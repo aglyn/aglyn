@@ -261,7 +261,56 @@ export function useCommunityActions(hostId: string) {
     [user, hostId, queueLoading, enqueueSnackbar],
   )
 
-  return { install, installPlan, buy }
+  /**
+   * Uninstall a plugin listing from the listing detail (AGL-881) — the same
+   * `action:'uninstall'` the installed add-ons card uses, so it removes the
+   * pin (and the switchboard entry when nothing else pins it) and decrements
+   * activeInstalls. Only plugins have a removable pin; other artifact types
+   * land in a library and have nothing to uninstall.
+   */
+  const uninstall = useCallback(
+    async (listing: any, scope?: 'org' | 'host') => {
+      const dequeue = queueLoading()
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/community/install-plugin', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            listingId: listing.$id,
+            hostId,
+            action: 'uninstall',
+            ...(scope ? { scope } : {}),
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          return void enqueueSnackbar(payload?.error ?? 'Uninstall failed', {
+            variant: 'error',
+            allowDuplicate: true,
+          })
+        }
+        enqueueSnackbar(`Removed "${listing.displayName}"`, {
+          variant: 'success',
+          persist: false,
+        })
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('An error has occurred', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        dequeue()
+      }
+    },
+    [user, hostId, queueLoading, enqueueSnackbar],
+  )
+
+  return { install, installPlan, buy, uninstall }
 }
 
 export default useCommunityActions
