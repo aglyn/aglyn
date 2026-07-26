@@ -197,11 +197,20 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
 
   if (editorInert) {
     // Editor affordance (AGL-571): collapsed trigger by default — exactly
-    // what the live site shows — expanding to inline, editable panel
-    // contents only while the menu subtree holds the selection.
+    // what the live site shows — expanding to the editable panel only while
+    // the menu subtree holds the selection.
     const authoring = isLeafSelectedWithin(rest as Record<string, unknown>)
     return (
-      <Box ref={ref} {...rest} sx={[{ display: 'inline-block' }, ...nodeSx]}>
+      <Box
+        ref={ref}
+        {...rest}
+        // Relative so the authoring panel drops UNDER the trigger as an
+        // overlay (AGL-830). The old inline-block expanded the panel in the
+        // toolbar's flow, shoving and overlapping the other nav items in a
+        // horizontal app bar; positioning it like the live popup keeps the
+        // bar intact while the panel stays selectable and editable in place.
+        sx={[{ position: 'relative', display: 'inline-flex' }, ...nodeSx]}
+      >
         <Button
           color="inherit"
           aria-expanded={authoring || undefined}
@@ -210,24 +219,31 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
           {label}
         </Button>
         {authoring ? (
-          <Box
-            sx={{
-              m: 0.5,
-              p: 1,
-              border: '1px dashed',
-              borderColor: 'divider',
-              borderRadius: 1,
-            }}
+          <Paper
+            elevation={4}
+            aria-label={label}
+            sx={[
+              {
+                position: 'absolute',
+                top: '100%',
+                mt: 0.5,
+                zIndex: (theme) => theme.zIndex.modal,
+                p: 1,
+                border: '1px dashed',
+                borderColor: 'divider',
+              },
+              panelSx as never,
+            ]}
           >
             <Typography
               variant="caption"
               color="text.secondary"
-              sx={{ display: 'block', mb: 0.5 }}
+              sx={{ display: 'block', mb: 0.5, px: 1 }}
             >
               {editorHint}
             </Typography>
             {children}
-          </Box>
+          </Paper>
         ) : null}
       </Box>
     )
