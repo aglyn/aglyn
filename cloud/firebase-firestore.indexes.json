@@ -319,6 +319,46 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "versions",
+      "fieldPath": "nodes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "versions",
+      "fieldPath": "template",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "versions",
+      "fieldPath": "layout",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "versions",
+      "fieldPath": "datasetSchema",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "templates",
+      "fieldPath": "nodes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "templates",
+      "fieldPath": "theme",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "components",
+      "fieldPath": "nodes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "records",
+      "fieldPath": "values",
+      "indexes": []
     }
   ]
 }

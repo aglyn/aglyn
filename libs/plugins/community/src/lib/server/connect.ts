@@ -64,7 +64,18 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     // Payouts belong to the publishing ORG (AGL-652) — the marketplace pays
     // the organization that published, not whoever set the account up. Only
     // a manager may bind a payout destination.
-    const orgForUser = await getOrgForUser(decoded.uid)
+    //
+    // The acting org comes from the client (AGL-861): the URL is the source of
+    // truth for which workspace the seller is in, and a member can belong to
+    // several. Guessing with `getOrgForUser(uid)` returned the FIRST org from
+    // the reverse index, so the profile check ran against the wrong org and
+    // 412'd even when the acting org's profile was fully set up. Passing the
+    // requested org resolves membership for that specific org; falling back to
+    // the first only when the client omits it keeps older callers working.
+    const requestedOrgId =
+      String((req.body as { orgId?: string } | undefined)?.orgId ?? '').trim() ||
+      undefined
+    const orgForUser = await getOrgForUser(decoded.uid, requestedOrgId)
     const orgId = orgForUser?.orgId
     if (!orgId || !(await canActAsPublisher(firestore, decoded.uid, orgId))) {
       return res.status(403).json({
@@ -76,8 +87,7 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     if (!profileSnapshot.exists) {
       return res.status(412).json({
         error:
-          'Set up your organization’s publisher profile first ' +
-          '(Organization → Community)',
+          'Set up your publisher profile first — Marketplace → Profile.',
       })
     }
 
@@ -114,17 +124,17 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     const orgSlug = (
       await firestore.collection('orgs').doc(orgId).get()
     ).get('slug') as string | undefined
+    // Return people to the Marketplace page (AGL-861), not the retired
+    // `/[orgSlug]/community` surface. Stripe bakes these URLs into the
+    // onboarding link, so an extra redirect hop mid-onboarding is avoidable.
     const payoutsPath = orgSlug
-      ? buildRoute(Route.MANAGE_COMMUNITY_PROFILE, { orgSlug })
+      ? buildRoute(Route.ORG_MARKETPLACE, { orgSlug })
       : Route.MANAGE_MY_COMMUNITY
     const link = await stripe(
       'account_links',
       new URLSearchParams({
         account: accountId as string,
         type: 'account_onboarding',
-        // Canonical org surface (AGL-653). `/manage/community` is now only a
-        // redirect, and Stripe bakes these URLs into the onboarding link —
-        // sending people through an extra hop mid-onboarding is avoidable.
         refresh_url: `${origin}${payoutsPath}?connect=refresh`,
         return_url: `${origin}${payoutsPath}?connect=done`,
       }),

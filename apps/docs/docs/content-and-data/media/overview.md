@@ -38,7 +38,9 @@ feature; large video uploads and higher storage are gated by plan.
   tags, and your own **custom key/value metadata** (mirrored onto the delivered object's
   storage metadata). Bulk-edit tags and folders across a selection.
 - Each card has an **overflow menu** (Copy URL, Details, Delete) so actions stay tidy.
-- See **per-asset usage** — where each asset is referenced, plus delivery counters.
+- See **per-asset usage**: delivery counters load automatically, and a **Used on**
+  audit runs on demand — click **Find where this is used** to list every screen,
+  layout, and content entry that references the asset, each a link that opens it.
 
 ## Upload
 

@@ -21,11 +21,50 @@
 // (useful when the CLI's OAuth session expires, e.g. the
 // redirect_uri_mismatch reauth failure). The key never touches disk.
 //
-//   set -a && source .env && set +a && \
-//     node tools/scripts/deploy-firestore-rules.mjs
+//   node tools/scripts/deploy-firestore-rules.mjs
+// (self-loads the service account from the repo's local .env files; already-set
+// process.env still wins, so `source .env` first is optional.)
 
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { cert, initializeApp } from 'firebase-admin/app'
+
+// Load admin creds from the repo's local env files so the script is a single
+// self-contained command (matches the backfill scripts). Already-set env wins.
+function loadLocalEnv() {
+  const roots = ['.', 'apps/console', 'cloud']
+  const names = [
+    '.env',
+    '.env.local',
+    '.env.development',
+    '.env.development.local',
+    '.env.production',
+    '.env.production.local',
+  ]
+  for (const file of roots.flatMap((r) => names.map((n) => `${r}/${n}`))) {
+    if (!existsSync(file)) continue
+    let text
+    try {
+      text = readFileSync(file, 'utf8')
+    } catch {
+      continue
+    }
+    for (const line of text.split('\n')) {
+      const match = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)$/)
+      if (!match) continue
+      const key = match[1]
+      if (process.env[key] !== undefined) continue
+      let value = match[2].trim()
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1)
+      }
+      process.env[key] = value
+    }
+  }
+}
+loadLocalEnv()
 
 const projectId = process.env.FIREBASE_PROJECT_ID
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL

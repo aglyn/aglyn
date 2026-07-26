@@ -15,49 +15,10 @@
  * limitations under the License.
  */
 
-import { Container } from '@aglyn/shared-ui-jsx'
-import {
-  componentMapper,
-  FieldComponentType,
-  FormRenderer,
-} from '@aglyn/shared-ui-jsx-forms'
-import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
-import { forwardRef, useCallback } from 'react'
-import { besignerDocsUrl } from '../utils/docs-help'
+import { forwardRef } from 'react'
 import CloseableDrawerComponent, {
   type CloseableDrawerProps,
 } from './closeable-drawer.component'
-
-const formSchema: FormSchema = {
-  fields: [
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'title',
-      label: 'Page Title',
-      description:
-        'The page title will show in the browser tab. Additionally, will be the default text used in search results.',
-      help: {
-        title: 'Page title (SEO)',
-        excerpt:
-          'Shows in the browser tab and as the headline in search results and social cards.',
-        href: besignerDocsUrl('seo', '#per-screen-seo'),
-      },
-    },
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'description',
-      label: 'Page Description',
-      description:
-        'The page description will be the default text used in search results.',
-      help: {
-        title: 'Page description (SEO)',
-        excerpt:
-          'The summary search engines and social cards show beneath the title for this screen.',
-        href: besignerDocsUrl('seo', '#per-screen-seo'),
-      },
-    },
-  ],
-}
 
 export interface PropertiesDialogProps extends Partial<CloseableDrawerProps> {
   children?: JSX.Children
@@ -66,12 +27,6 @@ export interface PropertiesDialogProps extends Partial<CloseableDrawerProps> {
 export const PropertiesDialogComponent = forwardRef<any, PropertiesDialogProps>(
   (props, ref) => {
     const { children, onClose, ...rest } = props
-    const handleFormCancel = useCallback(
-      (values: any, ...args: any[]) => {
-        onClose?.call(null, null, 'cancelClick')
-      },
-      [onClose],
-    )
 
     return (
       <CloseableDrawerComponent
@@ -82,17 +37,6 @@ export const PropertiesDialogComponent = forwardRef<any, PropertiesDialogProps>(
         onClose={onClose}
         {...rest}
       >
-        <Container gutterY maxWidth={false}>
-          <FormRenderer
-            componentMapper={componentMapper}
-            onCancel={handleFormCancel}
-            // onSubmit={()}
-            // initialValues={elemStyles}
-            schema={formSchema}
-          >
-            {({ formFields }) => <>{formFields}</>}
-          </FormRenderer>
-        </Container>
         {children}
       </CloseableDrawerComponent>
     )

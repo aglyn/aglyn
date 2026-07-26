@@ -165,6 +165,32 @@ export type CommunityArtifactType =
   | 'datasetSchema'
   | 'emailTemplate'
 
+/**
+ * Human-readable label for each artifact type (AGL-864).
+ *
+ * Shared by browse cards, the listing detail page, and the seller panel so
+ * "what kind of thing is this" reads the same everywhere. Resolve a listing's
+ * label through {@link listingArtifactLabel}, which tolerates the legacy
+ * `type`/`kind` shape the way {@link listingArtifactType} does.
+ */
+export const ARTIFACT_TYPE_LABELS: Record<CommunityArtifactType, string> = {
+  plugin: 'Plugin',
+  component: 'Component',
+  template: 'Site template',
+  layout: 'Layout',
+  datasetSchema: 'Dataset schema',
+  emailTemplate: 'Email template',
+}
+
+/** The friendly artifact-type label for a listing (AGL-864). */
+export function listingArtifactLabel(listing: {
+  artifactType?: string
+  type?: string
+  kind?: string
+}): string {
+  return ARTIFACT_TYPE_LABELS[listingArtifactType(listing)] ?? 'Component'
+}
+
 /** Where an installed artifact lives. */
 export type InstallTarget = 'org' | 'host'
 

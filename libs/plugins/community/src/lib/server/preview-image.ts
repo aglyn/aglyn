@@ -100,6 +100,26 @@ export const previewImageHandler: PluginApiHandler = async (req, res) => {
       return res.status(200).json({ deleted: true })
     }
 
+    // DAM-hosted asset (AGL-863): the publisher picked an existing asset from
+    // the media library instead of uploading raw bytes. It already lives in
+    // our storage/CDN, so point `previewImageUrl` at it directly — no re-upload
+    // and no duplicate blob. Parity with the logo/screenshot URL fields, which
+    // already accept any https URL through validateListingContent.
+    const providedUrl = String(req.body?.url ?? '').trim()
+    if (providedUrl) {
+      if (!/^https:\/\/[^\s]+$/.test(providedUrl) || providedUrl.length > 2000) {
+        return res.status(400).json({ error: 'Invalid image URL' })
+      }
+      await listingRef.set(
+        {
+          previewImageUrl: providedUrl,
+          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+      return res.status(200).json({ url: providedUrl })
+    }
+
     const contentType = String(req.body?.contentType ?? '')
     const data = String(req.body?.data ?? '')
     if (!contentType.startsWith('image/')) {

@@ -20,6 +20,7 @@ import {
   LISTING_CATEGORIES,
   LISTING_README_MAX_CHARS,
   listingArtifactType,
+  listingArtifactLabel,
   installTargetsFor,
   resolveInstallPlan,
   resolvePluginInstallState,
@@ -41,6 +42,10 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Link as MuiLink,
   Stack,
@@ -352,6 +357,9 @@ export function CommunityListingContent({
   const { enqueueSnackbar } = useSnackbar()
   const { install, installPlan, buy } = useCommunityActions(hostId)
   const [installScope, setInstallScope] = useState<'org' | 'host'>('org')
+  // Confirm before writing install pins (AGL-867): the install is deliberate
+  // and site-scoped, so it names its targets before committing.
+  const [confirmOpen, setConfirmOpen] = useState(false)
   // Org-scope install targeting (AGL-773): All sites vs a chosen subset. Only
   // engaged at org scope with a known site list; otherwise the per-site tab's
   // simpler org/host choice (AGL-656) still applies.
@@ -496,7 +504,10 @@ export function CommunityListingContent({
     return () => {
       active = false
     }
-  }, [listing?.type, listingId])
+    // Keyed on the listing's id, not its legacy `type` (AGL-864): an
+    // artifactType-only plugin has no `type`, so keying on it left the effect
+    // stuck at its undefined first value and the versions fetch never fired.
+  }, [listing?.$id, listingId])
   const latestEntry = versions[0]
   const realmTrusted = versions.some((entry) => entry.trust === 'realm')
   const abiIncompatible =
@@ -563,6 +574,48 @@ export function CommunityListingContent({
     ? [...listing.versionHistory].sort((a, b) => b.version - a.version)
     : []
 
+  // Human summary of exactly where this install lands (AGL-867), read from the
+  // same targeting the CTA acts on. An org pin covers every site (now and
+  // future); host pins are named so "Selected sites" can't silently mean
+  // something else.
+  const installTargetSummary = (): string => {
+    if (orgTargeting && !installed) {
+      if (
+        installPlanSteps.length === 1 &&
+        installPlanSteps[0]?.scope === 'org'
+      ) {
+        return 'the whole organization — every site, including sites added later'
+      }
+      const names = installPlanSteps
+        .filter((step) => step.scope === 'host')
+        .map(
+          (step) =>
+            (hosts ?? []).find((host) => host.id === step.hostId)?.label ??
+            step.hostId,
+        )
+      if (names.length) {
+        return `${names.length} site${names.length === 1 ? '' : 's'}: ${names.join(
+          ', ',
+        )}`
+      }
+      return 'the selected targets'
+    }
+    if (installTargetScope === 'org') {
+      return 'the whole organization — every site'
+    }
+    return 'this site'
+  }
+
+  // The actual pin write, run only after the confirm dialog (AGL-867).
+  const runInstall = () => {
+    setConfirmOpen(false)
+    if (orgTargeting && !installed) {
+      void installPlan(listing, installPlanSteps)
+    } else {
+      void install(listing, installTargetScope)
+    }
+  }
+
   return (
     <>
       <NextPageTitle screen={listing?.displayName ?? 'Community listing'} />
@@ -617,6 +670,18 @@ export function CommunityListingContent({
                               }}
                             />
                           ) : null}
+                          {/* What kind of thing this is, said plainly and
+                              first (AGL-864) — a plugin, a site template, a
+                              layout, etc. Filled so it reads as the primary
+                              classification, ahead of the softer category
+                              chips. */}
+                          {listing ? (
+                            <Chip
+                              size="small"
+                              color="primary"
+                              label={listingArtifactLabel(listing)}
+                            />
+                          ) : null}
                           {(listing?.categories ?? []).map((entry: string) => (
                             <Chip key={entry} size="small" label={entry} />
                           ))}
@@ -631,7 +696,7 @@ export function CommunityListingContent({
                               label={listing.license}
                             />
                           ) : null}
-                          {listing?.type === 'plugin' ? (
+                          {isPlugin ? (
                             realmTrusted ? (
                               <Chip
                                 size="small"
@@ -669,7 +734,7 @@ export function CommunityListingContent({
                         <Typography variant="body2" color="text.secondary">
                           {listing?.description ?? 'No description provided.'}
                         </Typography>
-                        {listing?.type === 'plugin' &&
+                        {isPlugin &&
                         !realmTrusted &&
                         listing?.reviewStatus !== 'verified' ? (
                           <Alert severity="info">
@@ -841,11 +906,11 @@ export function CommunityListingContent({
                             onClick={
                               permissions.installPlugins
                                 ? () =>
-                                    mustBuy
-                                      ? buy(listing)
-                                      : orgTargeting && !installed
-                                        ? installPlan(listing, installPlanSteps)
-                                        : install(listing, installTargetScope)
+                                    // Buying goes straight to Stripe checkout,
+                                    // which is its own confirmation; a free or
+                                    // entitled install confirms its targets
+                                    // first (AGL-867).
+                                    mustBuy ? buy(listing) : setConfirmOpen(true)
                                 : () =>
                                     enqueueSnackbar(
                                       'Your team role does not allow installing from the community',
@@ -957,7 +1022,7 @@ export function CommunityListingContent({
                           </Stack>
                         </CardDisplay>
                       ) : null}
-                      {listing?.type === 'plugin' && versions.length ? (
+                      {isPlugin && versions.length ? (
                         <CardDisplay
                           header={'Versions & changelog'}
                           contentGutterX
@@ -1015,7 +1080,7 @@ export function CommunityListingContent({
                           listingId={listingId}
                         />
                       ) : null}
-                      {listing?.type === 'plugin' && versions.length ? null : (
+                      {isPlugin && versions.length ? null : (
                       <CardDisplay
                         header={'Version history'}
                         contentGutterX
@@ -1057,6 +1122,47 @@ export function CommunityListingContent({
               ]}
             />
           )}
+          {/* Install confirmation (AGL-867): names the artifact, its version,
+              and exactly which sites before any pin is written. */}
+          <Dialog
+            open={confirmOpen}
+            onClose={() => setConfirmOpen(false)}
+            maxWidth="xs"
+            fullWidth
+          >
+            <DialogTitle>
+              {installed ? 'Update this listing?' : 'Install this listing?'}
+            </DialogTitle>
+            <DialogContent dividers>
+              <Stack spacing={1}>
+                <Typography variant="body2">
+                  {installed ? 'Update ' : 'Install '}
+                  <strong>{listing?.displayName}</strong>
+                  {listing
+                    ? ` (${listingArtifactLabel(listing)}, v${
+                        listing?.latestVersion
+                      })`
+                    : ''}
+                  {'.'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {'This will be installed to '}
+                  <strong>{installTargetSummary()}</strong>
+                  {'.'}
+                </Typography>
+              </Stack>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setConfirmOpen(false)}>{'Cancel'}</Button>
+              <Button
+                variant="contained"
+                color="secondary"
+                onClick={runInstall}
+              >
+                {installed ? 'Update' : 'Install'}
+              </Button>
+            </DialogActions>
+          </Dialog>
         </Container>
     </>
   )

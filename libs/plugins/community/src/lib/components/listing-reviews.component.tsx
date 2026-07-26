@@ -59,6 +59,10 @@ export function ListingReviews({
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const uid = (user as any)?.uid as string | undefined
+  // Rating (not commenting) requires a verified email (AGL-865). We can't see
+  // the install pins from here, so the "installed" half is still enforced
+  // server-side; the email half we can reflect in the control's state.
+  const emailVerified = Boolean((user as any)?.emailVerified)
 
   const { data: reviewDocs } = useFirestoreCollection<any>(
     () =>
@@ -180,20 +184,29 @@ export function ListingReviews({
             <Typography variant="subtitle2">
               {mine ? 'Your review' : 'Leave a review'}
             </Typography>
+            {/* Rating and comment are distinct affordances (AGL-865): a rating
+                is gated on a verified email + an install and moves the score;
+                a comment is open to anyone signed in. */}
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Typography variant="caption" sx={{ minWidth: 56 }}>
+                {'Rating'}
+              </Typography>
               <Rating
                 value={rating}
                 size="small"
                 onChange={(_event, value) => setRating(value)}
-                disabled={busy}
+                disabled={busy || !emailVerified}
               />
               <Typography variant="caption" color="text.secondary">
-                {'Rating requires having installed this'}
+                {emailVerified
+                  ? 'Requires having installed this'
+                  : 'Verify your email to rate'}
               </Typography>
             </Stack>
             <TextField
               size="small"
-              placeholder="Share how it worked out, or ask a question"
+              label="Comment"
+              placeholder="Share how it worked out, or ask a question — anyone can comment"
               value={comment}
               onChange={(event) => setComment(event.target.value)}
               disabled={busy}
