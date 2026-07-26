@@ -27,6 +27,7 @@ import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import MediaPickerDialog from './media/media-picker-dialog.component'
+import EditListingDialog from './marketplace/edit-listing-dialog.component'
 
 /** Absolute src for a chosen DAM asset — prefer the direct URL, fall back to
  * the stable relative CDN path made absolute so the server's https check and
@@ -202,6 +203,8 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const [previewPickerListingId, setPreviewPickerListingId] = useState<
     string | null
   >(null)
+  // The listing open in the full editor (AGL-862), or null when closed.
+  const [editListing, setEditListing] = useState<any | null>(null)
   const handlePickPreview = useCallback(
     (listing: any) => () => setPreviewPickerListingId(listing.$id),
     [],
@@ -370,6 +373,13 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                 <Button
                   size="small"
                   color="secondary"
+                  onClick={() => setEditListing(listing)}
+                >
+                  {'Edit'}
+                </Button>
+                <Button
+                  size="small"
+                  color="secondary"
                   onClick={handlePickPreview(listing)}
                 >
                   {listing.previewImageUrl ? 'Replace' : 'Image'}
@@ -385,6 +395,13 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
             ))}
           </Stack>
         )}
+        <EditListingDialog
+          orgId={orgId}
+          listing={editListing}
+          open={Boolean(editListing)}
+          onClose={() => setEditListing(null)}
+          user={user}
+        />
       </CardDisplay>
     ),
     payouts: (
