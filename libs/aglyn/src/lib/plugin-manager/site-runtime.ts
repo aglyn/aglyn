@@ -35,10 +35,30 @@ export interface SiteRuntimeProps {
   page: Record<string, any>
 }
 
+/**
+ * Context handed to {@link SiteRuntimeEntry.loadPreviewProps} (AGL-830). The
+ * besigner Preview renders draft nodes with no server enricher, so a runtime
+ * that needs page-props (e.g. the marketing automations engine) rebuilds its
+ * own slice client-side from the passed Firestore instance.
+ */
+export interface SiteRuntimePreviewContext {
+  hostId?: string
+  /** Client Firestore instance (typed `unknown` to avoid a firebase dep here). */
+  firestore: unknown
+}
+
 export interface SiteRuntimeEntry {
   pluginId: string
   runtimeId: string
   Component: ComponentType<SiteRuntimeProps>
+  /**
+   * Optional (AGL-830): build this runtime's `page`-props slice client-side
+   * for the editor Preview, where no server enricher runs. The returned bag
+   * is passed as the runtime's `page` prop. Absent → the runtime gets `{}`.
+   */
+  loadPreviewProps?: (
+    ctx: SiteRuntimePreviewContext,
+  ) => Promise<Record<string, unknown>>
 }
 
 const runtimes: SiteRuntimeEntry[] = []

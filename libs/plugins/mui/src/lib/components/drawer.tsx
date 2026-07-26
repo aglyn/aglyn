@@ -110,7 +110,7 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(sx) ? sx : sx ? [sx] : []
     const resolvedAnchor: DrawerAnchor = anchor === 'right' ? 'right' : 'left'
-    const { suppressNavigation } = Aglyn.useScreenLink(undefined)
+    const { editorInert } = Aglyn.useScreenLink(undefined)
     const [open, setOpen] = useState(false)
     // The renderer stamps the node id on every leaf; commands target it.
     const nodeId = useMemo(
@@ -120,7 +120,7 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
     )
 
     useEffect(() => {
-      if (suppressNavigation || !nodeId) return undefined
+      if (editorInert || !nodeId) return undefined
       mountedDrawers.push(nodeId)
       const unsubscribe = Aglyn.subscribeDrawerCommands((detail) => {
         // Match on the un-namespaced suffix (AGL-573): an interaction
@@ -140,9 +140,9 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
         const index = mountedDrawers.indexOf(nodeId)
         if (index >= 0) mountedDrawers.splice(index, 1)
       }
-    }, [suppressNavigation, nodeId])
+    }, [editorInert, nodeId])
 
-    if (suppressNavigation) {
+    if (editorInert) {
       // Editor affordance: a slim, selectable placeholder mirroring the
       // live hidden-until-opened drawer (AGL-571). While the drawer or a
       // descendant is selected, the contents expand inline as a real
@@ -215,22 +215,20 @@ DrawerElement.displayName = 'AglynDrawer'
  * drawer is an interaction (*When clicked → Open/close a drawer*), the
  * same openDrawer/closeDrawer/toggleDrawer steps any element can use;
  * the legacy `targetNodeId` attribute is discarded here so persisted
- * values neither retarget the click nor leak into the DOM. Inert on
- * editing surfaces so canvas clicks only select.
+ * values neither retarget the click nor leak into the DOM. Inert on the
+ * static canvas so canvas clicks only select; live (incl. Preview) it toggles.
  */
 export const DrawerToggle = forwardRef<HTMLButtonElement, DrawerToggleProps>(
   (props, ref) => {
     const { targetNodeId: _ignoredLegacyBinding, ariaLabel, ...rest } = props
-    const { suppressNavigation } = Aglyn.useScreenLink(undefined)
+    const { editorInert } = Aglyn.useScreenLink(undefined)
     return (
       <IconButton
         ref={ref}
         color="inherit"
         aria-label={ariaLabel || 'Open menu'}
         onClick={
-          suppressNavigation
-            ? undefined
-            : () => Aglyn.dispatchDrawerCommand('toggle')
+          editorInert ? undefined : () => Aglyn.dispatchDrawerCommand('toggle')
         }
         {...rest}
       >

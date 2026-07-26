@@ -160,7 +160,7 @@ export const presets: Aglyn.PresetSchema[] = [
  * editor sanitizes at commit, but screen node props are written directly via
  * the Firebase client SDK, so a host editor can plant arbitrary `html`
  * (bypassing the editor) that would execute on the public site AND in the
- * besigner canvas on console.aglyn.com. DOMPurify is DOM-based, so it paints
+ * besigner canvas on app.aglyn.com. DOMPurify is DOM-based, so it paints
  * on hydrate (SSR yields empty), matching custom-html.
  */
 function sanitizeTypographyHtml(html: string): string {

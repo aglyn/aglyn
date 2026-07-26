@@ -683,6 +683,8 @@ function BesignerPage(props) {
         ]),
       ),
       suppressNavigation: true,
+      // Static canvas: interactions inert, menus/drawers show editor affordance (AGL-830).
+      editorInert: true,
     }),
     [routingMap, screensById],
   )

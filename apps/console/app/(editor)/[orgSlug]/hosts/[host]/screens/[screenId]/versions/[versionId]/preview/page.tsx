@@ -25,6 +25,7 @@ import {
   ThemeProvider,
   useThemeModeState,
 } from '@aglyn/shared-ui-theme'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { CssBaseline, Stack, Typography } from '@mui/material'
 import Head from 'next/head'
 import { observer } from 'mobx-react-lite'
@@ -49,12 +50,20 @@ function ScreenPreviewPage() {
     versionId: string
   }>()
   const hostId = useHostId()
+  const firestore = useFirestore()
   const screenId = params?.screenId as string
   const versionId = params?.versionId as string
   const [missing, setMissing] = useState(false)
   const [hostTheme, setHostTheme] = useState<Aglyn.AglynHostTheme | undefined>(
     undefined,
   )
+  // Per-runtime page-props slices for the mounted site runtimes (AGL-830).
+  // Preview has no server enricher, so each runtime rebuilds its own slice
+  // client-side (e.g. marketing compiles the host's interactions), letting the
+  // SAME runtimes the tenant uses drive hover menus/drawers in preview.
+  const [runtimePages, setRuntimePages] = useState<
+    Record<string, unknown>[] | null
+  >(null)
 
   useEffect(() => {
     if (!hostId || !screenId || !versionId) return
@@ -80,6 +89,30 @@ function ScreenPreviewPage() {
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
   }, [hostId, screenId, versionId])
+
+  // Interactions parity (AGL-830): mount the registered site runtimes exactly
+  // like the tenant page, each fed the page-props slice it rebuilds client-side.
+  // Site plugins are already registered by the withSitePlugins gate, so
+  // listSiteRuntimes() is populated by the time this runs. Actions are
+  // host-scoped and delegated at the document level, so this loads once — a
+  // fresh node snapshot re-renders the DOM but the armed listeners still match.
+  useEffect(() => {
+    if (!hostId || !firestore) return
+    let cancelled = false
+    const runtimes = Aglyn.listSiteRuntimes()
+    Promise.all(
+      runtimes.map((runtime) =>
+        runtime.loadPreviewProps
+          ? runtime.loadPreviewProps({ hostId, firestore }).catch(() => ({}))
+          : Promise.resolve({}),
+      ),
+    ).then((pages) => {
+      if (!cancelled) setRuntimePages(pages)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [hostId, firestore])
 
   const root = Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)
   // Style like the live site: the snapshot carries the host theme, and the
@@ -123,13 +156,33 @@ function ScreenPreviewPage() {
       ) : null}
       <CssBaseline enableColorScheme />
       <NextPageTitle screen={'Screen Preview'} />
+      {/* Shared hidden-class rule (AGL-562/830): the tenant page ships this in
+          its SSR HTML so author-hidden elements (a mega-menu panel carries the
+          class to start closed) paint hidden from the first frame. Preview
+          renders the same nodes, so it ships the same rule — without it the
+          panel is stuck open. */}
+      <style>{Aglyn.ELEMENT_HIDDEN_STYLE_TEXT}</style>
       {root ? (
         // Preview renders draft state outside the tenant site: screen links
         // show their content but must not navigate the console origin.
+        // suppressNavigation only — NOT editorInert — so interactions run for
+        // real and hover-to-open menus behave like the live site (AGL-830).
         <Aglyn.ScreenLinkContext.Provider value={SUPPRESSED_SCREEN_LINKS}>
           <AglynNodeRenderer node={root} />
         </Aglyn.ScreenLinkContext.Provider>
       ) : null}
+      {/* Site runtimes (AGL-419/830): the marketing automations engine arms
+          the authored hover/click triggers and drives the menu/drawer command
+          buses — the same components the tenant catch-all mounts. */}
+      {runtimePages
+        ? Aglyn.listSiteRuntimes().map((runtime, index) => (
+            <runtime.Component
+              key={runtime.runtimeId}
+              hostId={hostId}
+              page={runtimePages[index] ?? {}}
+            />
+          ))
+        : null}
     </ThemeProvider>
   )
 }

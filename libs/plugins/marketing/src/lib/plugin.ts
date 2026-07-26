@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { registerSiteRuntime } from '@aglyn/aglyn'
 import { MarketingSiteRuntime } from './components/site-runtime'
+import { loadMarketingPreviewProps } from './preview-props'
 import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -63,5 +64,8 @@ export function registerMarketingPlugin(): void {
     pluginId: 'marketing',
     runtimeId: 'marketing-site-runtime',
     Component: MarketingSiteRuntime,
+    // Editor Preview (AGL-830): rebuild the automations slice client-side so
+    // the same runtime drives hover menus/drawers in preview as on the site.
+    loadPreviewProps: loadMarketingPreviewProps,
   })
 }

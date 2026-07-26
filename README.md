@@ -1,504 +1,221 @@
 <!--
   ~ Shields.io Config
   ~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  ~
   ~ Default params:
-  ~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  ~ style=for-the-badge
-  ~ labelColor=404C5C
-  ~ cacheSeconds=maxAge
+  ~   style=for-the-badge
+  ~   labelColor=404C5C
+  ~   cacheSeconds=maxAge
   ~
-  ~
-  ~ Colors:
-  ~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  ~ Valid/success/positive: 4CAF50
-  ~ Invalid/error/negative: E53935
-  ~ Incorrect/warning/beware: FFAB40
-  ~ Brand purple: 9C27B0
-  ~ Brand blue/grey: 404C5C
-  ~ Brand light-blue: 039BE5
+  ~ Brand palette:
+  ~   Success 4CAF50 · Error E53935 · Warning FFAB40
+  ~   Purple 9C27B0 · Blue-grey 404C5C · Light-blue 039BE5 · Pink E040FB
   -->
-
-<h1 align="center">Aglyn - The clickable screen to create online.</h1>
 
 <p align="center">
   <a href="https://aglyn.com" title="Go to aglyn.com">
-    <img 
-      src="https://app.aglyn.com/_static/images/brand/aglyn-logo-mark-multi-144x144.png" 
-      alt="aglyn-logo"
-      width="120px" 
-      height="120px"
-    />
-  </a>
-  <br>
-  <i>Aglyn is a website builder platform for your business goals
-    <br> using an easy to learn clickable screen.</i>
-  <br>
-</p>
-
-<p align="center">
-  <a href="https://aglyn.com"><strong>aglyn.com</strong></a>
-  <br>
-  <a href="https://console.aglyn.com">Sign in</a>
-  ·
-  <a href="https://console.aglyn.com">Sign up</a>
-  <br>
-</p>
-
-<p align="center">
-  <a href="CONTRIBUTING.md">Contributing Guidelines</a>
-  ·
-  <a href="https://github.com/aglyn/core/issues">Submit an Issue</a>
-  <br>
-  <br>
-</p>
-
-<p align="center">
-   <img src="https://img.shields.io/badge/Aglyn-Secure_Website-9C27B0?style=for-the-badge&cacheSeconds=maxAge&labelColor=404C5C&color=9C27B0&cacheSeconds=maxAge&logoHeight=40&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJiIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiLz48L2NsaXBQYXRoPjwvZGVmcz48ZyBpZD0iYSIgY2xpcC1wYXRoPSJ1cmwoI2IpIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiM0MDRjNWMiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgzLjEyOCAyLjYyOSkiPjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgMC43KSI+PHBhdGggZD0iTTE3LjQyMiwxOC41ODNIMTUuMjY5bC0yLjY3My01LjhINS40NTNMMi44LDE4LjU4M0guNTU3bDguMTg0LTE4aC42MTVabS01Ljc0OC03Ljg1M0w5LjA0OCw0Ljg4OCw2LjQsMTAuNzMxWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTAuNTU3IC0wLjU4MykiIGZpbGw9IiMwMzliZTUiLz48L2c+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMSAwLjM0NikiPjxwYXRoIGQ9Ik0xNy40MjIsMTguNTgzSDE1LjI2OWwtMi42NzMtNS44SDUuNDUzTDIuOCwxOC41ODNILjU1N2w4LjE4NC0xOGguNjE1Wm0tNS43NDgtNy44NTNMOS4wNDgsNC44ODgsNi40LDEwLjczMVoiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0wLjU1NyAtMC41ODMpIiBmaWxsPSIjOWMyN2IwIi8+PC9nPjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDIpIj48cGF0aCBkPSJNMTcuNDIyLDE4LjU4M0gxNS4yNjlsLTIuNjczLTUuOEg1LjQ1M0wyLjgsMTguNTgzSC41NTdsOC4xODQtMThoLjYxNVptLTUuNzQ4LTcuODUzTDkuMDQ4LDQuODg4LDYuNCwxMC43MzFaIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtMC41NTcgLTAuNTgzKSIgZmlsbD0iI2ZmZiIvPjwvZz48L2c+PC9nPjwvc3ZnPg==" alt="aglyn secure website"/>
-  </a>
-  <a href="#">
-    <img src="https://img.shields.io/website?style=for-the-badge&cacheSeconds=300&labelColor=404C5C&label=Site%20Availability&down_color=E53935&down_message=online&up_color=4CAF50&up_message=online&url=https://aglyn.com/_static/images/brand/aglyn-logo.svg" alt="website availability"/>
-  </a>
-  <br/>
-  <br/>
-</p>
-
-<p align="center">
-  <a href="https://github.com/aglyn/core">
-    <img src="https://img.shields.io/github/license/aglyn/core?style=for-the-badge&cacheSeconds=maxAge&labelColor=404C5C&" alt="Monorepo license" />
-  </a>&nbsp;
-  <a href="https://github.com/aglyn/core">
-    <img src="https://img.shields.io/github/package-json/v/aglyn/core?style=for-the-badge&cacheSeconds=maxAge&labelColor=404C5C&" alt="Monorepo version" />
+    <img src="docs/assets/readme/cover.png" alt="Aglyn — the clickable screen to create online" width="100%" />
   </a>
 </p>
 
-<h3 align="center">Connect with us</h3>
+<h3 align="center">The clickable screen to create online.</h3>
 
 <p align="center">
-  <a href="https://www.linkedin.com/company/aglyn/" title="Go to LinkedIn">
-    <img src="https://img.shields.io/badge/LinkedIn-Company_Page-0A66C2?logo=linkedin&style=for-the-badge&cacheSeconds=maxAge&color=0A66C2&logoColor=0A66C2&labelColor=F1F1F1" alt="linkedin-company-page" />
-  </a>&nbsp;
-  <a href="https://twitter.com/AglynOfficial" title="Go to Twitter">
-    <img src="https://img.shields.io/badge/Twitter-@AglynOfficial-1d9bf0?logo=twitter&style=for-the-badge&cacheSeconds=maxAge&color=1d9bf0&logoColor=1d9bf0&labelColor=F1F1F1" alt="twitter-aglyn" />
-  </a>&nbsp;
-  <a href="https://github.com/aglyn" title="Go to GitHub org">
-    <img src="https://img.shields.io/badge/GitHub-Organization_Page-000000?style=for-the-badge&cacheSeconds=maxAge&labelColor=F1F1F1&color=404C5C&cacheSeconds=maxAge&logoHeight=40&logo=github&logoColor=000000" alt="github-organization" />
-  </a>
+  <i>Aglyn is a multi-tenant website-builder platform that turns a live, clickable canvas<br>
+  into a real business website — no code, no ceremony, no expensive rebuilds.</i>
 </p>
 
-<hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+<p align="center">
+  <a href="https://aglyn.com"><strong>aglyn.com</strong></a> &nbsp;·&nbsp;
+  <a href="https://app.aglyn.com">Console</a> &nbsp;·&nbsp;
+  <a href="https://app.aglyn.com">Sign in / Sign up</a> &nbsp;·&nbsp;
+  <a href="CONTRIBUTING.md">Contributing</a> &nbsp;·&nbsp;
+  <a href="https://github.com/aglyn/aglyn/issues">Report a bug</a>
+</p>
 
-## Table of Contents
+<p align="center">
+  <img src="https://img.shields.io/badge/Aglyn-Secure_Website-9C27B0?style=for-the-badge&labelColor=404C5C&color=9C27B0&logoHeight=40&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJiIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiLz48L2NsaXBQYXRoPjwvZGVmcz48ZyBpZD0iYSIgY2xpcC1wYXRoPSJ1cmwoI2IpIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiM0MDRjNWMiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgzLjEyOCAyLjYyOSkiPjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgMC43KSI+PHBhdGggZD0iTTE3LjQyMiwxOC41ODNIMTUuMjY5bC0yLjY3My01LjhINS40NTNMMi44LDE4LjU4M0guNTU3bDguMTg0LTE4aC42MTVabS01Ljc0OC03Ljg1M0w5LjA0OCw0Ljg4OCw2LjQsMTAuNzMxWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTAuNTU3IC0wLjU4MykiIGZpbGw9IiMwMzliZTUiLz48L2c+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMSAwLjM0NikiPjxwYXRoIGQ9Ik0xNy40MjIsMTguNTgzSDE1LjI2OWwtMi42NzMtNS44SDUuNDUzTDIuOCwxOC41ODNILjU1N2w4LjE4NC0xOGguNjE1Wm0tNS43NDgtNy44NTNMOS4wNDgsNC44ODgsNi40LDEwLjczMVoiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0wLjU1NyAtMC41ODMpIiBmaWxsPSIjOWMyN2IwIi8+PC9nPjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDIpIj48cGF0aCBkPSJNMTcuNDIyLDE4LjU4M0gxNS4yNjlsLTIuNjczLTUuOEg1LjQ1M0wyLjgsMTguNTgzSC41NTdsOC4xODQtMThoLjYxNVptLTUuNzQ4LTcuODUzTDkuMDQ4LDQuODg4LDYuNCwxMC43MzFaIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtMC41NTcgLTAuNTgzKSIgZmlsbD0iI2ZmZiIvPjwvZz48L2c+PC9nPjwvc3ZnPg==" alt="Aglyn secure website"/>
+  <img src="https://img.shields.io/github/license/aglyn/aglyn?style=for-the-badge&labelColor=404C5C&color=4CAF50" alt="License" />
+  <img src="https://img.shields.io/github/package-json/v/aglyn/aglyn?style=for-the-badge&labelColor=404C5C&color=039BE5&label=version" alt="Version" />
+</p>
 
-<!-- toc -->
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&labelColor=404C5C&logo=nextdotjs" alt="Next.js" />
+  <img src="https://img.shields.io/badge/React-19-087EA4?style=for-the-badge&labelColor=404C5C&logo=react" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-6/7-3178C6?style=for-the-badge&labelColor=404C5C&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Firebase-12-FFCA28?style=for-the-badge&labelColor=404C5C&logo=firebase&logoColor=white" alt="Firebase" />
+  <img src="https://img.shields.io/badge/MUI-9-007FFF?style=for-the-badge&labelColor=404C5C&logo=mui&logoColor=white" alt="MUI" />
+  <img src="https://img.shields.io/badge/MobX-6-FF9955?style=for-the-badge&labelColor=404C5C&logo=mobx&logoColor=white" alt="MobX" />
+  <img src="https://img.shields.io/badge/Nx-23-143055?style=for-the-badge&labelColor=404C5C&logo=nx&logoColor=white" alt="Nx" />
+  <img src="https://img.shields.io/badge/Node-%E2%89%A524-5FA04E?style=for-the-badge&labelColor=404C5C&logo=nodedotjs&logoColor=white" alt="Node 24+" />
+</p>
 
-- [Monorepo sources](#monorepo-sources)
-  - [Library Types](#library-types)
-    - [Feature](#feature)
-    - [UI](#ui)
-    - [Data-access](#data-access)
-    - [Utility](#utility)
-  - [Directory and file structure](#directory-and-file-structure)
-  - [Apps Monorepo package type](#apps-monorepo-package-type)
-  - [Package scope predicate: lib(`core`)](#package-scope-predicate-libcore)
-    - [Data-access](#data-access-1)
-    - [UI](#ui-1)
-  - [Package scope predicate: lib(`shared`)](#package-scope-predicate-libshared)
-    - [Services and Providers (i.e., data-access)](#services-and-providers-ie-data-access)
-    - [Feature](#feature-1)
-    - [UI](#ui-2)
-    - [Utility](#utility-1)
-- [Terminology and meaning](#terminology-and-meaning)
-  - [Extension](#extension)
-  - [Plugin / Add-on](#plugin--add-on)
-- [Firebase](#firebase)
-  - [Emulation](#emulation)
-- [Monorepo source files](#monorepo-source-files)
-  - [Source files: apps](#source-files-apps)
-  - [Libraries](#libraries)
-- [Basic usage](#basic-usage)
-  - [Serving](#serving)
-  - [Building](#building)
-    - [Unit testing](#unit-testing)
-    - [End-to-end (e2e) testing](#end-to-end-e2e-testing)
-- [Scaffolding](#scaffolding)
-  - [Applications](#applications)
-  - [Libraries](#libraries-1)
-  - [App or library modules and components](#app-or-library-modules-and-components)
-- [Updating](#updating)
-  - [Move or rename application and libraries](#move-or-rename-application-and-libraries)
-  - [Nx build framework](#nx-build-framework)
-  - [Version and changelog](#version-and-changelog)
-- [Visualizing dependencies](#visualizing-dependencies)
-- [Environment files](#environment-files)
-  - [What other .env files can be used?](#what-other-env-files-can-be-used)
-    - [Files on the left have more priority than files on the right:](#files-on-the-left-have-more-priority-than-files-on-the-right)
-- [Git](#git)
-  - [Commit messages](#commit-messages)
-    - [Template](#template)
-    - [Overview](#overview)
-      - [Types](#types)
-      - [Footers](#footers)
+<hr/>
 
-<!-- tocstop -->
+## ✨ What is Aglyn?
 
-## Monorepo sources
+Aglyn takes the pain out of getting a professional website off the ground. Instead of hiring
+engineers or wrestling with templates, you build on a **live, clickable canvas** — the _Besigner_ —
+where what you click is what you ship. Every element, page, and interaction is editable in place, and
+publishing is instant across a globally-served, multi-tenant runtime.
 
-There are many different types of libraries in a workspace. In order to maintain a certain sense of
-order, we recommend having a small number of types, such as the below four (4) types of libraries.
+It's a full platform, not just an editor: organizations, billing, a plugin marketplace, a digital
+asset manager, e-commerce, bookings, email, workflows, and a documented REST API all live under one
+roof.
 
-### Library Types
+> **Three surfaces, one platform**
+> · [`aglyn.com`](https://aglyn.com) — the marketing site
+> · [`app.aglyn.com`](https://app.aglyn.com) — where you build, manage orgs & billing
+> · `aglyn.app` + your own custom domain — where your published site is served to the world
 
-#### Feature
+## 📸 Take a look
 
-Developers should consider feature libraries as libraries that implement smart UI (with access to
-data sources) for specific business use cases or pages in an application.
+<p align="center"><i>The Besigner — a clickable, in-place canvas where design and content live on the same surface.</i></p>
 
-#### UI
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/assets/readme/console-dashboard.png" alt="Aglyn console dashboard" width="100%" />
+      <br /><sub><b>Console dashboard</b> — traffic, users, campaigns & activity at a glance</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/assets/readme/console-commerce.png" alt="Aglyn commerce products hub" width="100%" />
+      <br /><sub><b>Built-in commerce</b> — products, pricing, orders & POS</sub>
+    </td>
+  </tr>
+</table>
 
-A UI library contains only presentational components (also called "dumb" components).
+## 🚀 Highlights
 
-#### Data-access
+| | |
+|---|---|
+| 🖱️ **Besigner canvas** | A clickable, in-place visual editor — design and content on the same surface. |
+| 🌐 **True multi-tenancy** | One runtime serves every customer site, on `aglyn.app` or a custom domain, with ISR. |
+| 🧩 **Plugin platform** | Commerce, Bookings, Contacts, Email, Events, Workflows, Redirects & more — installable per org, with a review-queued marketplace. |
+| 🎨 **Theme & layout builder** | Design tokens, themes, and layout templates that stay consistent across every page. |
+| 🖼️ **Digital Asset Manager** | Drag-and-drop media, folders, custom metadata, and stable CDN URLs that survive replace & move. |
+| 🛒 **Built-in commerce** | Products, pricing, POS, and digital goods powered by Stripe. |
+| 🔐 **Security first** | Firebase Auth with email-verify gates, durable rate limiting, CSRF protection, and rules-tested Firestore. |
+| ⚡ **Modern stack** | Next.js App Router, React 19, server components, and an Nx-orchestrated monorepo. |
+| 🔌 **Customer REST API** | Scoped `aglyn_sk_` API keys for programmatic access on Business plans. |
+| 📚 **Docs that ship with the code** | Four Docusaurus instances (docs, api, learn, help) kept in sync with features. |
 
-A data-access library contains code for interacting with a back-end system. It also includes all the
-code related to state management.
+## 🏗️ Inside the monorepo
 
-#### Utility
-
-A utility library contains low-level utilities used by many libraries and applications.
-
-### Directory and file structure
+An [Nx](https://nx.dev) workspace organized into deployable **apps** and shareable **libs**.
 
 ```
-@aglyn/
+aglyn/
 ├─ apps/
-│  ├─ 🌐 console
-│  └─ 🌐 www
+│  ├─ 🌐 www        → marketing site               (aglyn.com)
+│  ├─ 🛠️ console     → dashboard, editor, billing    (app.aglyn.com)
+│  ├─ 🚀 tenant      → runtime for published sites   (aglyn.app + custom domains)
+│  └─ 📖 docs        → Docusaurus documentation
 │
 ├─ libs/
-│  ├─ core/
-│  │  ├─ data/
-│  │  │  └─ 📚 components
-│  │  │  └─ 📚 framework
-│  │
-│  ├─ feature/
-│  │  ├─ 📚 besigner
-│  │  └─ 📚 renderer
-│  │
-│  ├─ plugins/
-│  │  ├─ ui/
-│  │  │  └─ 📚 mui-bundle
-│  │
-│  ├─ shared/
-│  │  ├─ data/
-│  │  │  ├─ 📚 mdi
-│  │  │  └─ 📚 types
-│  │  │
-│  │  ├─ feature/
-│  │  │  └─ 📚 themes
-│  │  │
-│  │  ├─ ui/
-│  │  │  └─ 📚 jsx
-│  │  │
-│  │  ├─ util/
-│  │  │  ├─ 📚 dom
-│  │  │  ├─ 📚 emitter
-│  │  │  ├─ 📚 errors
-│  │  │  ├─ 📚 guards
-│  │  │  ├─ 📚 logger
-│  │  │  ├─ 📚 timestamp
-│  │  │  ├─ 📚 tools
-│  │  │  └─ 📚 vendor
-│  │  │
-└──┴──┴────────────────────
+│  ├─ aglyn                 → core platform library
+│  ├─ aglyn-node-renderer   → server-side screen renderer
+│  ├─ besigner/             → the clickable visual editor (core + designer)
+│  ├─ tenant/runtime        → shared tenant runtime (host events + composition)
+│  ├─ plugins/              → bookings · commerce · community · contacts · data
+│  │                          email · events-calendar · inbox · logic · marketing
+│  │                          mui · redirects · workflows
+│  └─ shared/               → data · ui · util building blocks
+│       ├─ data/  → enums · forms · mdi · regex · types
+│       ├─ ui/    → jsx · jsx-forms · theme · color-picker · json-editor · next · …
+│       └─ util/  → dom · email · errors · fbclient · fbserver · http · logger · …
+│
+└─ cloud/          → Firebase (functions, Firestore/Storage rules, Remote Config)
 ```
 
-### Apps Monorepo package type
-
-- **WWW**
-  - URL: [https://aglyn.com/](https://aglyn.com/)
-  - Workspace name: `www`
-  - Directory: [apps/www](apps/www)
-- **Console**
-  - URL: TBD
-  - Workspace name: `console`
-  - Directory: [apps/console](apps/console)
-
-### Package scope predicate: lib(`core`)
-
-<code>@aglyn/libs/core/_`TYPE_PREDICATE`_-_`LIBRARY_NAME`_</code>
-
-#### Data-access
-
-- **Framework (core)**
-
-  - NodeJS import: `@aglyn/core-data-framework`
-  - Workspace name: `core-data-framework`
-  - Directory: [libs/core/data/framework](libs/core/data/framework)
-
-- **Feature: Components Extensions Mui Plugin**
-  - NodeJS import: `@aglyn/addons-ui-mui-bundle`
-  - Workspace name: `addons-ui-mui-bundle`
-  - Directory: [libs/addons/ui/mui-bundle](libs/addons/ui/mui-bundle)
-
-#### UI
-
-- **Besigner**
-  - NodeJS import: `@aglyn/core-feature-besigner`
-  - Workspace name: `core-feature-besigner`
-  - Directory: [libs/core/feature/besigner](libs/core/feature/besigner)
-- **Renderer**
-  - NodeJS import: `@aglyn/core-feature-renderer`
-  - Workspace name: `core-feature-renderer`
-  - Directory: [libs/core/feature/renderer](libs/core/feature/renderer)
-
-### Package scope predicate: lib(`shared`)
-
-<code>@aglyn/libs/shared/_`TYPE_PREDICATE`_-_`LIBRARY_NAME`_</code>
-
-#### Services and Providers (i.e., data-access)
+**Library conventions** — each lib is one of four types, so dependencies stay predictable:
 
-- **MDI**
-  - NodeJS import: `@aglyn/shared-data-mdi`
-  - Workspace name: `shared-data-mdi`
-  - Directory: [libs/shared/data/mdi](libs/shared/data/mdi)
-- **Types**
-  - NodeJS import: `@aglyn/shared-data-types`
-  - Workspace name: `shared-data-types`
-  - Directory: [libs/shared/util/types](libs/shared/data/types)
+- **Feature** — smart UI with data access, for a specific business use case.
+- **UI** — presentational ("dumb") components only.
+- **Data-access** — back-end interaction and state management.
+- **Utility** — low-level helpers shared broadly.
 
-#### Feature
+## 🧰 Tech stack
 
-- **Themes**
-  - NodeJS import: `@aglyn/shared-feature-themes`
-  - Workspace name: `shared-feature-themes`
-  - Directory: [libs/shared/feature/themes](libs/shared/feature/themes)
+| Area | Tools |
+|---|---|
+| **Framework** | Next.js 16 (App Router, RSC) · React 19 |
+| **Language** | TypeScript (dual `typescript@6` bridge + `@typescript/native@7` for `tsc`) |
+| **UI** | MUI 9 · MobX 6 · Data-Driven Forms 4 |
+| **Backend** | Firebase (Auth, Firestore, Storage, Remote Config) · Cloud Functions · `firebase-admin` 14 |
+| **Payments & email** | Stripe · Resend |
+| **Monorepo** | Nx 23 |
+| **Testing** | Jest 30 (unit) · Playwright + Firebase emulators (e2e) |
+| **Runtime** | Node ≥ 24 |
 
-#### UI
+## ⚡ Quick start
 
-- **React components**
-  - NodeJS import: `@aglyn/shared-ui-jsx`
-  - Workspace name: `shared-ui-jsx`
-  - Directory: [libs/shared/ui/jsx](libs/shared/ui/jsx)
+> **Prerequisites:** Node ≥ 24, npm, and the [Firebase CLI](https://firebase.google.com/docs/cli)
+> for local emulation.
 
-#### Utility
+```bash
+# 1. Install dependencies
+npm install
 
-- **Dom**
-  - NodeJS import: `@aglyn/shared-util-dom`
-  - Workspace name: `shared-util-dom`
-  - Directory: [libs/shared/util/dom](libs/shared/util/dom)
-- **Emitter**
-  - NodeJS import: `@aglyn/shared-util-emitter`
-  - Workspace name: `shared-util-emitter`
-  - Directory: [libs/shared/util/emitter](libs/shared/util/emitter)
-- **Errors**
-  - NodeJS import: `@aglyn/shared-util-errors`
-  - Workspace name: `shared-util-errors`
-  - Directory: [libs/shared/util/errors](libs/shared/util/errors)
-- **Guards**
-  - NodeJS import: `@aglyn/shared-util-guards`
-  - Workspace name: `shared-util-guards`
-  - Directory: [libs/shared/util/guards](libs/shared/util/guards)
-- **Helpers**
-  - NodeJS import: `@aglyn/shared-util-vendor`
-  - Workspace name: `shared-util-vendor`
-  - Directory: [libs/shared/util/vendors](libs/shared/util/vendor)
-- **Logger**
-  - NodeJS import: `@aglyn/shared-util-logger`
-  - Workspace name: `shared-util-logger`
-  - Directory: [libs/shared/util/logger](libs/shared/util/logger)
-- **Timestamp**
-  - NodeJS import: `@aglyn/shared-util-timestamp`
-  - Workspace name: `shared-util-timestamp`
-  - Directory: [libs/shared/util/timestamp](libs/shared/util/timestamp)
-- **Tools**
-  - NodeJS import: `@aglyn/shared-util-tools`
-  - Workspace name: `shared-util-tools`
-  - Directory: [libs/shared/util/tools](libs/shared/util/tools)
+# 2. Copy the example environment and fill in the blanks
+cp .env.example .env
 
-<hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+# 3. Serve an app (console, tenant, www, or docs)
+npx nx serve console
+```
 
-## Terminology and meaning
+The dev server hot-reloads on http://localhost:4200. Use `--prod` for a production build.
 
-### Extension
+### Run against the Firebase emulators
 
-Extrinsic or non-standard integration extending and/or modifying procedures and behavior—producing
-affects deviating systematic and foundational logic in default and composed standard behavior of the
-account or application instance. Subjectively and simultaneously, adding logical and behavioral
-features, solutions and other capabilities. Extensions are created by third-parties (community) and
-occasionally by an official first-party;
+```bash
+# Start the emulators (imports/exports local data)
+firebase emulators:start --import=./.firebase --export-on-exit
 
-### Plugin / Add-on
+# Serve the console wired to the emulators
+npm run serve:console:emulated
+```
 
-Personalizing, pluggable account or application modules and features. Intended to contribute
-supports and integral adoptions, respecting the symbolical architecture and behavior of the account
-or application instance; fulfilling dependencies and behavioral requests. Created commonly by both
-first- and third-party entities.
+Default emulator hosts: Firestore `localhost:8082`, Auth `localhost:9099`. See
+[`docs/E2E_LOCAL.md`](docs/E2E_LOCAL.md) for the full local end-to-end recipe.
 
-<hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+## 🛠️ Common commands
 
-## Firebase
+| Task | Command |
+|---|---|
+| Serve an app | `nx serve <app>` (`--prod` for production) |
+| Build an app | `nx build <app>` → output in `dist/` |
+| Unit tests | `nx test <app>` · affected only: `nx affected:test` |
+| E2E tests | `nx e2e <app-e2e>` · affected only: `nx affected:e2e` |
+| Lint | `nx lint` · workspace: `npm run lint` |
+| Type-check | `npm run typecheck` |
+| Format | `npm run format` |
+| Dependency graph | `nx graph` |
 
-Provides auth, data-store, analytics and more.
+Scaffolding new projects:
 
-### Emulation
+```bash
+nx g @nx/next:app <app-name>     # new Next.js app
+nx g @nx/react:lib <lib-name>    # new React library
+nx g @nx/react:component <name> --project=<app>
+```
 
-1. Set the environment variables for the hosts:
+Libraries are shareable and imported as `@aglyn/<name>` (e.g. `@aglyn/shared-ui-jsx`).
 
-- `FIRESTORE_EMULATOR_HOST=localhost:8082`
-- `FIREBASE_AUTH_EMULATOR_HOST=localhost:9099`
+## 📖 Documentation
 
-2. Run command to start up the firebase emulators:
+Deep-dives live in [`docs/`](docs), including:
 
-- `firebase emulators:start --import=./.firebase --export-on-exit`
+- [Multi-tenant Firestore](docs/MULTI_TENANT_FIRESTORE.md) · [Platform provisioning](docs/PLATFORM_PROVISIONING.md)
+- [Plugin loading](docs/PLUGIN_LOADING.md) · [Plugin platform gaps](docs/PLUGIN_PLATFORM_GAPS.md)
+- [Rate limiting](docs/RATE_LIMITING.md) · [Security content review](docs/SECURITY_CONTENT_REVIEW.md)
+- [Email setup](docs/EMAIL_SETUP.md) · [Stripe go-live](docs/STRIPE_GO_LIVE.md) · [Commerce token signing](docs/COMMERCE_TOKEN_SIGNING.md)
+- [Vercel deployments](docs/VERCEL_DEPLOYMENTS.md) · [Build performance](docs/BUILD_PERFORMANCE.md) · [TypeScript 7](docs/TYPESCRIPT7.md)
 
-<hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+## 🤝 Contributing
 
-## Monorepo source files
+We follow [Conventional Commits](https://www.conventionalcommits.org) — commit messages are linted.
 
-### Source files: apps
-
-- `apps/*` directory contains packages for the sole purpose of rendering/serving
-
-### Libraries
-
-- `libs/*` directory contains packages for grouping utilities, features, services, ui components,
-  logic etc.,
-
-## Basic usage
-
-### Serving
-
-- Run `nx serve <app-name>` for a dev server. Navigate to http://localhost:4200/. The app will
-  automatically reload if you change any of the source files. Use the `--prod` flag for a production
-  environment.
-
-### Building
-
-- Run `nx build <app-name>` to build the project. The build artifacts will be stored in the `dist/`
-  directory. Use the `--prod` flag for a production build.
-
-#### Unit testing
-
-- Run `nx test <app-name>` to execute the unit tests via [Jest](https://jestjs.io).
-- Run `nx affected:test` to execute the unit tests affected by a change.
-
-#### End-to-end (e2e) testing
-
-- Run `ng e2e <app-name>` to execute the end-to-end tests via [Cypress](https://www.cypress.io).
-- Run `nx affected:e2e` to execute the end-to-end tests affected by a change.
-
-## Scaffolding
-
-### Applications
-
-When using Nx monorepo, you can create multiple applications and libraries in the same workspace.
-
-- Run `nx g @nx/react:app <app-name>` to generate an React application.
-- Run `nx g @nx/node:app <app-name>` to generate an Node.js application.
-- Run `nx g @nx/next:app <app-name>` to generate an Next.js application.
-
-_**@See** Nx documentation for more
-app [community plugins](https://nx.dev/community#community-plugin-list) and commands_
-
-### Libraries
-
-Libraries are shareable across libraries and applications. They can be imported from `@aglyn/mylib`.
-
-- Run `nx g @nx/react:lib <lib-name>` to generate a React library
-- Run `nx g @nx/node:lib <lib-name>` to generate a Node.js library
-- Run `nx g @nx/next:lib <lib-name>` to generate a Next.js library
-
-_**@See** Nx documentation for more
-library [community plugins](https://nx.dev/community#community-plugin-list) and commands_
-
-### App or library modules and components
-
-- Run `nx g @nx/react:component my-component --project=my-app` to generate a new component.
-
-## Updating
-
-### Move or rename application and libraries
-
-To streamline the refactoring process Nx provides workspace commands to move and/or rename project
-applications and libraries.
-
-- For example
-  run `nx g @nx/workspace:move --project website-feature-react website/feature/react-renderer` to
-  move the library under `/libs/website/feature/react` to `/libs/website/feature/react-renderer`
-
-\*Make sure to provide the Nx project name and not the actual directory (@See [nx.json](./nx.json)
-for registered project name), followed by its _new_ directory
-
-### Nx build framework
-
-1. Run `nx migrate latest` to pull the most recent version of Nx, it will generate a new files
-   named `migrations.json`in the root directory. Double check the contents and make sure changes are
-   ok.
-1. Double check changes are ok in `package.json` then run `npm install`
-1. Next apply the migrations by running the following command `nx migrate --run-migrations`
-1. If everything succeeded, stage the changes and make sure to commit the `migrations.json` file for
-   versioning.
-
-_@See More info detailed on
-the [Nx documentation](https://nx.dev/latest/react/core-concepts/updating-nx)_
-
-### Version and changelog
-
-Package version bump and changelog automation with [SemVer](https://semver.org/)
-and [ConventionalCommits](https://www.conventionalcommits.org/en/v1.0.0/)
-
-- Run `nx run workspace:version --version=[major|minor|patch|prerelease] --preid=beta --dry-run` for
-  version bump and generation of CHANGELOG
-- Run `nx run <lib-name>:version [...options]` for independent project app or lib version and
-  generation of CHANGELOG
-
-_**@See** [`@jscutlery/semver`](https://github.com/jscutlery/semver) Nx bundle repository for full
-list of commands and options._
-
-## Visualizing dependencies
-
-Nx can generate a dependency tree graph
-
-- Run `nx dep-graph` to see a diagram of the dependencies of your projects.
-
-<hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
-
-## Environment files
-
-### What other .env files can be used?
-
-_Note: this feature is available with react-scripts@1.0.0 and higher._
-
-- `.env`: Default.
-- `.env.local`: Local overrides. This file is loaded for all environments except test.
-- `.env.development`, `.env.test`, `.env.production`: Environment-specific settings.
-- `.env.development.local`, `.env.test.local`, `.env.production.local`: Local overrides of
-  environment-specific settings.
-
-#### Files on the left have more priority than files on the right:
-
-- `npm start`: `.env.development.local`, `.env.development`, `.env.local`, `.env`
-- `npm run build`: `.env.production.local`, `.env.production`, `.env.local`, `.env`
-- `npm test`: `.env.test.local`, `.env.test`, `.env` (note `.env.local` is missing)
-
-These variables will act as the defaults if the machine does not explicitly set them. Please refer
-to the [dotenv documentation](https://github.com/motdotla/dotenv) for more details.
-
-[Source](https://create-react-app.dev/docs/adding-custom-environment-variables)
-
-<hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
-
-## Git
-
-### Commit messages
-
-- Message template: [COMMIT_TEMPLATE.md](COMMIT_TEMPLATE.md).
-- Lint documentation: [ConventionalCommits](https://www.conventionalcommits.org)
-
-#### Template
-
-```markdown
+```
 <type>[(optional-scope)]: <description>
 
 [optional body]
@@ -506,57 +223,51 @@ to the [dotenv documentation](https://github.com/motdotla/dotenv) for more detai
 [optional footer(s)]
 ```
 
-#### Overview
+Common types: `feat` (new feature → minor), `fix` (bug patch → patch), plus `build`, `chore`, `ci`,
+`docs`, `style`, `refactor`, `perf`, `test`, and `revert`. A `!` after the type/scope or a
+`BREAKING CHANGE:` footer signals a major change.
 
-For the purpose of communicating intent to the consumers of the library, the commit outlines the
-following structural elements:
+See [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and
+[SECURITY.md](SECURITY.md) before opening a PR.
 
-##### Types
+## 🌍 Terminology
 
-Other than `fix:` and `feat:` are allowed, for
-example [@commitlint/config-conventional](https://github.com/conventional-changelog/commitlint/tree/master/%40commitlint/config-conventional) (
-based on
-the [the Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines))
-recommends: `build:`, `chore:`, `ci:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `fix:`
-, `feat:`, `style:`, `revert:` and others.
+- **Organization** — the entity that owns sites, members, and billing.
+- **Workspace** — the UX word for an organization's working area.
+- **Tenant** — a site at runtime (the served, published surface only).
+- **Besigner** — Aglyn's clickable visual editor.
+- **Plugin / Add-on** — pluggable, first- or third-party modules that extend an org or app while
+  respecting its architecture.
+- **Extension** — deeper, non-standard integrations that modify default behavior; typically
+  community-authored.
 
-- **Fixing:** a commit of the _type_ `fix` patches a bug in your codebase (this correlates
-  with [`PATCH`](http://semver.org/#summary) in Semantic Versioning).
-- **Feature:** a commit of the _type_ `feat` introduces a new feature to the codebase (this
-  correlates with [`MINOR`](http://semver.org/#summary) in Semantic Versioning).
-- **BREAKING CHANGE:** a commit that has a footer `BREAKING CHANGE:`, or appends a `!` after the
-  type/scope, introduces a breaking API change (correlating
-  with [`MAJOR`](http://semver.org/#summary) in Semantic Versioning). A BREAKING CHANGE can be part
-  of commits of any _type_.
+<hr/>
 
-##### Footers
-
-Other than `BREAKING CHANGE: <description>` may be provided and follow a convention similar
-to [git trailer format](https://git-scm.com/docs/git-interpret-trailers).
-
-<hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
-
-<a name="about" id="about"></a>
-
-<h2 align="center">About the organization</h2>
+<h3 align="center">Connect with us</h3>
 
 <p align="center">
-  Enterprise: Aglyn LLC (aglyn) is an American global distributed technology company and is most
-  notable for Aglyn.com, as well as their contributions to improving the “no code” web development
-  markets by optimizing the process and necessary steps for a website to get off the ground for
-  organizations. Easing maintenance and minimizing work required by expensive engineers.
+  <a href="https://www.linkedin.com/company/aglyn/" title="LinkedIn">
+    <img src="https://img.shields.io/badge/LinkedIn-Follow-0A66C2?logo=linkedin&style=for-the-badge&labelColor=F1F1F1&logoColor=0A66C2&color=0A66C2" alt="LinkedIn" />
+  </a>&nbsp;
+  <a href="https://twitter.com/AglynOfficial" title="Twitter / X">
+    <img src="https://img.shields.io/badge/@AglynOfficial-Follow-1d9bf0?logo=x&style=for-the-badge&labelColor=F1F1F1&logoColor=000000&color=1d9bf0" alt="Twitter" />
+  </a>&nbsp;
+  <a href="https://github.com/aglyn" title="GitHub org">
+    <img src="https://img.shields.io/badge/GitHub-aglyn-181717?logo=github&style=for-the-badge&labelColor=F1F1F1&logoColor=181717&color=404C5C" alt="GitHub" />
+  </a>
 </p>
 
-<hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
-
-<h2 align="center">License</h2>
+<h2 align="center">About Aglyn</h2>
 
 <p align="center">
-  <a href="LICENSE">
-    Apache License
-    ·
-    Version 2.0
-    ·
-    January 2004
-  </a>
+  Aglyn LLC is a distributed technology company building the clickable way to create online.
+  We're improving the no-code web-development market by shrinking the distance between an idea and a
+  live, professional website — easing maintenance and minimizing the expensive engineering work a
+  business site usually demands.
+</p>
+
+<hr/>
+
+<p align="center">
+  <a href="LICENSE"><strong>Apache License 2.0</strong></a> · © Aglyn LLC
 </p>

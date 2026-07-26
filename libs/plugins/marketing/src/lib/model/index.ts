@@ -23,3 +23,4 @@
 export * from './overlays'
 export * from './experiments'
 export * from './site-contract'
+export * from './compile-client-automations'
