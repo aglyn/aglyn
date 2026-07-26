@@ -172,6 +172,11 @@ export interface CommunityListingContentProps {
    */
   orgScoped?: boolean
   /**
+   * The acting org's slug from the URL (AGL-869). At org scope the publisher
+   * link builds from it directly rather than the async host resolution.
+   */
+  orgSlug?: string
+  /**
    * The org's sites, for the install-targeting picker (AGL-773). Present only
    * at org scope; when given (and non-empty) the CTA offers All sites vs
    * Selected sites instead of the single org/host choice.
@@ -190,13 +195,16 @@ export function CommunityListingContent({
   listingId,
   permissions,
   orgScoped,
+  orgSlug: orgSlugProp,
   hosts,
 }: CommunityListingContentProps) {
   // The publisher link was `/{hostDocId}/community/publisher/{id}` — the
   // pre-AGL-621 shape, dead since. The sibling browse grid was fixed for
   // exactly this (AGL-673) and this file was missed; both now build the
   // route from the shared table (AGL-685).
-  const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
+  const { orgSlug: resolvedOrgSlug, subdomain } = useConsoleHostRoute(hostId)
+  // Prefer the URL slug (AGL-869): synchronous and always present at org scope.
+  const orgSlug = orgSlugProp ?? resolvedOrgSlug
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -801,17 +809,30 @@ export function CommunityListingContent({
                         contentGutterY
                       >
                         <Stack spacing={0.5}>
+                          {/* Link to the publisher's storefront (AGL-869):
+                              the org-scope publisher page at org scope, the
+                              per-site publisher page otherwise. */}
                           <MuiLink
                             href={
-                              orgScoped
+                              !listing?.profileId
                                 ? undefined
-                                : orgSlug && subdomain && listing?.profileId
-                                  ? buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
-                                      orgSlug,
-                                      host: subdomain,
-                                      profileId: listing.profileId,
-                                    })
-                                  : undefined
+                                : orgScoped
+                                  ? orgSlug
+                                    ? buildRoute(
+                                        Route.ORG_MARKETPLACE_PUBLISHER,
+                                        { orgSlug, profileId: listing.profileId },
+                                      )
+                                    : undefined
+                                  : orgSlug && subdomain
+                                    ? buildRoute(
+                                        Route.HOST_COMMUNITY_PUBLISHER,
+                                        {
+                                          orgSlug,
+                                          host: subdomain,
+                                          profileId: listing.profileId,
+                                        },
+                                      )
+                                    : undefined
                             }
                             color="secondary"
                             underline="hover"

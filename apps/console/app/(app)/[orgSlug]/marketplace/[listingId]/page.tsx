@@ -165,6 +165,7 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
             listingId={listingId}
             permissions={permissions}
             orgScoped
+            orgSlug={orgSlug}
             hosts={hostList}
           />
         </>

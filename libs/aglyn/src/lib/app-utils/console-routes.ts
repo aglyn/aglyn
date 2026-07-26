@@ -49,6 +49,7 @@ export enum Route {
   // (`HOST_COMMUNITY*`) is being retired in favor of this.
   ORG_MARKETPLACE = '/[orgSlug]/marketplace',
   ORG_MARKETPLACE_LISTING = '/[orgSlug]/marketplace/[listingId]',
+  ORG_MARKETPLACE_PUBLISHER = '/[orgSlug]/marketplace/publisher/[profileId]',
   ORG_SETTINGS = '/[orgSlug]/settings',
   MANAGE_BILLING = '/[orgSlug]/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
@@ -162,6 +163,7 @@ export interface RoutePayload {
   [Route.ORG_PLUGINS]: { orgSlug: string }
   [Route.ORG_MARKETPLACE]: { orgSlug: string }
   [Route.ORG_MARKETPLACE_LISTING]: { orgSlug: string; listingId: string }
+  [Route.ORG_MARKETPLACE_PUBLISHER]: { orgSlug: string; profileId: string }
   [Route.MANAGE_USER_SETTINGS]: undefined
   [Route.MANAGE_NOTIFICATIONS]: undefined
   [Route.MANAGE_MY_COMMUNITY]: undefined
