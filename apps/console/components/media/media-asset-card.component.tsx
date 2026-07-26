@@ -46,6 +46,7 @@ export interface MediaAssetCardProps {
   onToggleSelect?: (checked: boolean) => void
   /** Overflow-menu actions (non-picker). */
   onCopyUrl?: () => void
+  onReplace?: () => void
   onDetails?: () => void
   onDelete?: () => void
 }
@@ -76,6 +77,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
     selected,
     onToggleSelect,
     onCopyUrl,
+    onReplace,
     onDetails,
     onDelete,
   } = props
@@ -233,6 +235,9 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
         {onCopyUrl ? (
           <MenuItem onClick={runAction(onCopyUrl)}>{'Copy URL'}</MenuItem>
+        ) : null}
+        {onReplace ? (
+          <MenuItem onClick={runAction(onReplace)}>{'Replace file'}</MenuItem>
         ) : null}
         {onDetails ? (
           <MenuItem onClick={runAction(onDetails)}>{'Details'}</MenuItem>

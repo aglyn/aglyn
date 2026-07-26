@@ -918,18 +918,19 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
   }, [editor, folderNameById, firestore, scopeId, user, enqueueSnackbar, logActivity, refresh])
 
-  // Asset editing (AGL-184): replace-file + image transforms.
+  // Asset editing (AGL-184): replace-file + image transforms. AGL-827
+  // generalized replace to any media so the card overflow menu can trigger
+  // it without opening the drawer.
   const replaceInputRef = useRef<HTMLInputElement>(null)
   const [imageEditorOpen, setImageEditorOpen] = useState(false)
-  const replaceBytes = useCallback(
-    async (base64: string, contentType: string) => {
-      if (!editor) return
+  const replaceMediaBytes = useCallback(
+    async (media: any, base64: string, contentType: string) => {
+      if (!media) return
+      const mediaId = media.$id ?? media.id
       const idToken = await (user as any)?.getIdToken?.()
       const updatedAtMs =
-        editor.media?.updatedAt?.toMillis?.() ??
-        (editor.media?.updatedAt?.seconds
-          ? editor.media.updatedAt.seconds * 1000
-          : undefined)
+        media?.updatedAt?.toMillis?.() ??
+        (media?.updatedAt?.seconds ? media.updatedAt.seconds * 1000 : undefined)
       const response = await fetch('/api/media/replace', {
         method: 'POST',
         headers: {
@@ -938,7 +939,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         },
         body: JSON.stringify({
           ...scopeBody,
-          mediaId: editor.id,
+          mediaId,
           contentType,
           data: base64,
           ...(updatedAtMs ? { expectedUpdatedAtMs: updatedAtMs } : {}),
@@ -954,13 +955,49 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       enqueueSnackbar('Image replaced', { variant: 'success', persist: false })
       logActivity('Replaced media file', {
         type: 'media',
-        id: editor.id,
-        name: editor.media?.fileName ?? editor.id,
+        id: mediaId,
+        name: media?.fileName ?? mediaId,
       })
       setEditor(null)
       refresh()
     },
-    [editor, user, scopeId, enqueueSnackbar, logActivity, refresh],
+    [user, scopeId, enqueueSnackbar, logActivity, refresh],
+  )
+  const replaceBytes = useCallback(
+    (base64: string, contentType: string) =>
+      replaceMediaBytes(editor?.media, base64, contentType),
+    [editor, replaceMediaBytes],
+  )
+  // Card-level replace (AGL-827): overflow "Replace file" opens a chooser
+  // for that specific asset. A ref holds the target so click() isn't racing
+  // a state update.
+  const cardReplaceInputRef = useRef<HTMLInputElement>(null)
+  const cardReplaceTargetRef = useRef<any>(null)
+  const requestCardReplace = useCallback((media: any) => {
+    cardReplaceTargetRef.current = media
+    cardReplaceInputRef.current?.click()
+  }, [])
+  const handleCardReplaceFile = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.target.value = ''
+      const media = cardReplaceTargetRef.current
+      cardReplaceTargetRef.current = null
+      if (!file || !media) return
+      if (!file.type.startsWith('image/')) {
+        return void enqueueSnackbar('Replace with an image file', {
+          variant: 'warning',
+          persist: false,
+        })
+      }
+      setBusy(true)
+      try {
+        await replaceMediaBytes(media, await fileToBase64(file), file.type)
+      } finally {
+        setBusy(false)
+      }
+    },
+    [replaceMediaBytes, enqueueSnackbar],
   )
   const handleReplaceFile = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1465,6 +1502,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           onChange={handleUpload}
           sx={{ display: 'none' }}
         />
+        <Box
+          component="input"
+          ref={cardReplaceInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleCardReplaceFile}
+          sx={{ display: 'none' }}
+        />
       </Stack>
       <Stack
         direction="row"
@@ -1697,6 +1742,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     })
                   }
                   onCopyUrl={handleCopyUrl(media)}
+                  onReplace={
+                    String(media.contentType ?? '').startsWith('image/')
+                      ? () => requestCardReplace(media)
+                      : undefined
+                  }
                   onDetails={() =>
                     setEditor({
                       id: media.$id as string,
