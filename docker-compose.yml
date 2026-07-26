@@ -1,0 +1,40 @@
+# Self-hosted Aglyn (AGL-905): the console (management UI) and the tenant
+# runtime (serves published sites) as two containers.
+#
+#   cp .env.selfhost.example .env.selfhost   # fill it in — see docs/SELF_HOSTING.md
+#   docker compose up --build
+#
+# The env file is used twice: as a BuildKit secret during the image build
+# (Next.js inlines NEXT_PUBLIC_* into the client bundles) and as runtime env
+# for the server-side secrets. Rebuild the images whenever a NEXT_PUBLIC_*
+# value changes — runtime env alone cannot update the client bundle.
+#
+# In front of these, run your own reverse proxy (Caddy/nginx/Traefik):
+# console on one hostname, tenant on a wildcard domain for your sites.
+
+services:
+  console:
+    build:
+      context: .
+      dockerfile: docker/console.Dockerfile
+      secrets:
+        - selfhost_env
+    env_file: .env.selfhost
+    ports:
+      - '4200:4200'
+    restart: unless-stopped
+
+  tenant:
+    build:
+      context: .
+      dockerfile: docker/tenant.Dockerfile
+      secrets:
+        - selfhost_env
+    env_file: .env.selfhost
+    ports:
+      - '4500:4500'
+    restart: unless-stopped
+
+secrets:
+  selfhost_env:
+    file: .env.selfhost
