@@ -42,6 +42,10 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Link as MuiLink,
   Stack,
@@ -353,6 +357,9 @@ export function CommunityListingContent({
   const { enqueueSnackbar } = useSnackbar()
   const { install, installPlan, buy } = useCommunityActions(hostId)
   const [installScope, setInstallScope] = useState<'org' | 'host'>('org')
+  // Confirm before writing install pins (AGL-867): the install is deliberate
+  // and site-scoped, so it names its targets before committing.
+  const [confirmOpen, setConfirmOpen] = useState(false)
   // Org-scope install targeting (AGL-773): All sites vs a chosen subset. Only
   // engaged at org scope with a known site list; otherwise the per-site tab's
   // simpler org/host choice (AGL-656) still applies.
@@ -566,6 +573,48 @@ export function CommunityListingContent({
   const versionHistory: any[] = Array.isArray(listing?.versionHistory)
     ? [...listing.versionHistory].sort((a, b) => b.version - a.version)
     : []
+
+  // Human summary of exactly where this install lands (AGL-867), read from the
+  // same targeting the CTA acts on. An org pin covers every site (now and
+  // future); host pins are named so "Selected sites" can't silently mean
+  // something else.
+  const installTargetSummary = (): string => {
+    if (orgTargeting && !installed) {
+      if (
+        installPlanSteps.length === 1 &&
+        installPlanSteps[0]?.scope === 'org'
+      ) {
+        return 'the whole organization — every site, including sites added later'
+      }
+      const names = installPlanSteps
+        .filter((step) => step.scope === 'host')
+        .map(
+          (step) =>
+            (hosts ?? []).find((host) => host.id === step.hostId)?.label ??
+            step.hostId,
+        )
+      if (names.length) {
+        return `${names.length} site${names.length === 1 ? '' : 's'}: ${names.join(
+          ', ',
+        )}`
+      }
+      return 'the selected targets'
+    }
+    if (installTargetScope === 'org') {
+      return 'the whole organization — every site'
+    }
+    return 'this site'
+  }
+
+  // The actual pin write, run only after the confirm dialog (AGL-867).
+  const runInstall = () => {
+    setConfirmOpen(false)
+    if (orgTargeting && !installed) {
+      void installPlan(listing, installPlanSteps)
+    } else {
+      void install(listing, installTargetScope)
+    }
+  }
 
   return (
     <>
@@ -857,11 +906,11 @@ export function CommunityListingContent({
                             onClick={
                               permissions.installPlugins
                                 ? () =>
-                                    mustBuy
-                                      ? buy(listing)
-                                      : orgTargeting && !installed
-                                        ? installPlan(listing, installPlanSteps)
-                                        : install(listing, installTargetScope)
+                                    // Buying goes straight to Stripe checkout,
+                                    // which is its own confirmation; a free or
+                                    // entitled install confirms its targets
+                                    // first (AGL-867).
+                                    mustBuy ? buy(listing) : setConfirmOpen(true)
                                 : () =>
                                     enqueueSnackbar(
                                       'Your team role does not allow installing from the community',
@@ -1073,6 +1122,47 @@ export function CommunityListingContent({
               ]}
             />
           )}
+          {/* Install confirmation (AGL-867): names the artifact, its version,
+              and exactly which sites before any pin is written. */}
+          <Dialog
+            open={confirmOpen}
+            onClose={() => setConfirmOpen(false)}
+            maxWidth="xs"
+            fullWidth
+          >
+            <DialogTitle>
+              {installed ? 'Update this listing?' : 'Install this listing?'}
+            </DialogTitle>
+            <DialogContent dividers>
+              <Stack spacing={1}>
+                <Typography variant="body2">
+                  {installed ? 'Update ' : 'Install '}
+                  <strong>{listing?.displayName}</strong>
+                  {listing
+                    ? ` (${listingArtifactLabel(listing)}, v${
+                        listing?.latestVersion
+                      })`
+                    : ''}
+                  {'.'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {'This will be installed to '}
+                  <strong>{installTargetSummary()}</strong>
+                  {'.'}
+                </Typography>
+              </Stack>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setConfirmOpen(false)}>{'Cancel'}</Button>
+              <Button
+                variant="contained"
+                color="secondary"
+                onClick={runInstall}
+              >
+                {installed ? 'Update' : 'Install'}
+              </Button>
+            </DialogActions>
+          </Dialog>
         </Container>
     </>
   )

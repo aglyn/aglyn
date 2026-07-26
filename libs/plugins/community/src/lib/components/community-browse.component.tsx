@@ -17,7 +17,6 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Box,
   Button,
@@ -45,7 +44,6 @@ import {
   listingArtifactLabel,
   resolvePluginInstallState,
 } from '../model/community'
-import useCommunityActions from '../hooks/use-community-actions'
 
 // The console route table is shared (AGL-685), so these go through
 // buildRoute rather than being reassembled from a base string — the shape
@@ -66,55 +64,17 @@ export interface CommunityBrowseProps {
 }
 
 /**
- * Install CTA wording, per artifact type (AGL-657).
- *
- * "Add to this site" is a lie for anything that doesn't install onto a site: a
- * dataset schema creates an org-level dataset, and an email template lands as
- * an inactive draft rather than going live. The button is the last thing
- * someone reads before committing, so it names what actually happens —
- * `INSTALL_TARGETS` already encodes where each type physically writes.
- */
-function installCta(listing: unknown): string {
-  switch (listingArtifactType(listing as any)) {
-    case 'datasetSchema':
-      return 'Add to this organization'
-    case 'emailTemplate':
-      return 'Add as a draft'
-    case 'template':
-    case 'layout':
-      return 'Save to Templates'
-    default:
-      return 'Add to this site'
-  }
-}
-
-/**
- * Past-tense state word for the types that don't "install" (AGL-789).
- *
- * Deliberately not "Installed": a schema became a dataset you now own and can
- * edit, and an email template is a draft that is NOT sending. Reusing the
- * component word would imply both a live artifact and a one-to-one relation,
- * and neither holds.
- */
-function addedLabel(artifactType: string): string {
-  return artifactType === 'emailTemplate' ? 'Draft added' : 'Added'
-}
-
-/**
- * Community components browse + install (AGL-44). Installing copies the
- * listing's pinned version snapshot into `hosts/{hostId}/components` (with
- * `community` source metadata), so the element drawer, editor grafting, and
- * tenant compose pipeline all apply unchanged. When a listing publishes a
- * newer version, installed hosts see an explicit Update action — no silent
- * upgrades.
+ * Community components browse (AGL-44). A read-only catalogue: each card links
+ * to the listing's detail page, which is the only place an install happens
+ * (AGL-867) — installing from a grid card was too easy and skipped the
+ * site-targeting choice. The card still shows install STATE (installed,
+ * org-wide) so the shelf reads honestly, but carries no install action.
  */
 export function CommunityBrowse(props: CommunityBrowseProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { enqueueSnackbar } = useSnackbar()
-  const { permissions, orgScoped } = props
-  const { install: runInstall, buy: runBuy } = useCommunityActions(hostId)
+  const { orgScoped } = props
   const [handles, setHandles] = useState<Record<string, string>>({})
   // Listings are org-owned (AGL-652), so "is this mine" is an org comparison.
   // Resolved from the routing mirror rather than a new prop so the component
@@ -180,24 +140,6 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
-
-  // Paid-listing gating (AGL-46): the buyer's purchase records, written by
-  // the Stripe webhook.
-  const { data: purchaseDocs } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'communityPurchases'),
-        where('buyerUid', '==', user?.uid ?? '-anonymous-'),
-        limit(200),
-      ),
-    [firestore, user?.uid],
-    { idField: '$id' },
-  )
-  const purchased = useMemo(() => {
-    const map: Record<string, boolean> = {}
-    for (const purchase of purchaseDocs ?? []) map[purchase.listingId] = true
-    return map
-  }, [purchaseDocs])
 
   // listingId → installed component doc (deleted installs don't count).
   const installed = useMemo(() => {
@@ -323,17 +265,6 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
     }
   }, [listings, firestore])
 
-  // Server-side install (AGL-46): version snapshots aren't client-readable
-  // (paid content), so the API verifies access and copies the definition.
-  // Handlers shared with the detail page live in useCommunityActions.
-  // A fresh install from the grid lands on this site (the org/host picker
-  // lives on the detail page); updating an existing pin keeps its scope so an
-  // org-wide install is not silently shadowed by a new host pin (AGL-656).
-  const handleInstall =
-    (listing: any, scope?: 'org' | 'host') => () =>
-      runInstall(listing, scope)
-  const handleBuy = (listing: any) => () => runBuy(listing)
-
   // Browse controls (AGL-95): client-side search/filter/sort over the
   // fetched page of listings.
   const [search, setSearch] = useState('')
@@ -450,22 +381,8 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
               ? pluginState.installedVersion
               : (componentInstall?.community?.version ??
                 artifactInstall?.version)
-            // Re-adding a schema or an email draft is always legitimate — it
-            // makes another dataset / another draft — so these never reach the
-            // disabled "up to date" state the way a component does.
-            const upToDate = isPlugin
-              ? isInstalled && !pluginState.updateAvailable
-              : componentInstall && installedVersion >= listing.latestVersion
-            const targetScope =
-              isPlugin && isInstalled
-                ? (pluginState.scope ?? undefined)
-                : undefined
             const priceUsd = Number(listing.priceUsd ?? 0)
-            const mustBuy =
-              priceUsd > 0 &&
-              !purchased[listing.$id] &&
-              listing.profileId !== viewerOrgId &&
-              !isInstalled
+            const detailHref = listingHref(listing.$id)
             return (
               <Grid key={listing.$id} size={{ xs: 12, sm: 6, md: 4 }}>
                 <Stack
@@ -571,32 +488,26 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                   ) : (
                     <span style={{ flex: 1 }} />
                   )}
+                  {/* Read-only state, then a link to the detail page — the
+                      only place an install happens (AGL-867). No install/buy
+                      action lives on the grid. */}
+                  {isInstalled ? (
+                    <Typography variant="caption" color="success.main">
+                      {`Installed${
+                        installedVersion ? ` (v${installedVersion})` : ''
+                      }`}
+                    </Typography>
+                  ) : null}
                   <Button
                     size="small"
-                    variant={isInstalled ? 'outlined' : 'contained'}
+                    variant="outlined"
                     color="secondary"
-                    disabled={Boolean(upToDate)}
-                    onClick={
-                      permissions?.installPlugins
-                        ? mustBuy
-                          ? handleBuy(listing)
-                          : handleInstall(listing, targetScope)
-                        : () =>
-                            enqueueSnackbar(
-                              'Your team role does not allow installing from the community',
-                              { variant: 'warning', persist: false },
-                            )
-                    }
+                    href={detailHref}
+                    disabled={!detailHref}
                   >
-                    {upToDate
-                      ? `Installed (v${installedVersion})`
-                      : artifactInstall
-                        ? `${addedLabel(artifactType)} (v${installedVersion}) · add again`
-                        : isInstalled
-                          ? `Update to v${listing.latestVersion}`
-                          : mustBuy
-                            ? `Buy for $${priceUsd}`
-                            : installCta(listing)}
+                    {priceUsd > 0 && !isInstalled
+                      ? `View details · $${priceUsd}`
+                      : 'View details'}
                   </Button>
                 </Stack>
               </Grid>
