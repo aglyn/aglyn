@@ -14,27 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import { buildRoute, Route } from './route-links'
+import type { ReactNode } from 'react'
+import StaffGuard from '../../../components/staff-guard.component'
 
 /**
- * The personal Manage area's tab strip (AGL-351): user-scoped surfaces —
- * notifications and profile — as their own console section in the
- * secondary app bar, mirroring orgNavTabItems/hostNavTabItems.
+ * Staff console layout (AGL-847). One gate for every `/admin/*` page: non-staff
+ * get a 404 for the whole area instead of the per-page "staff only" alert that
+ * used to leak the grant-script name.
  */
-export function manageNavTabItems() {
-  return [
-    {
-      id: 'nav-tab-manage-notifications',
-      label: 'Notifications',
-      href: buildRoute(Route.MANAGE_NOTIFICATIONS),
-    },
-    {
-      id: 'nav-tab-manage-user',
-      label: 'Manage Account',
-      href: buildRoute(Route.MANAGE_USER_SETTINGS),
-    },
-  ]
+export default function AdminLayout({ children }: { children: ReactNode }) {
+  return <StaffGuard>{children}</StaffGuard>
 }
-
-export default manageNavTabItems

@@ -67,6 +67,47 @@ export async function notifyUsers(
   }
 }
 
+// Staff are identified by a Firebase Auth custom claim (`staff`), which is not
+// a Firestore query — so the roster comes from paginating the auth users. A
+// burst of ticket activity shouldn't rescan every time, so the (small) result
+// is cached briefly. Fails soft to an empty list.
+let staffUidCache: { uids: string[]; at: number } | null = null
+const STAFF_CACHE_MS = 60_000
+
+async function listStaffUids(): Promise<string[]> {
+  const now = Date.now()
+  if (staffUidCache && now - staffUidCache.at < STAFF_CACHE_MS) {
+    return staffUidCache.uids
+  }
+  const auth = firebaseAdmin.app().auth()
+  const uids: string[] = []
+  let pageToken: string | undefined
+  do {
+    const page = await auth.listUsers(1000, pageToken)
+    for (const record of page.users) {
+      if (record.customClaims?.['staff']) uids.push(record.uid)
+    }
+    pageToken = page.pageToken
+  } while (pageToken && uids.length < 400)
+  staffUidCache = { uids, at: now }
+  return uids
+}
+
+/**
+ * Notifies every staff-claim holder (AGL-850) — the support-desk audience.
+ * Staff are not org members, so `notifyOrgAdmins`/`notifyHostManagers` never
+ * reach them; this enumerates the `staff` custom claim instead. The docs land
+ * at `users/{uid}/notifications`, which the console notifications menu already
+ * renders, so no separate staff inbox is needed. Never throws.
+ */
+export async function notifyStaff(payload: NotificationPayload): Promise<void> {
+  try {
+    await notifyUsers(await listStaffUids(), payload)
+  } catch (error) {
+    console.error('staff notification failed', error)
+  }
+}
+
 /** Notifies the org's owner + admins (billing, membership, org events). */
 export async function notifyOrgAdmins(
   orgId: string,

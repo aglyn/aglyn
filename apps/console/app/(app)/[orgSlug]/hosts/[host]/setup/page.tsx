@@ -446,6 +446,20 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
         .then(() => {
           enqueueSnackbar('Saved!', { variant: 'success' })
           logActivity('Updated host settings', { type: 'host', id: hostId })
+          // displayName is a client write to the host doc, so it bypasses the
+          // membership funnel — ping the server to re-fan the new name into
+          // every member's hostMemberships row (AGL-844). Fire-and-forget: a
+          // miss self-heals on the next membership change or backfill.
+          if (displayNameChanged) {
+            void fetch('/api/hosts/sync-memberships', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+              },
+              body: JSON.stringify({ hostId }),
+            }).catch(() => undefined)
+          }
           // The subdomain addresses this page, so a rename leaves the
           // current URL pointing at nothing — the host guard would render
           // the designed 404 on a successful save. Follow it across.

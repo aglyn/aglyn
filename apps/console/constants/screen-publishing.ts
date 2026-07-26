@@ -16,6 +16,7 @@
  */
 
 import type { HostUid, ScreenUid } from '@aglyn/aglyn'
+import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   deleteField,
   doc,
@@ -40,9 +41,11 @@ export async function publishScreenRoute(
 ): Promise<void> {
   const { hostId, screenId } = ids
   await Promise.all([
+    // `publishedAt` records when the route went live; it rides the same merge
+    // as the slug so publishing stamps it in one write (cleared on unpublish).
     setDoc(
       doc(firestore, 'hosts', hostId, 'screens', screenId),
-      { slug },
+      { slug, publishedAt: Timestamp.now() },
       { merge: true },
     ),
     updateDoc(doc(firestore, 'hosts', hostId), {
@@ -84,12 +87,16 @@ export async function unpublishScreenRoute(
     updateDoc(doc(firestore, 'hosts', hostId), {
       [`screens.${screenId}`]: deleteField(),
     }),
-    options?.clearSlug
-      ? setDoc(
-          doc(firestore, 'hosts', hostId, 'screens', screenId),
-          { slug: deleteField() },
-          { merge: true },
-        )
-      : Promise.resolve(),
+    // Drop `publishedAt` too (the route is no longer live), and the slug when
+    // asked. Always writes the screen doc now so an unpublished screen never
+    // keeps a stale published date.
+    setDoc(
+      doc(firestore, 'hosts', hostId, 'screens', screenId),
+      {
+        publishedAt: deleteField(),
+        ...(options?.clearSlug ? { slug: deleteField() } : {}),
+      },
+      { merge: true },
+    ),
   ])
 }

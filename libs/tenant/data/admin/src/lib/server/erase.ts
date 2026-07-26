@@ -17,6 +17,7 @@
 
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
+import { deleteHostProjectionForAllMembers } from './host-memberships'
 
 /** The reversible hold before a requested erasure is executed (AGL-485). */
 export const ERASURE_HOLD_MS = 7 * 24 * 60 * 60 * 1000
@@ -71,6 +72,9 @@ export async function eraseHost(hostId: string): Promise<void> {
       .doc(orgId)
       .set({ hosts: { [hostId]: FieldValue.delete() } }, { merge: true })
       .catch(() => undefined)
+    // Drop every member's reverse-index row for this host (AGL-844); the
+    // members still exist here (recursiveDelete of the org, if any, is later).
+    await deleteHostProjectionForAllMembers(orgId, hostId).catch(() => undefined)
   }
 
   // The host document tree (screens/layouts/versions/counters/products/…).

@@ -33,16 +33,19 @@ import {
   MenuItem,
   Typography,
 } from '@mui/material'
+import { doc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { type MouseEvent, useMemo, useState } from 'react'
+import {
+  useFirestore,
+  useSwitcherCollection,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 import { hostDisplayDomain } from '../constants/tenant-links'
-import {
-  useHostId,
-  useHostSubdomain,
-  useOrgHostsContext,
-} from '../components/host-id-provider'
-import { useOrgSlug } from '../hooks/use-org-scope'
+import { useHostId, useHostSubdomain } from '../components/host-id-provider'
+import { useOrgScope } from '../hooks/use-org-scope'
+import useFirestoreDoc from '../hooks/use-firestore-doc'
 import CreateHostDialog from './create-host-dialog.component'
 import HostIcon from './host-icon.component'
 import SwitcherSearchField from './switcher-search-field.component'
@@ -50,55 +53,83 @@ import SwitcherSearchField from './switcher-search-field.component'
 /**
  * Site switcher for the primary app bar (AGL-629, Vercel project-switcher UI):
  * the button shows the current site (or "All sites" off a site); the dropdown
- * filters the org's sites, marks the current one, and offers a create row. The
- * URL addresses sites by subdomain (AGL-622).
+ * lists the org's sites, marks the current one, and offers a create row.
  *
- * The site list comes from `HostIdProvider`'s context, NOT a local
- * `useOrgHosts` subscription: this component is rendered by the per-page
- * `DashboardLayout`, so it remounts on every navigation, and a local
- * subscription restarted from empty each time — flashing "Sites", then
- * "All sites", then the real name (AGL-745).
+ * Backed by the per-user `hostMemberships` projection via `useSwitcherCollection`
+ * (AGL-844): a recent-first window when idle and a name-prefix search when
+ * typing, so a member of hundreds of sites neither loads them all nor fails to
+ * find one outside the loaded window. The current site is read directly so the
+ * trigger always labels correctly during a cold load.
  */
 export function HostSwitcherNavComponent() {
   const hostId = useHostId()
   const hostSubdomain = useHostSubdomain()
   const router = useRouter()
-  const orgSlug = useOrgSlug()
-  // Workspace-scoped (AGL-236): the provider lists the selected org's sites.
-  const { hosts } = useOrgHostsContext()
+  const firestore = useFirestore()
+  const { data: user } = useUser()
+  const { currentOrg, orgSlug } = useOrgScope()
+  const uid = user?.uid
+  const orgId = currentOrg?.$id
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
+
+  const {
+    items: hits,
+    loading,
+    hasQuery,
+  } = useSwitcherCollection<any>({
+    firestore,
+    path: ['users', uid ?? '', 'hostMemberships'],
+    where: orgId ? ['orgId', '==', orgId] : undefined,
+    query,
+    idField: '$id',
+    deps: [firestore, uid, orgId],
+  })
+
+  // The open site read directly so the trigger resolves and its row keeps a
+  // check even when it falls outside the recent window.
+  const { data: currentDoc } = useFirestoreDoc<any>(
+    () =>
+      uid && hostId
+        ? doc(firestore, 'users', uid, 'hostMemberships', hostId)
+        : null,
+    [firestore, uid, hostId],
+    { idField: '$id' },
+  )
 
   const close = () => {
     setAnchorEl(null)
     setQuery('')
   }
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    const list = (hosts ?? []) as Array<any>
-    if (!needle) return list
-    return list.filter((host) =>
-      [host.displayName, host.subdomain, host.cname, host.$id].some(
-        (field: string | undefined) => field?.toLowerCase().includes(needle),
-      ),
-    )
-  }, [hosts, query])
+  // Pin the open site to the top of the idle window.
+  const sites = useMemo(() => {
+    const list = [...(hits ?? [])]
+    if (
+      !hasQuery &&
+      currentDoc?.$id &&
+      !list.some((site: any) => site.$id === currentDoc.$id)
+    ) {
+      list.unshift(currentDoc)
+    }
+    return list
+  }, [hits, hasQuery, currentDoc])
 
-  const goToHost = (host: { $id: string; subdomain: string }) => {
+  const goToHost = (site: { $id: string; subdomain?: string }) => {
     close()
-    if (host.$id === hostId) return
+    if (site.$id === hostId || !site.subdomain) return
     router.push(
-      buildRoute(Route.HOST_DASHBOARD, { orgSlug, host: host.subdomain }),
+      buildRoute(Route.HOST_DASHBOARD, { orgSlug, host: site.subdomain }),
     )
   }
 
-  const current = (hosts ?? []).find((host: any) => host.$id === hostId)
-  // On a site route the URL subdomain is known synchronously, so it labels
-  // the button during a cold load rather than the misleading "All sites".
+  // The URL subdomain labels the button during a cold load rather than the
+  // misleading "All sites".
   const label =
-    current?.displayName ?? current?.$id ?? hostSubdomain ?? 'All sites'
+    currentDoc?.displayName ?? currentDoc?.$id ?? hostSubdomain ?? 'All sites'
+  const empty = sites.length === 0
+  const showEmpty = empty && !loading
 
   return (
     <>
@@ -112,7 +143,7 @@ export function HostSwitcherNavComponent() {
         onClick={(event: MouseEvent<HTMLElement>) =>
           setAnchorEl(event.currentTarget)
         }
-        startIcon={<HostIcon host={current} />}
+        startIcon={<HostIcon host={currentDoc} />}
         endIcon={<MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />}
         sx={{
           maxWidth: 260,
@@ -146,34 +177,32 @@ export function HostSwitcherNavComponent() {
         />
         <Divider />
         <Box sx={{ maxHeight: 280, overflowY: 'auto', py: 0.5 }}>
-          {filtered.length === 0 ? (
+          {showEmpty ? (
             <Typography
               variant="body2"
               color="text.secondary"
               sx={{ px: 2, py: 1.5 }}
             >
-              {(hosts ?? []).length === 0
-                ? 'No sites yet.'
-                : 'No sites match.'}
+              {hasQuery ? 'No sites match.' : 'No sites yet.'}
             </Typography>
           ) : (
-            filtered.map((host: any) => {
-              const isCurrent = host.$id === hostId
+            sites.map((site: any) => {
+              const isCurrent = site.$id === hostId
               return (
                 <MenuItem
-                  key={host.$id}
+                  key={site.$id}
                   selected={isCurrent}
                   onClick={() =>
-                    goToHost({ $id: host.$id, subdomain: host.subdomain })
+                    goToHost({ $id: site.$id, subdomain: site.subdomain })
                   }
                   sx={{ gap: 1 }}
                 >
                   <ListItemIcon sx={{ minWidth: 0 }}>
-                    <HostIcon host={host} color={isCurrent ? 'secondary' : undefined} />
+                    <HostIcon host={site} color={isCurrent ? 'secondary' : undefined} />
                   </ListItemIcon>
                   <ListItemText
-                    primary={host.displayName ?? host.$id}
-                    secondary={hostDisplayDomain(host)}
+                    primary={site.displayName ?? site.$id}
+                    secondary={hostDisplayDomain(site)}
                     slotProps={{
                       primary: { noWrap: true },
                       secondary: { noWrap: true, variant: 'caption' },

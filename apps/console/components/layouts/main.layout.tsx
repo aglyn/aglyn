@@ -19,18 +19,7 @@ import {
   APP_CONSOLE,
   ICON_VARIANT_LEFT,
   ICON_VARIANT_MENU_DOWN,
-  ICON_VARIANT_SIGN_OUT,
-  ICON_VARIANT_THEME_DARK,
-  ICON_VARIANT_THEME_LIGHT,
-  ICON_VARIANT_THEME_SYSTEM,
-  ICON_VARIANT_USER_SETTINGS,
 } from '@aglyn/shared-data-enums'
-import {
-  mdiAccountGroupOutline,
-  mdiBookOpenVariant,
-  mdiCreditCardOutline,
-  mdiOpenInNew,
-} from '@aglyn/shared-data-mdi'
 import {
   AglynBesignerLogoFull,
   AglynConsoleLogoFull,
@@ -45,9 +34,8 @@ import {
   SrOnly,
 } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
-import { getThemeModeDisplayName, mergeSxProps } from '@aglyn/shared-ui-theme'
+import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { _isArr, _isArrEmpty } from '@aglyn/shared-util-tools'
-import { useUserPhoto } from '@aglyn/tenant-feature-instance'
 import {
   AppBar,
   Avatar,
@@ -63,18 +51,22 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material'
-import { useColorScheme } from '@mui/material/styles'
 import { Fragment, useMemo } from 'react'
-import { buildDocsUrl } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { TOP_BAR_HEIGHT } from '../../constants/shared'
 import NotificationPrompt from '../notification-prompt.component'
 import NotificationsMenu from '../notifications-menu.component'
 import OrgSwitcherNav from '../org-switcher-nav.component'
+import UserMenu from '../user-menu.component'
 
 // eslint-disable-next-line react/display-name
 const buildNav = (type?: 'icon' | 'text') => (item, i) => {
+  // Escape hatch for a fully custom action (AGL-858: the redesigned UserMenu),
+  // rendered in place instead of squeezed through the icon/menu item shape.
+  if (typeof item?.render === 'function') {
+    return item.render(item.key ?? item.id ?? i)
+  }
   const { avatar, icon, children, id, key, items, MenuProps, ...rest } = item
   const isMenu = !_isArrEmpty(items)
   const itemKey = key || id || i
@@ -344,6 +336,8 @@ export interface QuickActionsMenuItem extends IconButtonProps {
   href?: any
   items?: MenuItemProps[]
   MenuProps?: Partial<MenuProps>
+  /** Render a fully custom action in place (AGL-858: the UserMenu popover). */
+  render?: (key: string | number) => JSX.Element
 }
 
 export interface CenterNavMenuItem
@@ -378,14 +372,9 @@ export function MainLayout(props: MainLayoutProps) {
     backButton,
     ...rest
   } = props
-  const userPhotoUrl = useUserPhoto({ gravatar: { size: '64' } })
-  const { mode, setMode } = useColorScheme()
-  const themeModeDisplayName = getThemeModeDisplayName(mode)
-  // The active workspace for org-scoped chrome links (AGL-631). Empty only
-  // before any org resolves (a brand-new account); those links then fall back
-  // to the jump page.
-  const orgSlug = useOrgSlug()
-  const orgHome = orgSlug ? buildRoute(Route.ORG_HOME, { orgSlug }) : '/'
+  // The account menu, theme control, and org-scoped chrome links moved into
+  // the self-contained UserMenu component (AGL-858), which reads its own
+  // user/org/theme — so MainLayout no longer needs them here.
   const layoutTitle = useMemo(() => {
     return title ? [...(_isArr(title) ? title : [title]), 'Secure'] : 'Secure'
   }, [title])
@@ -446,99 +435,10 @@ export function MainLayout(props: MainLayoutProps) {
           appBarSuffix={appBarSuffix}
           quickActions={[
             ...(quickActions || []),
-            // Theme mode toggle, in the slot the "Manage" cog menu used to
-            // occupy (AGL-236 follow-up) — a direct click-to-cycle icon
-            // button rather than a single-item menu.
-            {
-              title: `Theme mode: ${themeModeDisplayName}`,
-              onClick: () => {
-                // cycle: system/undefined → light → dark → system
-                setMode(
-                  mode === 'dark'
-                    ? 'system'
-                    : mode === 'light'
-                      ? 'dark'
-                      : 'light',
-                )
-              },
-              icon: {
-                path:
-                  mode === 'dark'
-                    ? ICON_VARIANT_THEME_DARK.path
-                    : mode === 'light'
-                      ? ICON_VARIANT_THEME_LIGHT.path
-                      : ICON_VARIANT_THEME_SYSTEM.path,
-              },
-              'aria-label': 'switch theme mode',
-            },
-            {
-              title: 'Manage account',
-              MenuProps: { dense: true, horizontalOrigin: 'right' },
-              sx: { p: 0.5 },
-              edge: 'end',
-              avatar: {
-                src: userPhotoUrl,
-                slotProps: {
-                  img: {
-                    // user.photoURL https://stackoverflow.com/a/61042200/16134372
-                    referrerPolicy: 'no-referrer',
-                  },
-                },
-              },
-              items: [
-                {
-                  children: 'Settings',
-                  component: AppLink,
-                  href: Route.MANAGE_USER_SETTINGS,
-                  icon: { path: ICON_VARIANT_USER_SETTINGS.path },
-                },
-                {
-                  children: 'Billing',
-                  component: AppLink,
-                  href: orgSlug
-                    ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
-                    : orgHome,
-                  icon: { path: mdiCreditCardOutline.path },
-                },
-                {
-                  children: 'Publisher profile',
-                  component: AppLink,
-                  href: orgSlug
-                    ? `${buildRoute(Route.ORG_MARKETPLACE, {
-                        orgSlug,
-                      })}?tab=profile`
-                    : orgHome,
-                  icon: { path: mdiAccountGroupOutline.path },
-                },
-                {
-                  children: 'Staff console',
-                  component: AppLink,
-                  href: Route.ADMIN_OVERVIEW,
-                  icon: { path: ICON_VARIANT_USER_SETTINGS.path },
-                },
-                {
-                  type: 'divider',
-                },
-                {
-                  children: 'Documentation',
-                  component: 'a',
-                  href: buildDocsUrl(),
-                  target: '_blank',
-                  rel: 'noopener noreferrer',
-                  icon: { path: mdiBookOpenVariant.path },
-                  endIcon: { path: mdiOpenInNew.path },
-                },
-                {
-                  type: 'divider',
-                },
-                {
-                  children: 'Sign out',
-                  component: AppLink,
-                  href: Route.AUTH_SIGN_OUT,
-                  icon: { path: ICON_VARIANT_SIGN_OUT.path },
-                },
-              ],
-            },
+            // The redesigned account menu (AGL-858) owns its own avatar trigger
+            // + popover, and the theme control now lives inside it — so it
+            // renders as a custom node rather than an icon/menu item.
+            { render: (key: string | number) => <UserMenu key={key} /> },
           ]}
         />
         {besigner ? (

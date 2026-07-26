@@ -27,9 +27,17 @@ import {
 } from '../../../../utils/server/media-scope'
 
 export interface MediaReference {
-  kind: 'screen' | 'layout'
+  kind: 'screen' | 'layout' | 'entry'
   id: string
   name: string
+  /** Host that holds the referencing doc — org assets can span sites. */
+  hostId: string
+  /** Subdomain = the `[host]` route segment used to build the deep link. */
+  hostSubdomain: string
+  /** Live version of the screen/layout (its detail route needs it). */
+  versionId?: string
+  /** Collection holding the entry — deep-links to that collection. */
+  collectionId?: string
 }
 
 /**
@@ -85,21 +93,39 @@ async function handler(request: Request): Promise<Response> {
     ].filter(Boolean) as string[]
 
     // Org assets can appear on any of the org's sites — scan them all;
-    // a host asset scans its own site only.
-    const hostRefs =
-      scope.collection === 'orgs'
-        ? (
-            await firestore
-              .collection('hosts')
-              .where('orgId', '==', scope.scopeId)
-              .get()
-          ).docs.map((host) => host.ref)
-        : [scope.scopeRef]
+    // a host asset scans its own site only. Carry each host's subdomain so
+    // the client can deep-link a reference to `/[orgSlug]/hosts/[subdomain]/…`
+    // (the `[host]` route segment is the subdomain, not the doc id).
+    const hosts: Array<{
+      ref: FirebaseFirestore.DocumentReference
+      id: string
+      subdomain: string
+    }> = []
+    if (scope.collection === 'orgs') {
+      const orgHosts = await firestore
+        .collection('hosts')
+        .where('orgId', '==', scope.scopeId)
+        .get()
+      for (const host of orgHosts.docs) {
+        hosts.push({
+          ref: host.ref,
+          id: host.id,
+          subdomain: String(host.get('subdomain') ?? host.id),
+        })
+      }
+    } else {
+      const scopeSnapshot = await scope.scopeRef.get()
+      hosts.push({
+        ref: scope.scopeRef,
+        id: scope.scopeId,
+        subdomain: String(scopeSnapshot.get('subdomain') ?? scope.scopeId),
+      })
+    }
 
     const references: MediaReference[] = []
-    for (const hostRef of hostRefs)
+    for (const host of hosts)
     for (const kind of ['screens', 'layouts'] as const) {
-      const parents = await hostRef.collection(kind).get()
+      const parents = await host.ref.collection(kind).get()
       await Promise.all(
         parents.docs.map(async (parent) => {
           if (parent.get('deletedAt')) return
@@ -116,7 +142,36 @@ async function handler(request: Request): Promise<Response> {
               kind: kind === 'screens' ? 'screen' : 'layout',
               id: parent.id,
               name: String(parent.get('name') ?? parent.id),
+              hostId: host.id,
+              hostSubdomain: host.subdomain,
+              versionId: String(versionId),
             })
+          }
+        }),
+      )
+    }
+
+    // Content-collection entries (AGL-833): blog and other collections
+    // reference media via `coverImage`/`body`, not screen/layout nodes — so
+    // scan every entry's fields too.
+    for (const host of hosts) {
+      const collections = await host.ref.collection('collections').get()
+      await Promise.all(
+        collections.docs.map(async (collection) => {
+          const entries = await collection.ref.collection('entries').get()
+          for (const entry of entries.docs) {
+            if (entry.get('deletedAt')) continue
+            const haystack = JSON.stringify(entry.data() ?? {})
+            if (needles.some((needle) => haystack.includes(needle))) {
+              references.push({
+                kind: 'entry',
+                id: entry.id,
+                name: String(entry.get('title') ?? entry.id),
+                hostId: host.id,
+                hostSubdomain: host.subdomain,
+                collectionId: collection.id,
+              })
+            }
           }
         }),
       )

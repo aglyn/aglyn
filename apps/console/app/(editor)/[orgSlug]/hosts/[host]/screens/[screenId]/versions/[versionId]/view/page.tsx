@@ -20,6 +20,7 @@ import {
   composeScreenRoutePath,
   findScreenIdByRoutePath,
   HostScreenVisibility,
+  nameSearchKey,
   normalizeScreenSlug,
   screenRoutePathToUrl,
   type ScreenRouteNode,
@@ -216,6 +217,9 @@ function ScreenDetails() {
     if (!editor?.displayName.trim()) return
     await updateDoc(screenRef, {
       displayName: editor.displayName.trim(),
+      // Keep the name-search key in sync on rename (AGL-835) so the switcher's
+      // prefix query finds the screen under its new name.
+      nameLower: nameSearchKey(editor.displayName.trim()),
       description: editor.description.trim(),
       updatedAt: Timestamp.now(),
     })
@@ -584,6 +588,14 @@ function ScreenDetails() {
       key: 'dateCreated',
       primary: 'Date created:',
       secondary: screen?.createdAt?.toDate?.()?.toLocaleString(),
+      icon: { path: ICON_VARIANT_DATE_TIME.path },
+    },
+    {
+      key: 'datePublished',
+      primary: 'Date published:',
+      // Present only while the route is live (cleared on unpublish); '--'
+      // otherwise via the ListItemText fallback below.
+      secondary: screen?.publishedAt?.toDate?.()?.toLocaleString(),
       icon: { path: ICON_VARIANT_DATE_TIME.path },
     },
     {

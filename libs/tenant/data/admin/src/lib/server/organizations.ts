@@ -36,6 +36,11 @@ import {
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
+import {
+  deleteMemberHostProjections,
+  syncHostProjectionForMembers,
+  syncMemberHostProjections,
+} from './host-memberships'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
@@ -521,6 +526,8 @@ export async function upsertOrgMember(
     )
   })
   await syncHostMemberRoles(orgId)
+  // Reverse-index this member's now-current host access (AGL-844).
+  await syncMemberHostProjections(orgId, uid)
 }
 
 /**
@@ -572,6 +579,11 @@ export async function transferOrgOwnership(
     )
   })
   await syncHostMemberRoles(orgId)
+  // Both principals' host access changed (owner spans every host) — AGL-844.
+  await Promise.all([
+    syncMemberHostProjections(orgId, toUid),
+    syncMemberHostProjections(orgId, fromUid),
+  ])
 }
 
 /**
@@ -626,6 +638,7 @@ export async function grantHostAccess(options: {
     }
   })
   await syncHostMemberRoles(orgId)
+  await syncMemberHostProjections(orgId, uid)
 }
 
 /** Drops one host from a member's hostAccess map, then re-projects. */
@@ -644,6 +657,7 @@ export async function revokeHostAccess(
       { merge: true },
     )
   await syncHostMemberRoles(orgId)
+  await syncMemberHostProjections(orgId, uid)
 }
 
 /** Removes a member + reverse index entry, then re-syncs projections. */
@@ -659,6 +673,9 @@ export async function removeOrgMember(
   batch.delete(db.collection('users').doc(uid).collection('orgs').doc(orgId))
   await batch.commit()
   await syncHostMemberRoles(orgId)
+  // The member is off the roster, so the sync above can't reach their rows —
+  // drop the reverse index explicitly (AGL-844), like the orgs entry above.
+  await deleteMemberHostProjections(orgId, uid)
 }
 
 /**
@@ -686,4 +703,6 @@ export async function registerOrgHost(
     .doc(hostId)
     .set({ orgId, ...(subdomain ? { subdomain } : {}) })
   await syncHostMemberRoles(orgId, hostId)
+  // Seed the per-user projection for everyone who can reach the new host.
+  await syncHostProjectionForMembers(orgId, hostId)
 }

@@ -21,6 +21,7 @@ import {
   firebaseAdmin,
   getOrgForUser,
   isImpersonationSession,
+  notifyStaff,
 } from '@aglyn/tenant-data-admin'
 
 const MAX_BODY = 5000
@@ -134,6 +135,15 @@ async function handler(request: Request): Promise<Response> {
         body,
         createdAt: now,
       })
+      // Staff have no other signal a ticket exists (AGL-850) — land them on the
+      // exact ticket in the staff queue.
+      await notifyStaff({
+        type: 'support.ticketOpened',
+        title: `New support ticket: ${subject}`,
+        body: decoded.email ? `From ${decoded.email}` : undefined,
+        link: `/admin/support?ticketId=${ticketRef.id}`,
+        orgId: orgId ?? undefined,
+      })
       return Response.json({ ticketId: ticketRef.id }, { status: 200 })
     }
 
@@ -162,6 +172,17 @@ async function handler(request: Request): Promise<Response> {
         })
         // A reply reopens a closed ticket unless the caller also closes it.
         updates['status'] = 'open'
+        // A subscriber replying needs to reach staff (AGL-850); a staff reply
+        // is outbound to the customer, so it raises no staff notification.
+        if (!isStaff) {
+          await notifyStaff({
+            type: 'support.ticketReply',
+            title: `Ticket reply: ${String(ticket['subject'] ?? '')}`,
+            body: decoded.email ? `From ${decoded.email}` : undefined,
+            link: `/admin/support?ticketId=${ticketId}`,
+            orgId: (ticket['orgId'] as string | undefined) ?? undefined,
+          })
+        }
       }
       if (status === 'open' || status === 'closed') {
         updates['status'] = status

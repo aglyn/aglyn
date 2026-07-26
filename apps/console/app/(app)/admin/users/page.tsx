@@ -261,6 +261,15 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                     {'Reset'}
                   </Button>
                 </Stack>
+                {/* Staff is granted to an existing account, not invited
+                    (AGL-853): custom claims attach to a real uid, so the
+                    person must have signed in at least once before they turn
+                    up here. */}
+                <Typography variant="caption" color="text.secondary">
+                  {'Staff access is granted to an existing account. If someone ' +
+                    "isn't found, have them sign in to Aglyn once, then search " +
+                    'their email here.'}
+                </Typography>
                 <Table size="small">
                   <TableHead>
                     <TableRow>

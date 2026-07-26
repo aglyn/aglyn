@@ -32,6 +32,9 @@ export enum Route {
   ADMIN_USER_DETAIL = '/admin/users/[uid]',
   ADMIN_FLAGS = '/admin/flags',
   ADMIN_PLUGIN_REVIEWS = '/admin/plugin-reviews',
+  // Staff support-ticket queue (AGL-849): the operator side of the
+  // subscriber `MANAGE_SUPPORT` page — every org's tickets in one place.
+  ADMIN_SUPPORT = '/admin/support',
   ADMIN_EMAILS = '/admin/emails',
   // The one besigner route with no host and no org in it (AGL-749). A system
   // email belongs to the platform, not to a workspace, so it is staff-scoped
@@ -145,6 +148,7 @@ export interface RoutePayload {
   [Route.ADMIN_USER_DETAIL]: { uid: string }
   [Route.ADMIN_FLAGS]: undefined
   [Route.ADMIN_PLUGIN_REVIEWS]: undefined
+  [Route.ADMIN_SUPPORT]: undefined
   [Route.ADMIN_EMAILS]: undefined
   [Route.ADMIN_EMAIL_BESIGNER]: { templateKey: string; versionId: string }
   [Route.HOST_EMAIL_BESIGNER]: {

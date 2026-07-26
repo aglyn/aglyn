@@ -108,6 +108,47 @@ async function handler(request: Request): Promise<Response> {
 
     const actorManages = isStaff || canManageOrg(actor?.member.role)
 
+    // Shared invite-email send (AGL-853): both `create` and the new `resend`
+    // deliver the same message. Best-effort — returns whether a message
+    // actually went out (unconfigured or a failed send both report false), so
+    // the client can say so honestly.
+    const sendInviteEmail = async (
+      email: string,
+      role: string,
+    ): Promise<boolean> => {
+      if (!isEmailConfigured()) {
+        console.warn(
+          'invite email skipped — set RESEND_API_KEY and USAGE_EMAIL_FROM ' +
+            'to deliver invite emails',
+        )
+        return false
+      }
+      const orgName =
+        (await firestore.collection('orgs').doc(orgId).get()).get('name') ??
+        'an organization'
+      const origin = headers.origin ?? `https://${headers.host}`
+      const fallbackText =
+        `You've been invited to join ${orgName} as ${role}.\n\n` +
+        `Sign in at ${origin} with this email address and accept ` +
+        'the invite from your dashboard.'
+      // Staff-designed template when one is published (AGL-750); null
+      // whenever it is missing or unusable, so this copy still goes out.
+      const designed = await renderSystemEmail('org-invite', {
+        'org.name': String(orgName),
+        'invite.role': role,
+        signInUrl: origin,
+      })
+      const result = await sendEmail({
+        to: email,
+        subject:
+          designed?.subject ?? `You've been invited to ${orgName} on Aglyn`,
+        text: designed?.text || fallbackText,
+        ...(designed?.html ? { html: designed.html } : {}),
+        context: 'invite',
+      })
+      return result.sent
+    }
+
     if (method === 'GET') {
       if (!actorManages) {
         return Response.json({ error: 'Listing invites requires the admin role' }, { status: 403 })
@@ -186,43 +227,9 @@ async function handler(request: Request): Promise<Response> {
         `Invited ${email} as ${role}`,
         { type: 'invite', id: inviteId, name: email },
       )
-      // Best-effort notification via Resend (same provider as AGL-137's
-      // usage emails); the invite works without it — the console banner
-      // surfaces it after sign-in either way. `emailed` tells the client
-      // whether a message actually went out so it can say so honestly
-      // (AGL-708): unconfigured or a failed send both report false.
-      let emailed = false
-      if (isEmailConfigured()) {
-        const orgName =
-          (await firestore.collection('orgs').doc(orgId).get()).get('name') ??
-          'an organization'
-        const origin = headers.origin ?? `https://${headers.host}`
-        const fallbackText =
-          `You've been invited to join ${orgName} as ${role}.\n\n` +
-          `Sign in at ${origin} with this email address and accept ` +
-          'the invite from your dashboard.'
-        // Staff-designed template when one is published (AGL-750); null
-        // whenever it is missing or unusable, so this copy still goes out.
-        const designed = await renderSystemEmail('org-invite', {
-          'org.name': String(orgName),
-          'invite.role': role,
-          signInUrl: origin,
-        })
-        const result = await sendEmail({
-          to: email,
-          subject:
-            designed?.subject ?? `You've been invited to ${orgName} on Aglyn`,
-          text: designed?.text || fallbackText,
-          ...(designed?.html ? { html: designed.html } : {}),
-          context: 'invite',
-        })
-        emailed = result.sent
-      } else {
-        console.warn(
-          'invite email skipped — set RESEND_API_KEY and USAGE_EMAIL_FROM ' +
-            'to deliver invite emails',
-        )
-      }
+      // Best-effort delivery via Resend (AGL-708): the invite works without
+      // it — the console banner surfaces it after sign-in either way.
+      const emailed = await sendInviteEmail(email, role)
       return Response.json({ ok: true, inviteId, emailed }, { status: 200 })
     }
 
@@ -242,6 +249,33 @@ async function handler(request: Request): Promise<Response> {
         { type: 'invite', id: inviteId, name: revokedEmail },
       )
       return Response.json({ ok: true }, { status: 200 })
+    }
+
+    if (action === 'resend') {
+      if (!actorManages) {
+        return Response.json({ error: 'Resending invites requires the admin role' }, { status: 403 })
+      }
+      const inviteId = String(body?.inviteId ?? '')
+      if (!inviteId) return Response.json({ error: 'Missing inviteId' }, { status: 400 })
+      const snapshot = await invitesRef.doc(inviteId).get()
+      const invite = snapshot.data()
+      if (!snapshot.exists || !invite) {
+        return Response.json({ error: 'Invite not found' }, { status: 404 })
+      }
+      if (invite['acceptedAt']) {
+        return Response.json({ error: 'Invite already accepted' }, { status: 409 })
+      }
+      const emailed = await sendInviteEmail(
+        String(invite['email']),
+        String(invite['role'] ?? 'viewer'),
+      )
+      void logOrgActivity(
+        orgId,
+        { uid: decoded.uid, email: decoded.email },
+        `Resent invite for ${invite['email']}`,
+        { type: 'invite', id: inviteId, name: String(invite['email']) },
+      )
+      return Response.json({ ok: true, emailed }, { status: 200 })
     }
 
     if (action === 'accept') {

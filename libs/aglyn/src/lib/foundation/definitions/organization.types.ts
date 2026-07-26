@@ -144,3 +144,23 @@ export interface UserOrgMembership extends AglynDocument {
   orgName?: string
   slug?: OrgSlug
 }
+
+/**
+ * `users/{uid}/hostMemberships/{hostId}` — reverse index of the sites a user
+ * can reach, mirroring `hosts/{hostId}.memberRoles` (AGL-844). Denormalizes the
+ * host name so the site switcher and subdomain→id routing query a user's own
+ * sites, ordered and name-prefix-searched, without scanning the `hosts`
+ * collection. Admin-SDK-maintained beside `memberRoles`; a best-effort
+ * convenience index, never an authorization source (the rules still gate host
+ * reads on `memberRoles`). NOT named `hosts` — that would collide with the
+ * top-level `hosts` collection for collection-group rules/indexes.
+ */
+export interface UserHostMembership extends AglynDocument {
+  $id: HostUid
+  orgId?: OrgUid
+  subdomain?: string
+  displayName?: string
+  nameLower?: string
+  role?: HostAccessRole
+  updatedAt?: ITimestamp
+}
