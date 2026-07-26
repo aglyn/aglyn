@@ -17,9 +17,28 @@ Bring collaborators into a site so they can build and manage alongside you.
 
 ## Invite someone
 
-1. Open the site's **user manager**.
-2. Invite the person by email and assign a [role](custom-roles.md).
-3. They accept and gain access according to that role.
+1. Open the organization's **Team** page and choose **Add or invite**.
+2. Enter their email and assign a [role](custom-roles.md).
+3. What happens next depends on whether they already have an Aglyn account:
+   **already on Aglyn** — they join right away and see the workspace on their next
+   visit; **new to Aglyn** — we email them an invite to accept.
+
+### Pending invites
+
+Invites that haven't been accepted are listed with **Resend** (send the email again,
+for the address that lost it in a spam folder) and **Revoke**. A revoked invite's link
+stops working immediately.
+
+## Accepting an invite
+
+If you're the one being invited, sign up or sign in with **the address the invite was
+sent to** — usually via Google, if that's the address. You land on the **Workspaces**
+page, which leads with **"You've been invited"** and an accept banner. Accept there and
+the workspace opens.
+
+If that invite is your only workspace, the page also offers **Create my own site
+instead** — accepting isn't your only option. If you already belong to other
+workspaces, the invite banner appears above your usual workspace picker.
 
 ## How team members act
 
@@ -32,6 +51,10 @@ enforced per tier; if you're at your limit, add a **seat add-on** before invitin
 The organization's **Team** page shows a **Recent Activity** feed — renames, workspace URL
 changes, ownership transfers, members added/removed or re-roled, and invites sent, revoked,
 or accepted — each with who did it and when. Visible to any member of the organization.
+
+Entries name the thing that changed and link straight to it, so "Saved the screen — Home"
+takes you to that screen. Entries recorded before this shipped show a plain description
+instead of a link.
 
 ## Tips
 

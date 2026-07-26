@@ -36,6 +36,10 @@ reusable components.
   (`/services/pricing`). Changing a slug or parent cascades safe rewrites across the map,
   with cycle guards so you can't create a loop.
 - Reorder the hierarchy with **drag-and-drop** in the screens list.
+- The screens list shows each screen's **Published** date, and the screen's detail page
+  shows **Date published**. Both stay empty until the screen goes live, and clear again if
+  you unpublish it (including a scheduled unpublish) — so the column tells you what's
+  live, not what exists.
 
 ## Layouts
 

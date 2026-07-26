@@ -22,6 +22,14 @@ and your [contacts CRM](../contacts/overview.md).
 2. Configure the fields and the submit behavior.
 3. Publish — the form posts to Aglyn's submit API.
 
+:::note Submission limits
+To keep spam from burning your plan's form allowance, submissions are capped at
+**10 per minute per site, per visitor address**. A visitor over the limit gets a
+short retry delay, not a permanent block. It's per address, so one spammer can't
+lock out everyone else — but bulk-importing through your own public form will trip
+it. Use [datasets](../datasets/import-export.md) for imports instead.
+:::
+
 ## Field types
 
 Each **Form Field** has a type that controls what visitors see and what is submitted:

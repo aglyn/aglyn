@@ -124,7 +124,8 @@ Each links into its section for the how-to.
 - **Console reorganization** — site users and analytics get their own
   sections, the dashboard gains commerce and campaign glance widgets, and
   the Products/Marketing/Workflows hubs are tabbed with `?tab=` deep
-  links. Notifications + profile live under a personal Manage area.
+  links. Notifications + [Manage Account](workspace-and-billing/manage-account.md)
+  live under a personal Manage area.
 - **[Redirects v2](building-sites/redirects/overview.md)** — prefix and regex match
   modes with capture substitution (`$1`), priority ordering, and an
   inline tester.

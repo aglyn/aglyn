@@ -10,8 +10,11 @@ The best examples are the shipping plugins — each one is the reference
 implementation of a pattern. Generated skeletons stay fresh by
 construction: `node tools/scripts/create-plugin.mjs sample --surfaces
 console,tenantApi` scaffolds a complete, test-passing plugin you can read
-and delete (we deliberately keep no checked-in "example" lib — it would
-rot; the scaffolder and the live plugins can't).
+and delete. First-party plugin *libs* are deliberately not duplicated as
+"example" libs — they would rot, and the scaffolder and the live plugins
+can't. The one checked-in example is the **sandbox community plugin**
+below, which exists because the sandbox contract has no first-party
+equivalent to read.
 
 | Pattern | Read this | Why |
 | --- | --- | --- |
@@ -24,3 +27,4 @@ rot; the scaffolder and the live plugins can't).
 | Plugin permissions | `libs/plugins/commerce` (`managePos`) | Per-tier defaults riding every resolved role set |
 | Community realm bundle | `tools/plugin-loader/realm/demo` (+ `EXPLAINED.md`) | The standalone track, narrated line by line |
 | Community starter | `tools/plugin-loader/realm/template` | What you actually copy to begin |
+| Sandbox community plugin | `examples/plugins/promo-countdown` | A complete, publishable sandbox plugin with no build step — `register()`, render, props, config scheme, emitted events, and cleanup. Passes the bundle verifier as-is, so it doubles as the worked example for [uploading a plugin](../publishing/publisher-handbook.md) |

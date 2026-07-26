@@ -28,6 +28,7 @@ import { logEvent, setUserId, setUserProperties } from 'firebase/analytics'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import { OrgScopeProvider } from '../../hooks/use-org-scope'
+import BootSplash from '../boot-splash.component'
 import useSessionCookie from '../../hooks/use-session-cookie'
 import { ReleaseFlagsProvider } from '../../hooks/use-release-flags'
 
@@ -76,7 +77,12 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
   const { children } = props
 
   return (
-    <NoSsr>
+    // The whole app is client-only, so `NoSsr` renders its fallback for the
+    // entire boot window — SSR *and* every render before mount. Without one
+    // the browser paints an empty document until hydration finishes, which
+    // reads as a broken app on a cold load or a full page navigation
+    // (AGL-896). The splash is the honest first frame.
+    <NoSsr fallback={<BootSplash />}>
       <FirebaseServicesProvider
         firebaseConfig={fbClientAppOptions}
         appName={FIREBASE_CLIENT_APP_NAME}

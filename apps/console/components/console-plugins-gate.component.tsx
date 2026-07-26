@@ -24,6 +24,7 @@ import {
 import { useUser } from '@aglyn/tenant-feature-instance'
 import type React from 'react'
 import { type ReactNode, useEffect, useState } from 'react'
+import BootSplash from './boot-splash.component'
 import { consolePluginLoader } from '../constants/console-plugin-loader'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useReleaseFlags } from '../hooks/use-release-flags'
@@ -90,7 +91,16 @@ export default function ConsolePluginsGate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, flagsReady, enabledKey])
 
-  if (orgId && readyForOrg !== orgId) return null
+  // This gate sits ABOVE the whole route tree — the app bar and nav strip
+  // included — so returning null here blanks the entire window, not just the
+  // page body. It re-holds on every `orgId` CHANGE, not only the first load:
+  // switching workspaces, or leaving `/[orgSlug]/…` for a route without an
+  // org segment (`/admin`, `/manage`), where `currentOrg` falls back down the
+  // chain and can land on a different org. The hold spans a network fetch
+  // (`loadOrgRealmPlugins`), so on a cold cache that was seconds of blank
+  // screen mid-navigation (AGL-903). Show the boot splash instead: same wait,
+  // but the app looks like it is loading rather than dead.
+  if (orgId && readyForOrg !== orgId) return <BootSplash />
   // Plugin-registered app providers (AGL-419) wrap every console page —
   // e.g. the community plugin's AI-assist provider. Mounted only once the
   // registry is populated; each receives the org billing doc.

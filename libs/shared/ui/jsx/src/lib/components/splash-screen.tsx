@@ -19,6 +19,7 @@
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import {
   Box,
+  type BoxProps,
   CircularProgress,
   Modal,
   type ModalProps as MuiModalProps,
@@ -29,6 +30,57 @@ import { AglynLogoFull } from '../const/svg-icons'
 import LoadingTextComponent from './loading-text.component'
 
 export interface SplashScreenProps extends Partial<MuiModalProps<any, any>> {}
+
+/**
+ * The splash artwork on its own, with no Modal around it.
+ *
+ * `SplashScreen` below puts this in a `Modal`, which is a portal — and a
+ * portal renders NOTHING on the server and nothing on the first client
+ * render either. That is fine for a splash shown over an already-painted
+ * app, but useless as a boot-time fallback: a caller that needs markup in
+ * the SSR HTML (see the console's `NoSsr` fallback) has to render this
+ * directly inside its own positioned container.
+ */
+export const SplashScreenContent = forwardRef<HTMLDivElement, BoxProps>(
+  // Props/ref pass through because `Modal` clones its child to attach the
+  // focus trap — the artwork has to keep accepting them.
+  (props, ref) => (
+    <Box
+      ref={ref}
+      {...props}
+      sx={{
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+        flexDirection: 'column',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Stack
+        direction="column"
+        spacing={2}
+        sx={{
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <AglynLogoFull sx={{ fontSize: 175 }} />
+        <CircularProgress color="secondary" />
+        <LoadingTextComponent
+          variant="overline"
+          sx={{ fontWeight: 'fontWeightBold' }}
+        >
+          {'One moment'}
+        </LoadingTextComponent>
+      </Stack>
+    </Box>
+  ),
+)
+SplashScreenContent.displayName = 'SplashScreenContent'
 
 const SplashScreen = forwardRef<any, SplashScreenProps>((props, ref) => {
   const { sx, ...rest } = props
@@ -45,37 +97,7 @@ const SplashScreen = forwardRef<any, SplashScreenProps>((props, ref) => {
   )
   return (
     <Modal ref={ref} sx={_sx} open {...rest}>
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          left: 0,
-          flexDirection: 'column',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexSpacing: 2,
-        }}
-      >
-        <Stack
-          direction="column"
-          spacing={2}
-          sx={{
-            justifyContent: "center",
-            alignItems: "center"
-          }}>
-          <AglynLogoFull sx={{ fontSize: 175 }} />
-          <CircularProgress color="secondary" />
-          <LoadingTextComponent
-            variant="overline"
-            sx={{ fontWeight: 'fontWeightBold' }}
-          >
-            {'One moment'}
-          </LoadingTextComponent>
-        </Stack>
-      </Box>
+      <SplashScreenContent />
     </Modal>
   );
 })

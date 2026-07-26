@@ -124,6 +124,8 @@ whole page becomes the editor), or use the **Edit** action on
 
 | Field | Guidance |
 | --- | --- |
+| Name | The display name on every browse card and at the top of the detail page; ≤80 chars. A typo here is fixable without republishing — leaving it blank keeps the current name rather than clearing it. |
+| Description | The one-line summary under the name on browse cards; ≤500 chars. |
 | Body (About) | The main docs: what it does, setup, what it adds, data & permissions. Rich-text editor with headings, bold/italic, links, and inline images; ≤20k chars. |
 | Preview image | The hero shown on browse cards and at the top of the detail page — pick it from your media library. |
 | Logo | Square; pick from the media library or paste an https URL. |
@@ -143,7 +145,11 @@ are what overcomes it.
   never change the code a consumer runs; ship a new version instead.
 - Users update explicitly (an *Update to vX* action appears when your
   `latestVersion` passes their pin). Write a changelog every publish —
-  it renders on the detail page.
+  it renders in the detail page's **Version history** card, where every
+  published version is listed with its changelog, a **Latest** marker,
+  and a **Realm-trusted** chip on versions that carry it. That card is
+  what a cautious buyer reads before installing, so a thin changelog
+  costs you installs.
 - Declare `hostAbi` in your manifest; when the platform bumps its ABI
   you'll rebuild against the new template and publish a compatible
   version (installs warn, loaders refuse, until you do).
@@ -155,10 +161,25 @@ only place an install happens. The buyer picks targets (**all sites**,
 **selected sites**, or org-wide for plugins), confirms a dialog that
 names exactly where the install lands, and the pin is written: your
 exact `{version, sha256}` pinned to the site or org, the plugin enabled
-for the workspace, loaded on their next visit. Uninstall removes the pin
-and disables it — **data your plugin created stays**, so reinstalls
-resume cleanly. Paid listings require purchase before install; you see
-sales in your publisher ledger.
+for the workspace, loaded on their next visit. Buyers can uninstall from
+the listing's own detail page (**Uninstall**, or **Uninstall org-wide**
+for an org-scope pin) as well as from **Marketplace → Installed** —
+removing the pin and disabling it. **Data your plugin created stays**, so
+reinstalls resume cleanly. Paid listings require purchase before install;
+you see sales in your publisher ledger.
+
+The detail page shows two install figures side by side: **installs** is
+the cumulative all-time total and only ever grows, while **active**
+counts the organizations and sites that currently hold a pin — it goes
+down when someone uninstalls. A big gap between the two is churn worth
+investigating.
+
+Every listing shows its **artifact type** as a chip — Plugin, Component,
+Site template, Layout, Dataset schema, or Email template — so buyers know
+what they're getting before they open it. Dataset schemas and email
+templates read **"Added (v1) · add again"** rather than "Installed",
+because adding one creates a *new* dataset or a *new* draft email each
+time; re-adding is a legitimate action, not a no-op.
 
 **Ratings and comments**: any signed-in user can comment on your
 listing; star ratings are reserved for verified-email accounts in an

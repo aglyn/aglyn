@@ -47,8 +47,11 @@ You can list a plugin as **paid**:
 
 ## Your publisher profile
 
-Published plugins appear under your **publisher profile** in the marketplace, alongside
-detail pages and listing previews.
+Your publisher profile is a **storefront**: its own page in the marketplace listing
+everything you've published, reachable from the Publisher card on any of your listings
+and from the *by @handle* link on every browse card. Buyers who like one of your
+plugins use it to find the rest, so the handle, display name, and bio you set are worth
+the same care as a listing.
 
 ## Tips
 

@@ -283,6 +283,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Maintenance mode',
     excerpt: 'Temporarily take your site offline behind a designed 503 screen.',
   },
+  manageAccount: {
+    path: '/workspace-and-billing/manage-account',
+    title: 'Manage Account',
+    excerpt: 'Your personal account — email, sign-in methods, avatar, name, and password.',
+  },
   manifestAndEnvs: {
     path: '/developers/plugins/reference/manifest-and-envs',
     title: 'Manifests, trust lifecycle & environment',
@@ -393,6 +398,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Responsive styling & custom CSS',
     excerpt: 'Style per breakpoint from the artboard preview, use the box stylers, custom classes, and the CSS builder.',
   },
+  sandboxSecurity: {
+    path: '/developers/plugins/reference/sandbox-security',
+    title: 'Sandbox security model',
+    excerpt: 'How sandboxed community plugins are isolated — separate origin, per-manifest CSP, pinned artifacts — and what that means when you write one.',
+  },
   saveATemplate: {
     path: '/building-sites/site-templates/save-a-template',
     title: 'Save & share a template',
@@ -427,6 +437,16 @@ export const DOCS_HELP_TOPICS = {
     path: '/staff-console/overview',
     title: 'Staff Console (internal)',
     excerpt: 'Aglyn-staff tools for managing organizations, entitlements, users, and audits.',
+  },
+  supportAndCommunity: {
+    path: '/workspace-and-billing/support-and-community',
+    title: 'Support & community',
+    excerpt: 'Open a support ticket with the Aglyn team, and ask other builders in the community forum.',
+  },
+  supportQueue: {
+    path: '/staff-console/support-queue',
+    title: 'Support queue (internal)',
+    excerpt: 'Triage customer support tickets from the staff console — filter, reply as Aglyn, and close or reopen.',
   },
   team: {
     path: '/workspace-and-billing/teams-and-roles/overview',
@@ -475,7 +495,7 @@ export type DocsHelpTopicKey = keyof typeof DOCS_HELP_TOPICS
 // Heading anchors present on each topic's docs page. Only topics with H2–H4
 // headings appear; a topic absent here has no linkable anchors.
 export const DOCS_HELP_ANCHORS = {
-  account: ['#google-sign-in', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity'],
+  account: ['#google-sign-in', '#sign-in-methods', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity'],
   actionsBuilder: ['#create-an-action', '#triggers', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   addALocale: ['#steps', '#tips', '#related'],
   addOns: ['#what-you-can-add', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
@@ -520,9 +540,10 @@ export const DOCS_HELP_ANCHORS = {
   glossary: ['#the-hierarchy', '#organization-org', '#workspace', '#tenant', '#tenant-vs-host--not-the-same-thing', '#quick-reference'],
   importExport: ['#export', '#import', '#upsert-on-a-key-field', '#tips', '#related'],
   interactions: ['#fluent-interactions', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#custom-html-block', '#related'],
-  inviteTeammates: ['#invite-someone', '#how-team-members-act', '#activity-log', '#tips', '#related'],
+  inviteTeammates: ['#invite-someone', '#pending-invites', '#accepting-an-invite', '#how-team-members-act', '#activity-log', '#tips', '#related'],
   languageSwitcher: ['#steps', '#tips', '#related'],
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
+  manageAccount: ['#account', '#sign-in-methods', '#profile-image', '#basic-info', '#security', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#engagement-stats', '#related'],
   media: ['#organize', '#upload', '#deliver-over-cdn', '#components', '#related'],
@@ -545,6 +566,7 @@ export const DOCS_HELP_ANCHORS = {
   redirects: ['#manage-redirects', '#metrics', '#match-modes-v2', '#related'],
   relations: ['#reference-fields', '#many-to-many', '#using-relations', '#tips', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#box-stylers', '#style-groups', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
+  sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#related'],
   saveATemplate: ['#start-from-a-template', '#where-to-find-it', '#save-your-site-as-a-template', '#tips', '#related'],
   screens: ['#screens--routing', '#layouts', '#nested-layouts', '#used-by', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],
   seo: ['#per-screen-seo', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
@@ -552,6 +574,8 @@ export const DOCS_HELP_ANCHORS = {
   siteProtection: ['#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#configure-it', '#related'],
   staffConsole: ['#whats-there', '#related'],
+  supportAndCommunity: ['#support-tickets', '#ticket-status', '#what-to-include', '#community-forum', '#related'],
+  supportQueue: ['#triage', '#notifications', '#related'],
   team: ['#team-roles', '#organizations', '#site-membership', '#seats', '#related'],
   templatesLibrary: ['#the-three-kinds', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#deleting', '#related'],
   termReference: ['#platform--accounts', '#organization-org', '#workspace', '#tenant', '#host', '#site', '#console', '#staff-console', '#member', '#custom-role', '#publisher', '#sites--content', '#screen', '#layout', '#slug', '#version', '#redirect', '#error-screens', '#maintenance-mode', '#locale', '#site-template', '#theme', '#custom-domain', '#subdomain', '#the-node-tree', '#node', '#tree', '#tree-root', '#trunk', '#stem', '#branch', '#leaf', '#component', '#component-bundle', '#preset', '#reusable-component', '#lineal-placement-rules', '#besigner-the-editor', '#besigner', '#canvas', '#hierarchy-panel', '#drawer', '#binding', '#plugins--marketplace', '#plugin', '#add-on', '#surface', '#console-extension', '#widget', '#injection-zone', '#plugin-manifest', '#enabled-plugins', '#feature-flag', '#release-flag', '#plugin-config', '#plugin-permission', '#plugin-job', '#listing', '#install', '#realm-bundle', '#sandbox', '#host-abi', '#review-queue', '#data--logic', '#dataset', '#record', '#field', '#relation', '#contact', '#segment', '#media-library', '#variable', '#function-fx', '#form', '#automation--marketing', '#event', '#workflow', '#action', '#automation', '#overlay', '#experiment', '#email-campaign', '#designed-email', '#merge-tag', '#commerce', '#product', '#order', '#pos', '#booking', '#billing--plans', '#plan', '#entitlement', '#quota', '#seat', '#metered-usage'],

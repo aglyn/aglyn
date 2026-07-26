@@ -21,11 +21,21 @@ The **staff console** is where Aglyn operators manage the platform and support c
 
 - **Staff overview** — platform metrics, the newest organizations, purchases, and
   per-org usage; plus search.
+- **[Support queue](support-queue.md)** — every organization's support tickets in one
+  triage list: filter by open/closed, reply as Aglyn staff, close or reopen.
+- **Plugin reviews & realm trust** — the marketplace review queue, plus a
+  **Listed plugins — realm trust** table for granting or revoking
+  [realm trust](../developers/plugins/guides/realm-bundles.md#granting-trust-staff)
+  per version.
 - **Organization management** — audited plan and entitlement overrides, suspension,
-  and GDPR-erasure flags, per organization.
+  and GDPR-erasure flags, per organization. The directory is listed server-side with
+  the Admin SDK (so it shows *every* org, not the subset client rules would return),
+  ordered by organization id, 25 per page with Previous/Next.
 - **Entitlement editor** — full override editor for an organization's entitlements.
 - **Users admin** — staff-claim management and disabling users, with gated listing
-  and an **exact-email lookup** for accounts beyond the loaded pages.
+  and an **exact-email lookup** for accounts beyond the loaded pages. Staff access is
+  granted to an **existing** account, so if someone isn't found, have them sign in to
+  Aglyn once and then search their email again.
   Each account opens a **detail page** showing identity/auth state, staff role, every
   organization membership with roles and per-site access, and its recent audit trail.
 - **Staff notes** — free-text support/billing context on each organization's detail
@@ -59,7 +69,10 @@ The **staff console** is where Aglyn operators manage the platform and support c
   owner a banner.
 - **Audit log viewer** — a record of staff actions.
 
-Access is protected by scoped Firestore rules and a staff-claim script.
+Access is gated on a **staff claim**, enforced per handler and by scoped Firestore
+rules. The area doesn't advertise itself: `/admin/*` returns a plain **404** to anyone
+without the claim, and the **Staff console** entry is hidden from the account menu
+rather than shown-and-refused.
 
 :::note Internal documentation
 Deeper runbooks for staff operations live with the platform ops docs, not in this public
