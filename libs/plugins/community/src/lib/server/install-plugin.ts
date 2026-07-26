@@ -130,23 +130,31 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     // pin (and the switchboard entry when no pin remains anywhere).
     if (req.body?.action === 'uninstall') {
       const orgId = await resolveOrgIdForHost(hostId)
-      if (req.body?.scope === 'org') {
-        if (!orgId) {
-          return res.status(409).json({ error: 'This site has no organization yet' })
-        }
-        await firestore
-          .collection('orgs')
-          .doc(orgId)
-          .collection('installs')
+      if (req.body?.scope === 'org' && !orgId) {
+        return res.status(409).json({ error: 'This site has no organization yet' })
+      }
+      const pinRef =
+        req.body?.scope === 'org'
+          ? orgId
+            ? firestore.collection('orgs').doc(orgId).collection('installs').doc(listingId)
+            : null
+          : firestore.collection('hosts').doc(hostId).collection('installs').doc(listingId)
+      // Active-install accounting (AGL-880): decrement only when a pin actually
+      // existed, so a repeat/no-op uninstall never over-counts. `installCount`
+      // is a cumulative all-time total and is deliberately left untouched.
+      const pinExisted = pinRef ? (await pinRef.get()).exists : false
+      if (pinRef) await pinRef.delete()
+      if (pinExisted) {
+        const listingRef = firestore
+          .collection('communityListings')
           .doc(listingId)
-          .delete()
-      } else {
         await firestore
-          .collection('hosts')
-          .doc(hostId)
-          .collection('installs')
-          .doc(listingId)
-          .delete()
+          .runTransaction(async (tx) => {
+            const snapshot = await tx.get(listingRef)
+            const current = Number(snapshot.get('activeInstalls') ?? 0)
+            tx.update(listingRef, { activeInstalls: Math.max(0, current - 1) })
+          })
+          .catch(() => undefined)
       }
       await syncEnabledPlugins(
         firestore,
@@ -252,7 +260,10 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     if (!existing.exists) {
       await listingRef
         .update({
+          // installCount is the cumulative all-time total; activeInstalls
+          // mirrors live pins and is decremented on uninstall (AGL-880).
           installCount: firebaseAdmin.firestore.FieldValue.increment(1),
+          activeInstalls: firebaseAdmin.firestore.FieldValue.increment(1),
         })
         .catch(() => undefined)
     }
