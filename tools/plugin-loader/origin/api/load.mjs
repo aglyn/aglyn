@@ -17,7 +17,10 @@ import { fileURLToPath } from 'node:url'
 
 const LISTING_ID = /^[A-Za-z0-9_-]{1,64}$/
 const VERSION = /^[A-Za-z0-9._-]{1,32}$/
+const HOST_ID = /^[A-Za-z0-9_-]{1,64}$/
 const NETWORK_ORIGIN = /^https:\/\/[^\s/]+$/
+// Strict origin shape for CSP/HTML injection — scheme + hostname only.
+const ANCESTOR_ORIGIN = /^https:\/\/[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/
 
 const BASE_FRAME_ANCESTORS =
   'frame-ancestors https://app.aglyn.com https://*.aglyn.app'
@@ -44,47 +47,72 @@ function loadHtml() {
   throw new Error('load.html not found in bundle')
 }
 
-function csp(connectExtra) {
+function csp(connectExtra, ancestorExtra) {
   const connect = ["'self'", ...connectExtra].join(' ')
+  const ancestors = [BASE_FRAME_ANCESTORS, ...ancestorExtra].join(' ')
   return (
     "default-src 'none'; " +
     "script-src 'unsafe-inline' blob:; " +
     `connect-src ${connect}; ` +
     "style-src 'unsafe-inline'; " +
     'img-src data: blob: https:; ' +
-    BASE_FRAME_ANCESTORS
+    ancestors
   )
+}
+
+async function fetchJson(url) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 3000)
+  try {
+    const response = await fetch(url, { signal: controller.signal })
+    return response.ok ? await response.json() : null
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export default async function handler(req, res) {
   const listingId = String(req.query?.listing ?? '')
   const version = String(req.query?.v ?? '')
+  const hostId = String(req.query?.host ?? '')
 
   let network = []
   if (LISTING_ID.test(listingId) && VERSION.test(version)) {
     try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 3000)
-      const response = await fetch(
+      const payload = await fetchJson(
         'https://app.aglyn.com/api/community/listing-versions?listingId=' +
           encodeURIComponent(listingId),
-        { signal: controller.signal },
       )
-      clearTimeout(timer)
-      if (response.ok) {
-        const payload = await response.json()
-        const entry = (payload?.versions ?? []).find(
-          (candidate) => String(candidate?.version) === version,
-        )
-        network = (Array.isArray(entry?.network) ? entry.network : [])
-          .map((origin) => String(origin))
-          .filter((origin) => NETWORK_ORIGIN.test(origin))
-          .slice(0, 20)
-      }
+      const entry = (payload?.versions ?? []).find(
+        (candidate) => String(candidate?.version) === version,
+      )
+      network = (Array.isArray(entry?.network) ? entry.network : [])
+        .map((origin) => String(origin))
+        .filter((origin) => NETWORK_ORIGIN.test(origin))
+        .slice(0, 20)
     } catch {
       // Strict fallback — the plugin still runs, just without direct
       // network; hostFetch remains available.
       network = []
+    }
+  }
+
+  // Custom-domain ancestors (AGL-884): resolved server-side from the
+  // framing host's VERIFIED domain — the host id names WHICH lookup to do;
+  // the origin value itself never comes from the caller.
+  let ancestors = []
+  if (HOST_ID.test(hostId)) {
+    try {
+      const payload = await fetchJson(
+        'https://app.aglyn.com/api/plugin-host-origins/' +
+          encodeURIComponent(hostId),
+      )
+      ancestors = (Array.isArray(payload?.origins) ? payload.origins : [])
+        .map((origin) => String(origin).toLowerCase())
+        .filter((origin) => ANCESTOR_ORIGIN.test(origin))
+        .slice(0, 4)
+    } catch {
+      ancestors = []
     }
   }
 
@@ -95,8 +123,17 @@ export default async function handler(req, res) {
     console.error('loader html missing:', error)
     return res.status(500).json({ error: 'Loader unavailable' })
   }
+  // Mirror the extra ancestors into the page's own referrer check
+  // (defense in depth). Values are regex-validated origins, so the
+  // JSON.stringify injection is inert.
+  if (ancestors.length) {
+    html = html.replace(
+      'const EXTRA_ANCESTORS = []',
+      `const EXTRA_ANCESTORS = ${JSON.stringify(ancestors)}`,
+    )
+  }
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
-  res.setHeader('Content-Security-Policy', csp(network))
+  res.setHeader('Content-Security-Policy', csp(network, ancestors))
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Referrer-Policy', 'origin')
   res.setHeader('Cache-Control', 'private, no-store')

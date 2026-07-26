@@ -148,8 +148,12 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
       url.searchParams.set('listing', listingId)
       url.searchParams.set('v', version)
       url.searchParams.set('sha', sha256)
+      // The framing host (AGL-884): the origin resolves this to the site's
+      // VERIFIED custom domain and widens frame-ancestors to exactly that —
+      // never to caller-supplied origins.
+      if (hostId) url.searchParams.set('host', hostId)
       return url.toString()
-    }, [originUsable, pluginOrigin, listingId, version, sha256])
+    }, [originUsable, pluginOrigin, hostId, listingId, version, sha256])
 
     // Bridge: validate every inbound message by origin + source + schema,
     // then honor resize / surface events / flag errors. Never eval or graft
