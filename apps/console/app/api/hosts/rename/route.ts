@@ -25,6 +25,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  syncHostProjectionForMembers,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -124,6 +125,14 @@ async function handler(request: Request): Promise<Response> {
         error: 'That subdomain is taken.',
         suggestions: suggestSubdomains(subdomain),
       }, { status: 409 })
+    }
+
+    // Propagate the new subdomain into every member's hostMemberships row
+    // (AGL-844) so switcher navigation targets the current address. Best-
+    // effort — a miss self-heals on the next membership change or backfill.
+    const orgId = hostSnapshot.get('orgId') as string | undefined
+    if (orgId) {
+      await syncHostProjectionForMembers(orgId, hostId).catch(() => undefined)
     }
 
     await firestore
