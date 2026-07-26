@@ -24,4 +24,4 @@ Apps point here via `NEXT_PUBLIC_PLUGIN_ORIGIN=https://plugins.aglyn.com`
 (console + tenant). The realm trust keys (`PLUGIN_TRUST_*`) are separate —
 see `docs/PLUGIN_LOADING.md`.
 
-<!-- deploy: static, no build (settings enforce empty build/install commands) -->
+<!-- deploy: static; project settings pin no-op build/install commands -->
