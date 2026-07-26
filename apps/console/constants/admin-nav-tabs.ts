@@ -50,6 +50,11 @@ export function adminNavTabItems() {
       href: buildRoute(Route.ADMIN_PLUGIN_REVIEWS),
     },
     {
+      id: 'nav-tab-admin-support',
+      label: 'Support',
+      href: buildRoute(Route.ADMIN_SUPPORT),
+    },
+    {
       id: 'nav-tab-admin-emails',
       label: 'Emails',
       href: buildRoute(Route.ADMIN_EMAILS),
