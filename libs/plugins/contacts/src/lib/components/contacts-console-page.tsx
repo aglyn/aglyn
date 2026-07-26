@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { checkQuota, type ContactSegment, type ContactSource, contactMatchesSegment, type HostContact } from '@aglyn/aglyn'
+import { checkContactQuota, type ContactSegment, type ContactSource, contactMatchesSegment, type HostContact } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -104,7 +104,9 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
       ),
     [contactDocs],
   )
-  const quota = checkQuota(org, 'contactsPerHost', contacts.length)
+  // Audience bands (AGL-890): paid plans meter past the included count
+  // instead of blocking; only free hard-bands (quota.allowed = false).
+  const quota = checkContactQuota(org, contacts.length)
 
   // Saved segments (AGL-199): reusable audience filters.
   const { data: segmentDocs } = useFirestoreCollection<any>(
@@ -291,11 +293,11 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                     sx={{ minWidth: 220 }}
                   />
                   <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-                    {`${contacts.length.toLocaleString()} / ${
-                      Number.isFinite(quota.limit)
-                        ? quota.limit.toLocaleString()
+                    {`${contacts.length.toLocaleString()} contacts · ${
+                      Number.isFinite(quota.included)
+                        ? `${quota.included.toLocaleString()} included`
                         : '∞'
-                    } contacts`}
+                    }`}
                   </Typography>
                   <Button size="small" onClick={handleExport} disabled={!visible.length}>
                     {'Export CSV'}
@@ -376,6 +378,15 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                   <Alert severity="warning">
                     {'Contact limit reached — new visitors are no longer ' +
                       'captured. Upgrade in Billing to keep collecting.'}
+                  </Alert>
+                ) : quota.overageContacts > 0 &&
+                  quota.overageRateUsd != null ? (
+                  <Alert severity="info">
+                    {`${quota.overageContacts.toLocaleString()} contacts over ` +
+                      `your plan's included ${quota.included.toLocaleString()} — ` +
+                      `metered at $${quota.overageRateUsd}/1,000 per month ` +
+                      `(≈$${quota.overageMonthlyUsd.toFixed(2)} this month). ` +
+                      'Upgrade in Billing for a larger included audience.'}
                   </Alert>
                 ) : null}
                 {contacts.length === 0 ? (

@@ -16,11 +16,11 @@
  */
 
 import {
+  checkContactQuota,
   type ContactInteraction,
   type ContactSource,
   mergeContactInteraction,
   normalizeContactEmail,
-  resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
@@ -32,9 +32,12 @@ import { getOrgForHost, orgDataCollectionForHost } from './organizations'
  * orders, bookings). Fire-and-forget by design — callers should never
  * fail their primary write because contact capture had a problem.
  *
- * Quota: `contactsPerHost` gates NEW contact creation only; interactions
- * on existing contacts always append. Dropped creations increment
- * `counters/contactsDropped` so the console can surface an upgrade hint.
+ * Quota (AGL-890): contacts are audience BANDS, not hard caps. Paid plans
+ * always create — contacts past the included band meter onto the monthly
+ * invoice (report-usage cron). Free hard-bands at the included count:
+ * only there do dropped creations increment `counters/contactsDropped`,
+ * surfaced as a console alert (AGL-891). Interactions on existing
+ * contacts always append regardless of plan.
  */
 export async function upsertHostContact(options: {
   hostId: string
@@ -106,14 +109,16 @@ export async function upsertHostContact(options: {
       return
     }
 
-    // New contact: enforce the plan quota via the aggregate count (cheap;
-    // no doc reads) against the owning org's entitlements (AGL-238).
+    // New contact: audience-band check via the aggregate count (cheap; no
+    // doc reads) against the owning org's entitlements (AGL-238/890).
+    // Metered plans always pass (overage bills via the report-usage
+    // cron); only free's hard band drops the CRM record — visibly, via
+    // the counter and the console alert (AGL-891). The signup/order that
+    // triggered the capture always succeeds either way.
     const orgBilling = await getOrgForHost(options.hostId)
-    const limit = resolveOrgEntitlements(
-      (orgBilling?.org as any) ?? null,
-    ).contactsPerHost
     const count = (await contactsRef.count().get()).data().count
-    if (count >= limit) {
+    const quota = checkContactQuota((orgBilling?.org as any) ?? null, count)
+    if (!quota.allowed) {
       await hostRef
         .collection('counters')
         .doc('contactsDropped')

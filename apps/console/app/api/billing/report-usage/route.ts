@@ -19,6 +19,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import {
   checkApiRequestQuota,
+  checkContactQuota,
   checkDataStorageQuota,
 } from '@aglyn/aglyn/server'
 import {
@@ -173,10 +174,21 @@ async function handler(request: Request): Promise<Response> {
       const apiUsageSnap = await orgRef.collection('apiUsage').doc(month).get()
       const apiRequests = Number(apiUsageSnap.get('count') ?? 0)
       const apiQuota = checkApiRequestQuota(orgSnapshot.data() as any, apiRequests)
+      // Contacts audience-band overage (AGL-890): plan-priced per 1,000
+      // contacts over the included band, metered like dataset storage.
+      // One aggregate count per org — contacts are org-scoped (AGL-237).
+      const contactsCount = Number(
+        (await orgRef.collection('contacts').count().get()).data().count ?? 0,
+      )
+      const contactQuota = checkContactQuota(
+        orgSnapshot.data() as any,
+        contactsCount,
+      )
       const billedCents =
         estimate.billedCents +
         Math.round(dataQuota.overageMonthlyUsd * 100) +
-        Math.round(apiQuota.overageMonthlyUsd * 100)
+        Math.round(apiQuota.overageMonthlyUsd * 100) +
+        Math.round(contactQuota.overageMonthlyUsd * 100)
       const usageRef = orgRef.collection('usage').doc(month)
       const existing = await usageRef.get()
       if (existing.get('reportedAt')) {
@@ -221,6 +233,8 @@ async function handler(request: Request): Promise<Response> {
           dataOverageUsd: dataQuota.overageMonthlyUsd,
           apiRequests,
           apiOverageUsd: apiQuota.overageMonthlyUsd,
+          contactsCount,
+          contactsOverageUsd: contactQuota.overageMonthlyUsd,
           billedCents,
           computedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           ...(reported && {
