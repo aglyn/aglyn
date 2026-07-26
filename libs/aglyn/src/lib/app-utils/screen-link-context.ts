@@ -40,6 +40,15 @@ export interface ScreenLinkContextValue {
    * render their content but must not navigate.
    */
   suppressNavigation?: boolean
+  /**
+   * True ONLY on the static besigner canvas (AGL-830): interactions are
+   * inert and command-bus-driven elements (nav menus, drawers) render their
+   * editor affordance instead of the live popup. The Preview surface leaves
+   * this falsy — it suppresses navigation but runs interactions for real, so
+   * a hover-to-open mega menu behaves exactly like the live site. Split out
+   * of {@link suppressNavigation}, which now means only "links don't navigate".
+   */
+  editorInert?: boolean
   /** Current screen's translations: locale → screen id (AGL-164). */
   localeVariants?: Record<string, string>
   /** Locale of the screen being rendered (AGL-164). */
@@ -61,6 +70,8 @@ export interface ResolvedScreenLink {
   /** Site-relative href (`/`, `/company/about`), undefined when unresolvable. */
   href?: string
   suppressNavigation: boolean
+  /** True only on the static besigner canvas — interactions are inert. */
+  editorInert: boolean
 }
 
 /**
@@ -73,7 +84,7 @@ export interface ResolvedScreenLink {
 export function useScreenLink(
   screenId: string | null | undefined,
 ): ResolvedScreenLink {
-  const { screens, suppressNavigation } = useContext(ScreenLinkContext)
+  const { screens, suppressNavigation, editorInert } = useContext(ScreenLinkContext)
   const href = useMemo(() => {
     if (!screenId) return undefined
     const path = screens?.[screenId]
@@ -88,5 +99,9 @@ export function useScreenLink(
     }
     return path === '/' ? '/' : `/${path}`
   }, [screenId, screens])
-  return { href, suppressNavigation: Boolean(suppressNavigation) }
+  return {
+    href,
+    suppressNavigation: Boolean(suppressNavigation),
+    editorInert: Boolean(editorInert),
+  }
 }

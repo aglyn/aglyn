@@ -37,8 +37,24 @@ const command = (
 /** Renders on a "live site" surface (navigation not suppressed). */
 const renderLive = (ui: React.ReactElement) => render(ui)
 
-/** Renders on an editing surface (besigner canvas / preview). */
+/**
+ * Renders on the static besigner canvas: navigation suppressed AND
+ * interactions inert (editorInert), so the menu shows its editor affordance.
+ */
 const renderEditor = (ui: React.ReactElement) =>
+  render(
+    <Aglyn.ScreenLinkContext.Provider
+      value={{ suppressNavigation: true, editorInert: true }}
+    >
+      {ui}
+    </Aglyn.ScreenLinkContext.Provider>,
+  )
+
+/**
+ * Renders on the Preview surface (AGL-830): navigation suppressed but NOT
+ * inert — interactions run for real, exactly like the live site.
+ */
+const renderPreview = (ui: React.ReactElement) =>
   render(
     <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
       {ui}
@@ -119,7 +135,9 @@ describe('NavMenu dropdown (AGL-562)', () => {
 
   it('collapses again when selection leaves the subtree (AGL-571)', () => {
     const editor = (selectedWithin: boolean) => (
-      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+      <Aglyn.ScreenLinkContext.Provider
+        value={{ suppressNavigation: true, editorInert: true }}
+      >
         <NavMenu
           label="Company"
           {...(selectedWithin ? { 'data-aglyn-selected-within': '' } : {})}
@@ -238,6 +256,33 @@ describe('menu command bus (AGL-568)', () => {
     )
     command('open')
     expect(screen.getByText('Live contents')).toBeTruthy()
+  })
+})
+
+describe('preview surface runs interactions, not the affordance (AGL-830)', () => {
+  it('ships closed and enrolls in the command bus like the live site', () => {
+    renderPreview(
+      <NavMenu label="Company" {...{ 'data-aglyn': 'leaf:preview-1' }}>
+        <a href="/about">{'About'}</a>
+      </NavMenu>,
+    )
+    // Closed by default — NOT the canvas affordance's stuck-open panel.
+    expect(screen.queryByText('About')).toBeNull()
+    // The hover interaction's Open-menu command reaches it (bus enrolled).
+    command('open', 'preview-1')
+    expect(screen.getByText('About')).toBeTruthy()
+  })
+
+  it('does not force-expand on the canvas selection attribute', () => {
+    // `data-aglyn-selected-within` is a canvas-only affordance signal; in
+    // preview the menu is live, so it stays closed until a real interaction.
+    renderPreview(
+      <NavMenu label="Company" {...{ 'data-aglyn-selected-within': '' }}>
+        <a href="/about">{'About'}</a>
+      </NavMenu>,
+    )
+    expect(screen.queryByText('About')).toBeNull()
+    expect(screen.queryByText(/Dropdown items/)).toBeNull()
   })
 })
 

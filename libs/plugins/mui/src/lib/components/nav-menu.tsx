@@ -110,14 +110,15 @@ export function megaMenuPanelSx(panelWidth: MegaMenuPanelWidth): SxProps {
  * grace period); click/command opens stay put until click-away, Escape,
  * or an explicit close.
  *
- * On editing surfaces (besigner canvas, preview — flagged by
- * ScreenLinkContext.suppressNavigation) the menu mirrors the live site's
- * collapsed state: just the trigger, no panel (AGL-571). Only while the
- * menu or one of its descendants is selected (the renderer stamps
- * `data-aglyn-selected-within` on the leaf) does the panel expand
- * inline, like form fields do, so its contents stay selectable and
- * editable without fighting a popup — and it collapses again the moment
- * selection leaves the subtree.
+ * On the static besigner canvas (flagged by ScreenLinkContext.editorInert)
+ * the menu mirrors the live site's collapsed state: just the trigger, no
+ * panel (AGL-571). Only while the menu or one of its descendants is selected
+ * (the renderer stamps `data-aglyn-selected-within` on the leaf) does the
+ * panel expand inline, like form fields do, so its contents stay selectable
+ * and editable without fighting a popup — and it collapses again the moment
+ * selection leaves the subtree. The Preview surface is NOT inert (AGL-830):
+ * it suppresses link navigation but runs interactions for real, so the menu
+ * takes the live branch and opens on hover exactly like the tenant site.
  */
 interface MenuShellProps extends BoxProps {
   label: string
@@ -130,7 +131,7 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
   // Node styles ride the sx prop the renderer merges; keep them by
   // composing with the shell's own layout sx (stack.ts pattern).
   const nodeSx = Array.isArray(sx) ? sx : sx ? [sx] : []
-  const { suppressNavigation } = Aglyn.useScreenLink(undefined)
+  const { editorInert } = Aglyn.useScreenLink(undefined)
   const [open, setOpen] = useState(false)
   // True while the menu is open BECAUSE a hover interaction opened it —
   // only then does pointer leave close the menu.
@@ -163,7 +164,7 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
   // live surfaces only, keyed by node id, broadcasts answered by the
   // first mounted menu.
   useEffect(() => {
-    if (suppressNavigation || !nodeId) return undefined
+    if (editorInert || !nodeId) return undefined
     mountedMenus.push(nodeId)
     const unsubscribe = Aglyn.subscribeMenuCommands((detail) => {
       // Match on the un-namespaced suffix (AGL-573): a command authored on
@@ -192,9 +193,9 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
       const index = mountedMenus.indexOf(nodeId)
       if (index >= 0) mountedMenus.splice(index, 1)
     }
-  }, [suppressNavigation, nodeId, cancelClose])
+  }, [editorInert, nodeId, cancelClose])
 
-  if (suppressNavigation) {
+  if (editorInert) {
     // Editor affordance (AGL-571): collapsed trigger by default — exactly
     // what the live site shows — expanding to inline, editable panel
     // contents only while the menu subtree holds the selection.

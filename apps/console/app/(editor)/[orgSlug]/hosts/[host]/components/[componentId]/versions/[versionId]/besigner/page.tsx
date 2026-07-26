@@ -132,6 +132,8 @@ function ComponentBesignerPage(props) {
         ]),
       ),
       suppressNavigation: true,
+      // Static canvas: interactions inert, menus/drawers show editor affordance (AGL-830).
+      editorInert: true,
     }),
     [hostResult?.data?.screens, screenDocs],
   )

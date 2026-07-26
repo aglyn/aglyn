@@ -30,7 +30,18 @@ const command = (kind: Aglyn.DrawerCommand, nodeId?: string) =>
     Aglyn.dispatchDrawerCommand(kind, nodeId)
   })
 
+/** Static besigner canvas: navigation suppressed AND interactions inert. */
 const renderEditor = (ui: React.ReactElement) =>
+  render(
+    <Aglyn.ScreenLinkContext.Provider
+      value={{ suppressNavigation: true, editorInert: true }}
+    >
+      {ui}
+    </Aglyn.ScreenLinkContext.Provider>,
+  )
+
+/** Preview surface (AGL-830): navigation suppressed, interactions live. */
+const renderPreview = (ui: React.ReactElement) =>
   render(
     <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
       {ui}
@@ -155,6 +166,20 @@ describe('Drawer element (AGL-562)', () => {
     expect(screen.getByText('Editable contents')).toBeTruthy()
     expect(screen.getByText(/slides in on the live site/)).toBeTruthy()
   })
+
+  it('runs live on the Preview surface, not the affordance (AGL-830)', () => {
+    renderPreview(
+      <DrawerElement {...{ 'data-aglyn': 'leaf:drawer-preview' }}>
+        <span>{'Slide-in contents'}</span>
+      </DrawerElement>,
+    )
+    // No canvas placeholder — the drawer is live and closed until commanded.
+    expect(screen.queryByText(/slides in on the live site/)).toBeNull()
+    expect(screen.queryByText('Slide-in contents')).toBeNull()
+    // Enrolled in the command bus, so an interaction opens it.
+    command('open', 'drawer-preview')
+    expect(screen.getByText('Slide-in contents')).toBeTruthy()
+  })
 })
 
 describe('DrawerToggle (AGL-562, interactions-only targeting AGL-572)', () => {
@@ -193,13 +218,22 @@ describe('DrawerToggle (AGL-562, interactions-only targeting AGL-572)', () => {
     expect(button.hasAttribute('targetnodeid')).toBe(false)
   })
 
-  it('is inert on editing surfaces', () => {
+  it('is inert on the static canvas', () => {
     const seen: unknown[] = []
     const unsubscribe = Aglyn.subscribeDrawerCommands((d) => seen.push(d))
     renderEditor(<DrawerToggle ariaLabel="Open menu" />)
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
     unsubscribe()
     expect(seen).toHaveLength(0)
+  })
+
+  it('dispatches on the Preview surface (AGL-830)', () => {
+    const seen: unknown[] = []
+    const unsubscribe = Aglyn.subscribeDrawerCommands((d) => seen.push(d))
+    renderPreview(<DrawerToggle ariaLabel="Open menu" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    unsubscribe()
+    expect(seen).toHaveLength(1)
   })
 })
 
