@@ -127,6 +127,9 @@ The drawer's **Password** section gets a member back into their account. This is
 sign-in **for this site only** — it has nothing to do with any Aglyn console account the
 same person might also have.
 
+![The member drawer's Password section, showing the reset-email button above a
+new-password field with a Generate button](/img/guides/member-drawer-password.png)
+
 - **Send password reset email** — emails the member a link to the site's `/recover` page.
   The link works once and expires after an hour, and their current password keeps working
   until they use it. This is the option to reach for. Capped at a few sends per hour to

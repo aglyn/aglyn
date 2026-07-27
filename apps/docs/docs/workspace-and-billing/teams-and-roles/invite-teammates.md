@@ -51,6 +51,10 @@ enforced per tier; if you're at your limit, add a **seat add-on** before invitin
 Open the member from the **Team** page and use the **Password** card. It has two
 options, and the first is almost always the right one.
 
+![The Password card on a team member's page, with the reset-email button above a
+divider reading "Or set a password directly" and a new-password field with a Generate
+button](/img/teams-and-roles/team-member-password.png)
+
 **Send password reset email** emails the member a link to choose their own password.
 Their current password keeps working until they use the link, and nobody else ever sees
 the new one. This works for every member. A few sends per hour to the same person is the

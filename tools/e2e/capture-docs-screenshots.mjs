@@ -46,6 +46,10 @@ const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
 const ORG_SLUG = process.env.E2E_ORG_SLUG ?? 'e2e-bakery'
 const HOST = process.env.E2E_HOST ?? 'demo'
 const HOST_BASE = `${ORG_SLUG}/hosts/${HOST}`
+// Account fixtures the password shots target (AGL-921); both come from
+// seed-e2e.mjs, which is also where their guard-relevant properties are set.
+const TEAMMATE_UID = process.env.E2E_TEAMMATE_UID ?? 'e2e-teammate'
+const NON_STAFF_UID = process.env.E2E_OWNER_UID ?? 'e2e-nonstaff-owner'
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'E2e-Password-1'
 const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
@@ -147,6 +151,16 @@ const shots = [
     waitFor: 'Invite',
   },
   {
+    // Password card on a teammate's detail page (AGL-921). Targets the plain
+    // teammate fixture rather than the owner: every other seeded account trips
+    // one of the AGL-913 guards and renders the refusal instead of the form.
+    out: 'teams-and-roles/team-member-password.png',
+    path: `/${ORG_SLUG}/team/${TEAMMATE_UID}`,
+    waitFor: 'Send password reset email',
+    // The card sits below the member form, off a 900px viewport.
+    actions: [{ scroll: 'text=Signs the account out everywhere' }],
+  },
+  {
     out: 'getting-started/org-settings-page.png',
     path: `/${ORG_SLUG}/settings`,
     waitFor: 'Workspace',
@@ -182,6 +196,17 @@ const shots = [
     out: 'teams-and-roles/host-users-page.png',
     path: `/${HOST_BASE}/users`,
     waitFor: 'Site users',
+  },
+  {
+    // Password section inside the site member drawer (AGL-921). Opening the
+    // drawer takes a click on the member row — there is no direct URL for it.
+    out: 'guides/member-drawer-password.png',
+    path: `/${HOST_BASE}/users`,
+    waitFor: 'Site users',
+    actions: [
+      { click: 'text=visitor@aglyn.test', waitFor: 'Lifetime purchases' },
+      { scroll: 'text=Or set a password directly' },
+    ],
   },
   {
     out: 'custom-domains/setup-domains.png',
@@ -234,6 +259,15 @@ const shots = [
     out: 'staff-console/admin-audit.png',
     path: '/admin/audit',
     waitFor: 'Audit',
+  },
+  {
+    // Password card on the staff user detail page (AGL-921). Points at the
+    // non-staff owner: staff accounts are a case the page treats differently,
+    // and the ordinary customer account is what support actually opens.
+    out: 'staff-console/admin-user-password.png',
+    path: `/admin/users/${NON_STAFF_UID}`,
+    waitFor: 'Send password reset email',
+    actions: [{ scroll: 'text=Signs the account out everywhere' }],
   },
   {
     out: 'plugins/plugin-reviews.png',
@@ -331,6 +365,13 @@ const context = await browser.newContext({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
 })
+// E2E_TIMEOUT_MS governed only the explicit waits below, leaving every
+// action on Playwright's 30s default. Against a cold dev server that is the
+// sign-in form losing the race with its own first client compile, which
+// surfaced as a bare `page.fill: Timeout 30000ms exceeded` on the email
+// field rather than anything pointing at compilation.
+context.setDefaultTimeout(TIMEOUT_MS)
+context.setDefaultNavigationTimeout(TIMEOUT_MS)
 
 // Sign in through the real UI once (see console.e2e.mjs for why).
 {
@@ -393,6 +434,43 @@ const only = process.argv
   ?.slice('--only='.length)
 
 let failures = 0
+/**
+ * Removes what the docs must never show: the auth-emulator warning banner,
+ * Next's dev indicator, and the AGL-663 notification pre-permission modal.
+ *
+ * Called both after the page settles AND again just before the shutter,
+ * because the notification modal appears on a delay — stripping it only once
+ * meant any shot with a scroll or a long settle caught it on the way back in.
+ */
+async function stripChrome(page) {
+  // Not for docs: the auth-emulator warning banner and Next's dev
+  // indicator/error badge.
+  await page.evaluate(() => {
+    for (const selector of [
+      '.firebase-emulator-warning',
+      'nextjs-portal',
+      '#__next-build-watcher',
+      '[data-nextjs-toast]',
+    ]) {
+      document.querySelectorAll(selector).forEach((el) => el.remove())
+    }
+    // AGL-663 notification pre-permission modal overlays the page — drop
+    // it (and its backdrop) so shots capture the content beneath.
+    let removedModal = false
+    for (const dialog of document.querySelectorAll('[role="dialog"]')) {
+      if (/notification/i.test(dialog.textContent ?? '')) {
+        ;(dialog.closest('.MuiModal-root') ?? dialog).remove()
+        removedModal = true
+      }
+    }
+    if (removedModal) {
+      document
+        .querySelectorAll('.MuiBackdrop-root')
+        .forEach((el) => el.remove())
+    }
+  })
+}
+
 for (const shot of shots) {
   if (only && !shot.out.includes(only)) continue
   const page = await context.newPage()
@@ -402,32 +480,7 @@ for (const shot of shots) {
       timeout: TIMEOUT_MS,
     })
     await page.waitForSelector(`text=${shot.waitFor}`, { timeout: TIMEOUT_MS })
-    // Not for docs: the auth-emulator warning banner and Next's dev
-    // indicator/error badge.
-    await page.evaluate(() => {
-      for (const selector of [
-        '.firebase-emulator-warning',
-        'nextjs-portal',
-        '#__next-build-watcher',
-        '[data-nextjs-toast]',
-      ]) {
-        document.querySelectorAll(selector).forEach((el) => el.remove())
-      }
-      // AGL-663 notification pre-permission modal overlays the page — drop
-      // it (and its backdrop) so shots capture the content beneath.
-      let removedModal = false
-      for (const dialog of document.querySelectorAll('[role="dialog"]')) {
-        if (/notification/i.test(dialog.textContent ?? '')) {
-          ;(dialog.closest('.MuiModal-root') ?? dialog).remove()
-          removedModal = true
-        }
-      }
-      if (removedModal) {
-        document
-          .querySelectorAll('.MuiBackdrop-root')
-          .forEach((el) => el.remove())
-      }
-    })
+    await stripChrome(page)
     for (const action of shot.actions ?? []) {
       // frame: true targets the canvas iframe (the besigner viewport).
       const scope = action.frame ? page.frameLocator('iframe') : page
@@ -446,6 +499,8 @@ for (const shot of shots) {
       await page.waitForTimeout(action.settleMs ?? 800)
     }
     await page.waitForTimeout(shot.settleMs ?? 1500)
+    // The notification modal can drift back in during the settle above.
+    await stripChrome(page)
     if (shot.annotate) await annotate(page, shot.annotate)
     const outPath = join(IMG_ROOT, shot.out)
     mkdirSync(dirname(outPath), { recursive: true })

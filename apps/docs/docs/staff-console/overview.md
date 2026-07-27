@@ -17,6 +17,9 @@ The **staff console** is where Aglyn operators manage the platform and support c
 
 ![The staff audit log](/img/staff-console/admin-audit.png)
 
+![The Password card on a user's staff detail page, offering a reset email or a directly
+set password](/img/staff-console/admin-user-password.png)
+
 ## What's there
 
 - **Staff overview** — platform metrics, the newest organizations, purchases, and
