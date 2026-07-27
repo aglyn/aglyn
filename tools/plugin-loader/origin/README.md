@@ -25,6 +25,15 @@ What it serves:
 
 No secrets live on this project — it is a static page plus edge rewrites.
 
+Deployments are scoped to this directory. The repo-root `vercel.json` is
+only read by projects rooted at `.` (aglyn-console), so without its own
+git settings this project rebuilt on **every** push to the monorepo — the
+whole `main` history showed up here as no-op deploys. `vercel.json` now
+carries both halves: `git.deploymentEnabled` limits it to `main` (a
+promote push to `production` no longer makes a preview here), and
+`ignoreCommand` (`git diff --quiet HEAD^ HEAD -- .`, run from the root
+directory — exit 0 skips) builds only when this directory changed.
+
 Apps point here via `NEXT_PUBLIC_PLUGIN_ORIGIN=https://plugins.aglyn.com`
 (console + tenant). The realm trust keys (`PLUGIN_TRUST_*`) are separate —
 see `docs/PLUGIN_LOADING.md`.

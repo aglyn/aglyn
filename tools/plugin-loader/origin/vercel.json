@@ -1,5 +1,14 @@
 {
   "version": 2,
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "**": false,
+      "*": false,
+      "*/**": false
+    }
+  },
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- .",
   "functions": {
     "api/load.mjs": {
       "includeFiles": "**/load.html"
