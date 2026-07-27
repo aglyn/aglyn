@@ -17,20 +17,19 @@
 'use client'
 
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
-  Button,
   Chip,
-  Link as MuiLink,
+  MenuItem,
+  Skeleton,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
@@ -38,58 +37,57 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
-interface QueueEntry {
+interface QueueRow {
   listingId: string
   displayName: string
   description: string
-  readme: string
   license: string
   categories: string[]
-  homepageUrl: string
-  repositoryUrl: string
   profileId: string
   reviewStatus: string
   priceUsd: number
   version: string
-  capabilities: { network?: string[]; events?: string[] }
-  hostAbi: number | null
-  trust: string | null
-  verifier: {
-    ok?: boolean
-    problems?: Array<{ level: string; message: string }>
-    error?: string
-  } | null
+  hidden: boolean
 }
 
-/** A listed/verified plugin with per-version trust state (AGL-885). */
-interface ListedEntry {
+interface ListedRow {
   listingId: string
   displayName: string
   reviewStatus: string
+  profileId: string
   latestVersion: string
-  /** Under staff takedown — de-listed AND revoked (AGL-948/952). */
   hidden: boolean
   hiddenReason: string
-  versions: Array<{ version: string; trust: string | null }>
+  realmVersions: number
+  versionCount: number
 }
 
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'in_review', label: 'In review' },
+  { value: 'listed', label: 'Listed' },
+  { value: 'verified', label: 'Verified' },
+  { value: 'hidden', label: 'Taken down' },
+]
+
 /**
- * Marketplace review queue (AGL-432): staff move submitted plugin
- * listings through in_review → listed/verified/rejected, with the static
- * verifier re-run and a manual checklist alongside. Realm trust is the
- * separate super-staff grant (sign-plugin) surfaced as its own button.
+ * Staff marketplace review index (AGL-961).
+ *
+ * Scanning surface only: rows carry just enough to pick the right listing,
+ * and every consequential action — verdicts, realm trust, takedown — lives
+ * on the detail page. The previous version stacked all of it inline, which
+ * meant the most destructive controls in the platform sat as same-weight
+ * text buttons in a wall of caption text.
  */
 const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
-  const { enqueueSnackbar } = useSnackbar()
-  const [queue, setQueue] = useState<QueueEntry[]>([])
-  const [listed, setListed] = useState<ListedEntry[]>([])
+  const [queue, setQueue] = useState<QueueRow[]>([])
+  const [listed, setListed] = useState<ListedRow[]>([])
+  const [publishers, setPublishers] = useState<Record<string, string>>({})
   const [loaded, setLoaded] = useState(false)
-  const [busy, setBusy] = useState<string | null>(null)
-  const [rejectReason, setRejectReason] = useState<Record<string, string>>({})
-  const [takedownReason, setTakedownReason] = useState<Record<string, string>>(
-    {},
-  )
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('all')
 
   const token = useCallback(
     async () =>
@@ -107,6 +105,7 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
       const payload = await response.json()
       setQueue(payload?.queue ?? [])
       setListed(payload?.listed ?? [])
+      setPublishers(payload?.publishers ?? {})
     }
     setLoaded(true)
   }, [token])
@@ -115,141 +114,68 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
     if (user) void refresh()
   }, [user, refresh])
 
-  const act = useCallback(
-    async (entry: QueueEntry, action: string) => {
-      setBusy(entry.listingId)
-      try {
-        const idToken = await token()
-        const response = await fetch('/api/admin/plugin-reviews', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          body: JSON.stringify({
-            listingId: entry.listingId,
-            action,
-            reason: rejectReason[entry.listingId] ?? '',
-          }),
-        })
-        const payload = await response.json().catch(() => ({}))
-        if (response.ok) {
-          enqueueSnackbar(`${entry.displayName}: ${payload.reviewStatus}`, {
-            variant: 'success',
-          })
-          await refresh()
-        } else {
-          enqueueSnackbar(payload?.error ?? 'Action failed', {
-            variant: 'error',
-            allowDuplicate: true,
-          })
-        }
-      } finally {
-        setBusy(null)
-      }
-    },
-    [token, rejectReason, enqueueSnackbar, refresh],
+  const publisherName = useCallback(
+    (profileId: string) => publishers[profileId] ?? profileId,
+    [publishers],
   )
 
-  // Grant or revoke realm trust for any listing+version (AGL-885) — the
-  // super-staff sign-plugin call, shared by the queue button and the
-  // listed-plugins section below.
-  const signRealm = useCallback(
-    async (listingId: string, version: string, action: 'grant' | 'revoke') => {
-      setBusy(listingId)
-      try {
-        const idToken = await token()
-        const response = await fetch('/api/admin/sign-plugin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          body: JSON.stringify({
-            listingId,
-            version,
-            ...(action === 'revoke' ? { action: 'revoke' } : {}),
-          }),
-        })
-        const payload = await response.json().catch(() => ({}))
-        if (response.ok) {
-          enqueueSnackbar(
-            action === 'revoke'
-              ? 'Realm trust revoked'
-              : 'Realm trust granted (version signed)',
-            { variant: 'success' },
-          )
-          await refresh()
-        } else {
-          enqueueSnackbar(payload?.error ?? 'Signing failed', {
-            variant: 'error',
-            allowDuplicate: true,
-          })
-        }
-      } finally {
-        setBusy(null)
+  // One predicate for both sections, so a search never means two things.
+  const matches = useCallback(
+    (row: { displayName: string; listingId: string; profileId: string; reviewStatus: string; hidden: boolean }) => {
+      const term = search.trim().toLowerCase()
+      if (
+        term &&
+        ![row.displayName, row.listingId, publisherName(row.profileId)].some(
+          (field) => String(field).toLowerCase().includes(term),
+        )
+      ) {
+        return false
       }
+      if (status === 'all') return true
+      if (status === 'hidden') return row.hidden
+      return row.reviewStatus === status
     },
-    [token, enqueueSnackbar, refresh],
+    [search, status, publisherName],
   )
 
-  const grantRealm = useCallback(
-    (entry: QueueEntry) => signRealm(entry.listingId, entry.version, 'grant'),
-    [signRealm],
-  )
+  const visibleQueue = useMemo(() => queue.filter(matches), [queue, matches])
+  const visibleListed = useMemo(() => listed.filter(matches), [listed, matches])
+  const filtering = search.trim().length > 0 || status !== 'all'
 
-  // Staff takedown (AGL-952). The route existed since AGL-658 with zero
-  // callers — a moderator had to hand-craft a POST to pull a plugin. Since
-  // AGL-948 hiding also writes the kill switch, so this button stops the
-  // bundle in every workspace that already installed it, not just the
-  // listing page; the copy below says so, because "Hide" alone reads far
-  // milder than what it now does.
-  const takedown = useCallback(
-    async (entry: ListedEntry) => {
-      const action = entry.hidden ? 'unhide' : 'hide'
-      const reason = takedownReason[entry.listingId] ?? ''
-      // The route 400s on a hide with no reason; catch it here so the
-      // moderator sees why instead of a generic failure.
-      if (action === 'hide' && !reason.trim()) {
-        return void enqueueSnackbar('Taking a plugin down needs a reason', {
-          variant: 'warning',
-          allowDuplicate: true,
-        })
-      }
-      setBusy(entry.listingId)
-      try {
-        const idToken = await token()
-        const response = await fetch('/api/admin/plugin-reviews', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          body: JSON.stringify({ listingId: entry.listingId, action, reason }),
-        })
-        const payload = await response.json().catch(() => ({}))
-        if (response.ok) {
-          enqueueSnackbar(
-            payload?.revoked
-              ? `${entry.displayName} taken down — running installs stop on next load`
-              : action === 'hide'
-                ? `${entry.displayName} hidden`
-                : `${entry.displayName} restored`,
-            { variant: 'success' },
-          )
-          setTakedownReason((current) => ({ ...current, [entry.listingId]: '' }))
-          await refresh()
-        } else {
-          enqueueSnackbar(payload?.error ?? 'Takedown failed', {
-            variant: 'error',
-            allowDuplicate: true,
-          })
-        }
-      } finally {
-        setBusy(null)
-      }
-    },
-    [token, takedownReason, enqueueSnackbar, refresh],
+  const row = (
+    key: string,
+    listingId: string,
+    name: string,
+    profileId: string,
+    chips: React.ReactNode,
+    caption: string,
+  ) => (
+    <Stack
+      key={key}
+      spacing={0.25}
+      sx={{
+        py: 1,
+        borderBottom: 1,
+        borderColor: 'divider',
+        '&:last-of-type': { borderBottom: 0 },
+      }}
+    >
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+      >
+        <AppLink href={buildRoute(Route.ADMIN_PLUGIN_REVIEW, { listingId })}>
+          <Typography variant="subtitle2" component="span">
+            {name}
+          </Typography>
+        </AppLink>
+        {chips}
+      </Stack>
+      <Typography variant="caption" color="text.secondary">
+        {`${publisherName(profileId)} · ${caption}`}
+      </Typography>
+    </Stack>
   )
 
   return (
@@ -273,313 +199,144 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
               waiting for review" — the queue fetch 403s and the empty result
               reads as good news rather than as a refusal (AGL-760). */}
           <StaffOnly>
-          <Stack spacing={3}>
-            {loaded && queue.length === 0 ? (
-              <Alert severity="success">
-                {'No plugin submissions waiting for review.'}
-              </Alert>
-            ) : null}
-            {queue.map((entry) => (
-              <CardDisplay
-                key={entry.listingId}
-                header={`${entry.displayName} v${entry.version}`}
-                help={docsHelp('manifestAndEnvs', {
-                  anchor: '#review--trust-lifecycle',
-                  excerpt:
-                    'Advance this submission through the review lifecycle — list, verify, or reject with a reason. Realm trust is a separate super-staff signing grant.',
-                })}
-                contentGutterX
-                contentGutterY
+            <Stack spacing={3}>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', flexWrap: 'wrap' }}
               >
-                <Stack spacing={1.5}>
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                  >
-                    <Chip size="small" label={entry.reviewStatus} />
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={entry.priceUsd > 0 ? `$${entry.priceUsd}` : 'Free'}
-                    />
-                    {entry.license ? (
-                      <Chip size="small" variant="outlined" label={entry.license} />
-                    ) : (
-                      <Chip size="small" color="warning" label="No license" />
-                    )}
-                    {entry.categories.map((category) => (
-                      <Chip key={category} size="small" label={category} />
-                    ))}
-                    {entry.trust === 'realm' ? (
-                      <Chip size="small" color="success" label="Realm-trusted" />
-                    ) : null}
-                  </Stack>
-                  <Typography variant="body2" color="text.secondary">
-                    {entry.description || 'No description.'}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {`Publisher: ${entry.profileId} · README: ${
-                      entry.readme ? `${entry.readme.length} chars` : 'MISSING'
-                    } · Capabilities: network ${
-                      entry.capabilities.network?.length ?? 0
-                    }, events ${entry.capabilities.events?.length ?? 0} · ` +
-                      `hostAbi ${entry.hostAbi ?? 'undeclared'}`}
-                  </Typography>
-                  {entry.homepageUrl || entry.repositoryUrl ? (
-                    <Stack direction="row" spacing={2}>
-                      {entry.homepageUrl ? (
-                        <MuiLink
-                          href={entry.homepageUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          variant="caption"
-                        >
-                          {'Homepage'}
-                        </MuiLink>
-                      ) : null}
-                      {entry.repositoryUrl ? (
-                        <MuiLink
-                          href={entry.repositoryUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          variant="caption"
-                        >
-                          {'Repository'}
-                        </MuiLink>
-                      ) : null}
-                    </Stack>
-                  ) : null}
-                  {entry.verifier ? (
-                    entry.verifier.error ? (
-                      <Alert severity="warning">
-                        {`Verifier: ${entry.verifier.error}`}
-                      </Alert>
-                    ) : entry.verifier.ok ? (
-                      <Alert severity="success">
-                        {'Static verifier: clean'}
-                      </Alert>
-                    ) : (
-                      <Alert severity="error">
-                        {'Static verifier found problems: ' +
-                          (entry.verifier.problems ?? [])
-                            .map((problem) => problem.message)
-                            .join(' · ')}
-                      </Alert>
-                    )
-                  ) : null}
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                  >
-                    {entry.reviewStatus === 'submitted' ? (
-                      <Button
-                        size="small"
-                        disabled={busy === entry.listingId}
-                        onClick={() => void act(entry, 'start-review')}
-                      >
-                        {'Start review'}
-                      </Button>
-                    ) : null}
-                    <Button
-                      size="small"
-                      variant="contained"
-                      disabled={busy === entry.listingId}
-                      onClick={() => void act(entry, 'list')}
-                    >
-                      {'List'}
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      color="info"
-                      disabled={busy === entry.listingId}
-                      onClick={() => void act(entry, 'verify')}
-                    >
-                      {'Verify ✓'}
-                    </Button>
-                    <Button
-                      size="small"
-                      color="success"
-                      disabled={busy === entry.listingId}
-                      onClick={() => void grantRealm(entry)}
-                    >
-                      {'Grant realm trust'}
-                    </Button>
-                    <TextField
-                      size="small"
-                      placeholder="Rejection reason"
-                      value={rejectReason[entry.listingId] ?? ''}
-                      onChange={(event) =>
-                        setRejectReason((current) => ({
-                          ...current,
-                          [entry.listingId]: event.target.value,
-                        }))
-                      }
-                      sx={{ minWidth: 220 }}
-                    />
-                    <Button
-                      size="small"
-                      color="error"
-                      disabled={busy === entry.listingId}
-                      onClick={() => void act(entry, 'reject')}
-                    >
-                      {'Reject'}
-                    </Button>
-                  </Stack>
-                </Stack>
-              </CardDisplay>
-            ))}
-            {/* Realm trust for LISTED plugins (AGL-885): once a listing
-                leaves the queue, its trust must stay administrable —
-                especially revoke, which pulls marketplace code back out of
-                the app realm. */}
-            {listed.length ? (
-              <CardDisplay
-                header={'Listed plugins — realm trust'}
-                contentGutterX
-                contentGutterY
-              >
-                <Stack spacing={2}>
-                  <Typography variant="body2" color="text.secondary">
-                    {'Grant signs a version to run in the app realm; revoke ' +
-                      'returns it to the sandbox on next load. Super-staff ' +
-                      'only, audited.'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {'Take down pulls the listing AND stops the plugin ' +
-                      'loading in every workspace that already installed it ' +
-                      '— it writes the kill switch, not just a de-list. ' +
-                      'Restoring clears it again.'}
-                  </Typography>
-                  {listed.map((entry) => (
-                    <Stack key={entry.listingId} spacing={0.75}>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                      >
-                        <Typography variant="subtitle2">
-                          {entry.displayName}
-                        </Typography>
-                        <Chip size="small" label={entry.reviewStatus} />
-                        {entry.hidden ? (
-                          <Chip
-                            size="small"
-                            color="error"
-                            label="Taken down — revoked"
-                          />
-                        ) : null}
-                        <Typography variant="caption" color="text.secondary">
-                          {entry.listingId}
-                        </Typography>
-                      </Stack>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center', flexWrap: 'wrap', pl: 1 }}
-                      >
-                        {entry.hidden ? (
-                          <Typography variant="caption" color="error">
-                            {entry.hiddenReason
-                              ? `Reason: ${entry.hiddenReason}`
-                              : 'No reason recorded'}
-                          </Typography>
-                        ) : (
-                          <TextField
-                            size="small"
-                            placeholder="Takedown reason"
-                            value={takedownReason[entry.listingId] ?? ''}
-                            onChange={(event) =>
-                              setTakedownReason((current) => ({
-                                ...current,
-                                [entry.listingId]: event.target.value,
-                              }))
-                            }
-                            sx={{ minWidth: 220 }}
-                          />
-                        )}
-                        <Button
-                          size="small"
-                          color={entry.hidden ? 'success' : 'error'}
-                          disabled={busy === entry.listingId}
-                          onClick={() => void takedown(entry)}
-                        >
-                          {entry.hidden ? 'Restore listing' : 'Take down'}
-                        </Button>
-                      </Stack>
-                      {entry.versions.map((versionEntry) => (
-                        <Stack
-                          key={versionEntry.version}
-                          direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'center', flexWrap: 'wrap', pl: 1 }}
-                        >
-                          <Typography variant="body2" sx={{ minWidth: 64 }}>
-                            {`v${versionEntry.version}`}
-                          </Typography>
-                          {versionEntry.version === entry.latestVersion ? (
-                            <Chip size="small" label="Latest" />
-                          ) : null}
-                          {versionEntry.trust === 'realm' ? (
-                            <Chip
-                              size="small"
-                              color="success"
-                              label="Realm-trusted"
-                            />
-                          ) : (
-                            <Chip
-                              size="small"
-                              variant="outlined"
-                              label="Sandboxed"
-                            />
-                          )}
-                          {versionEntry.trust === 'realm' ? (
-                            <Button
-                              size="small"
-                              color="error"
-                              disabled={busy === entry.listingId}
-                              onClick={() =>
-                                void signRealm(
-                                  entry.listingId,
-                                  versionEntry.version,
-                                  'revoke',
-                                )
-                              }
-                            >
-                              {'Revoke realm trust'}
-                            </Button>
-                          ) : (
-                            <Button
-                              size="small"
-                              color="success"
-                              disabled={busy === entry.listingId}
-                              onClick={() =>
-                                void signRealm(
-                                  entry.listingId,
-                                  versionEntry.version,
-                                  'grant',
-                                )
-                              }
-                            >
-                              {'Grant realm trust'}
-                            </Button>
-                          )}
-                        </Stack>
-                      ))}
-                    </Stack>
+                <TextField
+                  size="small"
+                  placeholder="Search name, publisher or listing id"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  sx={{ minWidth: 320 }}
+                />
+                <TextField
+                  size="small"
+                  select
+                  value={status}
+                  onChange={(event) => setStatus(event.target.value)}
+                  sx={{ minWidth: 180 }}
+                >
+                  {STATUS_FILTERS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
                   ))}
+                </TextField>
+              </Stack>
+
+              {!loaded ? (
+                <Stack spacing={2}>
+                  <Skeleton variant="rounded" height={140} />
+                  <Skeleton variant="rounded" height={200} />
                 </Stack>
-              </CardDisplay>
-            ) : null}
-          </Stack>
+              ) : (
+                <>
+                  <CardDisplay
+                    header={`Awaiting review (${visibleQueue.length})`}
+                    help={docsHelp('manifestAndEnvs', {
+                      anchor: '#review--trust-lifecycle',
+                      excerpt:
+                        'Submissions waiting on a staff verdict. Open one to read its manifest, verifier findings and act.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    {visibleQueue.length ? (
+                      <Stack>
+                        {visibleQueue.map((entry) =>
+                          row(
+                            entry.listingId,
+                            entry.listingId,
+                            entry.displayName,
+                            entry.profileId,
+                            <>
+                              <Chip size="small" label={entry.reviewStatus} />
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label={`v${entry.version || '—'}`}
+                              />
+                              {entry.license ? null : (
+                                <Chip
+                                  size="small"
+                                  color="warning"
+                                  label="No license"
+                                />
+                              )}
+                            </>,
+                            entry.priceUsd > 0 ? `$${entry.priceUsd}` : 'Free',
+                          ),
+                        )}
+                      </Stack>
+                    ) : (
+                      <Alert severity={filtering ? 'info' : 'success'}>
+                        {filtering
+                          ? 'No submissions match this filter.'
+                          : 'No plugin submissions waiting for review.'}
+                      </Alert>
+                    )}
+                  </CardDisplay>
+
+                  <CardDisplay
+                    header={`Listed plugins (${visibleListed.length})`}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    {visibleListed.length ? (
+                      <Stack>
+                        {visibleListed.map((entry) =>
+                          row(
+                            entry.listingId,
+                            entry.listingId,
+                            entry.displayName,
+                            entry.profileId,
+                            <>
+                              <Chip size="small" label={entry.reviewStatus} />
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label={`v${entry.latestVersion || '—'}`}
+                              />
+                              {entry.realmVersions ? (
+                                <Chip
+                                  size="small"
+                                  color="success"
+                                  label={`${entry.realmVersions} realm-trusted`}
+                                />
+                              ) : null}
+                              {entry.hidden ? (
+                                <Chip
+                                  size="small"
+                                  color="error"
+                                  label="Taken down"
+                                />
+                              ) : null}
+                            </>,
+                            `${entry.versionCount} version${
+                              entry.versionCount === 1 ? '' : 's'
+                            }${entry.hidden && entry.hiddenReason ? ` · ${entry.hiddenReason}` : ''}`,
+                          ),
+                        )}
+                      </Stack>
+                    ) : (
+                      <Alert severity="info">
+                        {filtering
+                          ? 'No listed plugins match this filter.'
+                          : 'No listed plugins yet.'}
+                      </Alert>
+                    )}
+                  </CardDisplay>
+                </>
+              )}
+            </Stack>
           </StaffOnly>
         </Container>
       </DashboardLayout>
     </>
   )
 }
-PluginReviews.displayName = 'Page:AdminPluginReviews'
 
 export default PluginReviews

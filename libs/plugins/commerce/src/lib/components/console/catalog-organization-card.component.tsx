@@ -207,13 +207,30 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     [confirm, categoryDocs, firestore, hostId],
   )
 
+  const draftSlug = collectionDraft
+    ? collectionDraft.slug || CommerceModel.commerceSlug(collectionDraft.name)
+    : ''
+  // The slug is the collection's public address at /collections/{slug} and
+  // nothing enforced uniqueness (AGL-957) — a second one at the same slug
+  // made the first unreachable with no error anywhere. Checked against the
+  // catalog collections only; content collections have their own namespace.
+  const slugTaken =
+    collectionDraft !== null &&
+    Aglyn.isCollectionSlugTaken(
+      draftSlug,
+      'catalog',
+      commerceCollections,
+      collectionDraft.id,
+    )
   const collectionError = collectionDraft
     ? collectionDraft.name
-      ? CommerceModel.validateCollection({
+      ? (CommerceModel.validateCollection({
           ...collectionDraft,
-          slug:
-            collectionDraft.slug || CommerceModel.commerceSlug(collectionDraft.name),
-        })
+          slug: draftSlug,
+        }) ??
+        (slugTaken
+          ? `Another collection already serves /collections/${draftSlug}`
+          : null))
       : null
     : null
 
@@ -511,13 +528,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
             size="small"
             autoFocus
             sx={{ mt: 1 }}
+            error={slugTaken}
             helperText={
-              collectionDraft?.name
-                ? `/collections/${
-                    collectionDraft.slug ||
-                    CommerceModel.commerceSlug(collectionDraft.name)
-                  }`
-                : undefined
+              collectionDraft?.name ? `/collections/${draftSlug}` : undefined
             }
           />
           <TextField

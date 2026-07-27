@@ -315,9 +315,20 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
 
   const [newCollectionOpen, setNewCollectionOpen] = useState(false)
   const [collectionName, setCollectionName] = useState('')
+  // The slug is the collection's public address and nothing enforced
+  // uniqueness (AGL-957): a second /blog made the first unreachable, silently.
+  const collectionSlugOwner = useMemo(
+    () =>
+      Aglyn.findCollectionSlugOwner(
+        slugify(collectionName),
+        'content',
+        collections,
+      ),
+    [collectionName, collections],
+  )
   const handleCreateCollection = useCallback(async () => {
     const displayName = collectionName.trim()
-    if (!displayName) return
+    if (!displayName || collectionSlugOwner !== null) return
     const id = Aglyn.createResourceUid()
     await setDoc(doc(firestore, 'hosts', hostId, 'collections', id), {
       displayName,
@@ -339,7 +350,14 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
       id,
       name: displayName,
     })
-  }, [collectionName, firestore, hostId, enqueueSnackbar, logActivity])
+  }, [
+    collectionName,
+    collectionSlugOwner,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+    logActivity,
+  ])
 
   // Entry editor dialog state; null id = creating.
   const [editor, setEditor] = useState<{
@@ -928,10 +946,13 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             size="small"
             fullWidth
             autoFocus
+            error={collectionSlugOwner !== null}
             helperText={
-              collectionName.trim()
-                ? `Served at /${slugify(collectionName)}`
-                : 'e.g. Blog, News, Projects'
+              collectionSlugOwner !== null
+                ? `Another collection already serves /${slugify(collectionName)}`
+                : collectionName.trim()
+                  ? `Served at /${slugify(collectionName)}`
+                  : 'e.g. Blog, News, Projects'
             }
             sx={{ mt: 1 }}
           />
@@ -943,7 +964,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           <Button
             variant="contained"
             color="secondary"
-            disabled={!collectionName.trim()}
+            disabled={!collectionName.trim() || collectionSlugOwner !== null}
             onClick={handleCreateCollection}
           >
             {'Create'}
