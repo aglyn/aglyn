@@ -17,7 +17,12 @@
 'use client'
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink,
+  CardDisplay,
+  Container,
+  GridItems,
+} from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -25,7 +30,6 @@ import {
   Alert,
   Button,
   Chip,
-  Link,
   Stack,
   TextField,
   Table,
@@ -43,6 +47,7 @@ import AuthenticatedLayout from '../../../../../components/layouts/authenticated
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
+import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
@@ -162,6 +167,28 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
       setEditBusy(false)
     }
   }, [uid, edit, editBusy, user, enqueueSnackbar])
+
+  // Password help (AGL-912). Throws on failure so PasswordAdminControls
+  // surfaces the endpoint's own message — "no email address", "too
+  // repetitive", "check email settings" are all things the staffer must see
+  // verbatim to know what to do next.
+  const callManage = useCallback(
+    async (payload: Record<string, unknown>) => {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/admin/users/manage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ uid, ...payload }),
+      })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(body?.error ?? 'Request failed')
+      return body
+    },
+    [uid, user],
+  )
 
   const handleImpersonate = useCallback(async () => {
     if (!uid) return
@@ -383,7 +410,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                             {detail.memberships.map((membership) => (
                               <TableRow key={membership.orgId}>
                                 <TableCell>
-                                  <Link
+                                  <AppLink
                                     href={buildRoute(Route.ADMIN_ORG_DETAIL, {
                                       orgId: membership.orgId,
                                     })}
@@ -391,7 +418,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                     underline="hover"
                                   >
                                     {membership.orgName ?? membership.orgId}
-                                  </Link>
+                                  </AppLink>
                                 </TableCell>
                                 <TableCell>
                                   {membership.role ?? '—'}
@@ -435,6 +462,37 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           </TableBody>
                         </Table>
                       )}
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    <CardDisplay
+                      header="Password"
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt:
+                          'Email this account a reset link, or set a password directly when they cannot receive mail. Both are audited.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <PasswordAdminControls
+                        email={detail.user.email}
+                        subjectLabel={detail.user.email ?? detail.user.uid}
+                        description={
+                          'For an account that has locked itself out. ' +
+                          'Setting a password revokes this account’s ' +
+                          'refresh tokens, so every device signs out.'
+                        }
+                        onSendReset={async () => {
+                          await callManage({ action: 'sendPasswordReset' })
+                        }}
+                        onSetPassword={async (password) => {
+                          await callManage({ action: 'setPassword', password })
+                        }}
+                      />
                     </CardDisplay>
                   ),
                 },

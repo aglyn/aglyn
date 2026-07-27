@@ -35,6 +35,7 @@
 // Idempotent: deterministic `seed-…` ids, merge-set writes. Refuses to
 // run without both emulator hosts so it can never touch production.
 
+import { randomBytes, scryptSync } from 'node:crypto'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
@@ -103,6 +104,12 @@ export const E2E_UNVERIFIED_OWNER_UID = 'e2e-unverified-owner'
 export const E2E_UNVERIFIED_OWNER_EMAIL = 'unverified-owner@aglyn.test'
 const unverifiedOwnerOrgId = E2E_UNVERIFIED_OWNER_UID
 
+// Ordinary teammate in the primary org — belongs to that org alone and holds
+// no staff claim, which is what the team member detail page needs to render
+// its editable state (AGL-921).
+export const E2E_TEAMMATE_UID = 'e2e-teammate'
+export const E2E_TEAMMATE_EMAIL = 'teammate@aglyn.test'
+
 try {
   await auth.getUser(E2E_UID)
   // Converge on re-runs: the password may have changed between seeds.
@@ -123,6 +130,28 @@ try {
 // missing staffRole as `support`, so the e2e staff user must name `super`
 // to exercise super-only admin flows.
 await auth.setCustomUserClaims(E2E_UID, { staff: true, staffRole: 'super' })
+
+// Teammate auth record (AGL-921). Needs to exist in Auth, not just on the org
+// roster: the team member endpoints resolve the target through the Admin SDK,
+// and an account with no email address refuses password help outright.
+try {
+  await auth.getUser(E2E_TEAMMATE_UID)
+  await auth.updateUser(E2E_TEAMMATE_UID, {
+    password: E2E_PASSWORD,
+    emailVerified: true,
+  })
+} catch {
+  await auth.createUser({
+    uid: E2E_TEAMMATE_UID,
+    email: E2E_TEAMMATE_EMAIL,
+    password: E2E_PASSWORD,
+    emailVerified: true,
+    displayName: 'E2E Teammate',
+  })
+}
+// Explicitly cleared on re-runs so this account can never drift into staff —
+// the whole point of the fixture is an account the org fully owns.
+await auth.setCustomUserClaims(E2E_TEAMMATE_UID, {})
 
 // Non-staff org owner (impersonation target). Explicitly clears claims on
 // re-runs so it can never accidentally carry `staff`.
@@ -209,6 +238,41 @@ await put(
   firestore.collection('users').doc(E2E_UID).collection('orgs').doc(orgId),
   { orgName: 'E2E Bakery Co', slug: E2E_ORG_SLUG, role: 'owner', createdAt: now },
 )
+// Plain teammate — a non-owner, non-staff member of THIS org and no other
+// (AGL-921). The org team detail page has nothing useful to show without one:
+// the owner's own row hides the role editor, and the password card's guards
+// (AGL-913) refuse the owner, refuse staff, and refuse an account that spans
+// organizations — so every other seeded account lands on a refusal. This is
+// the ordinary case those guards are the exception to.
+await put(
+  firestore
+    .collection('orgs')
+    .doc(orgId)
+    .collection('members')
+    .doc(E2E_TEAMMATE_UID),
+  {
+    email: E2E_TEAMMATE_EMAIL,
+    displayName: 'E2E Teammate',
+    role: 'editor',
+    title: 'Content editor',
+    allHosts: true,
+    status: 'active',
+    createdAt: now,
+  },
+)
+await put(
+  firestore
+    .collection('users')
+    .doc(E2E_TEAMMATE_UID)
+    .collection('orgs')
+    .doc(orgId),
+  {
+    orgName: 'E2E Bakery Co',
+    slug: E2E_ORG_SLUG,
+    role: 'editor',
+    createdAt: now,
+  },
+)
 // Public slug → org reservation (AGL-585/AGL-621): the middleware and the
 // client both resolve workspaces through orgSlugs.
 await put(firestore.collection('orgSlugs').doc(E2E_ORG_SLUG), {
@@ -226,6 +290,34 @@ await put(firestore.collection('hosts').doc(hostId), {
 })
 const hostRef = firestore.collection('hosts').doc(hostId)
 const orgRef = firestore.collection('orgs').doc(orgId)
+
+/**
+ * `users/{uid}/hostMemberships/{hostId}` — the per-user site projection the
+ * site switcher reads (AGL-844). Written here by hand because the seed pokes
+ * Firestore directly and never runs `syncHostMemberships`, which is what
+ * maintains it in the app. Missing rows don't fail anything loudly: the
+ * switcher falls back to the subdomain, so every seeded console page rendered
+ * the chip as "demo" instead of "Demo Bakery" — which is exactly what a batch
+ * of docs screenshots then captured. Fields (and `nameLower`'s normalization)
+ * mirror `membershipRow` in libs/tenant/data/admin/…/host-memberships.ts.
+ */
+const putHostMembership = (uid, id, displayName, subdomain, role, org) =>
+  put(
+    firestore
+      .collection('users')
+      .doc(uid)
+      .collection('hostMemberships')
+      .doc(id),
+    {
+      orgId: org,
+      subdomain,
+      displayName,
+      nameLower: displayName.trim().replace(/\s+/g, ' ').toLowerCase(),
+      role,
+      createdAt: now,
+    },
+  )
+await putHostMembership(E2E_UID, hostId, 'Demo Bakery', hostId, 'admin', orgId)
 
 // ── Second org the SAME owner belongs to (AGL-621/622/623) ──────────────────
 // Gives the e2e user 2+ workspaces so the jump page shows a picker, the org
@@ -280,6 +372,14 @@ await put(firestore.collection('hosts').doc(E2E_HOST2_ID), {
   seo: { favicon: 'https://picsum.photos/seed/studiofav/64' },
   createdAt: now,
 })
+await putHostMembership(
+  E2E_UID,
+  E2E_HOST2_ID,
+  'Studio Site',
+  E2E_HOST2_SUBDOMAIN,
+  'admin',
+  E2E_ORG2_ID,
+)
 
 // ── Non-staff-owned org (impersonation success path) ────────────────────────
 // Minimal but complete: the org doc + both membership mirrors, enough for
@@ -433,6 +533,20 @@ for (const [id, fileName, tags, seed] of mediaFixtures) {
 // folders rendered as grid cards (folders-first). The three fixtures above
 // stay at the root so the default view — and the specs waiting on hero.jpg —
 // are unchanged.
+// Site member — a visitor account on the published site, which is a wholly
+// separate identity from the console users above: a Firestore doc with a
+// scrypt-hashed password, not a Firebase Auth user (AGL-109). Seeded here so
+// the console's Site users card and its member drawer have something to open
+// without running the full guides walk (AGL-921).
+await put(hostRef.collection('siteMembers').doc('seed-site-member'), {
+  email: 'visitor@aglyn.test',
+  displayName: 'Rae Visitor',
+  passwordScrypt: (() => {
+    const salt = randomBytes(16).toString('hex')
+    return `${salt}:${scryptSync('Visitor-Password-1', salt, 64).toString('hex')}`
+  })(),
+  createdAt: now,
+})
 await put(hostRef.collection('mediaFolders').doc('seed-folder-blog'), {
   name: 'Blog covers',
   parentId: null,

@@ -151,6 +151,35 @@ What to assert (all against `http://localhost:4500`):
 | `/api/anything-unregistered`                     | 404                                                                                                             |
 | `POST /api/analytics/collect`                    | 204                                                                                                             |
 
+## A second checkout, when the main one is busy (AGL-931)
+
+The console dev server binds one port and one `.next`, so capturing screenshots or running
+emulator e2e while the main checkout is already serving needs a second checkout rather than a
+second server in the same one. Two dev servers sharing `apps/console/.next` fight over it.
+
+```bash
+node tools/scripts/new-worktree.mjs shots            # → ../aglyn-wt-shots, console on 4300
+node tools/scripts/new-worktree.mjs api --app=tenant # → ../aglyn-wt-api, tenant on 4600
+```
+
+It creates the worktree, clones `node_modules`, copies the gitignored env files, regenerates
+`tsconfig.next.json`, and prunes the main checkout's Next cache first. Each of those is a step
+somebody had already got wrong:
+
+- `node_modules` is **cloned with `cp -Rc`, never symlinked** — a symlink breaks turbopack's
+  module resolution and surfaces as unrelated build errors. On APFS the clone is copy-on-write.
+- The **env files are gitignored**, so `git worktree add` does not bring them. Without them the
+  worktree boots and then throws `FirebaseError: Firebase: Error (auth/invalid-api-key)` at the
+  sign-in page, which reads like bad credentials rather than a missing file.
+- `tsconfig.next.json` is generated, not committed.
+
+**Serve with `nx serve`, not `next dev`.** Only the nx target carries the cache prune
+(`docs/BUILD_PERFORMANCE.md`), and a bare `npx next dev` is how the last worktree quietly grew a
+6 GB cache nothing was ever going to clean. The script prints the right command when it finishes.
+
+Tear down with `git worktree remove --force <path>` — worktrees are cheap to recreate and a
+stale one keeps a whole `node_modules` and `.next` on disk.
+
 ## Docs screenshots
 
 `tools/e2e/capture-docs-screenshots.mjs` reuses the same stack to capture

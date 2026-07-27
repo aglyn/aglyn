@@ -121,6 +121,27 @@ member**, each behind a confirmation:
 
 Both actions are recorded in the site's activity log.
 
+### Password help
+
+The drawer's **Password** section gets a member back into their account. This is their
+sign-in **for this site only** — it has nothing to do with any Aglyn console account the
+same person might also have.
+
+![The member drawer's Password section, showing the reset-email button above a
+new-password field with a Generate button](/img/guides/member-drawer-password.png)
+
+- **Send password reset email** — emails the member a link to the site's `/recover` page.
+  The link works once and expires after an hour, and their current password keeps working
+  until they use it. This is the option to reach for. Capped at a few sends per hour to
+  the same member, so a stuck retry loop can't flood their inbox.
+- **Set a password directly** — replaces the member's password with one you choose. Use it
+  only when the member cannot receive email; you then have to pass the new password to them
+  yourself. The member is signed out on every device and is emailed to say an administrator
+  changed their password.
+
+Both need the admin role on the site (or an organization role that manages members), and
+both are recorded in the site's activity log — never the password itself.
+
 ## Related
 
 - [Members-only areas](../workspace-and-billing/teams-and-roles/members-only.md)

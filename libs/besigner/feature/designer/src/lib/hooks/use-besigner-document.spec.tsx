@@ -299,4 +299,52 @@ describe('useBesignerDocument', () => {
       expect(byStatus.current.hasError).toBe(true)
     })
   })
+
+  /**
+   * The canvas root is guaranteed here rather than per editor (AGL-931).
+   * Without it the hierarchy renders 'Invalid node' with Add Element
+   * disabled, and the document can never be repaired from the UI. Only the
+   * two definition-shaped editors passed a `toCanvasNodes` that repaired it,
+   * so screens and layouts were one bad document away from the same dead end.
+   */
+  describe('canvas root guarantee', () => {
+    const rootOf = () =>
+      mockCanvas.setNodes.mock.calls.at(-1)?.[0]?.[Aglyn.CANVAS_ROOT_ELEMENT_ID]
+
+    it('roots a rootless document with no toCanvasNodes of its own', () => {
+      setup({ nodes: { hero: { $id: 'hero', componentId: 'box' } } })
+      expect(rootOf()).toBeDefined()
+      expect(rootOf().nodes).toEqual(['hero'])
+    })
+
+    it('roots an empty document', () => {
+      setup({ nodes: {} as never, status: 'success' })
+      expect(rootOf()).toBeDefined()
+    })
+
+    it('still roots when a toCanvasNodes returns something rootless', () => {
+      setup({
+        nodes: { hero: { $id: 'hero', componentId: 'box' } },
+        toCanvasNodes: () => ({}) as never,
+      })
+      expect(rootOf()).toBeDefined()
+    })
+
+    it('leaves an already-rooted document alone', () => {
+      const rooted = {
+        [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
+          $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+          componentId: 'div',
+          nodes: ['hero'],
+        },
+        hero: {
+          $id: 'hero',
+          componentId: 'box',
+          parentId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+        },
+      }
+      setup({ nodes: rooted as never })
+      expect(mockCanvas.setNodes).toHaveBeenLastCalledWith(rooted)
+    })
+  })
 })

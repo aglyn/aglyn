@@ -51,6 +51,37 @@ describe('api-http', () => {
       })
     })
 
+    it('names the offending fields on a validation failure (AGL-901)', async () => {
+      const res = ApiErrors.badRequest({
+        message: 'Record failed validation',
+        code: 'validation_failed',
+        fields: { email: 'Required', age: 'Must be a whole number' },
+      })
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({
+        error: {
+          type: 'bad_request',
+          message: 'Record failed validation',
+          code: 'validation_failed',
+          fields: { email: 'Required', age: 'Must be a whole number' },
+        },
+      })
+    })
+
+    it('omits fields when there are none, so the envelope stays stable', async () => {
+      const empty = await ApiErrors.badRequest({ fields: {} }).json()
+      expect(empty.error).not.toHaveProperty('fields')
+      const absent = await ApiErrors.badRequest().json()
+      expect(absent.error).not.toHaveProperty('fields')
+    })
+
+    it('names both plans that carry API access (AGL-899)', async () => {
+      const body = await ApiErrors.planRequired().json()
+      expect(body.error.message).toBe(
+        'API access requires the Business or Advanced plan',
+      )
+    })
+
     it('rateLimited sets Retry-After (min 1s) and merges headers', () => {
       const res = ApiErrors.rateLimited(-5, { 'X-RateLimit-Remaining': '0' })
       expect(res.status).toBe(429)

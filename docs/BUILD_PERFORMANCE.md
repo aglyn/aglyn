@@ -154,3 +154,32 @@ console does compile that plugin's code — but it means plugin churn costs full
 The tenant-scoped libraries flagged as suspicious in the issue (`tenant-feature-instance`,
 `tenant-data-admin`, `tenant-runtime`) are not misplaced: the besigner renders tenant feature
 instances, and the first two are among the console's most heavily used dependencies.
+
+## The Next dev cache prunes itself at serve time (AGL-927)
+
+`apps/console/.next/dev/cache/turbopack` grows without bound across a long dev session. It
+reached 126 GB once and 58 GB a second time, on a 460 GB volume — large enough that it becomes
+the machine's disk problem rather than the project's.
+
+Nothing under `.next` is source. It is entirely derived from the repo, so the only cost of
+deleting it is one cold rebuild, and a dev server that is about to start is going to pay build
+cost anyway. So each Next app's `serve` target carries `"dependsOn": ["clean-next-cache"]`,
+which runs `tools/scripts/clean-next.mjs --prune --app=<app>` first. Over 10 GB the app's
+`.next` is removed and the server starts fresh; under it, nothing happens. `nx serve console`
+and `npm run serve:console:emulated` both go through the target, so there is no way to start a
+dev server the normal way and skip the check.
+
+Run it by hand with `npm run clean:next` (report only) or `npm run clean:next:prune` (delete
+regardless of size). Override the limit with `--threshold=<GB>` or `NEXT_CACHE_MAX_GB`.
+
+**The guard.** An app whose `.next` is being served by a running dev server is never touched,
+including under `--force` — deleting a cache mid-serve breaks the running server. "In use" is
+decided by each `next` process's working directory rather than by port, so it still holds for a
+server started on a custom `--port`, and a second checkout (a git worktree, see
+`docs/E2E_LOCAL.md`) has its own `.next` and is correctly treated as unrelated.
+
+**Reading the numbers.** The script sizes with `du`, which on APFS can report noticeably more
+than the free space you actually get back — a 58 GB prune returned closer to 7 GiB of
+immediately observable `df`, partly because the replacement cache starts rebuilding at once and
+partly because APFS reclaim lags. The threshold is a `du` number and so prunes somewhat earlier
+than its face value suggests, which is the conservative direction.

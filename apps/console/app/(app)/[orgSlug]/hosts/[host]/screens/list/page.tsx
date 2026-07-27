@@ -555,16 +555,16 @@ function Screens(props) {
       return (
       <>
         {liveUrl ? (
-          <IconButton
+          <AppLink
+            componentVariant="icon-button"
             size="small"
             aria-label="View live"
-            component="a"
             href={liveUrl}
             target="_blank"
             rel="noreferrer"
           >
             <MdiIcon path={mdiOpenInNew.path} size={0.8} />
-          </IconButton>
+          </AppLink>
         ) : null}
         {hostLocales.length ? (
           <IconButton

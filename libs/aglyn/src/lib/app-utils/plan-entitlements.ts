@@ -520,6 +520,54 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
 const DEAD_SUBSCRIPTION_STATUSES = new Set(['canceled', 'unpaid', 'incomplete'])
 
 /**
+ * Whether the org is actually being charged for its plan right now.
+ *
+ * This is deliberately stricter than `resolveEffectivePlan`: entitlement
+ * asks "what does this org get", revenue asks "who is paying us". A staff
+ * plan override (`/admin/orgs`) writes `plan` and never writes
+ * `subscription`, so a comped or dark-launched org resolves to a paid plan
+ * while billing nothing — counting it inflates MRR (AGL-925). No
+ * subscription mirror means no Stripe subscription means no revenue.
+ *
+ * `past_due` counts: Stripe is still retrying and the plan is still owed.
+ */
+export function isBillingSubscription(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  const plan = org?.plan
+  if (!plan || plan === 'free' || !(plan in PLAN_ENTITLEMENTS)) return false
+  const status = org?.subscription?.status
+  if (!status) return false
+  return !DEAD_SUBSCRIPTION_STATUSES.has(status)
+}
+
+/**
+ * The org's monthly recurring revenue in USD — plan base plus purchased
+ * seat/dataset add-ons, and 0 for anyone who is not actually billing.
+ *
+ * Annual subscriptions contribute their per-month equivalent
+ * (`basePriceAnnualMonthlyUsd`), not the month-to-month price, so a mixed
+ * book does not read high by the size of the annual discount.
+ */
+export function orgMonthlyRevenueUsd(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  if (!isBillingSubscription(org)) return 0
+  const pricing = PLAN_PRICING[org?.plan as OrgPlan]
+  if (!pricing) return 0
+  const annual = org?.subscription?.interval === 'year'
+  const addons = org?.seatAddons ?? {}
+  const seats = (quantity: number | undefined, price: number | null) =>
+    Math.max(0, quantity ?? 0) * (price ?? 0)
+  return (
+    (annual ? pricing.basePriceAnnualMonthlyUsd : pricing.basePriceMonthlyUsd) +
+    seats(addons.managers, pricing.extraSeatMonthlyUsd) +
+    seats(addons.members, pricing.extraCollaboratorMonthlyUsd) +
+    seats(addons.datasets, pricing.extraDatasetMonthlyUsd)
+  )
+}
+
+/**
  * The plan the org actually gets (AGL-247): missing/unknown plans resolve
  * as `free`, and a paid plan whose subscription is canceled/unpaid/
  * incomplete downgrades to `free` until the webhook restores it — plan

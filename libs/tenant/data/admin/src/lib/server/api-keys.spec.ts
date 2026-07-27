@@ -56,6 +56,15 @@ describe('api-keys (pure helpers)', () => {
     it('returns an empty array when nothing is valid', () => {
       expect(normalizeScopes(['nope', 'also:nope'])).toEqual([])
     })
+
+    it('refuses contacts:write — no endpoint enforces it (AGL-899)', () => {
+      // A mintable scope that grants nothing reads as a broken permission.
+      // Re-add this only alongside real contact-write endpoints.
+      expect(isApiScope('contacts:write')).toBe(false)
+      expect(normalizeScopes(['contacts:read', 'contacts:write'])).toEqual([
+        'contacts:read',
+      ])
+    })
   })
 
   describe('hashApiKey', () => {

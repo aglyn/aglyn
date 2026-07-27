@@ -16,11 +16,10 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
   Box,
-  Button,
   LinearProgress,
   Stack,
   Tooltip,
@@ -110,13 +109,14 @@ export function ScreenAnalyticsCard(props: {
         <Alert
           severity="info"
           action={
-            <Button
+            <AppLink
+              componentVariant="button"
               color="inherit"
               size="small"
               href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
             >
               {'Upgrade'}
-            </Button>
+            </AppLink>
           }
         >
           {'Per-screen traffic — views, devices, referrers per page — is a ' +

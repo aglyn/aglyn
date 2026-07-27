@@ -59,6 +59,7 @@ import {
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
+import { AuthConsentCheckbox } from '../../../components/auth-legal-consent.component'
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
 import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-signin'
 import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
@@ -88,6 +89,10 @@ function SignUp() {
   const { queueLoading, loading } = useLoading()
   const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)
+  // Account creation is contract formation, so both sign-up flows (email and
+  // Google) require affirmative agreement to the Terms and Privacy Policy.
+  const [consented, setConsented] = useState(false)
+  const [consentError, setConsentError] = useState(false)
   const analytics = useAnalytics()
   // Org workspace subdomains can't run OAuth — hand sign-in to the auth
   // host and skip the local form/redirect-result entirely (AGL-465).
@@ -103,6 +108,11 @@ function SignUp() {
   const handleSignUp = useCallback(
     async (values?: any) => {
       if (loading) return
+      // Gate both the email/password submit and the Google button on consent.
+      if (!consented) {
+        setConsentError(true)
+        return
+      }
       if (error) setError(null)
       const dequeueLoading = queueLoading()
       // Popup flows can wedge the overlay if the popup handle is severed
@@ -147,8 +157,13 @@ function SignUp() {
           dequeueLoading()
         })
     },
-    [analytics, error, firebaseAuth, loading, queueLoading],
+    [analytics, consented, error, firebaseAuth, loading, queueLoading],
   )
+
+  const handleConsentChange = useCallback((next: boolean) => {
+    setConsented(next)
+    if (next) setConsentError(false)
+  }, [])
 
   const handleFormSubmit = useCallback(
     async (values) => {
@@ -234,6 +249,11 @@ function SignUp() {
         clearOnUnmount
       />
       <AuthErrorAlertComponent error={error} sx={{ mt: 2, mb: 1 }} />
+      <AuthConsentCheckbox
+        checked={consented}
+        onChange={handleConsentChange}
+        error={consentError}
+      />
       <Divider flexItem variant="middle" sx={{ my: 3 }}>
         {'Or sign up with'}
       </Divider>

@@ -128,10 +128,21 @@ export interface UseBesignerDocumentResult {
 const noopQueueLoading: BesignerQueueLoading = () => () => undefined
 const noopNotify: BesignerNotify = () => undefined
 
-/** Pushes a stored node map into the shared canvas singleton. */
+/**
+ * Pushes a stored node map into the shared canvas singleton.
+ *
+ * The canvas root is guaranteed here rather than per editor (AGL-931). A map
+ * without one leaves the hierarchy showing 'Invalid node' with Add Element
+ * disabled — an editor the document can never be repaired from — and only
+ * the two definition-shaped editors passed a `toCanvasNodes` that repaired
+ * it. Doing it at the one point every editor loads through means no route
+ * can be added that forgets.
+ */
 export function setLocalNodes(value: Aglyn.ProcessableNodes) {
   const parsed = Aglyn.canvas.processNodesToDenormalized(value)
-  return Aglyn.canvas.setNodes(parsed)
+  return Aglyn.canvas.setNodes(
+    Aglyn.ensureCanvasRoot(parsed) as typeof parsed,
+  )
 }
 
 /**

@@ -73,7 +73,6 @@ export namespace Res {
       FAILED_REQUIREMENTS = 'failed-requirements',
       MISSING_HDR = 'missing-required-header',
       FAIL_ID_TOKEN_CHECK = 'id-token-verification-failed',
-      FAIL_CSRF_TOKEN_CHECK = 'csrf-token-verification-failed',
       CREATE_SESSION_COOKIE = 'create-session-cookie',
       RATE_LIMIT_EXCEEDED = 'rate-limit-exceeded',
       METHOD_NOT_ALLOWED = 'method-not-allowed',
@@ -159,13 +158,6 @@ export namespace Res {
       StatusCode.HTTP401,
       Prefix.NO_AUTH,
       MsgCode.FAIL_ID_TOKEN_CHECK,
-      Message.LOGIN_REQUIRED,
-    )
-
-    export const csrfTokenCheck = buildError(
-      StatusCode.HTTP401,
-      Prefix.NO_AUTH,
-      MsgCode.FAIL_CSRF_TOKEN_CHECK,
       Message.LOGIN_REQUIRED,
     )
 

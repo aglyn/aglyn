@@ -68,7 +68,10 @@
     "test:eslint-rules": "node tools/eslint-rules/no-plan-gated-entitlement.test.mjs",
     "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",
-    "typecheck": "node tools/scripts/typecheck.mjs"
+    "typecheck": "node tools/scripts/typecheck.mjs",
+    "clean:next": "node tools/scripts/clean-next.mjs",
+    "clean:next:prune": "node tools/scripts/clean-next.mjs --prune --force",
+    "worktree:new": "node tools/scripts/new-worktree.mjs"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.1",
@@ -102,10 +105,8 @@
     "change-case": "^5.4.4",
     "clsx": "^2.1.1",
     "cookie": "^2.0.1",
-    "cookie-signature": "^1.2.2",
     "core-js": "3.49.0",
     "cors": "^2.8.6",
-    "csrf": "^3.1.0",
     "debug": "^4.4.3",
     "deep-equal": "^2.2.3",
     "deepmerge-ts": "^7.1.5",
@@ -194,7 +195,6 @@
     "@swc/jest": "0.2.39",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "16.3.2",
-    "@types/cookie-signature": "^1.1.2",
     "@types/cors": "^2.8.19",
     "@types/deep-equal": "^1.0.4",
     "@types/flat": "^5.0.5",

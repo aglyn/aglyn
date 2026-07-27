@@ -44,8 +44,3 @@ export function withIdTokenHeader<T = any>(
 ): NextApiHandler<T> {
   return requireHeader('idToken', 'id-token', handler)
 }
-export function withCsrfTokenHeader<T = any>(
-  handler: NextApiHandler<T>,
-): NextApiHandler<T> {
-  return requireHeader('csrfToken', 'csrf-token', handler)
-}

@@ -29,12 +29,18 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { firebaseAdmin } from './firebase-admin'
 
-/** Scopes a key can be granted, as `resource:action`. */
+/**
+ * Scopes a key can be granted, as `resource:action`. Every entry must be
+ * enforced by a real endpoint — a mintable scope that grants nothing reads
+ * as a broken permission (AGL-899 removed `contacts:write` on those grounds;
+ * contacts are read-only over the API, created by the site capture points).
+ * Re-add it in the same change that ships contact writes, which must meter
+ * against the audience bands (AGL-890) the way site capture does.
+ */
 export const API_SCOPES = [
   'datasets:read',
   'datasets:write',
   'contacts:read',
-  'contacts:write',
   'sites:read',
   'forms:read',
 ] as const

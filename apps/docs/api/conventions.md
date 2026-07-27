@@ -75,17 +75,30 @@ errors add a `code` with the specific detail.
 | `403` | `plan_required` | The organization's plan doesn't include API access. |
 | `403` | `insufficient_scope` | The key lacks the required scope (`code` is the scope). |
 | `404` | `not_found` | No such resource — or no such endpoint. |
-| `405` | `method_not_allowed` | Method not supported on that path. |
+| `405` | `method_not_allowed` | Method not supported on that path; the `Allow` header lists what is. |
 | `429` | `rate_limited` | [Rate limit](rate-limits.md) exceeded. |
+| `500` | `internal_error` | Something went wrong on our side. Safe to retry. |
 
-Two rough edges worth coding defensively around today:
+### Validation errors
 
-- **A server-side failure is not guaranteed to use this envelope.** An unexpected
-  error can surface as a plain `500` without the JSON body, so treat any `5xx` as
-  retryable regardless of what it contains.
-- **Some 404s are really "wrong method".** `POST /v1` and `POST /v1/me` return `404`
-  rather than `405`, and methods outside GET/POST/PATCH/DELETE are rejected by the
-  framework without a JSON body.
+A `validation_failed` response names the fields that failed, so you don't have to
+bisect a payload:
+
+```json
+{
+  "error": {
+    "type": "bad_request",
+    "message": "Record failed validation",
+    "code": "validation_failed",
+    "fields": {
+      "email": "Required",
+      "headcount": "Must be a whole number"
+    }
+  }
+}
+```
+
+`fields` is present only on validation failures — treat it as optional.
 
 ## Idempotency
 

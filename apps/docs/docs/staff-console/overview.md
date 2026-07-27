@@ -17,10 +17,18 @@ The **staff console** is where Aglyn operators manage the platform and support c
 
 ![The staff audit log](/img/staff-console/admin-audit.png)
 
+![The Password card on a user's staff detail page, offering a reset email or a directly
+set password](/img/staff-console/admin-user-password.png)
+
 ## What's there
 
 - **Staff overview** — platform metrics, the newest organizations, purchases, and
-  per-org usage; plus search.
+  per-org usage; plus search. The **MRR estimate** counts only organizations with a
+  live Stripe subscription — staff plan overrides, comped accounts, and canceled or
+  unpaid subscriptions contribute $0, and annual plans count at their per-month
+  equivalent rather than the month-to-month price. The tile shows how many
+  organizations are billing and how many are comped, so a paid plan that bills
+  nothing never inflates the headline.
 - **[Support queue](support-queue.md)** — every organization's support tickets in one
   triage list: filter by open/closed, reply as Aglyn staff, close or reopen.
 - **Plugin reviews & realm trust** — the marketplace review queue, plus a
@@ -38,6 +46,12 @@ The **staff console** is where Aglyn operators manage the platform and support c
   Aglyn once and then search their email again.
   Each account opens a **detail page** showing identity/auth state, staff role, every
   organization membership with roles and per-site access, and its recent audit trail.
+- **Password help** — on that detail page, a **Password** card can email the account a
+  reset link, or set its password directly for an account that cannot receive mail.
+  Setting a password revokes the account's refresh tokens (so every device signs out)
+  and emails the holder that an admin changed it. Both actions need the **super** staff
+  role and are audited; the password itself is never recorded. An account with no email
+  address supports neither.
 - **Staff notes** — free-text support/billing context on each organization's detail
   page, visible to staff only (never in tenant-readable data) and audited.
 - **Broadcast announcements** — push a product announcement or maintenance notice as

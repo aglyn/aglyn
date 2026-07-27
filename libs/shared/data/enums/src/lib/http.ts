@@ -151,7 +151,6 @@ export enum HttpRefCodeTopic {
   FAILED_REQUIREMENTS = 'failed-requirements',
   MISSING_HEADER = 'missing-required-header',
   FAIL_ID_TOKEN_CHECK = 'id-token-verification-failed',
-  FAIL_CSRF_TOKEN_CHECK = 'csrf-token-verification-failed',
   CREATE_SESSION_COOKIE = 'create-session-cookie',
   RATE_LIMIT_EXCEEDED = 'rate-limit-exceeded',
   METHOD_NOT_ALLOWED = 'method-not-allowed',

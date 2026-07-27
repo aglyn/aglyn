@@ -18,18 +18,8 @@
 
 import type { AglynOrgBilling } from '@aglyn/aglyn'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { doc, getDocFromServer, onSnapshot } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import useConfirmedDoc from './use-confirmed-doc'
 import useOrgScope from './use-org-scope'
-
-const RETRY_DELAY_MS = 400
-// Exponential backoff (AGL-887): 5 flat 400ms retries burned out in ~2s,
-// well inside a cold load's App Check/token window — the subscription then
-// silently gave up and plan-dependent UI (the switcher badge, the Upgrade
-// CTA) rendered as if the org were free. 8 doubling attempts spread the
-// same give-up point across ~1.5 minutes.
-const MAX_RETRIES = 8
-const MAX_RETRY_DELAY_MS = 15_000
 
 /**
  * The org workspace's billing doc — the entitlement source the signed-in
@@ -37,19 +27,18 @@ const MAX_RETRY_DELAY_MS = 15_000
  * in AGL-444; the uid-keyed `tenantId` return leg retired with the Stripe
  * `metadata[tenantId]` wire key in AGL-445).
  *
- * Subscribes with a raw `onSnapshot` (with its own retry) rather than
- * reactfire's `useFirestoreDocData` — that hook's cached Observable is a
- * *terminated* RxJS stream once it errors, so it can't recover from the one
- * transient `permission-denied` this read can hit right after sign-in, when
- * `useUser()` reports a signed-in user a beat before Firestore's own
- * credential provider has attached that user's ID token (AGL-216).
+ * The listen itself is `useConfirmedDoc` (AGL-928) — the shared
+ * retry-with-backoff + server-confirm-on-cache-miss contract this hook
+ * originally learned the hard way (AGL-216 transient permission-denied,
+ * AGL-887 a stale noDocument tombstone rendering a Business workspace as
+ * Free). State clears whenever the org scope changes (AGL-591).
  */
 export function useCurrentOrg(): {
   org: Partial<AglynOrgBilling> | undefined
   /** The org the billing data came from, once orgs carry it (AGL-237). */
   orgId: string | undefined
   /**
-   * True once a snapshot for the CURRENT org has actually arrived (AGL-887).
+   * True once an answer for the CURRENT org is trustworthy (AGL-887).
    * `org === undefined` conflates "still loading / read failing" with "no
    * org doc" — plan-dependent UI must not render a fallback tier (or an
    * Upgrade CTA) until this is true, or a failed read masquerades as Free.
@@ -63,92 +52,10 @@ export function useCurrentOrg(): {
   // signups pre first host) resolve undefined, which the entitlement
   // helpers treat as the pre-billing fail-open, same as before.
   const orgId = currentOrg?.$id
-  const sourcePath =
-    orgsLoading || !orgId ? null : (['orgs', orgId] as const)
-  const [org, setOrg] = useState<Partial<AglynOrgBilling> | undefined>(
-    undefined,
+  const { data: org, ready } = useConfirmedDoc<Partial<AglynOrgBilling>>(
+    firestore,
+    orgsLoading || !orgId ? null : ['orgs', orgId],
   )
-  const [ready, setReady] = useState(false)
-
-  useEffect(() => {
-    // Clear on every scope change (AGL-591): switching orgs must not keep
-    // the previous org's name/logo in the switcher until the new doc lands.
-    setOrg(undefined)
-    setReady(false)
-    if (!sourcePath) {
-      return
-    }
-    let cancelled = false
-    let unsubscribe: (() => void) | null = null
-    let timer: ReturnType<typeof setTimeout> | null = null
-    let attempt = 0
-
-    const [collectionName, docId] = sourcePath
-    const subscribe = () => {
-      unsubscribe = onSnapshot(
-        doc(firestore, collectionName, docId),
-        (snapshot) => {
-          if (cancelled) return
-          attempt = 0
-          // A cache-served "doesn't exist" is NOT a confirmed answer
-          // (AGL-887, the AGL-813/827 tombstone class on a doc read): the
-          // multi-tab IndexedDB cache can hold a stale `noDocument`
-          // tombstone for a live org doc, and the resumed listen never
-          // re-sends the correction — the workspace then renders as Free
-          // forever. Confirm from the server before believing it; a failed
-          // confirm leaves `ready` false (no plan cue) rather than lying.
-          const fromCache = snapshot.metadata.fromCache
-          if (!snapshot.exists() && fromCache) {
-            void getDocFromServer(doc(firestore, collectionName, docId))
-              .then((server) => {
-                if (cancelled) return
-                setOrg(
-                  server.exists()
-                    ? ({
-                        $id: server.id,
-                        ...server.data(),
-                      } as Partial<AglynOrgBilling>)
-                    : undefined,
-                )
-                setReady(true)
-              })
-              .catch(() => undefined)
-            return
-          }
-          setOrg(
-            snapshot.exists()
-              ? ({ $id: snapshot.id, ...snapshot.data() } as Partial<AglynOrgBilling>)
-              : undefined,
-          )
-          setReady(true)
-        },
-        () => {
-          if (cancelled) return
-          unsubscribe?.()
-          if (attempt < MAX_RETRIES) {
-            const delay = Math.min(
-              RETRY_DELAY_MS * 2 ** attempt,
-              MAX_RETRY_DELAY_MS,
-            )
-            attempt += 1
-            timer = setTimeout(subscribe, delay)
-          }
-          // Retries exhausted: `ready` stays false, so plan-dependent UI
-          // shows nothing rather than a wrong "Free" (AGL-887).
-        },
-      )
-    }
-    subscribe()
-
-    return () => {
-      cancelled = true
-      if (timer) clearTimeout(timer)
-      unsubscribe?.()
-    }
-    // sourcePath is derived state; its parts are the real dependencies.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, sourcePath?.[0], sourcePath?.[1]])
-
   return { org, orgId, ready }
 }
 

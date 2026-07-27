@@ -39,7 +39,8 @@
           "buildTarget": "console:build:development",
           "dev": true
         }
-      }
+      },
+      "dependsOn": ["clean-next-cache"]
     },
     "export": {
       "executor": "@nx/next:export",
@@ -63,6 +64,14 @@
       "options": {
         "syncVersions": false
       }
+    },
+    "clean-next-cache": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "command": "node tools/scripts/clean-next.mjs --prune --app=console"
+      },
+      "cache": false
     }
   }
 }

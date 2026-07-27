@@ -57,8 +57,46 @@ describe('definitionToCanvasTree (AGL-680)', () => {
     expect(tree[CANVAS_ROOT_ELEMENT_ID].nodes).toEqual(['hero'])
   })
 
-  it('does nothing with an empty definition', () => {
-    expect(definitionToCanvasTree({ nodes: {} })).toEqual({})
+  /**
+   * The editor has no way back from a rootless canvas: the hierarchy shows
+   * `'Invalid node'` and Add Element is disabled, so a component stored this
+   * way could never be repaired from the UI (AGL-753). Everything created
+   * before AGL-693 is stored as exactly this.
+   */
+  it('gives an empty definition an empty canvas root, not nothing', () => {
+    const tree = definitionToCanvasTree({ nodes: {} })
+    expect(tree[CANVAS_ROOT_ELEMENT_ID]).toBeDefined()
+    expect(tree[CANVAS_ROOT_ELEMENT_ID].nodes).toEqual([])
+  })
+
+  it('gives an absent definition an empty canvas root', () => {
+    expect(
+      definitionToCanvasTree({ rootId: undefined, nodes: undefined })[
+        CANVAS_ROOT_ELEMENT_ID
+      ],
+    ).toBeDefined()
+  })
+
+  /**
+   * `promoteToComponent` walks a selected subtree, so the promoted root can
+   * keep pointing at the parent it had in the screen it came from. That
+   * parent is not in the definition, which makes the node a root even though
+   * it has a `parentId` (AGL-753).
+   */
+  it('treats a parent outside the map as no parent', () => {
+    const tree = definitionToCanvasTree({
+      nodes: {
+        hero: {
+          $id: 'hero',
+          componentId: 'box',
+          parentId: 'screen-section-gone',
+          nodes: ['title'],
+        },
+        title: { $id: 'title', componentId: 'text', parentId: 'hero' },
+      },
+    })
+    expect(tree[CANVAS_ROOT_ELEMENT_ID].nodes).toEqual(['hero'])
+    expect(tree['hero'].parentId).toBe(CANVAS_ROOT_ELEMENT_ID)
   })
 })
 

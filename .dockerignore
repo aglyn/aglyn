@@ -1,0 +1,28 @@
+# Self-host container builds (AGL-904). Keep the build context lean — the
+# monorepo's caches and artifacts dwarf the sources.
+.git
+.github
+node_modules
+**/node_modules
+dist
+**/.next
+**/out
+coverage
+.nx
+.vercel
+tmp
+*.log
+
+# Secrets never enter an image. The runtime env comes from --env-file /
+# docker-compose env_file, not from the build context.
+.env
+.env.*
+!.env.example
+!.env.selfhost.example
+
+# Local tooling & heavyweight non-runtime dirs
+.firebase
+.idea
+.vscode
+apps/docs/build
+apps/www/.next

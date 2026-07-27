@@ -46,6 +46,10 @@ const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
 const ORG_SLUG = process.env.E2E_ORG_SLUG ?? 'e2e-bakery'
 const HOST = process.env.E2E_HOST ?? 'demo'
 const HOST_BASE = `${ORG_SLUG}/hosts/${HOST}`
+// Account fixtures the password shots target (AGL-921); both come from
+// seed-e2e.mjs, which is also where their guard-relevant properties are set.
+const TEAMMATE_UID = process.env.E2E_TEAMMATE_UID ?? 'e2e-teammate'
+const NON_STAFF_UID = process.env.E2E_OWNER_UID ?? 'e2e-nonstaff-owner'
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'E2e-Password-1'
 const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
@@ -54,7 +58,7 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  * path → output file (under static/img) + the text to wait for.
  * `annotate` draws numbered badges + outlines around the located elements
  * before the shot (the legend lives in the docs page that embeds it).
- * Run a subset with `--only=<out-substring>`.
+ * Run a subset with `--only=<out-substring>[,<out-substring>…]`.
  */
 const shots = [
   {
@@ -147,6 +151,16 @@ const shots = [
     waitFor: 'Invite',
   },
   {
+    // Password card on a teammate's detail page (AGL-921). Targets the plain
+    // teammate fixture rather than the owner: every other seeded account trips
+    // one of the AGL-913 guards and renders the refusal instead of the form.
+    out: 'teams-and-roles/team-member-password.png',
+    path: `/${ORG_SLUG}/team/${TEAMMATE_UID}`,
+    waitFor: 'Send password reset email',
+    // The card sits below the member form, off a 900px viewport.
+    actions: [{ scroll: 'text=Signs the account out everywhere' }],
+  },
+  {
     out: 'getting-started/org-settings-page.png',
     path: `/${ORG_SLUG}/settings`,
     waitFor: 'Workspace',
@@ -182,6 +196,17 @@ const shots = [
     out: 'teams-and-roles/host-users-page.png',
     path: `/${HOST_BASE}/users`,
     waitFor: 'Site users',
+  },
+  {
+    // Password section inside the site member drawer (AGL-921). Opening the
+    // drawer takes a click on the member row — there is no direct URL for it.
+    out: 'guides/member-drawer-password.png',
+    path: `/${HOST_BASE}/users`,
+    waitFor: 'Site users',
+    actions: [
+      { click: 'text=visitor@aglyn.test', waitFor: 'Lifetime purchases' },
+      { scroll: 'text=Or set a password directly' },
+    ],
   },
   {
     out: 'custom-domains/setup-domains.png',
@@ -234,6 +259,15 @@ const shots = [
     out: 'staff-console/admin-audit.png',
     path: '/admin/audit',
     waitFor: 'Audit',
+  },
+  {
+    // Password card on the staff user detail page (AGL-921). Points at the
+    // non-staff owner: staff accounts are a case the page treats differently,
+    // and the ordinary customer account is what support actually opens.
+    out: 'staff-console/admin-user-password.png',
+    path: `/admin/users/${NON_STAFF_UID}`,
+    waitFor: 'Send password reset email',
+    actions: [{ scroll: 'text=Signs the account out everywhere' }],
   },
   {
     out: 'plugins/plugin-reviews.png',
@@ -326,10 +360,50 @@ function chromeExecutable() {
   return { channel: 'chrome' }
 }
 
+// `--only=` takes a comma-separated list of `out` substrings, so re-shooting
+// a scattered handful of images is one signed-in run rather than one per
+// image.
+const only = process.argv
+  .find((arg) => arg.startsWith('--only='))
+  ?.slice('--only='.length)
+  .split(',')
+  .map((part) => part.trim())
+  .filter(Boolean)
+const selected = only?.length
+  ? shots.filter((shot) => only.some((part) => shot.out.includes(part)))
+  : shots
+if (!selected.length) {
+  console.error(`No shots match --only=${only?.join(',')}`)
+  process.exit(1)
+}
+
 const browser = await chromium.launch({ headless: true, ...chromeExecutable() })
 const context = await browser.newContext({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
+})
+// E2E_TIMEOUT_MS governed only the explicit waits below, leaving every
+// action on Playwright's 30s default. Against a cold dev server that is the
+// sign-in form losing the race with its own first client compile, which
+// surfaced as a bare `page.fill: Timeout 30000ms exceeded` on the email
+// field rather than anything pointing at compilation.
+context.setDefaultTimeout(TIMEOUT_MS)
+context.setDefaultNavigationTimeout(TIMEOUT_MS)
+
+// The AGL-663 pre-permission prompt arms itself 2.5s after mount, on every
+// page — and re-arms on every remount. Deleting it from the DOM after the
+// fact (stripChrome, below) was a race it kept winning: any shot with a
+// click, a scroll or a long settle caught it on the way back in, which is
+// how a dozen docs screenshots ended up with "Enable notifications" sitting
+// in the middle of them. Write the dismissal the component persists for
+// itself instead, before any app code runs, so the dialog never mounts at
+// all. Key and value mirror apps/console/components/notification-prompt.
+await context.addInitScript(() => {
+  try {
+    window.localStorage.setItem('aglyn:notification-prompt-dismissed', 'never')
+  } catch {
+    // Storage blocked — stripChrome() stays as the backstop.
+  }
 })
 
 // Sign in through the real UI once (see console.e2e.mjs for why).
@@ -345,8 +419,10 @@ const context = await browser.newContext({
   await page.close()
 }
 
-// Pre-warm the routes so dev-server compiles don't distort waits.
-for (const shot of shots) {
+// Pre-warm the routes so dev-server compiles don't distort waits — the
+// selected ones only, so a re-capture of a handful of shots doesn't pay for
+// compiling all fifty.
+for (const shot of selected) {
   await fetch(`${BASE_URL}${shot.path}`).catch(() => undefined)
 }
 
@@ -388,13 +464,45 @@ async function annotate(page, marks) {
   }
 }
 
-const only = process.argv
-  .find((arg) => arg.startsWith('--only='))
-  ?.slice('--only='.length)
-
 let failures = 0
-for (const shot of shots) {
-  if (only && !shot.out.includes(only)) continue
+/**
+ * Removes what the docs must never show: the auth-emulator warning banner,
+ * Next's dev indicator, and — as a backstop to the seeded dismissal above —
+ * the AGL-663 notification pre-permission modal.
+ *
+ * Called both after the page settles AND again just before the shutter, so
+ * the backstop still covers a modal that appears on a delay.
+ */
+async function stripChrome(page) {
+  // Not for docs: the auth-emulator warning banner and Next's dev
+  // indicator/error badge.
+  await page.evaluate(() => {
+    for (const selector of [
+      '.firebase-emulator-warning',
+      'nextjs-portal',
+      '#__next-build-watcher',
+      '[data-nextjs-toast]',
+    ]) {
+      document.querySelectorAll(selector).forEach((el) => el.remove())
+    }
+    // AGL-663 notification pre-permission modal overlays the page — drop
+    // it (and its backdrop) so shots capture the content beneath.
+    let removedModal = false
+    for (const dialog of document.querySelectorAll('[role="dialog"]')) {
+      if (/notification/i.test(dialog.textContent ?? '')) {
+        ;(dialog.closest('.MuiModal-root') ?? dialog).remove()
+        removedModal = true
+      }
+    }
+    if (removedModal) {
+      document
+        .querySelectorAll('.MuiBackdrop-root')
+        .forEach((el) => el.remove())
+    }
+  })
+}
+
+for (const shot of selected) {
   const page = await context.newPage()
   try {
     await page.goto(`${BASE_URL}${shot.path}`, {
@@ -402,32 +510,7 @@ for (const shot of shots) {
       timeout: TIMEOUT_MS,
     })
     await page.waitForSelector(`text=${shot.waitFor}`, { timeout: TIMEOUT_MS })
-    // Not for docs: the auth-emulator warning banner and Next's dev
-    // indicator/error badge.
-    await page.evaluate(() => {
-      for (const selector of [
-        '.firebase-emulator-warning',
-        'nextjs-portal',
-        '#__next-build-watcher',
-        '[data-nextjs-toast]',
-      ]) {
-        document.querySelectorAll(selector).forEach((el) => el.remove())
-      }
-      // AGL-663 notification pre-permission modal overlays the page — drop
-      // it (and its backdrop) so shots capture the content beneath.
-      let removedModal = false
-      for (const dialog of document.querySelectorAll('[role="dialog"]')) {
-        if (/notification/i.test(dialog.textContent ?? '')) {
-          ;(dialog.closest('.MuiModal-root') ?? dialog).remove()
-          removedModal = true
-        }
-      }
-      if (removedModal) {
-        document
-          .querySelectorAll('.MuiBackdrop-root')
-          .forEach((el) => el.remove())
-      }
-    })
+    await stripChrome(page)
     for (const action of shot.actions ?? []) {
       // frame: true targets the canvas iframe (the besigner viewport).
       const scope = action.frame ? page.frameLocator('iframe') : page
@@ -446,6 +529,8 @@ for (const shot of shots) {
       await page.waitForTimeout(action.settleMs ?? 800)
     }
     await page.waitForTimeout(shot.settleMs ?? 1500)
+    // The notification modal can drift back in during the settle above.
+    await stripChrome(page)
     if (shot.annotate) await annotate(page, shot.annotate)
     const outPath = join(IMG_ROOT, shot.out)
     mkdirSync(dirname(outPath), { recursive: true })
@@ -460,5 +545,5 @@ for (const shot of shots) {
 }
 
 await browser.close()
-console.log(failures ? `\n${failures} shots failed` : `\nAll ${shots.length} shots captured`)
+console.log(failures ? `\n${failures} shots failed` : `\nAll ${selected.length} shots captured`)
 process.exit(failures ? 1 : 0)

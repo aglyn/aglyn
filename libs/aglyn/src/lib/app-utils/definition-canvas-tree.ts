@@ -36,6 +36,13 @@ type Nodes = Record<string, any>
  * and unwrapped on the way out. The wrapper is never published: the tenant
  * runtime grafts from `rootId`, and an extra always-empty container in
  * every instance would be both wrong and wasteful.
+ *
+ * A map with no findable root always yields the empty canvas root rather
+ * than being passed through (AGL-753). Passing it through renders `'Invalid
+ * node'` with Add Element disabled — an editor with no way out, so the
+ * document can never be repaired from the UI. Components created before
+ * AGL-693 are stored as exactly that (`nodes: {}`), which is why this is a
+ * load-time repair and not a migration.
  */
 export function definitionToCanvasTree(definition: {
   rootId?: string
@@ -48,8 +55,21 @@ export function definitionToCanvasTree(definition: {
   const rootId =
     definition?.rootId && nodes[definition.rootId]
       ? definition.rootId
-      : Object.keys(nodes).find((id) => !nodes[id]?.parentId)
-  if (!rootId) return nodes
+      : (Object.keys(nodes).find((id) => !nodes[id]?.parentId) ??
+        // A definition promoted out of a screen can keep the `parentId` it
+        // had there, so "no parent" is not always "no parentId" — a parent
+        // that is not itself in the map is just as much a root.
+        Object.keys(nodes).find((id) => !nodes[nodes[id]?.parentId]))
+  if (!rootId) {
+    return {
+      [CANVAS_ROOT_ELEMENT_ID]: {
+        $id: CANVAS_ROOT_ELEMENT_ID,
+        componentId: 'div',
+        parentId: null,
+        nodes: [],
+      },
+    }
+  }
 
   return {
     ...nodes,

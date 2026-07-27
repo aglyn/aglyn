@@ -35,9 +35,10 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useHostActivityLogger from '../hooks/use-host-activity-logger'
+import PasswordAdminControls from './password-admin-controls.component'
 import { computeLifetimePurchaseCents } from '../utils/site-member-purchases'
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
@@ -74,6 +75,7 @@ export interface SiteMemberDrawerProps {
 export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
   const { hostId, member, onClose } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const logActivity = useHostActivityLogger(hostId)
@@ -193,6 +195,27 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
     logActivity,
   ])
 
+  // Password help (AGL-914). Unlike suspend/reactivate above, this cannot go
+  // through the client SDK — the scrypt hashing and the session cut-off both
+  // have to happen server-side.
+  const passwordRequest = useCallback(
+    async (payload: Record<string, unknown>) => {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/membership/admin-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ hostId, memberId, ...payload }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result?.error ?? 'Request failed')
+      return result
+    },
+    [user, hostId, memberId],
+  )
+
   return (
     <Drawer anchor="right" open={Boolean(member)} onClose={onClose}>
       {member ? (
@@ -224,6 +247,31 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
               {suspended ? 'Reactivate member' : 'Suspend member'}
             </Button>
           </Stack>
+
+          <Divider textAlign="left">{'Password'}</Divider>
+          <PasswordAdminControls
+            email={email || null}
+            subjectLabel={email || memberId}
+            description={
+              'For a member locked out of their account on this site. This ' +
+              'is their site sign-in only — it has nothing to do with any ' +
+              'Aglyn console account they may also have.'
+            }
+            onSendReset={async () => {
+              await passwordRequest({ action: 'sendPasswordReset' })
+              logActivity('Sent a site member a password reset', {
+                type: 'member',
+                name: email,
+              })
+            }}
+            onSetPassword={async (password) => {
+              await passwordRequest({ action: 'setPassword', password })
+              logActivity('Set a site member’s password', {
+                type: 'member',
+                name: email,
+              })
+            }}
+          />
 
           <Divider textAlign="left">{'Lifetime purchases'}</Divider>
           <Typography variant="h6">

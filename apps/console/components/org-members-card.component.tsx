@@ -25,7 +25,11 @@ import {
   type HostAccessRole,
   type OrgRole,
 } from '@aglyn/aglyn'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink,
+  CardDisplay,
+  useConfirmationContext,
+} from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -36,7 +40,6 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
-  Link as MuiLink,
   MenuItem,
   Stack,
   Table,
@@ -260,11 +263,11 @@ export function OrgMembersCard() {
             ) : seatQuota.addonPriceUsd != null ? (
               <>
                 {` — extra seats $${seatQuota.addonPriceUsd}/mo in `}
-                <MuiLink
+                <AppLink
                   href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#addons`}
                 >
                   {'Billing'}
-                </MuiLink>
+                </AppLink>
               </>
             ) : null}
           </Typography>
@@ -345,15 +348,15 @@ export function OrgMembersCard() {
               <TableRow key={member.$id}>
                 <TableCell>
                   {/* Member detail page (AGL-364). */}
-                  <MuiLink
-                    href={buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug, 
+                  <AppLink
+                    href={buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug,
                       uid: member.$id,
                     })}
                     color="inherit"
                     underline="hover"
                   >
                     {member.displayName || member.email || member.$id}
-                  </MuiLink>
+                  </AppLink>
                   {member.title ? (
                     <Typography
                       variant="caption"

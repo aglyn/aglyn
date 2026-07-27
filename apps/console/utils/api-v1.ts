@@ -98,10 +98,10 @@ export async function authenticateApiV1(
   const verified = await verifyApiKey(token)
   if (!verified) return ApiErrors.unauthorized()
 
-  const org = await getOrgDoc(verified.orgId)
-  if (!org) return ApiErrors.unauthorized()
-  if (!checkEntitlement(org, 'apiAccess')) return ApiErrors.planRequired()
-
+  // From here the key is known, so the rate-limit budget is knowable — and a
+  // client that reads it off every response shouldn't lose it on exactly the
+  // errors it retries (AGL-900). Consume the budget before the entitlement
+  // check so an unentitled key can't poll `plan_required` for free.
   const rate = checkRateLimit(verified.keyId)
   const headers = rateLimitHeaders(rate)
   if (!rate.allowed) {
@@ -109,6 +109,12 @@ export async function authenticateApiV1(
       Math.ceil((rate.resetMs - Date.now()) / 1000),
       headers,
     )
+  }
+
+  const org = await getOrgDoc(verified.orgId)
+  if (!org) return ApiErrors.unauthorized({ headers })
+  if (!checkEntitlement(org, 'apiAccess')) {
+    return ApiErrors.planRequired({ headers })
   }
 
   const firestore = firebaseAdmin.app().firestore()

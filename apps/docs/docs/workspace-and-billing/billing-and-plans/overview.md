@@ -13,7 +13,7 @@ and shows **usage meters** so you always know where you stand.
 ![The Billing page in the Aglyn console: the current plan card with subscription status, cancel and payment-method actions, beside the plan comparison and usage meters](/img/billing-and-plans/billing-page.png)
 
 :::info Plan availability
-Every site has a plan. **Free**, **Pro**, and **Business** unlock progressively more.
+Every site has a plan. **Free**, **Starter**, **Pro**, **Business**, and **Advanced** unlock progressively more.
 :::
 
 ## Tiers & entitlements
@@ -24,9 +24,16 @@ Every site has a plan. **Free**, **Pro**, and **Business** unlock progressively 
 | Starter | $16/mo | $25/mo | Sell up to 100 products; 2% fee on physical, 7% on digital sales |
 | Pro | $39/mo | $56/mo | 2,500 products, 0% physical / 5% digital fees, POS, abandoned-cart recovery, reviews, dropshipping |
 | Business | $99/mo | $139/mo | 10,000 products, 0% / 2% fees, subscriptions & paywalls, gift cards |
+| Advanced | $299/mo | $399/mo | Unlimited products, 0% / 0% fees, high-volume commerce & API |
 
 Transaction fees are Aglyn platform fees on storefront sales, separate from
 Stripe's payment-processing fees. Upgrading is the way to reduce them.
+
+:::note Pricing is provisional (pre-release)
+Aglyn is in pre-release: prices, plans, tiers, quotas, and the features included in each
+tier are provisional and may change at any time — including for existing subscribers.
+Nothing here guarantees that a price or feature set will remain the same.
+:::
 
 - Each tier maps to a set of **entitlements** and quota limits.
 - The runtime enforces them with `checkEntitlement` and `checkQuota`, so gated features are

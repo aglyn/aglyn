@@ -21,7 +21,7 @@
  * console session chokepoint). This file owns the pipeline (auth, entitlement,
  * rate limit, error envelope); resource handlers are wired in AGL-618.
  */
-import { apiJson } from '@aglyn/tenant-data-admin'
+import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
 import { authenticateApiV1 } from '../../../../utils/api-v1'
 import { dispatchResource } from '../../../../utils/api-v1-resources'
 
@@ -42,6 +42,14 @@ async function dispatch(
   const { headers } = context
 
   // Root + key introspection stay here; resources dispatch to their handlers.
+  // Both answer GET only, and a non-GET on either is a wrong *method*, not an
+  // unknown endpoint — `dispatchResource` would 404 it, which reads as "this
+  // path doesn't exist" and sends integrators hunting the wrong bug (AGL-900).
+  const isServicePath =
+    segments.length === 0 || (segments.length === 1 && segments[0] === 'me')
+  if (isServicePath && request.method !== 'GET') {
+    return ApiErrors.methodNotAllowed({ headers: { ...headers, Allow: 'GET' } })
+  }
   if (segments.length === 0 && request.method === 'GET') {
     return apiJson(
       {
@@ -49,7 +57,11 @@ async function dispatch(
         name: 'Aglyn REST API',
         version: 'v1',
         documentation: 'https://docs.aglyn.com/api',
-        resources: ['datasets', 'contacts', 'sites', 'forms'],
+        // Only top-level resources belong here. Form submissions are a
+        // sub-resource of sites (`/v1/sites/{id}/form-submissions`) and are
+        // deliberately absent — advertising `forms` 404'd every client that
+        // read this list (AGL-898).
+        resources: ['datasets', 'contacts', 'sites'],
       },
       { headers },
     )
@@ -64,15 +76,46 @@ async function dispatch(
   return dispatchResource(request, context, segments)
 }
 
+/**
+ * Every v1 response goes through here so an unexpected throw becomes the
+ * documented error envelope instead of the framework's HTML 500 (AGL-900):
+ * a client that branches on `error.type` must keep working precisely when
+ * things are already failing. A missing composite index is the realistic
+ * trigger — `form-submissions?form=` combines a where with an orderBy.
+ */
+async function safeDispatch(
+  request: Request,
+  routeContext: RouteContext,
+): Promise<Response> {
+  try {
+    return await dispatch(request, routeContext)
+  } catch (error) {
+    console.error('api/v1 request failed', error)
+    return ApiErrors.internal()
+  }
+}
+
 export function GET(request: Request, routeContext: RouteContext) {
-  return dispatch(request, routeContext)
+  return safeDispatch(request, routeContext)
 }
 export function POST(request: Request, routeContext: RouteContext) {
-  return dispatch(request, routeContext)
+  return safeDispatch(request, routeContext)
 }
 export function PATCH(request: Request, routeContext: RouteContext) {
-  return dispatch(request, routeContext)
+  return safeDispatch(request, routeContext)
 }
 export function DELETE(request: Request, routeContext: RouteContext) {
-  return dispatch(request, routeContext)
+  return safeDispatch(request, routeContext)
+}
+/**
+ * PUT has no handler anywhere in v1, so Next would answer with its own 405
+ * and no JSON body — a client parsing `error.type` gets nothing to read.
+ * (HEAD is left alone: Next derives it from GET, which is the useful
+ * behavior. OPTIONS likewise stays with the framework — this API is
+ * server-to-server and sends no CORS headers to preflight.)
+ */
+export function PUT() {
+  return ApiErrors.methodNotAllowed({
+    headers: { Allow: 'GET, POST, PATCH, DELETE' },
+  })
 }

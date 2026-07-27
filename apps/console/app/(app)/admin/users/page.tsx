@@ -18,6 +18,7 @@
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
+  AppLink,
   CardDisplay,
   Container,
   useConfirmationContext,
@@ -286,20 +287,16 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                         <TableCell>
                           {/* Detail page (AGL-244); ids stay off the email
                               line — copy them from the chip (AGL-360). */}
-                          <Typography
+                          <AppLink
                             variant="body2"
-                            component="a"
+                            color="inherit"
+                            underline="hover"
                             href={buildRoute(Route.ADMIN_USER_DETAIL, {
                               uid: record.uid,
                             })}
-                            sx={{
-                              color: 'inherit',
-                              textDecoration: 'none',
-                              '&:hover': { textDecoration: 'underline' },
-                            }}
                           >
                             {record.email ?? record.displayName ?? record.uid}
-                          </Typography>
+                          </AppLink>
                           <Chip
                             size="small"
                             variant="outlined"
@@ -353,7 +350,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                           </Typography>
                         </TableCell>
                         <TableCell align="right">
-                          <Button
+                          <AppLink
+                            componentVariant="button"
                             size="small"
                             variant="outlined"
                             href={buildRoute(Route.ADMIN_USER_DETAIL, {
@@ -362,7 +360,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                             sx={{ mr: 0.5 }}
                           >
                             {'View'}
-                          </Button>
+                          </AppLink>
                           <Button
                             size="small"
                             disabled={busy}

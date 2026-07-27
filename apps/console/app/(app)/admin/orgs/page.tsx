@@ -22,7 +22,12 @@ import {
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink,
+  CardDisplay,
+  Container,
+  useConfirmationContext,
+} from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -569,14 +574,15 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                             </Typography>
                           </TableCell>
                           <TableCell align="right">
-                            <Button
+                            <AppLink
+                              componentVariant="button"
                               size="small"
                               href={buildRoute(Route.ADMIN_ORG_DETAIL, {
                                 orgId: org.$id,
                               })}
                             >
                               {'Open'}
-                            </Button>
+                            </AppLink>
                             <Button
                               size="small"
                               disabled={usageLoading === org.$id}

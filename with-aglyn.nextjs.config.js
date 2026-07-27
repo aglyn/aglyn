@@ -308,9 +308,17 @@ const AGLYN_CONFIG = {
   /**
    * Next.js can automatically create a standalone folder which copies only
    * the necessary files for a production deployment including select files in
-   * node_modules
+   * node_modules.
+   *
+   * Self-host container builds (AGL-904): opt-in via AGLYN_STANDALONE=1 so the
+   * Docker images ship a node_modules-free server bundle, while the Vercel
+   * deployments keep their current (non-standalone) output untouched. The
+   * tracing root is pinned to the workspace root so the monorepo's shared
+   * libs get traced into the bundle.
    */
-  // output: 'standalone',
+  ...(process.env.AGLYN_STANDALONE === '1'
+    ? { output: 'standalone', outputFileTracingRoot: __dirname }
+    : {}),
 
   pageExtensions: ['mdx', 'md', 'jsx', 'js', 'tsx', 'ts'],
   generateEtags: true,
@@ -452,15 +460,7 @@ const AGLYN_CONFIG = {
  * @param nextConfig {import('./with-aglyn.nextjs.config').WithAglynOptions}
  **/
 function withAglyn(nextConfig = {}) {
-  // Never log the secret's VALUE: this runs on every build and every server
-  // start, for every app that uses withAglyn, so the value landed in Vercel's
-  // build and runtime logs. Whether it is configured is the only useful bit.
-  console.log(
-    'process.env.NODE_ENV',
-    NODE_ENV,
-    '; CSRF_SECRET',
-    process.env.CSRF_SECRET ? '[set]' : '[unset]',
-  )
+  console.log('process.env.NODE_ENV', NODE_ENV)
 
   /**
    * Base configuration for NextJS Apps next.config.js

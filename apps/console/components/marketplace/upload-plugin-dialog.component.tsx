@@ -94,6 +94,8 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
   const [category, setCategory] = useState('')
   const [changelog, setChangelog] = useState('')
   const [priceUsd, setPriceUsd] = useState('0')
+  const [readme, setReadme] = useState('')
+  const [license, setLicense] = useState('')
 
   const reset = () => {
     setBundleFile(null)
@@ -104,6 +106,8 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
     setCategory('')
     setChangelog('')
     setPriceUsd('0')
+    setReadme('')
+    setLicense('')
     setProblems([])
   }
 
@@ -165,6 +169,12 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
           category: category || undefined,
           changelog: changelog.trim(),
           priceUsd: Math.max(0, Math.round(Number(priceUsd) || 0)),
+          // Listing docs (AGL-927): the publish API already validates and
+          // stores these (validateListingContent); without them every
+          // bundle-published listing hit review flagged "README: MISSING ·
+          // No license" and rendered a bare detail page.
+          ...(readme.trim() ? { readme: readme.trim() } : {}),
+          ...(license.trim() ? { license: license.trim() } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -298,14 +308,37 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
             </TextField>
           </Stack>
           <TextField
-            label="Price (USD)"
-            helperText="0 for free. Paid listings need payouts set up."
-            type="number"
-            value={priceUsd}
-            onChange={(event) => setPriceUsd(event.target.value)}
+            label="README (markdown)"
+            helperText={
+              'Shown on your listing page — what it does, how to configure ' +
+              'it. Reviewers and cautious buyers read this first.'
+            }
+            value={readme}
+            onChange={(event) => setReadme(event.target.value)}
             size="small"
-            sx={{ maxWidth: 200 }}
+            multiline
+            minRows={4}
           />
+          <Stack direction="row" spacing={1}>
+            <TextField
+              label="License"
+              placeholder="MIT"
+              helperText="Short label, e.g. MIT or Apache-2.0"
+              value={license}
+              onChange={(event) => setLicense(event.target.value)}
+              size="small"
+              sx={{ flex: 1 }}
+            />
+            <TextField
+              label="Price (USD)"
+              helperText="0 for free. Paid listings need payouts set up."
+              type="number"
+              value={priceUsd}
+              onChange={(event) => setPriceUsd(event.target.value)}
+              size="small"
+              sx={{ flex: 1 }}
+            />
+          </Stack>
 
           {problems.length ? (
             <Alert severity="error">

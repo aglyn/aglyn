@@ -18,7 +18,7 @@
 
 import { buildRoute, createResourceUid, Route } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -241,13 +241,14 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
             // Rendered only once the org slug resolves — a link to a route
             // that does not exist is worse than no link at all.
             orgSlug ? (
-              <Button
+              <AppLink
+                componentVariant="button"
                 size="small"
                 color="inherit"
                 href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#addons`}
               >
                 {'Enable in Billing'}
-              </Button>
+              </AppLink>
             ) : undefined
           }
         >

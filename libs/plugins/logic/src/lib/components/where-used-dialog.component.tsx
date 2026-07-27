@@ -22,10 +22,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Link as MuiLink,
   Stack,
   Typography,
 } from '@mui/material'
+import { AppLink } from '@aglyn/shared-ui-jsx'
 import { useConsoleHostRoute } from '@aglyn/tenant-feature-instance'
 import type { WhereUsedResult } from '../utils/fetch-where-used'
 
@@ -90,9 +90,9 @@ export function WhereUsedDialog(props: WhereUsedDialogProps) {
                   sx={{ justifyContent: 'space-between' }}
                 >
                   {href ? (
-                    <MuiLink href={href} variant="body2" noWrap>
+                    <AppLink href={href} variant="body2" noWrap>
                       {dependent.name}
-                    </MuiLink>
+                    </AppLink>
                   ) : (
                     <Typography variant="body2" noWrap>
                       {dependent.name}

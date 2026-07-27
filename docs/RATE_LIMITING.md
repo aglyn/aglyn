@@ -64,10 +64,15 @@ Firestore blip. Degrading to the per-instance cap keeps some protection, keeps
 sites usable, and reports which happened.
 
 Note the distinction from a fail-*open* default, the pattern the pre-release
-audit flagged as systemic: `CSRF_SECRET = process.env.CSRF_SECRET || ''` used
-to sign with an empty key when unset, which made CSRF tokens forgeable while
-still reporting success. That one now fails closed (AGL-795). Degrading is
-only defensible here because the fallback still enforces *something*.
+audit flagged as systemic. The canonical example was the CSRF middleware's
+`CSRF_SECRET = process.env.CSRF_SECRET || ''`, which signed with an empty key
+when unset — making tokens forgeable while still reporting success. AGL-795
+made it fail closed; AGL-919 then deleted the module outright, because an
+audit found it had **no callers at all**: the fail-closed guard protected a
+path nothing executed, and its presence in the env implied a protection that
+did not exist. Degrading is only defensible here because the fallback still
+enforces *something*, and because this limiter is actually wired to live
+routes — which is the first thing to check before trusting any control.
 
 ## Operational: enable the TTL policy
 

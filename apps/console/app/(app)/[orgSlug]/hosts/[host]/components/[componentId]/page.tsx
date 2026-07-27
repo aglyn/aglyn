@@ -168,15 +168,19 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
               hostId,
               displayName: 'Initial version',
               // Falls back to a root-only canvas, never `{}` — an empty map
-              // renders as "Invalid node" (AGL-693).
-              nodes:
-                definition?.nodes ?? {
-                  [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
-                    $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
-                    componentId: 'div',
-                    nodes: [],
+              // renders as "Invalid node" (AGL-693). Emptiness, not just
+              // absence: components created before AGL-693 hold `nodes: {}`,
+              // which `??` happily passes through, minting a version that
+              // opens uneditable (AGL-753).
+              nodes: Object.keys(definition?.nodes ?? {}).length
+                ? definition.nodes
+                : {
+                    [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
+                      $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+                      componentId: 'div',
+                      nodes: [],
+                    },
                   },
-                },
               ...(definition?.rootId ? { rootId: definition.rootId } : {}),
               createdAt: timestamp,
               updatedAt: timestamp,

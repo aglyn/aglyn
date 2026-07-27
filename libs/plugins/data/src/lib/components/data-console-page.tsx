@@ -18,7 +18,8 @@
 
 import { buildRoute, type ConsolePluginPageProps, Route } from '@aglyn/aglyn'
 import { useConsoleHostRoute } from '@aglyn/tenant-feature-instance'
-import { Alert, Button, Stack } from '@mui/material'
+import { AppLink } from '@aglyn/shared-ui-jsx'
+import { Alert, Stack } from '@mui/material'
 import HostDatasetsCard from './host-datasets-card.component'
 
 /**
@@ -42,13 +43,14 @@ export function DataConsolePage(props: ConsolePluginPageProps) {
         action={
           // Rendered only once the slug resolves — no link beats a dead one.
           orgSlug ? (
-            <Button
+            <AppLink
+              componentVariant="button"
               color="inherit"
               size="small"
               href={buildRoute(Route.ORG_DATA, { orgSlug })}
             >
               {'Open organization data'}
-            </Button>
+            </AppLink>
           ) : undefined
         }
       >

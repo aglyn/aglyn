@@ -368,6 +368,95 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       source: 'apps/console/app/api/admin/erasure-request/route.ts',
     },
+    // Admin-initiated password mail (AGL-910). Unlike the self-serve
+    // `password-reset` below, Aglyn composes and sends these itself — the
+    // reset LINK still comes from Firebase (generatePasswordResetLink), but
+    // the message around it is ours, so both are designable.
+    {
+      key: 'admin-password-reset',
+      name: 'Password reset (sent by an admin)',
+      description:
+        'Password reset link sent on someone else\'s behalf from the ' +
+        'console — by staff from a user\'s detail page, or by an ' +
+        'organization admin from a team member\'s page.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Reset your Aglyn password',
+      mergeTokens: [
+        {
+          name: 'resetUrl',
+          description: 'One-time link that opens the reset form',
+          sample: 'https://app.aglyn.com/reset-password?oobCode=…',
+        },
+        {
+          name: 'actor.name',
+          description: 'Who asked for the reset',
+          sample: 'Aglyn support',
+        },
+      ],
+      // Mirrors the fallbackText in _lib/password-admin.ts.
+      defaultBody: [
+        { block: 'text', text: 'Reset your password', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            '{{actor.name}} started a password reset for your Aglyn ' +
+            'account. Choose a new password here:',
+          variant: 'body',
+        },
+        { block: 'button', label: 'Set a new password', href: '{{resetUrl}}' },
+        {
+          block: 'text',
+          text:
+            'The link expires shortly. If you were not expecting this, you ' +
+            'can ignore this email — your password stays as it is.',
+          variant: 'caption',
+        },
+      ],
+      source: 'apps/console/app/api/_lib/password-admin.ts',
+    },
+    {
+      key: 'password-changed-by-admin',
+      name: 'Password changed by an admin',
+      description:
+        'Notice sent to the account holder after an admin sets their ' +
+        'password directly. Always sent — it is how someone finds out an ' +
+        'administrator changed their credentials.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your Aglyn password was changed',
+      mergeTokens: [
+        {
+          name: 'actor.name',
+          description: 'Who changed the password',
+          sample: 'Aglyn support',
+        },
+        {
+          name: 'signInUrl',
+          description: 'Where to sign in with the new password',
+          sample: 'https://app.aglyn.com',
+        },
+      ],
+      // Mirrors the fallbackText in _lib/password-admin.ts.
+      defaultBody: [
+        { block: 'text', text: 'Your password was changed', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            '{{actor.name}} set a new password on your account. You have ' +
+            'been signed out everywhere and will need the new password to ' +
+            'sign back in.',
+          variant: 'body',
+        },
+        { block: 'button', label: 'Sign in', href: '{{signInUrl}}' },
+        {
+          block: 'text',
+          text:
+            'If you did not expect this, contact whoever administers your ' +
+            'account straight away.',
+          variant: 'caption',
+        },
+      ],
+      source: 'apps/console/app/api/_lib/password-admin.ts',
+    },
     {
       key: 'password-reset',
       name: 'Forgot password',

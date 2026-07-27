@@ -57,6 +57,12 @@ const HOST_ID = process.env.E2E_HOST ?? 'demo'
 // The console routes by ORG SLUG since AGL-621 (`/[orgSlug]/…`), which is not
 // the host subdomain. Kept in sync with E2E_ORG_SLUG in seed-e2e.mjs.
 const ORG_SLUG = process.env.E2E_ORG_SLUG ?? 'e2e-bakery'
+// Host-scoped pages live UNDER the org (AGL-796): `/[orgSlug]/hosts/[host]/…`.
+// Every console shot here used to address `/demo/…` — the bare host subdomain,
+// which is what those routes looked like before AGL-621 and is now a 404 that
+// the harness happily photographed. Same shape as the sibling
+// capture-docs-screenshots.mjs.
+const HOST_BASE = `${ORG_SLUG}/hosts/${HOST_ID}`
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'E2e-Password-1'
 const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
@@ -768,6 +774,20 @@ const context = await browser.newContext({
   deviceScaleFactor: 1,
 })
 
+// The AGL-663 pre-permission prompt arms itself 2.5s after mount, on every
+// console page, and re-arms on every remount — so dismissing it per shot
+// with a click (as this script used to) only covered the shots someone
+// remembered to annotate. Write the dismissal the component persists for
+// itself instead, before any app code runs, so the dialog never mounts.
+// Key and value mirror apps/console/components/notification-prompt.
+await context.addInitScript(() => {
+  try {
+    window.localStorage.setItem('aglyn:notification-prompt-dismissed', 'never')
+  } catch {
+    // Storage blocked — the prompt may appear; the shot is still taken.
+  }
+})
+
 // Sign in to the console through the real UI once (a synthetic
 // localStorage session races connectAuthEmulator — see console.e2e.mjs).
 {
@@ -856,11 +876,11 @@ async function shot({ out, base, path, waitFor, actions = [], settleMs, clip }) 
 
 // Pre-warm the dev-server routes so compiles don't eat navigation waits.
 for (const path of [
-  `/${HOST_ID}/data`,
-  `/${HOST_ID}/products`,
-  `/${HOST_ID}/users`,
-  `/${HOST_ID}/screens/seed-guide-survey-screen/versions/seed-guide-survey-screen-v1/besigner`,
-  `/${HOST_ID}/screens/seed-guide-nav/versions/seed-guide-nav-v1/besigner`,
+  `/${HOST_BASE}/data`,
+  `/${HOST_BASE}/products`,
+  `/${HOST_BASE}/users`,
+  `/${HOST_BASE}/screens/seed-guide-survey-screen/versions/seed-guide-survey-screen-v1/besigner`,
+  `/${HOST_BASE}/screens/seed-guide-nav/versions/seed-guide-nav-v1/besigner`,
 ]) {
   await fetch(`${CONSOLE_BASE}${path}`).catch(() => undefined)
 }
@@ -879,14 +899,14 @@ const pickSurveyDataset = [
 await shot({
   out: 'survey-data-page.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/data`,
+  path: `/${HOST_BASE}/data`,
   waitFor: 'Add dataset',
   actions: [...pickSurveyDataset, { waitFor: 'Great pastries' }],
 })
 await shot({
   out: 'survey-schema-dialog.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/data`,
+  path: `/${HOST_BASE}/data`,
   waitFor: 'Add dataset',
   actions: [
     ...pickSurveyDataset,
@@ -896,7 +916,7 @@ await shot({
 await shot({
   out: 'datasets-schema-field-editor.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/data`,
+  path: `/${HOST_BASE}/data`,
   waitFor: 'Add dataset',
   actions: [
     ...pickSurveyDataset,
@@ -907,7 +927,7 @@ await shot({
 await shot({
   out: 'datasets-import-dialog.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/data`,
+  path: `/${HOST_BASE}/data`,
   waitFor: 'Add dataset',
   actions: [
     ...pickSurveyDataset,
@@ -915,7 +935,7 @@ await shot({
   ],
 })
 
-const surveyBesigner = `/${HOST_ID}/screens/seed-guide-survey-screen/versions/seed-guide-survey-screen-v1/besigner`
+const surveyBesigner = `/${HOST_BASE}/screens/seed-guide-survey-screen/versions/seed-guide-survey-screen-v1/besigner`
 await shot({
   out: 'survey-besigner-form.png',
   base: CONSOLE_BASE,
@@ -955,7 +975,7 @@ await shot({
 await shot({
   out: 'datasets-repeat-binding.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/screens/seed-guide-results/versions/seed-guide-results-v1/besigner`,
+  path: `/${HOST_BASE}/screens/seed-guide-results/versions/seed-guide-results-v1/besigner`,
   waitFor: 'Properties',
   settleMs: 8000,
   actions: [
@@ -973,7 +993,7 @@ await shot({
 
 // ── 3b. Mega-menu walkthrough — besigner nav shots (AGL-580) ───────────────
 
-const navBesigner = `/${HOST_ID}/screens/seed-guide-nav/versions/seed-guide-nav-v1/besigner`
+const navBesigner = `/${HOST_BASE}/screens/seed-guide-nav/versions/seed-guide-nav-v1/besigner`
 
 // The element picker's Navigation group — Mega Menu + the Dropdown Panel
 // preset (AGL-589) both in frame.
@@ -1063,14 +1083,14 @@ await shot({
 await shot({
   out: 'commerce-products-hub.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/products`,
+  path: `/${HOST_BASE}/products`,
   waitFor: 'Hand-poured candle',
   settleMs: 2500,
 })
 await shot({
   out: 'commerce-product-editor-billing.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/products`,
+  path: `/${HOST_BASE}/products`,
   waitFor: 'Coffee club',
   actions: [
     {
@@ -1085,7 +1105,7 @@ await shot({
 await shot({
   out: 'commerce-element-picker.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/screens/seed-guide-shop/versions/seed-guide-shop-v1/besigner`,
+  path: `/${HOST_BASE}/screens/seed-guide-shop/versions/seed-guide-shop-v1/besigner`,
   waitFor: 'Properties',
   settleMs: 6000,
   actions: [
@@ -1097,14 +1117,14 @@ await shot({
 await shot({
   out: 'commerce-orders-tab.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/products?tab=orders`,
+  path: `/${HOST_BASE}/products?tab=orders`,
   waitFor: '1001',
   settleMs: 2500,
 })
 await shot({
   out: 'commerce-order-detail.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/products?tab=orders`,
+  path: `/${HOST_BASE}/products?tab=orders`,
   waitFor: '1001',
   actions: [{ click: 'text=1001', waitFor: 'Timeline', settleMs: 1500 }],
 })
@@ -1114,14 +1134,14 @@ await shot({
 await shot({
   out: 'members-users-tab.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/users`,
+  path: `/${HOST_BASE}/users`,
   waitFor: 'maya@example.com',
   settleMs: 2000,
 })
 await shot({
   out: 'members-member-drawer.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/users`,
+  path: `/${HOST_BASE}/users`,
   waitFor: 'maya@example.com',
   actions: [
     { click: 'text=maya@example.com', waitFor: 'Lifetime purchases', settleMs: 2000 },
@@ -1137,15 +1157,6 @@ await shot({
 
 // ── 5b. Org marketplace (AGL-782) ─────────────────────────────────────────
 
-// The notifications pre-permission prompt (AGL-663) opens over the page on
-// first visit and lands square in the middle of a screenshot. Dismissed with
-// a real click rather than removed in `stripDevChrome`, because that helper
-// evaluates DOM removals and a React dialog needs an actual event to close
-// (and to record the dismissal) — otherwise the backdrop and scroll lock stay
-// behind. Optional so a shot still works when the prompt doesn't appear.
-const dismissNotificationsPrompt = [
-  { click: 'role=button[name="Not now"]', optional: true, settleMs: 400 },
-]
 // Replaces community-page.png, which still showed the per-site Community tab
 // that AGL-775 deleted — and whose alt text had since been rewritten to
 // describe tabs the picture didn't contain.
@@ -1158,17 +1169,14 @@ await shot({
   // The grid is populated by Firestore subscriptions that settle after first
   // paint; wait for a seeded listing rather than the frame, or the shot
   // catches the empty state.
-  actions: [
-    ...dismissNotificationsPrompt,
-    { waitFor: 'Site footer', settleMs: 1200 },
-  ],
+  actions: [{ waitFor: 'Site footer', settleMs: 1200 }],
 })
 await shot({
   out: 'marketplace-publish.png',
   base: CONSOLE_BASE,
   path: `/${ORG_SLUG}/marketplace?tab=publish`,
   waitFor: 'Publish to the marketplace',
-  actions: [...dismissNotificationsPrompt, { settleMs: 800 }],
+  actions: [{ settleMs: 800 }],
 })
 
 // ── 6. Tenant flows: auth pages, storefront, live survey ───────────────────
@@ -1288,7 +1296,7 @@ if (!only) {
 await shot({
   out: 'survey-records-after-submit.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_ID}/data`,
+  path: `/${HOST_BASE}/data`,
   waitFor: 'Add dataset',
   actions: [...pickSurveyDataset, { waitFor: 'gluten-free' }],
 })

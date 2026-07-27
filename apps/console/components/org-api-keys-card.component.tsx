@@ -191,7 +191,7 @@ export function OrgApiKeysCard() {
         anchor: '#tiers--entitlements',
         title: 'REST API & API keys',
         excerpt:
-          'Programmatic access to your datasets, contacts, sites, and form submissions. Included on the Business plan.',
+          'Programmatic access to your datasets, contacts, sites, and form submissions. Included on the Business and Advanced plans.',
       })}
       contentGutterX
       contentGutterY
