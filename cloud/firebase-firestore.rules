@@ -387,14 +387,20 @@ service cloud.firestore {
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
               'locations', 'products', 'components', 'registers', 'installs',
-              'templates']));
+              'templates', 'collections']));
         // `templates` is excluded from update as well as create: its
         // dedicated block above freezes `source`, and leaving it here would
         // re-grant the unrestricted update this catch-all allows (AGL-666).
+        // `collections` is excluded from create and update (AGL-978): the
+        // slug is the collection's public address and must be claimed
+        // transactionally, like the host subdomain (AGL-642), so
+        // /api/hosts/collections owns both. The dedicated block below
+        // re-grants the non-identity updates the console still makes
+        // client-side (template assignment, categories).
         allow update: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'installs',
-              'templates']));
+              'templates', 'collections']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -405,8 +411,22 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'collections']));
       }
+      // Editors keep full client control of a collection doc EXCEPT the two
+      // identity keys: `slug` is its public address (uniqueness is claimed in
+      // /api/hosts/collections) and `kind` decides which console surface owns
+      // it — a client rewrite of either is the AGL-954 collision or the
+      // AGL-957 shadowing, back again.
+      match /collections/{collectionId} {
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+            !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['slug', 'kind']));
+      }
+      // Entries are a separate resource that merely lives underneath, so the
+      // name-based exclusions above must not reach them: create/update/delete
+      // stay editor-writable here (rules OR, so a dedicated allow wins).
       match /collections/{collectionId}/entries/{entryId} {
-        allow delete: if isStaff() ||
+        allow create, update, delete: if isStaff() ||
           (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
       }
     }

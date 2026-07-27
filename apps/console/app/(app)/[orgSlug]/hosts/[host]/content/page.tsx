@@ -107,6 +107,8 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const logActivity = useHostActivityLogger(hostId)
+  // Shared by the collection-create call (AGL-978) and AI assist below.
+  const { data: user } = useUser()
 
   const { data: collectionDocs } = useFirestoreCollection<any>(
     () =>
@@ -329,15 +331,33 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   const handleCreateCollection = useCallback(async () => {
     const displayName = collectionName.trim()
     if (!displayName || collectionSlugOwner !== null) return
-    const id = Aglyn.createResourceUid()
-    await setDoc(doc(firestore, 'hosts', hostId, 'collections', id), {
-      displayName,
-      slug: slugify(displayName),
-      // Disambiguates this doc from commerce's product collections, which
-      // live in the same Firestore collection (AGL-954).
-      kind: 'content',
-      createdAt: Timestamp.now(),
-    })
+    // The slug is the collection's public address, so uniqueness is claimed
+    // in a transaction server-side (AGL-978) — the check above is only the
+    // fast feedback in this dialog. Rules deny a client create.
+    let id: string
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/hosts/collections', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          hostId,
+          action: 'create',
+          kind: 'content',
+          data: { displayName, slug: slugify(displayName) },
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result?.error ?? 'Collection create failed')
+      id = String(result.id)
+    } catch (error: any) {
+      return void enqueueSnackbar(error?.message ?? 'Collection create failed', {
+        variant: 'error',
+      })
+    }
     setNewCollectionOpen(false)
     setCollectionName('')
     setSelectedId(id)
@@ -353,7 +373,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   }, [
     collectionName,
     collectionSlugOwner,
-    firestore,
+    user,
     hostId,
     enqueueSnackbar,
     logActivity,
@@ -443,7 +463,6 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     [bodyTab, applyMarkdown],
   )
   // AI assist (AGL-130): write or improve the markdown-lite body.
-  const { data: aiUser } = useUser()
   const { org } = useCurrentOrg()
   const [aiInstruction, setAiInstruction] = useState<string | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
@@ -453,7 +472,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     }
     setAiBusy(true)
     try {
-      const idToken = await (aiUser as any)?.getIdToken?.()
+      const idToken = await (user as any)?.getIdToken?.()
       const response = await fetch('/api/ai/assist', {
         method: 'POST',
         headers: {
@@ -496,7 +515,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     } finally {
       setAiBusy(false)
     }
-  }, [aiInstruction, aiBusy, editor, aiUser, enqueueSnackbar])
+  }, [aiInstruction, aiBusy, editor, user, enqueueSnackbar])
   // Scheduled publishing (AGL-123): entry id being scheduled + datetime.
   const [scheduler, setScheduler] = useState<{
     entry: any
