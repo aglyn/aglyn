@@ -28,6 +28,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
+import { docsHelp } from '../../constants/docs-links'
 import MarkdownVisualEditor, {
   type MarkdownEditorCommand,
   type MarkdownVisualEditorHandle,
@@ -211,7 +212,17 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
   ]
 
   return (
-    <CardDisplay header={'Edit listing'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Edit listing'}
+      help={docsHelp('publisherHandbook', {
+        anchor: '#authoring-your-listing',
+        excerpt:
+          'What buyers see on the public listing page — name, summary, ' +
+          'rich-text body, and media.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           {'Everything here shows on the public listing page. The body is ' +
