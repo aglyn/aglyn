@@ -18,6 +18,7 @@
 
 import { usePathname } from 'next/navigation'
 import { useMemo } from 'react'
+import { useEnabledPluginIds } from '../components/console-plugins-gate.component'
 import { useHostId, useHostReady } from '../components/host-id-provider'
 import adminNavTabItems from '../constants/admin-nav-tabs'
 import hostNavTabItems from '../constants/host-nav-tabs'
@@ -153,6 +154,8 @@ export function useSecondaryNav(): {
   const { orgs, loading: orgsLoading } = useOrgScope()
   const hostResolved = useHostReady()
   const hostId = useHostId()
+  // Scopes the plugin-contributed tabs to this workspace (AGL-758).
+  const enabledPluginIds = useEnabledPluginIds()
 
   const addressable = useMemo(
     () =>
@@ -171,7 +174,11 @@ export function useSecondaryNav(): {
     if (!addressable) return []
     switch (section.kind) {
       case 'host':
-        return hostNavTabItems(section.orgSlug ?? '', section.host ?? '')
+        return hostNavTabItems(
+          section.orgSlug ?? '',
+          section.host ?? '',
+          enabledPluginIds,
+        )
       case 'org':
         return orgNavTabItems
       case 'admin':
@@ -181,7 +188,7 @@ export function useSecondaryNav(): {
       default:
         return []
     }
-  }, [addressable, section, orgNavTabItems])
+  }, [addressable, section, orgNavTabItems, enabledPluginIds])
 
   const activeTab = useMemo(
     () => resolveActiveTab(pathname, section.base, navTabItems),

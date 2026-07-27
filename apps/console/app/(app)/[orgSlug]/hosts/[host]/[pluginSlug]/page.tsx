@@ -18,6 +18,7 @@
 
 import { checkEntitlement, RELEASE_FLAGS, type ReleaseFlagKey } from '@aglyn/aglyn'
 import { resolveConsolePluginPage } from '@aglyn/aglyn'
+import { useEnabledPluginIds } from '../../../../../../components/console-plugins-gate.component'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
@@ -58,9 +59,16 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const { org } = useCurrentOrg()
   const { permissions } = useOrgPermissions()
 
+  // Scoped to this workspace's plugins (AGL-758): the registry is a
+  // session-wide union, so an unscoped lookup would serve a page from a
+  // plugin the current org has not enabled.
+  const enabledPluginIds = useEnabledPluginIds()
   const resolved = useMemo(
-    () => (pluginSlug ? resolveConsolePluginPage(`/${pluginSlug}`) : undefined),
-    [pluginSlug],
+    () =>
+      pluginSlug
+        ? resolveConsolePluginPage(`/${pluginSlug}`, enabledPluginIds)
+        : undefined,
+    [pluginSlug, enabledPluginIds],
   )
 
   // The release flag governing this surface, keyed by the nav item's tab id

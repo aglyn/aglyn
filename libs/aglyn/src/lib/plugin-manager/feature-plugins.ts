@@ -274,9 +274,24 @@ export function unregisterConsoleExtension(pluginId: PluginId): void {
   consoleExtensions.delete(pluginId)
 }
 
-/** Registration-ordered extensions; the console shell filters by flag. */
-export function listConsoleExtensions(): ConsoleExtension[] {
-  return Array.from(consoleExtensions.values())
+/**
+ * Registration-ordered extensions; the console shell filters by flag.
+ *
+ * AGL-758: the registry is a module-global that only ever grows — nothing
+ * outside tests unregisters, and loaded chunks can't unload — so after
+ * visiting two workspaces it holds the UNION of both plugin sets. Every
+ * read is therefore scoped by the caller's effective enabled set; pass the
+ * current org's plugin ids so one workspace never serves another's nav
+ * items, widgets, pages or providers. Omitting the argument keeps the
+ * unfiltered union (tests, and non-org surfaces that have no such set).
+ */
+export function listConsoleExtensions(
+  enabledPluginIds?: readonly PluginId[],
+): ConsoleExtension[] {
+  const all = Array.from(consoleExtensions.values())
+  if (!enabledPluginIds) return all
+  const enabled = new Set(enabledPluginIds)
+  return all.filter((extension) => enabled.has(extension.pluginId))
 }
 
 /** A nav item flattened with its owning extension's id + entitlement flag. */
@@ -290,8 +305,10 @@ export interface ConsoleNavEntry extends ConsoleNavItem {
  * shell appends these to its static tabs, so a plugin adds a menu item
  * by registering here — no edit to the console's nav constants.
  */
-export function listConsoleNavItems(): ConsoleNavEntry[] {
-  return listConsoleExtensions().flatMap((extension) =>
+export function listConsoleNavItems(
+  enabledPluginIds?: readonly PluginId[],
+): ConsoleNavEntry[] {
+  return listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
     (extension.navItems ?? []).map((navItem) => ({
       ...navItem,
       pluginId: extension.pluginId,
@@ -307,8 +324,9 @@ export function listConsoleNavItems(): ConsoleNavEntry[] {
  */
 export function resolveConsolePluginPage(
   href: string,
+  enabledPluginIds?: readonly PluginId[],
 ): { extension: ConsoleExtension; navItem: ConsoleNavItem } | undefined {
-  for (const extension of consoleExtensions.values()) {
+  for (const extension of listConsoleExtensions(enabledPluginIds)) {
     for (const navItem of extension.navItems ?? []) {
       if (navItem.Component && navItem.href === href) {
         return { extension, navItem }
@@ -321,9 +339,10 @@ export function resolveConsolePluginPage(
 /** Widgets registered for a slot, across every extension (AGL-419). */
 export function listConsoleWidgets(
   slot: string,
+  enabledPluginIds?: readonly PluginId[],
 ): Array<{ extension: ConsoleExtension; widget: ConsoleWidget }> {
   const out: Array<{ extension: ConsoleExtension; widget: ConsoleWidget }> = []
-  for (const extension of consoleExtensions.values()) {
+  for (const extension of listConsoleExtensions(enabledPluginIds)) {
     for (const widget of extension.widgets ?? []) {
       if (widget.slot === slot) out.push({ extension, widget })
     }
@@ -333,10 +352,12 @@ export function listConsoleWidgets(
 
 /** Providers registered by every extension, in registration order. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function listConsoleProviders(): Array<ComponentType<any>> {
+export function listConsoleProviders(
+  enabledPluginIds?: readonly PluginId[],
+): Array<ComponentType<any>> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const out: Array<ComponentType<any>> = []
-  for (const extension of consoleExtensions.values()) {
+  for (const extension of listConsoleExtensions(enabledPluginIds)) {
     out.push(...(extension.providers ?? []))
   }
   return out

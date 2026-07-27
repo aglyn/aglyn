@@ -19,6 +19,8 @@ import {
   defineUiFeatureBundle,
   listConsoleExtensions,
   listConsoleNavItems,
+  listConsoleProviders,
+  listConsoleWidgets,
   MUI_BUNDLE_ID,
   registerConsoleExtension,
   resolveConsolePluginPage,
@@ -155,5 +157,63 @@ describe('console extension registry', () => {
     const resolved = resolveConsolePluginPage('/events')
     expect(resolved?.extension.pluginId).toBe('events-calendar')
     expect(resolved?.navItem.Component).toBe(Page)
+  })
+
+  /**
+   * AGL-758: the registry only ever grows within a session, so after
+   * visiting two workspaces it holds the union of both plugin sets. Every
+   * read takes the caller's effective enabled ids so one workspace never
+   * serves another's contributions.
+   */
+  describe('scoping reads to a workspace', () => {
+    const Widget = (): null => null
+    const Provider = (): null => null
+    const Page = (): null => null
+
+    beforeEach(() => {
+      registerConsoleExtension({
+        pluginId: 'events-calendar',
+        displayName: 'Events',
+        navItems: [{ label: 'Events', href: '/events', Component: Page }],
+        widgets: [{ widgetId: 'events-glance', slot: 'dashboard', Component: Widget }],
+        providers: [Provider],
+      })
+      registerConsoleExtension({
+        pluginId: 'commerce',
+        displayName: 'Commerce',
+        navItems: [{ label: 'Products', href: '/products', Component: Page }],
+        widgets: [{ widgetId: 'commerce-glance', slot: 'dashboard', Component: Widget }],
+        providers: [Provider],
+      })
+    })
+
+    it('lists only the enabled extensions and their nav items', () => {
+      expect(listConsoleExtensions(['commerce']).map((e) => e.pluginId)).toEqual([
+        'commerce',
+      ])
+      expect(listConsoleNavItems(['commerce']).map((i) => i.label)).toEqual([
+        'Products',
+      ])
+    })
+
+    it('does not resolve a page from a plugin the workspace has not enabled', () => {
+      expect(resolveConsolePluginPage('/events', ['commerce'])).toBeUndefined()
+      expect(
+        resolveConsolePluginPage('/events', ['events-calendar'])?.extension
+          .pluginId,
+      ).toBe('events-calendar')
+    })
+
+    it('scopes widgets and providers too', () => {
+      expect(listConsoleWidgets('dashboard', ['commerce'])).toHaveLength(1)
+      expect(listConsoleProviders(['commerce'])).toHaveLength(1)
+    })
+
+    it('keeps the unfiltered union when no ids are given', () => {
+      expect(listConsoleExtensions()).toHaveLength(2)
+      expect(listConsoleNavItems()).toHaveLength(2)
+      expect(listConsoleWidgets('dashboard')).toHaveLength(2)
+      expect(listConsoleProviders()).toHaveLength(2)
+    })
   })
 })
