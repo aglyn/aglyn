@@ -46,7 +46,7 @@ import {
   setDoc,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 
 export interface CatalogOrganizationCardProps {
@@ -83,6 +83,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const { data: user } = useUser()
 
   const { data: categoryDocs } = useFirestoreCollection<any>(
     () =>
@@ -245,16 +246,47 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     (row: CollectionRow) => async () => {
       const confirmed = await confirm({
         title: 'Delete this collection?',
-        description: `Storefront blocks pointing at "${row.name}" go empty.`,
+        description:
+          `Storefront blocks pointing at "${row.name}" go empty, and any ` +
+          'content entries published under it are deleted with it.',
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
-      await deleteDoc(doc(firestore, 'hosts', hostId, 'collections', row.$id))
+      // A collection owns an `entries` subcollection (the Content page's
+      // published entries) and Firestore doesn't cascade, so deleting the
+      // doc from here stranded them — still editor-writable through the
+      // host catch-all rule, just unreachable. recursiveDelete is
+      // Admin-SDK-only, hence the route (AGL-947).
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/resources/erase', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            scope: 'hosts',
+            scopeId: hostId,
+            kind: 'collections',
+            id: row.$id,
+          }),
+        })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(result?.error ?? 'Collection delete failed')
+        }
+      } catch (error: any) {
+        return void enqueueSnackbar(error?.message ?? 'Collection delete failed', {
+          variant: 'error',
+        })
+      }
+      enqueueSnackbar('Collection deleted', { variant: 'success', persist: false })
     },
-    [confirm, firestore, hostId],
+    [confirm, user, hostId, enqueueSnackbar],
   )
 
   const collectionCount = (row: CollectionRow) =>

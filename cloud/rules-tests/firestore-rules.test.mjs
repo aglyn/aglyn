@@ -240,6 +240,25 @@ describe('hosts', () => {
         setDoc(doc(authed(EDITOR), 'hosts', HOST, coll, 'new-doc'), { name: 'x' }),
       )
     }
+    // Deleting a COLLECTION doc is API-only (AGL-947): it owns `entries`,
+    // which Firestore won't cascade into. Single entries stay deletable —
+    // the dedicated entries block re-grants what the name-based exclusion
+    // in the catch-all would otherwise take with it.
+    await assertSucceeds(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog'), { name: 'Blog' }),
+    )
+    await assertSucceeds(
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog', 'entries', 'e1'),
+        { title: 'Hello' },
+      ),
+    )
+    await assertFails(
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog')),
+    )
+    await assertSucceeds(
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog', 'entries', 'e1')),
+    )
     await assertSucceeds(
       updateDoc(doc(authed(EDITOR), 'hosts', HOST), { displayName: 'Renamed' }),
     )
