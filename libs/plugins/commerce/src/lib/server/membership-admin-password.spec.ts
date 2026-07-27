@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import type {
-  PluginApiRequest,
-  PluginApiResponse,
+import {
+  type PluginApiRequest,
+  type PluginApiResponse,
+  resolvePluginApiRoute,
 } from '@aglyn/aglyn/server'
 import {
   memberCookieName,
@@ -323,7 +324,13 @@ describe('route registration', () => {
     // The console posts to a literal '/api/membership/admin-password', which
     // only resolves if registerCommerceApi wired this exact path — a typo
     // there is a 404 the UI reports as a generic failure.
-    const { resolvePluginApiRoute } = await import('@aglyn/aglyn/server')
+    // `resolvePluginApiRoute` is imported statically at the top of the file
+    // ON PURPOSE (AGL-949): a dynamic import here made plugins-commerce ->
+    // aglyn a DYNAMIC edge in the nx graph, and enforce-module-boundaries
+    // walks dynamic edges transitively — console -> plugins-commerce ->
+    // aglyn meant every static `@aglyn/aglyn` import in the console app was
+    // reported as "a static import of a lazy-loaded library". One await in
+    // one spec file cost the console 100 lint errors.
     const { registerCommerceApi } = await import('../server')
     registerCommerceApi()
     expect(resolvePluginApiRoute('membership/admin-password')).toBe(
