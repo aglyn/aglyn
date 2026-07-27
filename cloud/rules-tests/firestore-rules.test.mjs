@@ -527,6 +527,11 @@ describe('org-shared data (AGL-237)', () => {
     await assertSucceeds(
       deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1')),
     )
+    // Deleting the DATASET doc is API-only (AGL-945): it owns `records`,
+    // and Firestore doesn't cascade, so a client delete would orphan them.
+    await assertFails(
+      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1')),
+    )
     await assertSucceeds(
       setDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'c2'), { email: 'n@y.z' }),
     )

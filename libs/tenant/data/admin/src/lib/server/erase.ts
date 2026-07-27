@@ -81,6 +81,28 @@ export async function eraseHost(hostId: string): Promise<void> {
   await firestore.recursiveDelete(hostRef)
 }
 
+/**
+ * Delete a single resource document *and everything under it* (AGL-945).
+ *
+ * Firestore does not cascade: deleting `orgs/{o}/datasets/{d}` leaves every
+ * `records/{r}` beneath it alive but unreachable from the console — still
+ * billed, still matched by the rules (which match subcollection paths
+ * independently of the parent), and resurrected wholesale if the parent id
+ * is ever reused. Only the Admin SDK has `recursiveDelete`, so the console
+ * cards route their deletes through /api/resources/erase, which lands here.
+ *
+ * Authorization belongs to the caller — this only walks the tree.
+ */
+export async function eraseSubtree(
+  path: readonly [string, string, string, string],
+): Promise<void> {
+  const firestore = firebaseAdmin.app().firestore()
+  const [scope, scopeId, kind, id] = path
+  await firestore.recursiveDelete(
+    firestore.collection(scope).doc(scopeId).collection(kind).doc(id),
+  )
+}
+
 type DocRef = FirebaseFirestore.DocumentReference
 
 /** Recursively snapshot a doc + all its subcollections (for the export). */

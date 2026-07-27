@@ -118,12 +118,18 @@ service cloud.firestore {
       }
       // Dataset/record CREATES are API-only (AGL-473): the console route
       // enforces the dataStore entitlement and dataset/record quotas
-      // server-side. Updates and deletes stay editor-writable — they
+      // server-side. Record updates/deletes stay editor-writable — they
       // don't consume quota.
+      // Deleting the DATASET doc is API-only too (AGL-945): the doc owns a
+      // `records` subcollection and Firestore doesn't cascade, so a client
+      // delete orphaned every record beneath it (still billed, still
+      // matched by the rule below, which doesn't check that its parent
+      // exists). /api/resources/erase recursiveDeletes the whole subtree.
       match /datasets/{datasetId} {
         allow read: if isStaff() || isOrgMember();
         allow create: if isStaff();
-        allow update, delete: if isStaff() || canWriteOrgData();
+        allow update: if isStaff() || canWriteOrgData();
+        allow delete: if isStaff();
         match /records/{recordId} {
           allow read: if isStaff() || isOrgMember();
           allow create: if isStaff();
