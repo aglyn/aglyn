@@ -247,10 +247,18 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
    * being done, which is worse than no checklist.
    */
   const artifactUrl = (version: string) => {
-    const origin = process.env.NEXT_PUBLIC_PLUGIN_ORIGIN ?? ''
     const entry = detail?.versions.find((item) => item.version === version)
-    if (!origin || !entry?.sha256) return null
-    return `${origin.replace(/\/+$/, '')}/artifacts/${detail?.listingId}/${version}/${entry.sha256}.bundle`
+    if (!entry?.sha256) return null
+    const path = `/artifacts/${detail?.listingId}/${version}/${entry.sha256}.bundle`
+    const origin = process.env.NEXT_PUBLIC_PLUGIN_ORIGIN ?? ''
+    // The plugin origin just edge-rewrites to the console's own artifact
+    // route, so fall back to that directly when the origin is unset — as it
+    // is on every dev machine. Without the fallback the "read the bundle
+    // source" link silently vanished exactly where it matters most, and a
+    // reviewer had no way to reach the code they are certifying.
+    return origin
+      ? `${origin.replace(/\/+$/, '')}${path}`
+      : `/api/plugin-artifacts/${detail?.listingId}/${version}/${entry.sha256}.bundle`
   }
 
   const checklistLink = (
