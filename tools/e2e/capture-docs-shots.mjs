@@ -768,6 +768,20 @@ const context = await browser.newContext({
   deviceScaleFactor: 1,
 })
 
+// The AGL-663 pre-permission prompt arms itself 2.5s after mount, on every
+// console page, and re-arms on every remount — so dismissing it per shot
+// with a click (as this script used to) only covered the shots someone
+// remembered to annotate. Write the dismissal the component persists for
+// itself instead, before any app code runs, so the dialog never mounts.
+// Key and value mirror apps/console/components/notification-prompt.
+await context.addInitScript(() => {
+  try {
+    window.localStorage.setItem('aglyn:notification-prompt-dismissed', 'never')
+  } catch {
+    // Storage blocked — the prompt may appear; the shot is still taken.
+  }
+})
+
 // Sign in to the console through the real UI once (a synthetic
 // localStorage session races connectAuthEmulator — see console.e2e.mjs).
 {
@@ -1137,15 +1151,6 @@ await shot({
 
 // ── 5b. Org marketplace (AGL-782) ─────────────────────────────────────────
 
-// The notifications pre-permission prompt (AGL-663) opens over the page on
-// first visit and lands square in the middle of a screenshot. Dismissed with
-// a real click rather than removed in `stripDevChrome`, because that helper
-// evaluates DOM removals and a React dialog needs an actual event to close
-// (and to record the dismissal) — otherwise the backdrop and scroll lock stay
-// behind. Optional so a shot still works when the prompt doesn't appear.
-const dismissNotificationsPrompt = [
-  { click: 'role=button[name="Not now"]', optional: true, settleMs: 400 },
-]
 // Replaces community-page.png, which still showed the per-site Community tab
 // that AGL-775 deleted — and whose alt text had since been rewritten to
 // describe tabs the picture didn't contain.
@@ -1158,17 +1163,14 @@ await shot({
   // The grid is populated by Firestore subscriptions that settle after first
   // paint; wait for a seeded listing rather than the frame, or the shot
   // catches the empty state.
-  actions: [
-    ...dismissNotificationsPrompt,
-    { waitFor: 'Site footer', settleMs: 1200 },
-  ],
+  actions: [{ waitFor: 'Site footer', settleMs: 1200 }],
 })
 await shot({
   out: 'marketplace-publish.png',
   base: CONSOLE_BASE,
   path: `/${ORG_SLUG}/marketplace?tab=publish`,
   waitFor: 'Publish to the marketplace',
-  actions: [...dismissNotificationsPrompt, { settleMs: 800 }],
+  actions: [{ settleMs: 800 }],
 })
 
 // ── 6. Tenant flows: auth pages, storefront, live survey ───────────────────

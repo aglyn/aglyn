@@ -58,7 +58,7 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  * path → output file (under static/img) + the text to wait for.
  * `annotate` draws numbered badges + outlines around the located elements
  * before the shot (the legend lives in the docs page that embeds it).
- * Run a subset with `--only=<out-substring>`.
+ * Run a subset with `--only=<out-substring>[,<out-substring>…]`.
  */
 const shots = [
   {
@@ -360,6 +360,23 @@ function chromeExecutable() {
   return { channel: 'chrome' }
 }
 
+// `--only=` takes a comma-separated list of `out` substrings, so re-shooting
+// a scattered handful of images is one signed-in run rather than one per
+// image.
+const only = process.argv
+  .find((arg) => arg.startsWith('--only='))
+  ?.slice('--only='.length)
+  .split(',')
+  .map((part) => part.trim())
+  .filter(Boolean)
+const selected = only?.length
+  ? shots.filter((shot) => only.some((part) => shot.out.includes(part)))
+  : shots
+if (!selected.length) {
+  console.error(`No shots match --only=${only?.join(',')}`)
+  process.exit(1)
+}
+
 const browser = await chromium.launch({ headless: true, ...chromeExecutable() })
 const context = await browser.newContext({
   viewport: { width: 1440, height: 900 },
@@ -372,6 +389,22 @@ const context = await browser.newContext({
 // field rather than anything pointing at compilation.
 context.setDefaultTimeout(TIMEOUT_MS)
 context.setDefaultNavigationTimeout(TIMEOUT_MS)
+
+// The AGL-663 pre-permission prompt arms itself 2.5s after mount, on every
+// page — and re-arms on every remount. Deleting it from the DOM after the
+// fact (stripChrome, below) was a race it kept winning: any shot with a
+// click, a scroll or a long settle caught it on the way back in, which is
+// how a dozen docs screenshots ended up with "Enable notifications" sitting
+// in the middle of them. Write the dismissal the component persists for
+// itself instead, before any app code runs, so the dialog never mounts at
+// all. Key and value mirror apps/console/components/notification-prompt.
+await context.addInitScript(() => {
+  try {
+    window.localStorage.setItem('aglyn:notification-prompt-dismissed', 'never')
+  } catch {
+    // Storage blocked — stripChrome() stays as the backstop.
+  }
+})
 
 // Sign in through the real UI once (see console.e2e.mjs for why).
 {
@@ -386,8 +419,10 @@ context.setDefaultNavigationTimeout(TIMEOUT_MS)
   await page.close()
 }
 
-// Pre-warm the routes so dev-server compiles don't distort waits.
-for (const shot of shots) {
+// Pre-warm the routes so dev-server compiles don't distort waits — the
+// selected ones only, so a re-capture of a handful of shots doesn't pay for
+// compiling all fifty.
+for (const shot of selected) {
   await fetch(`${BASE_URL}${shot.path}`).catch(() => undefined)
 }
 
@@ -429,18 +464,14 @@ async function annotate(page, marks) {
   }
 }
 
-const only = process.argv
-  .find((arg) => arg.startsWith('--only='))
-  ?.slice('--only='.length)
-
 let failures = 0
 /**
  * Removes what the docs must never show: the auth-emulator warning banner,
- * Next's dev indicator, and the AGL-663 notification pre-permission modal.
+ * Next's dev indicator, and — as a backstop to the seeded dismissal above —
+ * the AGL-663 notification pre-permission modal.
  *
- * Called both after the page settles AND again just before the shutter,
- * because the notification modal appears on a delay — stripping it only once
- * meant any shot with a scroll or a long settle caught it on the way back in.
+ * Called both after the page settles AND again just before the shutter, so
+ * the backstop still covers a modal that appears on a delay.
  */
 async function stripChrome(page) {
   // Not for docs: the auth-emulator warning banner and Next's dev
@@ -471,8 +502,7 @@ async function stripChrome(page) {
   })
 }
 
-for (const shot of shots) {
-  if (only && !shot.out.includes(only)) continue
+for (const shot of selected) {
   const page = await context.newPage()
   try {
     await page.goto(`${BASE_URL}${shot.path}`, {
@@ -515,5 +545,5 @@ for (const shot of shots) {
 }
 
 await browser.close()
-console.log(failures ? `\n${failures} shots failed` : `\nAll ${shots.length} shots captured`)
+console.log(failures ? `\n${failures} shots failed` : `\nAll ${selected.length} shots captured`)
 process.exit(failures ? 1 : 0)

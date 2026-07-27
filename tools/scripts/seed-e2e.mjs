@@ -291,6 +291,34 @@ await put(firestore.collection('hosts').doc(hostId), {
 const hostRef = firestore.collection('hosts').doc(hostId)
 const orgRef = firestore.collection('orgs').doc(orgId)
 
+/**
+ * `users/{uid}/hostMemberships/{hostId}` — the per-user site projection the
+ * site switcher reads (AGL-844). Written here by hand because the seed pokes
+ * Firestore directly and never runs `syncHostMemberships`, which is what
+ * maintains it in the app. Missing rows don't fail anything loudly: the
+ * switcher falls back to the subdomain, so every seeded console page rendered
+ * the chip as "demo" instead of "Demo Bakery" — which is exactly what a batch
+ * of docs screenshots then captured. Fields (and `nameLower`'s normalization)
+ * mirror `membershipRow` in libs/tenant/data/admin/…/host-memberships.ts.
+ */
+const putHostMembership = (uid, id, displayName, subdomain, role, org) =>
+  put(
+    firestore
+      .collection('users')
+      .doc(uid)
+      .collection('hostMemberships')
+      .doc(id),
+    {
+      orgId: org,
+      subdomain,
+      displayName,
+      nameLower: displayName.trim().replace(/\s+/g, ' ').toLowerCase(),
+      role,
+      createdAt: now,
+    },
+  )
+await putHostMembership(E2E_UID, hostId, 'Demo Bakery', hostId, 'admin', orgId)
+
 // ── Second org the SAME owner belongs to (AGL-621/622/623) ──────────────────
 // Gives the e2e user 2+ workspaces so the jump page shows a picker, the org
 // switcher has somewhere to switch to, and a cross-org URL can be exercised.
@@ -344,6 +372,14 @@ await put(firestore.collection('hosts').doc(E2E_HOST2_ID), {
   seo: { favicon: 'https://picsum.photos/seed/studiofav/64' },
   createdAt: now,
 })
+await putHostMembership(
+  E2E_UID,
+  E2E_HOST2_ID,
+  'Studio Site',
+  E2E_HOST2_SUBDOMAIN,
+  'admin',
+  E2E_ORG2_ID,
+)
 
 // ── Non-staff-owned org (impersonation success path) ────────────────────────
 // Minimal but complete: the org doc + both membership mirrors, enough for
