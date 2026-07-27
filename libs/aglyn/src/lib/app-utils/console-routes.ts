@@ -32,6 +32,10 @@ export enum Route {
   ADMIN_USER_DETAIL = '/admin/users/[uid]',
   ADMIN_FLAGS = '/admin/flags',
   ADMIN_PLUGIN_REVIEWS = '/admin/plugin-reviews',
+  // One submission or listed plugin in full (AGL-959): the queue index is
+  // for scanning, this is where a reviewer reads the manifest, weighs the
+  // verifier findings and acts.
+  ADMIN_PLUGIN_REVIEW = '/admin/plugin-reviews/[listingId]',
   // Staff support-ticket queue (AGL-849): the operator side of the
   // subscriber `MANAGE_SUPPORT` page — every org's tickets in one place.
   ADMIN_SUPPORT = '/admin/support',
@@ -149,6 +153,7 @@ export interface RoutePayload {
   [Route.ADMIN_USER_DETAIL]: { uid: string }
   [Route.ADMIN_FLAGS]: undefined
   [Route.ADMIN_PLUGIN_REVIEWS]: undefined
+  [Route.ADMIN_PLUGIN_REVIEW]: { listingId: string }
   [Route.ADMIN_SUPPORT]: undefined
   [Route.ADMIN_EMAILS]: undefined
   [Route.ADMIN_EMAIL_BESIGNER]: { templateKey: string; versionId: string }

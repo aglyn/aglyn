@@ -17,6 +17,7 @@
 
 import {
   checkPluginBundle,
+  PLUGIN_HOST_ABI_VERSION,
   pluginArtifactPath,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
@@ -52,8 +53,109 @@ const ACTIONS: Record<string, string> = {
   reject: 'rejected',
 }
 
+/**
+ * One listing in full, for the detail page (AGL-959). The index deals in
+ * rows; everything a reviewer needs to actually decide — manifest,
+ * capabilities, ABI, verifier findings, per-version trust, takedown state —
+ * is assembled here rather than smeared across the list payload.
+ */
+async function listingDetail(
+  firestore: FirebaseFirestore.Firestore,
+  listingId: string,
+): Promise<Response> {
+  const listingRef = firestore.collection('communityListings').doc(listingId)
+  const snapshot = await listingRef.get()
+  const listing = snapshot.data()
+  if (!listing) {
+    return Response.json({ error: 'Unknown listing' }, { status: 404 })
+  }
+
+  const versionsSnapshot = await listingRef
+    .collection('pluginVersions')
+    .orderBy('publishedAt', 'desc')
+    .limit(25)
+    .get()
+  const versions = versionsSnapshot.docs.map((doc) => {
+    const publishedAt = doc.get('publishedAt')
+    return {
+      version: String(doc.get('version') ?? doc.id),
+      trust: doc.get('trust') ?? null,
+      sha256: String(doc.get('sha256') ?? ''),
+      hostAbi: Number(doc.get('manifest.hostAbi')) || null,
+      capabilities: doc.get('manifest.capabilities') ?? {},
+      publishedAt: publishedAt?.toDate?.()?.toISOString() ?? null,
+      signed: Boolean(doc.get('signature')),
+    }
+  })
+
+  // Publisher is an ORG since AGL-652 — show the name, not the raw id.
+  const publisherId = String(listing.profileId ?? '')
+  const publisher = publisherId
+    ? await firestore.collection('orgs').doc(publisherId).get()
+    : null
+
+  // Kill switch, so the page can say whether the plugin is actually stopped
+  // rather than only de-listed (AGL-948).
+  const revocation = (
+    await firestore.collection('revocations').doc(listingId).get()
+  ).data()
+
+  // Verifier re-run against the stored artifact for the version under
+  // review — the same AGL-426 checks the publish API enforced, re-run so a
+  // reviewer never has to trust the publish-time verdict.
+  const reviewVersion = String(listing.latestVersion ?? '')
+  const artifactsBucket = process.env.PLUGIN_ARTIFACTS_BUCKET
+  const reviewSha = versions.find((entry) => entry.version === reviewVersion)
+    ?.sha256
+  let verifier: unknown = null
+  if (artifactsBucket && reviewSha) {
+    try {
+      const [bytes] = await firebaseAdmin
+        .app()
+        .storage()
+        .bucket(artifactsBucket)
+        .file(pluginArtifactPath(listingId, reviewVersion, reviewSha))
+        .download()
+      verifier = checkPluginBundle(bytes.toString('utf8'))
+    } catch {
+      verifier = { error: 'artifact unavailable' }
+    }
+  }
+
+  return Response.json(
+    {
+      listingId,
+      displayName: listing.displayName ?? listingId,
+      description: listing.description ?? '',
+      readme: listing.readme ?? '',
+      license: listing.license ?? '',
+      categories: listing.categories ?? [],
+      homepageUrl: listing.homepageUrl ?? '',
+      repositoryUrl: listing.repositoryUrl ?? '',
+      publisherId,
+      publisherName: publisher?.get('name') ?? publisherId,
+      publisherSlug: publisher?.get('slug') ?? null,
+      reviewStatus: listing.reviewStatus ?? 'submitted',
+      rejectionReason: listing.rejectionReason ?? '',
+      priceUsd: Number(listing.priceUsd ?? 0),
+      latestVersion: reviewVersion,
+      activeInstalls: Number(listing.activeInstalls ?? 0),
+      hidden: Boolean(listing.hiddenAt),
+      hiddenReason: String(listing.hiddenReason ?? ''),
+      revoked: Boolean(revocation),
+      revokedVersions: revocation?.versions ?? null,
+      unpublished: Boolean(listing.deletedAt),
+      platformHostAbi: PLUGIN_HOST_ABI_VERSION,
+      versions,
+      verifier,
+    },
+    { status: 200 },
+  )
+}
+
 async function handler(request: Request): Promise<Response> {
-  const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const { method, body, query, headers: rawHeaders } =
+    await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   const authorization = headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
@@ -72,56 +174,34 @@ async function handler(request: Request): Promise<Response> {
     const firestore = firebaseAdmin.app().firestore()
 
     if (method === 'GET') {
+      const detailId = String(query['listingId'] ?? '')
+      if (detailId) return listingDetail(firestore, detailId)
+
       const snapshot = await firestore
         .collection('communityListings')
         .where('type', '==', 'plugin')
         .where('reviewStatus', 'in', ['submitted', 'in_review'])
         .limit(50)
         .get()
-      const artifactsBucket = process.env.PLUGIN_ARTIFACTS_BUCKET
-      const queue = await Promise.all(
-        snapshot.docs.map(async (doc) => {
-          const listing = doc.data()
-          const version = String(listing.latestVersion ?? '')
-          const versionDoc = (
-            await doc.ref.collection('pluginVersions').doc(version).get()
-          ).data()
-          // Verifier re-run (AGL-426) against the stored artifact, when
-          // the bucket is reachable — reviewers see fresh findings.
-          let verifier: unknown = null
-          if (artifactsBucket && versionDoc?.sha256) {
-            try {
-              const [bytes] = await firebaseAdmin
-                .app()
-                .storage()
-                .bucket(artifactsBucket)
-                .file(pluginArtifactPath(doc.id, version, versionDoc.sha256))
-                .download()
-              verifier = checkPluginBundle(bytes.toString('utf8'))
-            } catch {
-              verifier = { error: 'artifact unavailable' }
-            }
-          }
-          return {
-            listingId: doc.id,
-            displayName: listing.displayName ?? doc.id,
-            description: listing.description ?? '',
-            readme: listing.readme ?? '',
-            license: listing.license ?? '',
-            categories: listing.categories ?? [],
-            homepageUrl: listing.homepageUrl ?? '',
-            repositoryUrl: listing.repositoryUrl ?? '',
-            profileId: listing.profileId,
-            reviewStatus: listing.reviewStatus,
-            priceUsd: Number(listing.priceUsd ?? 0),
-            version,
-            capabilities: versionDoc?.manifest?.capabilities ?? {},
-            hostAbi: versionDoc?.manifest?.hostAbi ?? null,
-            trust: versionDoc?.trust ?? null,
-            verifier,
-          }
-        }),
-      )
+      // Rows only (AGL-961). This used to DOWNLOAD every queued bundle to
+      // re-run the verifier, so the index paid a Storage round trip per
+      // submission before it could paint. The verifier now runs on the
+      // detail page, for the one listing being read.
+      const queue = snapshot.docs.map((doc) => {
+        const listing = doc.data()
+        return {
+          listingId: doc.id,
+          displayName: listing.displayName ?? doc.id,
+          description: listing.description ?? '',
+          license: listing.license ?? '',
+          categories: listing.categories ?? [],
+          profileId: listing.profileId,
+          reviewStatus: listing.reviewStatus,
+          priceUsd: Number(listing.priceUsd ?? 0),
+          version: String(listing.latestVersion ?? ''),
+          hidden: Boolean(listing.hiddenAt),
+        }
+      })
       // Listed/verified plugins with per-version trust (AGL-885): once a
       // listing leaves the queue the Grant/Revoke realm-trust actions used
       // to leave with it — revoking a live plugin's trust required a
@@ -141,23 +221,50 @@ async function handler(request: Request): Promise<Response> {
             .orderBy('publishedAt', 'desc')
             .limit(10)
             .get()
+          const versions = versionsSnapshot.docs.map((versionDoc) => ({
+            version: String(versionDoc.get('version') ?? versionDoc.id),
+            trust: versionDoc.get('trust') ?? null,
+          }))
           return {
             listingId: doc.id,
             displayName: listing.displayName ?? doc.id,
             reviewStatus: listing.reviewStatus,
+            profileId: listing.profileId,
             latestVersion: String(listing.latestVersion ?? ''),
-            // Takedown state (AGL-952), so the page can render the current
-            // verdict rather than a button whose effect staff can't see.
+            // Takedown state (AGL-952), so a row shows the current verdict
+            // rather than sending a reviewer into the detail page to find
+            // out whether the plugin is stopped.
             hidden: Boolean(listing.hiddenAt),
             hiddenReason: String(listing.hiddenReason ?? ''),
-            versions: versionsSnapshot.docs.map((versionDoc) => ({
-              version: String(versionDoc.get('version') ?? versionDoc.id),
-              trust: versionDoc.get('trust') ?? null,
-            })),
+            // Summarised for the row; the per-version controls live on the
+            // detail page (AGL-960).
+            realmVersions: versions.filter((entry) => entry.trust === 'realm')
+              .length,
+            versionCount: versions.length,
+            versions,
           }
         }),
       )
-      return Response.json({ queue, listed }, { status: 200 })
+
+      // Publisher names for scanning (AGL-961) — a listing id tells a
+      // reviewer nothing. One batched read for both sections.
+      const publisherIds = [
+        ...new Set(
+          [...queue, ...listed]
+            .map((entry) => String(entry.profileId ?? ''))
+            .filter(Boolean),
+        ),
+      ]
+      const publishers: Record<string, string> = {}
+      if (publisherIds.length) {
+        const docs = await firestore.getAll(
+          ...publisherIds.map((id) => firestore.collection('orgs').doc(id)),
+        )
+        for (const doc of docs) {
+          if (doc.exists) publishers[doc.id] = String(doc.get('name') ?? doc.id)
+        }
+      }
+      return Response.json({ queue, listed, publishers }, { status: 200 })
     }
 
     if (method !== 'POST') {
