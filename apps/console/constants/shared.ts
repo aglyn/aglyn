@@ -28,6 +28,18 @@ export const TABLE_ROW_HEIGHT = 48
  */
 export const TABLE_HEAD_HEIGHT = 48
 
+/**
+ * Canonical, published legal documents. These are hosted on the production
+ * marketing site (aglyn.com), not the console, so they are absolute
+ * cross-origin URLs opened in a new tab — a full navigation, not in-SPA
+ * routing (hence a plain anchor / MUI Link, not AppLink). Always point at
+ * production so users see the canonical published terms from every env.
+ */
+export const LEGAL_URLS = {
+  TERMS: 'https://aglyn.com/legal/terms',
+  PRIVACY: 'https://aglyn.com/legal/privacy',
+}
+
 export const mainNavigation = [
   // {
   //   children: 'Features',

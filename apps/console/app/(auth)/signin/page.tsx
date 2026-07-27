@@ -56,6 +56,7 @@ import {
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
+import { AuthLegalNotice } from '../../../components/auth-legal-consent.component'
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
 import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-signin'
 import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
@@ -245,6 +246,7 @@ function SignIn() {
           {'Google'}
         </Button>
       </Stack>
+      <AuthLegalNotice />
     </AuthFormComponent>
   );
 }
