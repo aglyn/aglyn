@@ -51,14 +51,17 @@ function isKind(value: unknown): value is HostCollectionKind {
  * mistaking it for catalog is what puts those entries in reach of a delete.
  */
 export function hostCollectionKind(
-  data: Record<string, unknown> | null | undefined,
+  data: object | null | undefined,
 ): HostCollectionKind {
   if (!data) return 'content'
-  if (isKind(data['kind'])) return data['kind']
+  // Accepts any object shape — callers pass typed rows (HostCollection) as
+  // readily as raw Firestore data.
+  const fields = data as Record<string, unknown>
+  if (isKind(fields['kind'])) return fields['kind']
   if (
-    data['mode'] !== undefined ||
-    data['rules'] !== undefined ||
-    data['productIds'] !== undefined
+    fields['mode'] !== undefined ||
+    fields['rules'] !== undefined ||
+    fields['productIds'] !== undefined
   ) {
     return 'catalog'
   }
@@ -67,6 +70,6 @@ export function hostCollectionKind(
 
 /** Filter helper: `docs.filter(isHostCollectionKind('catalog'))`. */
 export function isHostCollectionKind(kind: HostCollectionKind) {
-  return (data: Record<string, unknown> | null | undefined): boolean =>
+  return (data: object | null | undefined): boolean =>
     hostCollectionKind(data) === kind
 }
