@@ -96,7 +96,14 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
         {children}
       </Button>
     ) : (
-      <IconButton key={itemKey} color="inherit" {...rest}>
+      <IconButton
+        key={itemKey}
+        color="inherit"
+        // AGL-752: an `href` or a custom `component` resolves this to an <a>,
+        // same as the text branch above.
+        {...(rest.href || rest.component ? { nativeButton: false } : {})}
+        {...rest}
+      >
         {!avatar ? (
           !icon?.path ? (
             icon
@@ -197,6 +204,10 @@ const TopAppBar = (props: TopAppBarProps) => {
           >
             {backButton && (
               <Button
+                // AGL-752: every caller passes `component: AppLink`, which
+                // resolves to an <a>; declare it so MUI v7's button-root check
+                // stays quiet. Overridable by the caller via the spread below.
+                {...(backButton.component ? { nativeButton: false } : {})}
                 {...backButton}
                 sx={{
                   minWidth: 'unset',
