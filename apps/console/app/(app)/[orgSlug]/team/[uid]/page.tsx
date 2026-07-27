@@ -46,6 +46,7 @@ import AuthenticatedLayout from '../../../../../components/layouts/authenticated
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
+import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
@@ -189,6 +190,56 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
       setBusy(false)
     }
   }, [member, confirm, request, router, enqueueSnackbar])
+
+  // Password help (AGL-913). Eligibility comes from the server because it
+  // depends on things the member list never carries — staff claims and
+  // whether the account also belongs to another organization.
+  const [passwordInfo, setPasswordInfo] = useState<{
+    email: string | null
+    canSetPassword: boolean
+    blockedReason: string | null
+  } | null>(null)
+  useEffect(() => {
+    if (!canManage || !currentOrg?.$id || !uid) return
+    let active = true
+    void (async () => {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch(
+          `/api/orgs/members/password?orgId=${encodeURIComponent(
+            currentOrg.$id,
+          )}&uid=${encodeURIComponent(uid)}`,
+          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
+        )
+        if (!response.ok) return
+        const payload = await response.json()
+        if (active) setPasswordInfo(payload)
+      } catch (error) {
+        console.error(error)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [canManage, currentOrg?.$id, uid, user])
+
+  const passwordRequest = useCallback(
+    async (payload: Record<string, unknown>) => {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/orgs/members/password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ orgId: currentOrg?.$id, uid, ...payload }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result?.error ?? 'Request failed')
+      return result
+    },
+    [user, currentOrg?.$id, uid],
+  )
 
   const displayName = member?.displayName || member?.email || uid
   const isOwnerRow = member?.role === 'owner'
@@ -393,6 +444,40 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                 </Stack>
               </CardDisplay>
             )}
+            {canManage && member && passwordInfo ? (
+              <CardDisplay
+                header={'Password'}
+                help={docsHelp('inviteTeammates', {
+                  anchor: '#how-team-members-act',
+                  excerpt:
+                    'Email this member a password reset link, or set a ' +
+                    'password for them when their account belongs to this ' +
+                    'organization alone.',
+                })}
+                contentGutterX
+                contentGutterY
+              >
+                <Stack sx={{ maxWidth: 480 }}>
+                  <PasswordAdminControls
+                    email={passwordInfo.email}
+                    subjectLabel={displayName}
+                    description={
+                      'For a teammate who cannot get into their Aglyn ' +
+                      'account. Aglyn accounts are personal and can span ' +
+                      'several organizations, so a reset email is the ' +
+                      'normal route.'
+                    }
+                    setPasswordBlockedReason={passwordInfo.blockedReason}
+                    onSendReset={async () => {
+                      await passwordRequest({ action: 'sendPasswordReset' })
+                    }}
+                    onSetPassword={async (password) => {
+                      await passwordRequest({ action: 'setPassword', password })
+                    }}
+                  />
+                </Stack>
+              </CardDisplay>
+            ) : null}
             {currentOrg?.$id ? (
               // Changes made TO this member (role/access edits), AGL-389.
               <OrgActivityCard
