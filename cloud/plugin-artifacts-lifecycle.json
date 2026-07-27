@@ -1,0 +1,12 @@
+{
+  "$comment": "Lifecycle policy for the isolated plugin-artifacts bucket (AGL-944). Apply with: gcloud storage buckets update gs://$PLUGIN_ARTIFACTS_BUCKET --lifecycle-file=cloud/plugin-artifacts-lifecycle.json  — read it back with: gcloud storage buckets describe gs://$PLUGIN_ARTIFACTS_BUCKET --format='value(lifecycle_config)'. Revert with --clear-lifecycle.",
+  "$why": "AbortIncompleteMultipartUpload is the ONLY rule that is safe on this bucket. It reaps abandoned partial uploads and can never touch a finished object, so a published bundle is out of its reach by construction. There is deliberately NO age-based Delete rule: lifecycle matches on age/class/prefix and has no view of Firestore, while installs pin bundles by exact sha256 and the bucket has no object versioning — an aged-out bundle would 404 the loader and disable that plugin for every workspace pinned to it, unrecoverably. Reclaiming real orphans is a Firestore join instead: POST /api/admin/reap-plugin-artifacts (AGL-942), weekly. See docs/PLUGIN_LOADING.md.",
+  "lifecycle": {
+    "rule": [
+      {
+        "action": { "type": "AbortIncompleteMultipartUpload" },
+        "condition": { "age": 7 }
+      }
+    ]
+  }
+}

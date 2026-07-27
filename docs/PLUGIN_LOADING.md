@@ -227,6 +227,32 @@ class and prefix, and has no view of Firestore. An age-based delete rule
 would eventually remove bundles that live installs pin by exact sha, which
 breaks them unrecoverably.
 
+### The one safe lifecycle rule (AGL-944)
+
+`cloud/plugin-artifacts-lifecycle.json` carries the bucket's policy:
+`AbortIncompleteMultipartUpload` at 7 days, and nothing else. It reaps
+abandoned partial uploads and cannot touch a finished object, so a
+published bundle is out of its reach by construction. There is
+deliberately **no `Delete` rule** — see above for why age is not a safe
+signal here.
+
+```
+gcloud storage buckets update gs://$PLUGIN_ARTIFACTS_BUCKET \
+  --lifecycle-file=cloud/plugin-artifacts-lifecycle.json
+gcloud storage buckets describe gs://$PLUGIN_ARTIFACTS_BUCKET \
+  --format='value(lifecycle_config)'          # read it back
+```
+
+Revert with `--clear-lifecycle`. The bucket is a plain GCS bucket in the
+`aglyn-main` project, never registered with Firebase Storage, so it does
+not appear in the Firebase console's Storage tab (only
+`aglyn-main.appspot.com` is) — use the Cloud console or `gcloud`. Keep it
+that way: registering it would put it behind Firebase Security Rules and
+make it addressable from the client SDKs, when the whole design has the
+console's `/api/plugin-artifacts/…` route as the only read path. Billing
+is unaffected either way — same project, same Cloud Billing account as
+Firebase, just Cloud Storage SKUs rather than the Firebase Storage line.
+
 ## Publish → sign → load walkthrough
 
 1. Author builds with the realm rollup template; entry exports
