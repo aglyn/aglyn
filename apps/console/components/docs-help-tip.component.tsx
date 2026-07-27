@@ -17,7 +17,7 @@
 'use client'
 
 import { mdiHelpCircleOutline, mdiOpenInNew } from '@aglyn/shared-data-mdi'
-import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import {
   IconButton,
@@ -79,8 +79,8 @@ export function DocsHelpTip(props: DocsHelpTipProps) {
         </Stack>
       }
     >
-      <AppLink
-        componentVariant="icon-button"
+      <IconButton
+        component="a"
         href={href}
         target="_blank"
         rel="noopener noreferrer"
@@ -95,7 +95,7 @@ export function DocsHelpTip(props: DocsHelpTipProps) {
         )}
       >
         <MdiIcon path={mdiHelpCircleOutline.path} fontSize="inherit" />
-      </AppLink>
+      </IconButton>
     </Tooltip>
   )
 }
