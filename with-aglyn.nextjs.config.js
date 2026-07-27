@@ -460,15 +460,7 @@ const AGLYN_CONFIG = {
  * @param nextConfig {import('./with-aglyn.nextjs.config').WithAglynOptions}
  **/
 function withAglyn(nextConfig = {}) {
-  // Never log the secret's VALUE: this runs on every build and every server
-  // start, for every app that uses withAglyn, so the value landed in Vercel's
-  // build and runtime logs. Whether it is configured is the only useful bit.
-  console.log(
-    'process.env.NODE_ENV',
-    NODE_ENV,
-    '; CSRF_SECRET',
-    process.env.CSRF_SECRET ? '[set]' : '[unset]',
-  )
+  console.log('process.env.NODE_ENV', NODE_ENV)
 
   /**
    * Base configuration for NextJS Apps next.config.js

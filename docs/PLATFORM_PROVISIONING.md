@@ -29,13 +29,6 @@ Sections (each skips with instructions when its credential is absent):
 | Vercel env sync | Upserts the console/tenant projects' env vars from the current shell (incl. `ANTHROPIC_API_KEY` for AI assist, AGL-89) | `VERCEL_TOKEN`, `VERCEL_CONSOLE_PROJECT_ID`, `VERCEL_TENANT_PROJECT_ID` (+ `VERCEL_TEAM_ID`) |
 | Staff claim | Grants the `staff` custom claim via `set-staff-claim.mjs` | `FIREBASE_PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY` + `--staff <uid-or-email>` |
 
-### Set by hand, not by the bootstrapper
-
-`CSRF_SECRET` on the **www** project. It isn't part of the env sync above (which
-covers console and tenant), and `apps/www` **fails closed without it** — form
-endpoints return 500 by design. See [`docs/CSRF.md`](CSRF.md), which also tracks an
-outstanding rotation.
-
 ## What tenants get automatically (no setup)
 
 - Host + subdomain on the shared tenant edge (create host in the console)
@@ -69,4 +62,3 @@ which warns that an index deploy also reconciles `fieldOverrides`.
 
 - Stripe specifics: `docs/STRIPE_GO_LIVE.md`
 - Content security posture: `docs/SECURITY_CONTENT_REVIEW.md`
-- CSRF secret + outstanding rotation: `docs/CSRF.md`

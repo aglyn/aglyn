@@ -16,10 +16,7 @@
  */
 
 import {HttpStatusCode} from '@aglyn/shared-data-enums'
-import {
-  withCsrfTokenHeader,
-  withIdTokenHeader,
-} from '@aglyn/shared-util-rest-api'
+import {withIdTokenHeader} from '@aglyn/shared-util-rest-api'
 import type {NextApiHandler} from 'next'
 import {verifyIdToken} from '../../firebase/fb-admin'
 
@@ -41,19 +38,6 @@ export const requireIdToken = <T = any>(handler: NextApiHandler<T>): NextApiHand
   }) as any)
 }
 
-export const requireCsrfToken = <T = any>(handler: NextApiHandler<T>): NextApiHandler<T> => {
-  return withCsrfTokenHeader((async (req, res) => {
-    if (req['csrfToken'] !== req.cookies.csrfToken) {
-      return res.status(HttpStatusCode.UNAUTHORIZED).json({
-        status: 'error',
-        error: { message: 'CSRF mismatch. Possible break-in attempt!' },
-        statusMessage: 'Invalid request',
-      } as T)
-    }
-    await handler(req, res)
-  }) as any)
-}
-
-export const secureRequest = <T = any>(handler: NextApiHandler<T>, withCsrf?: boolean) => {
-  return withCsrf ? requireIdToken(requireCsrfToken(handler)) : requireIdToken(handler)
+export const secureRequest = <T = any>(handler: NextApiHandler<T>) => {
+  return requireIdToken(handler)
 }
