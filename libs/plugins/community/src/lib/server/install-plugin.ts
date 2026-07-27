@@ -25,7 +25,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
-import { listingArtifactType } from '../model/community'
+import { isListingBrowsable, listingArtifactType } from '../model/community'
 
 /**
  * Installs (or upgrades) a community plugin into a host (AGL-45), pinning a
@@ -181,6 +181,23 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
       listingArtifactType(listing) !== 'plugin'
     ) {
       return res.status(404).json({ error: 'Unknown plugin listing' })
+    }
+
+    // Installs enforce the same review state the marketplace browses by
+    // (AGL-965). `isListingBrowsable` used to be applied ONLY by the browse
+    // UI, so a listing that was never reviewed, was rejected, or has since
+    // been de-listed could still be installed by anyone who knew its id and
+    // posted here directly — which also made "delist" a suggestion rather
+    // than a control. The publisher keeps installing their own listing to
+    // test it before review.
+    if (!isListingBrowsable(listing) && !(await canActAsPublisher(
+      firestore,
+      decoded.uid,
+      listing.profileId,
+    ))) {
+      return res
+        .status(409)
+        .json({ error: 'This plugin is not available for install' })
     }
 
     const priceUsd = Number(listing.priceUsd ?? 0)

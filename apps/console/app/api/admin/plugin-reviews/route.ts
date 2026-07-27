@@ -63,6 +63,14 @@ const ACTIONS: Record<string, string> = {
   list: 'listed',
   verify: 'verified',
   reject: 'rejected',
+  // Moves BACK down the ladder (AGL-965). Review used to be a one-way
+  // ratchet: the only retreats were `reject`, which reads as a verdict on
+  // the whole listing and notifies the publisher as such, and takedown,
+  // which is the kill switch and stops the plugin in every workspace that
+  // already installed it. Neither expresses "pull it from the marketplace
+  // while we look again, without breaking the sites already using it".
+  delist: 'in_review',
+  unverify: 'listed',
 }
 
 /**
@@ -533,7 +541,10 @@ async function handler(request: Request): Promise<Response> {
     )
 
     // Tell the publisher their listing moved (rejections especially).
-    if (listing.profileId && (action === 'reject' || action === 'list' || action === 'verify')) {
+    if (
+      listing.profileId &&
+      ['reject', 'list', 'verify', 'delist'].includes(action)
+    ) {
       // Publishers are ORGS now (AGL-652), so `profileId` is an org id —
       // writing to users/{profileId}/notifications silently dropped every
       // verdict into a user document nobody reads. Notify the org's managers.
@@ -549,8 +560,17 @@ async function handler(request: Request): Promise<Response> {
           title:
             action === 'reject'
               ? `"${listing.displayName}" was rejected`
-              : `"${listing.displayName}" is now ${nextStatus}`,
-          body: action === 'reject' ? reason : 'Your plugin passed review.',
+              : action === 'delist'
+                ? `"${listing.displayName}" is back in review`
+                : `"${listing.displayName}" is now ${nextStatus}`,
+          body:
+            action === 'reject'
+              ? reason
+              : action === 'delist'
+                ? reason ||
+                  'It has been removed from the marketplace while we take ' +
+                    'another look. Existing installs keep working.'
+                : 'Your plugin passed review.',
           orgId: publisherOrgId,
           link: publisherSlug
             ? buildRoute(Route.MANAGE_COMMUNITY_PROFILE, {
