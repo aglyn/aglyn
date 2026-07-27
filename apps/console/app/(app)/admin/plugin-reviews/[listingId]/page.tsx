@@ -40,6 +40,7 @@ import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { PLUGIN_REVIEW_CHECKLIST } from '../../../../../constants/plugin-review-checklist'
+import { reviewStatusMeaning } from '../../../../../constants/plugin-review-status'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 
@@ -220,6 +221,9 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
     setTakedownReason('')
   }, [detail, takedownReason, post, enqueueSnackbar])
 
+  const status = reviewStatusMeaning(detail?.reviewStatus ?? '')
+  const blocked = (detail?.checklistOutstanding.length ?? 0) > 0
+
   const findings = (detail?.verifier?.problems ?? [])
     .slice()
     .sort(
@@ -269,7 +273,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                     >
-                      <Chip size="small" label={detail.reviewStatus} />
+                      <Chip size="small" color={status.color} label={status.label} />
                       <Chip
                         size="small"
                         variant="outlined"
@@ -304,6 +308,9 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         />
                       ) : null}
                     </Stack>
+                    <Typography variant="caption" color="text.secondary">
+                      {status.meaning}
+                    </Typography>
                     <Typography variant="body2" color="text.secondary">
                       {'Publisher: '}
                       {detail.publisherSlug ? (
@@ -320,6 +327,17 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       )}
                       {` · ${detail.listingId}`}
                     </Typography>
+                    {/* Grandfathering (AGL-965): plugins listed before the
+                        checklist existed are still listed — retroactively
+                        emptying the marketplace would be worse than the gap
+                        — but staff should be able to see which ones carry
+                        no recorded review for the bytes running today. */}
+                    {['listed', 'verified'].includes(detail.reviewStatus) &&
+                    detail.checklistOutstanding.length ? (
+                      <Alert severity="warning">
+                        {`Live in the marketplace with no recorded review for these bytes (${detail.checklistOutstanding.length} required item(s) outstanding). Work through the checklist, or delist while you do.`}
+                      </Alert>
+                    ) : null}
                     {detail.rejectionReason ? (
                       <Alert severity="error">
                         {`Rejected: ${detail.rejectionReason}`}
@@ -534,6 +552,11 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                   </Stack>
                 </CardDisplay>
 
+                {/* Verdicts, ordered by consequence rather than by the
+                    order they were built (AGL-966). The old card was a flat
+                    row of same-weight text buttons where "List" — the click
+                    that makes a plugin installable by every workspace — sat
+                    between "Start review" and a rejection box. */}
                 <CardDisplay
                   header="Review verdict"
                   contentGutterX
@@ -544,59 +567,167 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       'Move this submission through the review lifecycle — list, verify, or reject with a reason.',
                   })}
                 >
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                  >
-                    <Button
-                      size="small"
-                      disabled={busy}
-                      onClick={() =>
-                        void post({ action: 'start-review' }, 'Now in review')
-                      }
-                    >
-                      {'Start review'}
-                    </Button>
-                    {/* Listing is what puts the plugin in front of every
-                        workspace, so it carries the same bar as the badge. */}
-                    <Button
-                      size="small"
-                      variant="contained"
-                      disabled={busy || detail.checklistOutstanding.length > 0}
-                      onClick={() => void post({ action: 'list' }, 'Listed')}
-                    >
-                      {detail.checklistOutstanding.length
-                        ? `List (${detail.checklistOutstanding.length} left)`
-                        : 'List'}
-                    </Button>
-                    <Button
-                      size="small"
-                      color="success"
-                      disabled={busy || detail.checklistOutstanding.length > 0}
-                      onClick={() => void post({ action: 'verify' }, 'Verified')}
-                    >
-                      {detail.checklistOutstanding.length
-                        ? `Verify ✓ (${detail.checklistOutstanding.length} left)`
-                        : 'Verify ✓'}
-                    </Button>
-                    <TextField
-                      size="small"
-                      placeholder="Rejection reason"
-                      value={reason}
-                      onChange={(event) => setReason(event.target.value)}
-                      sx={{ minWidth: 240 }}
-                    />
-                    <Button
-                      size="small"
-                      color="error"
-                      disabled={busy}
-                      onClick={() =>
-                        void post({ action: 'reject', reason }, 'Rejected')
-                      }
-                    >
-                      {'Reject'}
-                    </Button>
+                  <Stack spacing={2}>
+                    <Stack spacing={0.5}>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <Typography variant="body2">{'Currently:'}</Typography>
+                        <Chip
+                          size="small"
+                          color={status.color}
+                          label={status.label}
+                        />
+                        {status.live ? (
+                          <Chip size="small" color="warning" label="Live to customers" />
+                        ) : (
+                          <Chip size="small" variant="outlined" label="Not installable" />
+                        )}
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {status.meaning}
+                      </Typography>
+                    </Stack>
+
+                    <Divider />
+
+                    {/* Forward. One primary action, captioned with its
+                        actual effect, so nobody has to know that listed and
+                        verified differ only by a badge. */}
+                    <Stack spacing={0.5}>
+                      <Typography variant="subtitle2">{'Advance'}</Typography>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        {detail.reviewStatus === 'submitted' ? (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            disabled={busy}
+                            onClick={() =>
+                              void post({ action: 'start-review' }, 'Now in review')
+                            }
+                          >
+                            {'Start review'}
+                          </Button>
+                        ) : null}
+                        {detail.reviewStatus !== 'listed' &&
+                        detail.reviewStatus !== 'verified' ? (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            disabled={busy || blocked}
+                            onClick={() => void post({ action: 'list' }, 'Listed')}
+                          >
+                            {'List'}
+                          </Button>
+                        ) : null}
+                        {detail.reviewStatus !== 'verified' ? (
+                          <Button
+                            size="small"
+                            variant={
+                              detail.reviewStatus === 'listed'
+                                ? 'contained'
+                                : 'outlined'
+                            }
+                            color="success"
+                            disabled={busy || blocked}
+                            onClick={() => void post({ action: 'verify' }, 'Verified')}
+                          >
+                            {'Verify ✓'}
+                          </Button>
+                        ) : null}
+                        {detail.reviewStatus === 'verified' ? (
+                          <Typography variant="body2" color="text.secondary">
+                            {'Nothing further — this is the top of the ladder.'}
+                          </Typography>
+                        ) : null}
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {'List makes it installable by every workspace. ' +
+                          'Verify does the same and adds the badge — so if it ' +
+                          'is not ready to install, it is not ready for either. ' +
+                          'This ladder decides DISTRIBUTION (who can install ' +
+                          'it), for the whole listing. What the code is allowed ' +
+                          'to do once installed is a separate, per-version ' +
+                          'decision — see Versions below.'}
+                      </Typography>
+                      {blocked ? (
+                        <Alert severity="info" sx={{ mt: 0.5 }}>
+                          {`Blocked: ${detail.checklistOutstanding.length} required checklist item(s) outstanding for these bytes.`}
+                        </Alert>
+                      ) : null}
+                    </Stack>
+
+                    <Divider />
+
+                    {/* Back down the ladder. Never checklist-gated — a
+                        retreat must always be available — and deliberately
+                        quieter than the danger zone below, which is the only
+                        control that reaches code already running. */}
+                    <Stack spacing={0.5}>
+                      <Typography variant="subtitle2">{'Step back'}</Typography>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <TextField
+                          size="small"
+                          placeholder="Reason (required to reject)"
+                          value={reason}
+                          onChange={(event) => setReason(event.target.value)}
+                          sx={{ minWidth: 260 }}
+                        />
+                        {status.live ? (
+                          <Button
+                            size="small"
+                            color="warning"
+                            disabled={busy}
+                            onClick={() =>
+                              void post(
+                                { action: 'delist', reason },
+                                'Delisted — back in review',
+                              )
+                            }
+                          >
+                            {'Delist'}
+                          </Button>
+                        ) : null}
+                        {detail.reviewStatus === 'verified' ? (
+                          <Button
+                            size="small"
+                            disabled={busy}
+                            onClick={() =>
+                              void post({ action: 'unverify' }, 'Badge removed')
+                            }
+                          >
+                            {'Unverify'}
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="small"
+                          color="error"
+                          disabled={busy}
+                          onClick={() =>
+                            void post({ action: 'reject', reason }, 'Rejected')
+                          }
+                        >
+                          {'Reject'}
+                        </Button>
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {'Delist pulls it from the marketplace and blocks new ' +
+                          'installs; existing installs keep working. Unverify ' +
+                          'only drops the badge. Reject notifies the publisher. ' +
+                          'None of these stop code already running — that is ' +
+                          'the danger zone.'}
+                      </Typography>
+                    </Stack>
                   </Stack>
                 </CardDisplay>
 
@@ -607,6 +738,24 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         'the app realm instead of the sandbox iframe. ' +
                         'Super-staff only, audited.'}
                     </Typography>
+                    {/* The two axes get conflated constantly (AGL-966):
+                        review status is per LISTING and controls who can
+                        install; trust is per VERSION and controls what the
+                        code can reach once installed. Verified is not realm
+                        trust, and realm trust is the far more dangerous of
+                        the two. */}
+                    <Alert severity="info">
+                      {'This is a different axis from the review verdict above. ' +
+                        'Listing and verifying apply to the whole listing and ' +
+                        'decide who may install it. Trust applies to ONE ' +
+                        'version and decides where its code runs: sandboxed in ' +
+                        'a cross-origin iframe capped by the manifest CSP, or ' +
+                        'inside the app realm with neither of those between it ' +
+                        'and user data. A verified plugin can be sandboxed, and ' +
+                        'a sandboxed version of a verified plugin is the normal ' +
+                        'case — realm trust is the exception that needs a ' +
+                        'reason.'}
+                    </Alert>
                     {detail.versions.map((entry) => (
                       <Stack
                         key={entry.version}
