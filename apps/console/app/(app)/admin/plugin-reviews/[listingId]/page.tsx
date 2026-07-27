@@ -431,8 +431,10 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                     ) : (
                       <Alert severity="success">
                         {'Static verifier found nothing.'}
+                        {/* Says WHICH bytes, because that is what makes a
+                            stored verdict trustworthy — not when it ran. */}
                         {detail.verifierCached
-                          ? ' Verdict stored at publish time for these exact bytes.'
+                          ? ' Stored verdict for these exact bytes.'
                           : ''}
                       </Alert>
                     )}
