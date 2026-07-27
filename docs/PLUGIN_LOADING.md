@@ -82,7 +82,18 @@ Every link must hold before a byte executes:
    loads when a key is configured. Server-side loading refuses to run
    without a key at all.
 3. **Kill switch** — `revocations/{listingId}` beats a still-present trust
-   grant; revoked versions are dropped by the server-side join.
+   grant; revoked versions are dropped by the server-side join. **Staff
+   takedown is a kill switch too** (AGL-948): hiding a plugin listing
+   writes the revocation as well, and `resolveCommunityPluginVersion`
+   refuses any listing carrying `hiddenAt`, so one moderation action stops
+   the bundle everywhere instead of only de-listing it. Un-hiding clears
+   the revocation only if the takedown wrote it (`source: 'takedown'`), so
+   a hand-written revocation survives.
+
+   Publisher **unpublish (`deletedAt`) is deliberately NOT a kill
+   switch** — it blocks new installs and hides the listing, but existing
+   installs keep loading. A publisher retiring a listing must not break
+   the sites already paying for it.
 4. **ABI compatibility** (AGL-429) — manifests declare `hostAbi`; the
    loaders refuse a bundle whose generation differs from the host's
    `PLUGIN_HOST_ABI_VERSION` (undeclared = legacy, loads with a warning),

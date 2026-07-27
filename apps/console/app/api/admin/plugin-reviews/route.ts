@@ -182,7 +182,8 @@ async function handler(request: Request): Promise<Response> {
             .collection('reviews')
             .doc(reviewUid)
         : firestore.collection('communityListings').doc(listingId)
-      if (!(await target.get()).exists) {
+      const targetSnapshot = await target.get()
+      if (!targetSnapshot.exists) {
         return Response.json({ error: 'Unknown target' }, { status: 404 })
       }
       await target.set(
@@ -201,8 +202,55 @@ async function handler(request: Request): Promise<Response> {
               },
         { merge: true },
       )
+
+      // Takedown means takedown (AGL-948). Hiding a PLUGIN listing also
+      // writes the kill switch, so one staff action has one outcome
+      // instead of leaving the bundle executing in every workspace that
+      // already installed it. The realm join blocks on `hiddenAt` too, but
+      // the revocation is what the client-side loaders and the public
+      // listing-versions endpoint already understand — belt and braces on
+      // the one action where a gap means running attacker code.
+      const isPlugin =
+        !reviewUid &&
+        (targetSnapshot.get('artifactType') === 'plugin' ||
+          targetSnapshot.get('type') === 'plugin')
+      if (isPlugin) {
+        const revocationRef = firestore.collection('revocations').doc(listingId)
+        if (action === 'hide') {
+          await revocationRef.set(
+            {
+              versions: 'all',
+              reason: hideReason,
+              revokedBy: decoded.uid,
+              revokedAt: FieldValue.serverTimestamp(),
+              // Marks this revocation as takedown-owned, so un-hiding can
+              // clear it without also clearing a revocation staff wrote by
+              // hand for a different reason.
+              source: 'takedown',
+            },
+            { merge: true },
+          )
+        } else if ((await revocationRef.get()).get('source') === 'takedown') {
+          await revocationRef.delete()
+        }
+      }
+
+      await firestore.collection('adminAudit').add({
+        actorUid: decoded.uid,
+        action: `plugins.takedown.${action}`,
+        target: reviewUid
+          ? `communityListings/${listingId}/reviews/${reviewUid}`
+          : `communityListings/${listingId}`,
+        after: {
+          hidden: action === 'hide',
+          ...(hideReason ? { reason: hideReason } : {}),
+          ...(isPlugin ? { revoked: action === 'hide' } : {}),
+        },
+        at: FieldValue.serverTimestamp(),
+      })
+
       return Response.json(
-        { ok: true, hidden: action === 'hide' },
+        { ok: true, hidden: action === 'hide', revoked: isPlugin && action === 'hide' },
         { status: 200 },
       )
     }

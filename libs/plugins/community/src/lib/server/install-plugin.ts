@@ -174,6 +174,10 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     if (
       !listing ||
       listing.deletedAt ||
+      // Staff takedown blocks new installs too (AGL-948) — the revocation
+      // check below stops a hidden listing anyway, but only while the
+      // revocation stands, and a takedown is not conditional on it.
+      listing.hiddenAt ||
       listingArtifactType(listing) !== 'plugin'
     ) {
       return res.status(404).json({ error: 'Unknown plugin listing' })
