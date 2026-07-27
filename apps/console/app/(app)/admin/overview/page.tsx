@@ -200,7 +200,22 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                     label: 'MRR estimate',
                     value:
                       metrics?.mrrUsd != null ? `$${metrics.mrrUsd}` : null,
-                    help: 'Monthly recurring revenue estimated from active plan subscriptions.',
+                    // Comped orgs are the usual reason this reads lower
+                    // than the plan mix suggests (AGL-925) — say so here
+                    // rather than leaving staff to reconcile it by hand.
+                    caption:
+                      metrics?.payingOrgs != null
+                        ? `${metrics.payingOrgs} billing${
+                            metrics.compedOrgs
+                              ? ` · ${metrics.compedOrgs} comped`
+                              : ''
+                          }`
+                        : null,
+                    help:
+                      'Monthly recurring revenue from organizations with a live ' +
+                      'Stripe subscription. Staff plan overrides, comped, and ' +
+                      'canceled organizations contribute $0; annual plans count ' +
+                      'at their per-month equivalent.',
                   },
                 ].map((metric) => ({
                   size: { xs: 6, md: 3 },
@@ -217,6 +232,11 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                       <Typography variant="h4">
                         {metric.value ?? '…'}
                       </Typography>
+                      {metric['caption'] ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {metric['caption']}
+                        </Typography>
+                      ) : null}
                     </CardDisplay>
                   ),
                 })),

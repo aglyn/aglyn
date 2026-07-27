@@ -21,6 +21,8 @@ import {
   checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
+  isBillingSubscription,
+  orgMonthlyRevenueUsd,
   resolveEffectivePlan,
   checkQuota,
   checkSeatQuota,
@@ -551,6 +553,58 @@ describe('plan entitlements', () => {
         'digital',
       ),
     ).toBe(0)
+  })
+
+  describe('MRR (AGL-925)', () => {
+    it('excludes a staff plan override, which writes no subscription', () => {
+      const comped = { plan: 'business' } as any
+      // The org still GETS business — only the revenue is zero.
+      expect(resolveEffectivePlan(comped)).toBe('business')
+      expect(isBillingSubscription(comped)).toBe(false)
+      expect(orgMonthlyRevenueUsd(comped)).toBe(0)
+    })
+
+    it('excludes free, canceled, unpaid, and incomplete subscriptions', () => {
+      expect(orgMonthlyRevenueUsd({ plan: 'free' } as any)).toBe(0)
+      for (const status of ['canceled', 'unpaid', 'incomplete']) {
+        expect(
+          orgMonthlyRevenueUsd({ plan: 'pro', subscription: { status } } as any),
+        ).toBe(0)
+      }
+    })
+
+    it('counts active, trialing, and past_due as revenue', () => {
+      for (const status of ['active', 'trialing', 'past_due']) {
+        expect(
+          orgMonthlyRevenueUsd({ plan: 'pro', subscription: { status } } as any),
+        ).toBe(56)
+      }
+    })
+
+    it('counts an annual plan at its per-month equivalent', () => {
+      expect(
+        orgMonthlyRevenueUsd({
+          plan: 'business',
+          subscription: { status: 'active', interval: 'year' },
+        } as any),
+      ).toBe(99)
+      expect(
+        orgMonthlyRevenueUsd({
+          plan: 'business',
+          subscription: { status: 'active', interval: 'month' },
+        } as any),
+      ).toBe(139)
+    })
+
+    it('adds purchased seat and dataset add-ons to the base price', () => {
+      expect(
+        orgMonthlyRevenueUsd({
+          plan: 'starter',
+          subscription: { status: 'active' },
+          seatAddons: { managers: 2, members: 3, datasets: 1 },
+        } as any),
+      ).toBe(25 + 2 * 5 + 3 * 3 + 1 * 2)
+    })
   })
 
   it('prices the AGL-278 table (annual headline, monthly billing)', () => {

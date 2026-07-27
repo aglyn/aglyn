@@ -16,7 +16,11 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { PLAN_PRICING, type OrgPlan } from '@aglyn/aglyn/server'
+import {
+  isBillingSubscription,
+  orgMonthlyRevenueUsd,
+  type OrgPlan,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -102,6 +106,11 @@ async function handler(request: Request): Promise<Response> {
 
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
     let mrrUsd = 0
+    // Orgs sitting on a paid plan that bills nothing — staff overrides,
+    // comps, dark launches (AGL-925). They are excluded from MRR, and
+    // reported so the headline is legible rather than mysteriously low.
+    let compedOrgs = 0
+    let payingOrgs = 0
     let signups30d = 0
     const planCounts: Record<string, number> = {}
     const newestOrgs: any[] = []
@@ -109,18 +118,15 @@ async function handler(request: Request): Promise<Response> {
       const data = doc.data()
       const plan = (data['plan'] ?? '') as OrgPlan | ''
       planCounts[plan || 'none'] = (planCounts[plan || 'none'] ?? 0) + 1
-      if (plan && PLAN_PRICING[plan]) {
-        const pricing = PLAN_PRICING[plan]
-        mrrUsd += pricing.basePriceMonthlyUsd
-        const addons = data['seatAddons'] ?? {}
-        mrrUsd +=
-          Math.max(0, addons.managers ?? 0) * (pricing.extraSeatMonthlyUsd ?? 0)
-        mrrUsd +=
-          Math.max(0, addons.members ?? 0) *
-          (pricing.extraCollaboratorMonthlyUsd ?? 0)
-        mrrUsd +=
-          Math.max(0, addons.datasets ?? 0) *
-          (pricing.extraDatasetMonthlyUsd ?? 0)
+      // MRR follows the Stripe subscription mirror, not the plan field: a
+      // staff override sets `plan` and never writes `subscription`, so
+      // billing state is the only honest signal of revenue (AGL-925).
+      const billing = data as { plan?: OrgPlan; subscription?: any }
+      if (isBillingSubscription(billing)) {
+        payingOrgs += 1
+        mrrUsd += orgMonthlyRevenueUsd(billing)
+      } else if (plan && plan !== 'free') {
+        compedOrgs += 1
       }
       const createdMs = data['createdAt']?.toMillis?.() ?? null
       if (createdMs && createdMs >= thirtyDaysAgo) signups30d += 1
@@ -193,6 +199,8 @@ async function handler(request: Request): Promise<Response> {
         signups30d,
         hosts: hostsCount.data().count,
         mrrUsd: Math.round(mrrUsd * 100) / 100,
+        payingOrgs,
+        compedOrgs,
         planCounts,
         rollupMonth: month,
       },

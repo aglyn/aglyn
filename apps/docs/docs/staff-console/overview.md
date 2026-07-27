@@ -20,7 +20,12 @@ The **staff console** is where Aglyn operators manage the platform and support c
 ## What's there
 
 - **Staff overview** — platform metrics, the newest organizations, purchases, and
-  per-org usage; plus search.
+  per-org usage; plus search. The **MRR estimate** counts only organizations with a
+  live Stripe subscription — staff plan overrides, comped accounts, and canceled or
+  unpaid subscriptions contribute $0, and annual plans count at their per-month
+  equivalent rather than the month-to-month price. The tile shows how many
+  organizations are billing and how many are comped, so a paid plan that bills
+  nothing never inflates the headline.
 - **[Support queue](support-queue.md)** — every organization's support tickets in one
   triage list: filter by open/closed, reply as Aglyn staff, close or reopen.
 - **Plugin reviews & realm trust** — the marketplace review queue, plus a
