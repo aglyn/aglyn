@@ -16,12 +16,15 @@
  */
 'use client'
 
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink,
+  CardDisplay,
+  useConfirmationContext,
+} from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
   Chip,
-  Link,
   MenuItem,
   Stack,
   Table,
@@ -195,9 +198,9 @@ export function HostMembersCard(props: HostMembersCardProps) {
       <Stack spacing={1.5}>
         <Typography variant="caption" color="text.secondary">
           {'Site users are organization members scoped to this site — the '}
-          <Link href={buildRoute(Route.MANAGE_TEAM, { orgSlug })} color="secondary">
+          <AppLink href={buildRoute(Route.MANAGE_TEAM, { orgSlug })} color="secondary">
             {'organization Team page'}
-          </Link>
+          </AppLink>
           {' manages everyone in one place.'}
         </Typography>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
@@ -240,11 +243,11 @@ export function HostMembersCard(props: HostMembersCardProps) {
             ) : seatQuota.addonPriceUsd != null ? (
               <>
                 {` — extra seats $${seatQuota.addonPriceUsd}/mo in `}
-                <Link
+                <AppLink
                   href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#addons`}
                 >
                   {'Billing'}
-                </Link>
+                </AppLink>
               </>
             ) : null}
           </Typography>

@@ -16,13 +16,11 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Box,
-  Button,
   Chip,
   Grid,
-  Link as MuiLink,
   MenuItem,
   Stack,
   TextField,
@@ -435,7 +433,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                     spacing={1}
                     sx={{ alignItems: 'center' }}
                   >
-                    <MuiLink
+                    <AppLink
                       href={listingHref(listing.$id)}
                       color="inherit"
                       underline="hover"
@@ -444,7 +442,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                       noWrap
                     >
                       {listing.displayName}
-                    </MuiLink>
+                    </AppLink>
                     {/* Primary classification, said first (AGL-864). */}
                     <Chip
                       size="small"
@@ -475,13 +473,13 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                     {handles[listing.profileId] ? (
                       <>
                         {' · by '}
-                        <MuiLink
+                        <AppLink
                           href={publisherHref(listing.profileId)}
                           color="secondary"
                           underline="hover"
                         >
                           {`@${handles[listing.profileId]}`}
-                        </MuiLink>
+                        </AppLink>
                       </>
                     ) : (
                       ''
@@ -520,17 +518,18 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                       }`}
                     </Typography>
                   ) : null}
-                  <Button
+                  <AppLink
+                    componentVariant="button"
                     size="small"
                     variant="outlined"
                     color="secondary"
-                    href={detailHref}
+                    href={detailHref ?? ''}
                     disabled={!detailHref}
                   >
                     {priceUsd > 0 && !isInstalled
                       ? `View details · $${priceUsd}`
                       : 'View details'}
-                  </Button>
+                  </AppLink>
                 </Stack>
               </Grid>
             )

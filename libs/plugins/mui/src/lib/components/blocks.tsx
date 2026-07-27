@@ -37,7 +37,7 @@ import {
   mdiViewGridOutline,
   mdiYoutube,
 } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import Stack from '@mui/material/Stack'
@@ -218,9 +218,9 @@ const SocialLinks = forwardRef<HTMLDivElement, SocialLinksProps>(
           </Box>
         ) : (
           entries.map((entry) => (
-            <IconButton
+            <AppLink
               key={entry.key}
-              component="a"
+              componentVariant="icon-button"
               href={entry.href}
               target="_blank"
               rel="noopener noreferrer"
@@ -228,7 +228,7 @@ const SocialLinks = forwardRef<HTMLDivElement, SocialLinksProps>(
               size="small"
             >
               <MdiIcon path={entry.path} />
-            </IconButton>
+            </AppLink>
           ))
         )}
       </Stack>

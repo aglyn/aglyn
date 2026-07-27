@@ -17,7 +17,12 @@
 'use client'
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink,
+  CardDisplay,
+  Container,
+  GridItems,
+} from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -25,7 +30,6 @@ import {
   Alert,
   Button,
   Chip,
-  Link,
   Stack,
   TextField,
   Table,
@@ -406,7 +410,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                             {detail.memberships.map((membership) => (
                               <TableRow key={membership.orgId}>
                                 <TableCell>
-                                  <Link
+                                  <AppLink
                                     href={buildRoute(Route.ADMIN_ORG_DETAIL, {
                                       orgId: membership.orgId,
                                     })}
@@ -414,7 +418,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                     underline="hover"
                                   >
                                     {membership.orgName ?? membership.orgId}
-                                  </Link>
+                                  </AppLink>
                                 </TableCell>
                                 <TableCell>
                                   {membership.role ?? '—'}

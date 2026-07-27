@@ -21,6 +21,7 @@ import {
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
+import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Alert, Button } from '@mui/material'
 import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
@@ -171,13 +172,14 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         severity="warning"
         sx={{ borderRadius: 0 }}
         action={
-          <Button
+          <AppLink
+            componentVariant="button"
             color="inherit"
             size="small"
             href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
           >
             {'Fix payment'}
-          </Button>
+          </AppLink>
         }
       >
         {'Your last payment failed. Update your payment method to keep ' +
@@ -205,13 +207,14 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         // MUI's action slot replaces the onClose icon, so the dismiss
         // button lives beside Upgrade explicitly.
         <>
-          <Button
+          <AppLink
+            componentVariant="button"
             color="inherit"
             size="small"
             href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
           >
             {'Upgrade'}
-          </Button>
+          </AppLink>
           <Button
             color="inherit"
             size="small"

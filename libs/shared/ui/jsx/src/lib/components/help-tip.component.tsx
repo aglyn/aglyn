@@ -27,6 +27,7 @@ import {
   Typography,
 } from '@mui/material'
 import type { MouseEventHandler, ReactNode } from 'react'
+import { AppLink } from './app-link'
 import { MdiIcon } from './mdi-icon/mdi-icon'
 
 /** Content shape accepted anywhere a help affordance can attach (AGL-600/601). */
@@ -102,8 +103,8 @@ export function HelpTip(props: HelpTipProps) {
   return (
     <Tooltip arrow enterDelay={150} title={content}>
       {href ? (
-        <IconButton
-          component="a"
+        <AppLink
+          componentVariant="icon-button"
           href={href}
           target="_blank"
           rel="noopener noreferrer"
@@ -113,7 +114,7 @@ export function HelpTip(props: HelpTipProps) {
           onClick={onClick}
         >
           <MdiIcon path={mdiHelpCircleOutline.path} fontSize="inherit" />
-        </IconButton>
+        </AppLink>
       ) : (
         <IconButton
           size="small"

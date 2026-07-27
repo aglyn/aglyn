@@ -637,16 +637,16 @@ function ScreenDetails() {
         headerRight={
           <Stack direction="row" spacing={1}>
             {liveUrl ? (
-              <Button
+              <AppLink
+                componentVariant="button"
                 size="small"
                 variant="outlined"
-                component="a"
                 href={liveUrl}
                 target="_blank"
                 rel="noreferrer"
               >
                 {'View'}
-              </Button>
+              </AppLink>
             ) : null}
             <Button
               size="small"

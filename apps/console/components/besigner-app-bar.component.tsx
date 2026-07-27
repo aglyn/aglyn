@@ -29,7 +29,7 @@ import {
   ICON_VARIANT_PAGES,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Button, type ButtonProps, Divider, Stack } from '@mui/material'
 import { forwardRef } from 'react'
 import SecondaryAppBarComponent, {
@@ -100,9 +100,9 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             })}
             flexItem
           />
-          <Button
-            component="a"
-            href={liveUrl || undefined}
+          <AppLink
+            componentVariant="button"
+            href={liveUrl || ''}
             target="_blank"
             rel="noopener noreferrer"
             size="small"
@@ -111,7 +111,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             endIcon={<MdiIcon path={ICON_VARIANT_PAGES.path} />}
           >
             {'Live'}
-          </Button>
+          </AppLink>
           <Button
             onClick={onPreview}
             size="small"
