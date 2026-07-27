@@ -177,6 +177,53 @@ Generate the key pair with
   with `public, max-age=31536000, immutable`; front them with a CDN and
   cache hits are free forever (a new version is a new URL).
 
+## Artifact retention (AGL-942)
+
+Bundles are immutable and content-addressed, so the bucket only ever grew
+— nothing deleted from it. The stranding case is a **republish of the same
+version string with different bytes**: the new build writes a new object
+and the version doc's `sha256` repoints, leaving the previous object
+unreachable forever (every loader derives its URL from the version doc's
+hash).
+
+`POST /api/admin/reap-plugin-artifacts` (cron-secret auth, weekly) joins
+the bucket against Firestore and deletes only what no version doc claims:
+
+- **Survives** if ANY `pluginVersions` doc claims the object's exact
+  `{listingId}/{version}/{sha256}`. Not "is it the latest" and not "does
+  an install pin it" — `install-plugin` accepts a `requestedVersion`, so
+  every version doc is installable and keeps its bytes alive at zero
+  installs.
+- **Reaped** if unclaimed AND older than 7 days. The min-age guard exists
+  because a publish writes the object before the version doc that claims
+  it; a run racing an in-flight publish would otherwise see a legitimate
+  bundle as an orphan. Capped at 200 deletions per run and audited to
+  `adminAudit` (`plugins.artifacts.reap`).
+- **Reported, never deleted**: objects whose parent `communityListings`
+  doc is gone (Firestore doesn't cascade to subcollections, and existing
+  installs of a hard-deleted listing still load off the orphaned version
+  doc), and anything under `artifacts/` that isn't a canonical path.
+
+Deletions are permanent — the bucket has no object versioning and a
+publisher's build isn't reproducible from our side — so run it dry first:
+
+```
+CRON_SECRET=… node tools/scripts/reap-plugin-artifacts.mjs           # dry run
+CRON_SECRET=… node tools/scripts/reap-plugin-artifacts.mjs --apply
+```
+
+The script is a thin client for the route, not a second implementation:
+the join needs the Admin SDK plus `PLUGIN_ARTIFACTS_BUCKET`, and one home
+for the rules means a local dry run and the weekly cron can never disagree
+about what counts as an orphan. The decision itself is a pure function
+(`planArtifactReap`, `apps/console/utils/server/reap-plugin-artifacts.ts`)
+so the rules that authorize a permanent delete are unit-tested.
+
+**A GCS lifecycle rule cannot do this job** — it matches on age, storage
+class and prefix, and has no view of Firestore. An age-based delete rule
+would eventually remove bundles that live installs pin by exact sha, which
+breaks them unrecoverably.
+
 ## Publish → sign → load walkthrough
 
 1. Author builds with the realm rollup template; entry exports
