@@ -186,8 +186,11 @@ and the version doc's `sha256` repoints, leaving the previous object
 unreachable forever (every loader derives its URL from the version doc's
 hash).
 
-`POST /api/admin/reap-plugin-artifacts` (cron-secret auth, weekly) joins
-the bucket against Firestore and deletes only what no version doc claims:
+`POST /api/admin/reap-plugin-artifacts` (cron-secret auth) joins the
+bucket against Firestore and deletes only what no version doc claims. It
+runs weekly from `.github/workflows/scheduled-crons.yml` (Mondays 05:30
+UTC) alongside the other scheduled routes, and is in that workflow's
+`workflow_dispatch` list for a manual run:
 
 - **Survives** if ANY `pluginVersions` doc claims the object's exact
   `{listingId}/{version}/{sha256}`. Not "is it the latest" and not "does
