@@ -129,7 +129,8 @@ same person might also have.
 
 - **Send password reset email** — emails the member a link to the site's `/recover` page.
   The link works once and expires after an hour, and their current password keeps working
-  until they use it. This is the option to reach for.
+  until they use it. This is the option to reach for. Capped at a few sends per hour to
+  the same member, so a stuck retry loop can't flood their inbox.
 - **Set a password directly** — replaces the member's password with one you choose. Use it
   only when the member cannot receive email; you then have to pass the new password to them
   yourself. The member is signed out on every device and is emailed to say an administrator

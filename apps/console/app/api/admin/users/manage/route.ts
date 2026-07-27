@@ -17,9 +17,11 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  consumePasswordResetSend,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  passwordResetThrottleMessage,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -162,6 +164,23 @@ async function handler(request: Request): Promise<Response> {
       const actorName = 'Aglyn support'
 
       if (action === 'sendPasswordReset') {
+        // Throttled per recipient and per actor (AGL-920). Staff are trusted,
+        // but the cap protects the recipient's mailbox rather than guarding
+        // against staff — several people helping one user still add up to a
+        // pile of unsolicited mail.
+        const throttle = await consumePasswordResetSend({
+          actorKey: decoded.uid,
+          recipientKey: target.email,
+        })
+        if (!throttle.allowed) {
+          return Response.json(
+            { error: passwordResetThrottleMessage(throttle) },
+            {
+              status: 429,
+              headers: { 'Retry-After': String(throttle.retryAfterSeconds) },
+            },
+          )
+        }
         const sent = await sendAuthPasswordResetEmail({
           email: target.email,
           origin,

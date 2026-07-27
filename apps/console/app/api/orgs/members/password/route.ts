@@ -17,11 +17,13 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  consumePasswordResetSend,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
   logOrgActivity,
   memberHasOrgPermission,
+  passwordResetThrottleMessage,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import {
@@ -156,6 +158,21 @@ async function handler(request: Request): Promise<Response> {
       targetUid
 
     if (action === 'sendPasswordReset') {
+      // Throttled per recipient and per actor (AGL-920) — this is the surface
+      // where a mail-bomb is easiest, since any org admin can reach it.
+      const throttle = await consumePasswordResetSend({
+        actorKey: decoded.uid,
+        recipientKey: target.email,
+      })
+      if (!throttle.allowed) {
+        return Response.json(
+          { error: passwordResetThrottleMessage(throttle) },
+          {
+            status: 429,
+            headers: { 'Retry-After': String(throttle.retryAfterSeconds) },
+          },
+        )
+      }
       const sent = await sendAuthPasswordResetEmail({
         email: target.email,
         origin,

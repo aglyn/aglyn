@@ -53,7 +53,8 @@ options, and the first is almost always the right one.
 
 **Send password reset email** emails the member a link to choose their own password.
 Their current password keeps working until they use the link, and nobody else ever sees
-the new one. This works for every member.
+the new one. This works for every member. A few sends per hour to the same person is the
+cap — it's their inbox, and a reset link is good for an hour anyway.
 
 **Set a password directly** replaces the member's password with one you choose. Use it
 only when the member cannot receive email at all — you then have to pass the new password

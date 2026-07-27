@@ -18,7 +18,12 @@
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { validateNewPassword } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
-import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
+import {
+  consumePasswordResetSend,
+  firebaseAdmin,
+  isImpersonationSession,
+  passwordResetThrottleMessage,
+} from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   hashMemberPassword,
@@ -110,6 +115,19 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
     )
 
     if (action === 'sendPasswordReset') {
+      // Throttled per recipient and per actor (AGL-920). Same caps as the
+      // console surfaces — a site member's inbox is no less worth protecting
+      // than a console user's.
+      const throttle = await consumePasswordResetSend({
+        actorKey: decoded.uid,
+        recipientKey: email,
+      })
+      if (!throttle.allowed) {
+        res.setHeader('Retry-After', String(throttle.retryAfterSeconds))
+        return res
+          .status(429)
+          .json({ error: passwordResetThrottleMessage(throttle) })
+      }
       if (!isEmailConfigured()) {
         return res.status(502).json({
           error: 'Email is not configured, so no reset link could be sent',

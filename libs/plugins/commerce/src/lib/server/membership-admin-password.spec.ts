@@ -37,8 +37,19 @@ let mockMemberExists = true
 const mockMemberUpdates: Array<Record<string, unknown>> = []
 let mockDecodedToken: Record<string, unknown> = {}
 
+let mockThrottleAllows = true
 jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: () => false,
+  consumePasswordResetSend: async () =>
+    mockThrottleAllows
+      ? { allowed: true, retryAfterSeconds: 0, limited: null, degraded: false }
+      : {
+          allowed: false,
+          retryAfterSeconds: 900,
+          limited: 'recipient',
+          degraded: false,
+        },
+  passwordResetThrottleMessage: () => 'Too many reset emails',
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -127,6 +138,7 @@ beforeEach(() => {
   mockMemberExists = true
   mockDecodedToken = { uid: ADMIN_UID, email_verified: true }
   mockManageMembers = false
+  mockThrottleAllows = true
   for (const key of Object.keys(mockHostFields)) delete mockHostFields[key]
   for (const key of Object.keys(mockMemberFields)) delete mockMemberFields[key]
   Object.assign(mockHostFields, {
@@ -256,6 +268,38 @@ describe('membershipAdminPasswordHandler', () => {
     expect(mockMemberUpdates).toHaveLength(0)
     const sent = (sendEmailMock.mock.calls[0] as any[])[0]
     expect(sent.text).toContain('https://demo.aglyn.app/recover?token=')
+  })
+
+  it('429s without sending once the reset throttle is exhausted (AGL-920)', async () => {
+    mockThrottleAllows = false
+    const { res, result } = makeResponse()
+    await membershipAdminPasswordHandler(
+      makeRequest({
+        hostId: HOST_ID,
+        memberId: MEMBER_ID,
+        action: 'sendPasswordReset',
+      }),
+      res,
+    )
+    expect(result.status).toBe(429)
+    // The whole point is the mail not going out — a 429 after the send would
+    // report a refusal the recipient's inbox has already been spared of.
+    expect(sendEmailMock).not.toHaveBeenCalled()
+  })
+
+  it('does not throttle setPassword, which is not a send amplifier', async () => {
+    mockThrottleAllows = false
+    const { res, result } = makeResponse()
+    await membershipAdminPasswordHandler(
+      makeRequest({
+        hostId: HOST_ID,
+        memberId: MEMBER_ID,
+        action: 'setPassword',
+        password: 'correct-horse-battery',
+      }),
+      res,
+    )
+    expect(result.status).toBe(200)
   })
 
   it('uses the custom domain for the reset link when the site has one', async () => {
