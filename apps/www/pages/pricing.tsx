@@ -219,8 +219,9 @@ function Pricing() {
               'are an $89/mo add-on per location on Business and above.'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {'Existing subscribers keep their current price until they ' +
-              'change plans.'}
+            {'Aglyn is in pre-release: prices, plans, and the features ' +
+              'included in each tier are provisional and may change at any ' +
+              'time.'}
           </Typography>
         </Stack>
       </Container>

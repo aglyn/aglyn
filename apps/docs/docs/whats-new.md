@@ -155,8 +155,8 @@ with Shopify and Squarespace:
   analytics dashboard.
 - **[New pricing](workspace-and-billing/billing-and-plans/overview.md)** — Starter $16, Pro $39,
   Business $99, and the new Advanced $299 (annual), with platform fees that
-  drop to 0% as you upgrade. Existing subscribers keep their current price
-  until they change plans.
+  drop to 0% as you upgrade. Pricing and the features included in each tier
+  are provisional during pre-release and may change at any time.
 
 ## Latest polish wave
 
