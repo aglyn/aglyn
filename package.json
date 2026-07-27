@@ -70,7 +70,8 @@
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",
     "typecheck": "node tools/scripts/typecheck.mjs",
     "clean:next": "node tools/scripts/clean-next.mjs",
-    "clean:next:prune": "node tools/scripts/clean-next.mjs --prune --force"
+    "clean:next:prune": "node tools/scripts/clean-next.mjs --prune --force",
+    "worktree:new": "node tools/scripts/new-worktree.mjs"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.1",
