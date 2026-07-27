@@ -131,8 +131,13 @@ export function OrgListsCard(props: OrgListsCardProps) {
     const accepted = await confirm({
       title: 'Delete list?',
       description: `"${list.name}" and its enrollments stop being targetable; automations enrolling into it start reporting errors.`,
+      confirmationText: 'Delete',
       confirmationButtonProps: { color: 'error' },
     })
+      // `confirm` resolves with no value and REJECTS on cancel, so gating on
+      // the resolved value alone made this always return (AGL-950).
+      .then(() => true)
+      .catch(() => false)
     if (!accepted) return
     // The list owns a `members` subcollection of enrolled contacts, and
     // Firestore doesn't cascade — deleting the doc from here left that PII

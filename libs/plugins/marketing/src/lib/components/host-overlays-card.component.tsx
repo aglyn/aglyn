@@ -187,8 +187,13 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
     const confirmed = await confirm({
       title: 'Delete overlay?',
       description: `"${overlay.name ?? overlay.$id}" stops showing immediately.`,
+      confirmationText: 'Delete',
       confirmationButtonProps: { color: 'error' },
     })
+      // Resolves with no value and rejects on cancel — gating on the
+      // resolved value alone made this always return (AGL-950).
+      .then(() => true)
+      .catch(() => false)
     if (!confirmed) return
     await deleteDoc(doc(firestore, 'hosts', hostId, 'overlays', overlay.$id))
     enqueueSnackbar('Overlay deleted', { variant: 'success', persist: false })
