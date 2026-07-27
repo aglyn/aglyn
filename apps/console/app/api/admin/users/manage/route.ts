@@ -22,6 +22,12 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  originFromHeaders,
+  sendAuthPasswordResetEmail,
+  sendPasswordChangedNotice,
+  validateNewPassword,
+} from '../../../_lib/password-admin'
 
 const ACTIONS = [
   'grantStaff',
@@ -30,6 +36,8 @@ const ACTIONS = [
   'enable',
   'setRole',
   'updateProfile',
+  'sendPasswordReset',
+  'setPassword',
 ] as const
 const STAFF_ROLES = ['support', 'billing', 'super'] as const
 type ManageAction = (typeof ACTIONS)[number]
@@ -138,6 +146,69 @@ async function handler(request: Request): Promise<Response> {
         at: FieldValue.serverTimestamp(),
       })
       return Response.json({ ok: true }, { status: 200 })
+    }
+
+    // Password help (AGL-912). Both actions need somewhere to send mail —
+    // a reset link is useless without an inbox, and a silent password change
+    // the holder never learns about is worse than no change at all. An
+    // account with no email address (phone/anonymous provider) gets neither.
+    if (action === 'sendPasswordReset' || action === 'setPassword') {
+      if (!target.email) {
+        return Response.json({
+          error: 'This account has no email address',
+        }, { status: 400 })
+      }
+      const origin = originFromHeaders(headers)
+      const actorName = 'Aglyn support'
+
+      if (action === 'sendPasswordReset') {
+        const sent = await sendAuthPasswordResetEmail({
+          email: target.email,
+          origin,
+          actorName,
+        })
+        if (!sent) {
+          return Response.json({
+            error: 'Could not send the reset email — check email settings',
+          }, { status: 502 })
+        }
+        await firebaseAdmin.app().firestore().collection('adminAudit').add({
+          actorUid: decoded.uid,
+          action: 'user.sendPasswordReset',
+          target: `users/${uid}`,
+          before: null,
+          after: { email: target.email },
+          at: FieldValue.serverTimestamp(),
+        })
+        return Response.json({ ok: true }, { status: 200 })
+      }
+
+      const validated = validateNewPassword(body?.password)
+      if (validated.error) {
+        return Response.json({ error: validated.error }, { status: 400 })
+      }
+      await auth.updateUser(uid, { password: validated.password })
+      // Sessions outlive the credential otherwise: an id token stays valid
+      // for up to an hour and a refresh token indefinitely, so whoever was
+      // signed in with the OLD password keeps working. Revoking is the
+      // difference between "changed the password" and "took back the
+      // account" — which is the point of the action.
+      await auth.revokeRefreshTokens(uid)
+      const notified = await sendPasswordChangedNotice({
+        email: target.email,
+        origin,
+        actorName,
+      })
+      // The audit records THAT the password changed, never the password.
+      await firebaseAdmin.app().firestore().collection('adminAudit').add({
+        actorUid: decoded.uid,
+        action: 'user.setPassword',
+        target: `users/${uid}`,
+        before: null,
+        after: { email: target.email, holderNotified: notified },
+        at: FieldValue.serverTimestamp(),
+      })
+      return Response.json({ ok: true, notified }, { status: 200 })
     }
 
     const requestedRole = String(body?.role ?? '')
