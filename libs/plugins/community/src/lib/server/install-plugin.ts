@@ -25,7 +25,13 @@ import {
 } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
-import { isListingBrowsable, listingArtifactType } from '../model/community'
+import {
+  isListingBrowsable,
+  isPrivateListing,
+  isVersionApproved,
+  listingArtifactType,
+  newestApprovedVersion,
+} from '../model/community'
 
 /**
  * Installs (or upgrades) a community plugin into a host (AGL-45), pinning a
@@ -183,6 +189,21 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown plugin listing' })
     }
 
+    // The publisher installs their own listing for free, and may install
+    // an unapproved version of it to test. Org-owned now (AGL-652), so this
+    // is a role check — comparing a uid to an org id would never match.
+    const ownsListing = await canActAsPublisher(
+      firestore,
+      decoded.uid,
+      listing.profileId,
+    )
+
+    // Private plugins are installable ONLY by the owning org (AGL-968).
+    // This is what makes private mean private; the UI merely hides them.
+    if (isPrivateListing(listing) && !ownsListing) {
+      return res.status(404).json({ error: 'Unknown plugin listing' })
+    }
+
     // Installs enforce the same review state the marketplace browses by
     // (AGL-965). `isListingBrowsable` used to be applied ONLY by the browse
     // UI, so a listing that was never reviewed, was rejected, or has since
@@ -190,25 +211,13 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     // posted here directly — which also made "delist" a suggestion rather
     // than a control. The publisher keeps installing their own listing to
     // test it before review.
-    if (!isListingBrowsable(listing) && !(await canActAsPublisher(
-      firestore,
-      decoded.uid,
-      listing.profileId,
-    ))) {
+    if (!isListingBrowsable(listing) && !isPrivateListing(listing) && !ownsListing) {
       return res
         .status(409)
         .json({ error: 'This plugin is not available for install' })
     }
 
     const priceUsd = Number(listing.priceUsd ?? 0)
-    // The publisher installs their own listing for free. Org-owned now
-    // (AGL-652), so this is a role check — comparing a uid to an org id
-    // would never match and would charge publishers for their own work.
-    const ownsListing = await canActAsPublisher(
-      firestore,
-      decoded.uid,
-      listing.profileId,
-    )
     if (priceUsd > 0 && !ownsListing) {
       const purchases = await firestore
         .collection('communityPurchases')
@@ -221,12 +230,58 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
-    const version = requestedVersion ?? String(listing.latestVersion ?? '')
-    const versionSnapshot = await listingRef
-      .collection('pluginVersions')
-      .doc(version)
-      .get()
-    const versionData = versionSnapshot.data() as any
+    // Installs resolve the newest APPROVED version, never `latestVersion`
+    // (AGL-966). Before this, publishing v1.0.1 to a verified listing put
+    // unreviewed code in front of every workspace immediately: the listing
+    // kept its status, the queue never surfaced the update, and this line
+    // pinned whatever had just been uploaded. A pending version is now
+    // simply not offered, and the previously approved one keeps installing.
+    //
+    // The publisher may still install their own unapproved version — that
+    // is how you test a plugin before submitting it, and it reaches only
+    // their own sites.
+    let version = requestedVersion ?? ''
+    let versionData: any
+    if (version) {
+      versionData = (
+        await listingRef.collection('pluginVersions').doc(version).get()
+      ).data()
+      if (!isVersionApproved(versionData) && !ownsListing) {
+        return res.status(409).json({
+          error: 'That version has not passed review yet',
+          reviewState: versionData?.reviewState ?? 'unknown',
+        })
+      }
+    } else {
+      const approvedSnapshot = await listingRef
+        .collection('pluginVersions')
+        .orderBy('publishedAt', 'desc')
+        .limit(25)
+        .get()
+      const candidates = approvedSnapshot.docs.map((doc) => ({
+        version: String(doc.get('version') ?? doc.id),
+        reviewState: doc.get('reviewState'),
+        publishedAt: doc.get('publishedAt'),
+        data: doc.data(),
+      }))
+      const newest = newestApprovedVersion(candidates as never) as
+        | { version: string; data: any }
+        | null
+      // The publisher testing their own listing falls back to latest.
+      const fallback = ownsListing
+        ? candidates.find(
+            (entry) => entry.version === String(listing.latestVersion ?? ''),
+          )
+        : undefined
+      const chosen = newest ?? fallback
+      if (!chosen) {
+        return res.status(409).json({
+          error: 'This plugin has no reviewed version available to install',
+        })
+      }
+      version = chosen.version
+      versionData = (chosen as { data?: unknown }).data
+    }
     if (!versionData?.sha256 || !versionData?.manifest) {
       return res.status(404).json({ error: 'Unknown plugin version' })
     }

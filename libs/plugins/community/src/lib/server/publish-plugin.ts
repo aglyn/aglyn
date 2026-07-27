@@ -25,7 +25,11 @@ import {
   PLUGIN_VERIFIER_VERSION,
   validatePluginManifest,
 } from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgForUser,
+  notifyStaff,
+} from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   canActAsPublisher,
@@ -299,8 +303,17 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         latestVersion: manifest.version,
         deletedAt: null,
         // Review queue (AGL-432): first publish enters as 'submitted';
-        // version bumps keep whatever status staff granted.
+        // version bumps keep whatever status staff granted — which is safe
+        // now that installs resolve the newest APPROVED version rather than
+        // `latestVersion` (AGL-966). A listed plugin stays listed on its
+        // reviewed bytes while the new version waits in the queue.
         ...(existing.empty && { createdAt: now, reviewStatus: 'submitted' }),
+        // Private plugins never reach the marketplace but take the same
+        // review path (AGL-968). Only settable on first publish; changing
+        // visibility later is a separate, deliberate action.
+        ...(existing.empty && {
+          visibility: req.body?.visibility === 'private' ? 'private' : 'public',
+        }),
         updatedAt: now,
       },
       { merge: true },
@@ -317,6 +330,10 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         manifest,
         ...(changelog.trim() && { changelog: changelog.trim() }),
         publishedAt: now,
+        // Every version starts UNREVIEWED (AGL-966). This doc is written
+        // with .set() and no merge, so a republish of the same version
+        // string also resets it — new bytes, new review, by construction.
+        reviewState: 'pending',
         // Keep the verdict we just computed (AGL-962). The bundle is
         // immutable and content-addressed, so this result holds for as long
         // as the checker does — the review page reads it instead of
@@ -331,6 +348,21 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
           checkedAt: now,
         },
       })
+
+    // Tell staff a version is waiting (AGL-970). Nothing announced a
+    // submission before this: reviewers had to notice a new row by
+    // visiting the queue, and an UPDATE to an already-listed plugin
+    // produced no row at all. Persistent per-user notifications, so it
+    // survives a refresh and stays until someone acts on it.
+    await notifyStaff({
+      type: 'community.review',
+      title: `${displayName.trim()} v${manifest.version} needs review`,
+      body: existing.empty
+        ? 'A new plugin was submitted to the marketplace.'
+        : 'A new version was published. The previously approved version ' +
+          'keeps installing until this one is reviewed.',
+      link: `/admin/plugin-reviews/${listingRef.id}`,
+    }).catch(() => undefined)
 
     return res
       .status(200)

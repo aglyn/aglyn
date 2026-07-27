@@ -84,6 +84,21 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Unknown plugin version' }, { status: 404 })
     }
 
+    // Realm trust is the strongest grant in the platform — it drops a
+    // bundle into the app realm, where the sandbox iframe and the manifest
+    // CSP no longer stand between it and user data. It cannot be granted to
+    // bytes that have not passed review (AGL-966).
+    if (action === 'grant' && snapshot.get('reviewState') !== 'approved') {
+      return Response.json(
+        {
+          error:
+            'That version has not passed review — approve it before granting realm trust',
+          reviewState: snapshot.get('reviewState') ?? 'unknown',
+        },
+        { status: 409 },
+      )
+    }
+
     if (action === 'grant') {
       const privateKeyBase64 = process.env.PLUGIN_TRUST_PRIVATE_KEY
       if (!privateKeyBase64) {
