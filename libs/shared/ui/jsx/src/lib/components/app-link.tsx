@@ -26,31 +26,23 @@ import type {
   IconButtonProps as MuiIconButtonProps,
   LinkProps as MuiLinkProps,
 } from '@mui/material'
+// AGL-926: `Fab` and `IconButton` used to be pulled in with `next/dynamic`,
+// which returns a plain function component and therefore swallows the ref.
+// That made those two variants unusable as a child of anything that clones
+// its child and measures it — MUI `Tooltip` threw
+// `childNode.getAttribute is not a function` and took out every help tip.
+// They are ordinary static imports now, like the other four variants.
 import {
   Button as MuiButton,
   ButtonBase as MuiButtonBase,
+  Fab as MuiFab,
+  IconButton as MuiIconButton,
   Link as MuiLink,
 } from '@mui/material'
 import clsx from 'clsx'
-import dynamic, { type DynamicOptionsLoadingProps } from 'next/dynamic'
 import { usePathname } from 'next/navigation'
 import { forwardRef, type Ref, useMemo } from 'react'
 import NextLink, { type NextLinkProps } from './next-link'
-
-const Placeholder = (props: DynamicOptionsLoadingProps) => {
-  const { error } = props
-  if (error) console.error(error)
-  return <a href={'#'}>{error ? 'error!' : 'loading'}</a>
-}
-
-const MuiFab = dynamic<MuiFabProps>(() => import('@mui/material/Fab'), {
-  loading: Placeholder,
-  ssr: true,
-})
-const MuiIconButton = dynamic<MuiIconButtonProps>(
-  () => import('@mui/material/IconButton'),
-  { loading: Placeholder, ssr: true },
-)
 
 export type AppLinkVariant =
   | 'naked'
