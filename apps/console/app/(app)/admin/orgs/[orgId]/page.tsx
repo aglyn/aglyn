@@ -22,7 +22,7 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -464,13 +464,29 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           >
                             {`${orgId} · ${org?.slug ?? 'no slug'}`}
                           </Typography>
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ fontFamily: 'monospace' }}
-                          >
-                            {`Owner: ${org?.ownerUid ?? '—'}`}
-                          </Typography>
+                          {/* The owner uid is the one identifier on this
+                              card that has a page of its own (AGL-244). */}
+                          {org?.ownerUid ? (
+                            <AppLink
+                              variant="caption"
+                              color="text.secondary"
+                              underline="hover"
+                              sx={{ fontFamily: 'monospace' }}
+                              href={buildRoute(Route.ADMIN_USER_DETAIL, {
+                                uid: org.ownerUid,
+                              })}
+                            >
+                              {`Owner: ${org.ownerUid}`}
+                            </AppLink>
+                          ) : (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ fontFamily: 'monospace' }}
+                            >
+                              {'Owner: —'}
+                            </Typography>
+                          )}
                           <Typography variant="caption" color="text.secondary">
                             {`Stripe: ${org?.stripeCustomerId ?? '—'}`}
                           </Typography>
@@ -661,7 +677,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 }}
                               >
                                 {/* Host detail page link (AGL-392). */}
-                                <MuiLink
+                                <AppLink
                                   href={buildRoute(
                                     Route.ADMIN_ORG_HOST_DETAIL,
                                     { orgId, hostId: host.$id },
@@ -674,7 +690,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   {host.displayName ??
                                     host.subdomain ??
                                     host.$id}
-                                </MuiLink>
+                                </AppLink>
                                 <Typography
                                   variant="caption"
                                   color="text.secondary"
@@ -721,11 +737,21 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   justifyContent: 'space-between',
                                 }}
                               >
-                                <Typography variant="body2" noWrap>
+                                {/* Member docs are keyed by uid, so the
+                                    roster links straight to the account. */}
+                                <AppLink
+                                  variant="body2"
+                                  color="inherit"
+                                  underline="hover"
+                                  noWrap
+                                  href={buildRoute(Route.ADMIN_USER_DETAIL, {
+                                    uid: member.$id,
+                                  })}
+                                >
                                   {member.email ??
                                     member.displayName ??
                                     member.$id}
-                                </Typography>
+                                </AppLink>
                                 <Stack direction="row" spacing={1}>
                                   <Chip
                                     label={member.role ?? 'viewer'}
