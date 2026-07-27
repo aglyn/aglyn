@@ -78,6 +78,8 @@ interface ListingDetail {
     problems?: Array<{ level: string; message: string }>
     error?: string
   } | null
+  /** The verdict came from the version doc rather than a fresh download. */
+  verifierCached: boolean
 }
 
 /** Verifier findings read as a wall of text otherwise; group by severity. */
@@ -398,7 +400,18 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         detail.versions[0]?.hostAbi ?? 'none (legacy)'
                       }, platform runs ${detail.platformHostAbi}`}
                     </Typography>
-                    {detail.verifier?.error ? (
+                    {/* "No findings" and "never checked" must not look the
+                        same. A null verdict means the artifacts bucket is
+                        unreachable or unconfigured, and rendering that as a
+                        clean bill of health would invite a reviewer to
+                        approve a bundle nobody has inspected. */}
+                    {!detail.verifier ? (
+                      <Alert severity="warning">
+                        {'The static verifier has not run for this version — ' +
+                          'no artifact was reachable. Treat this as unchecked, ' +
+                          'not as clean.'}
+                      </Alert>
+                    ) : detail.verifier.error ? (
                       <Alert severity="warning">
                         {`Verifier could not run: ${detail.verifier.error}`}
                       </Alert>
@@ -418,6 +431,9 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                     ) : (
                       <Alert severity="success">
                         {'Static verifier found nothing.'}
+                        {detail.verifierCached
+                          ? ' Verdict stored at publish time for these exact bytes.'
+                          : ''}
                       </Alert>
                     )}
                   </Stack>

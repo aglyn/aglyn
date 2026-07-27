@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { checkPluginBundle } from './plugin-bundle-checks'
+import {
+  type BundleCheckProblem,
+  checkPluginBundle,
+  isStoredVerdictCurrent,
+  PLUGIN_VERIFIER_VERSION,
+} from './plugin-bundle-checks'
 
 const GOOD_BUNDLE = `const host = globalThis.__AGLYN_PLUGIN_HOST__;
 var React = host["React"];
@@ -79,5 +84,48 @@ describe('checkPluginBundle (AGL-426)', () => {
       { maxBytes: 32 },
     )
     expect(result.ok).toBe(false)
+  })
+})
+
+describe('isStoredVerdictCurrent (AGL-962)', () => {
+  const SHA = 'a'.repeat(64)
+  const OTHER = 'b'.repeat(64)
+  const verdict = (overrides: Record<string, unknown> = {}) => ({
+    ok: true,
+    problems: [] as BundleCheckProblem[],
+    sha256: SHA,
+    verifierVersion: PLUGIN_VERIFIER_VERSION,
+    ...overrides,
+  })
+
+  it('serves a verdict for the same bytes from the same checker', () => {
+    expect(isStoredVerdictCurrent(verdict(), SHA)).toBe(true)
+  })
+
+  it('rejects a verdict for different bytes', () => {
+    // A republish keeps the version string but changes the sha; the old
+    // verdict was never true of these bytes.
+    expect(isStoredVerdictCurrent(verdict({ sha256: OTHER }), SHA)).toBe(false)
+  })
+
+  it('rejects a verdict from an older checker', () => {
+    expect(
+      isStoredVerdictCurrent(
+        verdict({ verifierVersion: PLUGIN_VERIFIER_VERSION - 1 }),
+        SHA,
+      ),
+    ).toBe(false)
+  })
+
+  it('rejects a verdict with no checker version — pre-AGL-962 writes', () => {
+    expect(isStoredVerdictCurrent(verdict({ verifierVersion: undefined }), SHA)).toBe(
+      false,
+    )
+  })
+
+  it('rejects a missing verdict or an unknown sha', () => {
+    expect(isStoredVerdictCurrent(null, SHA)).toBe(false)
+    expect(isStoredVerdictCurrent(undefined, SHA)).toBe(false)
+    expect(isStoredVerdictCurrent(verdict(), '')).toBe(false)
   })
 })

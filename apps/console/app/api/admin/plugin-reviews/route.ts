@@ -17,9 +17,12 @@
 
 import {
   checkPluginBundle,
+  isStoredVerdictCurrent,
   PLUGIN_HOST_ABI_VERSION,
+  PLUGIN_VERIFIER_VERSION,
   pluginArtifactPath,
   pluginRequestFromWeb,
+  type StoredBundleVerdict,
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -85,6 +88,9 @@ async function listingDetail(
       capabilities: doc.get('manifest.capabilities') ?? {},
       publishedAt: publishedAt?.toDate?.()?.toISOString() ?? null,
       signed: Boolean(doc.get('signature')),
+      // Server-side only — used to decide whether the verdict below needs
+      // recomputing; stripped before the payload goes out.
+      verification: doc.get('verification') ?? null,
     }
   })
 
@@ -100,15 +106,26 @@ async function listingDetail(
     await firestore.collection('revocations').doc(listingId).get()
   ).data()
 
-  // Verifier re-run against the stored artifact for the version under
-  // review — the same AGL-426 checks the publish API enforced, re-run so a
-  // reviewer never has to trust the publish-time verdict.
+  // The verifier verdict for the version under review (AGL-426), served
+  // from the version doc when it is current (AGL-962).
+  //
+  // `checkPluginBundle` is pure and the artifact is immutable and
+  // content-addressed, so a verdict pinned to {sha256, verifierVersion} is
+  // exactly as trustworthy as re-running it — and re-running meant
+  // downloading up to a megabyte from Storage on EVERY page view. A stored
+  // verdict from an older checker, or for different bytes, is ignored.
   const reviewVersion = String(listing.latestVersion ?? '')
   const artifactsBucket = process.env.PLUGIN_ARTIFACTS_BUCKET
-  const reviewSha = versions.find((entry) => entry.version === reviewVersion)
-    ?.sha256
-  let verifier: unknown = null
-  if (artifactsBucket && reviewSha) {
+  const reviewEntry = versions.find((entry) => entry.version === reviewVersion)
+  const reviewSha = reviewEntry?.sha256
+  const stored = reviewEntry?.verification as StoredBundleVerdict | undefined
+  const storedIsCurrent = isStoredVerdictCurrent(stored, reviewSha ?? '')
+
+  let verifier: unknown = storedIsCurrent
+    ? { ok: stored?.ok, problems: stored?.problems ?? [] }
+    : null
+  let verifierCached = storedIsCurrent
+  if (!storedIsCurrent && artifactsBucket && reviewSha) {
     try {
       const [bytes] = await firebaseAdmin
         .app()
@@ -116,9 +133,32 @@ async function listingDetail(
         .bucket(artifactsBucket)
         .file(pluginArtifactPath(listingId, reviewVersion, reviewSha))
         .download()
-      verifier = checkPluginBundle(bytes.toString('utf8'))
+      const result = checkPluginBundle(bytes.toString('utf8'))
+      verifier = result
+      // Write it back so this sha is verified at most once platform-wide —
+      // covers every listing published before the verdict was persisted at
+      // publish time, and any version whose checker has since moved on.
+      // Best effort: a failed write costs the next reader a re-run, nothing
+      // more, so it must never fail the page.
+      await listingRef
+        .collection('pluginVersions')
+        .doc(reviewVersion)
+        .set(
+          {
+            verification: {
+              ok: result.ok,
+              problems: result.problems,
+              sha256: reviewSha,
+              verifierVersion: PLUGIN_VERIFIER_VERSION,
+              checkedAt: FieldValue.serverTimestamp(),
+            },
+          },
+          { merge: true },
+        )
+        .catch(() => undefined)
     } catch {
       verifier = { error: 'artifact unavailable' }
+      verifierCached = false
     }
   }
 
@@ -146,8 +186,11 @@ async function listingDetail(
       revokedVersions: revocation?.versions ?? null,
       unpublished: Boolean(listing.deletedAt),
       platformHostAbi: PLUGIN_HOST_ABI_VERSION,
-      versions,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      versions: versions.map(({ verification, ...entry }) => entry),
       verifier,
+      verifierCached,
+      verifierVersion: PLUGIN_VERIFIER_VERSION,
     },
     { status: 200 },
   )

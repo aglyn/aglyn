@@ -42,6 +42,47 @@ export interface BundleCheckResult {
 
 export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
 
+/**
+ * Stamped onto a cached verdict (AGL-962) so a stored result outlives only
+ * the checker that produced it.
+ *
+ * `checkPluginBundle` is pure over immutable, content-addressed bytes, so a
+ * verdict for a given sha256 never changes — but the CHECKS do. **Bump this
+ * whenever a rule is added, removed or loosened**, and every stored verdict
+ * from the old checker is ignored and recomputed on next read. Forgetting to
+ * bump means a reviewer sees a verdict from a checker that no longer exists,
+ * which is the failure mode re-running the verifier was meant to prevent.
+ */
+export const PLUGIN_VERIFIER_VERSION = 1
+
+/** A verdict as stored on a `pluginVersions` doc (AGL-962). */
+export interface StoredBundleVerdict {
+  ok?: boolean
+  problems?: BundleCheckProblem[]
+  sha256?: string
+  verifierVersion?: number
+}
+
+/**
+ * Whether a stored verdict may be served instead of re-running the checks.
+ *
+ * Fails closed on every mismatch: no verdict, a verdict for different bytes
+ * (a republished version keeps its version string but changes sha), or a
+ * verdict from a checker that has since changed. Any of those means
+ * download-and-recompute, which costs one page view rather than showing a
+ * reviewer a verdict that was never true of the bundle in front of them.
+ */
+export function isStoredVerdictCurrent(
+  stored: StoredBundleVerdict | null | undefined,
+  sha256: string,
+): boolean {
+  if (!stored || !sha256) return false
+  return (
+    stored.sha256 === sha256 &&
+    Number(stored.verifierVersion) === PLUGIN_VERIFIER_VERSION
+  )
+}
+
 const ENTRY_EXPORT = (name: string) =>
   new RegExp(
     // `export function name(`, `export const name =`, `export { name }`,

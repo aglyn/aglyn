@@ -22,6 +22,7 @@ import {
   MAX_PLUGIN_BUNDLE_BYTES,
   type PluginApiHandler,
   pluginArtifactPath,
+  PLUGIN_VERIFIER_VERSION,
   validatePluginManifest,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
@@ -316,6 +317,19 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         manifest,
         ...(changelog.trim() && { changelog: changelog.trim() }),
         publishedAt: now,
+        // Keep the verdict we just computed (AGL-962). The bundle is
+        // immutable and content-addressed, so this result holds for as long
+        // as the checker does — the review page reads it instead of
+        // re-downloading a megabyte per view. `verifierVersion` is what
+        // makes that safe: bump PLUGIN_VERIFIER_VERSION and every stored
+        // verdict is recomputed on next read.
+        verification: {
+          ok: verification.ok,
+          problems: verification.problems,
+          sha256,
+          verifierVersion: PLUGIN_VERIFIER_VERSION,
+          checkedAt: now,
+        },
       })
 
     return res
