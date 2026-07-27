@@ -33,7 +33,6 @@ import {
 } from '@mui/material'
 import {
   collection,
-  deleteDoc,
   doc,
   getCountFromServer,
   limit,
@@ -45,6 +44,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostOrgId,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
 
 export interface OrgListsCardProps {
@@ -62,6 +62,7 @@ export function OrgListsCard(props: OrgListsCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const { data: user } = useUser()
   const hostOrgId = useHostOrgId(hostId)
   const scope = hostOrgId
     ? (['orgs', hostOrgId] as const)
@@ -133,7 +134,33 @@ export function OrgListsCard(props: OrgListsCardProps) {
       confirmationButtonProps: { color: 'error' },
     })
     if (!accepted) return
-    await deleteDoc(doc(firestore, scope[0], scope[1], 'lists', list.$id))
+    // The list owns a `members` subcollection of enrolled contacts, and
+    // Firestore doesn't cascade — deleting the doc from here left that PII
+    // behind, unreachable but still readable to every org member. Only the
+    // Admin SDK can recursiveDelete, so this goes through the erase route
+    // (AGL-946).
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/resources/erase', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          scope: scope[0],
+          scopeId: scope[1],
+          kind: 'lists',
+          id: list.$id,
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result?.error ?? 'List delete failed')
+    } catch (error: any) {
+      return void enqueueSnackbar(error?.message ?? 'List delete failed', {
+        variant: 'error',
+      })
+    }
     enqueueSnackbar('List deleted', { variant: 'success', persist: false })
   }
 

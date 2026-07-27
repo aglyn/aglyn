@@ -147,9 +147,15 @@ service cloud.firestore {
 
       // Email lists (AGL-254): static audiences shared across the org's
       // hosts; the enrollList automation step writes members server-side.
+      // Deleting the LIST doc is API-only (AGL-946): its `members` are
+      // enrolled contacts (PII) in a subcollection Firestore won't cascade
+      // into, so a client delete left them readable to every org member
+      // with no list to reach them from. /api/resources/erase walks the
+      // whole subtree; enrollments below stay individually deletable.
       match /lists/{listId} {
         allow read: if isStaff() || isOrgMember();
-        allow write: if isStaff() || canWriteOrgData();
+        allow create, update: if isStaff() || canWriteOrgData();
+        allow delete: if isStaff();
         match /members/{memberId} {
           allow read: if isStaff() || isOrgMember();
           allow write: if isStaff() || canWriteOrgData();

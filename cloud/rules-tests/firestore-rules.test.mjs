@@ -497,6 +497,8 @@ describe('org-shared data (AGL-237)', () => {
       const db = context.firestore()
       await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1'), { name: 'Team' })
       await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1'), { a: 1 })
+      await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1'), { name: 'Newsletter' })
+      await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1', 'members', 'm1'), { email: 'x@y.z' })
       await setDoc(doc(db, 'orgs', ORG, 'contacts', 'c1'), { email: 'x@y.z' })
       await setDoc(doc(db, 'orgs', ORG, 'media', 'm1'), { url: 'u' })
       await setDoc(doc(db, 'orgs', ORG, 'installs', 'p1'), { version: '1' })
@@ -532,6 +534,15 @@ describe('org-shared data (AGL-237)', () => {
     await assertFails(
       deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1')),
     )
+    // Same for an email LIST and its enrolled `members` (PII) — AGL-946.
+    // Editors still manage the list itself and individual enrollments.
+    await assertSucceeds(
+      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'lists', 'l1'), { name: 'News' }),
+    )
+    await assertSucceeds(
+      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')),
+    )
+    await assertFails(deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'lists', 'l1')))
     await assertSucceeds(
       setDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'c2'), { email: 'n@y.z' }),
     )
