@@ -23,6 +23,7 @@ import { useHostId, useHostReady } from '../components/host-id-provider'
 import adminNavTabItems from '../constants/admin-nav-tabs'
 import hostNavTabItems from '../constants/host-nav-tabs'
 import manageNavTabItems from '../constants/manage-nav-tabs'
+import useIsStaff from './use-is-staff'
 import useOrgNavTabItems from './use-org-nav-tabs'
 import { useOrgScope } from './use-org-scope'
 
@@ -156,6 +157,7 @@ export function useSecondaryNav(): {
   const hostId = useHostId()
   // Scopes the plugin-contributed tabs to this workspace (AGL-758).
   const enabledPluginIds = useEnabledPluginIds()
+  const isStaff = useIsStaff()
 
   const addressable = useMemo(
     () =>
@@ -182,13 +184,19 @@ export function useSecondaryNav(): {
       case 'org':
         return orgNavTabItems
       case 'admin':
-        return adminNavTabItems()
+        // Staff-claim gated (AGL-953). StaffGuard/StaffOnly 404 the PAGES,
+        // but the strip rendered for anyone who typed an /admin URL, which
+        // published the name of every internal tool and made the 404 read
+        // as a broken link rather than a refusal. `null` (claim still
+        // resolving) yields nothing, so neither audience gets a flash of
+        // the wrong strip.
+        return isStaff === true ? adminNavTabItems() : []
       case 'manage':
         return manageNavTabItems()
       default:
         return []
     }
-  }, [addressable, section, orgNavTabItems, enabledPluginIds])
+  }, [addressable, section, orgNavTabItems, enabledPluginIds, isStaff])
 
   const activeTab = useMemo(
     () => resolveActiveTab(pathname, section.base, navTabItems),
