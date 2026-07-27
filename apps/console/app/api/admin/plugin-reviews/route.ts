@@ -146,6 +146,10 @@ async function handler(request: Request): Promise<Response> {
             displayName: listing.displayName ?? doc.id,
             reviewStatus: listing.reviewStatus,
             latestVersion: String(listing.latestVersion ?? ''),
+            // Takedown state (AGL-952), so the page can render the current
+            // verdict rather than a button whose effect staff can't see.
+            hidden: Boolean(listing.hiddenAt),
+            hiddenReason: String(listing.hiddenReason ?? ''),
             versions: versionsSnapshot.docs.map((versionDoc) => ({
               version: String(versionDoc.get('version') ?? versionDoc.id),
               trust: versionDoc.get('trust') ?? null,
