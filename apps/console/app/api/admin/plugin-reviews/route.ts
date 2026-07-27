@@ -30,6 +30,10 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { buildRoute, Route } from '@aglyn/aglyn/server'
+import {
+  outstandingChecklistItems,
+  PLUGIN_REVIEW_CHECKLIST,
+} from '../../../../constants/plugin-review-checklist'
 import { FieldValue } from 'firebase-admin/firestore'
 import { notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 
@@ -49,6 +53,11 @@ import { notifyOrgAdmins } from '@aglyn/tenant-data-admin'
  * listing/verifying here never signs anything. Every action lands in
  * adminAudit.
  */
+/** Every id the checklist route will accept (AGL-963). */
+const REQUIRED_OR_OPTIONAL = new Set(
+  PLUGIN_REVIEW_CHECKLIST.map((item) => item.id),
+)
+
 const ACTIONS: Record<string, string> = {
   'start-review': 'in_review',
   list: 'listed',
@@ -91,6 +100,7 @@ async function listingDetail(
       // Server-side only — used to decide whether the verdict below needs
       // recomputing; stripped before the payload goes out.
       verification: doc.get('verification') ?? null,
+      reviewChecklist: doc.get('reviewChecklist') ?? null,
     }
   })
 
@@ -187,7 +197,26 @@ async function listingDetail(
       unpublished: Boolean(listing.deletedAt),
       platformHostAbi: PLUGIN_HOST_ABI_VERSION,
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      versions: versions.map(({ verification, ...entry }) => entry),
+      versions: versions.map(
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        ({ verification, reviewChecklist, ...entry }) => entry,
+      ),
+      // Review checklist for the version under review (AGL-963). Ticks made
+      // against different bytes do not count, so a republish starts clean.
+      checklist: Object.fromEntries(
+        Object.entries(
+          (reviewEntry?.reviewChecklist ?? {}) as Record<
+            string,
+            { by?: string; sha256?: string }
+          >,
+        )
+          .filter(([, entry]) => entry?.sha256 === reviewSha)
+          .map(([id, entry]) => [id, { by: entry.by ?? null }]),
+      ),
+      checklistOutstanding: outstandingChecklistItems(
+        reviewEntry?.reviewChecklist as never,
+        reviewSha ?? '',
+      ),
       verifier,
       verifierCached,
       verifierVersion: PLUGIN_VERIFIER_VERSION,
@@ -409,6 +438,42 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // Review checklist (AGL-963). Ticks are per {version, sha256} and carry
+    // who + when, so "verified" is a recorded act rather than a click.
+    if (action === 'checklist') {
+      const version = String(body?.version ?? '')
+      const itemId = String(body?.itemId ?? '')
+      const checked = body?.checked !== false
+      if (!listingId || !version || !REQUIRED_OR_OPTIONAL.has(itemId)) {
+        return Response.json({ error: 'Unknown checklist item' }, { status: 400 })
+      }
+      const versionRef = firestore
+        .collection('communityListings')
+        .doc(listingId)
+        .collection('pluginVersions')
+        .doc(version)
+      const versionSnapshot = await versionRef.get()
+      if (!versionSnapshot.exists) {
+        return Response.json({ error: 'Unknown version' }, { status: 404 })
+      }
+      await versionRef.set(
+        {
+          reviewChecklist: {
+            [itemId]: checked
+              ? {
+                  by: decoded.uid,
+                  at: FieldValue.serverTimestamp(),
+                  // Pins the tick to the bytes it was made against.
+                  sha256: String(versionSnapshot.get('sha256') ?? ''),
+                }
+              : FieldValue.delete(),
+          },
+        },
+        { merge: true },
+      )
+      return Response.json({ ok: true, itemId, checked }, { status: 200 })
+    }
+
     const nextStatus = ACTIONS[action]
     if (!listingId || !nextStatus) {
       return Response.json({ error: 'Unknown action' }, { status: 400 })
@@ -421,6 +486,39 @@ async function handler(request: Request): Promise<Response> {
     const listingRef = firestore.collection('communityListings').doc(listingId)
     const listing = (await listingRef.get()).data()
     if (!listing) return Response.json({ error: 'Unknown listing' }, { status: 404 })
+
+    // Both gates that expose a plugin to customers require a completed
+    // checklist (AGL-963).
+    //
+    // `list` matters MORE than `verify`, which is easy to get backwards:
+    // listing is what makes `isListingBrowsable` true, so it is the moment
+    // executable third-party code becomes installable by every workspace.
+    // `verify` only adds the badge on top. Gating the badge while leaving
+    // listing open would put the ceremony on the weaker action.
+    //
+    // `start-review` and `reject` stay ungated on purpose: a reviewer must
+    // be able to throw something out without first ticking eight boxes
+    // about a bundle they have already decided against.
+    if (action === 'verify' || action === 'list') {
+      const version = String(listing.latestVersion ?? '')
+      const versionSnapshot = await listingRef
+        .collection('pluginVersions')
+        .doc(version)
+        .get()
+      const outstanding = outstandingChecklistItems(
+        versionSnapshot.get('reviewChecklist'),
+        String(versionSnapshot.get('sha256') ?? ''),
+      )
+      if (outstanding.length) {
+        return Response.json(
+          {
+            error: `Review checklist incomplete — ${outstanding.length} required item(s) outstanding`,
+            outstanding,
+          },
+          { status: 409 },
+        )
+      }
+    }
 
     await listingRef.set(
       {

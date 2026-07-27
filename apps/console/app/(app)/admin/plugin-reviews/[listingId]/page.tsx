@@ -24,8 +24,10 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
+  Checkbox,
   Chip,
   Divider,
+  FormControlLabel,
   Skeleton,
   Stack,
   TextField,
@@ -37,6 +39,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
 import { docsHelp } from '../../../../../constants/docs-links'
+import { PLUGIN_REVIEW_CHECKLIST } from '../../../../../constants/plugin-review-checklist'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 
@@ -80,6 +83,9 @@ interface ListingDetail {
   } | null
   /** The verdict came from the version doc rather than a fresh download. */
   verifierCached: boolean
+  /** Ticked items, keyed by id, for THIS version's bytes (AGL-963). */
+  checklist: Record<string, { by: string | null }>
+  checklistOutstanding: string[]
 }
 
 /** Verifier findings read as a wall of text otherwise; group by severity. */
@@ -441,6 +447,93 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                   </Stack>
                 </CardDisplay>
 
+                {/* The checklist is the actual review (AGL-963). The static
+                    verifier matches source TEXT, so computed access like
+                    g['ev'+'al'] walks straight past it — these items are the
+                    things a machine structurally cannot judge. */}
+                <CardDisplay
+                  header={`Review checklist (${
+                    PLUGIN_REVIEW_CHECKLIST.filter(
+                      (item) => detail.checklist?.[item.id],
+                    ).length
+                  }/${PLUGIN_REVIEW_CHECKLIST.length})`}
+                  contentGutterX
+                  contentGutterY
+                >
+                  <Stack spacing={1}>
+                    <Typography variant="body2" color="text.secondary">
+                      {'The static verifier is a lint, not a boundary — it ' +
+                        'cannot see computed property access, tell code from ' +
+                        'comments, or judge intent. These are the checks only ' +
+                        'a person can make. Ticks are recorded against this ' +
+                        "version's exact bytes and reset if it is republished."}
+                    </Typography>
+                    {detail.checklistOutstanding.length ? (
+                      <Alert severity="info">
+                        {`${detail.checklistOutstanding.length} required item(s) outstanding — List and Verify stay blocked until they are done. Rejecting never needs the checklist.`}
+                      </Alert>
+                    ) : (
+                      <Alert severity="success">
+                        {'Every required item is recorded for these bytes.'}
+                      </Alert>
+                    )}
+                    {PLUGIN_REVIEW_CHECKLIST.map((item) => (
+                      <Stack key={item.id} spacing={0.25} sx={{ pl: 0.5 }}>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              size="small"
+                              checked={Boolean(detail.checklist?.[item.id])}
+                              disabled={busy}
+                              onChange={(event) =>
+                                void post(
+                                  {
+                                    action: 'checklist',
+                                    version: detail.latestVersion,
+                                    itemId: item.id,
+                                    checked: event.target.checked,
+                                  },
+                                  event.target.checked
+                                    ? 'Recorded'
+                                    : 'Cleared',
+                                )
+                              }
+                            />
+                          }
+                          label={
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                            >
+                              <Typography variant="body2">
+                                {item.label}
+                              </Typography>
+                              {item.required ? (
+                                <Chip size="small" label="Required" />
+                              ) : null}
+                              {item.realmOnly ? (
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  label="Realm trust"
+                                />
+                              ) : null}
+                            </Stack>
+                          }
+                        />
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ pl: 4 }}
+                        >
+                          {item.detail}
+                        </Typography>
+                      </Stack>
+                    ))}
+                  </Stack>
+                </CardDisplay>
+
                 <CardDisplay
                   header="Review verdict"
                   contentGutterX
@@ -465,21 +558,27 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                     >
                       {'Start review'}
                     </Button>
+                    {/* Listing is what puts the plugin in front of every
+                        workspace, so it carries the same bar as the badge. */}
                     <Button
                       size="small"
                       variant="contained"
-                      disabled={busy}
+                      disabled={busy || detail.checklistOutstanding.length > 0}
                       onClick={() => void post({ action: 'list' }, 'Listed')}
                     >
-                      {'List'}
+                      {detail.checklistOutstanding.length
+                        ? `List (${detail.checklistOutstanding.length} left)`
+                        : 'List'}
                     </Button>
                     <Button
                       size="small"
                       color="success"
-                      disabled={busy}
+                      disabled={busy || detail.checklistOutstanding.length > 0}
                       onClick={() => void post({ action: 'verify' }, 'Verified')}
                     >
-                      {'Verify ✓'}
+                      {detail.checklistOutstanding.length
+                        ? `Verify ✓ (${detail.checklistOutstanding.length} left)`
+                        : 'Verify ✓'}
                     </Button>
                     <TextField
                       size="small"
