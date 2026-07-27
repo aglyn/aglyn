@@ -19,7 +19,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
   effectiveDatasetModel,
-  hostCollectionKind,
+  legacyCollectionKind,
   nameSearchKey,
   rewriteBindingTokensDeep,
   validateDocument,
@@ -214,12 +214,12 @@ async function handler(request: Request): Promise<Response> {
         const cleaned = cleanDoc(item)
         // `collections` holds both content and catalog documents (AGL-954).
         // A bundle exported before that discriminator existed carries no
-        // `kind`, and import is the last path that can still create one — so
-        // classify here rather than leaving the doc to the shape fallback
-        // forever. An explicit `kind` in the bundle is preserved.
+        // `kind`, so this is the one place that still infers it from shape
+        // (AGL-979) — everywhere else reads `kind` and does not guess. An
+        // explicit `kind` in the bundle is preserved.
         await write(docRef, {
           ...cleaned,
-          kind: hostCollectionKind(cleaned),
+          kind: legacyCollectionKind(cleaned),
         })
         const entries: any[] = Array.isArray(item.entries) ? item.entries : []
         for (const entry of entries.slice(0, 200)) {
