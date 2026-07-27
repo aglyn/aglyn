@@ -84,6 +84,9 @@ export async function searchContent(options: {
   // Published collection entries.
   const collections = await hostRef.collection('collections').limit(20).get()
   for (const collectionDoc of collections.docs) {
+    // Commerce's product collections share this path (AGL-954); they own no
+    // entries, so reading them here is a wasted round trip per collection.
+    if (Aglyn.hostCollectionKind(collectionDoc.data()) !== 'content') continue
     const slug = collectionDoc.get('slug')
     const entries = await collectionDoc.ref
       .collection('entries')

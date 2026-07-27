@@ -117,13 +117,13 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     [productDocs],
   )
   // Content collections (AGL-81) live in the same `hosts/{hostId}/collections`
-  // subcollection (displayName, no name/mode); only name-bearing commerce
-  // docs belong in this list.
+  // subcollection. This used to keep them out by requiring a non-empty
+  // `name`, which held only because the Content page happens to write
+  // `displayName` — a content doc that ever acquired a `name` (an import, a
+  // hand edit) would land in this list, and its Delete now cascades into
+  // `entries` (AGL-947). The shared classifier is the real check (AGL-954).
   const commerceCollections: CollectionRow[] = useMemo(
-    () =>
-      [...(collectionDocs ?? [])].filter(
-        (row: any) => typeof row.name === 'string' && row.name.trim(),
-      ),
+    () => (collectionDocs ?? []).filter(Aglyn.isHostCollectionKind('catalog')),
     [collectionDocs],
   )
 
@@ -236,6 +236,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
       ...data,
       name: collectionDraft.name.trim().slice(0, 80),
       slug: collectionDraft.slug || CommerceModel.commerceSlug(collectionDraft.name),
+      // Disambiguates this doc from the Content page's collections, which
+      // live in the same Firestore collection (AGL-954).
+      kind: 'catalog',
       updatedAt: Timestamp.now(),
     })
     setCollectionDraft(null)
@@ -273,6 +276,10 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
             scopeId: hostId,
             kind: 'collections',
             id: row.$id,
+            // The route re-checks this server-side (AGL-954): a stale client
+            // must not be able to recursiveDelete a content collection's
+            // entries through the catalog card.
+            collectionKind: 'catalog',
           }),
         })
         const result = await response.json().catch(() => ({}))

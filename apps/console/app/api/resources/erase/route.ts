@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { hostCollectionKind, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   eraseSubtree,
@@ -125,6 +125,28 @@ async function handler(request: Request): Promise<Response> {
             error: 'This workspace is suspended',
           }, { status: 403 })
         }
+      }
+    }
+
+    // `collections` holds two unrelated document kinds on one path (AGL-954).
+    // The caller states which one it believes it is deleting, and that is
+    // checked here — the catalog card must not be able to recursiveDelete a
+    // content collection's `entries`, however stale its list is.
+    const expectedCollectionKind = body?.collectionKind
+    if (kind === 'collections' && expectedCollectionKind) {
+      const snapshot = await firestore
+        .collection(scope)
+        .doc(scopeId)
+        .collection(kind)
+        .doc(id)
+        .get()
+      if (
+        snapshot.exists &&
+        hostCollectionKind(snapshot.data()) !== expectedCollectionKind
+      ) {
+        return Response.json({
+          error: 'That collection belongs to a different part of the console',
+        }, { status: 409 })
       }
     }
 

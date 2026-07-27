@@ -20,6 +20,7 @@ import {
   EntityPickerContext,
   type EntityOption,
   effectiveDatasetModel,
+  isHostCollectionKind,
 } from '@aglyn/aglyn'
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
@@ -91,7 +92,12 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
   const value = useMemo(
     () => ({
       products: toOptions(productDocs),
-      collections: toOptions(collectionDocs),
+      // COLLECTION_SELECT is the commerce product-grid picker, and content
+      // collections share the same Firestore path (AGL-954) — offering them
+      // here would bind a product grid to a blog.
+      collections: toOptions(
+        (collectionDocs ?? []).filter(isHostCollectionKind('catalog')),
+      ),
       categories: toOptions(categoryDocs),
       // Console-created datasets store the human name as `displayName`
       // (AGL-536); `name` covers pre-migration docs.

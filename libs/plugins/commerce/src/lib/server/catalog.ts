@@ -163,11 +163,14 @@ export async function queryPublicCatalog(
   ] =
     await Promise.all([
       hostRef.collection('products').limit(500).get(),
+      // limit(5) not 1: content collections share this path and a slug is
+      // unique only within a kind (AGL-954) — the catalog match is picked
+      // out below rather than trusting whichever doc came back first.
       !collectionIdParam && collectionSlug
         ? hostRef
             .collection('collections')
             .where('slug', '==', collectionSlug)
-            .limit(1)
+            .limit(5)
             .get()
         : null,
       !categoryIdParam && categorySlug
@@ -184,10 +187,16 @@ export async function queryPublicCatalog(
         ? hostRef.collection('productCategories').limit(200).get()
         : null,
     ])
-  const collection =
-    collectionByIdSnapshot?.exists
+  const collectionById =
+    collectionByIdSnapshot?.exists &&
+    Aglyn.hostCollectionKind(collectionByIdSnapshot.data()) === 'catalog'
       ? collectionByIdSnapshot
-      : collectionsSnapshot?.docs[0]
+      : undefined
+  const collection =
+    collectionById ??
+    collectionsSnapshot?.docs.find(
+      (docSnapshot) => Aglyn.hostCollectionKind(docSnapshot.data()) === 'catalog',
+    )
   const categoryId = categoryIdParam || categoriesSnapshot?.docs[0]?.id
 
   let products = productsSnapshot.docs
