@@ -62,7 +62,12 @@ async function handler(request: Request): Promise<Response> {
       .get()
     const customerId = org.get('stripeCustomerId')
     if (!customerId) {
-      return Response.json({ invoices: [], paymentMethod: null }, { status: 200 })
+      // Never subscribed — distinct from "lookup failed" (AGL-940), which the
+      // UI has to be able to tell apart.
+      return Response.json(
+        { invoices: [], paymentMethod: null, hasCustomer: false },
+        { status: 200 },
+      )
     }
     const headers = { Authorization: `Bearer ${stripeKey}` }
     const [invoicesResponse, customerResponse] = await Promise.all([
@@ -81,6 +86,29 @@ async function handler(request: Request): Promise<Response> {
     ])
     const invoicesPayload = await invoicesResponse.json()
     const customerPayload = await customerResponse.json()
+
+    // AGL-940: these used to be read straight through. A Stripe failure —
+    // wrong-mode key, deleted customer, restricted key, rate limit — yields
+    // `{error}` instead of `{data}`, so `invoices` fell to [] and
+    // `paymentMethod` to null and the endpoint returned 200. Staff saw "No
+    // invoices yet" for an org with a paid invoice, indistinguishable from an
+    // account that had never subscribed. Surface it instead of swallowing it.
+    if (!invoicesResponse.ok || !customerResponse.ok) {
+      const detail =
+        invoicesPayload?.error?.message ?? customerPayload?.error?.message ?? null
+      console.error('Stripe billing lookup failed', {
+        orgId,
+        customerId,
+        invoicesStatus: invoicesResponse.status,
+        customerStatus: customerResponse.status,
+        detail,
+      })
+      return Response.json(
+        { invoices: [], paymentMethod: null, hasCustomer: true, stripeError: detail ?? 'Stripe lookup failed' },
+        { status: 200 },
+      )
+    }
+
     const invoices = Array.isArray(invoicesPayload?.data)
       ? invoicesPayload.data.map((invoice: any) => ({
           id: invoice.id,
@@ -98,19 +126,28 @@ async function handler(request: Request): Promise<Response> {
           hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
         }))
       : []
-    const card =
-      customerPayload?.invoice_settings?.default_payment_method?.card ?? null
-    const paymentMethod = card
-      ? {
-          brand: card.brand ?? null,
-          last4: card.last4 ?? null,
-          expMonth: card.exp_month ?? null,
-          expYear: card.exp_year ?? null,
+    // AGL-940: this read `default_payment_method.card` and nothing else, so a
+    // non-card method rendered as "No payment method" even when one was on
+    // file. Checkout offers Link, Amazon Pay, Cash App and Klarna, and the
+    // reference org (Test Org) pays by Link — `.card` is undefined there.
+    // Describe whatever type is attached.
+    const pm = customerPayload?.invoice_settings?.default_payment_method ?? null
+    const card = pm?.card ?? null
+    const paymentMethod = !pm
+      ? null
+      : {
+          type: pm.type ?? (card ? 'card' : null),
+          brand: card?.brand ?? null,
+          last4: card?.last4 ?? pm[pm.type]?.last4 ?? null,
+          expMonth: card?.exp_month ?? null,
+          expYear: card?.exp_year ?? null,
+          // Link and the wallet methods identify by email, not a PAN.
+          email: pm[pm.type]?.email ?? pm.billing_details?.email ?? null,
         }
-      : null
     return Response.json({
       invoices,
       paymentMethod,
+      hasCustomer: true,
       delinquent: customerPayload?.delinquent === true,
     }, { status: 200 })
   } catch (error) {

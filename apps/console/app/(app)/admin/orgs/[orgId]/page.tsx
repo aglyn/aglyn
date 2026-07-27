@@ -74,6 +74,31 @@ import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
  * this org — no minted tokens, no write surface, so there is nothing to
  * lock down. Mutations stay on the audited Organizations list page.
  */
+/**
+ * A human label for whatever payment method is on file (AGL-940). Checkout
+ * offers Link, Amazon Pay, Cash App and Klarna alongside cards, and the
+ * wallet methods identify by email rather than a PAN — the card-shaped
+ * label rendered "undefined •••• ---- exp --/--" for those.
+ */
+function describePaymentMethod(pm: {
+  type: string | null
+  brand: string | null
+  last4: string | null
+  expMonth: number | null
+  expYear: number | null
+  email: string | null
+}): string {
+  if (pm.brand && pm.last4) {
+    const exp =
+      pm.expMonth && pm.expYear ? ` exp ${pm.expMonth}/${pm.expYear}` : ''
+    return `${pm.brand} •••• ${pm.last4}${exp}`
+  }
+  const label = pm.type ? pm.type.replace(/_/g, ' ') : 'payment method'
+  if (pm.last4) return `${label} •••• ${pm.last4}`
+  if (pm.email) return `${label} · ${pm.email}`
+  return label
+}
+
 const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const params = useParams<{ orgId?: string }>()
   const orgId = params?.orgId ?? ''
@@ -137,12 +162,18 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       hostedInvoiceUrl: string | null
     }>
     paymentMethod: {
+      type: string | null
       brand: string | null
       last4: string | null
       expMonth: number | null
       expYear: number | null
+      email: string | null
     } | null
     delinquent?: boolean
+    /** False when the org never subscribed — distinct from a failed lookup. */
+    hasCustomer?: boolean
+    /** Set when Stripe itself errored; the lists above are then meaningless. */
+    stripeError?: string
   } | null>(null)
   const [billingError, setBillingError] = useState<string | null>(null)
   useEffect(() => {
@@ -872,14 +903,19 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                               {billing.paymentMethod ? (
                                 <Chip
                                   size="small"
-                                  label={`${billing.paymentMethod.brand ?? 'card'} •••• ${
-                                    billing.paymentMethod.last4 ?? '----'
-                                  } exp ${billing.paymentMethod.expMonth ?? '--'}/${
-                                    billing.paymentMethod.expYear ?? '--'
-                                  }`}
+                                  label={describePaymentMethod(
+                                    billing.paymentMethod,
+                                  )}
                                 />
                               ) : (
-                                <Chip size="small" label="No payment method" />
+                                <Chip
+                                  size="small"
+                                  label={
+                                    billing.hasCustomer === false
+                                      ? 'Never subscribed'
+                                      : 'No payment method'
+                                  }
+                                />
                               )}
                               {billing.delinquent ? (
                                 <Chip
@@ -889,12 +925,18 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 />
                               ) : null}
                             </Stack>
-                            {billing.invoices.length === 0 ? (
+                            {billing.stripeError ? (
+                              <Alert severity="warning">
+                                {`Couldn't reach Stripe — this is not "no invoices". ${billing.stripeError}`}
+                              </Alert>
+                            ) : billing.invoices.length === 0 ? (
                               <Typography
                                 variant="body2"
                                 color="text.secondary"
                               >
-                                {'No invoices yet.'}
+                                {billing.hasCustomer === false
+                                  ? 'This organization has never subscribed.'
+                                  : 'No invoices yet.'}
                               </Typography>
                             ) : (
                               <Table size="small">
