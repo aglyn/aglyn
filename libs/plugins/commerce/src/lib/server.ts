@@ -50,6 +50,7 @@ import { reservationAvailabilityHandler } from './server/reservation-availabilit
 import { gateHandler } from './server/gate'
 import { memberFeedHandler } from './server/member-feed'
 import { membershipAccountHandler } from './server/membership-account'
+import { membershipAdminPasswordHandler } from './server/membership-admin-password'
 import { membershipContentHandler } from './server/membership-content'
 import { membershipLoginHandler } from './server/membership-login'
 import { membershipLogoutHandler } from './server/membership-logout'
@@ -97,6 +98,12 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/subscription-portal', subscriptionPortalHandler)
   registerPluginApiRoute('commerce/reviews', reviewsHandler)
   registerPluginApiRoute('membership/account', membershipAccountHandler)
+  // Console-driven password help for a member (AGL-914). Console-auth, not
+  // the visitor cookie the neighbouring routes take.
+  registerPluginApiRoute(
+    'membership/admin-password',
+    membershipAdminPasswordHandler,
+  )
   registerPluginApiRoute('membership/content', membershipContentHandler)
   registerPluginApiRoute('membership/login', membershipLoginHandler)
   registerPluginApiRoute('membership/logout', membershipLogoutHandler)

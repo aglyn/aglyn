@@ -68,11 +68,22 @@ export function mintMemberSession(hostId: string, memberId: string): string {
   return `${payload}.${sign(payload)}`
 }
 
-/** Returns the memberId when the cookie verifies for this host. */
-export function verifyMemberSession(
+/**
+ * Verified session contents. `issuedAtMs` is derived, not stored: the
+ * payload carries `now + TTL`, so subtracting the TTL recovers the mint
+ * time. That is what lets sessions be revoked in bulk (AGL-914) without
+ * changing the token format or invalidating cookies already in the wild.
+ */
+export interface MemberSessionToken {
+  memberId: string
+  issuedAtMs: number
+}
+
+/** Returns the session contents when the cookie verifies for this host. */
+export function parseMemberSession(
   hostId: string,
   token: string | undefined,
-): string | null {
+): MemberSessionToken | null {
   const parts = String(token ?? '').split('.')
   if (parts.length !== 4) return null
   const [tokenHost, memberId, expires, signature] = parts
@@ -84,7 +95,15 @@ export function verifyMemberSession(
   const b = Buffer.from(expected)
   if (a.length !== b.length) return null
   if (!timingSafeEqual(new Uint8Array(a), new Uint8Array(b))) return null
-  return memberId
+  return { memberId, issuedAtMs: Number(expires) - SESSION_TTL_MS }
+}
+
+/** Returns the memberId when the cookie verifies for this host. */
+export function verifyMemberSession(
+  hostId: string,
+  token: string | undefined,
+): string | null {
+  return parseMemberSession(hostId, token)?.memberId ?? null
 }
 
 /** Password-reset links live for one hour (AGL-552). */
@@ -189,6 +208,15 @@ export function readMemberSession(
   return verifyMemberSession(hostId, raw)
 }
 
+/**
+ * Field name for the bulk session cut-off (AGL-914). Set to `Date.now()`
+ * whenever every existing session for a member must stop working — today
+ * only when an admin sets their password from the console, since a rewritten
+ * `passwordScrypt` does NOT invalidate sessions on its own (unlike a reset
+ * TOKEN, which binds to the hash by design).
+ */
+export const MEMBER_SESSIONS_VALID_FROM_FIELD = 'sessionsValidFromMs'
+
 /** Suspension rejection body — matches the login flow's AGL-546 message. */
 export const MEMBER_SUSPENDED_ERROR =
   'This account has been suspended. Contact the site owner.'
@@ -216,8 +244,12 @@ export async function readActiveMemberSession(
   req: PluginApiRequest,
   hostId: string,
 ): Promise<MemberSessionCheck> {
-  const memberId = readMemberSession(req, hostId)
-  if (!memberId) return { status: 'anonymous' }
+  const session = parseMemberSession(
+    hostId,
+    req.cookies?.[memberCookieName(hostId)],
+  )
+  if (!session) return { status: 'anonymous' }
+  const { memberId, issuedAtMs } = session
   const member = await firebaseAdmin
     .app()
     .firestore()
@@ -227,6 +259,12 @@ export async function readActiveMemberSession(
     .doc(memberId)
     .get()
   if (!member.exists) return { status: 'anonymous' }
+  // Revoked in bulk (AGL-914): a session minted before the cut-off is dead
+  // even though its signature is still good. Reads as `anonymous` rather
+  // than `suspended` — the account is fine, this browser just holds a stale
+  // cookie, and signing in again is the correct next step.
+  const validFrom = Number(member.get(MEMBER_SESSIONS_VALID_FROM_FIELD) ?? 0)
+  if (validFrom && issuedAtMs < validFrom) return { status: 'anonymous' }
   if (member.get('suspended') === true) {
     return { status: 'suspended', memberId }
   }
