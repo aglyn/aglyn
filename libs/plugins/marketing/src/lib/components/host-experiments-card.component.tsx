@@ -250,8 +250,13 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
     const accepted = await confirm({
       title: 'Delete experiment?',
       description: `"${experiment.name}" and its results are removed.`,
+      confirmationText: 'Delete',
       confirmationButtonProps: { color: 'error' },
     })
+      // Resolves with no value and rejects on cancel — gating on the
+      // resolved value alone made this always return (AGL-950).
+      .then(() => true)
+      .catch(() => false)
     if (!accepted) return
     await deleteDoc(
       doc(firestore, 'hosts', hostId, 'experiments', experiment.$id),

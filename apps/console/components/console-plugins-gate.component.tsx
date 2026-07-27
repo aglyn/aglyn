@@ -23,7 +23,7 @@ import {
 } from '@aglyn/aglyn'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import type React from 'react'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import BootSplash from './boot-splash.component'
 import { consolePluginLoader } from '../constants/console-plugin-loader'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -49,6 +49,21 @@ function useEffectiveEnabledPlugins(): { flagsReady: boolean; enabledKey: string
 }
 
 /**
+ * The current workspace's effective plugin ids, for scoping reads of the
+ * ConsoleExtension registry (AGL-758). The registry is a module-global
+ * union across every org visited this session, so any surface that lists
+ * nav items, widgets, pages or providers must filter by this set — without
+ * it, a plugin enabled for one workspace keeps contributing to the next.
+ */
+export function useEnabledPluginIds(): string[] {
+  const { enabledKey } = useEffectiveEnabledPlugins()
+  return useMemo(
+    () => enabledKey.split(',').filter(Boolean),
+    [enabledKey],
+  )
+}
+
+/**
  * Dynamic console-plugin activation (AGL-417), replacing the static
  * register-console-plugins composition root: once the org workspace
  * resolves, load + register its enabled plugins' ConsoleExtensions, THEN
@@ -65,6 +80,11 @@ export default function ConsolePluginsGate({
   const { data: user } = useUser()
   const [readyForOrg, setReadyForOrg] = useState<string | null>(null)
   const { flagsReady, enabledKey } = useEffectiveEnabledPlugins()
+  const enabledPluginIds = useEnabledPluginIds()
+  // Latches on the first completed load; from then on a workspace switch
+  // renders through instead of blanking the tree (AGL-758).
+  const hasLoadedOnce = useRef(false)
+  if (readyForOrg) hasLoadedOnce.current = true
 
   useEffect(() => {
     // Wait for Remote Config activation (AGL-422) so a release-flagged-off
@@ -92,19 +112,27 @@ export default function ConsolePluginsGate({
   }, [orgId, flagsReady, enabledKey])
 
   // This gate sits ABOVE the whole route tree — the app bar and nav strip
-  // included — so returning null here blanks the entire window, not just the
-  // page body. It re-holds on every `orgId` CHANGE, not only the first load:
-  // switching workspaces, or leaving `/[orgSlug]/…` for a route without an
-  // org segment (`/admin`, `/manage`), where `currentOrg` falls back down the
-  // chain and can land on a different org. The hold spans a network fetch
-  // (`loadOrgRealmPlugins`), so on a cold cache that was seconds of blank
-  // screen mid-navigation (AGL-903). Show the boot splash instead: same wait,
-  // but the app looks like it is loading rather than dead.
-  if (orgId && readyForOrg !== orgId) return <BootSplash />
+  // included — so holding here blanks the entire window, not just the page
+  // body. It used to hold on every `orgId` CHANGE, which meant a workspace
+  // switch unmounted and remounted the whole console: an empty frame, then
+  // the boot splash, then a fresh tree (AGL-758). The hold spans a network
+  // fetch (`loadOrgRealmPlugins`), so on a cold cache that was seconds of it
+  // (AGL-903).
+  //
+  // Only the FIRST load of a session needs the hold, because the registry
+  // starts empty and rendering the shell before it is populated would drop
+  // every plugin nav item and page. After that the registry is a union that
+  // never shrinks, and reads are scoped to the org's own plugin ids
+  // (`useEnabledPluginIds`), so a switch can keep the previous tree mounted:
+  // the new workspace's plugin tabs simply appear when their chunks land,
+  // and the old workspace's never leak in.
+  if (orgId && !hasLoadedOnce.current && readyForOrg !== orgId) {
+    return <BootSplash />
+  }
   // Plugin-registered app providers (AGL-419) wrap every console page —
-  // e.g. the community plugin's AI-assist provider. Mounted only once the
-  // registry is populated; each receives the org billing doc.
-  return listConsoleProviders().reduce<ReactNode>(
+  // e.g. the community plugin's AI-assist provider. Scoped to this org, so
+  // a provider from a previously visited workspace does not linger.
+  return listConsoleProviders(enabledPluginIds).reduce<ReactNode>(
     (inner, Provider, index) => (
       <Provider key={index} org={org}>
         {inner}

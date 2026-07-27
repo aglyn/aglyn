@@ -118,12 +118,18 @@ service cloud.firestore {
       }
       // Dataset/record CREATES are API-only (AGL-473): the console route
       // enforces the dataStore entitlement and dataset/record quotas
-      // server-side. Updates and deletes stay editor-writable — they
+      // server-side. Record updates/deletes stay editor-writable — they
       // don't consume quota.
+      // Deleting the DATASET doc is API-only too (AGL-945): the doc owns a
+      // `records` subcollection and Firestore doesn't cascade, so a client
+      // delete orphaned every record beneath it (still billed, still
+      // matched by the rule below, which doesn't check that its parent
+      // exists). /api/resources/erase recursiveDeletes the whole subtree.
       match /datasets/{datasetId} {
         allow read: if isStaff() || isOrgMember();
         allow create: if isStaff();
-        allow update, delete: if isStaff() || canWriteOrgData();
+        allow update: if isStaff() || canWriteOrgData();
+        allow delete: if isStaff();
         match /records/{recordId} {
           allow read: if isStaff() || isOrgMember();
           allow create: if isStaff();
@@ -141,9 +147,15 @@ service cloud.firestore {
 
       // Email lists (AGL-254): static audiences shared across the org's
       // hosts; the enrollList automation step writes members server-side.
+      // Deleting the LIST doc is API-only (AGL-946): its `members` are
+      // enrolled contacts (PII) in a subcollection Firestore won't cascade
+      // into, so a client delete left them readable to every org member
+      // with no list to reach them from. /api/resources/erase walks the
+      // whole subtree; enrollments below stay individually deletable.
       match /lists/{listId} {
         allow read: if isStaff() || isOrgMember();
-        allow write: if isStaff() || canWriteOrgData();
+        allow create, update: if isStaff() || canWriteOrgData();
+        allow delete: if isStaff();
         match /members/{memberId} {
           allow read: if isStaff() || isOrgMember();
           allow write: if isStaff() || canWriteOrgData();
@@ -383,9 +395,19 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'installs',
               'templates']));
+        // `collections` joins the delete exclusion (AGL-947): a collection
+        // owns `entries`, Firestore doesn't cascade, and a client delete
+        // orphaned them — /api/resources/erase recursiveDeletes instead.
+        // The exclusion is by NAME and {document=**} spans deeper paths, so
+        // it would take single-entry deletes with it; the block below
+        // re-grants those (rules OR, so a dedicated allow still wins).
         allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
-            !(subcollection in ['screens', 'layouts']));
+            !(subcollection in ['screens', 'layouts', 'collections']));
+      }
+      match /collections/{collectionId}/entries/{entryId} {
+        allow delete: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
       }
     }
 

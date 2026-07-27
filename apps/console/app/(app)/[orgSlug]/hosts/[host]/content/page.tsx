@@ -172,10 +172,16 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     : hostDoc?.subdomain
       ? `https://${hostDoc.subdomain}.aglyn.app`
       : null
+  // `collections` is shared with commerce's product collections (AGL-954) —
+  // list only the content ones, or the catalog's rows show up here and
+  // entries published under them are unreachable.
   const collections = useMemo(
-    () => [...(collectionDocs ?? [])].sort((a, b) =>
-      String(a.displayName ?? '').localeCompare(String(b.displayName ?? '')),
-    ),
+    () =>
+      (collectionDocs ?? [])
+        .filter(Aglyn.isHostCollectionKind('content'))
+        .sort((a, b) =>
+          String(a.displayName ?? '').localeCompare(String(b.displayName ?? '')),
+        ),
     [collectionDocs],
   )
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -316,6 +322,9 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     await setDoc(doc(firestore, 'hosts', hostId, 'collections', id), {
       displayName,
       slug: slugify(displayName),
+      // Disambiguates this doc from commerce's product collections, which
+      // live in the same Firestore collection (AGL-954).
+      kind: 'content',
       createdAt: Timestamp.now(),
     })
     setNewCollectionOpen(false)

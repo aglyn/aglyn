@@ -82,7 +82,18 @@ Every link must hold before a byte executes:
    loads when a key is configured. Server-side loading refuses to run
    without a key at all.
 3. **Kill switch** — `revocations/{listingId}` beats a still-present trust
-   grant; revoked versions are dropped by the server-side join.
+   grant; revoked versions are dropped by the server-side join. **Staff
+   takedown is a kill switch too** (AGL-948): hiding a plugin listing
+   writes the revocation as well, and `resolveCommunityPluginVersion`
+   refuses any listing carrying `hiddenAt`, so one moderation action stops
+   the bundle everywhere instead of only de-listing it. Un-hiding clears
+   the revocation only if the takedown wrote it (`source: 'takedown'`), so
+   a hand-written revocation survives.
+
+   Publisher **unpublish (`deletedAt`) is deliberately NOT a kill
+   switch** — it blocks new installs and hides the listing, but existing
+   installs keep loading. A publisher retiring a listing must not break
+   the sites already paying for it.
 4. **ABI compatibility** (AGL-429) — manifests declare `hostAbi`; the
    loaders refuse a bundle whose generation differs from the host's
    `PLUGIN_HOST_ABI_VERSION` (undeclared = legacy, loads with a warning),
@@ -176,6 +187,82 @@ Generate the key pair with
 - **Realm artifacts** are immutable content-addressed objects published
   with `public, max-age=31536000, immutable`; front them with a CDN and
   cache hits are free forever (a new version is a new URL).
+
+## Artifact retention (AGL-942)
+
+Bundles are immutable and content-addressed, so the bucket only ever grew
+— nothing deleted from it. The stranding case is a **republish of the same
+version string with different bytes**: the new build writes a new object
+and the version doc's `sha256` repoints, leaving the previous object
+unreachable forever (every loader derives its URL from the version doc's
+hash).
+
+`POST /api/admin/reap-plugin-artifacts` (cron-secret auth) joins the
+bucket against Firestore and deletes only what no version doc claims. It
+runs weekly from `.github/workflows/scheduled-crons.yml` (Mondays 05:30
+UTC) alongside the other scheduled routes, and is in that workflow's
+`workflow_dispatch` list for a manual run:
+
+- **Survives** if ANY `pluginVersions` doc claims the object's exact
+  `{listingId}/{version}/{sha256}`. Not "is it the latest" and not "does
+  an install pin it" — `install-plugin` accepts a `requestedVersion`, so
+  every version doc is installable and keeps its bytes alive at zero
+  installs.
+- **Reaped** if unclaimed AND older than 7 days. The min-age guard exists
+  because a publish writes the object before the version doc that claims
+  it; a run racing an in-flight publish would otherwise see a legitimate
+  bundle as an orphan. Capped at 200 deletions per run and audited to
+  `adminAudit` (`plugins.artifacts.reap`).
+- **Reported, never deleted**: objects whose parent `communityListings`
+  doc is gone (Firestore doesn't cascade to subcollections, and existing
+  installs of a hard-deleted listing still load off the orphaned version
+  doc), and anything under `artifacts/` that isn't a canonical path.
+
+Deletions are permanent — the bucket has no object versioning and a
+publisher's build isn't reproducible from our side — so run it dry first:
+
+```
+CRON_SECRET=… node tools/scripts/reap-plugin-artifacts.mjs           # dry run
+CRON_SECRET=… node tools/scripts/reap-plugin-artifacts.mjs --apply
+```
+
+The script is a thin client for the route, not a second implementation:
+the join needs the Admin SDK plus `PLUGIN_ARTIFACTS_BUCKET`, and one home
+for the rules means a local dry run and the weekly cron can never disagree
+about what counts as an orphan. The decision itself is a pure function
+(`planArtifactReap`, `apps/console/utils/server/reap-plugin-artifacts.ts`)
+so the rules that authorize a permanent delete are unit-tested.
+
+**A GCS lifecycle rule cannot do this job** — it matches on age, storage
+class and prefix, and has no view of Firestore. An age-based delete rule
+would eventually remove bundles that live installs pin by exact sha, which
+breaks them unrecoverably.
+
+### The one safe lifecycle rule (AGL-944)
+
+`cloud/plugin-artifacts-lifecycle.json` carries the bucket's policy:
+`AbortIncompleteMultipartUpload` at 7 days, and nothing else. It reaps
+abandoned partial uploads and cannot touch a finished object, so a
+published bundle is out of its reach by construction. There is
+deliberately **no `Delete` rule** — see above for why age is not a safe
+signal here.
+
+```
+gcloud storage buckets update gs://$PLUGIN_ARTIFACTS_BUCKET \
+  --lifecycle-file=cloud/plugin-artifacts-lifecycle.json
+gcloud storage buckets describe gs://$PLUGIN_ARTIFACTS_BUCKET \
+  --format='value(lifecycle_config)'          # read it back
+```
+
+Revert with `--clear-lifecycle`. The bucket is a plain GCS bucket in the
+`aglyn-main` project, never registered with Firebase Storage, so it does
+not appear in the Firebase console's Storage tab (only
+`aglyn-main.appspot.com` is) — use the Cloud console or `gcloud`. Keep it
+that way: registering it would put it behind Firebase Security Rules and
+make it addressable from the client SDKs, when the whole design has the
+console's `/api/plugin-artifacts/…` route as the only read path. Billing
+is unaffected either way — same project, same Cloud Billing account as
+Firebase, just Cloud Storage SKUs rather than the Firebase Storage line.
 
 ## Publish → sign → load walkthrough
 

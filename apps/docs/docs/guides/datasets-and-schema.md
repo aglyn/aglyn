@@ -170,6 +170,18 @@ design a single template. Up to 100 records render per repeatable.
 Automation steps live in the **Do** list of an action — see
 [workflows & actions](../marketing-and-automation/workflows-and-actions/overview.md).
 
+## Deleting a dataset
+
+**Delete** removes the dataset *and every record in it*, permanently — the
+confirmation tells you how many documents go with it. There is no undo and no
+retention window, so export first (**CSV** or **JSON**) if you might want the
+rows back. Deleting a single record from the table leaves the dataset itself
+alone.
+
+The same applies to the two other things that hold records inside them:
+deleting an **email list** takes its enrolled subscribers, and deleting a
+**collection** takes the content entries published under it.
+
 ## Related
 
 - [Build & publish a survey](build-and-publish-a-survey.md)

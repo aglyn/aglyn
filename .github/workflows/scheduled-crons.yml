@@ -29,6 +29,11 @@ on:
     - cron: '0 4 * * *' # run-erasures   — daily 04:00 UTC
     - cron: '0 8 * * *' # usage-alerts   — daily 08:00 UTC
     - cron: '0 6 1 * *' # usage-email    — monthly, 1st at 06:00 UTC
+    # Weekly, not daily: orphans only appear when a publisher republishes,
+    # and each run lists the whole artifacts bucket. A POST with no body
+    # DELETES (the route only defaults to a dry run for GET) — see
+    # docs/PLUGIN_LOADING.md for what it will and will not remove.
+    - cron: '30 5 * * 1' # reap-plugin-artifacts — Mondays 05:30 UTC
   workflow_dispatch:
     inputs:
       path:
@@ -41,6 +46,7 @@ on:
           - /api/admin/run-erasures
           - /api/billing/usage-alerts
           - /api/billing/usage-email
+          - /api/admin/reap-plugin-artifacts
 
 permissions:
   contents: read
@@ -63,6 +69,7 @@ jobs:
             '0 4 * * *') path=/api/admin/run-erasures ;;
             '0 8 * * *') path=/api/billing/usage-alerts ;;
             '0 6 1 * *') path=/api/billing/usage-email ;;
+            '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;
             *) path="$DISPATCH_PATH" ;;
           esac
           if [ -z "$path" ]; then

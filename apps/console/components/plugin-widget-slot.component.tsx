@@ -17,6 +17,7 @@
 'use client'
 
 import { listConsoleWidgets } from '@aglyn/aglyn'
+import { useEnabledPluginIds } from './console-plugins-gate.component'
 
 /**
  * Renders every plugin widget registered for a named slot (AGL-419) —
@@ -27,9 +28,12 @@ export default function PluginWidgetSlot({
   slot,
   ...props
 }: { slot: string } & Record<string, unknown>) {
+  // Scoped to this workspace's plugins (AGL-758) — the registry is a
+  // session-wide union across every org visited.
+  const enabledPluginIds = useEnabledPluginIds()
   return (
     <>
-      {listConsoleWidgets(slot).map(({ widget }) => (
+      {listConsoleWidgets(slot, enabledPluginIds).map(({ widget }) => (
         <widget.Component key={widget.widgetId} {...props} />
       ))}
     </>

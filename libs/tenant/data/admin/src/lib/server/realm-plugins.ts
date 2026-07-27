@@ -65,6 +65,9 @@ export async function getPluginConfig(
  *    doc; only versions carrying `trust: 'realm'` survive.
  * 3. Drop revoked versions (`revocations/{listingId}` kill switch) — a
  *    revocation beats a still-present trust grant.
+ * 4. Drop hidden listings (AGL-948) — `resolveCommunityPluginVersion`
+ *    returns null for a listing under staff takedown. `deletedAt` is not
+ *    a blocker; see that function for why the two differ.
  *
  * The returned sha256/signature come from the VERSION doc, not the install
  * copy, so a tampered install doc cannot smuggle different bytes past the
@@ -76,7 +79,22 @@ interface InstallPin {
   version: string
 }
 
-/** One version-doc read, shaped for the remote loaders' `resolveVersion`. */
+/**
+ * One version-doc read, shaped for the remote loaders' `resolveVersion`.
+ *
+ * Also the staff-takedown gate (AGL-948): a listing carrying `hiddenAt`
+ * resolves to null, so an already-installed plugin stops loading the
+ * moment staff hide it. Takedown used to only de-list — a plugin pulled
+ * for abuse kept executing in every workspace that had installed it until
+ * someone separately wrote a revocation. It lives HERE rather than in the
+ * join because every remote path funnels through this function: the
+ * console and site realm joins, and both apps' remote-server-bundle
+ * loaders.
+ *
+ * `deletedAt` is deliberately NOT a blocker. A publisher retiring a
+ * listing must not break the sites already paying for it; unpublish
+ * blocks new installs (`install-plugin`) and that is all it means.
+ */
 export async function resolveCommunityPluginVersion(
   listingId: string,
   version: string,
@@ -86,14 +104,20 @@ export async function resolveCommunityPluginVersion(
   trust?: string
   hostAbi?: number
 } | null> {
-  const snapshot = await firebaseAdmin
+  const listingRef = firebaseAdmin
     .app()
     .firestore()
     .collection('communityListings')
     .doc(listingId)
-    .collection('pluginVersions')
-    .doc(version)
-    .get()
+  const [listing, snapshot] = await Promise.all([
+    listingRef.get(),
+    listingRef.collection('pluginVersions').doc(version).get(),
+  ])
+  // A missing listing doc is NOT a blocker: Firestore does not cascade to
+  // subcollections, so a hard-deleted listing leaves working installs
+  // resolving off an orphaned version doc. Only an explicit takedown stops
+  // them.
+  if (listing.get('hiddenAt')) return null
   const data = snapshot.data()
   if (!data?.sha256) return null
   const hostAbi = Number(data.manifest?.hostAbi)

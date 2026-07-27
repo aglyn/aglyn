@@ -15,8 +15,37 @@
  * limitations under the License.
  */
 
-import { type CollectionCategory, collectionTotalPages } from '@aglyn/aglyn/server'
+import {
+  type CollectionCategory,
+  collectionTotalPages,
+  hostCollectionKind,
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+
+/**
+ * Resolve a public content-collection slug (AGL-954). Commerce's product
+ * collections share `hosts/{hostId}/collections`, and a slug is only unique
+ * within a kind — a bare `limit(1)` handed the URL to whichever doc Firestore
+ * returned first, so a catalog collection could shadow a blog. Reads a small
+ * window instead and takes the first content-kind match.
+ */
+async function findContentCollection(
+  hostId: string,
+  collectionSlug: string,
+): Promise<FirebaseFirestore.QueryDocumentSnapshot | undefined> {
+  const matches = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(hostId)
+    .collection('collections')
+    .where('slug', '==', collectionSlug)
+    .limit(5)
+    .get()
+  return matches.docs.find(
+    (docSnapshot) => hostCollectionKind(docSnapshot.data()) === 'content',
+  )
+}
 
 export interface CollectionEntrySummary {
   $id: string
@@ -197,15 +226,10 @@ export async function getPublishedCollectionSource(options: {
   categories: CollectionCategory[]
 }> {
   try {
-    const firestore = firebaseAdmin.app().firestore()
-    const collectionQuery = await firestore
-      .collection('hosts')
-      .doc(options.hostId)
-      .collection('collections')
-      .where('slug', '==', options.collectionSlug)
-      .limit(1)
-      .get()
-    const collectionDoc = collectionQuery.docs[0]
+    const collectionDoc = await findContentCollection(
+      options.hostId,
+      options.collectionSlug,
+    )
     if (!collectionDoc) return { entries: [], categories: [] }
     return {
       entries: await listLiveEntries(collectionDoc.ref.collection('entries')),
@@ -249,15 +273,7 @@ export async function getCollectionContent(options: {
     error: null,
   }
   try {
-    const firestore = firebaseAdmin.app().firestore()
-    const collectionQuery = await firestore
-      .collection('hosts')
-      .doc(hostId)
-      .collection('collections')
-      .where('slug', '==', collectionSlug)
-      .limit(1)
-      .get()
-    const collectionDoc = collectionQuery.docs[0]
+    const collectionDoc = await findContentCollection(hostId, collectionSlug)
     if (!collectionDoc) return data
     data.collection = {
       $id: collectionDoc.id,

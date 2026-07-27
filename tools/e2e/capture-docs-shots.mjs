@@ -35,7 +35,10 @@
 //                                         # `demo` natively on that port)
 //   5. FIRESTORE_EMULATOR_HOST=localhost:8082 \
 //      FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 \
-//        node tools/e2e/capture-docs-shots.mjs [--only=<out-substring>]
+//        node tools/e2e/capture-docs-shots.mjs [--only=a,b,…]
+//
+// `--only=` matches shot filenames and the two walk names, `survey-walk`
+// and `member-signup-walk`.
 //
 // Same conventions as the sibling capture script: 1440×900 viewport,
 // sign-in through the real /signin UI, emulator banner + dev overlay
@@ -67,9 +70,17 @@ const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'E2e-Password-1'
 const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
 
+// `--only=` takes a comma-separated list of substrings, matched against a
+// shot's output filename and against the two walk names below — so the
+// end-to-end walks can be re-run on their own instead of only ever as part
+// of a full 28-image capture.
 const only = process.argv
   .find((arg) => arg.startsWith('--only='))
   ?.slice('--only='.length)
+  .split(',')
+  .map((part) => part.trim())
+  .filter(Boolean)
+const selected = (name) => !only?.length || only.some((part) => name.includes(part))
 const skipSeed = process.argv.includes('--no-seed')
 
 // ── 1. Seed the guide fixtures ─────────────────────────────────────────────
@@ -773,6 +784,11 @@ const context = await browser.newContext({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
 })
+// Without this, only the explicit waits below honoured E2E_TIMEOUT_MS and
+// every fill/click sat on Playwright's 30s default — which is what a
+// mis-targeted selector burned before the walk gave up.
+context.setDefaultTimeout(TIMEOUT_MS)
+context.setDefaultNavigationTimeout(TIMEOUT_MS)
 
 // The AGL-663 pre-permission prompt arms itself 2.5s after mount, on every
 // console page, and re-arms on every remount — so dismissing it per shot
@@ -823,7 +839,7 @@ let failures = 0
  * the shot (used for selection niceties like highlighting a node).
  */
 async function shot({ out, base, path, waitFor, actions = [], settleMs, clip }) {
-  if (only && !out.includes(only)) return
+  if (!selected(out)) return
   const page = await context.newPage()
   try {
     await page.goto(`${base}${path}`, {
@@ -1217,7 +1233,7 @@ await shot({
 
 // Walk the survey for real: fill it in and submit, so the records shot
 // below shows a genuine end-to-end submission.
-if (!only || 'survey-records-after-submit.png'.includes(only)) {
+if (selected('survey-walk') || selected('survey-records-after-submit.png')) {
   const page = await context.newPage()
   try {
     await page.goto(`${TENANT_BASE}/survey`, {
@@ -1265,7 +1281,7 @@ if (!only || 'survey-records-after-submit.png'.includes(only)) {
 
 // Walk the member sign-up for real (idempotent: an "already a member"
 // rejection on re-runs is fine — the account exists).
-if (!only) {
+if (selected('member-signup-walk')) {
   const page = await context.newPage()
   try {
     await page.goto(`${TENANT_BASE}/signup`, {
@@ -1273,19 +1289,43 @@ if (!only) {
       timeout: TIMEOUT_MS,
     })
     await page.waitForSelector('text=Create your account', { timeout: TIMEOUT_MS })
-    await page.fill('input[placeholder="Name"]', 'Walk Through')
-    await page.fill('input[type="email"]', 'walkthrough@example.com')
+    // Field names, not placeholders: the Members sign-up form is MUI
+    // TextFields with floating labels and no placeholder attribute, so
+    // `input[placeholder="Name"]` matched nothing and the walk spent the
+    // default 30s action timeout before being skipped on every run.
+    await page.fill('input[name="displayName"]', 'Walk Through')
+    await page.fill('input[name="email"]', 'walkthrough@example.com')
     await page.fill('input[type="password"]', 'Walkthrough-Pass-1')
     await page.click('button[type="submit"]')
-    await page
+    const signedUp = await page
       .waitForURL((url) => !url.pathname.startsWith('/signup'), {
         timeout: 15_000,
       })
-      .then(() => console.log('WALK  member signed up end-to-end'))
-      .catch(() => console.log('WALK  member sign-up: already a member (ok)'))
+      .then(() => true)
+      .catch(() => false)
+    if (signedUp) {
+      console.log('WALK  member signed up end-to-end')
+    } else {
+      // Staying on /signup is only OK for the one expected reason. The
+      // previous version treated ANY failure to navigate as "already a
+      // member", which is how a walk that never filled a field in the first
+      // place still reported an ok-ish line. Assert the form's own 409 copy.
+      const body = await page.locator('body').innerText()
+      if (/already a member/i.test(body)) {
+        console.log('WALK  member sign-up: already a member (ok)')
+      } else {
+        failures += 1
+        console.error(
+          `FAIL  member sign-up walk: stayed on /signup — ${body
+            .replace(/\s+/g, ' ')
+            .slice(0, 160)}`,
+        )
+      }
+    }
   } catch (error) {
-    console.warn(
-      `  member sign-up walk skipped: ${String(error?.message ?? error).split('\n')[0]}`,
+    failures += 1
+    console.error(
+      `FAIL  member sign-up walk: ${String(error?.message ?? error).split('\n')[0]}`,
     )
   } finally {
     await page.close()

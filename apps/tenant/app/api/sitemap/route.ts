@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { screenRoutePathToUrl } from '@aglyn/aglyn/server'
+import { hostCollectionKind, screenRoutePathToUrl } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import getHost from '../../../utils/get-host'
 
@@ -74,6 +74,10 @@ export async function GET(request: Request): Promise<Response> {
       const collections = await hostRef.collection('collections').limit(250).get()
       for (const docSnapshot of collections.docs) {
         const raw = docSnapshot.data() as any
+        // Content collections share this path and serve at /{slug}, not
+        // /collections/{slug} (AGL-954) — listing them here published a URL
+        // that resolves to nothing.
+        if (hostCollectionKind(raw) !== 'catalog') continue
         if (raw.slug) urls.push(`${base}/collections/${raw.slug}`)
       }
     }
@@ -92,7 +96,11 @@ export async function GET(request: Request): Promise<Response> {
       .doc(hostRes.host.$id)
     const collections = await hostRef.collection('collections').limit(50).get()
     for (const docSnapshot of collections.docs) {
-      const collectionSlug = (docSnapshot.data() as any).slug
+      const raw = docSnapshot.data() as any
+      // Skip commerce's product collections — they have no `entries` and
+      // serve under /collections/{slug} instead (AGL-954).
+      if (hostCollectionKind(raw) !== 'content') continue
+      const collectionSlug = raw.slug
       if (!collectionSlug) continue
       urls.push(`${base}/${collectionSlug}`)
       const entries = await docSnapshot.ref

@@ -16,6 +16,7 @@
  */
 
 import type { SitePageResolver } from '@aglyn/aglyn/server'
+import { hostCollectionKind } from '@aglyn/aglyn/server'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -154,13 +155,16 @@ export const commerceSitePageResolver: SitePageResolver = async ({
       hostDocRef
         .collection('collections')
         .where('slug', '==', pdpSegments[1])
-        .limit(1)
+        .limit(5)
         .get(),
     ])
     const collectionScreenId = storeSettings.get('collectionScreenId')
-    const shopCollection = collectionSnapshot.docs[0]?.data() as
-      | CommerceModel.HostCollection
-      | undefined
+    // Content collections share this path and a slug is only unique within a
+    // kind (AGL-954), so take the first CATALOG match rather than the first
+    // doc — otherwise a blog with the same slug renders as a product page.
+    const shopCollection = collectionSnapshot.docs
+      .find((docSnapshot) => hostCollectionKind(docSnapshot.data()) === 'catalog')
+      ?.data() as CommerceModel.HostCollection | undefined
     if (collectionScreenId && shopCollection) {
       const templateRes = await getScreen({
         hostId,

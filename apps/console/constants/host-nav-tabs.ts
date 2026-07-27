@@ -29,7 +29,17 @@ import { buildRoute, Route } from './route-links'
  * DashboardLayout via their `navTabId`. The Events tab now arrives this
  * way from the events-calendar plugin.
  */
-export function hostNavTabItems(orgSlug: string, host: string) {
+export function hostNavTabItems(
+  orgSlug: string,
+  host: string,
+  /**
+   * The workspace's effective plugin ids (AGL-758). The registry is a
+   * session-wide union across every org visited, so without this a plugin
+   * enabled for one workspace keeps contributing a tab to the next.
+   * Omitted only by callers with no org context.
+   */
+  enabledPluginIds?: readonly string[],
+) {
   const staticTabs = [
     {
       id: 'nav-tab-dashboard',
@@ -110,7 +120,7 @@ export function hostNavTabItems(orgSlug: string, host: string) {
   // `[pluginSlug]` route that actually serves it, so this and the page's own
   // `activeTab` cannot drift apart (AGL-649/685). Ids fall back to the
   // navTabId so DashboardLayout's release-flag gating applies.
-  const pluginTabs = listConsoleNavItems().map((item) => ({
+  const pluginTabs = listConsoleNavItems(enabledPluginIds).map((item) => ({
     id: item.navTabId ?? `nav-plugin-${item.href.replace(/[^\w]+/g, '-')}`,
     label: item.label,
     href: buildRoute(Route.HOST_PLUGIN, {

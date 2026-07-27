@@ -67,6 +67,9 @@ interface ListedEntry {
   displayName: string
   reviewStatus: string
   latestVersion: string
+  /** Under staff takedown — de-listed AND revoked (AGL-948/952). */
+  hidden: boolean
+  hiddenReason: string
   versions: Array<{ version: string; trust: string | null }>
 }
 
@@ -84,6 +87,9 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState<Record<string, string>>({})
+  const [takedownReason, setTakedownReason] = useState<Record<string, string>>(
+    {},
+  )
 
   const token = useCallback(
     async () =>
@@ -190,6 +196,60 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
   const grantRealm = useCallback(
     (entry: QueueEntry) => signRealm(entry.listingId, entry.version, 'grant'),
     [signRealm],
+  )
+
+  // Staff takedown (AGL-952). The route existed since AGL-658 with zero
+  // callers — a moderator had to hand-craft a POST to pull a plugin. Since
+  // AGL-948 hiding also writes the kill switch, so this button stops the
+  // bundle in every workspace that already installed it, not just the
+  // listing page; the copy below says so, because "Hide" alone reads far
+  // milder than what it now does.
+  const takedown = useCallback(
+    async (entry: ListedEntry) => {
+      const action = entry.hidden ? 'unhide' : 'hide'
+      const reason = takedownReason[entry.listingId] ?? ''
+      // The route 400s on a hide with no reason; catch it here so the
+      // moderator sees why instead of a generic failure.
+      if (action === 'hide' && !reason.trim()) {
+        return void enqueueSnackbar('Taking a plugin down needs a reason', {
+          variant: 'warning',
+          allowDuplicate: true,
+        })
+      }
+      setBusy(entry.listingId)
+      try {
+        const idToken = await token()
+        const response = await fetch('/api/admin/plugin-reviews', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ listingId: entry.listingId, action, reason }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (response.ok) {
+          enqueueSnackbar(
+            payload?.revoked
+              ? `${entry.displayName} taken down — running installs stop on next load`
+              : action === 'hide'
+                ? `${entry.displayName} hidden`
+                : `${entry.displayName} restored`,
+            { variant: 'success' },
+          )
+          setTakedownReason((current) => ({ ...current, [entry.listingId]: '' }))
+          await refresh()
+        } else {
+          enqueueSnackbar(payload?.error ?? 'Takedown failed', {
+            variant: 'error',
+            allowDuplicate: true,
+          })
+        }
+      } finally {
+        setBusy(null)
+      }
+    },
+    [token, takedownReason, enqueueSnackbar, refresh],
   )
 
   return (
@@ -387,6 +447,12 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                       'returns it to the sandbox on next load. Super-staff ' +
                       'only, audited.'}
                   </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {'Take down pulls the listing AND stops the plugin ' +
+                      'loading in every workspace that already installed it ' +
+                      '— it writes the kill switch, not just a de-list. ' +
+                      'Restoring clears it again.'}
+                  </Typography>
                   {listed.map((entry) => (
                     <Stack key={entry.listingId} spacing={0.75}>
                       <Stack
@@ -398,9 +464,50 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                           {entry.displayName}
                         </Typography>
                         <Chip size="small" label={entry.reviewStatus} />
+                        {entry.hidden ? (
+                          <Chip
+                            size="small"
+                            color="error"
+                            label="Taken down — revoked"
+                          />
+                        ) : null}
                         <Typography variant="caption" color="text.secondary">
                           {entry.listingId}
                         </Typography>
+                      </Stack>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap', pl: 1 }}
+                      >
+                        {entry.hidden ? (
+                          <Typography variant="caption" color="error">
+                            {entry.hiddenReason
+                              ? `Reason: ${entry.hiddenReason}`
+                              : 'No reason recorded'}
+                          </Typography>
+                        ) : (
+                          <TextField
+                            size="small"
+                            placeholder="Takedown reason"
+                            value={takedownReason[entry.listingId] ?? ''}
+                            onChange={(event) =>
+                              setTakedownReason((current) => ({
+                                ...current,
+                                [entry.listingId]: event.target.value,
+                              }))
+                            }
+                            sx={{ minWidth: 220 }}
+                          />
+                        )}
+                        <Button
+                          size="small"
+                          color={entry.hidden ? 'success' : 'error'}
+                          disabled={busy === entry.listingId}
+                          onClick={() => void takedown(entry)}
+                        >
+                          {entry.hidden ? 'Restore listing' : 'Take down'}
+                        </Button>
                       </Stack>
                       {entry.versions.map((versionEntry) => (
                         <Stack

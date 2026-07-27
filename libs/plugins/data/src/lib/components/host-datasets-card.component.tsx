@@ -329,7 +329,33 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       .then(() => true)
       .catch(() => false)
     if (!confirmed) return
-    await deleteDoc(doc(firestore, dataScope[0], dataScope[1], 'datasets', selected.$id))
+    // Deleting the dataset doc client-side would strand its `records`
+    // subcollection — Firestore doesn't cascade and only the Admin SDK has
+    // `recursiveDelete`, so the delete goes through the erase route
+    // (AGL-945). Single-record deletes below stay client-direct.
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/resources/erase', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          scope: dataScope[0],
+          scopeId: dataScope[1],
+          kind: 'datasets',
+          id: selected.$id,
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result?.error ?? 'Dataset delete failed')
+    } catch (error: any) {
+      return void enqueueSnackbar(error?.message ?? 'Dataset delete failed', {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     setSelectedId(null)
     enqueueSnackbar('Dataset deleted', { variant: 'success', persist: false })
     logActivity('Deleted dataset', {
@@ -341,9 +367,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     selected,
     records.length,
     confirm,
-    firestore,
-    hostId,
-    orgId,
+    dataScope[0],
+    dataScope[1],
+    user,
     enqueueSnackbar,
     logActivity,
   ])
