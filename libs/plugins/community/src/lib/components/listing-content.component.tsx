@@ -524,7 +524,11 @@ export function CommunityListingContent({
     // Keyed on the listing's id, not its legacy `type` (AGL-864): an
     // artifactType-only plugin has no `type`, so keying on it left the effect
     // stuck at its undefined first value and the versions fetch never fired.
-  }, [listing?.$id, listingId])
+    //
+    // `pinsNonce` re-reads after this page's own writes, so the per-version
+    // install counts (AGL-1036) are not left showing the tally from before the
+    // update the user just pressed.
+  }, [listing?.$id, listingId, pinsNonce])
   const latestEntry = versions[0]
   const realmTrusted = versions.some((entry) => entry.trust === 'realm')
   const abiIncompatible =
@@ -738,7 +742,11 @@ export function CommunityListingContent({
     })
     // Left open on failure — a destructive schema update comes back asking for
     // the confirmation tick, and closing would hide the question.
-    if (done) setUpdateOpen(false)
+    if (done) {
+      setUpdateOpen(false)
+      // Re-read the install state and the per-version counts this just moved.
+      setPinsNonce((current) => current + 1)
+    }
   }
 
   // The actual pin write, run only after the confirm dialog (AGL-867).
