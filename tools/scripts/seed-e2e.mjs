@@ -450,10 +450,15 @@ await put(
 )
 
 // ── Org-scoped data (AGL-237/239): datasets, contacts, lists ───────────────
+// `visibleTo` is required from AGL-1039 on: the tenant runtime narrows
+// org datasets with `array-contains-any`, which matches NOTHING on a doc
+// that lacks the field — a seeded site would render its repeatables empty.
+// Production got the same stamp from the AGL-1040 backfill.
 const teamDataset = orgRef.collection('datasets').doc('seed-team')
 await put(teamDataset, {
   name: 'Team',
   fields: ['name', 'role', 'photo'],
+  visibleTo: ['org'],
   createdAt: now,
 })
 const teamRows = [
@@ -475,6 +480,7 @@ for (const [index, [name, role, photo]] of teamRows.entries()) {
 await put(orgRef.collection('datasets').doc('seed-guide-survey'), {
   name: 'Survey responses',
   displayName: 'Survey responses',
+  visibleTo: ['org'],
   singularName: 'Survey response',
   fields: ['satisfaction', 'comments'],
   model: {

@@ -17,7 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import {
-  orgDataCollectionForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
+  orgDataQueryForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 export interface SearchResult {
   title: string
@@ -114,9 +114,12 @@ export async function searchContent(options: {
   // screen that repeats over the dataset — records only surface through
   // repeatables, so an un-navigable match would be noise. Version reads
   // happen lazily and only when a dataset actually matched.
+  // Scoped to this host (AGL-1039): site search surfaces record contents
+  // publicly, so an unscoped read here leaks another client's rows into
+  // search results without anyone binding a repeatable at all.
   const datasets = await (
-    await orgDataCollectionForHost(host.$id, 'datasets')
-  )
+    await orgDataQueryForHost(host.$id, 'datasets')
+  ).query
     .limit(20)
     .get()
   let screenVersionCache: Map<string, any> | null = null

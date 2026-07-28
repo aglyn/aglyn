@@ -29,6 +29,7 @@ import {
   isValidOrgSlug,
   projectHostMemberRoles,
   projectMemberScopeTokens,
+  scopeTokensForHost,
   type AglynOrganization,
   type AglynOrgCustomRole,
   type AglynOrgMember,
@@ -349,6 +350,49 @@ export async function orgDataCollectionForHost(
   return orgId
     ? firestore().collection('orgs').doc(orgId).collection(name)
     : firestore().collection('hosts').doc(hostId).collection(name)
+}
+
+/**
+ * Narrows an org-scoped collection to what ONE host may see (AGL-1039).
+ *
+ * The Admin SDK does not evaluate Firestore rules, so AGL-1041's
+ * `visibleTo.hasAny(...)` protects the console and nothing else — every
+ * server read has to filter for itself or a client site can render another
+ * client's data. Use this instead of the bare collection ref anywhere a
+ * request is being served in the context of a single host.
+ *
+ * Only the ORG path is filtered. The legacy `hosts/{hostId}/…` fallback is
+ * site-private by construction and its docs carry no `visibleTo`, so
+ * filtering it would match nothing and blank the site (production has zero
+ * such datasets — see AGL-1050 — but the branch still exists).
+ */
+export function scopedToHost(
+  ref: FirebaseFirestore.CollectionReference,
+  hostId: string,
+): FirebaseFirestore.Query {
+  const orgScoped = ref.parent?.parent?.id === 'orgs'
+  if (!orgScoped) return ref
+  return ref.where(
+    'visibleTo',
+    'array-contains-any',
+    scopeTokensForHost(hostId),
+  )
+}
+
+/**
+ * `orgDataCollectionForHost` + `scopedToHost` in one call — the form every
+ * host-context read should use. Returns the collection ref too, for the
+ * writes and `doc()` lookups a Query cannot express.
+ */
+export async function orgDataQueryForHost(
+  hostId: string,
+  name: 'datasets' | 'contacts' | 'contactSegments',
+): Promise<{
+  ref: FirebaseFirestore.CollectionReference
+  query: FirebaseFirestore.Query
+}> {
+  const ref = await orgDataCollectionForHost(hostId, name)
+  return { ref, query: scopedToHost(ref, hostId) }
 }
 
 /**

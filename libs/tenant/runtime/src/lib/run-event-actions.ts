@@ -223,7 +223,7 @@ async function executeAction(
       } else if (step.type === 'datasetAppend') {
         // Id-first lookup (AGL-261/556); the name query is the legacy path.
         const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
-        const datasetDoc = await resolveDatasetDoc(datasetsRef, step)
+        const datasetDoc = await resolveDatasetDoc(datasetsRef, step, hostId)
         if (!datasetDoc?.exists || datasetDoc.get('deletedAt')) {
           stepErrors.push(
             `unknown dataset "${step.datasetName || step.datasetId}"`,
@@ -251,7 +251,7 @@ async function executeAction(
         // Update-or-append (AGL-257): matches the record whose `email`
         // field equals the payload's email; appends when nothing matches.
         const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
-        const datasetDoc = await resolveDatasetDoc(datasetsRef, step)
+        const datasetDoc = await resolveDatasetDoc(datasetsRef, step, hostId)
         if (!datasetDoc?.exists || datasetDoc.get('deletedAt')) {
           stepErrors.push(
             `unknown dataset "${step.datasetName || step.datasetId}"`,
