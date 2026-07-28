@@ -27,12 +27,31 @@ const MAX_ORGS_CHECKED = 25
  * Whether the author has actually used this listing (AGL-655).
  *
  * An install pin lives at `orgs/{orgId}/installs/{listingId}` (org-wide) or
- * `hosts/{hostId}/installs/{listingId}` (one site). Checking the org pins of
- * every org the author belongs to covers both without a collection-group
- * query: a host pin implies the org installed it somewhere, and the org
- * mirror is what the install routes write.
+ * `hosts/{hostId}/installs/{listingId}` (one site), and **it is one or the
+ * other** — `install-plugin` reassigns its target ref to the org path for an
+ * org-scoped install rather than writing both.
+ *
+ * This used to read the org pin alone, on the stated reasoning that "a host
+ * pin implies the org installed it somewhere, and the org mirror is what the
+ * install routes write" (AGL-1006). There is no org mirror, so a per-site
+ * install left nothing to find and the workspace was refused a rating — and
+ * it refused exactly the careful installers, the ones who scoped a plugin to
+ * one site before rolling it out. Ratings drive marketplace ranking, so that
+ * skewed the sample toward org-wide installers.
+ *
+ * Host pins are found through the org doc's own `hosts` map (written by
+ * `registerOrgHost`), then read in ONE batched `getAll` alongside the org
+ * pin. Two round trips per org, bounded and index-free — deliberately not a
+ * collection-group query on `installs`, which would need a new index and
+ * would match every tenant's pins for a listing, unbounded, to answer a
+ * question about one org.
  */
-async function isVerifiedInstaller(
+const MAX_HOSTS_CHECKED = 50
+
+// Exported for the AGL-1006 regression test: it takes its firestore, so the
+// rule "a host pin counts" is checkable without standing up the whole
+// handler (auth, transactions, aggregate writes).
+export async function isVerifiedInstaller(
   firestore: FirebaseFirestore.Firestore,
   uid: string,
   listingId: string,
@@ -44,13 +63,24 @@ async function isVerifiedInstaller(
     .limit(MAX_ORGS_CHECKED)
     .get()
   for (const membership of memberships.docs) {
-    const pin = await firestore
-      .collection('orgs')
-      .doc(membership.id)
-      .collection('installs')
-      .doc(listingId)
-      .get()
-    if (pin.exists) return { verified: true, orgId: membership.id }
+    const orgId = membership.id
+    const orgRef = firestore.collection('orgs').doc(orgId)
+    const org = await orgRef.get()
+    const hostIds = Object.keys(
+      (org.get('hosts') as Record<string, unknown> | undefined) ?? {},
+    ).slice(0, MAX_HOSTS_CHECKED)
+    const refs = [
+      orgRef.collection('installs').doc(listingId),
+      ...hostIds.map((hostId) =>
+        firestore
+          .collection('hosts')
+          .doc(hostId)
+          .collection('installs')
+          .doc(listingId),
+      ),
+    ]
+    const pins = await firestore.getAll(...refs)
+    if (pins.some((pin) => pin.exists)) return { verified: true, orgId }
   }
   return { verified: false }
 }
