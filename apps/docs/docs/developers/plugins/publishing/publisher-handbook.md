@@ -135,6 +135,18 @@ repository URL, license), **who can install it and for how much**, and
 the pre-publish checklist. Publishing always publishes **sandboxed** — a reviewer
 verifies and signs a version before it can run trusted.
 
+The **README** here is the same rich-text editor you get when you edit the
+listing later — toolbar, media picker, and a **Markdown source** toggle for
+when you are pasting a README you wrote elsewhere. It is the document
+reviewers read first and buyers read before running third-party code, so
+it is worth the room.
+
+The **changelog** has two audiences, and it is worth writing for both: the
+reviewer, who compares this version against the last approved one, and
+every installer who reads it on your listing's changelog tab before
+deciding to update. On a **first** version there is nothing to compare
+against — say what the plugin does instead, or leave it empty.
+
 ### Before you publish
 
 The last section of the page asks you to confirm a short checklist, in

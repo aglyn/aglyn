@@ -41,6 +41,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { getIdToken: async () => 'token' } }),
 }))
 
+// The README uses the shared MarkdownField, which offers a DAM picker
+// (AGL-1080). The picker's own behaviour is not what this spec covers, and
+// rendering it would drag the whole media library into a form test.
+jest.mock('../components/media/media-picker-dialog.component', () => ({
+  __esModule: true,
+  default: () => null,
+}))
+
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
@@ -132,6 +140,22 @@ describe('PublishPluginForm (AGL-969 / AGL-1076 / AGL-1078)', () => {
     for (const item of PUBLISHER_ATTESTATION) {
       expect(screen.getByText(item.label)).toBeTruthy()
     }
+  })
+
+  /**
+   * The README gets the real editor (AGL-1080).
+   *
+   * It was a four-row textarea, while the listing detail editor one
+   * navigation away used the full markdown editor for the same field — so
+   * the FIRST time a publisher wrote the document reviewers read first
+   * they got the worst tool we have. Asserting the mode switch rather than
+   * copy: it only exists on the shared MarkdownField, so a regression to a
+   * plain textarea fails here.
+   */
+  it('gives the README the markdown editor, not a bare textarea', () => {
+    open()
+    expect(screen.getByRole('button', { name: 'Visual editor' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Markdown source' })).toBeTruthy()
   })
 
   it('blocks publishing until the always-required items are confirmed', () => {

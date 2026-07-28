@@ -29,17 +29,11 @@ import {
 } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
-import MarkdownEditorToolbar from '../markdown-editor-toolbar.component'
-import {
-  applyCommandToSource,
-  MARKDOWN_SOURCE_HINT,
-} from '../markdown-source-command'
-import MarkdownVisualEditor, {
-  type MarkdownEditorCommand,
-  type MarkdownEditorContext,
-  type MarkdownVisualEditorHandle,
-} from '../markdown-visual-editor.component'
+import MarkdownField, {
+  type MarkdownFieldHandle,
+} from '../markdown-field.component'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
+import mediaSrc from '../../utils/media-src'
 
 // Mirrors the server's fixed taxonomy (community plugin model), which the
 // console can't import across the aglyn:addons boundary. The server
@@ -62,15 +56,6 @@ const MAX_SCREENSHOTS = 6
 
 /** Which image field / target the DAM picker is currently filling. */
 type PickTarget = 'preview' | 'logo' | 'screenshot' | 'body' | null
-
-function mediaSrc(media: { url?: string; cdnPath?: string }): string {
-  if (media.url) return media.url
-  if (media.cdnPath)
-    return typeof window === 'undefined'
-      ? media.cdnPath
-      : `${window.location.origin}${media.cdnPath}`
-  return ''
-}
 
 export interface ListingDetailEditorProps {
   orgId: string
@@ -95,7 +80,7 @@ export interface ListingDetailEditorProps {
 export function ListingDetailEditor(props: ListingDetailEditorProps) {
   const { orgId, listingId, listing, user, onDone } = props
   const { enqueueSnackbar } = useSnackbar()
-  const editorRef = useRef<MarkdownVisualEditorHandle | null>(null)
+  const editorRef = useRef<MarkdownFieldHandle | null>(null)
   const [busy, setBusy] = useState(false)
   const [pickTarget, setPickTarget] = useState<PickTarget>(null)
 
@@ -110,13 +95,6 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
     category: '',
   })
   const [readme, setReadme] = useState('')
-  // Visual by default, raw markdown one click away (AGL-985) — publishers
-  // often arrive holding a README they wrote somewhere else.
-  const [bodyMode, setBodyMode] = useState<'visual' | 'markdown'>('visual')
-  const [bodyContext, setBodyContext] = useState<MarkdownEditorContext | null>(
-    null,
-  )
-  const readmeInputRef = useRef<HTMLTextAreaElement | null>(null)
   const [screenshots, setScreenshots] = useState<string[]>([])
   const originalPreview = useRef<string>('')
 
@@ -217,27 +195,6 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
     }
   }
 
-  // One toolbar, two surfaces (AGL-985): in Visual a command mutates the
-  // editor's block model; in Markdown it wraps the textarea selection.
-  const handleCommand = (command: MarkdownEditorCommand) => {
-    if (bodyMode === 'visual') {
-      editorRef.current?.exec(command)
-      return
-    }
-    const input = readmeInputRef.current
-    const edit = applyCommandToSource(
-      readme,
-      input?.selectionStart ?? readme.length,
-      input?.selectionEnd ?? readme.length,
-      command,
-    )
-    setReadme(edit.body)
-    requestAnimationFrame(() => {
-      input?.focus()
-      input?.setSelectionRange(edit.start, edit.end)
-    })
-  }
-
   return (
     <CardDisplay
       header={'Edit listing'}
@@ -313,40 +270,17 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
 
         <Divider />
 
-        {/* Body — the WYSIWYG markdown editor, same as blog content. */}
-        <Stack spacing={1}>
-          <Typography variant="subtitle2">{'About'}</Typography>
-          <MarkdownEditorToolbar
-            onCommand={handleCommand}
-            context={bodyMode === 'visual' ? bodyContext : null}
-            mode={bodyMode}
-            onModeChange={setBodyMode}
-          />
-          {bodyMode === 'visual' ? (
-            // No wrapper box (AGL-982): the editor draws its own border and
-            // focus ring, so a second one read as a box inside a box.
-            <MarkdownVisualEditor
-              ref={editorRef}
-              value={readme}
-              onChange={setReadme}
-              onPickImageFromMedia={() => setPickTarget('body')}
-              onContextChange={setBodyContext}
-              minHeight={200}
-            />
-          ) : (
-            <TextField
-              label="Markdown source"
-              value={readme}
-              onChange={(event) => setReadme(event.target.value)}
-              size="small"
-              multiline
-              minRows={12}
-              fullWidth
-              inputRef={readmeInputRef}
-              helperText={MARKDOWN_SOURCE_HINT}
-            />
-          )}
-        </Stack>
+        {/* Body — the WYSIWYG markdown editor, same as blog content, and
+            since AGL-1080 the same component the publish form uses. */}
+        <MarkdownField
+          label="About"
+          value={readme}
+          onChange={setReadme}
+          onPickImageFromMedia={() => setPickTarget('body')}
+          editorRef={(handle) => {
+            editorRef.current = handle
+          }}
+        />
 
         <Divider />
 

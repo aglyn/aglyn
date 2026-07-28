@@ -37,7 +37,12 @@ import {
   PUBLISHER_ATTESTATION,
   requiredAttestationIds,
 } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import MarkdownField, {
+  type MarkdownFieldHandle,
+} from '../markdown-field.component'
+import MediaPickerDialog from '../media/media-picker-dialog.component'
 import { docsHelp } from '../../constants/docs-links'
+import mediaSrc from '../../utils/media-src'
 import { buildRoute, Route } from '../../constants/route-links'
 
 // Mirrors the server taxonomy; the server re-validates (the console cannot
@@ -182,6 +187,9 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
   const manifestRef = useRef<HTMLInputElement>(null)
   const [bundleFile, setBundleFile] = useState<File | null>(null)
   const [manifestFile, setManifestFile] = useState<File | null>(null)
+  // Inline README images come from the shared DAM, like everywhere else.
+  const readmeEditorRef = useRef<MarkdownFieldHandle | null>(null)
+  const [pickingReadmeImage, setPickingReadmeImage] = useState(false)
   const [draft, setDraft] = useState<PublishDraft>(() => readDraft(orgId))
   const [draftRestored, setDraftRestored] = useState(() =>
     draftHasContent(readDraft(orgId)),
@@ -530,25 +538,48 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
               </MenuItem>
             ))}
           </TextField>
-          <TextField
-            label="README (markdown)"
+          {/* The same editor the listing detail page uses (AGL-1080). The
+              first time a publisher writes the document reviewers read
+              first used to get the worst tool we have, and the second time
+              the good one — for the same field. The AGL-969 attestation
+              made that worse by asking them to confirm the README
+              documents what data the plugin handles, in a box too small to
+              see whether it does. */}
+          <MarkdownField
+            label="README"
+            value={draft.readme}
+            onChange={set('readme')}
+            onPickImageFromMedia={() => setPickingReadmeImage(true)}
+            editorRef={(handle) => {
+              readmeEditorRef.current = handle
+            }}
             helperText={
               'Shown on your listing page — what it does, how to configure ' +
-              'it. Reviewers and cautious buyers read this first.'
+              'it, and what it reads, stores or sends. Reviewers and ' +
+              'cautious buyers read this first.'
             }
-            value={draft.readme}
-            onChange={(event) => set('readme')(event.target.value)}
-            size="small"
-            multiline
-            minRows={10}
           />
+          {/* The only field that exclusively concerns updates (AGL-1080).
+              It was a single line labelled `Changelog` and nothing else,
+              presented as an equal peer of Category — while AGL-969 attests
+              to it and AGL-976 builds the listing's changelog tab out of
+              it. The helper names both audiences, because "what changed"
+              means something different to each. */}
           <TextField
             label="Changelog"
+            placeholder="Fixed the timer drift on Safari; added a compact layout"
+            helperText={
+              'Two audiences: the reviewer, comparing this version against ' +
+              'the last approved one, and every installer who reads it on ' +
+              'your listing’s changelog tab before updating. On a first ' +
+              'version there is nothing to compare against — say what the ' +
+              'plugin does instead, or leave it.'
+            }
             value={draft.changelog}
             onChange={(event) => set('changelog')(event.target.value)}
             size="small"
             multiline
-            minRows={2}
+            minRows={3}
           />
           {/* AGL-1076: the subject of the repository attestation below. */}
           <TextField
@@ -745,6 +776,17 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
           {'Discard draft'}
         </Button>
       </Stack>
+
+      <MediaPickerDialog
+        orgId={orgId}
+        open={pickingReadmeImage}
+        onClose={() => setPickingReadmeImage(false)}
+        onPick={(media) => {
+          setPickingReadmeImage(false)
+          const url = mediaSrc(media ?? {})
+          if (url) readmeEditorRef.current?.insertImage('', url)
+        }}
+      />
     </Stack>
   )
 }
