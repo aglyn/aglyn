@@ -114,6 +114,30 @@ Outcomes:
 Speed the review up: a real README, a license, sane `capabilities`
 (request only the network origins you use), and working links.
 
+## Private plugins
+
+Choose **Only this organization** under *Who can install this* when you
+upload, and the listing becomes **private**: never browsable in the
+marketplace by anyone, and installable only by your own organization's
+sites. That last part is enforced when the install is requested, not by
+hiding the page — knowing a private listing's id gets a stranger nowhere.
+
+Private changes the **audience, not the bar**. Your bundle still runs on
+Aglyn infrastructure and still reaches the host ABI, so it goes through
+the same queue, the same reviewer checklist, the same static verifier,
+and the same super-staff signature if it ever needs realm trust. Staff
+see private submissions in the queue marked *Private*.
+
+Private plugins are always free, and you find yours under
+**Marketplace → Listings** rather than in Browse — **View** opens the
+same detail page you install from.
+
+**Going public later** takes no re-review: the bytes were already
+approved, and who may install them was never part of that approval. It
+does ask for what any marketplace listing needs first — a description, a
+README, and a license — via **Make public** on the Listings row. Going
+back to private is always available and takes effect immediately.
+
 ## Authoring your listing
 
 Your listing IS your storefront — it renders on the detail page every

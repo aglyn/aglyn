@@ -38,6 +38,7 @@ import {
 import { createHash } from 'crypto'
 import {
   COMMUNITY_MAX_PRICE_USD,
+  missingPublicListingContent,
   validateListingContent,
 } from '../model/community'
 
@@ -116,6 +117,70 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
   }
 }
 
+/**
+ * Flip a listing between private and public (AGL-968/994).
+ *
+ * Deliberately NOT a re-review. Per-version `reviewState` and the listing's
+ * `reviewStatus` are left exactly as they are: approval is a statement about
+ * specific bytes (AGL-966), and who may install them was never part of that
+ * statement. Sending an already-approved bundle back through the queue
+ * because its audience widened would only teach publishers to start public.
+ *
+ * Going public does require what a public listing needs — see
+ * {@link missingPublicListingContent}. Going private is unconditional: it
+ * only ever removes reach.
+ */
+const setListingVisibility: PluginApiHandler = async (req, res) => {
+  const listingId = String(req.body?.listingId ?? '')
+  const visibility = req.body?.visibility === 'private' ? 'private' : 'public'
+  if (!listingId) return res.status(400).json({ error: 'Missing listingId' })
+  const authorization = String(req.headers.authorization ?? '')
+  const idToken = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined
+  if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
+  try {
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    const firestore = firebaseAdmin.app().firestore()
+    const listingRef = firestore.collection('communityListings').doc(listingId)
+    const listing = (await listingRef.get()).data()
+    if (!listing || listing.deletedAt) {
+      return res.status(404).json({ error: 'Unknown listing' })
+    }
+    const isPublisher = await canActAsPublisher(
+      firestore,
+      decoded.uid,
+      listing.profileId,
+    )
+    if (!isPublisher && decoded['staff'] !== true) {
+      return res.status(403).json({ error: 'Not your listing' })
+    }
+    if (visibility === 'public') {
+      const missing = missingPublicListingContent(listing)
+      if (missing.length) {
+        return res.status(400).json({
+          error:
+            'A marketplace listing needs ' +
+            missing.join(', ') +
+            '. Add them in Edit, then publish it.',
+          missing,
+        })
+      }
+    }
+    await listingRef.set(
+      {
+        visibility,
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+    return res.status(200).json({ ok: true, visibility })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ error: 'Visibility change failed' })
+  }
+}
+
 export const publishPluginHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -125,6 +190,10 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
   // new bundle. Publisher-or-staff, validated exactly like publish.
   if (req.body?.action === 'update-listing') {
     return updateListingContent(req, res)
+  }
+  // Private ⇄ public (AGL-968/994), without shipping a new bundle.
+  if (req.body?.action === 'set-visibility') {
+    return setListingVisibility(req, res)
   }
   const body = req.body ?? {}
   const headers = req.headers as Partial<Record<string, string>>

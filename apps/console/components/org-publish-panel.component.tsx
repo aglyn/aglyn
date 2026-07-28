@@ -318,7 +318,9 @@ export function OrgPublishPanel({
         {kind === 'plugin' ? (
           <Typography variant="body2" color="text.secondary">
             {'Upload a self-contained plugin bundle and its manifest. It ' +
-              'publishes sandboxed and is signed after a reviewer verifies it.'}
+              'publishes sandboxed and is signed after a reviewer verifies ' +
+              'it. Publish it to the marketplace, or keep it private to your ' +
+              'organization — private plugins take the same review path.'}
           </Typography>
         ) : kind === 'site' ? (
           <Typography variant="body2" color="text.secondary">

@@ -22,7 +22,9 @@ import {
   COMMUNITY_EMAIL_COMPONENT_ID_ALLOWLIST,
   installTargetsFor,
   isListingBrowsable,
+  isPrivateListing,
   resolveInstallPlan,
+  resolveOrgInstallSummary,
   resolveInstalledDatasetSchema,
   resolvePluginInstallState,
   sanitizeCommunityDefinition,
@@ -382,6 +384,34 @@ describe('isListingBrowsable (AGL-658)', () => {
       }),
     ).toBe(false)
   })
+
+  // Private is not a review state (AGL-968): a private plugin can be fully
+  // approved and even verified, and still must never be browsable. Passing
+  // review is what makes it INSTALLABLE by its owner, not what puts it in
+  // front of other workspaces.
+  it('keeps a private listing out of browse at every review state', () => {
+    for (const reviewStatus of [
+      undefined,
+      'submitted',
+      'listed',
+      'verified',
+      'rejected',
+    ]) {
+      expect(
+        isListingBrowsable({
+          artifactType: 'plugin',
+          visibility: 'private',
+          ...(reviewStatus ? { reviewStatus } : {}),
+        }),
+      ).toBe(false)
+    }
+  })
+
+  it('treats any other visibility value as public', () => {
+    expect(isPrivateListing({})).toBe(false)
+    expect(isPrivateListing({ visibility: 'public' })).toBe(false)
+    expect(isPrivateListing({ visibility: 'private' })).toBe(true)
+  })
 })
 
 /**
@@ -389,6 +419,80 @@ describe('isListingBrowsable (AGL-658)', () => {
  * organization" for a template would be a lie: only plugins have an
  * org-scoped pin, everything else physically lands on a host.
  */
+/**
+ * At org scope "installed" is a SET (AGL-997). The detail page used to
+ * resolve one acting host and report "Installed on this site", which named
+ * an arbitrary site and said nothing about the rest.
+ */
+describe('resolveOrgInstallSummary (AGL-997)', () => {
+  const hosts = [
+    { id: 'h1', label: 'Shop' },
+    { id: 'h2', label: 'Blog' },
+    { id: 'h3', label: 'Docs' },
+  ]
+
+  it('reports nothing installed when there are no pins', () => {
+    const summary = resolveOrgInstallSummary(hosts, {}, null)
+    expect(summary.installedAnywhere).toBe(false)
+    expect(summary.sites).toEqual([])
+    expect(summary.availableHostIds).toEqual(['h1', 'h2', 'h3'])
+  })
+
+  it('names the sites a partial install actually covers', () => {
+    const summary = resolveOrgInstallSummary(
+      hosts,
+      { h2: { version: '1.0.0' } },
+      null,
+    )
+    expect(summary.orgWide).toBe(false)
+    expect(summary.sites).toEqual([
+      {
+        hostId: 'h2',
+        label: 'Blog',
+        version: '1.0.0',
+        pinnedBy: 'host',
+        shadowed: false,
+      },
+    ])
+    // The other two stay offerable, which is what makes "add a site" possible.
+    expect(summary.availableHostIds).toEqual(['h1', 'h3'])
+    expect(summary.hostPinnedIds).toEqual(['h2'])
+  })
+
+  it('treats an org pin as covering every site', () => {
+    const summary = resolveOrgInstallSummary(hosts, {}, { version: '2.0.0' })
+    expect(summary.orgWide).toBe(true)
+    expect(summary.sites.map((site) => site.hostId)).toEqual(['h1', 'h2', 'h3'])
+    expect(summary.sites.every((site) => site.pinnedBy === 'org')).toBe(true)
+    // Nothing to "add": the org pin already covers sites made later, too.
+    expect(summary.availableHostIds).toEqual([])
+    // And nothing to remove per-site — the only pin is the org one.
+    expect(summary.hostPinnedIds).toEqual([])
+  })
+
+  it('lets a host pin shadow the org pin for its own site', () => {
+    const summary = resolveOrgInstallSummary(
+      hosts,
+      { h3: { version: '3.0.0' } },
+      { version: '2.0.0' },
+    )
+    expect(summary.orgWide).toBe(true)
+    const docs = summary.sites.find((site) => site.hostId === 'h3')
+    expect(docs).toEqual({
+      hostId: 'h3',
+      label: 'Docs',
+      version: '3.0.0',
+      pinnedBy: 'host',
+      shadowed: true,
+    })
+    // The unshadowed sites still run the org pin's version.
+    expect(
+      summary.sites.filter((site) => site.hostId !== 'h3').map((s) => s.version),
+    ).toEqual(['2.0.0', '2.0.0'])
+    expect(summary.hostPinnedIds).toEqual(['h3'])
+  })
+})
+
 describe('installTargetsFor (AGL-656)', () => {
   it('gives plugins the org/host choice', () => {
     expect(installTargetsFor({ artifactType: 'plugin' })).toEqual([

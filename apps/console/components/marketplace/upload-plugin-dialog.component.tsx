@@ -75,6 +75,11 @@ export interface UploadPluginDialogProps {
  * The bundle bytes and manifest go to `/api/community/publish-plugin`, which
  * statically verifies the bundle (entry exports, self-containment, forbidden
  * APIs, size), content-addresses it with sha256, and records the version.
+ *
+ * Visibility (AGL-968/992) chooses the AUDIENCE, never the trust level: a
+ * private plugin runs on the same infrastructure and reaches the same host
+ * ABI, so it takes the identical review path and is simply never listed —
+ * only the owning org's hosts can install it, enforced in `install-plugin`.
  */
 export function UploadPluginDialog(props: UploadPluginDialogProps) {
   const { orgId, open, onClose } = props
@@ -96,6 +101,10 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
   const [priceUsd, setPriceUsd] = useState('0')
   const [readme, setReadme] = useState('')
   const [license, setLicense] = useState('')
+  // Private plugins (AGL-968/992): only settable on FIRST publish — the
+  // server ignores it on a version bump, and changing it later is the
+  // deliberate flip in Marketplace › Listings.
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public')
 
   const reset = () => {
     setBundleFile(null)
@@ -108,6 +117,7 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
     setPriceUsd('0')
     setReadme('')
     setLicense('')
+    setVisibility('public')
     setProblems([])
   }
 
@@ -168,7 +178,18 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
           description: description.trim(),
           category: category || undefined,
           changelog: changelog.trim(),
-          priceUsd: Math.max(0, Math.round(Number(priceUsd) || 0)),
+          // A private plugin has no buyers — its only audience already owns
+          // it — so it publishes free regardless of what the field held
+          // before the publisher switched visibility.
+          priceUsd:
+            visibility === 'private'
+              ? 0
+              : Math.max(0, Math.round(Number(priceUsd) || 0)),
+          // Audience, not trust level (AGL-968): a private plugin takes the
+          // same review path — it just never reaches the marketplace, and
+          // only this org's sites can install it. Honoured on first publish
+          // only; re-publishing an existing listing leaves it alone.
+          visibility,
           // Listing docs (AGL-927): the publish API already validates and
           // stores these (validateListingContent); without them every
           // bundle-published listing hit review flagged "README: MISSING ·
@@ -210,6 +231,37 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
               'site data directly. A reviewer verifies and signs yours before ' +
               'it can run trusted.'}
           </Alert>
+
+          {/* Private plugins (AGL-968/992): build for your own sites without
+              publishing to anyone. Deliberately worded as an AUDIENCE choice
+              — private is not a faster lane, and the caption below says so,
+              because "skip the queue" is the reading it would otherwise
+              invite. */}
+          <TextField
+            select
+            label="Who can install this"
+            value={visibility}
+            onChange={(event) =>
+              setVisibility(event.target.value as 'public' | 'private')
+            }
+            size="small"
+            helperText={
+              visibility === 'private'
+                ? 'Private plugins take the same review path — same queue, ' +
+                  'same checklist, same verifier, same signature for realm ' +
+                  'trust. They are never listed in the marketplace, and only ' +
+                  'your sites can install them.'
+                : 'Listed in the marketplace for every workspace once a ' +
+                  'reviewer approves it.'
+            }
+          >
+            <MenuItem value="public">
+              {'Anyone — publish to the marketplace'}
+            </MenuItem>
+            <MenuItem value="private">
+              {'Only this organization — private plugin'}
+            </MenuItem>
+          </TextField>
 
           <Stack spacing={0.5}>
             <Typography variant="subtitle2">{'Bundle (.js)'}</Typography>
@@ -331,9 +383,17 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
             />
             <TextField
               label="Price (USD)"
-              helperText="0 for free. Paid listings need payouts set up."
+              // A private plugin has no buyers, and a price on one would only
+              // send the publisher through Stripe onboarding to sell to
+              // themselves.
+              disabled={visibility === 'private'}
+              helperText={
+                visibility === 'private'
+                  ? 'Private plugins are free — nobody else can install them.'
+                  : '0 for free. Paid listings need payouts set up.'
+              }
               type="number"
-              value={priceUsd}
+              value={visibility === 'private' ? '0' : priceUsd}
               onChange={(event) => setPriceUsd(event.target.value)}
               size="small"
               sx={{ flex: 1 }}
@@ -366,7 +426,11 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
           onClick={() => void submit()}
           disabled={busy || !bundleFile}
         >
-          {busy ? 'Publishing…' : 'Publish plugin'}
+          {busy
+            ? 'Publishing…'
+            : visibility === 'private'
+              ? 'Publish privately'
+              : 'Publish plugin'}
         </Button>
       </DialogActions>
     </Dialog>

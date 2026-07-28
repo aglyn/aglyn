@@ -16,7 +16,8 @@
  */
 'use client'
 
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { mdiCheckDecagram } from '@aglyn/shared-data-mdi'
+import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Box,
   Chip,
@@ -38,6 +39,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import {
   isListingBrowsable,
+  isPrivateListing,
   listingArtifactType,
   listingArtifactLabel,
   resolvePluginInstallState,
@@ -127,18 +129,25 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
             listingId,
           })
         : undefined
+  // Storefront links carry the publisher's HANDLE (AGL-1001), the identity
+  // shown right beside them on the card. The id remains a valid segment on
+  // the page itself, so a publisher whose handle hasn't loaded yet still
+  // links somewhere real rather than nowhere.
   const publisherHref = (profileId: string) =>
     orgScoped
       ? // Org-scope publisher storefront (AGL-869): all of one publisher's
         // listings. Needs the URL slug, which is passed in at org scope.
         orgSlug
-        ? buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, { orgSlug, profileId })
+        ? buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, {
+            orgSlug,
+            handle: handles[profileId] ?? profileId,
+          })
         : undefined
       : orgSlug && subdomain
         ? buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
             orgSlug,
             host: subdomain,
-            profileId,
+            handle: handles[profileId] ?? profileId,
           })
         : undefined
 
@@ -304,6 +313,15 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   const items = useMemo(() => {
     const needle = search.trim().toLowerCase()
     const filtered = (listings ?? []).filter((listing: any) => {
+      // Private plugins never appear here, not even for the org that owns
+      // them (AGL-968/993). The owner exemption below exists so a publisher
+      // can watch their own SUBMISSION move through review — but a private
+      // listing is not waiting to be listed, it is deliberately not for the
+      // marketplace, and showing it in this grid is the one thing "private"
+      // promises will not happen. Owners reach theirs from
+      // Marketplace › Listings, whose View opens the same detail page
+      // installs happen on.
+      if (isPrivateListing(listing)) return false
       // Review queue gate (AGL-432): unreviewed/rejected plugin listings
       // stay off the public browse; the owner still sees their own (the
       // detail page shows them the status). UX-level only — the docs are
@@ -428,21 +446,24 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                       }}
                     />
                   ) : null}
+                  {/* The name gets the whole line (AGL-1002). Sharing a row
+                      with the chips meant the title was the only thing that
+                      gave way when they did not fit — "Promo Countdown"
+                      truncated to "Promo Coun…" beside chips with room to
+                      spare, which inverts what matters on a browse card. */}
+                  <AppLink
+                    href={listingHref(listing.$id)}
+                    color="inherit"
+                    underline="hover"
+                    variant="subtitle2"
+                  >
+                    {listing.displayName}
+                  </AppLink>
                   <Stack
                     direction="row"
                     spacing={1}
-                    sx={{ alignItems: 'center' }}
+                    sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
                   >
-                    <AppLink
-                      href={listingHref(listing.$id)}
-                      color="inherit"
-                      underline="hover"
-                      variant="subtitle2"
-                      sx={{ flex: 1 }}
-                      noWrap
-                    >
-                      {listing.displayName}
-                    </AppLink>
                     {/* Primary classification, said first (AGL-864). */}
                     <Chip
                       size="small"
@@ -452,12 +473,28 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                     {listing.category ? (
                       <Chip size="small" label={listing.category} />
                     ) : null}
-                    {/* Org-wide installs apply to every site (AGL-656). */}
-                    {isPlugin && pluginState.scope === 'org' ? (
+                    {/* The reviewed badge belongs HERE most of all
+                        (AGL-1002): the detail page showed it, but browse is
+                        where someone is comparing options and deciding whose
+                        code to run. */}
+                    {listing.reviewStatus === 'verified' ? (
                       <Chip
                         size="small"
-                        variant="outlined"
-                        label={pluginState.shadowed ? 'Org-wide (shadowed)' : 'Org-wide'}
+                        color="info"
+                        label="Verified"
+                        // Carries more weight than the neighbouring
+                        // classification chips on purpose: it is the only one
+                        // that says a human vouched for the code, and the
+                        // rest are just taxonomy. The icon is what makes it
+                        // findable when scanning a grid rather than reading
+                        // one card.
+                        icon={
+                          <MdiIcon
+                            path={mdiCheckDecagram.path}
+                            sx={{ fontSize: 16 }}
+                          />
+                        }
+                        sx={{ fontWeight: 600 }}
                       />
                     ) : null}
                     {priceUsd > 0 ? (
@@ -502,6 +539,23 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                       variant="body2"
                       color="text.secondary"
                       sx={{ flex: 1 }}
+                      // Four lines, then ellipsis (AGL-1002). Grid rows
+                      // stretch to their tallest card, so one publisher's
+                      // essay used to leave every card beside it mostly white
+                      // space; the full text is one click away.
+                      //
+                      // Plain `style`, not `sx`: emotion drops the
+                      // `-webkit-box` display value on the way through, and
+                      // without it the other three properties clamp nothing
+                      // (measured — `display` computed to `flow-root` while
+                      // line-clamp and box-orient came through fine). Nothing
+                      // here reads the theme, so there is nothing to lose.
+                      style={{
+                        display: '-webkit-box',
+                        WebkitBoxOrient: 'vertical',
+                        WebkitLineClamp: 4,
+                        overflow: 'hidden',
+                      }}
                     >
                       {listing.description}
                     </Typography>
@@ -511,12 +565,35 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                   {/* Read-only state, then a link to the detail page — the
                       only place an install happens (AGL-867). No install/buy
                       action lives on the grid. */}
+                  {/* Install state reads as one statement (AGL-1002): the
+                      scope belongs with "Installed", not up in the chip row
+                      among the type and category pills, which say what the
+                      listing IS rather than what this workspace has done
+                      with it. Org-wide installs apply to every site
+                      (AGL-656). */}
                   {isInstalled ? (
-                    <Typography variant="caption" color="success.main">
-                      {`Installed${
-                        installedVersion ? ` (v${installedVersion})` : ''
-                      }`}
-                    </Typography>
+                    <Stack
+                      direction="row"
+                      spacing={0.75}
+                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                    >
+                      <Typography variant="caption" color="success.main">
+                        {`Installed${
+                          installedVersion ? ` (v${installedVersion})` : ''
+                        }`}
+                      </Typography>
+                      {isPlugin && pluginState.scope === 'org' ? (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={
+                            pluginState.shadowed
+                              ? 'Org-wide (shadowed)'
+                              : 'Org-wide'
+                          }
+                        />
+                      ) : null}
+                    </Stack>
                   ) : null}
                   <AppLink
                     componentVariant="button"

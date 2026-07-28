@@ -54,7 +54,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { Box, Divider, Link as MuiLink } from '@mui/material'
+import { Box, Link as MuiLink } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -76,8 +76,14 @@ import useFirestoreCollection from '../../../../../../hooks/use-firestore-collec
 import useFirestoreDoc from '../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../hooks/use-host-activity-logger'
 import MediaPickerDialog from '../../../../../../components/media/media-picker-dialog.component'
+import MarkdownEditorToolbar from '../../../../../../components/markdown-editor-toolbar.component'
+import {
+  applyCommandToSource,
+  MARKDOWN_SOURCE_HINT,
+} from '../../../../../../components/markdown-source-command'
 import MarkdownVisualEditor, {
   type MarkdownEditorCommand,
+  type MarkdownEditorContext,
   type MarkdownVisualEditorHandle,
 } from '../../../../../../components/markdown-visual-editor.component'
 
@@ -417,41 +423,25 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   // Markdown toolbar (AGL-582): wraps the CURRENT SELECTION of the body
   // textarea instead of appending at the end.
   const bodyInputRef = useRef<HTMLTextAreaElement | null>(null)
-  const applyMarkdown = useCallback(
-    (kind: 'bold' | 'italic' | 'heading' | 'link' | 'image') => {
-      const input = bodyInputRef.current
-      setEditor((prev) => {
-        if (!prev) return prev
-        const body = prev.body
-        const start = input?.selectionStart ?? body.length
-        const end = input?.selectionEnd ?? body.length
-        const selected = body.slice(start, end)
-        // Headings/images are block-level in markdown-lite: they need a
-        // blank line before them to parse as their own block.
-        const blockPrefix =
-          start > 0 && !/\n\n$/.test(body.slice(0, start)) ? '\n\n' : ''
-        const insert =
-          kind === 'bold'
-            ? `**${selected || 'bold text'}**`
-            : kind === 'italic'
-              ? `*${selected || 'italic text'}*`
-              : kind === 'heading'
-                ? `${blockPrefix}## ${selected || 'Heading'}`
-                : kind === 'link'
-                  ? `[${selected || 'link text'}](https://)`
-                  : `${blockPrefix}![${selected || 'alt text'}](https://)`
-        requestAnimationFrame(() => {
-          input?.focus()
-          input?.setSelectionRange(start, start + insert.length)
-        })
-        return {
-          ...prev,
-          body: body.slice(0, start) + insert + body.slice(end),
-        }
+  const [bodyContext, setBodyContext] =
+    useState<MarkdownEditorContext | null>(null)
+  const applyMarkdown = useCallback((command: MarkdownEditorCommand) => {
+    const input = bodyInputRef.current
+    setEditor((prev) => {
+      if (!prev) return prev
+      const edit = applyCommandToSource(
+        prev.body,
+        input?.selectionStart ?? prev.body.length,
+        input?.selectionEnd ?? prev.body.length,
+        command,
+      )
+      requestAnimationFrame(() => {
+        input?.focus()
+        input?.setSelectionRange(edit.start, edit.end)
       })
-    },
-    [],
-  )
+      return { ...prev, body: edit.body }
+    })
+  }, [])
   // One toolbar, two surfaces (AGL-582): in the Visual tab commands mutate
   // the editor's block model; in the Markdown tab they wrap the textarea
   // selection as before.
@@ -1232,48 +1222,14 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             minRows={2}
             helperText="Meta description — falls back to the excerpt"
           />
-          <Stack direction="row" spacing={1}>
-            {/* mousedown preventDefault keeps the visual editor's DOM
-                selection alive while the toolbar button is clicked. */}
-            <Button
-              size="small"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => handleToolbar('bold')}
-            >
-              {'B'}
-            </Button>
-            <Button
-              size="small"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => handleToolbar('italic')}
-            >
-              {'I'}
-            </Button>
-            <Button
-              size="small"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => handleToolbar('heading')}
-            >
-              {'H2'}
-            </Button>
-            <Button
-              size="small"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => handleToolbar('link')}
-            >
-              {'Link'}
-            </Button>
-            <Button
-              size="small"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => handleToolbar('image')}
-            >
-              {'Image'}
-            </Button>
-            <Button size="small" onClick={() => setPickerTarget('body')}>
-              {'Insert image'}
-            </Button>
-            <Divider orientation="vertical" flexItem />
+          {/* One toolbar for both surfaces (AGL-984), including the
+              Visual / Markdown switch. */}
+          <MarkdownEditorToolbar
+            onCommand={handleToolbar}
+            context={bodyTab === 'visual' ? bodyContext : null}
+            mode={bodyTab}
+            onModeChange={setBodyTab}
+          >
             <Button
               size="small"
               color="secondary"
@@ -1289,7 +1245,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             >
               {editor?.body?.trim() ? 'Improve with AI' : 'Write with AI'}
             </Button>
-          </Stack>
+          </MarkdownEditorToolbar>
           <Box>
             {bodyTab === 'visual' ? (
               // WYSIWYG surface (AGL-582): the editor IS the preview — it
@@ -1306,6 +1262,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                   // The editor's Insert image dialog hands off to the same
                   // media picker the "Insert image" button uses (AGL-596).
                   onPickImageFromMedia={() => setPickerTarget('body')}
+                  onContextChange={setBodyContext}
                 />
                 <Stack
                   direction="row"
@@ -1324,14 +1281,6 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                     {'Cmd/Ctrl+B bold · Cmd/Ctrl+I italic · Cmd/Ctrl+Z undo · ' +
                       'type "## ", "### " or "- " at a line start to convert'}
                   </Typography>
-                  <Button
-                    size="small"
-                    color="inherit"
-                    onClick={() => setBodyTab('markdown')}
-                    sx={{ flexShrink: 0, color: 'text.secondary' }}
-                  >
-                    {'Edit markdown'}
-                  </Button>
                 </Stack>
               </Box>
             ) : (
@@ -1349,13 +1298,8 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                   minRows={14}
                   fullWidth
                   inputRef={bodyInputRef}
-                  helperText="Markdown-lite: **bold**, *italic*, ## headings, - lists, [links](https:// or /page), ![images](https://)."
+                  helperText={MARKDOWN_SOURCE_HINT}
                 />
-                <Stack direction="row" sx={{ mt: 0.5, justifyContent: 'flex-end' }}>
-                  <Button size="small" onClick={() => setBodyTab('visual')}>
-                    {'Done — back to the editor'}
-                  </Button>
-                </Stack>
               </Box>
             )}
           </Box>

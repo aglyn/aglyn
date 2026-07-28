@@ -21,7 +21,9 @@ import {
   listingArtifactType,
   listingArtifactLabel,
   installTargetsFor,
+  isPrivateListing,
   resolveInstallPlan,
+  resolveOrgInstallSummary,
   resolvePluginInstallState,
   type InstallTargeting,
 } from '../model/community'
@@ -33,19 +35,32 @@ import {
   type MarkdownBlock,
   type MarkdownInline,
 } from '@aglyn/aglyn'
-import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { mdiCheckCircle, mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
+import {
+  AppLink,
+  CardDisplay,
+  Container,
+  GridItems,
+  MdiIcon,
+} from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
+  FormControl,
+  FormControlLabel,
+  FormGroup,
+  FormHelperText,
+  FormLabel,
   Link as MuiLink,
   Stack,
   Typography,
@@ -62,6 +77,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import HubTabs from '@aglyn/shared-ui-next/components/hub-tabs'
 import ListingReviews from './listing-reviews.component'
+import PluginSiteSet from './plugin-site-set.component'
 import { MenuItem, TextField } from '@mui/material'
 import { useCommunityActions } from '../hooks/use-community-actions'
 
@@ -374,6 +390,37 @@ export function CommunityListingContent({
     [firestore, orgId, listingId],
     { idField: '$id' },
   )
+  // Every site's pin, not just the acting one (AGL-997). At org scope the
+  // question is "which of my sites is this on", and the two subscriptions
+  // above can only answer for one arbitrary site. Read as a fan-in rather
+  // than a subscription per host: the host count is a prop, so a per-host
+  // hook would change the hook count between renders, and a collection-group
+  // query would need an index plus a rules audit to read other orgs' pins
+  // it must never see. `pinsNonce` re-reads after this page's own writes,
+  // which are the only thing that changes these docs while it is open.
+  const [sitePins, setSitePins] = useState<Record<string, any>>({})
+  const [pinsNonce, setPinsNonce] = useState(0)
+  const hostIdsKey = (hosts ?? []).map((host) => host.id).join('|')
+  useEffect(() => {
+    if (!orgScoped || !listingId || !hosts?.length) return
+    let active = true
+    void Promise.all(
+      hosts.map(async (host) => {
+        const snapshot = await getDoc(
+          doc(firestore, 'hosts', host.id, 'installs', listingId),
+        )
+        return [host.id, snapshot.exists() ? snapshot.data() : null] as const
+      }),
+    )
+      .then((entries) => {
+        if (active) setSitePins(Object.fromEntries(entries))
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestore, listingId, hostIdsKey, orgScoped, pinsNonce])
   // datasetSchema/emailTemplate installs live in neither collection above
   // (AGL-789) — they become an org dataset or a draft email version, each
   // stamped with the listing it came from. Scoped to this listing rather than
@@ -470,6 +517,16 @@ export function CommunityListingContent({
 
   const missing =
     status === 'success' && (!listing?.profileId || listing?.deletedAt)
+  // Somewhere to go from the zero state (AGL-998). Same surface split as
+  // every other link here: org route at org scope, host route otherwise,
+  // and undefined rather than a link to nowhere when the slug is unresolved.
+  const marketplaceHref = orgScoped
+    ? orgSlug
+      ? buildRoute(Route.ORG_MARKETPLACE, { orgSlug })
+      : undefined
+    : orgSlug && subdomain
+      ? buildRoute(Route.HOST_COMMUNITY, { orgSlug, host: subdomain })
+      : undefined
   const installed = isPlugin
     ? pluginState.scope != null
     : Boolean(componentInstall ?? artifactInstall)
@@ -545,36 +602,96 @@ export function CommunityListingContent({
     return 'this site'
   }
 
+  // The org-wide picture (AGL-997): which sites run this, at which version,
+  // and which are still free to add. Only meaningful at org scope for a
+  // plugin — everything else installs INTO a site and has no pin to survey.
+  const orgPluginScope = Boolean(orgTargeting && isPlugin)
+  const orgInstall = useMemo(
+    () => resolveOrgInstallSummary(hosts ?? [], sitePins, orgPin ?? null),
+    [hosts, sitePins, orgPin],
+  )
+  /** Run a pin write, then re-read every site's pin. */
+  const runSiteEdit = async (work: () => Promise<unknown>) => {
+    try {
+      await work()
+    } finally {
+      setPinsNonce((current) => current + 1)
+    }
+  }
+
   // The actual pin write, run only after the confirm dialog (AGL-867).
   const runInstall = () => {
     setConfirmOpen(false)
-    if (orgTargeting && !installed) {
-      void installPlan(listing, installPlanSteps)
-    } else {
-      void install(listing, installTargetScope)
-    }
+    // Re-read every site's pin afterwards (AGL-997). The acting host's pin is
+    // a live subscription, but the other sites' are a fan-in read — without
+    // this the page went straight from "Install" to a bare disabled
+    // "Installed" button, because the panel that explains WHERE it landed
+    // had not seen the write yet.
+    void runSiteEdit(() =>
+      orgTargeting && !installed
+        ? installPlan(listing, installPlanSteps)
+        : install(listing, installTargetScope),
+    )
   }
 
   return (
     <>
       <NextPageTitle screen={listing?.displayName ?? 'Community listing'} />
         <Container gutterY maxWidth="xl">
+          {/* A designed zero-state, not a loose sentence (AGL-998). This is
+              reached by ordinary means — a bookmark to something since
+              unpublished, a link from another environment — and the bare
+              line it used to print read as a half-rendered page with no way
+              out. `missing` is already gated on `status === 'success'`, so
+              this never stands in for loading. */}
           {missing ? (
-            <Typography variant="body2" color="text.secondary">
-              {'This listing does not exist or was unpublished.'}
-            </Typography>
+            <CardDisplay contentGutterX contentGutterY>
+              <Stack
+                spacing={1.5}
+                sx={{ alignItems: 'center', textAlign: 'center', py: 6 }}
+              >
+                <MdiIcon
+                  path={mdiStorefrontOutline.path}
+                  color="disabled"
+                  sx={{ fontSize: 48 }}
+                />
+                <Typography variant="h6">{'This listing isn’t here'}</Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ maxWidth: 440 }}
+                >
+                  {'It may have been unpublished by its publisher, taken ' +
+                    'down, or the link may point somewhere that no longer ' +
+                    'exists. Anything you already installed from it keeps ' +
+                    'working.'}
+                </Typography>
+                {marketplaceHref ? (
+                  <AppLink href={marketplaceHref}>
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      component="span"
+                    >
+                      {'Back to the marketplace'}
+                    </Button>
+                  </AppLink>
+                ) : null}
+              </Stack>
+            </CardDisplay>
           ) : (
             <GridItems
               spacing={3}
               items={[
                 {
                   size: { xs: 12, md: 8 },
+                  // No card header (AGL-1000): the page's hero now carries the
+                  // listing's name, and the only route that renders this
+                  // widget is the org listing page — the per-site one
+                  // redirects to it (AGL-775) — so a heading here would just
+                  // print the same words twice, inches apart.
                   children: (
-                    <CardDisplay
-                      header={listing?.displayName ?? '…'}
-                      contentGutterX
-                      contentGutterY
-                    >
+                    <CardDisplay contentGutterX contentGutterY>
                       <Stack spacing={2}>
                         {listing?.previewImageUrl ? (
                           <Box
@@ -653,6 +770,18 @@ export function CommunityListingContent({
                           {listing?.reviewStatus === 'verified' ? (
                             <Chip size="small" color="info" label="Verified" />
                           ) : null}
+                          {/* Private listings never reach browse (AGL-993),
+                              so this page is the only place their state is
+                              ever shown — say it beside Verified rather than
+                              letting an approved private plugin read exactly
+                              like a marketplace one. */}
+                          {isPrivateListing(listing ?? {}) ? (
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label="Private"
+                            />
+                          ) : null}
                           <Chip
                             size="small"
                             color={priceUsd > 0 ? 'secondary' : 'default'}
@@ -685,6 +814,14 @@ export function CommunityListingContent({
                             {'Community plugin: runs sandboxed and cannot ' +
                               'access your site data directly. Review the ' +
                               'publisher and docs before installing.'}
+                          </Alert>
+                        ) : null}
+                        {isPrivateListing(listing ?? {}) ? (
+                          <Alert severity="info">
+                            {'Private plugin: it is never listed in the ' +
+                              'marketplace, and only your organization’s ' +
+                              'sites can install it. It passes the same ' +
+                              'review as every other plugin.'}
                           </Alert>
                         ) : null}
                         {abiIncompatible ? (
@@ -728,45 +865,96 @@ export function CommunityListingContent({
                             <ListingReadme readme={listing.readme} />
                           </>
                         ) : null}
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 4 },
+                  children: (
+                    <Stack spacing={3}>
+                      {/* Install is the point of the page (AGL-1005). It used
+                          to be the LAST thing in the left column, under the
+                          README, the config table and the code sample — below
+                          the fold on any listing with real documentation.
+                          Here it leads the sidebar. */}
+                      <CardDisplay
+                        header={'Install'}
+                        contentGutterX
+                        contentGutterY
+                      >
+                        <Stack spacing={1.5}>
+                          {/* Price and version lead: the two facts someone
+                              decides on before they read anything else. */}
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'baseline' }}
+                          >
+                            <Typography variant="h6">
+                              {priceUsd > 0 ? `$${priceUsd}` : 'Free'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {`v${listing?.latestVersion ?? '…'}`}
+                            </Typography>
+                          </Stack>
+                        {/* Where it actually runs (AGL-997). At org scope an
+                            install is a SET of sites; this page used to
+                            resolve the single acting host and announce
+                            "Installed on this site", naming one arbitrary
+                            site and saying nothing about the others — and
+                            offering an Uninstall that was all-or-nothing. */}
+                        {/* The site set (AGL-997), shared with the
+                            installation detail page (AGL-1007) so the two
+                            surfaces cannot drift apart. */}
+                        {orgPluginScope ? (
+                          <PluginSiteSet
+                            listing={listing}
+                            hosts={hosts ?? []}
+                            orgInstall={orgInstall}
+                            latestVersion={listing?.latestVersion}
+                            installPlan={installPlan}
+                            uninstall={uninstall}
+                            onChanged={() =>
+                              setPinsNonce((current) => current + 1)
+                            }
+                          />
+                        ) : null}
                         {/* Existing state, told honestly (AGL-656): an org
                             pin applies everywhere, and this site's own pin
                             shadows it. Showing this is the difference between
-                            "Add to this site" lying and the truth. */}
-                        {isPlugin && installed ? (
-                          <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
-                            <Alert
-                              severity="success"
-                              icon={false}
-                              sx={{ py: 0.5, width: '100%' }}
+                            "Add to this site" lying and the truth. The
+                            org-scope panel above supersedes this for plugins
+                            (AGL-997); this remains for the per-site tab. */}
+                        {!orgPluginScope && isPlugin && installed ? (
+                          <Stack spacing={1}>
+                            {/* A confirmation, not a warning (AGL-1005): a
+                                tick and a sentence, where this used to be a
+                                pale alert with a red text link under it —
+                                which read as something having gone wrong. */}
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              sx={{ alignItems: 'flex-start' }}
                             >
-                              {pluginState.shadowed
-                                ? `Installed on this site (v${installedVersion}), ` +
-                                  'overriding the organization-wide install.'
-                                : pluginState.scope === 'org'
-                                  ? `Installed for the whole organization ` +
-                                    `(v${installedVersion}) — available on every site.`
-                                  : `Installed on this site (v${installedVersion}).`}
-                              {pluginState.updateAvailable
-                                ? ` A newer version (v${listing?.latestVersion}) is available.`
-                                : ''}
-                            </Alert>
-                            {/* Uninstall from the listing too (AGL-881), not
-                                only the installed add-ons card. Targets the
-                                effective pin's scope. */}
-                            <Button
-                              size="small"
-                              color="error"
-                              onClick={() =>
-                                void uninstall(
-                                  listing,
-                                  pluginState.scope ?? undefined,
-                                )
-                              }
-                            >
-                              {pluginState.scope === 'org'
-                                ? 'Uninstall org-wide'
-                                : 'Uninstall'}
-                            </Button>
+                              <MdiIcon
+                                path={mdiCheckCircle.path}
+                                color="success"
+                                sx={{ fontSize: 20, mt: '2px' }}
+                              />
+                              <Typography variant="body2">
+                                {pluginState.shadowed
+                                  ? `Installed on this site (v${installedVersion}), ` +
+                                    'overriding the organization-wide install.'
+                                  : pluginState.scope === 'org'
+                                    ? `Installed for the whole organization ` +
+                                      `(v${installedVersion}) — available on every site.`
+                                    : `Installed on this site (v${installedVersion}).`}
+                                {pluginState.updateAvailable
+                                  ? ` A newer version (v${listing?.latestVersion}) is available.`
+                                  : ''}
+                              </Typography>
+                            </Stack>
                           </Stack>
                         ) : null}
                         {/* Install targeting (AGL-773): at org scope, choose
@@ -774,7 +962,9 @@ export function CommunityListingContent({
                             installed — re-asking once it's settled would lie.
                             The per-site tab keeps the simpler org/host choice
                             (AGL-656) below until it's retired. */}
-                        {orgTargeting && !installed ? (
+                        {orgTargeting &&
+                        !installed &&
+                        !(orgPluginScope && orgInstall.installedAnywhere) ? (
                           <Stack spacing={1.5} sx={{ maxWidth: 420 }}>
                             <TextField
                               select
@@ -805,34 +995,66 @@ export function CommunityListingContent({
                                 </MenuItem>
                               ) : null}
                             </TextField>
+                            {/* A visible checkbox list, not a multi-select
+                                (AGL-996). The MUI `select multiple` this
+                                replaced rendered its options as bare rows
+                                with no tick and no renderValue, so the
+                                control that decides WHERE third-party code
+                                gets installed could not be read at all:
+                                picked and unpicked sites looked identical,
+                                and the closed field showed raw host ids. */}
                             {targeting === 'selected-sites' &&
                             canSelectSites ? (
-                              <TextField
-                                select
-                                size="small"
-                                label="Sites"
-                                value={selectedHostIds}
-                                onChange={(event) =>
-                                  setSelectedHostIds(
-                                    typeof event.target.value === 'string'
-                                      ? event.target.value.split(',')
-                                      : (event.target
-                                          .value as unknown as string[]),
-                                  )
-                                }
-                                slotProps={{ select: { multiple: true } }}
-                                helperText={
-                                  selectedHostIds.length
-                                    ? ' '
-                                    : 'Pick at least one site.'
-                                }
+                              <FormControl
+                                component="fieldset"
+                                error={!selectedHostIds.length}
                               >
-                                {(hosts ?? []).map((host) => (
-                                  <MenuItem key={host.id} value={host.id}>
-                                    {host.label}
-                                  </MenuItem>
-                                ))}
-                              </TextField>
+                                <FormLabel
+                                  component="legend"
+                                  sx={{ typography: 'caption' }}
+                                >
+                                  {'Sites'}
+                                </FormLabel>
+                                <FormGroup
+                                  // Scrolls rather than pushing Install off
+                                  // the page on an org with many sites.
+                                  sx={{ maxHeight: 240, overflowY: 'auto' }}
+                                >
+                                  {(hosts ?? []).map((host) => (
+                                    <FormControlLabel
+                                      key={host.id}
+                                      control={
+                                        <Checkbox
+                                          size="small"
+                                          checked={selectedHostIds.includes(
+                                            host.id,
+                                          )}
+                                          onChange={(event) =>
+                                            setSelectedHostIds((current) =>
+                                              event.target.checked
+                                                ? [...current, host.id]
+                                                : current.filter(
+                                                    (id) => id !== host.id,
+                                                  ),
+                                            )
+                                          }
+                                        />
+                                      }
+                                      label={host.label}
+                                      slotProps={{
+                                        typography: { variant: 'body2' },
+                                      }}
+                                    />
+                                  ))}
+                                </FormGroup>
+                                <FormHelperText>
+                                  {selectedHostIds.length
+                                    ? `${selectedHostIds.length} of ${
+                                        (hosts ?? []).length
+                                      } selected.`
+                                    : 'Pick at least one site.'}
+                                </FormHelperText>
+                              </FormControl>
                             ) : null}
                           </Stack>
                         ) : installTargets.length > 1 && !installed ? (
@@ -857,9 +1079,25 @@ export function CommunityListingContent({
                             <MenuItem value="host">{'This site only'}</MenuItem>
                           </TextField>
                         ) : null}
-                        <Box>
+                        {/* The org-scope panel owns install once anything is
+                            pinned (AGL-997) — it offers add, remove, update
+                            and promote, all of which this single button
+                            would only duplicate ambiguously. */}
+                        <Box
+                          sx={{
+                            display:
+                              orgPluginScope && orgInstall.installedAnywhere
+                                ? 'none'
+                                : undefined,
+                          }}
+                        >
                           <Button
-                            variant={installed ? 'outlined' : 'contained'}
+                            // Full-width and contained (AGL-1005): in a
+                            // sidebar card this is the page's primary action,
+                            // and "already installed and current" is the only
+                            // state where it steps back to an outline.
+                            fullWidth
+                            variant={upToDate ? 'outlined' : 'contained'}
                             color="secondary"
                             disabled={
                               Boolean(upToDate) ||
@@ -904,14 +1142,32 @@ export function CommunityListingContent({
                                       : 'Add to this site'}
                           </Button>
                         </Box>
-                      </Stack>
-                    </CardDisplay>
-                  ),
-                },
-                {
-                  size: { xs: 12, md: 4 },
-                  children: (
-                    <Stack spacing={3}>
+                        {/* Uninstall from the listing too (AGL-881), not only
+                            the installed add-ons card; targets the effective
+                            pin's scope. Demoted to a quiet full-width
+                            secondary below the primary (AGL-1005) — it used
+                            to be red text directly under the "installed"
+                            notice, which made a successful install look like
+                            a problem to undo. */}
+                        {!orgPluginScope && isPlugin && installed ? (
+                          <Button
+                            fullWidth
+                            size="small"
+                            color="inherit"
+                            onClick={() =>
+                              void uninstall(
+                                listing,
+                                pluginState.scope ?? undefined,
+                              )
+                            }
+                          >
+                            {pluginState.scope === 'org'
+                              ? 'Uninstall org-wide'
+                              : 'Uninstall'}
+                          </Button>
+                        ) : null}
+                        </Stack>
+                      </CardDisplay>
                       <CardDisplay
                         header={'Publisher'}
                         contentGutterX
@@ -929,7 +1185,15 @@ export function CommunityListingContent({
                                   ? orgSlug
                                     ? buildRoute(
                                         Route.ORG_MARKETPLACE_PUBLISHER,
-                                        { orgSlug, profileId: listing.profileId },
+                                        {
+                                          orgSlug,
+                                          // Handle, not id (AGL-1001); the id
+                                          // still resolves for the beat
+                                          // before the profile loads.
+                                          handle:
+                                            profile?.handle ??
+                                            listing.profileId,
+                                        },
                                       )
                                     : undefined
                                   : orgSlug && subdomain
@@ -938,7 +1202,9 @@ export function CommunityListingContent({
                                         {
                                           orgSlug,
                                           host: subdomain,
-                                          profileId: listing.profileId,
+                                          handle:
+                                            profile?.handle ??
+                                            listing.profileId,
                                         },
                                       )
                                     : undefined

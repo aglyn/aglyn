@@ -20,11 +20,12 @@ import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { Alert, Stack, Typography } from '@mui/material'
-import { doc } from 'firebase/firestore'
+import { collection, doc, limit, query, where } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
 import {
   useFirestore,
+  useFirestoreCollection,
   useFirestoreDoc,
   useUser,
 } from '@aglyn/tenant-feature-instance'
@@ -48,14 +49,32 @@ const OrgMarketplacePublisher: NextPageWithLayout<Record<string, never>> = () =>
   const { data: user } = useUser()
   const firestore = useFirestore()
   const { permissions } = useOrgPermissions()
-  const params = useParams<{ profileId: string }>()
-  const profileId = String(params.profileId ?? '')
+  const params = useParams<{ handle: string }>()
+  const segment = String(params.handle ?? '')
 
-  const { data: profile } = useFirestoreDoc<any>(
-    () => doc(firestore, 'publisherProfiles', profileId || '-missing-'),
-    [firestore, profileId],
+  // The URL carries the publisher's HANDLE (AGL-1001) — the identity they
+  // chose and the one shown on every browse card — not the opaque org
+  // document id it used to. Both resolve: the handle query runs first, and
+  // an id read backs it up so links already in the wild keep working. A
+  // handle is `^[a-z0-9][a-z0-9-]{2,29}$`, which an id can also match, so
+  // neither lookup can be skipped on the shape of the segment alone.
+  const { data: byHandle } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'publisherProfiles'),
+        where('handle', '==', segment || '-missing-'),
+        limit(1),
+      ),
+    [firestore, segment],
     { idField: '$id' },
   )
+  const { data: byId } = useFirestoreDoc<any>(
+    () => doc(firestore, 'publisherProfiles', segment || '-missing-'),
+    [firestore, segment],
+    { idField: '$id' },
+  )
+  const profile = (byHandle ?? [])[0] ?? byId
+  const profileId = String(profile?.$id ?? '')
 
   const { hosts } = useOrgHosts(
     firestore,
@@ -78,10 +97,13 @@ const OrgMarketplacePublisher: NextPageWithLayout<Record<string, never>> = () =>
           href: buildRoute(Route.ORG_MARKETPLACE, { orgSlug }),
         },
         {
-          children: 'Publisher',
+          // The handle, not the word "Publisher" (AGL-1000/1001) — a
+          // breadcrumb that repeats the page type tells you nothing the hero
+          // above it didn't already say.
+          children: profile?.handle ? `@${profile.handle}` : 'Publisher',
           href: buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, {
             orgSlug,
-            profileId,
+            handle: String(profile?.handle ?? segment),
           }),
         },
       ]}

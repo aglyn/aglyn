@@ -218,11 +218,21 @@ function SchemaForm({
 export default function PluginConfigCards({
   orgId,
   disabled,
+  pluginId,
 }: {
   orgId: string
   disabled?: boolean
+  /**
+   * Render only this plugin's settings (AGL-1007). The installation detail
+   * page is about one plugin, and its settings are the reason that page
+   * exists — without this it would have to re-implement the schema form
+   * rather than show the one every plugin already gets for free.
+   */
+  pluginId?: string
 }) {
-  const schemas = listPluginConfigSchemas()
+  const schemas = listPluginConfigSchemas().filter(
+    (schema) => !pluginId || schema.pluginId === pluginId,
+  )
   if (!schemas.length) return null
   return (
     <>

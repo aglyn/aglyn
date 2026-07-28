@@ -23,6 +23,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
+  Box,
   Button,
   Checkbox,
   Chip,
@@ -33,12 +34,15 @@ import {
   Skeleton,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import MarkdownLiteView from '../../../../../components/markdown-lite-view.component'
 import StaffOnly from '../../../../../components/staff-only.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { PLUGIN_REVIEW_CHECKLIST } from '../../../../../constants/plugin-review-checklist'
@@ -80,6 +84,8 @@ interface ListingDetail {
   revoked: boolean
   unpublished: boolean
   platformHostAbi: number
+  /** Bucket holding the bundle objects, for the Cloud console link (AGL-990). */
+  artifactsBucket: string | null
   versions: VersionEntry[]
   verifier: {
     ok?: boolean
@@ -113,6 +119,11 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [detail, setDetail] = useState<ListingDetail | null>(null)
+  // Rendered by default (AGL-989) — the reviewer's first question is what a
+  // buyer sees; Source is for auditing exactly what was submitted.
+  const [readmeView, setReadmeView] = useState<'rendered' | 'source'>(
+    'rendered',
+  )
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [reason, setReason] = useState('')
@@ -259,6 +270,22 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
     return origin
       ? `${origin.replace(/\/+$/, '')}${path}`
       : `/api/plugin-artifacts/${detail?.listingId}/${version}/${entry.sha256}.bundle`
+  }
+
+  /**
+   * The stored object in the Cloud console (AGL-990) — the served bundle is
+   * what a reviewer READS, this is where they see the bytes: size, upload
+   * time, content type, generation. The bucket is not in the Firebase
+   * console, so nobody finds this by hand.
+   */
+  const bucketUrl = (version: string) => {
+    const entry = detail?.versions.find((item) => item.version === version)
+    if (!entry?.sha256 || !detail?.artifactsBucket) return null
+    const object = `artifacts/${detail.listingId}/${version}/${entry.sha256}.bundle`
+    return (
+      'https://console.cloud.google.com/storage/browser/_details/' +
+      `${detail.artifactsBucket}/${object}`
+    )
   }
 
   const checklistLink = (
@@ -414,9 +441,15 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       {'Publisher: '}
                       {detail.publisherSlug ? (
                         <AppLink
+                          // The storefront route takes a handle now
+                          // (AGL-1001). This payload carries the org's slug
+                          // and name, not the publisher profile's handle, so
+                          // it passes the id — which that page still
+                          // resolves, the same fallback that keeps existing
+                          // links working.
                           href={buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, {
                             orgSlug: detail.publisherSlug,
-                            profileId: detail.publisherId,
+                            handle: detail.publisherId,
                           })}
                         >
                           {detail.publisherName}
@@ -481,21 +514,68 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       </Typography>
                     ) : null}
                     <Divider />
-                    <Typography variant="subtitle2">{'README'}</Typography>
-                    {detail.readme ? (
-                      <Typography
-                        variant="body2"
-                        component="pre"
-                        sx={{
-                          whiteSpace: 'pre-wrap',
-                          fontFamily: 'inherit',
-                          maxHeight: 320,
-                          overflowY: 'auto',
-                          m: 0,
+                    {/* A reviewer needs both halves (AGL-989): the rendered
+                        page a buyer lands on, and the exact source the
+                        publisher submitted. */}
+                    <Stack
+                      direction="row"
+                      sx={{
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 1,
+                      }}
+                    >
+                      <Typography variant="subtitle2">{'README'}</Typography>
+                      <ToggleButtonGroup
+                        exclusive
+                        size="small"
+                        value={readmeView}
+                        onChange={(_event, next) => {
+                          if (next) setReadmeView(next as 'rendered' | 'source')
                         }}
                       >
-                        {detail.readme}
-                      </Typography>
+                        <ToggleButton value="rendered">
+                          <Typography variant="caption">
+                            {'Rendered'}
+                          </Typography>
+                        </ToggleButton>
+                        <ToggleButton value="source">
+                          <Typography variant="caption">{'Source'}</Typography>
+                        </ToggleButton>
+                      </ToggleButtonGroup>
+                    </Stack>
+                    {detail.readme ? (
+                      // Framed (AGL-991): everything inside this border is
+                      // publisher-submitted content, not our page. On a review
+                      // screen that boundary is the whole job.
+                      <Box
+                        sx={{
+                          maxHeight: 480,
+                          overflowY: 'auto',
+                          border: 1,
+                          borderColor: 'divider',
+                          borderRadius: 1,
+                          p: 2,
+                          bgcolor: 'action.hover',
+                        }}
+                      >
+                        {readmeView === 'rendered' ? (
+                          <MarkdownLiteView source={detail.readme} />
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            component="pre"
+                            sx={{
+                              whiteSpace: 'pre-wrap',
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              m: 0,
+                            }}
+                          >
+                            {detail.readme}
+                          </Typography>
+                        )}
+                      </Box>
                     ) : (
                       <Alert severity="warning">
                         {'No README — publishers are expected to ship one.'}
@@ -648,24 +728,51 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         </Typography>
                         {(() => {
                           const link = checklistLink(item.id)
-                          if (!link) return null
+                          // The stored object sits beside what it serves
+                          // (AGL-990) — read the code, then inspect the bytes.
+                          const bucket =
+                            item.id === 'source-read' && detail
+                              ? bucketUrl(detail.reviewVersion)
+                              : null
+                          if (!link && !bucket) return null
                           // External targets (the raw bundle, the publisher's
                           // repo) are plain anchors on purpose; internal ones
                           // go through AppLink so the SPA does not full-reload.
                           return (
-                            <Typography variant="caption" sx={{ pl: 4 }}>
-                              {link.external ? (
-                                <MuiLink
-                                  href={link.href}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  {`${link.label} ↗`}
-                                </MuiLink>
-                              ) : (
-                                <AppLink href={link.href}>{link.label}</AppLink>
-                              )}
-                            </Typography>
+                            <Stack
+                              direction="row"
+                              spacing={2}
+                              sx={{ pl: 4, flexWrap: 'wrap' }}
+                            >
+                              {link ? (
+                                <Typography variant="caption">
+                                  {link.external ? (
+                                    <MuiLink
+                                      href={link.href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      {`${link.label} ↗`}
+                                    </MuiLink>
+                                  ) : (
+                                    <AppLink href={link.href}>
+                                      {link.label}
+                                    </AppLink>
+                                  )}
+                                </Typography>
+                              ) : null}
+                              {bucket ? (
+                                <Typography variant="caption">
+                                  <MuiLink
+                                    href={bucket}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    {'Object in Cloud Storage ↗'}
+                                  </MuiLink>
+                                </Typography>
+                              ) : null}
+                            </Stack>
                           )
                         })()}
                       </Stack>

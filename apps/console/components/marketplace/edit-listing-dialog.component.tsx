@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { Dialog } from '@mui/material'
+import { Box, Dialog } from '@mui/material'
 import ListingDetailEditor from './listing-detail-editor.component'
 
 export interface EditListingDialogProps {
@@ -39,15 +39,22 @@ export function EditListingDialog(props: EditListingDialogProps) {
   const { orgId, listing, open, onClose, user } = props
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      {listing ? (
-        <ListingDetailEditor
-          orgId={orgId}
-          listingId={listing.$id}
-          listing={listing}
-          user={user}
-          onDone={onClose}
-        />
-      ) : null}
+      {/* The editor is a full form, taller than any viewport (AGL-987). The
+          dialog paper caps at the screen, so without a scroller of its own
+          everything below the body — including Save — was unreachable. */}
+      {/* flex:1 + minHeight:0 inside the paper's column, or the child just
+          grows past the capped paper instead of scrolling within it. */}
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {listing ? (
+          <ListingDetailEditor
+            orgId={orgId}
+            listingId={listing.$id}
+            listing={listing}
+            user={user}
+            onDone={onClose}
+          />
+        ) : null}
+      </Box>
     </Dialog>
   )
 }

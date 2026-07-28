@@ -16,30 +16,31 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { mdiDotsVertical } from '@aglyn/shared-data-mdi'
+import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { Button, Stack, TextField, Typography } from '@mui/material'
+import {
+  Button,
+  Chip,
+  Divider,
+  IconButton,
+  Menu,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
+import { useRouter } from 'next/navigation'
 import { collection, doc, query, updateDoc, where } from 'firebase/firestore'
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { buildRoute, Route } from '../constants/route-links'
 import { docsHelp } from '../constants/docs-links'
+import { useOrgSlug } from '../hooks/use-org-scope'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
-import MediaPickerDialog from './media/media-picker-dialog.component'
 import EditListingDialog from './marketplace/edit-listing-dialog.component'
-
-/** Absolute src for a chosen DAM asset — prefer the direct URL, fall back to
- * the stable relative CDN path made absolute so the server's https check and
- * off-console (social card) rendering both accept it. */
-function mediaSrc(media: { url?: string; cdnPath?: string }): string {
-  if (media.url) return media.url
-  if (media.cdnPath)
-    return typeof window === 'undefined'
-      ? media.cdnPath
-      : `${window.location.origin}${media.cdnPath}`
-  return ''
-}
 
 const HANDLE_PATTERN = /^[a-z0-9][a-z0-9-]{2,29}$/
 
@@ -62,6 +63,8 @@ export interface OrgSellerPanelProps {
  */
 export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const { orgId, section } = props
+  const orgSlug = useOrgSlug()
+  const router = useRouter()
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -197,58 +200,69 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     }
   }, [orgId, validHandle, handle, displayName, bio, user, enqueueSnackbar])
 
-  // Listing preview image (AGL-95/863): pick from the shared DAM library
-  // rather than a raw OS file dialog. The pending listing id records which row
-  // opened the picker; a non-null id both opens the dialog and names its target.
-  const [previewPickerListingId, setPreviewPickerListingId] = useState<
-    string | null
-  >(null)
   // The listing open in the full editor (AGL-862), or null when closed.
   const [editListing, setEditListing] = useState<any | null>(null)
-  const handlePickPreview = useCallback(
-    (listing: any) => () => setPreviewPickerListingId(listing.$id),
-    [],
-  )
-  const handlePreviewPicked = useCallback(
-    async (media: { url?: string; cdnPath?: string }) => {
-      const listingId = previewPickerListingId
-      setPreviewPickerListingId(null)
-      const url = mediaSrc(media)
-      if (!listingId || !url) return
+  // Per-row overflow menu (AGL-999): the anchor plus the row it belongs to,
+  // so one <Menu> serves every row instead of one per listing.
+  const [rowMenu, setRowMenu] = useState<{
+    anchor: HTMLElement
+    listing: any
+  } | null>(null)
+  const closeRowMenu = () => setRowMenu(null)
+  const listingHref = (listing: any) =>
+    buildRoute(Route.ORG_MARKETPLACE_LISTING, {
+      orgSlug,
+      listingId: listing.$id,
+    })
+
+  // Private ⇄ public (AGL-968/994). Goes through the API rather than a client
+  // write: making a listing public is gated on it actually carrying the docs
+  // a stranger needs, and that check has to live somewhere a client can't
+  // skip. No re-review either way — the bytes are unchanged.
+  const [visibilityBusy, setVisibilityBusy] = useState('')
+  const handleVisibility = useCallback(
+    (listing: any) => async () => {
+      const next = listing.visibility === 'private' ? 'public' : 'private'
+      setVisibilityBusy(listing.$id)
       try {
         const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/community/preview-image', {
+        const response = await fetch('/api/community/publish-plugin', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
-          // An already-hosted DAM asset (AGL-863) — the server points
-          // previewImageUrl at it instead of re-uploading bytes.
-          body: JSON.stringify({ listingId, url }),
+          body: JSON.stringify({
+            action: 'set-visibility',
+            listingId: listing.$id,
+            visibility: next,
+          }),
         })
-        const payload = await response.json()
+        const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
-          return void enqueueSnackbar(payload?.error ?? 'Could not set image', {
-            variant: 'error',
-            allowDuplicate: true,
-          })
+          return void enqueueSnackbar(
+            payload?.error ?? 'Visibility change failed',
+            { variant: 'error', allowDuplicate: true },
+          )
         }
-        enqueueSnackbar('Preview image saved', {
-          variant: 'success',
-          persist: false,
-        })
+        enqueueSnackbar(
+          next === 'private'
+            ? 'Now private — only your sites can install it'
+            : 'Published to the marketplace',
+          { variant: 'success', persist: false },
+        )
       } catch (error) {
         console.error(error)
         enqueueSnackbar('An error has occurred', {
           variant: 'error',
           allowDuplicate: true,
         })
+      } finally {
+        setVisibilityBusy('')
       }
     },
-    [previewPickerListingId, user, enqueueSnackbar],
+    [user, enqueueSnackbar],
   )
-
   const handleUnpublish = useCallback(
     (listing: any) => async () => {
       try {
@@ -344,23 +358,58 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           </Typography>
         ) : (
           <Stack spacing={1}>
-            <MediaPickerDialog
-              orgId={orgId}
-              open={Boolean(previewPickerListingId)}
-              onClose={() => setPreviewPickerListingId(null)}
-              onPick={handlePreviewPicked}
-            />
+            {/* Private plugins are invisible in Browse by design (AGL-993),
+                which makes this the only door to them — say so, or a
+                publisher looking for the one they just uploaded will hunt
+                for it in the marketplace grid. */}
+            {(listings ?? []).some(
+              (listing: any) => listing.visibility === 'private',
+            ) ? (
+              <Typography variant="caption" color="text.secondary">
+                {'Private plugins never appear in the marketplace — open one ' +
+                  'with View to install it on your sites.'}
+              </Typography>
+            ) : null}
             {(listings ?? []).map((listing: any) => (
               <Stack
                 key={listing.$id}
                 direction="row"
                 spacing={1}
-                sx={{ alignItems: 'center' }}
+                sx={{
+                  alignItems: 'center',
+                  // The whole row is the way in (AGL-999) — the name and its
+                  // metadata are what you aim at, so they should behave like
+                  // the link they read as.
+                  borderRadius: 1,
+                  mx: -1,
+                  px: 1,
+                  '&:hover': { bgcolor: 'action.hover' },
+                }}
               >
-                <Stack sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" noWrap>
-                    {listing.displayName}
-                  </Typography>
+                <Stack
+                  onClick={() => router.push(listingHref(listing))}
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    py: 0.75,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center', minWidth: 0 }}
+                  >
+                    <Typography variant="body2" noWrap>
+                      {listing.displayName}
+                    </Typography>
+                    {/* This tab is the ONLY place a private listing appears
+                        (AGL-993 keeps it out of browse), so the row has to
+                        say which of the two things it is. */}
+                    {listing.visibility === 'private' ? (
+                      <Chip size="small" variant="outlined" label="Private" />
+                    ) : null}
+                  </Stack>
                   <Typography variant="caption" color="text.secondary">
                     {`v${listing.latestVersion}` +
                       (Number(listing.priceUsd ?? 0) > 0
@@ -370,31 +419,81 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                       (listing.deletedAt ? ' · unpublished' : '')}
                   </Typography>
                 </Stack>
-                <Button
+                {/* View what a buyer sees (AGL-988). The one action that
+                    stays visible (AGL-999): every other row action is either
+                    rare or destructive, and flattening them all out made the
+                    columns jump between rows — the action count varies by
+                    artifact type — while putting Unpublish at the end of the
+                    row, the easiest place to hit by mistake. */}
+                <AppLink href={listingHref(listing)}>
+                  <Button size="small" color="secondary" component="span">
+                    {'View'}
+                  </Button>
+                </AppLink>
+                <IconButton
                   size="small"
-                  color="secondary"
-                  onClick={() => setEditListing(listing)}
+                  aria-label={`More actions for ${listing.displayName}`}
+                  onClick={(event) =>
+                    setRowMenu({
+                      anchor: event.currentTarget,
+                      listing,
+                    })
+                  }
                 >
-                  {'Edit'}
-                </Button>
-                <Button
-                  size="small"
-                  color="secondary"
-                  onClick={handlePickPreview(listing)}
-                >
-                  {listing.previewImageUrl ? 'Replace' : 'Image'}
-                </Button>
-                <Button
-                  size="small"
-                  color={listing.deletedAt ? 'secondary' : 'error'}
-                  onClick={handleUnpublish(listing)}
-                >
-                  {listing.deletedAt ? 'Republish' : 'Unpublish'}
-                </Button>
+                  <MdiIcon path={mdiDotsVertical.path} fontSize="small" />
+                </IconButton>
               </Stack>
             ))}
           </Stack>
         )}
+        {/* One menu for every row (AGL-999) — the open row is state, not a
+            mounted <Menu> per listing. */}
+        <Menu
+          anchorEl={rowMenu?.anchor ?? null}
+          open={Boolean(rowMenu)}
+          onClose={closeRowMenu}
+        >
+          <MenuItem
+            onClick={() => {
+              setEditListing(rowMenu?.listing ?? null)
+              closeRowMenu()
+            }}
+          >
+            {'Edit listing'}
+          </MenuItem>
+          {/* Plugins only (AGL-994). `visibility` is enforced in
+              `install-plugin`; the component/layout/template install routes
+              have no such check, so offering the switch there would promise
+              a boundary that does not exist. */}
+          {(rowMenu?.listing?.artifactType ?? rowMenu?.listing?.type) ===
+          'plugin' ? (
+            <MenuItem
+              disabled={visibilityBusy === rowMenu?.listing?.$id}
+              onClick={() => {
+                const listing = rowMenu?.listing
+                closeRowMenu()
+                if (listing) void handleVisibility(listing)()
+              }}
+            >
+              {rowMenu?.listing?.visibility === 'private'
+                ? 'Make public…'
+                : 'Make private'}
+            </MenuItem>
+          ) : null}
+          <Divider />
+          <MenuItem
+            sx={{
+              color: rowMenu?.listing?.deletedAt ? undefined : 'error.main',
+            }}
+            onClick={() => {
+              const listing = rowMenu?.listing
+              closeRowMenu()
+              if (listing) void handleUnpublish(listing)()
+            }}
+          >
+            {rowMenu?.listing?.deletedAt ? 'Republish' : 'Unpublish'}
+          </MenuItem>
+        </Menu>
         <EditListingDialog
           orgId={orgId}
           listing={editListing}

@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { AiAssistProvider } from './components/ai-assist-provider.component'
 import CommunityBrowse from './components/community-browse.component'
 import HostPluginsCard from './components/host-plugins-card.component'
+import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
 import { CommunityListingContent } from './components/listing-content.component'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { RATING_FIELD } from './model/rating-field'
@@ -68,6 +69,14 @@ export function registerCommunityConsole(): void {
         widgetId: 'community-installed-addons',
         Component: HostPluginsCard,
       },
+      // The site set for one installation (AGL-1007): the same control the
+      // listing page uses, exposed so the installation detail page can show
+      // it without the app importing this plugin.
+      {
+        slot: 'pluginSiteSet',
+        widgetId: 'community-plugin-site-set',
+        Component: PluginSiteSetPanel,
+      },
     ],
     pluginId: BUNDLE_ID,
     displayName: 'Community',
@@ -78,3 +87,4 @@ export function registerCommunityConsole(): void {
 export { default as useCommunityActions } from './hooks/use-community-actions'
 export { default as CommunityBrowse } from './components/community-browse.component'
 export { default as HostPluginsCard } from './components/host-plugins-card.component'
+export { default as PluginSiteSetPanel } from './components/plugin-site-set-panel.component'

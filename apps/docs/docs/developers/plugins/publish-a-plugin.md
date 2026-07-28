@@ -33,10 +33,35 @@ are reproducible and upgrades are deliberate:
    — the publish API enforces the same checks.
 3. Publish a **version** to the marketplace: **Marketplace → Publish →
    "A plugin (upload a bundle)"** — upload the bundle and its
-   `manifest.json`, set the listing details and price. Uploads publish
-   **sandboxed**; staff review lists (and may sign) them.
+   `manifest.json`, choose who can install it, and set the listing details
+   and price. Uploads publish **sandboxed**; staff review lists (and may
+   sign) them.
 4. Installers get that pinned version and choose when to **upgrade** —
    ship updates by bumping the manifest `version` and uploading again.
+
+## Private plugins
+
+Not everything you build is for sale. When you upload a bundle, **Who can
+install this** offers:
+
+- **Anyone — publish to the marketplace.** The default. Listed for every
+  workspace once a reviewer approves it.
+- **Only this organization — private plugin.** Never listed in the
+  marketplace, for anyone, and installable only by your own sites.
+
+Private is a choice about **audience, not about trust**. A private plugin
+still executes on Aglyn infrastructure and still reaches the host ABI, so it
+goes through the identical pipeline: the same review queue, the same reviewer
+checklist, the same bundle verifier, and the same super-staff signature if it
+ever needs realm trust. It is not a way to ship unreviewed code.
+
+Private plugins are always free — nobody else can install them — and you
+reach yours from **Marketplace → Listings**, not from Browse.
+
+A private plugin can go public later from that same Listings tab. The bytes
+were already approved, so it needs **no re-review**; it does need what any
+marketplace listing needs first — a description, a README, and a license.
+Going back to private is always available.
 
 ## Paid listings
 

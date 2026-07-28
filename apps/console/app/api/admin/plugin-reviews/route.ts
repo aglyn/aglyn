@@ -260,6 +260,12 @@ async function listingDetail(
       unpublished: Boolean(listing.deletedAt),
       private: listing.visibility === 'private',
       platformHostAbi: PLUGIN_HOST_ABI_VERSION,
+      // Where the bundle bytes actually live (AGL-990). Staff-only payload,
+      // and a bucket NAME is not a credential — reaching the object still
+      // needs a Google account with access. Without it the page cannot build
+      // a Cloud console link, and this bucket does not appear in the Firebase
+      // console at all, so a reviewer has no way to find it by hand.
+      artifactsBucket: artifactsBucket ?? null,
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       versions: versions.map(
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
