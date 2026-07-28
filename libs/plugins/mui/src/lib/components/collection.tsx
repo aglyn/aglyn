@@ -293,6 +293,77 @@ const CollectionEntryBody = forwardRef<
             </Box>
           )
         }
+        // Code blocks and tables (AGL-974). Both scroll rather than wrap:
+        // a wrapped code line or a squeezed table column loses the very
+        // structure that made the block worth writing.
+        if (block.type === 'code') {
+          return (
+            <Box
+              key={index}
+              component="pre"
+              sx={{
+                my: 2,
+                p: 2,
+                overflowX: 'auto',
+                borderRadius: 1,
+                bgcolor: 'action.hover',
+                fontFamily: 'monospace',
+                fontSize: 14,
+              }}
+            >
+              <code>{block.text}</code>
+            </Box>
+          )
+        }
+        if (block.type === 'table') {
+          return (
+            <Box key={index} sx={{ my: 2, overflowX: 'auto' }}>
+              <Box
+                component="table"
+                sx={{
+                  borderCollapse: 'collapse',
+                  width: '100%',
+                  '& th, & td': {
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    px: 1.5,
+                    py: 1,
+                  },
+                  '& th': { bgcolor: 'action.hover' },
+                }}
+              >
+                <thead>
+                  <tr>
+                    {block.header.map((cell, cellIndex) => (
+                      <th
+                        key={cellIndex}
+                        style={{ textAlign: block.align[cellIndex] ?? 'left' }}
+                      >
+                        {renderInlines(cell, suppressNavigation)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {row.map((cell, cellIndex) => (
+                        <td
+                          key={cellIndex}
+                          style={{
+                            textAlign: block.align[cellIndex] ?? 'left',
+                          }}
+                        >
+                          {renderInlines(cell, suppressNavigation)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </Box>
+            </Box>
+          )
+        }
         return (
           <Typography
             key={index}
