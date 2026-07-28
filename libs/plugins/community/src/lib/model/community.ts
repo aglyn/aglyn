@@ -283,6 +283,82 @@ export function resolvePluginInstallState(
   }
 }
 
+/** One site's slice of an org-scope install picture (AGL-997). */
+export interface OrgInstallSite {
+  hostId: string
+  label: string
+  /** The version that actually runs here, from the effective pin. */
+  version: string | null
+  /** Where that pin lives — a host pin shadows the org one, as the loader does. */
+  pinnedBy: InstallTarget
+  /** This site has its OWN pin on top of an org pin. */
+  shadowed: boolean
+}
+
+/**
+ * The whole org's install picture for one listing (AGL-997).
+ *
+ * At org scope, "installed" is a SET, not a boolean. The detail page used to
+ * resolve state against the single acting host, so a plugin installed on one
+ * of five sites reported "Installed on this site" — describing one arbitrary
+ * site and staying silent about the other four — and offered an Uninstall
+ * that was all-or-nothing.
+ *
+ * `orgWide` and per-site pins are not exclusive: an org pin covers every
+ * site including ones created later, and a host pin on top of it shadows it
+ * for that one site. Both facts have to survive into the UI, which is why
+ * this returns the sites AND the pins rather than a single scope.
+ */
+export interface OrgInstallSummary {
+  /** An org pin exists: every site is covered, including future ones. */
+  orgWide: boolean
+  /** Version of the org pin, when there is one. */
+  orgVersion: string | null
+  /** Every site the listing effectively runs on. */
+  sites: OrgInstallSite[]
+  /** Sites carrying their own removable host pin. */
+  hostPinnedIds: string[]
+  /** Sites with no pin of their own and no org pin covering them. */
+  availableHostIds: string[]
+  installedAnywhere: boolean
+}
+
+export function resolveOrgInstallSummary(
+  hosts: ReadonlyArray<{ id: string; label: string }>,
+  hostPins: Readonly<Record<string, InstallPin | null | undefined>>,
+  orgPin: InstallPin | null | undefined,
+): OrgInstallSummary {
+  const orgWide = Boolean(orgPin)
+  const orgVersion = orgPin?.version != null ? String(orgPin.version) : null
+  const sites: OrgInstallSite[] = []
+  const hostPinnedIds: string[] = []
+  const availableHostIds: string[] = []
+  for (const host of hosts) {
+    const hostPin = hostPins[host.id]
+    if (hostPin) hostPinnedIds.push(host.id)
+    if (!hostPin && !orgPin) {
+      availableHostIds.push(host.id)
+      continue
+    }
+    sites.push({
+      hostId: host.id,
+      label: host.label,
+      version:
+        hostPin?.version != null ? String(hostPin.version) : orgVersion,
+      pinnedBy: hostPin ? 'host' : 'org',
+      shadowed: Boolean(hostPin && orgPin),
+    })
+  }
+  return {
+    orgWide,
+    orgVersion,
+    sites,
+    hostPinnedIds,
+    availableHostIds,
+    installedAnywhere: orgWide || hostPinnedIds.length > 0,
+  }
+}
+
 /** How the admin chose to target an install from the org marketplace. */
 export type InstallTargeting = 'all-sites' | 'selected-sites'
 

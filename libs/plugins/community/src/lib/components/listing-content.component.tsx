@@ -23,6 +23,7 @@ import {
   installTargetsFor,
   isPrivateListing,
   resolveInstallPlan,
+  resolveOrgInstallSummary,
   resolvePluginInstallState,
   type InstallTargeting,
 } from '../model/community'
@@ -388,6 +389,37 @@ export function CommunityListingContent({
     [firestore, orgId, listingId],
     { idField: '$id' },
   )
+  // Every site's pin, not just the acting one (AGL-997). At org scope the
+  // question is "which of my sites is this on", and the two subscriptions
+  // above can only answer for one arbitrary site. Read as a fan-in rather
+  // than a subscription per host: the host count is a prop, so a per-host
+  // hook would change the hook count between renders, and a collection-group
+  // query would need an index plus a rules audit to read other orgs' pins
+  // it must never see. `pinsNonce` re-reads after this page's own writes,
+  // which are the only thing that changes these docs while it is open.
+  const [sitePins, setSitePins] = useState<Record<string, any>>({})
+  const [pinsNonce, setPinsNonce] = useState(0)
+  const hostIdsKey = (hosts ?? []).map((host) => host.id).join('|')
+  useEffect(() => {
+    if (!orgScoped || !listingId || !hosts?.length) return
+    let active = true
+    void Promise.all(
+      hosts.map(async (host) => {
+        const snapshot = await getDoc(
+          doc(firestore, 'hosts', host.id, 'installs', listingId),
+        )
+        return [host.id, snapshot.exists() ? snapshot.data() : null] as const
+      }),
+    )
+      .then((entries) => {
+        if (active) setSitePins(Object.fromEntries(entries))
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestore, listingId, hostIdsKey, orgScoped, pinsNonce])
   // datasetSchema/emailTemplate installs live in neither collection above
   // (AGL-789) — they become an org dataset or a draft email version, each
   // stamped with the listing it came from. Scoped to this listing rather than
@@ -569,14 +601,56 @@ export function CommunityListingContent({
     return 'this site'
   }
 
+  // The org-wide picture (AGL-997): which sites run this, at which version,
+  // and which are still free to add. Only meaningful at org scope for a
+  // plugin — everything else installs INTO a site and has no pin to survey.
+  const orgPluginScope = Boolean(orgTargeting && isPlugin)
+  const orgInstall = useMemo(
+    () => resolveOrgInstallSummary(hosts ?? [], sitePins, orgPin ?? null),
+    [hosts, sitePins, orgPin],
+  )
+  // Sites ticked in "add to more sites", separate from the pre-install
+  // targeting picker: one is editing an existing install, the other is
+  // choosing where a new one lands, and sharing state between them would
+  // carry a stale selection across that boundary.
+  const [addHostIds, setAddHostIds] = useState<string[]>([])
+  const [siteBusy, setSiteBusy] = useState(false)
+  // Any pinned site behind the listing's latest version.
+  const staleSites = useMemo(
+    () =>
+      orgInstall.sites.filter(
+        (site) =>
+          site.version != null &&
+          listing?.latestVersion != null &&
+          String(listing.latestVersion) !== site.version,
+      ),
+    [orgInstall.sites, listing?.latestVersion],
+  )
+  /** Run a set of pin writes, then re-read every site's pin. */
+  const runSiteEdit = async (work: () => Promise<unknown>) => {
+    setSiteBusy(true)
+    try {
+      await work()
+    } finally {
+      setSiteBusy(false)
+      setAddHostIds([])
+      setPinsNonce((current) => current + 1)
+    }
+  }
+
   // The actual pin write, run only after the confirm dialog (AGL-867).
   const runInstall = () => {
     setConfirmOpen(false)
-    if (orgTargeting && !installed) {
-      void installPlan(listing, installPlanSteps)
-    } else {
-      void install(listing, installTargetScope)
-    }
+    // Re-read every site's pin afterwards (AGL-997). The acting host's pin is
+    // a live subscription, but the other sites' are a fan-in read — without
+    // this the page went straight from "Install" to a bare disabled
+    // "Installed" button, because the panel that explains WHERE it landed
+    // had not seen the write yet.
+    void runSiteEdit(() =>
+      orgTargeting && !installed
+        ? installPlan(listing, installPlanSteps)
+        : install(listing, installTargetScope),
+    )
   }
 
   return (
@@ -843,11 +917,240 @@ export function CommunityListingContent({
                               {`v${listing?.latestVersion ?? '…'}`}
                             </Typography>
                           </Stack>
+                        {/* Where it actually runs (AGL-997). At org scope an
+                            install is a SET of sites; this page used to
+                            resolve the single acting host and announce
+                            "Installed on this site", naming one arbitrary
+                            site and saying nothing about the others — and
+                            offering an Uninstall that was all-or-nothing. */}
+                        {orgPluginScope && orgInstall.installedAnywhere ? (
+                          <Stack spacing={1.5}>
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              sx={{ alignItems: 'flex-start' }}
+                            >
+                              <MdiIcon
+                                path={mdiCheckCircle.path}
+                                color="success"
+                                sx={{ fontSize: 20, mt: '2px' }}
+                              />
+                              <Typography variant="body2">
+                                {orgInstall.orgWide
+                                  ? `Installed for the whole organization ` +
+                                    `(v${orgInstall.orgVersion}) — every site, ` +
+                                    'including ones you add later.'
+                                  : `Installed on ${orgInstall.sites.length} of ` +
+                                    `${(hosts ?? []).length} sites.`}
+                              </Typography>
+                            </Stack>
+
+                            {/* Name them. A count alone still leaves you
+                                guessing which sites are running the thing. */}
+                            <Stack spacing={0.5}>
+                              {orgInstall.sites.map((site) => (
+                                <Stack
+                                  key={site.hostId}
+                                  direction="row"
+                                  spacing={1}
+                                  sx={{ alignItems: 'center' }}
+                                >
+                                  <Typography
+                                    variant="body2"
+                                    sx={{ flex: 1, minWidth: 0 }}
+                                    noWrap
+                                  >
+                                    {site.label}
+                                  </Typography>
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
+                                    {`v${site.version ?? '—'}`}
+                                  </Typography>
+                                  {site.shadowed ? (
+                                    <Chip
+                                      size="small"
+                                      variant="outlined"
+                                      label="Overrides org"
+                                    />
+                                  ) : null}
+                                  {/* Removable only where the site owns its
+                                      pin: dropping a site covered by the org
+                                      pin would mean writing an exclusion the
+                                      loader has no concept of. */}
+                                  {site.pinnedBy === 'host' ? (
+                                    <Button
+                                      size="small"
+                                      color="inherit"
+                                      disabled={siteBusy}
+                                      onClick={() =>
+                                        void runSiteEdit(() =>
+                                          uninstall(listing, 'host', site.hostId),
+                                        )
+                                      }
+                                    >
+                                      {'Remove'}
+                                    </Button>
+                                  ) : null}
+                                </Stack>
+                              ))}
+                            </Stack>
+
+                            {staleSites.length ? (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="secondary"
+                                disabled={siteBusy}
+                                onClick={() =>
+                                  void runSiteEdit(() =>
+                                    installPlan(
+                                      listing,
+                                      orgInstall.orgWide
+                                        ? [{ scope: 'org' as const }]
+                                        : orgInstall.hostPinnedIds.map(
+                                            (hostId) => ({
+                                              scope: 'host' as const,
+                                              hostId,
+                                            }),
+                                          ),
+                                    ),
+                                  )
+                                }
+                              >
+                                {`Update to v${listing?.latestVersion}`}
+                              </Button>
+                            ) : null}
+
+                            {/* Add sites after the fact. The picker used to
+                                render only when nothing was installed, which
+                                froze the set at install time. */}
+                            {!orgInstall.orgWide &&
+                            orgInstall.availableHostIds.length ? (
+                              <Stack spacing={0.5}>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  {'Add to more sites'}
+                                </Typography>
+                                <FormGroup
+                                  sx={{ maxHeight: 200, overflowY: 'auto' }}
+                                >
+                                  {orgInstall.availableHostIds.map((hostIdOption) => (
+                                    <FormControlLabel
+                                      key={hostIdOption}
+                                      control={
+                                        <Checkbox
+                                          size="small"
+                                          checked={addHostIds.includes(
+                                            hostIdOption,
+                                          )}
+                                          onChange={(event) =>
+                                            setAddHostIds((current) =>
+                                              event.target.checked
+                                                ? [...current, hostIdOption]
+                                                : current.filter(
+                                                    (id) => id !== hostIdOption,
+                                                  ),
+                                            )
+                                          }
+                                        />
+                                      }
+                                      label={
+                                        (hosts ?? []).find(
+                                          (host) => host.id === hostIdOption,
+                                        )?.label ?? hostIdOption
+                                      }
+                                      slotProps={{
+                                        typography: { variant: 'body2' },
+                                      }}
+                                    />
+                                  ))}
+                                </FormGroup>
+                                <Box>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    color="secondary"
+                                    disabled={siteBusy || !addHostIds.length}
+                                    onClick={() =>
+                                      void runSiteEdit(() =>
+                                        installPlan(
+                                          listing,
+                                          addHostIds.map((hostIdOption) => ({
+                                            scope: 'host' as const,
+                                            hostId: hostIdOption,
+                                          })),
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    {'Add to selected'}
+                                  </Button>
+                                </Box>
+                              </Stack>
+                            ) : null}
+
+                            <Divider />
+
+                            {/* Change the shape of the install, not just its
+                                membership: one org pin covers sites made
+                                later, which no set of host pins can. */}
+                            {orgInstall.orgWide ? (
+                              <Button
+                                fullWidth
+                                size="small"
+                                color="inherit"
+                                disabled={siteBusy}
+                                onClick={() =>
+                                  void runSiteEdit(() =>
+                                    uninstall(listing, 'org'),
+                                  )
+                                }
+                              >
+                                {'Uninstall org-wide'}
+                              </Button>
+                            ) : (
+                              <Button
+                                fullWidth
+                                size="small"
+                                variant="outlined"
+                                color="secondary"
+                                disabled={siteBusy}
+                                onClick={() =>
+                                  void runSiteEdit(async () => {
+                                    // Promote: add the org pin, then drop the
+                                    // per-site pins it makes redundant. In
+                                    // this order, so a failure part-way
+                                    // leaves the plugin installed everywhere
+                                    // it already was rather than nowhere.
+                                    await installPlan(listing, [
+                                      { scope: 'org' },
+                                    ])
+                                    for (const hostIdPinned of orgInstall.hostPinnedIds) {
+                                      await uninstall(
+                                        listing,
+                                        'host',
+                                        hostIdPinned,
+                                      )
+                                    }
+                                  })
+                                }
+                              >
+                                {'Install for the whole organization'}
+                              </Button>
+                            )}
+                          </Stack>
+                        ) : null}
                         {/* Existing state, told honestly (AGL-656): an org
                             pin applies everywhere, and this site's own pin
                             shadows it. Showing this is the difference between
-                            "Add to this site" lying and the truth. */}
-                        {isPlugin && installed ? (
+                            "Add to this site" lying and the truth. The
+                            org-scope panel above supersedes this for plugins
+                            (AGL-997); this remains for the per-site tab. */}
+                        {!orgPluginScope && isPlugin && installed ? (
                           <Stack spacing={1}>
                             {/* A confirmation, not a warning (AGL-1005): a
                                 tick and a sentence, where this used to be a
@@ -883,7 +1186,9 @@ export function CommunityListingContent({
                             installed — re-asking once it's settled would lie.
                             The per-site tab keeps the simpler org/host choice
                             (AGL-656) below until it's retired. */}
-                        {orgTargeting && !installed ? (
+                        {orgTargeting &&
+                        !installed &&
+                        !(orgPluginScope && orgInstall.installedAnywhere) ? (
                           <Stack spacing={1.5} sx={{ maxWidth: 420 }}>
                             <TextField
                               select
@@ -998,7 +1303,18 @@ export function CommunityListingContent({
                             <MenuItem value="host">{'This site only'}</MenuItem>
                           </TextField>
                         ) : null}
-                        <Box>
+                        {/* The org-scope panel owns install once anything is
+                            pinned (AGL-997) — it offers add, remove, update
+                            and promote, all of which this single button
+                            would only duplicate ambiguously. */}
+                        <Box
+                          sx={{
+                            display:
+                              orgPluginScope && orgInstall.installedAnywhere
+                                ? 'none'
+                                : undefined,
+                          }}
+                        >
                           <Button
                             // Full-width and contained (AGL-1005): in a
                             // sidebar card this is the page's primary action,
@@ -1057,7 +1373,7 @@ export function CommunityListingContent({
                             to be red text directly under the "installed"
                             notice, which made a successful install look like
                             a problem to undo. */}
-                        {isPlugin && installed ? (
+                        {!orgPluginScope && isPlugin && installed ? (
                           <Button
                             fullWidth
                             size="small"

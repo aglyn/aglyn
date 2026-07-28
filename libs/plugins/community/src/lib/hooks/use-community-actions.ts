@@ -269,7 +269,15 @@ export function useCommunityActions(hostId: string) {
    * land in a library and have nothing to uninstall.
    */
   const uninstall = useCallback(
-    async (listing: any, scope?: 'org' | 'host') => {
+    async (
+      listing: any,
+      scope?: 'org' | 'host',
+      // Which site's pin to drop (AGL-997). Without this the call always
+      // targeted the acting host, so at org scope "uninstall" could only
+      // mean "the whole org pin" or "whichever site happened to be acting"
+      // — removing the plugin from ONE of several sites was unreachable.
+      targetHostId?: string,
+    ) => {
       const dequeue = queueLoading()
       try {
         const idToken = await (user as any)?.getIdToken?.()
@@ -281,7 +289,7 @@ export function useCommunityActions(hostId: string) {
           },
           body: JSON.stringify({
             listingId: listing.$id,
-            hostId,
+            hostId: targetHostId ?? hostId,
             action: 'uninstall',
             ...(scope ? { scope } : {}),
           }),
