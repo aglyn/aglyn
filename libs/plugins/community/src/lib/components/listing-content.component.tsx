@@ -34,7 +34,14 @@ import {
   type MarkdownBlock,
   type MarkdownInline,
 } from '@aglyn/aglyn'
-import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
+import {
+  AppLink,
+  CardDisplay,
+  Container,
+  GridItems,
+  MdiIcon,
+} from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -477,6 +484,16 @@ export function CommunityListingContent({
 
   const missing =
     status === 'success' && (!listing?.profileId || listing?.deletedAt)
+  // Somewhere to go from the zero state (AGL-998). Same surface split as
+  // every other link here: org route at org scope, host route otherwise,
+  // and undefined rather than a link to nowhere when the slug is unresolved.
+  const marketplaceHref = orgScoped
+    ? orgSlug
+      ? buildRoute(Route.ORG_MARKETPLACE, { orgSlug })
+      : undefined
+    : orgSlug && subdomain
+      ? buildRoute(Route.HOST_COMMUNITY, { orgSlug, host: subdomain })
+      : undefined
   const installed = isPlugin
     ? pluginState.scope != null
     : Boolean(componentInstall ?? artifactInstall)
@@ -566,10 +583,47 @@ export function CommunityListingContent({
     <>
       <NextPageTitle screen={listing?.displayName ?? 'Community listing'} />
         <Container gutterY maxWidth="xl">
+          {/* A designed zero-state, not a loose sentence (AGL-998). This is
+              reached by ordinary means — a bookmark to something since
+              unpublished, a link from another environment — and the bare
+              line it used to print read as a half-rendered page with no way
+              out. `missing` is already gated on `status === 'success'`, so
+              this never stands in for loading. */}
           {missing ? (
-            <Typography variant="body2" color="text.secondary">
-              {'This listing does not exist or was unpublished.'}
-            </Typography>
+            <CardDisplay contentGutterX contentGutterY>
+              <Stack
+                spacing={1.5}
+                sx={{ alignItems: 'center', textAlign: 'center', py: 6 }}
+              >
+                <MdiIcon
+                  path={mdiStorefrontOutline.path}
+                  color="disabled"
+                  sx={{ fontSize: 48 }}
+                />
+                <Typography variant="h6">{'This listing isn’t here'}</Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ maxWidth: 440 }}
+                >
+                  {'It may have been unpublished by its publisher, taken ' +
+                    'down, or the link may point somewhere that no longer ' +
+                    'exists. Anything you already installed from it keeps ' +
+                    'working.'}
+                </Typography>
+                {marketplaceHref ? (
+                  <AppLink href={marketplaceHref}>
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      component="span"
+                    >
+                      {'Back to the marketplace'}
+                    </Button>
+                  </AppLink>
+                ) : null}
+              </Stack>
+            </CardDisplay>
           ) : (
             <GridItems
               spacing={3}
