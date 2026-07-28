@@ -62,6 +62,37 @@ export function parsePluginPropsJson(
 }
 
 /**
+ * What the inert placeholder says, and — more to the point — what it refuses
+ * to say (AGL-1029).
+ *
+ * It used to read "not installed on this site" for EVERY plugin with a listing
+ * id, because it inferred installation from `version`/`sha256`: fields the
+ * tenant compose pass injects and the canvas never has. Plugins do not execute
+ * in the editor by design, so their absence there means nothing about the pin,
+ * and the first thing an author saw after installing was a message telling them
+ * the install had failed.
+ *
+ * The claim is only made when it has been earned. The editor publishes the
+ * installs it reads (`setKnownPluginInstalls`); a listing id missing from that
+ * list really is not installed. Where nothing published a list — the tenant, a
+ * preview — the placeholder states what is true of the placement instead and
+ * asserts nothing about installation.
+ */
+export function placeholderText(listingId: string | undefined): string {
+  if (!listingId) return 'Plugin — pick an installed plugin'
+  const known = Aglyn.getKnownPluginInstall(listingId)
+  if (known) {
+    const name = known.displayName || 'Plugin'
+    return known.scope === 'org'
+      ? `${name} — installed org-wide; renders on the published site`
+      : `${name} — renders on the published site`
+  }
+  return Aglyn.hasKnownPluginInstalls()
+    ? 'Plugin — not installed on this site'
+    : 'Plugin — renders on the published site'
+}
+
+/**
  * Community plugin element (AGL-45): a placement for an installed executable
  * plugin. The saved node carries only `listingId`; the tenant compose pass
  * (`attachPluginInstalls`) injects the pinned version/sha256/capabilities +
@@ -117,9 +148,7 @@ const CommunityPlugin = forwardRef<HTMLElement, CommunityPluginProps>(
             textAlign: 'center',
           }}
         >
-          {listingId
-            ? 'Plugin — not installed on this site'
-            : 'Plugin — pick an installed plugin'}
+          {placeholderText(listingId)}
         </Box>
       )
     }
@@ -151,11 +180,15 @@ export const schema: Aglyn.ComponentSchema<CommunityPluginProps> = {
   attributes: [
     {
       name: 'listingId',
+      // A picker over what is actually installed (AGL-1030), not a typed
+      // document id: a mistyped character used to produce an element that
+      // looked broken with no clue why. The old helper text also pointed at
+      // "Manage → Plugins", a path AGL-1011 removed (AGL-1029).
       description:
-        'Installed community plugin id (Manage → Plugins). The sandboxed ' +
-        'plugin renders in an isolated iframe region.',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
-      label: 'Plugin listing id',
+        'Which installed plugin to place here. The sandboxed plugin renders ' +
+        'in an isolated iframe region on the published site.',
+      component: Aglyn.FieldComponentType.PLUGIN_SELECT,
+      label: 'Plugin',
     },
     {
       name: 'pluginPropsJson',

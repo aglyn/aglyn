@@ -49,7 +49,7 @@ import MuiMenuItem from '@mui/material/MenuItem'
 import { Grid } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import * as Besigner from '@aglyn/besigner'
-import { forwardRef, memo, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, memo, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { AiAssistContext } from '../contexts/ai-assist-context'
 import { BindingPickerContext } from '../contexts/binding-picker-context'
 import { InsertTokenMenu } from './insert-token-menu.component'
@@ -316,6 +316,13 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // inline text editor via the extracted hook.
     const { options: insertOptions, labelContext: tokenLabelContext } =
       useInsertTokenOptions(node)
+    // Re-render when the installed-plugin set changes (AGL-1030).
+    const knownPluginInstallsVersion = useSyncExternalStore(
+      Aglyn.subscribeKnownPluginInstalls,
+      Aglyn.getKnownPluginInstallsVersion,
+      Aglyn.getKnownPluginInstallsVersion,
+    )
+
     const attributes = useMemo(() => {
       const entityListFor = (component: Aglyn.FieldComponentType) => {
         switch (component) {
@@ -362,6 +369,32 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     path === '/' ? '/' : `/${path}`
                   })`,
                 })),
+            ],
+          }
+        }
+        if (field.component === Aglyn.FieldComponentType.PLUGIN_SELECT) {
+          // Installed plugins (AGL-1030), from the set the console publishes
+          // for the drawer — host and org pins both, host winning where it
+          // shadows. No extra read: the pins already carry the display name.
+          const installs = Aglyn.getKnownPluginInstalls()
+          return {
+            ...field,
+            component: Aglyn.FieldComponentType.SELECT,
+            options: [
+              {
+                value: '',
+                label: installs.length
+                  ? 'None'
+                  : 'No plugins installed for this site',
+              },
+              ...installs.map((install) => ({
+                value: install.listingId,
+                label:
+                  install.displayName ??
+                  /* An install with no name is still choosable — better a raw
+                     id in one option than a plugin that cannot be placed. */
+                  install.listingId,
+              })),
             ],
           }
         }
@@ -451,6 +484,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       labels,
       entityOptions,
       nodeOptions,
+      // The installed-plugin set arrives from a live subscription and can land
+      // after this memo first ran (AGL-1030) — without it the picker would sit
+      // on "No plugins installed for this site" until the panel remounted.
+      knownPluginInstallsVersion,
       ancestorDatasetId,
       insertOptions,
       tokenLabelContext,

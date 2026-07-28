@@ -66,6 +66,32 @@ export function pinnedProvenance(input: {
   }
 }
 
+/**
+ * Has this copy been edited since it was installed? (AGL-1018)
+ *
+ * The one question an install route must ask before it overwrites: a copy that
+ * still matches its base can be replaced freely, and one that does not holds
+ * work that replacing would destroy. `false` when there is no base — an install
+ * route cannot refuse everything installed before AGL-1015, and the update
+ * route is where that case is handled honestly.
+ */
+export async function hasDivergedFromBase(input: {
+  firestore: FirebaseFirestore.Firestore
+  sha256: unknown
+  /** The copy's content, in the same shape `recordInstallProvenance` was given. */
+  current: unknown
+}): Promise<boolean> {
+  const sha256 = typeof input.sha256 === 'string' ? input.sha256 : ''
+  if (!sha256) return false
+  const snapshot = await input.firestore
+    .collection(ARTIFACT_BASE_COLLECTION)
+    .doc(sha256)
+    .get()
+    .catch(() => null)
+  if (!snapshot?.exists) return false
+  return stableStringify(snapshot.get('content')) !== stableStringify(input.current)
+}
+
 export interface RecordProvenanceInput {
   firestore: FirebaseFirestore.Firestore
   listingId: string

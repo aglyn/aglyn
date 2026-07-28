@@ -145,7 +145,7 @@ graph TD
     HC["screens · layouts · contacts · media · datasets …"]
   end
   O -- "hosts directory" --> H
-  M -- "syncHostMemberRoles() fan-out" --> H
+  M -- "syncOrgAuthProjections() fan-out" --> H
   H --- HC
 ```
 
@@ -184,6 +184,22 @@ Org roles (org-wide), then per-host refinement:
   1-get budget, the membership doc carries a denormalized `orgSuspended`
   flag maintained by the suspension API route (writes N member docs on
   suspend, a rare staff action — the right side of the read/write tradeoff).
+- **Scoped org resources (AGL-1038).** A dataset or media asset can be
+  shared with the whole org (`visibleTo: ['org']`) or with named sites
+  (`['host:abc', …]`) — see §11. Rules authorize those by intersecting
+  `visibleTo` with a `scopeTokens` array on the member doc. The array is
+  denormalized for the same reason `orgSuspended` is, plus a harder one:
+  the rules language has no `.map()`, so `hostAccess`'s keys cannot be
+  turned into tokens at evaluation time at any price.
+  - Both projections — `memberRoles` on host docs, `scopeTokens` on member
+    docs — are written by the single `syncOrgAuthProjections()` writer,
+    which every membership mutation calls. A grant path that updates one
+    and forgets the other silently over- or under-grants, so they do not
+    get separate writers.
+  - Whether a member is org-wide (owner/admin, `allHosts`, or the legacy
+    pre-`allHosts` shape) is decided by one shared `isOrgWideMember()` in
+    `app-utils/organizations`, mirrored by `isOrgWideMember()` in the
+    rules. Three copies of that predicate disagreeing is a privilege bug.
 
 ### Rules v2 sketch
 

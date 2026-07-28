@@ -17,8 +17,9 @@
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { newestApprovedVersion } from '../model/community'
+import { listingArtifactType, newestApprovedVersion } from '../model/community'
 import { compareArtifactVersions } from '@aglyn/aglyn/server'
+import { versionCollectionFor } from './version-stats'
 
 /**
  * Public version history for a plugin listing (AGL-431). The
@@ -40,13 +41,27 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
       .firestore()
       .collection('communityListings')
       .doc(listingId)
+    // Every artifact type has a version history now (AGL-1036), not just
+    // plugins: the per-version install counts are worth the same to whoever
+    // publishes a component as to whoever publishes a plugin. The collection
+    // differs — plugins keep publish internals in `pluginVersions`, everything
+    // else keeps content snapshots in `versions` — so the type decides which
+    // to read, and the buyer-safe projection below stays the same either way.
+    const listingSnapshot = await listingRef.get()
+    const artifactType = listingArtifactType(listingSnapshot.data() ?? {})
+    const isPlugin = artifactType === 'plugin'
     const snapshot = await listingRef
-      .collection('pluginVersions')
+      .collection(versionCollectionFor(artifactType))
       .orderBy('publishedAt', 'desc')
       .limit(20)
       .get()
     const versions = snapshot.docs.map((doc) => ({
       version: String(doc.get('version') ?? doc.id),
+      // Per-version install counts (AGL-1036). `installCount` is every install
+      // that ever landed on this version; `activeInstalls` is how many are on
+      // it now — the one that answers "who is still on the old version".
+      installCount: Number(doc.get('installCount') ?? 0),
+      activeInstalls: Number(doc.get('activeInstalls') ?? 0),
       ...(doc.get('changelog') ? { changelog: String(doc.get('changelog')) } : {}),
       ...(doc.get('trust') ? { trust: String(doc.get('trust')) } : {}),
       ...(Number.isInteger(doc.get('manifest')?.hostAbi)
@@ -76,15 +91,19 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
     // than the one it replaced. The approved set is already in hand here and
     // `pluginVersions` is server-only, so this is the one place that can
     // repair it. Idempotent, and it only ever moves the value forward.
-    const newest = newestApprovedVersion(
-      snapshot.docs.map((doc) => ({
-        version: String(doc.get('version') ?? doc.id),
-        reviewState: doc.get('reviewState'),
-        publishedAt: doc.get('publishedAt'),
-      })) as never,
-    ) as { version?: string } | null
+    // Plugins only: `reviewState` and the approved-version guarantee are a
+    // plugin concept, and a copied artifact's `versions` docs carry neither.
+    const newest = !isPlugin
+      ? null
+      : (newestApprovedVersion(
+          snapshot.docs.map((doc) => ({
+            version: String(doc.get('version') ?? doc.id),
+            reviewState: doc.get('reviewState'),
+            publishedAt: doc.get('publishedAt'),
+          })) as never,
+        ) as { version?: string } | null)
     if (newest?.version) {
-      const stored = (await listingRef.get()).get('latestApprovedVersion')
+      const stored = listingSnapshot.get('latestApprovedVersion')
       if (
         stored == null ||
         (compareArtifactVersions(String(stored), newest.version) ?? 0) < 0

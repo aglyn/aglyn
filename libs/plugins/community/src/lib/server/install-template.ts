@@ -21,6 +21,7 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
 import { recordInstallProvenance } from './provenance'
+import { recordVersionMove } from './version-stats'
 import { listingArtifactType } from '../model/community'
 
 /**
@@ -228,6 +229,19 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
     }
     await batch.commit()
 
+    // Per-version tally (AGL-1036). A bundle is one install however many
+    // templates it lands, so the version it left is read off the first
+    // superseded doc rather than counted per template.
+    await recordVersionMove({
+      firestore,
+      listingRef,
+      artifactType: 'template',
+      from:
+        superseded.docs[0]?.get('installedFrom.version') ??
+        superseded.docs[0]?.get('source.version') ??
+        null,
+      to: listing.latestVersion,
+    })
     await listingRef
       .update({
         installCount: firebaseAdmin.firestore.FieldValue.increment(1),

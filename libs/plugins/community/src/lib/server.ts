@@ -42,6 +42,7 @@ import { publishDatasetSchemaHandler } from './server/publish-dataset-schema'
 import { publishEmailTemplateHandler } from './server/publish-email-template'
 import { publishLayoutHandler } from './server/publish-layout'
 import { publishTemplateHandler } from './server/publish-template'
+import { updateArtifactHandler } from './server/update-artifact'
 
 /**
  * Registers the community plugin's console-side API routes (AGL-396):
@@ -74,6 +75,10 @@ export function registerCommunityConsoleApi(): void {
     'community/install-email-template',
     installEmailTemplateHandler,
   )
+  // Updating a copied artifact is its own route (AGL-1018), not a flag on
+  // install: install writes the publisher's version, this one reconciles it
+  // with a copy that has diverged and refuses to overwrite silently.
+  registerPluginApiRoute('community/update-artifact', updateArtifactHandler)
   registerPluginApiRoute('community/listing-versions', listingVersionsHandler)
   registerPluginApiRoute('community/preview-image', previewImageHandler)
   registerPluginApiRoute('community/publish', publishHandler)

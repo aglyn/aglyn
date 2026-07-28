@@ -26,6 +26,7 @@ import {
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
 import { pinnedProvenance } from './provenance'
+import { recordVersionMove } from './version-stats'
 import {
   isListingBrowsable,
   isPrivateListing,
@@ -149,12 +150,23 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
       // Active-install accounting (AGL-880): decrement only when a pin actually
       // existed, so a repeat/no-op uninstall never over-counts. `installCount`
       // is a cumulative all-time total and is deliberately left untouched.
-      const pinExisted = pinRef ? (await pinRef.get()).exists : false
+      const pinSnapshot = pinRef ? await pinRef.get() : null
+      const pinExisted = pinSnapshot?.exists ?? false
+      // Read before the delete: the version being left is what the per-version
+      // tally has to decrement, and it is gone the moment the pin is.
+      const pinnedVersion = pinExisted ? pinSnapshot?.get('version') : null
       if (pinRef) await pinRef.delete()
       if (pinExisted) {
         const listingRef = firestore
           .collection('communityListings')
           .doc(listingId)
+        await recordVersionMove({
+          firestore,
+          listingRef,
+          artifactType: 'plugin',
+          from: pinnedVersion,
+          to: null,
+        })
         await firestore
           .runTransaction(async (tx) => {
             const snapshot = await tx.get(listingRef)
@@ -355,6 +367,17 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
         })
         .catch(() => undefined)
     }
+    // Per-version tally (AGL-1036). This runs on EVERY pin write, not just the
+    // first: a re-pin is the common case and the one the listing-level counters
+    // above are blind to — the pin already exists, so nothing there moves while
+    // the install changes version underneath.
+    await recordVersionMove({
+      firestore,
+      listingRef,
+      artifactType: 'plugin',
+      from: existing.exists ? existing.get('version') : null,
+      to: version,
+    })
 
     // Enablement sync (AGL-424): the new install loads on next visit for
     // workspaces with a configured switchboard.

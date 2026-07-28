@@ -17,6 +17,7 @@
 
 import {
   hostRoleFor,
+  isOrgWideMember,
   type OrgRole,
   resolveRolePermissions,
   type OrgPermissionSet,
@@ -124,20 +125,10 @@ export async function resolveOrgPermissions(
           }
     }
     const role = membership.member.role
-    // A membership predating `allHosts` carries neither the flag nor a
-    // `hostAccess` map, and demoting those to "scoped with access to nothing"
-    // would lock real members out of their own workspace. A site collaborator
-    // ALWAYS has a non-empty `hostAccess` — that is what the grant writes — so
-    // the absence of both is the legacy shape, not a scoped one.
-    const scoping = membership.member.hostAccess
-    const legacyUnscoped =
-      membership.member.allHosts === undefined &&
-      (!scoping || !Object.keys(scoping).length)
-    const orgWide =
-      role === 'owner' ||
-      role === 'admin' ||
-      membership.member.allHosts === true ||
-      legacyUnscoped
+    // Owner/admin, `allHosts`, and the legacy pre-`allHosts` shape all read
+    // as org-wide; `isOrgWideMember` owns that call so this gate, the
+    // `scopeTokens` projection and the rules cannot drift apart (AGL-1038).
+    const orgWide = isOrgWideMember(membership.member)
     const hostRole = context.hostId
       ? hostRoleFor(membership.member, context.hostId)
       : null

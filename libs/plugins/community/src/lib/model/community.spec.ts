@@ -86,7 +86,9 @@ describe('sanitizeCommunityDefinition', () => {
     })
     expect(result).toEqual({
       ok: false,
-      error: 'Component "reusableInstance" cannot be published',
+      error: expect.stringContaining(
+        'Component "reusableInstance" cannot be published',
+      ),
     })
   })
 
@@ -109,7 +111,9 @@ describe('sanitizeCommunityDefinition', () => {
       sanitizeCommunityDefinition({ rootId: 'root', nodes: layoutNodes }),
     ).toEqual({
       ok: false,
-      error: 'Component "layoutSlot" cannot be published',
+      error: expect.stringContaining(
+        'Component "layoutSlot" cannot be published',
+      ),
     })
     // Opted in: accepted.
     const allowed = sanitizeCommunityDefinition(
@@ -174,11 +178,19 @@ describe('sanitizeCommunityDefinition', () => {
     expect(withDivRoot.nodes['_@_'].componentId).toBe('div')
     expect(Object.keys(withDivRoot.nodes).sort()).toEqual(['_@_', 't'])
 
-    // An absent root componentId is the same wrapper; normalized to div.
+    // An absent root componentId is the same wrapper; normalized to div. It
+    // needs content of its own now (AGL-1033) — an empty wrapper is an empty
+    // listing and is refused below — but the normalization is unchanged.
     const withAbsentRoot = sanitizeCommunityDefinition({
       rootId: '_@_',
       nodes: {
-        '_@_': { $id: '_@_', parentId: null, nodes: [] },
+        '_@_': { $id: '_@_', parentId: null, nodes: ['t'] },
+        t: {
+          $id: 't',
+          componentId: 'muiTypography',
+          parentId: '_@_',
+          props: { children: 'Footer' },
+        },
       } as any,
     })
     if (withAbsentRoot.ok === false) throw new Error(withAbsentRoot.error)
@@ -195,7 +207,10 @@ describe('sanitizeCommunityDefinition', () => {
           d: { $id: 'd', componentId: 'div', parentId: '_@_' },
         },
       }),
-    ).toEqual({ ok: false, error: 'Component "div" cannot be published' })
+    ).toEqual({
+      ok: false,
+      error: expect.stringContaining('Component "div" cannot be published'),
+    })
 
     // The exemption is only for the wrapper shape — a real, disallowed
     // component at the root can't be smuggled through.
@@ -212,7 +227,9 @@ describe('sanitizeCommunityDefinition', () => {
       }),
     ).toEqual({
       ok: false,
-      error: 'Component "reusableInstance" cannot be published',
+      error: expect.stringContaining(
+        'Component "reusableInstance" cannot be published',
+      ),
     })
   })
 
@@ -789,7 +806,9 @@ describe('COMMUNITY_EMAIL_COMPONENT_ID_ALLOWLIST (AGL-657)', () => {
       ),
     ).toEqual({
       ok: false,
-      error: 'Component "videoEmbed" cannot be published',
+      error: expect.stringContaining(
+        'Component "videoEmbed" cannot be published',
+      ),
     })
     expect(
       sanitizeCommunityDefinition({ rootId: '_at_', nodes: emailNodes }).ok,

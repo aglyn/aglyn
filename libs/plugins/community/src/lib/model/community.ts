@@ -649,6 +649,19 @@ export const COMMUNITY_MAX_PRICE_USD = 1000
  * plugins-mui (plugin.spec.ts) minus `reusableInstance` — nested
  * instances would smuggle references to another tenant's private
  * definitions — and minus `layoutSlot`, which is layout chrome. Keep sorted.
+ *
+ * The rule this list encodes is "inert and self-contained": an element that
+ * renders from its own props travels to another workspace intact. What stays
+ * out is what cannot — raw-HTML escape hatches (`customHtml`), references to
+ * another tenant's documents (`reusableInstance`), third-party code
+ * (`plugin`), host chrome (`layoutSlot`) and anything bound to the source
+ * site's data (`collection`, `product`).
+ *
+ * It must cover everything the besigner's palette offers under those terms, or
+ * the catalogue promises what the exporter refuses — which is how `section`
+ * came to be missing (AGL-1033): every Sections & Blocks preset composes it,
+ * so the whole category was unpublishable. `blocks-publishable.spec.ts` walks
+ * the presets and fails if this list falls behind them again.
  */
 export const COMMUNITY_COMPONENT_ID_ALLOWLIST: readonly string[] = [
   'form',
@@ -665,6 +678,9 @@ export const COMMUNITY_COMPONENT_ID_ALLOWLIST: readonly string[] = [
   'muiToolbar',
   'muiTypography',
   'searchBox',
+  // A semantic wrapper — `<section>`/`<footer>`/`<nav>` plus styling, with no
+  // behaviour and no binding to the site it came from.
+  'section',
   'socialLinks',
   'videoEmbed',
 ]
@@ -822,6 +838,8 @@ export function sanitizeCommunityDefinition(
     return { ok: false, error: 'Definition has no root node' }
   }
   const sanitized: CommunityDefinitionNodes = {}
+  /** Set while walking; see the empty-definition check after the loop. */
+  let rootIsWrapper = false
   const queue = [rootId]
   while (queue.length) {
     const id = queue.shift() as string
@@ -844,7 +862,14 @@ export function sanitizeCommunityDefinition(
     if (!isRootWrapper && !allowed.includes(node.componentId)) {
       return {
         ok: false,
-        error: `Component "${node.componentId}" cannot be published`,
+        // Says why, not just no (AGL-1033). The bare id was doubly unhelpful:
+        // it is not what the palette calls the element, and it left the author
+        // guessing whether this was a bug or a rule.
+        error:
+          `Component "${node.componentId}" cannot be published — a listing may ` +
+          'only contain self-contained presentational elements. Raw HTML, ' +
+          'reusable-component references, plugin elements and anything bound ' +
+          "to this site's data or layout stay behind.",
       }
     }
     const plain: any = {}
@@ -859,7 +884,10 @@ export function sanitizeCommunityDefinition(
     plain.parentId = id === rootId ? null : (node.parentId ?? null)
     // Give the wrapper an explicit container id so the installed definition
     // renders its root collection the same way it did on the source site.
-    if (isRootWrapper) plain.componentId = 'div'
+    if (isRootWrapper) {
+      plain.componentId = 'div'
+      rootIsWrapper = true
+    }
     sanitized[id] = plain
     if (Array.isArray(node.nodes)) queue.push(...node.nodes)
   }
@@ -871,6 +899,23 @@ export function sanitizeCommunityDefinition(
   }
   if (serialized.length > COMMUNITY_DEFINITION_MAX_BYTES) {
     return { ok: false, error: 'Definition is too large to publish' }
+  }
+  // An empty definition is not a listing (AGL-1033). Publishing one used to
+  // SUCCEED — the root wrapper alone sanitizes cleanly — so a component whose
+  // content had never been published to its document shipped a blank version
+  // to everyone who installed it, and said nothing. Refusing here is the
+  // "fail loudly at the point the author understands it" half.
+  //
+  // Only the WRAPPER case: a definition that is a single real component is a
+  // perfectly good one-element listing, and refusing that would be a different
+  // bug in the other direction.
+  if (rootIsWrapper && Object.keys(sanitized).length <= 1) {
+    return {
+      ok: false,
+      error:
+        'There is nothing to publish — this is empty. If you have edited it ' +
+        'in the designer, publish those changes first, then publish the listing.',
+    }
   }
   return { ok: true, rootId, nodes: sanitized }
 }

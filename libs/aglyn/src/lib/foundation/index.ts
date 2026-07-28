@@ -70,6 +70,7 @@ export type {
   ProjectUid,
   PublishSchedule,
   RedirectUid,
+  ScopeToken,
   ScreenSlug,
   ScreenUid,
   TemplateKind,

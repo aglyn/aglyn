@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://aglyn.com" title="Go to aglyn.com">
-    <img src="docs/assets/readme/cover.png" alt="Aglyn — the clickable screen to create online" width="100%" />
+    <img src="docs/assets/readme/cover.png" alt="Aglyn — one platform, zero black boxes" width="100%" />
   </a>
 </p>
 

@@ -20,7 +20,8 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
-import { recordInstallProvenance } from './provenance'
+import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
+import { recordVersionMove } from './version-stats'
 
 /**
  * Installs (or updates) a community listing into a host (AGL-44/46).
@@ -116,6 +117,28 @@ export const installHandler: PluginApiHandler = async (req, res) => {
     const componentRef = existing.empty
       ? componentsRef.doc(createResourceUid())
       : existing.docs[0].ref
+    // Re-installing over a copy the workspace has EDITED is the silent
+    // destructive overwrite AGL-1018 exists to stop. The install still happens
+    // when it is asked for explicitly (`mode: 'replace'`, which the update
+    // dialog sends after showing what goes), but it is never the default.
+    if (!existing.empty) {
+      const diverged = await hasDivergedFromBase({
+        firestore,
+        sha256: existing.docs[0].get('installedFrom.sha256'),
+        current: {
+          rootId: existing.docs[0].get('rootId'),
+          nodes: existing.docs[0].get('nodes'),
+        },
+      })
+      if (diverged && req.body?.mode !== 'replace') {
+        return res.status(409).json({
+          error:
+            'Your copy of this component has been edited since it was ' +
+            'installed. Review the update to see what would change.',
+          diverged: true,
+        })
+      }
+    }
     const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
     // Provenance + base snapshot (AGL-1015). The snapshot holds only the
     // vendored tree — the display name and description come from the listing
@@ -147,6 +170,18 @@ export const installHandler: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
+    // Per-version tally (AGL-1036): a re-install moves this copy off whatever
+    // version it was on and onto the latest.
+    await recordVersionMove({
+      firestore,
+      listingRef,
+      artifactType: 'component',
+      from: existing.empty
+        ? null
+        : (existing.docs[0].get('installedFrom.version') ??
+          existing.docs[0].get('community.version')),
+      to: listing.latestVersion,
+    })
     // First installs count toward the browse "Most installed" sort
     // (AGL-95); updates don't inflate it.
     if (existing.empty) {

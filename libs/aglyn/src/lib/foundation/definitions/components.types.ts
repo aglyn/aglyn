@@ -204,6 +204,14 @@ export enum FieldComponentType {
    * from EntityPickerContext at edit time and persists the entity id —
    * renames never break the reference.
    */
+  /**
+   * Select listing the plugins installed for this site (AGL-1030): the editor
+   * resolves options from the install set the console publishes and persists
+   * the listing id. A picker rather than a typed document id — the same reason
+   * every other reference in the designer is one, and here it also removes the
+   * "is this installed?" question by construction.
+   */
+  PLUGIN_SELECT = 'plugin-select',
   PRODUCT_SELECT = 'product-select',
   COLLECTION_SELECT = 'collection-select',
   CATEGORY_SELECT = 'category-select',

@@ -29,6 +29,7 @@ import {
 } from '../model/community'
 import { canActAsPublisher } from './publisher-profile'
 import { recordInstallProvenance } from './provenance'
+import { recordVersionMove } from './version-stats'
 
 /**
  * Installs a marketplace dataset schema into an org (AGL-657).
@@ -180,6 +181,14 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
         createdAt: now,
       })
 
+    // Per-version tally (AGL-1036). Installing a schema always CREATES a new
+    // dataset rather than replacing one, so there is never a version to leave.
+    await recordVersionMove({
+      firestore,
+      listingRef,
+      artifactType: 'datasetSchema',
+      to: listing.latestVersion,
+    })
     await listingRef
       .update({
         installCount: firebaseAdmin.firestore.FieldValue.increment(1),

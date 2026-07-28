@@ -60,6 +60,10 @@ interface VersionEntry {
   signed: boolean
   reviewState: string
   grandfathered: boolean
+  /** Installs that ever landed on this version (AGL-1036). */
+  installCount: number
+  /** Installs pinned to it right now — the blast radius of a revoke. */
+  activeInstalls: number
 }
 
 interface ListingDetail {
@@ -1062,6 +1066,12 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                             ? new Date(entry.publishedAt).toLocaleDateString()
                             : '—'}
                           {` · ${entry.sha256.slice(0, 12)}`}
+                          {/* The blast radius of revoking THIS version
+                              (AGL-1036) — the listing total above answers a
+                              different question. */}
+                          {entry.activeInstalls
+                            ? ` · ${entry.activeInstalls} pinned here`
+                            : ''}
                         </Typography>
                         <Button
                           size="small"

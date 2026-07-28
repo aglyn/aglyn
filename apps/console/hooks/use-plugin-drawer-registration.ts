@@ -17,11 +17,11 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { pluginInstallToPreset } from '@aglyn/aglyn'
+import { pluginInstallToPreset, setKnownPluginInstalls } from '@aglyn/aglyn'
 import { collection, limit, query } from 'firebase/firestore'
 import { runInAction } from 'mobx'
-import { useEffect, useRef } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useEffect, useMemo, useRef } from 'react'
+import { useFirestore, useHostOrgId } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from './use-firestore-collection'
 
 /**
@@ -38,8 +38,54 @@ export function usePluginDrawerRegistration(hostId: string): void {
     [firestore, hostId],
     { idField: '$id' },
   )
+  // Org-wide pins too (AGL-1029). One org pin covers every site, so a plugin
+  // installed that way is genuinely available here — but the drawer only ever
+  // read the host's own installs, so those plugins had no entry, and the
+  // element could not be told they were installed either.
+  const orgId = useHostOrgId(hostId)
+  const { data: orgInstallDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'orgs', orgId ?? '-pending-', 'installs'),
+        limit(50),
+      ),
+    [firestore, orgId],
+    { idField: '$id' },
+  )
+  /**
+   * Host pins shadow org pins for the same listing (AGL-656), so the host
+   * entry wins — the drawer must not offer the same plugin twice, and the
+   * scope reported for it has to be the one actually in force.
+   */
+  const installs = useMemo(() => {
+    const byListing = new Map<string, any>()
+    for (const install of (orgInstallDocs as any[]) ?? []) {
+      const id = install?.listingId ?? install?.$id
+      if (id) byListing.set(id, { ...install, scope: 'org' })
+    }
+    for (const install of (installDocs as any[]) ?? []) {
+      const id = install?.listingId ?? install?.$id
+      if (id) byListing.set(id, { ...install, scope: 'host' })
+    }
+    return [...byListing.values()]
+  }, [installDocs, orgInstallDocs])
   // Track the ids we registered so we can unregister exactly those.
   const registeredIds = useRef<string[]>([])
+
+  // What the canvas may claim about installation (AGL-1029). Published
+  // separately from the presets because the element asks by listing id, and
+  // an unknown id is only "not installed" if there is a list to be missing
+  // from — on the tenant nothing publishes one.
+  useEffect(() => {
+    setKnownPluginInstalls(
+      installs.map((install) => ({
+        listingId: install.listingId ?? install.$id,
+        displayName: install.displayName ?? install.manifest?.name,
+        scope: install.scope,
+      })),
+    )
+    return () => setKnownPluginInstalls(undefined)
+  }, [installs])
 
   useEffect(() => {
     // Single mobx transaction (AGL-371): the drawer re-renders once per
@@ -49,7 +95,7 @@ export function usePluginDrawerRegistration(hostId: string): void {
         Aglyn.components.unregisterPreset(registeredIds.current)
         registeredIds.current = []
       }
-      const presets = ((installDocs as any[]) ?? [])
+      const presets = installs
         .map((install) => pluginInstallToPreset(install))
         .filter(
           (preset): preset is NonNullable<typeof preset> => Boolean(preset),
@@ -65,7 +111,7 @@ export function usePluginDrawerRegistration(hostId: string): void {
         registeredIds.current = []
       }
     }
-  }, [installDocs])
+  }, [installs])
 }
 
 export default usePluginDrawerRegistration

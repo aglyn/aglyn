@@ -69,6 +69,7 @@ import { buildRoute, Route } from '../../../../../../../../../../constants/route
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
+import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -103,6 +104,11 @@ function LayoutBesignerPage(props) {
   const host = useHostSubdomain()
   const { queueLoading } = useLoading()
   const logActivity = useHostActivityLogger(hostId)
+  // Installed plugins as drawer entries and as the element panel's plugin
+  // picker (AGL-1030). Registered on the screen editor since AGL-190 but
+  // nowhere else, so a plugin could not be placed in a reusable component or a
+  // layout at all, and the picker there had no installs to offer.
+  usePluginDrawerRegistration(hostId)
   const handleAddElementClick = useAddElementDrawerCallback()
   const listUrl = buildRoute(Route.LAYOUT_LIST, { orgSlug,  host })
   const { doc: hostResult } = useHost({ hostId })
