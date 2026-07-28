@@ -31,6 +31,7 @@ import {
   resolveInstalledDatasetSchema,
 } from '../model/community'
 import { recordInstallProvenance } from './provenance'
+import { recordVersionMove } from './version-stats'
 
 /**
  * Updating a COPIED marketplace artifact (AGL-1018).
@@ -418,6 +419,15 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         },
         { merge: true },
       )
+      // Per-version tally (AGL-1036): this install just moved versions, which
+      // is the whole reason the per-version count exists.
+      await recordVersionMove({
+        firestore,
+        listingRef,
+        artifactType,
+        from: installedVersion,
+        to: availableVersion,
+      })
       return res.status(200).json({
         updated: true,
         mode,
@@ -487,6 +497,16 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       updatedAt: now,
     })
     await batch.commit()
+    // Per-version tally (AGL-1036). Still a move, not a second install: the
+    // detached copy stops being tracked against the listing, so the version it
+    // held is genuinely vacated.
+    await recordVersionMove({
+      firestore,
+      listingRef,
+      artifactType,
+      from: installedVersion,
+      to: availableVersion,
+    })
     return res.status(200).json({
       updated: true,
       mode,

@@ -21,6 +21,7 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
 import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
+import { recordVersionMove } from './version-stats'
 
 /**
  * Installs (or updates) a community listing into a host (AGL-44/46).
@@ -169,6 +170,18 @@ export const installHandler: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
+    // Per-version tally (AGL-1036): a re-install moves this copy off whatever
+    // version it was on and onto the latest.
+    await recordVersionMove({
+      firestore,
+      listingRef,
+      artifactType: 'component',
+      from: existing.empty
+        ? null
+        : (existing.docs[0].get('installedFrom.version') ??
+          existing.docs[0].get('community.version')),
+      to: listing.latestVersion,
+    })
     // First installs count toward the browse "Most installed" sort
     // (AGL-95); updates don't inflate it.
     if (existing.empty) {

@@ -146,6 +146,11 @@ async function listingDetail(
       hostAbi: Number(doc.get('manifest.hostAbi')) || null,
       capabilities: doc.get('manifest.capabilities') ?? {},
       publishedAt: publishedAt?.toDate?.()?.toISOString() ?? null,
+      // Per-version installs (AGL-1036). "How many workspaces would a revoke
+      // actually hit" is a per-version question, and the listing total shown
+      // elsewhere on this page answers a different one.
+      installCount: Number(doc.get('installCount') ?? 0),
+      activeInstalls: Number(doc.get('activeInstalls') ?? 0),
       signed: Boolean(doc.get('signature')),
       reviewState: String(doc.get('reviewState') ?? 'pending'),
       grandfathered: Boolean(doc.get('grandfathered')),

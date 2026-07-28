@@ -91,6 +91,10 @@ interface ListingVersionEntry {
   trust?: string
   hostAbi?: number
   publishedAtMs: number | null
+  /** Installs that ever landed on this version (AGL-1036). */
+  installCount?: number
+  /** Installs on it right now — the "who is still on v1" number. */
+  activeInstalls?: number
 }
 
 const renderInlines = (inlines: MarkdownInline[]) =>
@@ -501,7 +505,10 @@ export function CommunityListingContent({
   // subset (version/changelog/trust/hostAbi/date).
   const [versions, setVersions] = useState<ListingVersionEntry[]>([])
   useEffect(() => {
-    if (!listing || listingArtifactType(listing) !== 'plugin' || !listingId) return
+    // Every artifact type now, not just plugins (AGL-1036): the route serves
+    // the per-version install counts for all of them, and a component's
+    // publisher wants "who is still on v1" as much as a plugin's does.
+    if (!listing || !listingId) return
     let active = true
     void fetch(
       `/api/community/listing-versions?listingId=${encodeURIComponent(listingId)}`,
@@ -1421,7 +1428,7 @@ export function CommunityListingContent({
                         contentGutterX
                         contentGutterY
                       >
-                        {isPlugin && versions.length ? (
+                        {versions.length ? (
                           <Stack spacing={1}>
                             {versions.map((entry, index) => (
                               <Stack key={entry.version} spacing={0.25}>
@@ -1460,6 +1467,25 @@ export function CommunityListingContent({
                                     color="text.secondary"
                                   >
                                     {entry.changelog}
+                                  </Typography>
+                                ) : null}
+                                {/* Per-version installs (AGL-1036). The
+                                    listing total cannot answer "who is still
+                                    on the old version" — this can, and that is
+                                    the question a publisher asks before
+                                    changing anything. Hidden at zero rather
+                                    than printed as "0 installs", which reads
+                                    as a failure on a version nobody has
+                                    reached yet. */}
+                                {entry.installCount ||
+                                entry.activeInstalls ? (
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
+                                    {`${entry.installCount ?? 0} install${
+                                      entry.installCount === 1 ? '' : 's'
+                                    } · ${entry.activeInstalls ?? 0} on this version`}
                                   </Typography>
                                 ) : null}
                               </Stack>

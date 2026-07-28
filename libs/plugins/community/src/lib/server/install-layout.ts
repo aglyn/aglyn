@@ -22,6 +22,7 @@ import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { listingArtifactType } from '../model/community'
 import { canActAsPublisher } from './publisher-profile'
 import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
+import { recordVersionMove } from './version-stats'
 
 /**
  * Installs a marketplace layout into a host's template library (AGL-671).
@@ -184,6 +185,17 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
     })
     await batch.commit()
 
+    // Per-version tally (AGL-1036): the replaced copy leaves its version.
+    await recordVersionMove({
+      firestore,
+      listingRef,
+      artifactType: 'layout',
+      from:
+        installedLayout?.get('installedFrom.version') ??
+        installedLayout?.get('source.version') ??
+        null,
+      to: listing.latestVersion,
+    })
     await listingRef
       .update({
         installCount: firebaseAdmin.firestore.FieldValue.increment(1),

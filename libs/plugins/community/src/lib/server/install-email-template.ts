@@ -27,6 +27,7 @@ import {
 import { listingArtifactType } from '../model/community'
 import { canActAsPublisher } from './publisher-profile'
 import { recordInstallProvenance } from './provenance'
+import { recordVersionMove } from './version-stats'
 
 /**
  * Installs a marketplace email template into a site (AGL-657).
@@ -206,6 +207,14 @@ export const installEmailTemplateHandler: PluginApiHandler = async (
     )
     await batch.commit()
 
+    // Per-version tally (AGL-1036). Each install adds another draft version
+    // rather than replacing the last, so nothing leaves a version here either.
+    await recordVersionMove({
+      firestore,
+      listingRef,
+      artifactType: 'emailTemplate',
+      to: listing.latestVersion,
+    })
     await listingRef
       .update({
         installCount: firebaseAdmin.firestore.FieldValue.increment(1),
