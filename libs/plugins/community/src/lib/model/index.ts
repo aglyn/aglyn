@@ -43,6 +43,16 @@ export {
   type ResolvedProvenance,
 } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 export {
+  applyArtifactUpdate,
+  describeChange,
+  planArtifactUpdate,
+  summarizeSchemaChange,
+  summarizeValue,
+  type ArtifactChange,
+  type ArtifactUpdatePlan,
+  type ChangeKind,
+} from '@aglyn/aglyn/app-utils/marketplace-merge'
+export {
   compareArtifactVersions,
   resolveUpdateState,
   updateStateLabel,

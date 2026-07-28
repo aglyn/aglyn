@@ -21,7 +21,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { listingArtifactType } from '../model/community'
 import { canActAsPublisher } from './publisher-profile'
-import { recordInstallProvenance } from './provenance'
+import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
 
 /**
  * Installs a marketplace layout into a host's template library (AGL-671).
@@ -120,6 +120,32 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
       })
     }
 
+    // Replacing a layout the workspace has edited destroys those edits — the
+    // old doc is soft-deleted, so the change is invisible until someone goes
+    // looking for it. Refuse unless the caller has been shown what goes and
+    // asked for a replacement anyway (AGL-1018).
+    const installedLayout = existing.docs.find(
+      (entry) =>
+        !entry.get('deletedAt') && entry.get('source.listingId') === listingId,
+    )
+    if (installedLayout) {
+      const diverged = await hasDivergedFromBase({
+        firestore,
+        sha256: installedLayout.get('installedFrom.sha256'),
+        current: {
+          rootId: installedLayout.get('rootId'),
+          nodes: installedLayout.get('nodes'),
+        },
+      })
+      if (diverged && req.body?.mode !== 'replace') {
+        return res.status(409).json({
+          error:
+            'Your copy of this layout has been edited since it was installed. ' +
+            'Review the update to see what would change.',
+          diverged: true,
+        })
+      }
+    }
     const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
     // Provenance + base snapshot (AGL-1015) — the layout tree as published,
     // without the display name the user is free to change.

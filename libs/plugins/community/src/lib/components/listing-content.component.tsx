@@ -82,6 +82,8 @@ import ListingReviews from './listing-reviews.component'
 import PluginSiteSet from './plugin-site-set.component'
 import { MenuItem, TextField } from '@mui/material'
 import { useCommunityActions } from '../hooks/use-community-actions'
+import { useArtifactUpdate } from '../hooks/use-artifact-update'
+import ArtifactUpdateDialog from './artifact-update-dialog.component'
 
 interface ListingVersionEntry {
   version: string
@@ -310,6 +312,17 @@ export function CommunityListingContent({
   // Confirm before writing install pins (AGL-867): the install is deliberate
   // and site-scoped, so it names its targets before committing.
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // Updating a COPIED artifact is never a plain re-install (AGL-1018): the
+  // copy has been edited in the workspace, so the update is previewed field by
+  // field before anything is written.
+  const {
+    preview: updatePreview,
+    loading: updateLoading,
+    loadPreview,
+    applyUpdate,
+    setPreview: setUpdatePreview,
+  } = useArtifactUpdate(hostId)
+  const [updateOpen, setUpdateOpen] = useState(false)
   // Screenshot lightbox (AGL-869): the clicked screenshot's URL, or null.
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   // Org-scope install targeting (AGL-773): All sites vs a chosen subset. Only
@@ -671,6 +684,54 @@ export function CommunityListingContent({
     } finally {
       setPinsNonce((current) => current + 1)
     }
+  }
+
+  /**
+   * A copied artifact with a newer version on offer (AGL-1018).
+   *
+   * The distinction that matters: a plugin takes an update by moving a pointer,
+   * but a component, layout or dataset schema was copied in and then EDITED
+   * here, so "Update" is a merge. It goes through the review dialog, never
+   * straight to the install route.
+   */
+  const copiedUpdatable =
+    !isPlugin && installed && updateStatus.state === 'update-available'
+  const openUpdateReview = () => {
+    setUpdatePreview(null)
+    setUpdateOpen(true)
+    if (listingId) void loadPreview(listingId)
+  }
+  /**
+   * "Install as a new copy", which means different things per type.
+   *
+   * Only a component or layout has a link that can be DETACHED, leaving the
+   * customised copy in place as an ordinary artifact — the update route does
+   * that. For the others a fresh copy is exactly what the ordinary install
+   * already produces (another empty dataset, another inactive draft, a replaced
+   * template bundle), quota checks included, so it goes there rather than
+   * through a second implementation that would drift from it.
+   */
+  const runCopy = async () => {
+    if (artifactType === 'component' || artifactType === 'layout') {
+      return void (await runUpdate('copy'))
+    }
+    setUpdateOpen(false)
+    await runSiteEdit(() => install(listing, installTargetScope))
+  }
+  const runUpdate = async (
+    mode: 'merge' | 'copy',
+    takePaths: string[] = [],
+    confirmDestructive = false,
+  ) => {
+    if (!listingId) return
+    const done = await applyUpdate(listingId, {
+      mode,
+      takePaths,
+      confirmDestructive,
+    })
+    // Left open on failure — a destructive schema update comes back asking for
+    // the confirmation tick, and closing would hide the question.
+    if (done) setUpdateOpen(false)
   }
 
   // The actual pin write, run only after the confirm dialog (AGL-867).
@@ -1187,8 +1248,14 @@ export function CommunityListingContent({
                                     // Buying goes straight to Stripe checkout,
                                     // which is its own confirmation; a free or
                                     // entitled install confirms its targets
-                                    // first (AGL-867).
-                                    mustBuy ? buy(listing) : setConfirmOpen(true)
+                                    // first (AGL-867). Updating a copied
+                                    // artifact reviews the diff before writing
+                                    // anything (AGL-1018).
+                                    mustBuy
+                                      ? buy(listing)
+                                      : copiedUpdatable
+                                        ? openUpdateReview()
+                                        : setConfirmOpen(true)
                                 : () =>
                                     enqueueSnackbar(
                                       'Your team role does not allow installing from the community',
@@ -1198,7 +1265,11 @@ export function CommunityListingContent({
                           >
                             {upToDate
                               ? `Installed (v${installedVersion})`
-                              : artifactInstall
+                              : copiedUpdatable
+                                ? // Not "Update": pressing this shows what the
+                                  // update would do and writes nothing.
+                                  `Review update to v${offeredVersion}`
+                                : artifactInstall
                                 ? // Re-adding makes another dataset / another
                                   // draft, so this stays enabled (AGL-789).
                                   `${
@@ -1479,6 +1550,20 @@ export function CommunityListingContent({
               </Button>
             </DialogActions>
           </Dialog>
+          {/* Updating a copy, previewed field by field (AGL-1018). Install
+              writes the publisher's version over yours; this shows what would
+              be lost first, and keeps your edits by default. */}
+          <ArtifactUpdateDialog
+            open={updateOpen}
+            onClose={() => setUpdateOpen(false)}
+            artifactName={listing?.displayName ?? 'this listing'}
+            preview={updatePreview}
+            loading={updateLoading}
+            onApplyMerge={(takePaths, confirmDestructive) =>
+              void runUpdate('merge', takePaths, confirmDestructive)
+            }
+            onApplyCopy={() => void runCopy()}
+          />
           {/* Screenshot lightbox (AGL-869). */}
           <Dialog
             open={Boolean(lightboxUrl)}
