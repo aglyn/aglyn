@@ -53,6 +53,10 @@ interface QuotaState {
  * crosses 80% (warning) or 100% (error), with an Upgrade link to Billing.
  * Dismissible per browser session. Consistent with the dark-launch rule,
  * workspaces without an explicit plan see nothing.
+ *
+ * Every action here points at Billing, so for a site collaborator every
+ * action is a dead end (AGL-1072): AGL-1032 took Billing out of their console
+ * and redirects them off the URL. They keep the warning and lose the button.
  */
 export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const params = useParams<{ hostId?: string }>()
@@ -67,8 +71,22 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // `loaded` matters as much as `orgWide`: this hook reports org-wide
   // while it loads (AGL-1047), so acting on the value alone would fire
   // exactly the denied query this is here to prevent, on first render.
+  //
+  // The same answer gates the ACTIONS below (AGL-1072): every action in this
+  // banner is a link to Billing, which AGL-1032 removed from a collaborator's
+  // console and redirects them off. One predicate for both, deliberately —
+  // `useOrgReach` answers the same question from the AGL-1032 nav mirror, but
+  // a second async source resolving on its own clock could show the Upgrade
+  // button for a beat after the counts had already decided the viewer is
+  // scoped.
   const { orgWide: viewerOrgWide, loaded: scopeLoaded } = useScopeTokens(orgId)
-  const canCountOrgData = scopeLoaded && viewerOrgWide
+  const orgWideViewer = scopeLoaded && viewerOrgWide
+  // The two are NOT complements, and the loading window is why. An action
+  // withheld for a beat costs an owner one render; the collaborator wording
+  // shown for a beat tells that owner to go ask an admin — themselves. So
+  // the action waits for "known org-wide" and the rewording waits for the
+  // stronger "known scoped".
+  const scopedViewer = scopeLoaded && !viewerOrgWide
   const [quotas, setQuotas] = useState<QuotaState[]>([])
   const [dismissed, setDismissed] = useState(true)
 
@@ -96,9 +114,9 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       // be a guaranteed-denied read for a guaranteed-empty answer.
       //
       // Skipped entirely for a site collaborator (AGL-1068) — see
-      // `canCountOrgData`. They cannot be told the org's dataset total, so
+      // `orgWideViewer`. They cannot be told the org's dataset total, so
       // the row is omitted rather than shown as a wrong number.
-      canCountOrgData && orgId
+      orgWideViewer && orgId
         ? getCountFromServer(
             collection(firestore, 'orgs', orgId, 'datasets'),
           ).catch(() => null)
@@ -137,7 +155,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, hostId, orgId, plan, canCountOrgData])
+  }, [firestore, hostId, orgId, plan, orgWideViewer])
 
   // Org-level team seats (AGL-238): the seat count is a client aggregate
   // query, cached per session.
@@ -149,7 +167,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // scoped collaborator since, silently (AGL-1068). Nobody outside the org
   // roster gets a seat total; the row is omitted instead.
   useEffect(() => {
-    if (!plan || !orgId || !canCountOrgData) return
+    if (!plan || !orgId || !orgWideViewer) return
     let active = true
     const apply = (seats: number) => {
       if (!active) return
@@ -177,7 +195,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, orgId, plan, canCountOrgData])
+  }, [firestore, orgId, plan, orgWideViewer])
 
   // Suspension (AGL-202) outranks everything — not dismissible, shown
   // regardless of plan so pre-billing workspaces see it too.
@@ -202,18 +220,24 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         severity="warning"
         sx={{ borderRadius: 0 }}
         action={
-          <AppLink
-            componentVariant="button"
-            color="inherit"
-            size="small"
-            href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
-          >
-            {'Fix payment'}
-          </AppLink>
+          orgWideViewer ? (
+            <AppLink
+              componentVariant="button"
+              color="inherit"
+              size="small"
+              href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
+            >
+              {'Fix payment'}
+            </AppLink>
+          ) : undefined
         }
       >
-        {'Your last payment failed. Update your payment method to keep ' +
-          'your plan — access continues during the retry window.'}
+        {scopedViewer
+          ? "This workspace's last payment failed. A workspace admin needs " +
+            'to update the payment method — access continues during the ' +
+            'retry window.'
+          : 'Your last payment failed. Update your payment method to keep ' +
+            'your plan — access continues during the retry window.'}
       </Alert>
     )
   }
@@ -237,14 +261,16 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         // MUI's action slot replaces the onClose icon, so the dismiss
         // button lives beside Upgrade explicitly.
         <>
-          <AppLink
-            componentVariant="button"
-            color="inherit"
-            size="small"
-            href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
-          >
-            {'Upgrade'}
-          </AppLink>
+          {orgWideViewer ? (
+            <AppLink
+              componentVariant="button"
+              color="inherit"
+              size="small"
+              href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
+            >
+              {'Upgrade'}
+            </AppLink>
+          ) : null}
           <Button
             color="inherit"
             size="small"
@@ -258,9 +284,22 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         </>
       }
     >
-      {exceeded
-        ? `You've reached your ${names} limit — upgrade to keep adding.`
-        : `You're above 80% of your ${names} quota.`}
+      {/*
+       * A site collaborator cannot buy anything, so "upgrade to keep adding"
+       * is an instruction they cannot follow (AGL-1072). The warning itself
+       * still earns its place — the rows they can see are host-scoped
+       * (screens, storage) and they are the ones about to hit them — so the
+       * limit stays and only the call to action changes. The org's quotas
+       * are theirs to work within, not to act on.
+       */}
+      {scopedViewer
+        ? exceeded
+          ? `This site has reached its ${names} limit — ask a workspace ` +
+            'admin to upgrade to keep adding.'
+          : `This site is above 80% of its ${names} quota.`
+        : exceeded
+          ? `You've reached your ${names} limit — upgrade to keep adding.`
+          : `You're above 80% of your ${names} quota.`}
     </Alert>
   )
 }
