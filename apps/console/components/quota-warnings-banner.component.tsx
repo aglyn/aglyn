@@ -26,7 +26,7 @@ import { Alert, Button } from '@mui/material'
 import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useScopeTokens } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostId } from '../components/host-id-provider'
 import { useOrgSlug } from '../hooks/use-org-scope'
@@ -60,6 +60,15 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const firestore = useFirestore()
   const orgSlug = useOrgSlug()
   const { org, orgId } = useCurrentOrg()
+  // Org-wide totals are not askable by a site collaborator (AGL-1068). An
+  // unfiltered `count()` over an org collection is denied on the QUERY
+  // SHAPE for a scoped member — Firestore does not evaluate it per
+  // document — so it fails for them no matter what the collection holds.
+  // `loaded` matters as much as `orgWide`: this hook reports org-wide
+  // while it loads (AGL-1047), so acting on the value alone would fire
+  // exactly the denied query this is here to prevent, on first render.
+  const { orgWide: viewerOrgWide, loaded: scopeLoaded } = useScopeTokens(orgId)
+  const canCountOrgData = scopeLoaded && viewerOrgWide
   const [quotas, setQuotas] = useState<QuotaState[]>([])
   const [dismissed, setDismissed] = useState(true)
 
@@ -81,13 +90,19 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       getDoc(doc(firestore, 'hosts', hostId, 'counters', 'media')).catch(
         () => null,
       ),
-      // Datasets are org-scoped (AGL-239/240); the host path is the
-      // pre-migration fallback.
-      getCountFromServer(
-        orgId
-          ? collection(firestore, 'orgs', orgId, 'datasets')
-          : collection(firestore, 'hosts', hostId, 'datasets'),
-      ).catch(() => null),
+      // Datasets are org-scoped (AGL-239/240). The `hosts/{hostId}/datasets`
+      // fallback that used to sit here is gone (AGL-1050): production held
+      // nothing under it and the rules now deny it outright, so asking would
+      // be a guaranteed-denied read for a guaranteed-empty answer.
+      //
+      // Skipped entirely for a site collaborator (AGL-1068) — see
+      // `canCountOrgData`. They cannot be told the org's dataset total, so
+      // the row is omitted rather than shown as a wrong number.
+      canCountOrgData && orgId
+        ? getCountFromServer(
+            collection(firestore, 'orgs', orgId, 'datasets'),
+          ).catch(() => null)
+        : Promise.resolve(null),
     ]).then(([screens, media, datasets]) => {
       if (!active) return
       const mediaBytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
@@ -103,23 +118,38 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
           used: mediaBytes / (1024 * 1024),
           limit: entitlements.storagePerHostMb,
         },
-        {
-          label: 'datasets',
-          used: datasets?.data().count ?? 0,
-          limit: entitlements.datasetsPerOrg,
-        },
+        // No count, no row. Previously an unanswerable count fell through
+        // to `?? 0`, which reads as "0 datasets used" — a confident wrong
+        // number, and the one that would say you are comfortably under a
+        // limit you may already have hit.
+        ...(datasets
+          ? [
+              {
+                label: 'datasets',
+                used: datasets.data().count,
+                limit: entitlements.datasetsPerOrg,
+              },
+            ]
+          : []),
       ])
     })
     return () => {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, hostId, orgId, plan])
+  }, [firestore, hostId, orgId, plan, canCountOrgData])
 
-  // Org-level team seats (AGL-238): the org roster is member-readable,
-  // so the seat count is a client aggregate query, cached per session.
+  // Org-level team seats (AGL-238): the seat count is a client aggregate
+  // query, cached per session.
+  //
+  // "The org roster is member-readable" stopped being true in AGL-1026 —
+  // it is readable by ORG-WIDE members, because who else the workspace
+  // employs is not a fact about the one site a collaborator was invited
+  // to. The count went on being asked anyway and has been denied for every
+  // scoped collaborator since, silently (AGL-1068). Nobody outside the org
+  // roster gets a seat total; the row is omitted instead.
   useEffect(() => {
-    if (!plan || !orgId) return
+    if (!plan || !orgId || !canCountOrgData) return
     let active = true
     const apply = (seats: number) => {
       if (!active) return
@@ -147,7 +177,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, orgId, plan])
+  }, [firestore, orgId, plan, canCountOrgData])
 
   // Suspension (AGL-202) outranks everything — not dismissible, shown
   // regardless of plan so pre-billing workspaces see it too.
