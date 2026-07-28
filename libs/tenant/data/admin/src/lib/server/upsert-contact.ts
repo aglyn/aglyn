@@ -21,10 +21,15 @@ import {
   type ContactSource,
   mergeContactInteraction,
   normalizeContactEmail,
+  ORG_SCOPE_TOKEN,
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
-import { getOrgForHost, orgDataCollectionForHost } from './organizations'
+import {
+  getOrgForHost,
+  orgDataCollectionForHost,
+  scopedToHost,
+} from './organizations'
 
 /**
  * Contacts ingestion (AGL-197): upserts an org-scoped contact doc (AGL-237)
@@ -61,6 +66,9 @@ export async function upsertHostContact(options: {
       options.hostId,
       'contacts',
     )
+    // Reads narrow to what this host may see (AGL-1039); the collection
+    // ref is still what writes and `count()` use.
+    const visible = scopedToHost(contactsRef, options.hostId)
     const interaction: ContactInteraction = {
       type: options.source,
       atMs: options.interaction.atMs ?? Date.now(),
@@ -72,7 +80,7 @@ export async function upsertHostContact(options: {
         : {}),
     }
 
-    const existing = await contactsRef
+    const existing = await visible
       .where('email', '==', email)
       .limit(1)
       .get()
@@ -128,6 +136,11 @@ export async function upsertHostContact(options: {
 
     await contactsRef.add({
       hostId: options.hostId,
+      // Org-wide by default — today's behavior. Keeping the field
+      // populated on every new contact is what lets the scoped reads
+      // above work at all: `array-contains-any` matches nothing on a doc
+      // that lacks it (AGL-1037).
+      visibleTo: [ORG_SCOPE_TOKEN],
       email,
       ...(options.name ? { name: options.name.slice(0, 120) } : {}),
       sources: { [options.source]: true },
