@@ -630,12 +630,13 @@ export function CommunityListingContent({
               items={[
                 {
                   size: { xs: 12, md: 8 },
+                  // No card header (AGL-1000): the page's hero now carries the
+                  // listing's name, and the only route that renders this
+                  // widget is the org listing page — the per-site one
+                  // redirects to it (AGL-775) — so a heading here would just
+                  // print the same words twice, inches apart.
                   children: (
-                    <CardDisplay
-                      header={listing?.displayName ?? '…'}
-                      contentGutterX
-                      contentGutterY
-                    >
+                    <CardDisplay contentGutterX contentGutterY>
                       <Stack spacing={2}>
                         {listing?.previewImageUrl ? (
                           <Box

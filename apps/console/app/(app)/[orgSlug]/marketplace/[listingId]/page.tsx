@@ -85,6 +85,14 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
   // act through the first site; the picker (AGL-773) chooses the real targets.
   const actingHost = hostList[0]?.id ?? ''
 
+  // Name the thing you are looking at (AGL-1000). The page used to announce
+  // itself as "Marketplace listing" over a breadcrumb ending in "Listing",
+  // which made the largest text on the page the one part identical on every
+  // listing. This route already reads the doc for the in-place editor, so the
+  // name costs nothing; the generic wording stays as the fallback for the
+  // beat before it resolves and for a listing that does not exist.
+  const listingName = String(listing?.displayName ?? '').trim()
+
   return (
     <DashboardLayout
       breadcrumbItems={[
@@ -93,7 +101,7 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
           href: buildRoute(Route.ORG_MARKETPLACE, { orgSlug }),
         },
         {
-          children: 'Listing',
+          children: listingName || 'Listing',
           href: buildRoute(Route.ORG_MARKETPLACE_LISTING, {
             orgSlug,
             listingId,
@@ -101,7 +109,7 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
         },
       ]}
       header={{
-        children: 'Marketplace listing',
+        children: listingName || 'Marketplace listing',
         icon: { path: mdiStorefrontOutline.path },
       }}
       help="plugins"
