@@ -22,6 +22,7 @@ import {
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
+  orgDataQueryForHost,
 } from '@aglyn/tenant-data-admin'
 // Shared bundle contract lives in _lib: route.ts may only export handlers.
 import {
@@ -71,12 +72,12 @@ async function handler(request: Request): Promise<Response> {
     if (memberRole !== 'admin') {
       return Response.json({ error: 'Not a site admin' }, { status: 403 })
     }
-    {
-      // Plan gate rides the owning org's doc (AGL-238).
-      const org = (await getOrgForHost(hostId))?.org
-      if (!checkEntitlement(org as any, 'siteExport')) {
-        return Response.json({ error: 'Site export requires a Pro plan' }, { status: 403 })
-      }
+    // Plan gate rides the owning org's doc (AGL-238). The org id is kept —
+    // datasets and media are read from the org, not the host (AGL-1046).
+    const owningOrg = await getOrgForHost(hostId)
+    const orgId = owningOrg?.orgId
+    if (!checkEntitlement(owningOrg?.org as any, 'siteExport')) {
+      return Response.json({ error: 'Site export requires a Pro plan' }, { status: 403 })
     }
 
     const hostData = hostSnapshot.data() ?? {}
@@ -131,13 +132,52 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    /**
+     * Datasets and media are ORG-owned (AGL-237) and narrowed to what this
+     * host may see (AGL-1046). Both used to be read off `hosts/{hostId}/…`,
+     * which AGL-237 emptied and AGL-1050 confirmed holds nothing in
+     * production — so a "whole-site backup" had been silently shipping zero
+     * datasets and an empty media manifest for every org-wired site. Fixing
+     * the path and applying the scope are the same edit: an agency's export
+     * of a client site must contain that client's data and no other's.
+     *
+     * `visibleTo` itself is stripped on the way out. Its `host:` tokens name
+     * hosts of THIS org, so they are noise at best and a dangling reference
+     * at worst once the bundle is restored somewhere else; the import side
+     * assigns a fresh scope instead.
+     */
+    const scopeless = (doc: FirebaseFirestore.QueryDocumentSnapshot) => {
+      const { visibleTo: _visibleTo, ...data } = doc.data()
+      return { $id: doc.id, ...data }
+    }
+    const exportOrgCollection = async (
+      name: 'datasets' | 'media',
+      cap: number,
+    ) => {
+      try {
+        const { query } = await orgDataQueryForHost(hostId, name)
+        const snapshot = await query.limit(cap).get()
+        return snapshot.docs.filter((doc) => !doc.get('deletedAt')).map(scopeless)
+      } catch (error) {
+        // A host with no owning org has no org data to export. That is not
+        // an export failure — the rest of the bundle is still valid.
+        console.error(error)
+        return []
+      }
+    }
+
     const withRecords = async () => {
-      const datasets = await exportCollection('datasets')
+      const datasets = await exportOrgCollection(
+        'datasets',
+        EXPORT_COLLECTION_LIMITS['datasets'] ?? 100,
+      )
       return Promise.all(
         datasets.map(async (item: any) => ({
           ...item,
           records: (
-            await hostRef
+            await firestore
+              .collection('orgs')
+              .doc(orgId as string)
               .collection('datasets')
               .doc(item.$id)
               .collection('records')
@@ -172,16 +212,9 @@ async function handler(request: Request): Promise<Response> {
       withEntries(),
       withRecords(),
       // Media manifest only — bytes stay in storage; URLs keep working
-      // because download tokens are stable.
-      hostRef
-        .collection('media')
-        .limit(500)
-        .get()
-        .then((snapshot) =>
-          snapshot.docs
-            .filter((doc) => !doc.get('deletedAt'))
-            .map((doc) => ({ $id: doc.id, ...doc.data() })),
-        ),
+      // because download tokens are stable. Org-owned and scope-filtered
+      // for the same reason as datasets (AGL-1046).
+      exportOrgCollection('media', 500),
     ])
 
     const bundle = {

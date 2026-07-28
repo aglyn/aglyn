@@ -217,7 +217,12 @@ async function handler(request: Request): Promise<Response> {
     // Paid gate (AGL-175 pricing): free workspaces serve raw storage URLs.
     // A plan-less org resolves as `free` (no CDN); overrides can still grant
     // it. `mediaCdn` is a Starter+ entitlement.
-    const cdnAllowed = checkEntitlement(org, 'mediaCdn')
+    // A private asset (AGL-1051) gets NO `cdnPath` — the field is what the
+    // pickers and page nodes reference, so withholding it is what keeps a
+    // private asset out of published content in the first place. Its bytes
+    // are reachable only through a signed URL minted per view.
+    const isPrivateUpload = body?.['private'] === true
+    const cdnAllowed = checkEntitlement(org, 'mediaCdn') && !isPrivateUpload
     const variants: number[] = []
     if (cdnAllowed && isImage && contentType !== 'image/svg+xml') {
       try {
@@ -277,6 +282,7 @@ async function handler(request: Request): Promise<Response> {
             cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}`,
           }
         : {}),
+      ...(isPrivateUpload ? { private: true } : {}),
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
     await scopeRef

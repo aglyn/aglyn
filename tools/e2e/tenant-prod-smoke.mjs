@@ -63,9 +63,18 @@ if (
 
 // Routes exist in the seed-e2e + guide fixtures; assert a content marker
 // so a designed-but-empty 200 can't pass.
+// `absent` is the scoped-sharing half (AGL-1047): a marker that must NOT
+// appear. A boundary is only proven by a render that leaves data out while
+// still succeeding, and only production mode proves it — the dev server
+// renders dynamically and would mask an ISR-only failure.
 const CHECKS = [
   { path: '/survey', marker: 'Tell us how we did' },
   { path: '/home', marker: 'Fresh sourdough' },
+  {
+    path: '/scoped',
+    marker: 'Avery Quinn',
+    absent: 'INTERNAL-RATE-CARD-SECRET',
+  },
 ]
 
 // `next start` on the dist artifact does NOT load apps/tenant/.env*
@@ -103,7 +112,11 @@ const smokeEnv = {
 // harness: the pre-hotfix 500 only reproduced after a forced rebuild).
 if (process.env.SMOKE_SKIP_BUILD === '1') {
   console.warn(
-    'WARNING: SMOKE_SKIP_BUILD=1 — asserting against the EXISTING dist. ' +
+    'WARNING: SMOKE_SKIP_BUILD=1 — asserting against the EXISTING dist, ' +
+    'INCLUDING ITS ISR CACHE, so a route can be served from a render made ' +
+    'before your fixture change (x-nextjs-cache: STALE). That silently ' +
+    'weakens the `absent` scope assertions into no-ops. Never trust a ' +
+    'security result from this mode. ' +
       'Only for iterating on this harness; never a deploy gate.',
   )
 } else {
@@ -181,7 +194,7 @@ if (!booted) {
 }
 
 let failures = 0
-for (const { path, marker } of CHECKS) {
+for (const { path, marker, absent } of CHECKS) {
   try {
     const res = await fetch(`${BASE}${path}`, {
       signal: AbortSignal.timeout(30_000),
@@ -189,11 +202,15 @@ for (const { path, marker } of CHECKS) {
     const body = await res.text()
     const okStatus = res.status === 200
     const okMarker = body.includes(marker)
-    const ok = okStatus && okMarker
+    // A leak is a failure even on a 200 with the right marker — the page
+    // renders correctly AND carries a row it must never have loaded.
+    const okAbsent = !absent || !body.includes(absent)
+    const ok = okStatus && okMarker && okAbsent
     if (!ok) failures += 1
     console.log(
       `${ok ? 'PASS' : 'FAIL'}  ${path} — HTTP ${res.status}` +
-        `${okMarker ? '' : ` (marker "${marker}" missing)`}`,
+        `${okMarker ? '' : ` (marker "${marker}" missing)`}` +
+        `${okAbsent ? '' : ` (LEAKED "${absent}")`}`,
     )
     if (!okStatus) {
       // Surface the server-side error the way the outage presented.

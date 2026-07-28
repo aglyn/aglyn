@@ -19,6 +19,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
   effectiveDatasetModel,
+  hostScopeToken,
   legacyCollectionKind,
   nameSearchKey,
   rewriteBindingTokensDeep,
@@ -107,12 +108,12 @@ async function handler(request: Request): Promise<Response> {
     if (memberRole !== 'admin') {
       return Response.json({ error: 'Not a site admin' }, { status: 403 })
     }
-    {
-      // Plan gate rides the owning org's doc (AGL-238).
-      const org = (await getOrgForHost(hostId))?.org
-      if (!checkEntitlement(org as any, 'siteExport')) {
-        return Response.json({ error: 'Site restore requires a Pro plan' }, { status: 403 })
-      }
+    // Plan gate rides the owning org's doc (AGL-238). The org id is kept —
+    // datasets and media restore into the org, not the host (AGL-1046).
+    const owningOrg = await getOrgForHost(hostId)
+    const orgId = owningOrg?.orgId
+    if (!checkEntitlement(owningOrg?.org as any, 'siteExport')) {
+      return Response.json({ error: 'Site restore requires a Pro plan' }, { status: 403 })
     }
 
     let written = 0
@@ -239,14 +240,45 @@ async function handler(request: Request): Promise<Response> {
       recordId: string
       errors: Record<string, string>
     }> = []
+    /**
+     * Datasets and media restore into the OWNING ORG (AGL-237), scoped to
+     * the importing site (AGL-1046). They used to be written to
+     * `hosts/{hostId}/…`, the path AGL-1050 proved nothing reads any more,
+     * so a restore appeared to succeed and the data was never seen again.
+     *
+     * The scope is deliberately `['host:{hostId}]` and not whatever the
+     * bundle carried. A bundle is portable: it can be restored into a
+     * different site, or a different org entirely, and honouring an
+     * embedded `['org']` there would publish one org's data across another
+     * agency's whole client roster on a restore. Narrow is recoverable in
+     * one click on the sharing control; wide is a leak. The export side
+     * strips `visibleTo` for the same reason.
+     */
+    const orgScopedRef = (name: 'datasets' | 'media', id: string) =>
+      firestore.collection('orgs').doc(orgId as string).collection(name).doc(id)
+    const importedScope = { visibleTo: [hostScopeToken(hostId)] }
+
+    const importOrgPlain = async (name: 'media') => {
+      const items: any[] = Array.isArray(bundle[name]) ? bundle[name] : []
+      if (!orgId) return
+      for (const item of items.slice(0, EXPORT_COLLECTION_LIMITS[name] ?? 100)) {
+        if (!item?.$id) continue
+        await write(orgScopedRef(name, String(item.$id)), {
+          ...cleanDoc(item),
+          ...importedScope,
+        })
+      }
+    }
+
     const importDatasets = async () => {
       const items: any[] = Array.isArray(bundle.datasets)
         ? bundle.datasets
         : []
+      if (!orgId) return
       for (const item of items.slice(0, 50)) {
         if (!item?.$id) continue
-        const docRef = hostRef.collection('datasets').doc(String(item.$id))
-        await write(docRef, cleanDoc(item))
+        const docRef = orgScopedRef('datasets', String(item.$id))
+        await write(docRef, { ...cleanDoc(item), ...importedScope })
         // v1 exports (no model) validate through the derived text model,
         // same as the live migration — everything passes, by design.
         const model = effectiveDatasetModel(item)
@@ -277,7 +309,7 @@ async function handler(request: Request): Promise<Response> {
     await importPlain('workflows')
     await importPlain('actions')
     await importPlain('services')
-    await importPlain('media')
+    await importOrgPlain('media')
     await importCollections()
     await importDatasets()
     await commit()

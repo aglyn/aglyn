@@ -19,7 +19,8 @@ import {
   checkDatasetQuota,
   checkEntitlement,
   createResourceUid,
-  ORG_SCOPE_TOKEN,
+  defaultScopeForNewResource,
+  visibleToHost,
 } from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
@@ -129,6 +130,10 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
 
     // Creating a dataset consumes org quota exactly like the console's own
     // create path (AGL-473) — installing must not be a way around it.
+    // Deliberately counts EVERY dataset the org owns, not the visible ones
+    // (AGL-1046). Scoping decides who can see a dataset, never who pays for
+    // it — the org owns all of them. Counting per scope would also make a
+    // collaborator's remaining quota disagree with the admin's.
     const datasets = await orgRef.collection('datasets').get()
     const quota = checkDatasetQuota(org, datasets.size)
     if (!quota.allowed) {
@@ -139,8 +144,15 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
 
     // Relink reference fields onto this org's datasets by display name; what
     // can't be relinked degrades to text and is reported to the installer.
+    // Only datasets visible in the INSTALL's scope are relink candidates
+    // (AGL-1046). Matching against every dataset the org owns would let an
+    // install into a client site silently bind its reference fields to the
+    // agency's internal dataset of the same name — the display-name
+    // collision AGL-1039 fixed on the render path, arriving here instead.
+    // An org-context install (no host) sees them all, as its installer does.
     const byLabel: Record<string, string> = {}
     for (const entry of datasets.docs) {
+      if (hostId && !visibleToHost(entry.get('visibleTo'), hostId)) continue
       const label = String(entry.get('displayName') ?? '').toLowerCase()
       if (label && !byLabel[label]) byLabel[label] = entry.id
     }
@@ -179,10 +191,14 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
           version: listing.latestVersion ?? null,
         },
         installedFrom: provenance.installedFrom,
-        // Org-wide by default (AGL-1044), like every other dataset creator.
-        // Without it the installed dataset matches no scoped read and would
-        // render on no site at all.
-        visibleTo: [ORG_SCOPE_TOKEN],
+        // Scoped like every other dataset creator (AGL-1046): the org's
+        // default, applied to the site the install came from. Stamping it
+        // is not optional — a dataset with no `visibleTo` matches no scoped
+        // read and would render on no site at all.
+        visibleTo: defaultScopeForNewResource({
+          defaultResourceScope: org?.defaultResourceScope,
+          hostId,
+        }),
         createdAt: now,
       })
 

@@ -28,6 +28,7 @@ import {
   Tab,
   Tabs,
 } from '@mui/material'
+import { useSnackbar } from 'notistack'
 import { useState } from 'react'
 import MediaLibraryComponent from './media-library.component'
 
@@ -63,7 +64,27 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
   const showTabs = Boolean(hostId) && Boolean(orgScope)
   const [tab, setTab] = useState<'site' | 'org'>(hostId ? 'site' : 'org')
 
+  const { enqueueSnackbar } = useSnackbar()
+
   const pick = (media: Aglyn.AglynHostMedia) => {
+    /**
+     * A private asset can never be placed into page content (AGL-1051).
+     * It has no `cdnPath`, so picking one would put an empty `src` on the
+     * page — a broken image on a published site, with nothing saying why.
+     * Refusing at the pick, with the reason, is the difference between a
+     * rule people can follow and a mystery they file a ticket about.
+     *
+     * This is a usability guard, not the boundary: the boundary is that
+     * the bytes need a signature, which no page node carries.
+     */
+    if (media.private) {
+      enqueueSnackbar(
+        'That file is private, so it cannot be placed on a page. ' +
+          'Turn off Private in the media library to use it here.',
+        { variant: 'warning', persist: false },
+      )
+      return
+    }
     // Hand back a CDN path that names the site using the asset (AGL-1043).
     // `cdnPath` is one stored string and a restricted asset can be visible
     // to N sites, so the qualified form has to be built at pick time — the

@@ -240,7 +240,27 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // for the page to work at all, not a nicety. Org-wide members skip it:
   // they read everything, and adding the filter would cost them a
   // composite index for nothing.
-  const { tokens: viewerTokens, orgWide: viewerOrgWide } = useScopeTokens(orgId)
+  const {
+    tokens: viewerTokens,
+    orgWide: viewerOrgWide,
+    loaded: scopeLoaded,
+  } = useScopeTokens(orgId)
+  /**
+   * Queries wait for the member doc (AGL-1047).
+   *
+   * `useScopeTokens` reports `orgWide: true` while it loads — deliberately,
+   * so an org-wide member never sees an empty library flash. The cost lands
+   * on the other side: for a SCOPED collaborator that default makes the
+   * first render issue an UNFILTERED list, which the AGL-1042 rules deny
+   * per document. It recovers when the member doc arrives, so the library
+   * looks fine and quietly logs a denial on every single mount.
+   *
+   * Waiting is strictly better than either default: no wasted denied
+   * round-trip, no misleading error in the console, and no chance of a
+   * page that renders empty with only a rules error to explain why. An
+   * org-scope-less library (a host library) has nothing to wait for.
+   */
+  const scopeReady = !orgId || scopeLoaded
   // Picking for a site narrows to THAT site's read set; otherwise a scoped
   // member narrows to their own. An org-wide member browsing the library
   // outright needs no filter.
@@ -315,14 +335,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // free-text `folder` string. Legacy strings migrate lazily below.
   const { data: folderDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, scopeCollection, scopeId, 'mediaFolders'),
-        ...(needsScope
-          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-          : []),
-        limit(500),
-      ),
-    [firestore, scopeId, needsScope, scopeTokens],
+      // `null` skips the listener entirely until the read set is known —
+      // see `scopeReady`. Issuing this unfiltered first would be denied.
+      scopeReady
+        ? query(
+            collection(firestore, scopeCollection, scopeId, 'mediaFolders'),
+            ...(needsScope
+              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+              : []),
+            limit(500),
+          )
+        : null,
+    [firestore, scopeId, needsScope, scopeTokens, scopeReady],
     { idField: '$id' },
   )
   const folderList: Array<Aglyn.AglynHostMediaFolder> = useMemo(
@@ -487,6 +511,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
   useEffect(() => {
     let active = true
+    // Hold until the caller's read set is known — see `scopeReady`.
+    if (!scopeReady) return undefined
     setLoadingMedia(true)
     void fetchPage(null)
       .then((page) => {
@@ -504,7 +530,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
     // refreshKey re-runs after any mutation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchPage, refreshKey])
+  }, [fetchPage, refreshKey, scopeReady])
   const handleLoadMore = useCallback(async () => {
     if (!pageCursor) return
     setLoadingMedia(true)
@@ -619,6 +645,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({})
   useEffect(() => {
     let active = true
+    // Same wait as the grid — see `scopeReady`.
+    if (!scopeReady) return undefined
     void Promise.all(
       folderList.map((folder) =>
         firestoreOneShotRetry(() =>
@@ -626,6 +654,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             query(
               collection(firestore, scopeCollection, scopeId, 'media'),
               where('folderId', '==', folder.$id),
+              // Without this the count is an UNFILTERED list, which the
+              // AGL-1042 rules deny per document for a scoped collaborator
+              // — the `.catch` below then reports every folder as "0 files"
+              // while the grid beside it shows the assets. Found by driving
+              // the console as `scope-collab` (AGL-1047); needs the
+              // folderId+visibleTo composite index, which the emulator does
+              // NOT require and production does.
+              ...(needsScope
+                ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+                : []),
             ),
           ),
         )
@@ -642,7 +680,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     return () => {
       active = false
     }
-  }, [folderList, firestore, scopeId, totalCount, refreshKey])
+  }, [
+    folderList,
+    firestore,
+    scopeId,
+    totalCount,
+    refreshKey,
+    needsScope,
+    scopeTokens,
+    scopeReady,
+  ])
 
   // Breadcrumb chain for the open folder.
   const breadcrumb = useMemo(() => {
@@ -812,6 +859,60 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       setFolderPromptBusy(false)
     }
   }, [folderPrompt])
+
+  /**
+   * Turn one asset private, or publish it again (AGL-1051).
+   *
+   * Confirmed in BOTH directions, because both are one-way for anything
+   * already pointing at the asset. Going private breaks every existing
+   * embed of it; going public hands out a URL that then works forever, for
+   * anyone it reaches — that is the property the private flag existed to
+   * remove, so it deserves the same pause.
+   */
+  const setAssetPrivate = useCallback(
+    async (mediaId: string, makePrivate: boolean) => {
+      const confirmed = await confirm({
+        title: makePrivate ? 'Make this file private?' : 'Publish this file?',
+        description: makePrivate
+          ? 'It will stop working anywhere it is already used, and can no ' +
+            'longer be placed on a page. You will still be able to view and ' +
+            'download it here through a temporary link.'
+          : 'It gets a permanent public URL. Anyone that URL reaches can ' +
+            'open the file, and there is no way to withdraw it afterwards.',
+        confirmationText: makePrivate ? 'Make private' : 'Publish',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/media/folders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          ...scopeBody,
+          action: 'set-private',
+          mediaId,
+          private: makePrivate,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        return void enqueueSnackbar(payload?.error ?? 'Could not update', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+      refresh()
+      enqueueSnackbar(makePrivate ? 'File is now private' : 'File published', {
+        variant: 'success',
+        persist: false,
+      })
+    },
+    [user, scopeId, confirm, enqueueSnackbar, refresh],
+  )
 
   // Multi-select + move (AGL-172): checkboxes are the accessible path;
   // dragging a selected card moves the whole selection.
@@ -1984,6 +2085,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     })
                   }
                   onDelete={handleDelete(media)}
+                  // Org library only, and org-wide members only (AGL-1051).
+                  // A host's own library is already unreachable from other
+                  // sites, and the route refuses a scoped collaborator
+                  // anyway — offering a control that always 403s is worse
+                  // than not offering it.
+                  onSetPrivate={
+                    orgId && viewerOrgWide && !onSelect
+                      ? (makePrivate) =>
+                          void setAssetPrivate(media.$id as string, makePrivate)
+                      : undefined
+                  }
                 />
               </DraggableCard>
             </Grid>

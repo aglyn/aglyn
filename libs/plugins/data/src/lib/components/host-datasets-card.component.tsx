@@ -98,8 +98,18 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // without this the Data page errors rather than showing fewer rows.
   // Org-wide members get no filter: they read everything, and adding one
   // would hide any dataset the AGL-1040 backfill missed.
-  const { tokens: scopeTokens, orgWide: viewerOrgWide } = useScopeTokens(orgId)
+  const {
+    tokens: scopeTokens,
+    orgWide: viewerOrgWide,
+    loaded: scopeLoaded,
+  } = useScopeTokens(orgId)
   const needsScope = Boolean(orgId) && !viewerOrgWide
+  // Wait for the member doc before listing (AGL-1047). `useScopeTokens`
+  // reports org-wide while loading, so without this a scoped collaborator's
+  // first render sends an UNFILTERED list that the AGL-1041 rules deny per
+  // document. It recovers on the next render, which is exactly what makes
+  // it easy to miss: the page looks right and logs a denial every mount.
+  const scopeReady = !orgId || scopeLoaded
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -133,14 +143,16 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
 
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, dataScope[0], dataScope[1], 'datasets'),
-        ...(needsScope
-          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-          : []),
-        limit(100),
-      ),
-    [firestore, hostId, orgId, needsScope, scopeTokens],
+      scopeReady
+        ? query(
+            collection(firestore, dataScope[0], dataScope[1], 'datasets'),
+            ...(needsScope
+              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+              : []),
+            limit(100),
+          )
+        : null,
+    [firestore, hostId, orgId, needsScope, scopeTokens, scopeReady],
     { idField: '$id' },
   )
   const datasets = useMemo(
@@ -363,6 +375,10 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           scopeId: dataScope[1],
           kind: 'datasets',
           id: selected.$id,
+          // Names the site this delete was issued from, so the route can
+          // refuse to destroy a dataset shared beyond it (AGL-1046). The
+          // org Data page passes no host and keeps the org-wide delete.
+          hostId,
         }),
       })
       const result = await response.json().catch(() => ({}))
@@ -386,6 +402,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     confirm,
     dataScope[0],
     dataScope[1],
+    hostId,
     user,
     enqueueSnackbar,
     logActivity,
@@ -886,8 +903,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       <Stack spacing={1.5}>
         {orgId ? (
           <Typography variant="caption" color="text.secondary">
-            {'Datasets belong to your organization and are shared by all ' +
-              'of its sites.'}
+            {/* Was "…and are shared by all of its sites", which stopped
+                being true when AGL-1044 shipped the sharing control.
+                Ownership and visibility are now separate facts. */}
+            {'Datasets belong to your organization. Each one is shared with ' +
+              'every site by default — use Schema to narrow that.'}
           </Typography>
         ) : null}
         {datasets.length === 0 ? (

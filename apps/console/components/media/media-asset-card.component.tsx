@@ -22,6 +22,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined'
 import {
   Box,
   Card,
@@ -52,6 +53,8 @@ export interface MediaAssetCardProps {
   onReplace?: () => void
   onDetails?: () => void
   onDelete?: () => void
+  /** Toggle the AGL-1051 private flag; omitted where the caller can't. */
+  onSetPrivate?: (makePrivate: boolean) => void
 }
 
 /** Short type label from a content type, e.g. `image/png` → `PNG`. */
@@ -83,6 +86,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
     onReplace,
     onDetails,
     onDelete,
+    onSetPrivate,
   } = props
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const picker = Boolean(onSelect)
@@ -228,6 +232,22 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
               />
             </Tooltip>
           ) : null}
+          {/* Private is a different fact from restricted (AGL-1051) and
+              gets its own badge, not a variant of the scope chip: this one
+              says the bytes need a signed link and the file cannot go on a
+              page at all. Someone scanning the grid for "why won't this
+              one work" needs to see it without opening anything. */}
+          {media.private ? (
+            <Tooltip title="Private — needs a signed link, and cannot be placed on a page">
+              <Chip
+                size="small"
+                color="warning"
+                icon={<VisibilityOffOutlinedIcon />}
+                label="Private"
+                sx={{ mt: 0.5, maxWidth: '100%' }}
+              />
+            </Tooltip>
+          ) : null}
         </Box>
         {picker ? null : (
           <IconButton
@@ -249,8 +269,15 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
       </Stack>
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
-        {onCopyUrl ? (
+        {/* A private asset has no permanent URL to copy — offering the item
+            would hand over a link that 404s (AGL-1051). */}
+        {onCopyUrl && !media.private ? (
           <MenuItem onClick={runAction(onCopyUrl)}>{'Copy URL'}</MenuItem>
+        ) : null}
+        {onSetPrivate ? (
+          <MenuItem onClick={runAction(() => onSetPrivate(!media.private))}>
+            {media.private ? 'Publish file' : 'Make private'}
+          </MenuItem>
         ) : null}
         {onReplace ? (
           <MenuItem onClick={runAction(onReplace)}>{'Replace file'}</MenuItem>

@@ -266,6 +266,24 @@ export interface AglynHostMedia {
    * (`orgs/{orgId}/media`) — a host's own library is private already.
    */
   visibleTo?: ScopeToken[]
+  /**
+   * Not fetchable without a signature (AGL-1051). **Orthogonal to
+   * `visibleTo`**, and the distinction is the whole point:
+   *
+   * - `visibleTo` answers *which sites may USE this asset* — a discovery
+   *   and authoring control. An asset restricted to one site is still
+   *   served to anyone who has its URL, because that site's pages are
+   *   public and the CDN that serves them is unauthenticated.
+   * - `private` answers *may the public FETCH these bytes at all*.
+   *
+   * A private asset carries no {@link cdnPath}, is refused by the pickers
+   * that place media into page content, and is reachable only through a
+   * short-lived signed URL minted for an authorized caller. Use it for
+   * things that are not web assets — a signed contract, unreleased
+   * artwork, an embargoed release — never for "this image is only on one
+   * site", which is what `visibleTo` is for.
+   */
+  private?: boolean
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
   deletedAt?: ITimestamp

@@ -74,6 +74,53 @@ Links copied before this behavior shipped keep working too.
 When a visitor saves a delivered file, it keeps the asset's **original filename and
 extension**, even though the URL itself doesn't carry one.
 
+## Who an asset is shared with
+
+Workspace media is shared across every site by default. The **Sharing** control on each
+asset and folder narrows that, with the same three choices as datasets — **All sites**,
+**This site only**, or **Selected sites…**. A folder's sharing applies to what it holds,
+so scoping a "Client A" folder scopes the assets inside it.
+
+In the media picker's **Organization (shared)** tab, a site sees only the assets it may
+use. An agency's internal artwork stays out of the client sites' pickers entirely.
+
+:::warning Sharing controls discovery, not secrecy
+Sharing decides which sites may **find and use** an asset, and stops the CDN serving a
+restricted asset to a site it isn't shared with. It does **not** make the bytes secret:
+anyone holding a delivered media URL can still fetch it, because that URL is public and
+cacheable by design — that is what makes the CDN fast.
+
+Treat an ordinary media URL as a shareable link. For files that must never be fetchable by
+someone who simply has the URL, mark them **Private** — see below.
+:::
+
+## Private files
+
+**Private** is a separate switch from sharing, and it answers a different question:
+
+|  | Question it answers |
+| -- | -- |
+| **Sharing** | Which of your sites may *use* this file? |
+| **Private** | May anyone *fetch* these bytes at all? |
+
+A private file:
+
+- has **no public URL** — the normal media link does not exist for it,
+- **cannot be placed on a page**; the picker refuses it and says why,
+- is viewable and downloadable in the console by people who can already see it, through a
+  **temporary link that stops working after about fifteen minutes**.
+
+That expiry is the point. A normal media URL, once shared, works forever and there's no way
+to take it back. A private file's link dies on its own, so a link pasted somewhere it
+shouldn't have been is a short problem instead of a permanent one.
+
+Use Private for things that aren't website assets: a signed contract, unreleased artwork,
+an embargoed announcement, anything with personal data in it. Don't use it to keep an image
+off one particular site — that's what sharing is for, and marking it private will just stop
+the image working everywhere.
+
+To publish a private file later, turn Private off. It gets a normal URL from that moment on.
+
 ## Components
 
 - **Image** — place and bind images from the library.

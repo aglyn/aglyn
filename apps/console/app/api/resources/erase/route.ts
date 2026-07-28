@@ -16,6 +16,9 @@
  */
 
 import { hostCollectionKind, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+// Shared, unit-tested scope decision lives in _lib: route.ts may only
+// export handlers.
+import { eraseScopeDenial } from '../../_lib/erase-scope'
 import {
   emailUnverifiedResponse,
   eraseSubtree,
@@ -103,6 +106,28 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({
           error: 'Deleting org data requires the editor role',
         }, { status: 403 })
+      }
+
+      // The role check above is NOT sufficient (AGL-1046) — see
+      // `eraseScopeDenial` for what it misses and why it is a 404.
+      const target = await firestore
+        .collection(scope)
+        .doc(scopeId)
+        .collection(kind)
+        .doc(id)
+        .get()
+      const denial = eraseScopeDenial({
+        visibleTo: target.get('visibleTo') as string[] | undefined,
+        member,
+        // A caller-supplied hint, treated as one: omitting it skips the
+        // shared-resource rail but not the boundary check, which is the
+        // part that is load-bearing.
+        fromHostId: body?.hostId ? String(body.hostId) : '',
+        label: erasable.label,
+        exists: target.exists,
+      })
+      if (denial) {
+        return Response.json({ error: denial.error }, { status: denial.status })
       }
     } else if (!isStaff) {
       // Host scope: the site's own member roles gate content, and a
