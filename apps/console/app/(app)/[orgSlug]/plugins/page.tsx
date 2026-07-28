@@ -26,7 +26,7 @@ import { AppLink, CardDisplay, Container, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Alert, Stack, Switch, Typography } from '@mui/material'
+import { Alert, Button, Stack, Switch, Typography } from '@mui/material'
 import { collection, getDocs, limit, query } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -252,6 +252,16 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
           children: 'Plugins',
           icon: { path: mdiPuzzleOutline.path },
         }}
+        // A way onward (AGL-1024). Now that Plugins is its own section,
+        // landing here with nothing installed used to offer no route to
+        // getting any — the marketplace was a tab away with nothing saying so.
+        headerRight={
+          <AppLink href={buildRoute(Route.ORG_MARKETPLACE, { orgSlug })}>
+            <Button variant="outlined" color="secondary" component="span">
+              {'Install a plugin'}
+            </Button>
+          </AppLink>
+        }
         help="plugins"
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>

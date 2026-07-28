@@ -149,7 +149,10 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                 tabs={[
                   {
                     id: 'browse',
-                    label: 'Browse',
+                    // "Browse All" (AGL-1024): the same grid also renders
+                    // publisher-filtered views, so the unqualified verb was
+                    // ambiguous about which of the two you were getting.
+                    label: 'Browse All',
                     content: (
                       <PluginWidgetSlot
                         slot="orgMarketplace"
@@ -216,7 +219,9 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                     ? [
                         {
                           id: 'publish',
-                          label: 'Publish',
+                          // Covers uploading a bundle as well as publishing
+                          // an existing artifact (AGL-1024).
+                          label: 'Upload / Publish',
                           content: (
                             <OrgPublishPanel
                               orgId={currentOrg.$id}
@@ -226,7 +231,9 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                         },
                         {
                           id: 'profile',
-                          label: 'Profile',
+                          // Whose profile (AGL-1024) — the console also has
+                          // org and user profiles.
+                          label: 'Publisher Profile',
                           content: (
                             <OrgSellerPanel
                               orgId={currentOrg.$id}
