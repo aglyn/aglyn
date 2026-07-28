@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { ORG_SCOPE_TOKEN, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   checkDatasetQuota,
   checkEntitlement,
@@ -128,6 +128,12 @@ async function handler(request: Request): Promise<Response> {
           displayName,
           fields,
           ...(model ? { model } : {}),
+          // Org-wide by default (AGL-1044). Without this every NEW dataset
+          // is invisible to the scoped reads — `array-contains-any` matches
+          // nothing on a doc missing the field — so it would not render on
+          // ANY site, not just for scoped members. Narrowing is an explicit
+          // act; the default has to be today's behavior.
+          visibleTo: [ORG_SCOPE_TOKEN],
           createdAt: Timestamp.now(),
         })
       return Response.json({ ok: true, id }, { status: 200 })

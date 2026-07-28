@@ -980,6 +980,45 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     const scopeChanged =
       JSON.stringify([...previousScope].sort()) !==
       JSON.stringify([...editor.visibleTo].sort())
+    // Narrowing can break a LIVE page (AGL-1045). Before taking an asset
+    // away from a site, find out which sites actually use it and name them
+    // — silently breaking a published client site is the worst outcome this
+    // project could produce. Widening needs no confirmation.
+    if (scopeChanged && Aglyn.narrowsScope(previousScope, editor.visibleTo)) {
+      // Inline rather than reusing runReferenceAudit below: that one drives
+      // the drawer's "Used on" panel state, and this needs a plain answer.
+      const affected = await (async () => {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/media/references', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ ...scopeBody, mediaId: editor.id }),
+        })
+        if (!response.ok) throw new Error('scan failed')
+        return ((await response.json())?.references ?? []) as MediaUsageRef[]
+      })().catch(() => null)
+      const losing = (affected ?? []).filter(
+        (host) => !Aglyn.visibleToHost(editor.visibleTo, host.hostId),
+      )
+      const names = [...new Set(losing.map((host) => host.hostSubdomain))]
+      const proceed = await confirm({
+        title: 'Limit who can use this file?',
+        description: names.length
+          ? `${names.join(', ')} ${names.length === 1 ? 'uses' : 'use'} this ` +
+            'file and will stop rendering it. This does not delete anything.'
+          : affected === null
+            ? 'Its current usage could not be checked. Any site losing ' +
+              'access will stop rendering it.'
+            : 'No page uses it yet, so nothing breaks today.',
+        confirmationText: 'Limit access',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!proceed) return
+    }
     try {
       await updateDoc(
         doc(firestore, scopeCollection, scopeId, 'media', editor.id),

@@ -19,6 +19,7 @@ import {
   checkDatasetQuota,
   checkEntitlement,
   createResourceUid,
+  ORG_SCOPE_TOKEN,
 } from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
@@ -178,6 +179,10 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
           version: listing.latestVersion ?? null,
         },
         installedFrom: provenance.installedFrom,
+        // Org-wide by default (AGL-1044), like every other dataset creator.
+        // Without it the installed dataset matches no scoped read and would
+        // render on no site at all.
+        visibleTo: [ORG_SCOPE_TOKEN],
         createdAt: now,
       })
 
