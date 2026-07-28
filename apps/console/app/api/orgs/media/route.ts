@@ -16,7 +16,11 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { createResourceUid, orgRoleAtLeast } from '@aglyn/aglyn/server'
+import {
+  createResourceUid,
+  ORG_SCOPE_TOKEN,
+  orgRoleAtLeast,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -98,6 +102,11 @@ async function handler(request: Request): Promise<Response> {
         sizeBytes: buffer.byteLength,
         url,
         uploadedBy: decoded.uid,
+        // Org-wide by default (AGL-1043/1044). Every writer of a scoped
+        // collection must stamp this: `array-contains-any` matches nothing
+        // on a doc without it, so an unstamped asset is invisible to every
+        // scoped read rather than merely unrestricted.
+        visibleTo: [ORG_SCOPE_TOKEN],
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
       return Response.json({ mediaId, url }, { status: 200 })
