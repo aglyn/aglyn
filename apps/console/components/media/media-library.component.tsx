@@ -33,6 +33,7 @@ import {
   useSensors,
 } from '@dnd-kit/core'
 import {
+  Alert,
   Box,
   Breadcrumbs,
   Button,
@@ -311,6 +312,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     useState<QueryDocumentSnapshot | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMedia, setLoadingMedia] = useState(true)
+  /** Firestore error code when the last load failed, else null. */
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const refresh = useCallback(() => setRefreshKey((key) => key + 1), [])
   const mediaDocs = useMemo(() => pages.flat(), [pages])
@@ -524,6 +527,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     // Hold until the caller's read set is known — see `scopeReady`.
     if (!scopeReady) return undefined
     setLoadingMedia(true)
+    setLoadError(null)
     void fetchPage(null)
       .then((page) => {
         if (!active) return
@@ -535,14 +539,21 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // permissions" with no context cost real time to diagnose — the
       // useful question is always WHICH collection, under WHICH scope,
       // with WHICH filter.
-      .catch((error) =>
+      .catch((error) => {
         console.error(
           `media query ${scopeCollection}/${scopeId}/media` +
             ` needsScope=${needsScope} tokens=${JSON.stringify(scopeTokens)}` +
             ` sort=${sortBy} folder=${String(currentFolder)}`,
           error,
-        ),
-      )
+        )
+        // A FAILED load and an EMPTY library are different facts, and this
+        // component was reporting both as "No media here — upload images…".
+        // Someone whose query was denied was being told, confidently, that
+        // they have no files: an invitation to re-upload assets that are
+        // already there. Whatever the cause (AGL-1062), the page must not
+        // claim knowledge it doesn't have.
+        if (active) setLoadError(error?.code ?? 'unavailable')
+      })
       .then(() => {
         if (active) setLoadingMedia(false)
       })
@@ -2024,7 +2035,22 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         </Stack>
       ) : null}
       {busy || loadingMedia ? <LinearProgress /> : null}
-      {visibleFolders.length === 0 && visibleItems.length === 0 ? (
+      {loadError && !loadingMedia ? (
+        // Never the empty state: "no media" is a claim about the library,
+        // and a failed read is a claim about us (AGL-1062).
+        <Alert
+          severity="warning"
+          action={
+            <Button color="inherit" size="small" onClick={refresh}>
+              {'Retry'}
+            </Button>
+          }
+        >
+          {loadError === 'permission-denied'
+            ? 'Your media could not be loaded — this account may not have access to this library, or the session needs refreshing. Nothing has been deleted.'
+            : 'Your media could not be loaded. Nothing has been deleted — try again in a moment.'}
+        </Alert>
+      ) : visibleFolders.length === 0 && visibleItems.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           {loadingMedia
             ? 'Loading media…'
