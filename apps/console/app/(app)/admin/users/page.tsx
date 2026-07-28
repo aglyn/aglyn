@@ -23,7 +23,6 @@ import {
   Container,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -207,205 +206,202 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   return (
-    <>
-      <NextPageTitle screen={'Users – Staff'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
-          { children: 'Users', href: buildRoute(Route.ADMIN_USERS) },
-        ]}
-        help="staffConsole"
-        header={{
-          children: 'User Management',
-          icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <StaffOnly>
-            <CardDisplay
-              header={'Accounts'}
-              help={docsHelp('staffConsole', {
-                anchor: '#whats-there',
-                excerpt:
-                  'Grant or revoke staff roles and disable accounts — audited, with an exact-email lookup for accounts beyond the loaded pages.',
-              })}
-              contentGutterX
-              contentGutterY
-            >
-              <Stack spacing={2}>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center' }}
+    <DashboardLayout
+      breadcrumbItems={[
+        { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
+        { children: 'Users', href: buildRoute(Route.ADMIN_USERS) },
+      ]}
+      help="staffConsole"
+      header={{
+        children: 'User Management',
+        icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <StaffOnly>
+          <CardDisplay
+            header={'Accounts'}
+            help={docsHelp('staffConsole', {
+              anchor: '#whats-there',
+              excerpt:
+                'Grant or revoke staff roles and disable accounts — audited, with an exact-email lookup for accounts beyond the loaded pages.',
+            })}
+            contentGutterX
+            contentGutterY
+          >
+            <Stack spacing={2}>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center' }}
+              >
+                <TextField
+                  size="small"
+                  label="Search (email, name, uid)"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  sx={{ maxWidth: 360, flexGrow: 1 }}
+                />
+                {/* Exact-email lookup (AGL-270): reaches accounts beyond
+                    the loaded pages. */}
+                <Button
+                  size="small"
+                  disabled={!search.includes('@')}
+                  onClick={() =>
+                    void loadPage(null, search.trim()).catch(() =>
+                      enqueueSnackbar('Lookup failed', { variant: 'error' }),
+                    )
+                  }
                 >
-                  <TextField
-                    size="small"
-                    label="Search (email, name, uid)"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    sx={{ maxWidth: 360, flexGrow: 1 }}
-                  />
-                  {/* Exact-email lookup (AGL-270): reaches accounts beyond
-                      the loaded pages. */}
-                  <Button
-                    size="small"
-                    disabled={!search.includes('@')}
-                    onClick={() =>
-                      void loadPage(null, search.trim()).catch(() =>
-                        enqueueSnackbar('Lookup failed', { variant: 'error' }),
-                      )
-                    }
-                  >
-                    {'Find exact email'}
-                  </Button>
-                  <Button size="small" onClick={() => void loadPage()}>
-                    {'Reset'}
-                  </Button>
-                </Stack>
-                {/* Staff is granted to an existing account, not invited
-                    (AGL-853): custom claims attach to a real uid, so the
-                    person must have signed in at least once before they turn
-                    up here. */}
-                <Typography variant="caption" color="text.secondary">
-                  {'Staff access is granted to an existing account. If someone ' +
-                    "isn't found, have them sign in to Aglyn once, then search " +
-                    'their email here.'}
-                </Typography>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{'User'}</TableCell>
-                      <TableCell>{'Status'}</TableCell>
-                      <TableCell>{'Created'}</TableCell>
-                      <TableCell>{'Last sign-in'}</TableCell>
-                      <TableCell align="right">{'Actions'}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {visible.map((record) => (
-                      <TableRow key={record.uid} hover>
-                        <TableCell>
-                          {/* Detail page (AGL-244); ids stay off the email
-                              line — copy them from the chip (AGL-360). */}
-                          <AppLink
-                            variant="body2"
-                            color="inherit"
-                            underline="hover"
-                            href={buildRoute(Route.ADMIN_USER_DETAIL, {
-                              uid: record.uid,
-                            })}
-                          >
-                            {record.email ?? record.displayName ?? record.uid}
-                          </AppLink>
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            label={`${record.uid.slice(0, 8)}…`}
-                            sx={{ ml: 1, fontFamily: 'monospace' }}
-                            onClick={() =>
-                              void navigator.clipboard
-                                ?.writeText(record.uid)
-                                .catch(() => undefined)
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {record.staff ? (
-                            <TextField
-                              select
-                              size="small"
-                              variant="standard"
-                              value={record.staffRole ?? 'super'}
-                              onChange={(event) =>
-                                void handleSetRole(record, event.target.value)
-                              }
-                              sx={{ minWidth: 96, mr: 1 }}
-                            >
-                              <MenuItem value="support">{'support'}</MenuItem>
-                              <MenuItem value="billing">{'billing'}</MenuItem>
-                              <MenuItem value="super">{'super'}</MenuItem>
-                            </TextField>
-                          ) : null}
-                          {record.disabled ? (
-                            <Chip
-                              label="disabled"
-                              size="small"
-                              color="error"
-                              sx={{ ml: record.staff ? 1 : 0 }}
-                            />
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="caption" color="text.secondary">
-                            {record.createdAt
-                              ? new Date(record.createdAt).toLocaleDateString()
-                              : '—'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="caption" color="text.secondary">
-                            {record.lastSignInAt
-                              ? new Date(record.lastSignInAt).toLocaleDateString()
-                              : '—'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right">
-                          <AppLink
-                            componentVariant="button"
-                            size="small"
-                            variant="outlined"
-                            href={buildRoute(Route.ADMIN_USER_DETAIL, {
-                              uid: record.uid,
-                            })}
-                            sx={{ mr: 0.5 }}
-                          >
-                            {'View'}
-                          </AppLink>
-                          <Button
-                            size="small"
-                            disabled={busy}
-                            onClick={handleAction(
-                              record,
-                              record.staff ? 'revokeStaff' : 'grantStaff',
-                              record.staff ? 'Revoke staff' : 'Grant staff',
-                            )}
-                          >
-                            {record.staff ? 'Revoke staff' : 'Grant staff'}
-                          </Button>
-                          <Button
-                            size="small"
-                            color={record.disabled ? 'success' : 'error'}
-                            disabled={busy}
-                            onClick={handleAction(
-                              record,
-                              record.disabled ? 'enable' : 'disable',
-                              record.disabled
-                                ? 'Enable account'
-                                : 'Disable account',
-                            )}
-                          >
-                            {record.disabled ? 'Enable' : 'Disable'}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {nextPageToken ? (
-                  <Button
-                    size="small"
-                    sx={{ alignSelf: 'flex-start' }}
-                    onClick={() => void loadPage(nextPageToken)}
-                  >
-                    {'Load more'}
-                  </Button>
-                ) : null}
+                  {'Find exact email'}
+                </Button>
+                <Button size="small" onClick={() => void loadPage()}>
+                  {'Reset'}
+                </Button>
               </Stack>
-            </CardDisplay>
-          </StaffOnly>
-        </Container>
-      </DashboardLayout>
-    </>
+              {/* Staff is granted to an existing account, not invited
+                  (AGL-853): custom claims attach to a real uid, so the
+                  person must have signed in at least once before they turn
+                  up here. */}
+              <Typography variant="caption" color="text.secondary">
+                {'Staff access is granted to an existing account. If someone ' +
+                  "isn't found, have them sign in to Aglyn once, then search " +
+                  'their email here.'}
+              </Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>{'User'}</TableCell>
+                    <TableCell>{'Status'}</TableCell>
+                    <TableCell>{'Created'}</TableCell>
+                    <TableCell>{'Last sign-in'}</TableCell>
+                    <TableCell align="right">{'Actions'}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {visible.map((record) => (
+                    <TableRow key={record.uid} hover>
+                      <TableCell>
+                        {/* Detail page (AGL-244); ids stay off the email
+                            line — copy them from the chip (AGL-360). */}
+                        <AppLink
+                          variant="body2"
+                          color="inherit"
+                          underline="hover"
+                          href={buildRoute(Route.ADMIN_USER_DETAIL, {
+                            uid: record.uid,
+                          })}
+                        >
+                          {record.email ?? record.displayName ?? record.uid}
+                        </AppLink>
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={`${record.uid.slice(0, 8)}…`}
+                          sx={{ ml: 1, fontFamily: 'monospace' }}
+                          onClick={() =>
+                            void navigator.clipboard
+                              ?.writeText(record.uid)
+                              .catch(() => undefined)
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {record.staff ? (
+                          <TextField
+                            select
+                            size="small"
+                            variant="standard"
+                            value={record.staffRole ?? 'super'}
+                            onChange={(event) =>
+                              void handleSetRole(record, event.target.value)
+                            }
+                            sx={{ minWidth: 96, mr: 1 }}
+                          >
+                            <MenuItem value="support">{'support'}</MenuItem>
+                            <MenuItem value="billing">{'billing'}</MenuItem>
+                            <MenuItem value="super">{'super'}</MenuItem>
+                          </TextField>
+                        ) : null}
+                        {record.disabled ? (
+                          <Chip
+                            label="disabled"
+                            size="small"
+                            color="error"
+                            sx={{ ml: record.staff ? 1 : 0 }}
+                          />
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" color="text.secondary">
+                          {record.createdAt
+                            ? new Date(record.createdAt).toLocaleDateString()
+                            : '—'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" color="text.secondary">
+                          {record.lastSignInAt
+                            ? new Date(record.lastSignInAt).toLocaleDateString()
+                            : '—'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <AppLink
+                          componentVariant="button"
+                          size="small"
+                          variant="outlined"
+                          href={buildRoute(Route.ADMIN_USER_DETAIL, {
+                            uid: record.uid,
+                          })}
+                          sx={{ mr: 0.5 }}
+                        >
+                          {'View'}
+                        </AppLink>
+                        <Button
+                          size="small"
+                          disabled={busy}
+                          onClick={handleAction(
+                            record,
+                            record.staff ? 'revokeStaff' : 'grantStaff',
+                            record.staff ? 'Revoke staff' : 'Grant staff',
+                          )}
+                        >
+                          {record.staff ? 'Revoke staff' : 'Grant staff'}
+                        </Button>
+                        <Button
+                          size="small"
+                          color={record.disabled ? 'success' : 'error'}
+                          disabled={busy}
+                          onClick={handleAction(
+                            record,
+                            record.disabled ? 'enable' : 'disable',
+                            record.disabled
+                              ? 'Enable account'
+                              : 'Disable account',
+                          )}
+                        >
+                          {record.disabled ? 'Enable' : 'Disable'}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {nextPageToken ? (
+                <Button
+                  size="small"
+                  sx={{ alignSelf: 'flex-start' }}
+                  onClick={() => void loadPage(nextPageToken)}
+                >
+                  {'Load more'}
+                </Button>
+              ) : null}
+            </Stack>
+          </CardDisplay>
+        </StaffOnly>
+      </Container>
+    </DashboardLayout>
   )
 }
 AdminUsers.displayName = 'Page:AdminUsers'

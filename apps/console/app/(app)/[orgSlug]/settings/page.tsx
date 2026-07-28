@@ -27,7 +27,6 @@ import {
   Container,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -312,427 +311,424 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
   }
 
   return (
-    <>
-      <NextPageTitle screen={'Settings – Organization'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          { children: 'Settings', href: buildRoute(Route.ORG_SETTINGS, { orgSlug }) },
-        ]}
-        header={{
-          children: 'Organization Settings',
-          icon: { path: ICON_VARIANT_APP_SETTINGS.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {!loading && !currentOrg ? (
-            <Alert severity="info">
-              {'Create your first site to start an organization, or accept ' +
-                'a pending invite from your dashboard.'}
-            </Alert>
-          ) : permissionsLoaded && !can('org.settings') ? (
-            // Permission guard (AGL-243): org.settings gates the page.
-            <Alert severity="warning">
-              {'You do not have permission to manage settings for this ' +
-                'organization — ask an organization admin for access.'}
-            </Alert>
-          ) : (
-            <HubTabs
-              tabs={[
-                {
-                  id: 'general',
-                  label: 'General',
-                  content: (
-            <CardDisplay
-              header={'General'}
-              help={docsHelp('glossary', {
-                anchor: '#workspace',
-                excerpt:
-                  'Rename the organization and change its workspace URL — ' +
-                  '"workspace" is the console word for your organization\'s home.',
-              })}
-              contentGutterX
-              contentGutterY
-            >
-              <Stack spacing={2} sx={{ maxWidth: 480 }}>
+    <DashboardLayout
+      breadcrumbItems={[
+        { children: 'Settings', href: buildRoute(Route.ORG_SETTINGS, { orgSlug }) },
+      ]}
+      header={{
+        children: 'Organization Settings',
+        icon: { path: ICON_VARIANT_APP_SETTINGS.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        {!loading && !currentOrg ? (
+          <Alert severity="info">
+            {'Create your first site to start an organization, or accept ' +
+              'a pending invite from your dashboard.'}
+          </Alert>
+        ) : permissionsLoaded && !can('org.settings') ? (
+          // Permission guard (AGL-243): org.settings gates the page.
+          <Alert severity="warning">
+            {'You do not have permission to manage settings for this ' +
+              'organization — ask an organization admin for access.'}
+          </Alert>
+        ) : (
+          <HubTabs
+            tabs={[
+              {
+                id: 'general',
+                label: 'General',
+                content: (
+          <CardDisplay
+            header={'General'}
+            help={docsHelp('glossary', {
+              anchor: '#workspace',
+              excerpt:
+                'Rename the organization and change its workspace URL — ' +
+                '"workspace" is the console word for your organization\'s home.',
+            })}
+            contentGutterX
+            contentGutterY
+          >
+            <Stack spacing={2} sx={{ maxWidth: 480 }}>
+              <TextField
+                label="Organization name"
+                value={name}
+                disabled={!canManage}
+                onChange={(event) => setName(event.target.value)}
+              />
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
                 <TextField
-                  label="Organization name"
-                  value={name}
-                  disabled={!canManage}
-                  onChange={(event) => setName(event.target.value)}
+                  label="Workspace URL"
+                  value={slug}
+                  disabled={!isOwner || busy}
+                  onChange={(event) =>
+                    setSlug(event.target.value.toLowerCase())
+                  }
+                  error={Boolean(slug) && !isValidOrgSlug(slug)}
+                  helperText={
+                    isOwner
+                      ? `Full address: ${slug || '…'}.${WORKSPACE_DOMAIN}. ` +
+                        'Old URLs keep redirecting after a change.'
+                      : 'Only the organization owner can change the URL.'
+                  }
+                  sx={{ flexGrow: 1 }}
                 />
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-                  <TextField
-                    label="Workspace URL"
-                    value={slug}
-                    disabled={!isOwner || busy}
-                    onChange={(event) =>
-                      setSlug(event.target.value.toLowerCase())
+                {isOwner ? (
+                  <Button
+                    variant="outlined"
+                    disabled={
+                      busy ||
+                      !isValidOrgSlug(slug) ||
+                      slug === (currentOrg?.slug ?? '')
                     }
-                    error={Boolean(slug) && !isValidOrgSlug(slug)}
-                    helperText={
-                      isOwner
-                        ? `Full address: ${slug || '…'}.${WORKSPACE_DOMAIN}. ` +
-                          'Old URLs keep redirecting after a change.'
-                        : 'Only the organization owner can change the URL.'
-                    }
-                    sx={{ flexGrow: 1 }}
-                  />
-                  {isOwner ? (
-                    <Button
-                      variant="outlined"
-                      disabled={
-                        busy ||
-                        !isValidOrgSlug(slug) ||
-                        slug === (currentOrg?.slug ?? '')
-                      }
-                      onClick={() => void handleSlugChange()}
-                      sx={{ mt: 1 }}
-                    >
-                      {'Change URL'}
-                    </Button>
-                  ) : null}
-                </Stack>
-                <Typography variant="body2" color="text.secondary">
-                  {`Your role: ${currentOrg?.role ?? '—'}. Plan, billing and ` +
-                    'suspension are managed under Manage → Billing.'}
-                </Typography>
-                {canManage ? (
-                  <Stack direction="row">
-                    <Button
-                      variant="contained"
-                      disabled={
-                        busy ||
-                        !name.trim() ||
-                        name.trim() === (currentOrg?.orgName ?? '')
-                      }
-                      onClick={() => void handleRename()}
-                    >
-                      {busy ? 'Saving…' : 'Save'}
-                    </Button>
-                  </Stack>
-                ) : (
-                  <Alert severity="info">
-                    {'Renaming the organization requires the admin role.'}
-                  </Alert>
-                )}
-              </Stack>
-            </CardDisplay>
-                  ),
-                },
-                ...(currentOrg && canManage
-                  ? [
-                      {
-                        id: 'profile',
-                        label: 'Profile',
-                        content: (
-                          <>
-            <CardDisplay
-              header={'Organization profile'}
-              help={docsHelp('glossary', {
-                anchor: '#organization-org',
-                excerpt:
-                  'Logo and contact details for the organization — shown in ' +
-                  'the console and available to your sites.',
-              })}
-              contentGutterX
-              contentGutterY
-              sx={{ mt: 3 }}
-            >
-              <Stack spacing={2} sx={{ maxWidth: 480 }}>
-                <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-                  <Avatar
-                    src={profile.logoUrl || undefined}
-                    variant="rounded"
-                    sx={{ width: 56, height: 56 }}
+                    onClick={() => void handleSlugChange()}
+                    sx={{ mt: 1 }}
                   >
-                    {(currentOrg.orgName ?? '?').slice(0, 1).toUpperCase()}
-                  </Avatar>
-                  <MediaUrlField
-                    label="Logo URL"
-                    helperText="Browse the org media library or paste an https URL"
-                    orgId={currentOrg.$id}
-                    value={profile.logoUrl}
-                    onChange={(logoUrl) =>
-                      setProfile((prev) => ({ ...prev, logoUrl }))
-                    }
-                  />
-                </Stack>
-                <TextField
-                  label="Contact email"
-                  value={profile.contactEmail}
-                  onChange={(event) =>
-                    setProfile((prev) => ({
-                      ...prev,
-                      contactEmail: event.target.value,
-                    }))
-                  }
-                />
-                <TextField
-                  label="Phone"
-                  value={profile.contactPhone}
-                  onChange={(event) =>
-                    setProfile((prev) => ({
-                      ...prev,
-                      contactPhone: event.target.value,
-                    }))
-                  }
-                />
-                <TextField
-                  label="Website"
-                  value={profile.contactWebsite}
-                  onChange={(event) =>
-                    setProfile((prev) => ({
-                      ...prev,
-                      contactWebsite: event.target.value,
-                    }))
-                  }
-                />
-                <TextField
-                  label="Address"
-                  multiline
-                  minRows={2}
-                  value={profile.contactAddress}
-                  onChange={(event) =>
-                    setProfile((prev) => ({
-                      ...prev,
-                      contactAddress: event.target.value,
-                    }))
-                  }
-                />
+                    {'Change URL'}
+                  </Button>
+                ) : null}
+              </Stack>
+              <Typography variant="body2" color="text.secondary">
+                {`Your role: ${currentOrg?.role ?? '—'}. Plan, billing and ` +
+                  'suspension are managed under Manage → Billing.'}
+              </Typography>
+              {canManage ? (
                 <Stack direction="row">
                   <Button
                     variant="contained"
-                    disabled={busy}
-                    onClick={() => void handleProfileSave()}
-                  >
-                    {busy ? 'Saving…' : 'Save profile'}
-                  </Button>
-                </Stack>
-              </Stack>
-            </CardDisplay>
-            {/* Default sharing (AGL-1048): what a NEW dataset or upload
-                starts as. Changes nothing that already exists — narrowing a
-                whole library from a toggle would break live pages with no
-                confirmation, which is what the per-resource flow prevents. */}
-            <CardDisplay
-              header={'Default sharing for new data and media'}
-              contentGutterX
-              contentGutterY
-              sx={{ mt: 3 }}
-            >
-              <Stack spacing={2} sx={{ maxWidth: 480 }}>
-                <TextField
-                  select
-                  size="small"
-                  label="New datasets and files are shared with"
-                  value={currentOrg?.defaultResourceScope ?? 'org'}
-                  disabled={!canManage || busy}
-                  onChange={(event) =>
-                    void settingsRequest({
-                      action: 'set-default-resource-scope',
-                      defaultResourceScope: event.target.value,
-                    })
-                      .then(() =>
-                        enqueueSnackbar('Default sharing updated', {
-                          variant: 'success',
-                          persist: false,
-                        }),
-                      )
-                      .catch((error: Error) =>
-                        enqueueSnackbar(error.message, { variant: 'error' }),
-                      )
-                  }
-                  helperText={
-                    'Only affects things created from now on. Created from ' +
-                    'an organization page there is no site to limit them to, ' +
-                    'so those stay shared with all sites either way.'
-                  }
-                >
-                  <MenuItem value="org">{'All sites'}</MenuItem>
-                  <MenuItem value="host">
-                    {'Only the site they were created in'}
-                  </MenuItem>
-                </TextField>
-              </Stack>
-            </CardDisplay>
-                          </>
-                        ),
-                      },
-                      {
-                        id: 'plugins',
-                        label: 'Plugins',
-                        content: (
-                          <CardDisplay
-                            header={'Plugins'}
-                            contentGutterX
-                            contentGutterY
-                          >
-                            <Typography variant="body2" color="text.secondary">
-                              {'Enabling plugins, configuring them, and ' +
-                                'managing marketplace installs now live in '}
-                              <AppLink
-                                href={`${buildRoute(Route.ORG_MARKETPLACE, {
-                                  orgSlug,
-                                })}?tab=installed`}
-                              >
-                                {'Marketplace › Installed'}
-                              </AppLink>
-                              {'.'}
-                            </Typography>
-                          </CardDisplay>
-                        ),
-                      },
-                      {
-                        id: 'api-keys',
-                        label: 'API keys',
-                        content: <OrgApiKeysCard />,
-                      },
-                    ]
-                  : []),
-                ...(currentOrg && isOwner
-                  ? [
-                      {
-                        id: 'ownership',
-                        label: 'Ownership',
-                        content: (
-            <CardDisplay
-              header={'Transfer ownership'}
-              help={docsHelp('team', {
-                anchor: '#team-roles',
-                excerpt:
-                  'Only the owner can transfer ownership. The new owner ' +
-                  'gains billing, workspace-URL, and transfer powers; you ' +
-                  'step down to admin.',
-              })}
-              contentGutterX
-              contentGutterY
-              sx={{ mt: 3 }}
-            >
-              <Stack spacing={2} sx={{ maxWidth: 480 }}>
-                <Typography variant="body2" color="text.secondary">
-                  {'Hand the organization to another member. They gain ' +
-                    'billing, workspace-URL and transfer powers; you step ' +
-                    'down to admin.'}
-                </Typography>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'flex-start' }}
-                >
-                  <TextField
-                    select
-                    label="New owner"
-                    value={transferTarget}
-                    disabled={busy}
-                    onChange={(event) =>
-                      setTransferTarget(event.target.value)
+                    disabled={
+                      busy ||
+                      !name.trim() ||
+                      name.trim() === (currentOrg?.orgName ?? '')
                     }
-                    sx={{ flexGrow: 1 }}
-                    helperText={
-                      members.length <= 1
-                        ? 'Invite a member from the Team page first.'
-                        : ''
-                    }
+                    onClick={() => void handleRename()}
                   >
-                    {members
-                      .filter((member) => member.$id !== (user as any)?.uid)
-                      .map((member) => (
-                        <MenuItem key={member.$id} value={member.$id}>
-                          {member.email ?? member.displayName ?? member.$id}
-                        </MenuItem>
-                      ))}
-                  </TextField>
-                  <Button
-                    color="error"
-                    variant="outlined"
-                    disabled={busy || !transferTarget}
-                    onClick={() => void handleTransfer()}
-                    sx={{ mt: 1 }}
-                  >
-                    {'Transfer'}
-                  </Button>
-                </Stack>
-              </Stack>
-            </CardDisplay>
-                        ),
-                      },
-                    ]
-                  : []),
-                ...(currentOrg && isOwner
-                  ? [
-                      {
-                        id: 'danger',
-                        label: 'Delete',
-                        content: (
-            <CardDisplay
-              header={'Delete organization'}
-              help={docsHelp('downgradingAndCanceling', {
-                anchor: '#deleting-your-organization',
-              })}
-              contentGutterX
-              contentGutterY
-              sx={{ mt: 3 }}
-            >
-              {org?.erasureRequestedAt ? (
-                <Stack spacing={2} sx={{ maxWidth: 480 }}>
-                  <Alert severity="warning">
-                    {'This organization is scheduled for deletion. After a ' +
-                      '7-day hold, all of its sites, files, and data are ' +
-                      'permanently erased. Cancel now to keep it.'}
-                  </Alert>
-                  <Button
-                    variant="outlined"
-                    disabled={busy}
-                    onClick={() => void handleCancelDeletion()}
-                    sx={{ alignSelf: 'flex-start' }}
-                  >
-                    {'Cancel deletion'}
+                    {busy ? 'Saving…' : 'Save'}
                   </Button>
                 </Stack>
               ) : (
-                <Stack spacing={2} sx={{ maxWidth: 480 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {'Permanently delete this organization and everything in ' +
-                      'it — sites, files, datasets, and members. Nothing is ' +
-                      'removed for 7 days (a final export is produced and you ' +
-                      'can cancel), then erasure is irreversible. Export ' +
-                      'anything you want to keep first.'}
-                  </Typography>
-                  <TextField
-                    label={`Type "${orgDisplayName}" to confirm`}
-                    value={deleteConfirmText}
-                    disabled={busy}
-                    onChange={(event) => setDeleteConfirmText(event.target.value)}
-                    size="small"
-                  />
-                  <Button
-                    color="error"
-                    variant="contained"
-                    disabled={
-                      busy ||
-                      !orgDisplayName ||
-                      deleteConfirmText.trim() !== orgDisplayName
-                    }
-                    onClick={() => void handleRequestDeletion()}
-                    sx={{ alignSelf: 'flex-start' }}
-                  >
-                    {'Delete organization'}
-                  </Button>
-                </Stack>
+                <Alert severity="info">
+                  {'Renaming the organization requires the admin role.'}
+                </Alert>
               )}
-            </CardDisplay>
-                        ),
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-          )}
-          {/* Plugin zone (AGL-433): orgSettings widgets. */}
-          {currentOrg?.$id ? (<PluginWidgetSlot slot="orgSettings" orgId={currentOrg.$id} org={org} />) : null}
-        </Container>
-      </DashboardLayout>
-    </>
+            </Stack>
+          </CardDisplay>
+                ),
+              },
+              ...(currentOrg && canManage
+                ? [
+                    {
+                      id: 'profile',
+                      label: 'Profile',
+                      content: (
+                        <>
+          <CardDisplay
+            header={'Organization profile'}
+            help={docsHelp('glossary', {
+              anchor: '#organization-org',
+              excerpt:
+                'Logo and contact details for the organization — shown in ' +
+                'the console and available to your sites.',
+            })}
+            contentGutterX
+            contentGutterY
+            sx={{ mt: 3 }}
+          >
+            <Stack spacing={2} sx={{ maxWidth: 480 }}>
+              <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+                <Avatar
+                  src={profile.logoUrl || undefined}
+                  variant="rounded"
+                  sx={{ width: 56, height: 56 }}
+                >
+                  {(currentOrg.orgName ?? '?').slice(0, 1).toUpperCase()}
+                </Avatar>
+                <MediaUrlField
+                  label="Logo URL"
+                  helperText="Browse the org media library or paste an https URL"
+                  orgId={currentOrg.$id}
+                  value={profile.logoUrl}
+                  onChange={(logoUrl) =>
+                    setProfile((prev) => ({ ...prev, logoUrl }))
+                  }
+                />
+              </Stack>
+              <TextField
+                label="Contact email"
+                value={profile.contactEmail}
+                onChange={(event) =>
+                  setProfile((prev) => ({
+                    ...prev,
+                    contactEmail: event.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="Phone"
+                value={profile.contactPhone}
+                onChange={(event) =>
+                  setProfile((prev) => ({
+                    ...prev,
+                    contactPhone: event.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="Website"
+                value={profile.contactWebsite}
+                onChange={(event) =>
+                  setProfile((prev) => ({
+                    ...prev,
+                    contactWebsite: event.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="Address"
+                multiline
+                minRows={2}
+                value={profile.contactAddress}
+                onChange={(event) =>
+                  setProfile((prev) => ({
+                    ...prev,
+                    contactAddress: event.target.value,
+                  }))
+                }
+              />
+              <Stack direction="row">
+                <Button
+                  variant="contained"
+                  disabled={busy}
+                  onClick={() => void handleProfileSave()}
+                >
+                  {busy ? 'Saving…' : 'Save profile'}
+                </Button>
+              </Stack>
+            </Stack>
+          </CardDisplay>
+          {/* Default sharing (AGL-1048): what a NEW dataset or upload
+              starts as. Changes nothing that already exists — narrowing a
+              whole library from a toggle would break live pages with no
+              confirmation, which is what the per-resource flow prevents. */}
+          <CardDisplay
+            header={'Default sharing for new data and media'}
+            contentGutterX
+            contentGutterY
+            sx={{ mt: 3 }}
+          >
+            <Stack spacing={2} sx={{ maxWidth: 480 }}>
+              <TextField
+                select
+                size="small"
+                label="New datasets and files are shared with"
+                value={currentOrg?.defaultResourceScope ?? 'org'}
+                disabled={!canManage || busy}
+                onChange={(event) =>
+                  void settingsRequest({
+                    action: 'set-default-resource-scope',
+                    defaultResourceScope: event.target.value,
+                  })
+                    .then(() =>
+                      enqueueSnackbar('Default sharing updated', {
+                        variant: 'success',
+                        persist: false,
+                      }),
+                    )
+                    .catch((error: Error) =>
+                      enqueueSnackbar(error.message, { variant: 'error' }),
+                    )
+                }
+                helperText={
+                  'Only affects things created from now on. Created from ' +
+                  'an organization page there is no site to limit them to, ' +
+                  'so those stay shared with all sites either way.'
+                }
+              >
+                <MenuItem value="org">{'All sites'}</MenuItem>
+                <MenuItem value="host">
+                  {'Only the site they were created in'}
+                </MenuItem>
+              </TextField>
+            </Stack>
+          </CardDisplay>
+                        </>
+                      ),
+                    },
+                    {
+                      id: 'plugins',
+                      label: 'Plugins',
+                      content: (
+                        <CardDisplay
+                          header={'Plugins'}
+                          contentGutterX
+                          contentGutterY
+                        >
+                          <Typography variant="body2" color="text.secondary">
+                            {'Enabling plugins, configuring them, and ' +
+                              'managing marketplace installs now live in '}
+                            <AppLink
+                              href={`${buildRoute(Route.ORG_MARKETPLACE, {
+                                orgSlug,
+                              })}?tab=installed`}
+                            >
+                              {'Marketplace › Installed'}
+                            </AppLink>
+                            {'.'}
+                          </Typography>
+                        </CardDisplay>
+                      ),
+                    },
+                    {
+                      id: 'api-keys',
+                      label: 'API keys',
+                      content: <OrgApiKeysCard />,
+                    },
+                  ]
+                : []),
+              ...(currentOrg && isOwner
+                ? [
+                    {
+                      id: 'ownership',
+                      label: 'Ownership',
+                      content: (
+          <CardDisplay
+            header={'Transfer ownership'}
+            help={docsHelp('team', {
+              anchor: '#team-roles',
+              excerpt:
+                'Only the owner can transfer ownership. The new owner ' +
+                'gains billing, workspace-URL, and transfer powers; you ' +
+                'step down to admin.',
+            })}
+            contentGutterX
+            contentGutterY
+            sx={{ mt: 3 }}
+          >
+            <Stack spacing={2} sx={{ maxWidth: 480 }}>
+              <Typography variant="body2" color="text.secondary">
+                {'Hand the organization to another member. They gain ' +
+                  'billing, workspace-URL and transfer powers; you step ' +
+                  'down to admin.'}
+              </Typography>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'flex-start' }}
+              >
+                <TextField
+                  select
+                  label="New owner"
+                  value={transferTarget}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setTransferTarget(event.target.value)
+                  }
+                  sx={{ flexGrow: 1 }}
+                  helperText={
+                    members.length <= 1
+                      ? 'Invite a member from the Team page first.'
+                      : ''
+                  }
+                >
+                  {members
+                    .filter((member) => member.$id !== (user as any)?.uid)
+                    .map((member) => (
+                      <MenuItem key={member.$id} value={member.$id}>
+                        {member.email ?? member.displayName ?? member.$id}
+                      </MenuItem>
+                    ))}
+                </TextField>
+                <Button
+                  color="error"
+                  variant="outlined"
+                  disabled={busy || !transferTarget}
+                  onClick={() => void handleTransfer()}
+                  sx={{ mt: 1 }}
+                >
+                  {'Transfer'}
+                </Button>
+              </Stack>
+            </Stack>
+          </CardDisplay>
+                      ),
+                    },
+                  ]
+                : []),
+              ...(currentOrg && isOwner
+                ? [
+                    {
+                      id: 'danger',
+                      label: 'Delete',
+                      content: (
+          <CardDisplay
+            header={'Delete organization'}
+            help={docsHelp('downgradingAndCanceling', {
+              anchor: '#deleting-your-organization',
+            })}
+            contentGutterX
+            contentGutterY
+            sx={{ mt: 3 }}
+          >
+            {org?.erasureRequestedAt ? (
+              <Stack spacing={2} sx={{ maxWidth: 480 }}>
+                <Alert severity="warning">
+                  {'This organization is scheduled for deletion. After a ' +
+                    '7-day hold, all of its sites, files, and data are ' +
+                    'permanently erased. Cancel now to keep it.'}
+                </Alert>
+                <Button
+                  variant="outlined"
+                  disabled={busy}
+                  onClick={() => void handleCancelDeletion()}
+                  sx={{ alignSelf: 'flex-start' }}
+                >
+                  {'Cancel deletion'}
+                </Button>
+              </Stack>
+            ) : (
+              <Stack spacing={2} sx={{ maxWidth: 480 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {'Permanently delete this organization and everything in ' +
+                    'it — sites, files, datasets, and members. Nothing is ' +
+                    'removed for 7 days (a final export is produced and you ' +
+                    'can cancel), then erasure is irreversible. Export ' +
+                    'anything you want to keep first.'}
+                </Typography>
+                <TextField
+                  label={`Type "${orgDisplayName}" to confirm`}
+                  value={deleteConfirmText}
+                  disabled={busy}
+                  onChange={(event) => setDeleteConfirmText(event.target.value)}
+                  size="small"
+                />
+                <Button
+                  color="error"
+                  variant="contained"
+                  disabled={
+                    busy ||
+                    !orgDisplayName ||
+                    deleteConfirmText.trim() !== orgDisplayName
+                  }
+                  onClick={() => void handleRequestDeletion()}
+                  sx={{ alignSelf: 'flex-start' }}
+                >
+                  {'Delete organization'}
+                </Button>
+              </Stack>
+            )}
+          </CardDisplay>
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        )}
+        {/* Plugin zone (AGL-433): orgSettings widgets. */}
+        {currentOrg?.$id ? (<PluginWidgetSlot slot="orgSettings" orgId={currentOrg.$id} org={org} />) : null}
+      </Container>
+    </DashboardLayout>
   )
 }
 OrgSettings.displayName = 'Page:OrgSettings'

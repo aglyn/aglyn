@@ -18,7 +18,6 @@
 
 import { ICON_VARIANT_HOST_GROUP } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert } from '@mui/material'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
@@ -38,48 +37,45 @@ const OrgMedia: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const { currentOrg, loading } = useOrgScope()
   return (
-    <>
-      <NextPageTitle screen={'Media – Organization'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          { children: 'Media', href: buildRoute(Route.ORG_MEDIA, { orgSlug }) },
-        ]}
-        help="media"
-        header={{
-          children: 'Organization Media',
-          icon: { path: ICON_VARIANT_HOST_GROUP.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {!loading && !currentOrg ? (
-            <Alert severity="info">
-              {'Create your first site to start an organization, or accept ' +
-                'a pending invite from your dashboard.'}
-            </Alert>
-          ) : (
-            currentOrg?.$id ? (
-            // Full library (org DAM parity): same card framing, folders,
-            // uploads, editing, references and quota meter as a site's
-            // media page (AGL-368).
-            <CardDisplay
-              header={'Library'}
-              help={docsHelp('media', {
-                excerpt:
-                  "The organization's shared media library — folders, " +
-                  'uploads, editing, and a quota meter, available to every ' +
-                  'site in the workspace.',
-              })}
-              contentGutterX
-              contentGutterY
-              contentBordered="all"
-            >
-              <MediaLibraryComponent orgId={currentOrg.$id} />
-            </CardDisplay>
-          ) : null
-          )}
-        </Container>
-      </DashboardLayout>
-    </>
+    <DashboardLayout
+      breadcrumbItems={[
+        { children: 'Media', href: buildRoute(Route.ORG_MEDIA, { orgSlug }) },
+      ]}
+      help="media"
+      header={{
+        children: 'Organization Media',
+        icon: { path: ICON_VARIANT_HOST_GROUP.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        {!loading && !currentOrg ? (
+          <Alert severity="info">
+            {'Create your first site to start an organization, or accept ' +
+              'a pending invite from your dashboard.'}
+          </Alert>
+        ) : (
+          currentOrg?.$id ? (
+          // Full library (org DAM parity): same card framing, folders,
+          // uploads, editing, references and quota meter as a site's
+          // media page (AGL-368).
+          <CardDisplay
+            header={'Library'}
+            help={docsHelp('media', {
+              excerpt:
+                "The organization's shared media library — folders, " +
+                'uploads, editing, and a quota meter, available to every ' +
+                'site in the workspace.',
+            })}
+            contentGutterX
+            contentGutterY
+            contentBordered="all"
+          >
+            <MediaLibraryComponent orgId={currentOrg.$id} />
+          </CardDisplay>
+        ) : null
+        )}
+      </Container>
+    </DashboardLayout>
   )
 }
 OrgMedia.displayName = 'Page:OrgMedia'

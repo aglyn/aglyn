@@ -18,7 +18,6 @@
 'use client'
 
 import type { AuthResultError } from '@aglyn/shared-data-enums'
-import { APP_CONSOLE } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_EMAIL,
   FIELD_SCHEMA_PASSWORD,
@@ -35,7 +34,6 @@ import {
 import {
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
-import { useNextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx'
 import { Button, CircularProgress, Divider, Link, Stack, Typography } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
@@ -72,11 +70,6 @@ const formSchema: FormSchema = {
 }
 
 function SignIn() {
-  useNextPageTitle({
-    screen: 'Sign in',
-    suffix: APP_CONSOLE.AFFIX,
-    separator: ` ${APP_CONSOLE.SEP} `,
-  })
   const { queueLoading, loading } = useLoading()
   const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)

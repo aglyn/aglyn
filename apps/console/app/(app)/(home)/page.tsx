@@ -26,7 +26,6 @@ import {
   GridItems,
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import {
   Box,
   Button,
@@ -36,15 +35,15 @@ import {
 } from '@mui/material'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import CreateHostDialog from '../../components/create-host-dialog.component'
-import CreateOrgDialog from '../../components/create-org-dialog.component'
-import EmptyState from '../../components/empty-state.component'
-import DashboardLayout from '../../components/layouts/dashboard.layout'
-import OrgInvitesBanner from '../../components/org-invites-banner.component'
-import { buildRoute, Route } from '../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../constants/shared'
-import { useOrgScope } from '../../hooks/use-org-scope'
-import { usePendingInvites } from '../../hooks/use-pending-invites'
+import CreateHostDialog from '../../../components/create-host-dialog.component'
+import CreateOrgDialog from '../../../components/create-org-dialog.component'
+import EmptyState from '../../../components/empty-state.component'
+import DashboardLayout from '../../../components/layouts/dashboard.layout'
+import OrgInvitesBanner from '../../../components/org-invites-banner.component'
+import { buildRoute, Route } from '../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import { useOrgScope } from '../../../hooks/use-org-scope'
+import { usePendingInvites } from '../../../hooks/use-pending-invites'
 
 /**
  * Org jump page (AGL-621) — the authenticated console root at `/`. Picks the
@@ -96,7 +95,6 @@ function OrgJump() {
         ) : null
       }
     >
-      <NextPageTitle screen={'Workspaces'} />
       {loading || orgs.length === 1 ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />

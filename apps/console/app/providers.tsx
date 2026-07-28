@@ -18,7 +18,6 @@
 
 import { ConfirmationProviderComponent } from '@aglyn/shared-ui-jsx'
 import { LoadingLayoutAppComponent } from '@aglyn/shared-ui-jsx/components/loading-layout-app.component'
-import { NextPageTitleProvider } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { SnackbarProvider } from '@aglyn/shared-ui-snackstack'
 import {
   consoleThemeDark,
@@ -60,9 +59,5 @@ const ThemeStack = withThemeCssVarProvider(
 )
 
 export default function Providers({ children }: { children?: ReactNode }) {
-  return (
-    <NextPageTitleProvider>
-      <ThemeStack>{children}</ThemeStack>
-    </NextPageTitleProvider>
-  )
+  return <ThemeStack>{children}</ThemeStack>
 }

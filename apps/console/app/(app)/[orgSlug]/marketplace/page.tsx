@@ -18,7 +18,6 @@
 
 import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { useMemo, useState } from 'react'
@@ -83,203 +82,200 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
   const actingHost = selectedHost || hostList[0]?.id || ''
 
   return (
-    <>
-      <NextPageTitle screen={'Marketplace'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: 'Marketplace',
-            href: buildRoute(Route.ORG_MARKETPLACE, { orgSlug }),
-          },
-        ]}
-        help="plugins"
-        header={{
+    <DashboardLayout
+      breadcrumbItems={[
+        {
           children: 'Marketplace',
-          icon: { path: mdiStorefrontOutline.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {!loading && !currentOrg ? (
-            <Alert severity="info">
-              {'Create your first site to start an organization, then browse ' +
-                'and install marketplace items here.'}
-            </Alert>
-          ) : !actingHost ? (
-            <Alert severity="info">
-              {'Add a site to your organization to install marketplace ' +
-                'items — installs apply to a site (or every site).'}
-            </Alert>
-          ) : (
-            <Stack spacing={2}>
-              {hostList.length > 1 ? (
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+          href: buildRoute(Route.ORG_MARKETPLACE, { orgSlug }),
+        },
+      ]}
+      help="plugins"
+      header={{
+        children: 'Marketplace',
+        icon: { path: mdiStorefrontOutline.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        {!loading && !currentOrg ? (
+          <Alert severity="info">
+            {'Create your first site to start an organization, then browse ' +
+              'and install marketplace items here.'}
+          </Alert>
+        ) : !actingHost ? (
+          <Alert severity="info">
+            {'Add a site to your organization to install marketplace ' +
+              'items — installs apply to a site (or every site).'}
+          </Alert>
+        ) : (
+          <Stack spacing={2}>
+            {hostList.length > 1 ? (
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  {'Acting site'}
+                </Typography>
+                <TextField
+                  select
+                  size="small"
+                  label="Site"
+                  value={actingHost}
+                  onChange={(event) => setSelectedHost(event.target.value)}
+                  sx={{ minWidth: 200 }}
                 >
-                  <Typography variant="body2" color="text.secondary">
-                    {'Acting site'}
-                  </Typography>
-                  <TextField
-                    select
-                    size="small"
-                    label="Site"
-                    value={actingHost}
-                    onChange={(event) => setSelectedHost(event.target.value)}
-                    sx={{ minWidth: 200 }}
-                  >
-                    {hostList.map((host) => (
-                      <MenuItem key={host.id} value={host.id}>
-                        {host.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                </Stack>
-              ) : null}
-              {/* Browse + manage in one place (AGL-774). Both are the
-                  community plugin's widgets (the app stays plugin-free) and
-                  render nothing if the community plugin is disabled. */}
-              <HubTabs
-                // Lazy panels (AGL-785): Browse, Installed and Publish each
-                // run their own Firestore subscriptions; mounting all three at
-                // once on load made their settling re-renders collide and trip
-                // React's update-depth limit. Mount only the active tab, then
-                // keep it.
-                lazy
-                tabs={[
-                  {
-                    id: 'browse',
-                    // "Browse All" (AGL-1024): the same grid also renders
-                    // publisher-filtered views, so the unqualified verb was
-                    // ambiguous about which of the two you were getting.
-                    label: 'Browse All',
-                    content: (
+                  {hostList.map((host) => (
+                    <MenuItem key={host.id} value={host.id}>
+                      {host.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Stack>
+            ) : null}
+            {/* Browse + manage in one place (AGL-774). Both are the
+                community plugin's widgets (the app stays plugin-free) and
+                render nothing if the community plugin is disabled. */}
+            <HubTabs
+              // Lazy panels (AGL-785): Browse, Installed and Publish each
+              // run their own Firestore subscriptions; mounting all three at
+              // once on load made their settling re-renders collide and trip
+              // React's update-depth limit. Mount only the active tab, then
+              // keep it.
+              lazy
+              tabs={[
+                {
+                  id: 'browse',
+                  // "Browse All" (AGL-1024): the same grid also renders
+                  // publisher-filtered views, so the unqualified verb was
+                  // ambiguous about which of the two you were getting.
+                  label: 'Browse All',
+                  content: (
+                    <PluginWidgetSlot
+                      slot="orgMarketplace"
+                      hostId={actingHost}
+                      permissions={permissions}
+                      orgScoped
+                      // The URL already knows the org (AGL-867): pass it so
+                      // listing links resolve synchronously instead of via an
+                      // async hostIndex→org lookup that can come back empty
+                      // and leave the detail page unreachable from browse.
+                      orgSlug={orgSlug}
+                    />
+                  ),
+                },
+                {
+                  id: 'installed',
+                  label: 'Installed',
+                  content: (
+                    <Stack spacing={2}>
+                      {/* A convenience, not the inventory (AGL-1011).
+                          Administering what you already run belongs in the
+                          Plugins section; this stays so that uninstalling
+                          something you just installed does not send you
+                          somewhere else, and every row links through. The
+                          first-party switchboard and the per-plugin config
+                          forms moved out entirely — they were never
+                          marketplace concerns. */}
+                      <Alert
+                        severity="info"
+                        action={
+                          <AppLink
+                            href={buildRoute(Route.ORG_PLUGINS, { orgSlug })}
+                          >
+                            <Button
+                              size="small"
+                              color="inherit"
+                              component="span"
+                            >
+                              {'Open Plugins'}
+                            </Button>
+                          </AppLink>
+                        }
+                      >
+                        {'A quick list of what this organization installed ' +
+                          'from the marketplace. Settings, per-site scope ' +
+                          'and built-in plugins live in Plugins.'}
+                      </Alert>
                       <PluginWidgetSlot
-                        slot="orgMarketplace"
+                        slot="orgAddons"
                         hostId={actingHost}
-                        permissions={permissions}
-                        orgScoped
-                        // The URL already knows the org (AGL-867): pass it so
-                        // listing links resolve synchronously instead of via an
-                        // async hostIndex→org lookup that can come back empty
-                        // and leave the detail page unreachable from browse.
+                        // Lets each row link to its installation page
+                        // (AGL-1007).
                         orgSlug={orgSlug}
                       />
-                    ),
-                  },
-                  {
-                    id: 'installed',
-                    label: 'Installed',
-                    content: (
-                      <Stack spacing={2}>
-                        {/* A convenience, not the inventory (AGL-1011).
-                            Administering what you already run belongs in the
-                            Plugins section; this stays so that uninstalling
-                            something you just installed does not send you
-                            somewhere else, and every row links through. The
-                            first-party switchboard and the per-plugin config
-                            forms moved out entirely — they were never
-                            marketplace concerns. */}
-                        <Alert
-                          severity="info"
-                          action={
-                            <AppLink
-                              href={buildRoute(Route.ORG_PLUGINS, { orgSlug })}
-                            >
-                              <Button
-                                size="small"
-                                color="inherit"
-                                component="span"
-                              >
-                                {'Open Plugins'}
-                              </Button>
-                            </AppLink>
-                          }
-                        >
-                          {'A quick list of what this organization installed ' +
-                            'from the marketplace. Settings, per-site scope ' +
-                            'and built-in plugins live in Plugins.'}
-                        </Alert>
-                        <PluginWidgetSlot
-                          slot="orgAddons"
-                          hostId={actingHost}
-                          // Lets each row link to its installation page
-                          // (AGL-1007).
-                          orgSlug={orgSlug}
-                        />
-                      </Stack>
-                    ),
-                  },
-                  // Seller area (AGL-776/798/801): one tab each for the
-                  // publish action and the seller sections — profile,
-                  // listings, payouts and sales — folded in from the retired
-                  // Community page. Gated on the publish permission; the server
-                  // enforces it too.
-                  ...(permissions.publishToCommunity && currentOrg?.$id
-                    ? [
-                        {
-                          id: 'publish',
-                          // Covers uploading a bundle as well as publishing
-                          // an existing artifact (AGL-1024).
-                          label: 'Upload / Publish',
-                          content: (
-                            <OrgPublishPanel
-                              orgId={currentOrg.$id}
-                              hosts={hostList}
-                            />
-                          ),
-                        },
-                        {
-                          id: 'profile',
-                          // Whose profile (AGL-1024) — the console also has
-                          // org and user profiles.
-                          label: 'Publisher Profile',
-                          content: (
-                            <OrgSellerPanel
-                              orgId={currentOrg.$id}
-                              section="profile"
-                            />
-                          ),
-                        },
-                        {
-                          id: 'listings',
-                          label: 'Listings',
-                          content: (
-                            <OrgSellerPanel
-                              orgId={currentOrg.$id}
-                              section="listings"
-                            />
-                          ),
-                        },
-                        {
-                          id: 'payouts',
-                          label: 'Payouts',
-                          content: (
-                            <OrgSellerPanel
-                              orgId={currentOrg.$id}
-                              section="payouts"
-                            />
-                          ),
-                        },
-                        {
-                          id: 'sales',
-                          label: 'Sales',
-                          content: (
-                            <OrgSellerPanel
-                              orgId={currentOrg.$id}
-                              section="sales"
-                            />
-                          ),
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </Stack>
-          )}
-        </Container>
-      </DashboardLayout>
-    </>
+                    </Stack>
+                  ),
+                },
+                // Seller area (AGL-776/798/801): one tab each for the
+                // publish action and the seller sections — profile,
+                // listings, payouts and sales — folded in from the retired
+                // Community page. Gated on the publish permission; the server
+                // enforces it too.
+                ...(permissions.publishToCommunity && currentOrg?.$id
+                  ? [
+                      {
+                        id: 'publish',
+                        // Covers uploading a bundle as well as publishing
+                        // an existing artifact (AGL-1024).
+                        label: 'Upload / Publish',
+                        content: (
+                          <OrgPublishPanel
+                            orgId={currentOrg.$id}
+                            hosts={hostList}
+                          />
+                        ),
+                      },
+                      {
+                        id: 'profile',
+                        // Whose profile (AGL-1024) — the console also has
+                        // org and user profiles.
+                        label: 'Publisher Profile',
+                        content: (
+                          <OrgSellerPanel
+                            orgId={currentOrg.$id}
+                            section="profile"
+                          />
+                        ),
+                      },
+                      {
+                        id: 'listings',
+                        label: 'Listings',
+                        content: (
+                          <OrgSellerPanel
+                            orgId={currentOrg.$id}
+                            section="listings"
+                          />
+                        ),
+                      },
+                      {
+                        id: 'payouts',
+                        label: 'Payouts',
+                        content: (
+                          <OrgSellerPanel
+                            orgId={currentOrg.$id}
+                            section="payouts"
+                          />
+                        ),
+                      },
+                      {
+                        id: 'sales',
+                        label: 'Sales',
+                        content: (
+                          <OrgSellerPanel
+                            orgId={currentOrg.$id}
+                            section="sales"
+                          />
+                        ),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </Stack>
+        )}
+      </Container>
+    </DashboardLayout>
   )
 }
 OrgMarketplace.displayName = 'Page:OrgMarketplace'

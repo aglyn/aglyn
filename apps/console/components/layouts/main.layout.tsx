@@ -16,7 +16,6 @@
  */
 
 import {
-  APP_CONSOLE,
   ICON_VARIANT_LEFT,
   ICON_VARIANT_MENU_DOWN,
 } from '@aglyn/shared-data-enums'
@@ -33,9 +32,8 @@ import {
   ScrollReaction,
   SrOnly,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
-import { _isArr, _isArrEmpty } from '@aglyn/shared-util-tools'
+import { _isArrEmpty } from '@aglyn/shared-util-tools'
 import {
   AppBar,
   Avatar,
@@ -51,7 +49,7 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material'
-import { Fragment, useMemo } from 'react'
+import { Fragment } from 'react'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { TOP_BAR_HEIGHT } from '../../constants/shared'
@@ -361,17 +359,19 @@ export interface CenterNavMenuItem
   items?: MenuItemProps[]
 }
 
+// `title` stays omitted from StackProps so no stray HTML title attribute
+// reaches the Stack. MainLayout took a `title` prop of its own until AGL-1059
+// moved document titles to App Router `metadata`; nothing set the visible
+// chrome from it, so the prop went with the title mechanism.
 export interface MainLayoutProps
   extends Omit<StackProps, 'title'>,
     TopAppBarProps {
   children?: JSX.Children
-  title?: string[] | string
 }
 
 export function MainLayout(props: MainLayoutProps) {
   const {
     children,
-    title,
     appBarSuffix,
     centerNavigationItems,
     centerPrefix,
@@ -386,89 +386,78 @@ export function MainLayout(props: MainLayoutProps) {
   // The account menu, theme control, and org-scoped chrome links moved into
   // the self-contained UserMenu component (AGL-858), which reads its own
   // user/org/theme — so MainLayout no longer needs them here.
-  const layoutTitle = useMemo(() => {
-    return title ? [...(_isArr(title) ? title : [title]), 'Secure'] : 'Secure'
-  }, [title])
-
   return (
-    <Fragment>
-      <NextPageTitle
-        screen={layoutTitle || APP_CONSOLE.TITLE}
-        suffix={APP_CONSOLE.AFFIX}
-        separator={` ${APP_CONSOLE.SEP} `}
+    <Stack
+      {...rest}
+      sx={[{
+        alignItems: "stretch",
+        flexDirection: "column",
+        // minHeight, not height: a fixed 100vh box is the containing block
+        // for the sticky secondary toolbar, which stopped sticking after
+        // one viewport of scroll on longer pages (AGL-37).
+        minHeight: "100vh",
+        // Besigner is a fixed editor shell (AGL-58/63): exactly the window
+        // height, never page-scrollable — overflow lives inside the editor
+        // regions (canvas pan, panel scroll).
+        ...(besigner && {
+          height: "100vh",
+          overflow: "hidden",
+          '@supports (height: 100dvh)': {
+            minHeight: "100dvh",
+            height: "100dvh",
+          },
+        }),
+      }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
+      <TopAppBar
+        enableAppBarElevation={enableAppBarElevation}
+        besigner={besigner}
+        backButton={backButton}
+        centerPrefix={centerPrefix}
+        centerNavigationItems={centerNavigationItems || []}
+        customCenter={
+          // Default center nav is the ORG switcher (AGL-236 — swapped
+          // with the host switcher, which now lives in the secondary
+          // bar); pages passing their own nav items or center keep them.
+          customCenter ??
+          (centerNavigationItems ? undefined : <OrgSwitcherNav />)
+        }
+        actionsPrefix={
+          // Notifications bell (AGL-260) rides beside any page-provided
+          // prefix actions.
+          <>
+            {actionsPrefix}
+            <NotificationsMenu />
+            {/* Pre-permission ask (AGL-663): the browser allows exactly one
+                native prompt per origin, so we offer in-app first where a
+                decline is reversible. Renders nothing unless it applies. */}
+            <NotificationPrompt />
+          </>
+        }
+        appBarSuffix={appBarSuffix}
+        quickActions={[
+          ...(quickActions || []),
+          // The redesigned account menu (AGL-858) owns its own avatar trigger
+          // + popover, and the theme control now lives inside it — so it
+          // renders as a custom node rather than an icon/menu item.
+          { render: (key: string | number) => <UserMenu key={key} /> },
+        ]}
       />
-      <Stack
-        {...rest}
-        sx={[{
-          alignItems: "stretch",
-          flexDirection: "column",
-          // minHeight, not height: a fixed 100vh box is the containing block
-          // for the sticky secondary toolbar, which stopped sticking after
-          // one viewport of scroll on longer pages (AGL-37).
-          minHeight: "100vh",
-          // Besigner is a fixed editor shell (AGL-58/63): exactly the window
-          // height, never page-scrollable — overflow lives inside the editor
-          // regions (canvas pan, panel scroll).
-          ...(besigner && {
-            height: "100vh",
-            overflow: "hidden",
-            '@supports (height: 100dvh)': {
-              minHeight: "100dvh",
-              height: "100dvh",
-            },
-          }),
-        }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
-        <TopAppBar
-          enableAppBarElevation={enableAppBarElevation}
-          besigner={besigner}
-          backButton={backButton}
-          centerPrefix={centerPrefix}
-          centerNavigationItems={centerNavigationItems || []}
-          customCenter={
-            // Default center nav is the ORG switcher (AGL-236 — swapped
-            // with the host switcher, which now lives in the secondary
-            // bar); pages passing their own nav items or center keep them.
-            customCenter ??
-            (centerNavigationItems ? undefined : <OrgSwitcherNav />)
-          }
-          actionsPrefix={
-            // Notifications bell (AGL-260) rides beside any page-provided
-            // prefix actions.
-            <>
-              {actionsPrefix}
-              <NotificationsMenu />
-              {/* Pre-permission ask (AGL-663): the browser allows exactly one
-                  native prompt per origin, so we offer in-app first where a
-                  decline is reversible. Renders nothing unless it applies. */}
-              <NotificationPrompt />
-            </>
-          }
-          appBarSuffix={appBarSuffix}
-          quickActions={[
-            ...(quickActions || []),
-            // The redesigned account menu (AGL-858) owns its own avatar trigger
-            // + popover, and the theme control now lives inside it — so it
-            // renders as a custom node rather than an icon/menu item.
-            { render: (key: string | number) => <UserMenu key={key} /> },
-          ]}
-        />
-        {besigner ? (
-          <Box
-            sx={{
-              flexGrow: 1,
-              minHeight: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-          >
-            {children}
-          </Box>
-        ) : (
-          children
-        )}
-      </Stack>
-    </Fragment>
+      {besigner ? (
+        <Box
+          sx={{
+            flexGrow: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          {children}
+        </Box>
+      ) : (
+        children
+      )}
+    </Stack>
   );
 }
 

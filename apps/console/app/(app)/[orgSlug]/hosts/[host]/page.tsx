@@ -18,7 +18,6 @@
 
 import { ICON_VARIANT_HOME } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
-import { useNextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useParams } from 'next/navigation'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
@@ -39,7 +38,6 @@ const Index: NextPageWithLayout<Record<string, never>> = (props) => {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const hostId = useHostId()
-  useNextPageTitle({ screen: 'My Dashboard' })
 
   return (
     <DashboardLayout

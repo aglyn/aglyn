@@ -18,7 +18,6 @@
 
 import { ICON_VARIANT_USER_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Stack } from '@mui/material'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
@@ -42,33 +41,30 @@ const HostUsers: NextPageWithLayout<Record<string, never>> = () => {
   const host = useHostSubdomain()
 
   return (
-    <>
-      <NextPageTitle screen={'Users'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: <HostDisplayNameComponent hostId={hostId} />,
-            href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
-          },
-          {
-            children: 'Users',
-            href: buildRoute(Route.HOST_USERS, { orgSlug,  host }),
-          },
-        ]}
-        help="members"
-        header={{
+    <DashboardLayout
+      breadcrumbItems={[
+        {
+          children: <HostDisplayNameComponent hostId={hostId} />,
+          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
+        },
+        {
           children: 'Users',
-          icon: { path: ICON_VARIANT_USER_SETTINGS.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <Stack spacing={3}>
-            <SiteAccountsCard hostId={hostId} />
-            <HostMembersCard hostId={hostId} />
-          </Stack>
-        </Container>
-      </DashboardLayout>
-    </>
+          href: buildRoute(Route.HOST_USERS, { orgSlug,  host }),
+        },
+      ]}
+      help="members"
+      header={{
+        children: 'Users',
+        icon: { path: ICON_VARIANT_USER_SETTINGS.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <Stack spacing={3}>
+          <SiteAccountsCard hostId={hostId} />
+          <HostMembersCard hostId={hostId} />
+        </Stack>
+      </Container>
+    </DashboardLayout>
   )
 }
 HostUsers.displayName = 'Page:HostUsers'

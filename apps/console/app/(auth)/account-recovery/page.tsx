@@ -18,12 +18,10 @@
 'use client'
 
 import type { AuthResultError } from '@aglyn/shared-data-enums'
-import { APP_CONSOLE } from '@aglyn/shared-data-enums'
 import { FIELD_SCHEMA_EMAIL } from '@aglyn/shared-data-forms'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
-import { useNextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { Link, Typography } from '@mui/material'
 import { AuthErrorCodes, sendPasswordResetEmail } from 'firebase/auth'
 import { useCallback, useState } from 'react'
@@ -38,11 +36,6 @@ const formSchema: FormSchema = {
 }
 
 function AccountRecovery() {
-  useNextPageTitle({
-    screen: 'Account recovery',
-    suffix: APP_CONSOLE.AFFIX,
-    separator: ` ${APP_CONSOLE.SEP} `,
-  })
   const { queueLoading, loading } = useLoading()
   const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)

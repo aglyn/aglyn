@@ -23,7 +23,6 @@ import {
   Container,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -245,260 +244,257 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
   const isOwnerRow = member?.role === 'owner'
 
   return (
-    <>
-      <NextPageTitle screen={'Team member'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          { children: 'Team', href: buildRoute(Route.MANAGE_TEAM, { orgSlug }) },
-          {
-            children: displayName,
-            href: buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug,  uid }),
-          },
-        ]}
-        header={{
+    <DashboardLayout
+      breadcrumbItems={[
+        { children: 'Team', href: buildRoute(Route.MANAGE_TEAM, { orgSlug }) },
+        {
           children: displayName,
-          icon: { path: mdiAccountOutline.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <Stack spacing={3}>
-            {!loadingMember && !member ? (
-              <Alert severity="warning">
-                {'This person is not a member of the organization.'}
-              </Alert>
-            ) : (
-              <CardDisplay
-                header={'Member'}
-                help={docsHelp('inviteTeammates', {
-                  anchor: '#how-team-members-act',
-                  excerpt:
-                    "Set this member's role and job title, and restrict " +
-                    'editors and viewers to specific sites.',
-                })}
-                contentGutterX
-                contentGutterY
-              >
-                <Stack spacing={2} sx={{ maxWidth: 480 }}>
-                  <Stack
-                    direction="row"
-                    spacing={2}
-                    sx={{ alignItems: 'center' }}
-                  >
-                    <Avatar sx={{ width: 48, height: 48 }}>
-                      {String(displayName).slice(0, 1).toUpperCase()}
-                    </Avatar>
-                    <Stack sx={{ minWidth: 0 }}>
-                      <Typography variant="subtitle1" noWrap>
-                        {displayName}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        noWrap
-                      >
-                        {member?.email ?? ''}
-                        {member?.joinedAt?.seconds
-                          ? ` · joined ${new Date(
-                              member.joinedAt.seconds * 1000,
-                            ).toLocaleDateString()}`
-                          : ''}
-                      </Typography>
-                    </Stack>
-                    {isOwnerRow ? (
-                      <Chip size="small" color="secondary" label="Owner" />
-                    ) : null}
+          href: buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug,  uid }),
+        },
+      ]}
+      header={{
+        children: displayName,
+        icon: { path: mdiAccountOutline.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <Stack spacing={3}>
+          {!loadingMember && !member ? (
+            <Alert severity="warning">
+              {'This person is not a member of the organization.'}
+            </Alert>
+          ) : (
+            <CardDisplay
+              header={'Member'}
+              help={docsHelp('inviteTeammates', {
+                anchor: '#how-team-members-act',
+                excerpt:
+                  "Set this member's role and job title, and restrict " +
+                  'editors and viewers to specific sites.',
+              })}
+              contentGutterX
+              contentGutterY
+            >
+              <Stack spacing={2} sx={{ maxWidth: 480 }}>
+                <Stack
+                  direction="row"
+                  spacing={2}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <Avatar sx={{ width: 48, height: 48 }}>
+                    {String(displayName).slice(0, 1).toUpperCase()}
+                  </Avatar>
+                  <Stack sx={{ minWidth: 0 }}>
+                    <Typography variant="subtitle1" noWrap>
+                      {displayName}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      noWrap
+                    >
+                      {member?.email ?? ''}
+                      {member?.joinedAt?.seconds
+                        ? ` · joined ${new Date(
+                            member.joinedAt.seconds * 1000,
+                          ).toLocaleDateString()}`
+                        : ''}
+                    </Typography>
                   </Stack>
-                  {canManage && !isOwnerRow ? (
-                    <>
-                      <TextField
-                        select
-                        label="Role"
-                        value={role}
-                        onChange={(event) => setRole(event.target.value)}
-                        size="small"
-                      >
-                        <MenuItem value="admin">{'Admin'}</MenuItem>
-                        <MenuItem value="editor">{'Editor'}</MenuItem>
-                        <MenuItem value="viewer">{'Viewer'}</MenuItem>
-                      </TextField>
-                      <TextField
-                        label="Job title"
-                        value={title}
-                        onChange={(event) => setTitle(event.target.value)}
-                        size="small"
-                        placeholder="e.g. Marketing lead"
-                      />
-                      {/* Per-host access (AGL-388): admins/owners span all
-                          sites; editor/viewer can be restricted so they
-                          only see and work on the sites granted here. */}
-                      {role === 'admin' ? (
-                        <Alert severity="info">
-                          {'Admins have access to every site in the ' +
-                            'organization.'}
-                        </Alert>
-                      ) : (
-                        <Stack spacing={0.5}>
-                          <FormControlLabel
-                            control={
-                              <Switch
-                                checked={allHosts}
-                                onChange={(event) =>
-                                  setAllHosts(event.target.checked)
-                                }
-                              />
-                            }
-                            label="Access to all sites"
-                          />
-                          {!allHosts ? (
-                            <Stack spacing={0.5} sx={{ pl: 1 }}>
+                  {isOwnerRow ? (
+                    <Chip size="small" color="secondary" label="Owner" />
+                  ) : null}
+                </Stack>
+                {canManage && !isOwnerRow ? (
+                  <>
+                    <TextField
+                      select
+                      label="Role"
+                      value={role}
+                      onChange={(event) => setRole(event.target.value)}
+                      size="small"
+                    >
+                      <MenuItem value="admin">{'Admin'}</MenuItem>
+                      <MenuItem value="editor">{'Editor'}</MenuItem>
+                      <MenuItem value="viewer">{'Viewer'}</MenuItem>
+                    </TextField>
+                    <TextField
+                      label="Job title"
+                      value={title}
+                      onChange={(event) => setTitle(event.target.value)}
+                      size="small"
+                      placeholder="e.g. Marketing lead"
+                    />
+                    {/* Per-host access (AGL-388): admins/owners span all
+                        sites; editor/viewer can be restricted so they
+                        only see and work on the sites granted here. */}
+                    {role === 'admin' ? (
+                      <Alert severity="info">
+                        {'Admins have access to every site in the ' +
+                          'organization.'}
+                      </Alert>
+                    ) : (
+                      <Stack spacing={0.5}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={allHosts}
+                              onChange={(event) =>
+                                setAllHosts(event.target.checked)
+                              }
+                            />
+                          }
+                          label="Access to all sites"
+                        />
+                        {!allHosts ? (
+                          <Stack spacing={0.5} sx={{ pl: 1 }}>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {'Grant access to specific sites — the ' +
+                                'member only sees these.'}
+                            </Typography>
+                            {(hosts ?? []).map((host: any) => {
+                              const current = hostAccess[host.$id]
+                              return (
+                                <Stack
+                                  key={host.$id}
+                                  direction="row"
+                                  spacing={1}
+                                  sx={{ alignItems: 'center' }}
+                                >
+                                  <Typography
+                                    variant="body2"
+                                    sx={{ flex: 1, minWidth: 0 }}
+                                    noWrap
+                                  >
+                                    {host.displayName ?? host.$id}
+                                  </Typography>
+                                  <TextField
+                                    select
+                                    size="small"
+                                    value={current ?? ''}
+                                    onChange={(event) =>
+                                      setHostAccess((prev) => {
+                                        const next = { ...prev }
+                                        if (event.target.value) {
+                                          next[host.$id] = event.target.value
+                                        } else {
+                                          delete next[host.$id]
+                                        }
+                                        return next
+                                      })
+                                    }
+                                    sx={{ minWidth: 130 }}
+                                  >
+                                    <MenuItem value="">{'No access'}</MenuItem>
+                                    <MenuItem value="editor">
+                                      {'Editor'}
+                                    </MenuItem>
+                                    <MenuItem value="viewer">
+                                      {'Viewer'}
+                                    </MenuItem>
+                                  </TextField>
+                                </Stack>
+                              )
+                            })}
+                            {(hosts ?? []).length === 0 ? (
                               <Typography
                                 variant="caption"
                                 color="text.secondary"
                               >
-                                {'Grant access to specific sites — the ' +
-                                  'member only sees these.'}
+                                {'No sites yet.'}
                               </Typography>
-                              {(hosts ?? []).map((host: any) => {
-                                const current = hostAccess[host.$id]
-                                return (
-                                  <Stack
-                                    key={host.$id}
-                                    direction="row"
-                                    spacing={1}
-                                    sx={{ alignItems: 'center' }}
-                                  >
-                                    <Typography
-                                      variant="body2"
-                                      sx={{ flex: 1, minWidth: 0 }}
-                                      noWrap
-                                    >
-                                      {host.displayName ?? host.$id}
-                                    </Typography>
-                                    <TextField
-                                      select
-                                      size="small"
-                                      value={current ?? ''}
-                                      onChange={(event) =>
-                                        setHostAccess((prev) => {
-                                          const next = { ...prev }
-                                          if (event.target.value) {
-                                            next[host.$id] = event.target.value
-                                          } else {
-                                            delete next[host.$id]
-                                          }
-                                          return next
-                                        })
-                                      }
-                                      sx={{ minWidth: 130 }}
-                                    >
-                                      <MenuItem value="">{'No access'}</MenuItem>
-                                      <MenuItem value="editor">
-                                        {'Editor'}
-                                      </MenuItem>
-                                      <MenuItem value="viewer">
-                                        {'Viewer'}
-                                      </MenuItem>
-                                    </TextField>
-                                  </Stack>
-                                )
-                              })}
-                              {(hosts ?? []).length === 0 ? (
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  {'No sites yet.'}
-                                </Typography>
-                              ) : null}
-                            </Stack>
-                          ) : null}
-                        </Stack>
-                      )}
-                      <Stack direction="row" spacing={1}>
-                        <Button
-                          variant="contained"
-                          disabled={busy}
-                          onClick={() => void handleSave()}
-                        >
-                          {busy ? 'Saving…' : 'Save'}
-                        </Button>
-                        <Button
-                          color="error"
-                          disabled={busy}
-                          onClick={() => void handleRemove()}
-                        >
-                          {'Remove from organization'}
-                        </Button>
+                            ) : null}
+                          </Stack>
+                        ) : null}
                       </Stack>
-                    </>
-                  ) : !canManage ? (
-                    <Alert severity="info">
-                      {'Editing members requires the admin role.'}
-                    </Alert>
-                  ) : (
-                    <Alert severity="info">
-                      {'Ownership changes happen under Settings → ' +
-                        'Transfer ownership.'}
-                    </Alert>
-                  )}
-                </Stack>
-              </CardDisplay>
-            )}
-            {canManage && member && passwordInfo ? (
-              <CardDisplay
-                header={'Password'}
-                help={docsHelp('inviteTeammates', {
-                  anchor: '#how-team-members-act',
-                  excerpt:
-                    'Email this member a password reset link, or set a ' +
-                    'password for them when their account belongs to this ' +
-                    'organization alone.',
-                })}
-                contentGutterX
-                contentGutterY
-              >
-                <Stack sx={{ maxWidth: 480 }}>
-                  <PasswordAdminControls
-                    email={passwordInfo.email}
-                    subjectLabel={displayName}
-                    description={
-                      'For a teammate who cannot get into their Aglyn ' +
-                      'account. Aglyn accounts are personal and can span ' +
-                      'several organizations, so a reset email is the ' +
-                      'normal route.'
-                    }
-                    setPasswordBlockedReason={passwordInfo.blockedReason}
-                    onSendReset={async () => {
-                      await passwordRequest({ action: 'sendPasswordReset' })
-                    }}
-                    onSetPassword={async (password) => {
-                      await passwordRequest({ action: 'setPassword', password })
-                    }}
-                  />
-                </Stack>
-              </CardDisplay>
-            ) : null}
-            {currentOrg?.$id ? (
-              // Changes made TO this member (role/access edits), AGL-389.
-              <OrgActivityCard
-                orgId={currentOrg.$id}
-                targetId={uid}
-                header={'Changes to this member'}
-                max={30}
-              />
-            ) : null}
-            {currentOrg?.$id ? (
-              <OrgActivityCard
-                orgId={currentOrg.$id}
-                actorId={uid}
-                header={'Activity by this member'}
-                max={30}
-              />
-            ) : null}
-          </Stack>
-        </Container>
-      </DashboardLayout>
-    </>
+                    )}
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        variant="contained"
+                        disabled={busy}
+                        onClick={() => void handleSave()}
+                      >
+                        {busy ? 'Saving…' : 'Save'}
+                      </Button>
+                      <Button
+                        color="error"
+                        disabled={busy}
+                        onClick={() => void handleRemove()}
+                      >
+                        {'Remove from organization'}
+                      </Button>
+                    </Stack>
+                  </>
+                ) : !canManage ? (
+                  <Alert severity="info">
+                    {'Editing members requires the admin role.'}
+                  </Alert>
+                ) : (
+                  <Alert severity="info">
+                    {'Ownership changes happen under Settings → ' +
+                      'Transfer ownership.'}
+                  </Alert>
+                )}
+              </Stack>
+            </CardDisplay>
+          )}
+          {canManage && member && passwordInfo ? (
+            <CardDisplay
+              header={'Password'}
+              help={docsHelp('inviteTeammates', {
+                anchor: '#how-team-members-act',
+                excerpt:
+                  'Email this member a password reset link, or set a ' +
+                  'password for them when their account belongs to this ' +
+                  'organization alone.',
+              })}
+              contentGutterX
+              contentGutterY
+            >
+              <Stack sx={{ maxWidth: 480 }}>
+                <PasswordAdminControls
+                  email={passwordInfo.email}
+                  subjectLabel={displayName}
+                  description={
+                    'For a teammate who cannot get into their Aglyn ' +
+                    'account. Aglyn accounts are personal and can span ' +
+                    'several organizations, so a reset email is the ' +
+                    'normal route.'
+                  }
+                  setPasswordBlockedReason={passwordInfo.blockedReason}
+                  onSendReset={async () => {
+                    await passwordRequest({ action: 'sendPasswordReset' })
+                  }}
+                  onSetPassword={async (password) => {
+                    await passwordRequest({ action: 'setPassword', password })
+                  }}
+                />
+              </Stack>
+            </CardDisplay>
+          ) : null}
+          {currentOrg?.$id ? (
+            // Changes made TO this member (role/access edits), AGL-389.
+            <OrgActivityCard
+              orgId={currentOrg.$id}
+              targetId={uid}
+              header={'Changes to this member'}
+              max={30}
+            />
+          ) : null}
+          {currentOrg?.$id ? (
+            <OrgActivityCard
+              orgId={currentOrg.$id}
+              actorId={uid}
+              header={'Activity by this member'}
+              max={30}
+            />
+          ) : null}
+        </Stack>
+      </Container>
+    </DashboardLayout>
   )
 }
 TeamMemberDetail.displayName = 'Page:TeamMemberDetail'

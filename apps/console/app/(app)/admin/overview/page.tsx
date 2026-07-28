@@ -24,7 +24,6 @@ import {
   GridItems,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -147,346 +146,343 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
   const metrics = data?.metrics
 
   return (
-    <>
-      <NextPageTitle screen={'Overview – Staff'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
-          { children: 'Overview', href: buildRoute(Route.ADMIN_OVERVIEW) },
-        ]}
-        help="staffConsole"
-        header={{
-          children: 'Platform Overview',
-          icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <StaffOnly>
-            {error ? (
-            <Alert severity="error">{error}</Alert>
-          ) : (
-            <>
-            {(data?.anomalies ?? []).length ? (
-              <Alert severity="warning" sx={{ mb: 3 }}>
-                {'Usage anomalies (10x month-over-month): '}
-                {(data.anomalies as any[])
-                  .map(
-                    (anomaly) =>
-                      `${anomaly.orgId} (${anomaly.spikes.join('; ')})`,
-                  )
-                  .join(' · ')}
-              </Alert>
-            ) : null}
-            <GridItems
-              spacing={3}
-              items={[
-                ...[
-                  {
-                    label: 'Organizations',
-                    value: metrics?.orgs,
-                    help: 'Total organizations on the platform — one per customer workspace.',
-                  },
-                  {
-                    label: 'Signups (30d)',
-                    value: metrics?.signups30d,
-                    help: 'Organizations created in the last 30 days.',
-                  },
-                  {
-                    label: 'Sites',
-                    value: metrics?.hosts,
-                    help: 'Sites (hosts) across every organization, published and draft.',
-                  },
-                  {
-                    label: 'MRR estimate',
-                    value:
-                      metrics?.mrrUsd != null ? `$${metrics.mrrUsd}` : null,
-                    // Comped orgs are the usual reason this reads lower
-                    // than the plan mix suggests (AGL-925) — say so here
-                    // rather than leaving staff to reconcile it by hand.
-                    caption:
-                      metrics?.payingOrgs != null
-                        ? `${metrics.payingOrgs} billing${
-                            metrics.compedOrgs
-                              ? ` · ${metrics.compedOrgs} comped`
-                              : ''
-                          }`
-                        : null,
-                    help:
-                      'Monthly recurring revenue from organizations with a live ' +
-                      'Stripe subscription. Staff plan overrides, comped, and ' +
-                      'canceled organizations contribute $0; annual plans count ' +
-                      'at their per-month equivalent.',
-                  },
-                ].map((metric) => ({
-                  size: { xs: 6, md: 3 },
-                  children: (
-                    <CardDisplay
-                      header={metric.label}
-                      help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt: metric.help,
-                      })}
-                      contentGutterX
-                      contentGutterY
-                    >
-                      <Typography variant="h4">
-                        {metric.value ?? '…'}
+    <DashboardLayout
+      breadcrumbItems={[
+        { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
+        { children: 'Overview', href: buildRoute(Route.ADMIN_OVERVIEW) },
+      ]}
+      help="staffConsole"
+      header={{
+        children: 'Platform Overview',
+        icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <StaffOnly>
+          {error ? (
+          <Alert severity="error">{error}</Alert>
+        ) : (
+          <>
+          {(data?.anomalies ?? []).length ? (
+            <Alert severity="warning" sx={{ mb: 3 }}>
+              {'Usage anomalies (10x month-over-month): '}
+              {(data.anomalies as any[])
+                .map(
+                  (anomaly) =>
+                    `${anomaly.orgId} (${anomaly.spikes.join('; ')})`,
+                )
+                .join(' · ')}
+            </Alert>
+          ) : null}
+          <GridItems
+            spacing={3}
+            items={[
+              ...[
+                {
+                  label: 'Organizations',
+                  value: metrics?.orgs,
+                  help: 'Total organizations on the platform — one per customer workspace.',
+                },
+                {
+                  label: 'Signups (30d)',
+                  value: metrics?.signups30d,
+                  help: 'Organizations created in the last 30 days.',
+                },
+                {
+                  label: 'Sites',
+                  value: metrics?.hosts,
+                  help: 'Sites (hosts) across every organization, published and draft.',
+                },
+                {
+                  label: 'MRR estimate',
+                  value:
+                    metrics?.mrrUsd != null ? `$${metrics.mrrUsd}` : null,
+                  // Comped orgs are the usual reason this reads lower
+                  // than the plan mix suggests (AGL-925) — say so here
+                  // rather than leaving staff to reconcile it by hand.
+                  caption:
+                    metrics?.payingOrgs != null
+                      ? `${metrics.payingOrgs} billing${
+                          metrics.compedOrgs
+                            ? ` · ${metrics.compedOrgs} comped`
+                            : ''
+                        }`
+                      : null,
+                  help:
+                    'Monthly recurring revenue from organizations with a live ' +
+                    'Stripe subscription. Staff plan overrides, comped, and ' +
+                    'canceled organizations contribute $0; annual plans count ' +
+                    'at their per-month equivalent.',
+                },
+              ].map((metric) => ({
+                size: { xs: 6, md: 3 },
+                children: (
+                  <CardDisplay
+                    header={metric.label}
+                    help={docsHelp('staffConsole', {
+                      anchor: '#whats-there',
+                      excerpt: metric.help,
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <Typography variant="h4">
+                      {metric.value ?? '…'}
+                    </Typography>
+                    {metric['caption'] ? (
+                      <Typography variant="caption" color="text.secondary">
+                        {metric['caption']}
                       </Typography>
-                      {metric['caption'] ? (
-                        <Typography variant="caption" color="text.secondary">
-                          {metric['caption']}
-                        </Typography>
-                      ) : null}
-                    </CardDisplay>
-                  ),
-                })),
-                {
-                  size: { xs: 12, md: 6 },
-                  children: (
-                    <CardDisplay
-                      header={'Newest organizations'}
-                      help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt:
-                          'The most recently created organizations with their plan — open the Organizations page to manage one.',
-                      })}
-                      contentGutterX
-                      contentGutterY
-                    >
-                      {(data?.newestOrgs ?? []).length === 0 ? (
-                        <Typography variant="body2" color="text.secondary">
-                          {'No organizations yet.'}
-                        </Typography>
-                      ) : (
-                        <Stack spacing={0.5}>
-                          {(data?.newestOrgs ?? []).map((org: any) => (
-                            <Stack
-                              key={org.$id}
-                              direction="row"
-                              sx={{ justifyContent: 'space-between' }}
-                            >
-                              <Typography
-                                variant="body2"
-                                noWrap
-                                sx={{ maxWidth: '60%' }}
-                              >
-                                {org.name ?? org.slug ?? org.$id}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                {`${org.plan ?? 'no plan'} · ${formatDate(
-                                  org.createdAt,
-                                )}`}
-                              </Typography>
-                            </Stack>
-                          ))}
-                        </Stack>
-                      )}
-                    </CardDisplay>
-                  ),
-                },
-                {
-                  size: { xs: 12, md: 6 },
-                  children: (
-                    <CardDisplay
-                      header={'Marketplace purchases'}
-                      help={docsHelp('publisherHandbook', {
-                        anchor: '#getting-paid',
-                        excerpt:
-                          'Recent paid plugin purchases with the platform fee taken from each sale.',
-                      })}
-                      contentGutterX
-                      contentGutterY
-                    >
-                      {(data?.purchases ?? []).length === 0 ? (
-                        <Typography variant="body2" color="text.secondary">
-                          {'No purchases yet.'}
-                        </Typography>
-                      ) : (
-                        <Stack spacing={0.5}>
-                          {(data?.purchases ?? []).map((purchase: any) => (
-                            <Stack
-                              key={purchase.$id}
-                              direction="row"
-                              sx={{ justifyContent: 'space-between' }}
-                            >
-                              <Typography
-                                variant="body2"
-                                noWrap
-                                sx={{ maxWidth: '60%' }}
-                              >
-                                {purchase.listingId ?? purchase.$id}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                {`$${(purchase.amountCents / 100).toFixed(2)}` +
-                                  ` (fee $${(purchase.feeCents / 100).toFixed(
-                                    2,
-                                  )}) · ${formatDate(purchase.createdAt)}`}
-                              </Typography>
-                            </Stack>
-                          ))}
-                        </Stack>
-                      )}
-                    </CardDisplay>
-                  ),
-                },
-                {
-                  size: { xs: 12 },
-                  children: (
-                    <CardDisplay
-                      header={`Top usage (${metrics?.rollupMonth ?? 'last month'})`}
-                      help={docsHelp('architectureMultiTenancy', {
-                        anchor: '#billing--cost-attribution',
-                        excerpt:
-                          'The organizations with the highest monthly usage rollups — storage, page views, form submissions, and attributed cost.',
-                      })}
-                      contentGutterX
-                      contentGutterY
-                    >
-                      {(data?.topUsage ?? []).length === 0 ? (
-                        <Typography variant="body2" color="text.secondary">
-                          {'No usage rollups for the month — the ' +
-                            'report-usage cron writes them (AGL-41).'}
-                        </Typography>
-                      ) : (
-                        <Stack spacing={0.5}>
-                          {(data?.topUsage ?? []).map((usage: any) => (
-                            <Stack
-                              key={usage.orgId}
-                              direction="row"
-                              sx={{ justifyContent: 'space-between' }}
-                            >
-                              <Typography
-                                variant="body2"
-                                noWrap
-                                sx={{ maxWidth: '50%' }}
-                              >
-                                {usage.orgId}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                {`${usage.storageGb.toFixed(2)} GB · ` +
-                                  `${usage.pageViews} views · ` +
-                                  `${usage.formSubmissions} forms · ` +
-                                  `$${usage.costUsd.toFixed(2)}`}
-                              </Typography>
-                            </Stack>
-                          ))}
-                        </Stack>
-                      )}
-                    </CardDisplay>
-                  ),
-                },
-                {
-                  size: { xs: 12 },
-                  children: (
-                    <CardDisplay
-                      header={'Broadcast announcement'}
-                      help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt:
-                          'Send an in-app announcement to every organization owner and admin, optionally one plan tier. Audited, and mute preferences are respected.',
-                      })}
-                      contentGutterX
-                      contentGutterY
-                    >
-                      <Stack spacing={1.5}>
-                        <Typography variant="body2" color="text.secondary">
-                          {'Notifies every organization owner and admin ' +
-                            '(in-app, respects their mute preferences). ' +
-                            'Audited.'}
-                        </Typography>
-                        <Stack direction="row" spacing={1}>
-                          <TextField
-                            size="small"
-                            label="Title"
-                            value={broadcast.title}
-                            onChange={(event) =>
-                              setBroadcast((previous) => ({
-                                ...previous,
-                                title: event.target.value,
-                              }))
-                            }
-                            sx={{ flex: 1 }}
-                          />
-                          <TextField
-                            select
-                            size="small"
-                            label="Audience"
-                            value={broadcast.plan}
-                            onChange={(event) =>
-                              setBroadcast((previous) => ({
-                                ...previous,
-                                plan: event.target.value,
-                              }))
-                            }
-                            sx={{ minWidth: 160 }}
+                    ) : null}
+                  </CardDisplay>
+                ),
+              })),
+              {
+                size: { xs: 12, md: 6 },
+                children: (
+                  <CardDisplay
+                    header={'Newest organizations'}
+                    help={docsHelp('staffConsole', {
+                      anchor: '#whats-there',
+                      excerpt:
+                        'The most recently created organizations with their plan — open the Organizations page to manage one.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    {(data?.newestOrgs ?? []).length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        {'No organizations yet.'}
+                      </Typography>
+                    ) : (
+                      <Stack spacing={0.5}>
+                        {(data?.newestOrgs ?? []).map((org: any) => (
+                          <Stack
+                            key={org.$id}
+                            direction="row"
+                            sx={{ justifyContent: 'space-between' }}
                           >
-                            <MenuItem value="">{'Every org'}</MenuItem>
-                            <MenuItem value="starter">{'Starter'}</MenuItem>
-                            <MenuItem value="pro">{'Pro'}</MenuItem>
-                            <MenuItem value="business">{'Business'}</MenuItem>
-                          </TextField>
-                        </Stack>
+                            <Typography
+                              variant="body2"
+                              noWrap
+                              sx={{ maxWidth: '60%' }}
+                            >
+                              {org.name ?? org.slug ?? org.$id}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {`${org.plan ?? 'no plan'} · ${formatDate(
+                                org.createdAt,
+                              )}`}
+                            </Typography>
+                          </Stack>
+                        ))}
+                      </Stack>
+                    )}
+                  </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12, md: 6 },
+                children: (
+                  <CardDisplay
+                    header={'Marketplace purchases'}
+                    help={docsHelp('publisherHandbook', {
+                      anchor: '#getting-paid',
+                      excerpt:
+                        'Recent paid plugin purchases with the platform fee taken from each sale.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    {(data?.purchases ?? []).length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        {'No purchases yet.'}
+                      </Typography>
+                    ) : (
+                      <Stack spacing={0.5}>
+                        {(data?.purchases ?? []).map((purchase: any) => (
+                          <Stack
+                            key={purchase.$id}
+                            direction="row"
+                            sx={{ justifyContent: 'space-between' }}
+                          >
+                            <Typography
+                              variant="body2"
+                              noWrap
+                              sx={{ maxWidth: '60%' }}
+                            >
+                              {purchase.listingId ?? purchase.$id}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {`$${(purchase.amountCents / 100).toFixed(2)}` +
+                                ` (fee $${(purchase.feeCents / 100).toFixed(
+                                  2,
+                                )}) · ${formatDate(purchase.createdAt)}`}
+                            </Typography>
+                          </Stack>
+                        ))}
+                      </Stack>
+                    )}
+                  </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12 },
+                children: (
+                  <CardDisplay
+                    header={`Top usage (${metrics?.rollupMonth ?? 'last month'})`}
+                    help={docsHelp('architectureMultiTenancy', {
+                      anchor: '#billing--cost-attribution',
+                      excerpt:
+                        'The organizations with the highest monthly usage rollups — storage, page views, form submissions, and attributed cost.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    {(data?.topUsage ?? []).length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        {'No usage rollups for the month — the ' +
+                          'report-usage cron writes them (AGL-41).'}
+                      </Typography>
+                    ) : (
+                      <Stack spacing={0.5}>
+                        {(data?.topUsage ?? []).map((usage: any) => (
+                          <Stack
+                            key={usage.orgId}
+                            direction="row"
+                            sx={{ justifyContent: 'space-between' }}
+                          >
+                            <Typography
+                              variant="body2"
+                              noWrap
+                              sx={{ maxWidth: '50%' }}
+                            >
+                              {usage.orgId}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {`${usage.storageGb.toFixed(2)} GB · ` +
+                                `${usage.pageViews} views · ` +
+                                `${usage.formSubmissions} forms · ` +
+                                `$${usage.costUsd.toFixed(2)}`}
+                            </Typography>
+                          </Stack>
+                        ))}
+                      </Stack>
+                    )}
+                  </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12 },
+                children: (
+                  <CardDisplay
+                    header={'Broadcast announcement'}
+                    help={docsHelp('staffConsole', {
+                      anchor: '#whats-there',
+                      excerpt:
+                        'Send an in-app announcement to every organization owner and admin, optionally one plan tier. Audited, and mute preferences are respected.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <Stack spacing={1.5}>
+                      <Typography variant="body2" color="text.secondary">
+                        {'Notifies every organization owner and admin ' +
+                          '(in-app, respects their mute preferences). ' +
+                          'Audited.'}
+                      </Typography>
+                      <Stack direction="row" spacing={1}>
                         <TextField
                           size="small"
-                          label="Body (optional)"
-                          multiline
-                          minRows={2}
-                          value={broadcast.body}
+                          label="Title"
+                          value={broadcast.title}
                           onChange={(event) =>
                             setBroadcast((previous) => ({
                               ...previous,
-                              body: event.target.value,
+                              title: event.target.value,
                             }))
                           }
+                          sx={{ flex: 1 }}
                         />
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'center' }}
+                        <TextField
+                          select
+                          size="small"
+                          label="Audience"
+                          value={broadcast.plan}
+                          onChange={(event) =>
+                            setBroadcast((previous) => ({
+                              ...previous,
+                              plan: event.target.value,
+                            }))
+                          }
+                          sx={{ minWidth: 160 }}
                         >
-                          <TextField
-                            size="small"
-                            label="Link (optional)"
-                            placeholder="/manage/notifications or https://…"
-                            value={broadcast.link}
-                            onChange={(event) =>
-                              setBroadcast((previous) => ({
-                                ...previous,
-                                link: event.target.value,
-                              }))
-                            }
-                            sx={{ flex: 1 }}
-                          />
-                          <Button
-                            variant="contained"
-                            color="secondary"
-                            disabled={broadcastBusy || !broadcast.title.trim()}
-                            onClick={() => void handleBroadcast()}
-                          >
-                            {broadcastBusy ? 'Sending…' : 'Broadcast'}
-                          </Button>
-                        </Stack>
+                          <MenuItem value="">{'Every org'}</MenuItem>
+                          <MenuItem value="starter">{'Starter'}</MenuItem>
+                          <MenuItem value="pro">{'Pro'}</MenuItem>
+                          <MenuItem value="business">{'Business'}</MenuItem>
+                        </TextField>
                       </Stack>
-                    </CardDisplay>
-                  ),
-                },
-              ]}
-            />
-            </>
-          )}
-          </StaffOnly>
-        </Container>
-      </DashboardLayout>
-    </>
+                      <TextField
+                        size="small"
+                        label="Body (optional)"
+                        multiline
+                        minRows={2}
+                        value={broadcast.body}
+                        onChange={(event) =>
+                          setBroadcast((previous) => ({
+                            ...previous,
+                            body: event.target.value,
+                          }))
+                        }
+                      />
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center' }}
+                      >
+                        <TextField
+                          size="small"
+                          label="Link (optional)"
+                          placeholder="/manage/notifications or https://…"
+                          value={broadcast.link}
+                          onChange={(event) =>
+                            setBroadcast((previous) => ({
+                              ...previous,
+                              link: event.target.value,
+                            }))
+                          }
+                          sx={{ flex: 1 }}
+                        />
+                        <Button
+                          variant="contained"
+                          color="secondary"
+                          disabled={broadcastBusy || !broadcast.title.trim()}
+                          onClick={() => void handleBroadcast()}
+                        >
+                          {broadcastBusy ? 'Sending…' : 'Broadcast'}
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  </CardDisplay>
+                ),
+              },
+            ]}
+          />
+          </>
+        )}
+        </StaffOnly>
+      </Container>
+    </DashboardLayout>
   )
 }
 AdminOverview.displayName = 'Page:AdminOverview'

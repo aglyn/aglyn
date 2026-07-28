@@ -36,7 +36,6 @@ import {
   LOADING_OVERLAY_ELEMENT,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   TENANT_EMAIL_COLLECTION,
@@ -286,7 +285,6 @@ function HostEmailBesignerPage() {
   return (
     <>
       <MainLayout
-        title={'Besigner'}
         enableAppBarElevation
         besigner
         backButton={
@@ -362,8 +360,6 @@ function HostEmailBesignerPage() {
           },
         ]}
       >
-        <NextPageTitle screen={'Email Besigner'} />
-
         {blocked ??
           (error || notFound ? (
             <Stack sx={{ alignItems: 'center', justifyContent: 'center' }}>

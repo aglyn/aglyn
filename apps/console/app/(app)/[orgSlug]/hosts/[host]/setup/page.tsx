@@ -27,7 +27,6 @@ import {
   FormSchema,
   simpleComponentMapper,
 } from '@aglyn/shared-ui-jsx-forms'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useHost } from '@aglyn/tenant-feature-instance'
@@ -521,159 +520,156 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   )
 
   return (
-    <>
-      <NextPageTitle screen={'Host Setup'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: <HostDisplayNameComponent hostId={hostId} />,
-            href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
-          },
-          {
-            children: 'Setup',
-            href: buildRoute(Route.HOST_SETUP, { orgSlug,  host }),
-          },
-        ]}
-        help="gettingStarted"
-        header={{
-          children: 'Host Setup',
-          icon: { path: ICON_VARIANT_APP_SETTINGS.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <TabContext value={tab}>
-            <GridItems
-              spacing={3}
-              items={[
-                {
-                  size: {
-                    xs: 12,
-                    sm: 3,
-                  },
-                  children: (
-                    <CardDisplay
-                      header="Navigation"
-                      help={docsHelp('consoleTour', {
-                        excerpt:
-                          "Jump between this site's setup sections — " +
-                          'details, SEO, theme, custom domain, and activity.',
-                      })}
-                    >
-                      <TabList
-                        orientation="vertical"
-                        textColor="secondary"
-                        indicatorColor="secondary"
-                        sx={{
-                          ['.MuiTab-root']: {
-                            alignItems: 'start',
-                            maxWidth: 'unset',
-                          },
-                        }}
-                        onChange={onTabChange}
-                      >
-                        {forms.map(({ schema }) => (
-                          <Tab
-                            key={schema.id}
-                            value={schema.id}
-                            label={schema.title}
-                          />
-                        ))}
-                        <Tab value={THEME_TAB_ID} label={'Theme'} />
-                        <Tab value={DOMAIN_TAB_ID} label={'Custom Domain'} />
-                        <Tab value={EMAILS_TAB_ID} label={'Emails'} />
-                        <Tab value={ACTIVITY_TAB_ID} label={'Activity'} />
-                      </TabList>
-                    </CardDisplay>
-                  ),
+    <DashboardLayout
+      breadcrumbItems={[
+        {
+          children: <HostDisplayNameComponent hostId={hostId} />,
+          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
+        },
+        {
+          children: 'Setup',
+          href: buildRoute(Route.HOST_SETUP, { orgSlug,  host }),
+        },
+      ]}
+      help="gettingStarted"
+      header={{
+        children: 'Host Setup',
+        icon: { path: ICON_VARIANT_APP_SETTINGS.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <TabContext value={tab}>
+          <GridItems
+            spacing={3}
+            items={[
+              {
+                size: {
+                  xs: 12,
+                  sm: 3,
                 },
-                {
-                  size: {
-                    xs: 12,
-                    sm: 9,
-                  },
-                  children: (
-                    <>
-                      {forms.map(({ initialValues, onSubmit, schema }) => (
-                        <TabPanel
+                children: (
+                  <CardDisplay
+                    header="Navigation"
+                    help={docsHelp('consoleTour', {
+                      excerpt:
+                        "Jump between this site's setup sections — " +
+                        'details, SEO, theme, custom domain, and activity.',
+                    })}
+                  >
+                    <TabList
+                      orientation="vertical"
+                      textColor="secondary"
+                      indicatorColor="secondary"
+                      sx={{
+                        ['.MuiTab-root']: {
+                          alignItems: 'start',
+                          maxWidth: 'unset',
+                        },
+                      }}
+                      onChange={onTabChange}
+                    >
+                      {forms.map(({ schema }) => (
+                        <Tab
                           key={schema.id}
                           value={schema.id}
-                          sx={{ padding: 'unset' }}
-                        >
-                          <FormRenderer
-                            FormTemplate={CardDisplayFormTemplate}
-                            componentMapper={simpleComponentMapper}
-                            onSubmit={onSubmit}
-                            schema={schema}
-                            initialValues={initialValues}
-                          />
-
-                          {schema.id === 'hostDetails' ? (
-                            <>
-                              {/* Site brand mark (AGL-594): shown by the
-                                  tenant's navigation loader. */}
-                              <div style={{ marginTop: 24 }}>
-                                <LogoCard hostId={hostId} />
-                              </div>
-                              <div style={{ marginTop: 24 }}>
-                                <ErrorScreensCard hostId={hostId} />
-                              </div>
-                              {/* Designable auth screens (AGL-553). */}
-                              <div style={{ marginTop: 24 }}>
-                                <AuthScreensCard hostId={hostId} />
-                              </div>
-                              <div style={{ marginTop: 24 }}>
-                                <LanguagesCard hostId={hostId} />
-                              </div>
-                              <div style={{ marginTop: 24 }}>
-                                <SiteBackupCard hostId={hostId} />
-                              </div>
-                              <div style={{ marginTop: 24 }}>
-                                <SiteTemplateCard hostId={hostId} />
-                              </div>
-                              <div style={{ marginTop: 24 }}>
-                                <DeleteSiteCard hostId={hostId} />
-                              </div>
-                            </>
-                          ) : null}
-                          {schema.id === 'hostSeo' ? (
-                            <div style={{ marginTop: 24 }}>
-                              <FaviconCard hostId={hostId} />
-                            </div>
-                          ) : null}
-                        </TabPanel>
+                          label={schema.title}
+                        />
                       ))}
-                      <TabPanel value={THEME_TAB_ID} sx={{ padding: 'unset' }}>
-                        {status === 'success' ? (
-                          <ThemeEditor
-                            theme={data?.theme}
-                            saving={themeSaving}
-                            onSave={handleThemeSave}
-                          />
-                        ) : null}
-                      </TabPanel>
-                      <TabPanel value={DOMAIN_TAB_ID} sx={{ padding: 'unset' }}>
-                        <CustomDomainCard hostId={hostId} />
-                      </TabPanel>
-                      <TabPanel value={EMAILS_TAB_ID} sx={{ padding: 'unset' }}>
-                        <SiteEmailsCard />
-                      </TabPanel>
+                      <Tab value={THEME_TAB_ID} label={'Theme'} />
+                      <Tab value={DOMAIN_TAB_ID} label={'Custom Domain'} />
+                      <Tab value={EMAILS_TAB_ID} label={'Emails'} />
+                      <Tab value={ACTIVITY_TAB_ID} label={'Activity'} />
+                    </TabList>
+                  </CardDisplay>
+                ),
+              },
+              {
+                size: {
+                  xs: 12,
+                  sm: 9,
+                },
+                children: (
+                  <>
+                    {forms.map(({ initialValues, onSubmit, schema }) => (
                       <TabPanel
-                        value={ACTIVITY_TAB_ID}
+                        key={schema.id}
+                        value={schema.id}
                         sx={{ padding: 'unset' }}
                       >
-                        <HostActivityTable hostId={hostId} />
+                        <FormRenderer
+                          FormTemplate={CardDisplayFormTemplate}
+                          componentMapper={simpleComponentMapper}
+                          onSubmit={onSubmit}
+                          schema={schema}
+                          initialValues={initialValues}
+                        />
+
+                        {schema.id === 'hostDetails' ? (
+                          <>
+                            {/* Site brand mark (AGL-594): shown by the
+                                tenant's navigation loader. */}
+                            <div style={{ marginTop: 24 }}>
+                              <LogoCard hostId={hostId} />
+                            </div>
+                            <div style={{ marginTop: 24 }}>
+                              <ErrorScreensCard hostId={hostId} />
+                            </div>
+                            {/* Designable auth screens (AGL-553). */}
+                            <div style={{ marginTop: 24 }}>
+                              <AuthScreensCard hostId={hostId} />
+                            </div>
+                            <div style={{ marginTop: 24 }}>
+                              <LanguagesCard hostId={hostId} />
+                            </div>
+                            <div style={{ marginTop: 24 }}>
+                              <SiteBackupCard hostId={hostId} />
+                            </div>
+                            <div style={{ marginTop: 24 }}>
+                              <SiteTemplateCard hostId={hostId} />
+                            </div>
+                            <div style={{ marginTop: 24 }}>
+                              <DeleteSiteCard hostId={hostId} />
+                            </div>
+                          </>
+                        ) : null}
+                        {schema.id === 'hostSeo' ? (
+                          <div style={{ marginTop: 24 }}>
+                            <FaviconCard hostId={hostId} />
+                          </div>
+                        ) : null}
                       </TabPanel>
-                    </>
-                  ),
-                },
-              ]}
-            />
-          </TabContext>
-          {/* Plugin zone (AGL-433): hostSettings widgets. */}
-          <PluginWidgetSlot slot="hostSettings" hostId={hostId} />
-        </Container>
-      </DashboardLayout>
-    </>
+                    ))}
+                    <TabPanel value={THEME_TAB_ID} sx={{ padding: 'unset' }}>
+                      {status === 'success' ? (
+                        <ThemeEditor
+                          theme={data?.theme}
+                          saving={themeSaving}
+                          onSave={handleThemeSave}
+                        />
+                      ) : null}
+                    </TabPanel>
+                    <TabPanel value={DOMAIN_TAB_ID} sx={{ padding: 'unset' }}>
+                      <CustomDomainCard hostId={hostId} />
+                    </TabPanel>
+                    <TabPanel value={EMAILS_TAB_ID} sx={{ padding: 'unset' }}>
+                      <SiteEmailsCard />
+                    </TabPanel>
+                    <TabPanel
+                      value={ACTIVITY_TAB_ID}
+                      sx={{ padding: 'unset' }}
+                    >
+                      <HostActivityTable hostId={hostId} />
+                    </TabPanel>
+                  </>
+                ),
+              },
+            ]}
+          />
+        </TabContext>
+        {/* Plugin zone (AGL-433): hostSettings widgets. */}
+        <PluginWidgetSlot slot="hostSettings" hostId={hostId} />
+      </Container>
+    </DashboardLayout>
   )
 }
 HostSetup.displayName = 'Page:HostSetup'

@@ -36,7 +36,6 @@ import {
   useLoading,
 } from '@aglyn/shared-ui-jsx'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   getGoogleFontsUrl,
@@ -303,7 +302,6 @@ function TemplateBesignerPage(props) {
         </Head>
       ) : null}
       <MainLayout
-        title={'Besigner'}
         enableAppBarElevation
         besigner
         actionsPrefix={
@@ -401,8 +399,6 @@ function TemplateBesignerPage(props) {
           },
         ]}
       >
-        <NextPageTitle screen={'Template Besigner'} />
-
         {error || notFound ? (
           <Stack
             sx={{

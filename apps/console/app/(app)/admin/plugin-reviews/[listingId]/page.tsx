@@ -18,7 +18,6 @@
 
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -362,781 +361,778 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
     )
 
   return (
-    <>
-      <NextPageTitle screen={`${detail?.displayName ?? 'Plugin'} – Review`} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: 'Plugin reviews',
-            href: buildRoute(Route.ADMIN_PLUGIN_REVIEWS),
-          },
-          {
-            children: detail?.displayName ?? listingId,
-            href: buildRoute(Route.ADMIN_PLUGIN_REVIEW, { listingId }),
-          },
-        ]}
-        help="staffConsole"
-        header={{
-          children: detail?.displayName ?? 'Plugin review',
-          icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <StaffOnly>
-            {!loaded ? (
-              <Stack spacing={2}>
-                <Skeleton variant="rounded" height={120} />
-                <Skeleton variant="rounded" height={220} />
-              </Stack>
-            ) : !detail ? (
-              <Alert severity="warning">
-                {'That listing no longer exists.'}
-              </Alert>
-            ) : (
-              <Stack spacing={3}>
-                {/* Status first: a reviewer needs to know what state they
-                    are acting on before they read a word of the manifest. */}
-                <CardDisplay header="Status" contentGutterX contentGutterY>
-                  <Stack spacing={1.5}>
+    <DashboardLayout
+      breadcrumbItems={[
+        {
+          children: 'Plugin reviews',
+          href: buildRoute(Route.ADMIN_PLUGIN_REVIEWS),
+        },
+        {
+          children: detail?.displayName ?? listingId,
+          href: buildRoute(Route.ADMIN_PLUGIN_REVIEW, { listingId }),
+        },
+      ]}
+      help="staffConsole"
+      header={{
+        children: detail?.displayName ?? 'Plugin review',
+        icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <StaffOnly>
+          {!loaded ? (
+            <Stack spacing={2}>
+              <Skeleton variant="rounded" height={120} />
+              <Skeleton variant="rounded" height={220} />
+            </Stack>
+          ) : !detail ? (
+            <Alert severity="warning">
+              {'That listing no longer exists.'}
+            </Alert>
+          ) : (
+            <Stack spacing={3}>
+              {/* Status first: a reviewer needs to know what state they
+                  are acting on before they read a word of the manifest. */}
+              <CardDisplay header="Status" contentGutterX contentGutterY>
+                <Stack spacing={1.5}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                  >
+                    <Chip size="small" color={status.color} label={status.label} />
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={`v${detail.latestVersion || '—'}`}
+                    />
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={
+                        detail.priceUsd > 0 ? `$${detail.priceUsd}` : 'Free'
+                      }
+                    />
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={`${detail.activeInstalls} install${
+                        detail.activeInstalls === 1 ? '' : 's'
+                      }`}
+                    />
+                    {detail.hidden ? (
+                      <Chip
+                        size="small"
+                        color="error"
+                        label="Taken down — revoked"
+                      />
+                    ) : null}
+                    {detail.unpublished ? (
+                      <Chip
+                        size="small"
+                        color="warning"
+                        label="Unpublished by the publisher"
+                      />
+                    ) : null}
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary">
+                    {status.meaning}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {'Publisher: '}
+                    {detail.publisherSlug ? (
+                      <AppLink
+                        // The storefront route takes a handle now
+                        // (AGL-1001). This payload carries the org's slug
+                        // and name, not the publisher profile's handle, so
+                        // it passes the id — which that page still
+                        // resolves, the same fallback that keeps existing
+                        // links working.
+                        href={buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, {
+                          orgSlug: detail.publisherSlug,
+                          handle: detail.publisherId,
+                        })}
+                      >
+                        {detail.publisherName}
+                      </AppLink>
+                    ) : (
+                      detail.publisherName
+                    )}
+                    {` · ${detail.listingId}`}
+                  </Typography>
+                  {/* Grandfathering (AGL-965): plugins listed before the
+                      checklist existed are still listed — retroactively
+                      emptying the marketplace would be worse than the gap
+                      — but staff should be able to see which ones carry
+                      no recorded review for the bytes running today. */}
+                  {['listed', 'verified'].includes(detail.reviewStatus) &&
+                  detail.checklistOutstanding.length ? (
+                    <Alert severity="warning">
+                      {`Live in the marketplace with no recorded review for these bytes (${detail.checklistOutstanding.length} required item(s) outstanding). Work through the checklist, or delist while you do.`}
+                    </Alert>
+                  ) : null}
+                  {detail.rejectionReason ? (
+                    <Alert severity="error">
+                      {`Rejected: ${detail.rejectionReason}`}
+                    </Alert>
+                  ) : null}
+                  {detail.hidden ? (
+                    <Alert severity="error">
+                      {detail.hiddenReason
+                        ? `Taken down: ${detail.hiddenReason}`
+                        : 'Taken down (no reason recorded)'}
+                    </Alert>
+                  ) : null}
+                </Stack>
+              </CardDisplay>
+
+              <CardDisplay header="Overview" contentGutterX contentGutterY>
+                <Stack spacing={1.5}>
+                  <Typography variant="body2">
+                    {detail.description || 'No description.'}
+                  </Typography>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                  >
+                    {detail.license ? (
+                      <Chip size="small" variant="outlined" label={detail.license} />
+                    ) : (
+                      <Chip size="small" color="warning" label="No license" />
+                    )}
+                    {detail.categories.map((category) => (
+                      <Chip key={category} size="small" label={category} />
+                    ))}
+                  </Stack>
+                  {detail.homepageUrl || detail.repositoryUrl ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {detail.homepageUrl ? `Homepage: ${detail.homepageUrl}` : ''}
+                      {detail.homepageUrl && detail.repositoryUrl ? ' · ' : ''}
+                      {detail.repositoryUrl
+                        ? `Repository: ${detail.repositoryUrl}`
+                        : ''}
+                    </Typography>
+                  ) : null}
+                  <Divider />
+                  {/* A reviewer needs both halves (AGL-989): the rendered
+                      page a buyer lands on, and the exact source the
+                      publisher submitted. */}
+                  <Stack
+                    direction="row"
+                    sx={{
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 1,
+                    }}
+                  >
+                    <Typography variant="subtitle2">{'README'}</Typography>
+                    <ToggleButtonGroup
+                      exclusive
+                      size="small"
+                      value={readmeView}
+                      onChange={(_event, next) => {
+                        if (next) setReadmeView(next as 'rendered' | 'source')
+                      }}
+                    >
+                      <ToggleButton value="rendered">
+                        <Typography variant="caption">
+                          {'Rendered'}
+                        </Typography>
+                      </ToggleButton>
+                      <ToggleButton value="source">
+                        <Typography variant="caption">{'Source'}</Typography>
+                      </ToggleButton>
+                    </ToggleButtonGroup>
+                  </Stack>
+                  {detail.readme ? (
+                    // Framed (AGL-991): everything inside this border is
+                    // publisher-submitted content, not our page. On a review
+                    // screen that boundary is the whole job.
+                    <Box
+                      sx={{
+                        maxHeight: 480,
+                        overflowY: 'auto',
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        p: 2,
+                        bgcolor: 'action.hover',
+                      }}
+                    >
+                      {readmeView === 'rendered' ? (
+                        <MarkdownLiteView source={detail.readme} />
+                      ) : (
+                        <Typography
+                          variant="body2"
+                          component="pre"
+                          sx={{
+                            whiteSpace: 'pre-wrap',
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            m: 0,
+                          }}
+                        >
+                          {detail.readme}
+                        </Typography>
+                      )}
+                    </Box>
+                  ) : (
+                    <Alert severity="warning">
+                      {'No README — publishers are expected to ship one.'}
+                    </Alert>
+                  )}
+                </Stack>
+              </CardDisplay>
+
+              {/* What the bundle is allowed to reach, and what the static
+                  verifier found in it. The two questions that decide
+                  whether this code may run in the app realm. */}
+              <CardDisplay header="Security" contentGutterX contentGutterY>
+                <Stack spacing={1.5}>
+                  <Typography variant="body2" color="text.secondary">
+                    {`Declared network: ${
+                      detail.versions[0]?.capabilities?.network?.join(', ') ||
+                      'none'
+                    } · events: ${
+                      detail.versions[0]?.capabilities?.events?.join(', ') ||
+                      'none'
+                    }`}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {`Host ABI: declared ${
+                      detail.versions[0]?.hostAbi ?? 'none (legacy)'
+                    }, platform runs ${detail.platformHostAbi}`}
+                  </Typography>
+                  {/* "No findings" and "never checked" must not look the
+                      same. A null verdict means the artifacts bucket is
+                      unreachable or unconfigured, and rendering that as a
+                      clean bill of health would invite a reviewer to
+                      approve a bundle nobody has inspected. */}
+                  {!detail.verifier ? (
+                    <Alert severity="warning">
+                      {'The static verifier has not run for this version — ' +
+                        'no artifact was reachable. Treat this as unchecked, ' +
+                        'not as clean.'}
+                    </Alert>
+                  ) : detail.verifier.error ? (
+                    <Alert severity="warning">
+                      {`Verifier could not run: ${detail.verifier.error}`}
+                    </Alert>
+                  ) : findings.length ? (
+                    <Stack spacing={0.75}>
+                      {findings.map((problem, index) => (
+                        <Alert
+                          key={`${problem.level}-${index}`}
+                          severity={
+                            problem.level === 'error' ? 'error' : 'warning'
+                          }
+                        >
+                          {problem.message}
+                        </Alert>
+                      ))}
+                    </Stack>
+                  ) : (
+                    <Alert severity="success">
+                      {'Static verifier found nothing.'}
+                      {/* Says WHICH bytes, because that is what makes a
+                          stored verdict trustworthy — not when it ran. */}
+                      {detail.verifierCached
+                        ? ' Stored verdict for these exact bytes.'
+                        : ''}
+                    </Alert>
+                  )}
+                </Stack>
+              </CardDisplay>
+
+              {/* The checklist is the actual review (AGL-963). The static
+                  verifier matches source TEXT, so computed access like
+                  g['ev'+'al'] walks straight past it — these items are the
+                  things a machine structurally cannot judge. */}
+              <CardDisplay
+                header={`Review checklist — v${detail.reviewVersion} (${
+                  PLUGIN_REVIEW_CHECKLIST.filter(
+                    (item) => detail.checklist?.[item.id],
+                  ).length
+                }/${PLUGIN_REVIEW_CHECKLIST.length})`}
+                contentGutterX
+                contentGutterY
+              >
+                <Stack spacing={1}>
+                  <Typography variant="body2" color="text.secondary">
+                    {'The static verifier is a lint, not a boundary — it ' +
+                      'cannot see computed property access, tell code from ' +
+                      'comments, or judge intent. These are the checks only ' +
+                      'a person can make. Ticks are recorded against this ' +
+                      "version's exact bytes and reset if it is republished."}
+                  </Typography>
+                  {detail.checklistOutstanding.length ? (
+                    <Alert severity="info">
+                      {`${detail.checklistOutstanding.length} required item(s) outstanding — List and Verify stay blocked until they are done. Rejecting never needs the checklist.`}
+                    </Alert>
+                  ) : (
+                    <Alert severity="success">
+                      {'Every required item is recorded for these bytes.'}
+                    </Alert>
+                  )}
+                  {PLUGIN_REVIEW_CHECKLIST.map((item) => (
+                    <Stack key={item.id} spacing={0.25} sx={{ pl: 0.5 }}>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={Boolean(detail.checklist?.[item.id])}
+                            disabled={busy}
+                            onChange={(event) =>
+                              void post(
+                                {
+                                  action: 'checklist',
+                                  version: detail.reviewVersion,
+                                  itemId: item.id,
+                                  checked: event.target.checked,
+                                },
+                                event.target.checked
+                                  ? 'Recorded'
+                                  : 'Cleared',
+                              )
+                            }
+                          />
+                        }
+                        label={
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                          >
+                            <Typography variant="body2">
+                              {item.label}
+                            </Typography>
+                            {item.required ? (
+                              <Chip size="small" label="Required" />
+                            ) : null}
+                            {item.realmOnly ? (
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label="Realm trust"
+                              />
+                            ) : null}
+                          </Stack>
+                        }
+                      />
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ pl: 4 }}
+                      >
+                        {item.detail}
+                      </Typography>
+                      {(() => {
+                        const link = checklistLink(item.id)
+                        // The stored object sits beside what it serves
+                        // (AGL-990) — read the code, then inspect the bytes.
+                        const bucket =
+                          item.id === 'source-read' && detail
+                            ? bucketUrl(detail.reviewVersion)
+                            : null
+                        if (!link && !bucket) return null
+                        // External targets (the raw bundle, the publisher's
+                        // repo) are plain anchors on purpose; internal ones
+                        // go through AppLink so the SPA does not full-reload.
+                        return (
+                          <Stack
+                            direction="row"
+                            spacing={2}
+                            sx={{ pl: 4, flexWrap: 'wrap' }}
+                          >
+                            {link ? (
+                              <Typography variant="caption">
+                                {link.external ? (
+                                  <MuiLink
+                                    href={link.href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    {`${link.label} ↗`}
+                                  </MuiLink>
+                                ) : (
+                                  <AppLink href={link.href}>
+                                    {link.label}
+                                  </AppLink>
+                                )}
+                              </Typography>
+                            ) : null}
+                            {bucket ? (
+                              <Typography variant="caption">
+                                <MuiLink
+                                  href={bucket}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {'Object in Cloud Storage ↗'}
+                                </MuiLink>
+                              </Typography>
+                            ) : null}
+                          </Stack>
+                        )
+                      })()}
+                    </Stack>
+                  ))}
+                </Stack>
+              </CardDisplay>
+
+              {/* Verdicts, ordered by consequence rather than by the
+                  order they were built (AGL-966). The old card was a flat
+                  row of same-weight text buttons where "List" — the click
+                  that makes a plugin installable by every workspace — sat
+                  between "Start review" and a rejection box. */}
+              <CardDisplay
+                header="Review verdict"
+                contentGutterX
+                contentGutterY
+                help={docsHelp('manifestAndEnvs', {
+                  anchor: '#review--trust-lifecycle',
+                  excerpt:
+                    'Move this submission through the review lifecycle — list, verify, or reject with a reason.',
+                })}
+              >
+                <Stack spacing={2}>
+                  <Stack spacing={0.5}>
                     <Stack
                       direction="row"
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                     >
-                      <Chip size="small" color={status.color} label={status.label} />
+                      <Typography variant="body2">{'Currently:'}</Typography>
                       <Chip
                         size="small"
-                        variant="outlined"
-                        label={`v${detail.latestVersion || '—'}`}
+                        color={status.color}
+                        label={status.label}
                       />
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        label={
-                          detail.priceUsd > 0 ? `$${detail.priceUsd}` : 'Free'
-                        }
-                      />
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        label={`${detail.activeInstalls} install${
-                          detail.activeInstalls === 1 ? '' : 's'
-                        }`}
-                      />
-                      {detail.hidden ? (
-                        <Chip
-                          size="small"
-                          color="error"
-                          label="Taken down — revoked"
-                        />
-                      ) : null}
-                      {detail.unpublished ? (
-                        <Chip
-                          size="small"
-                          color="warning"
-                          label="Unpublished by the publisher"
-                        />
-                      ) : null}
+                      {status.live ? (
+                        <Chip size="small" color="warning" label="Live to customers" />
+                      ) : (
+                        <Chip size="small" variant="outlined" label="Not installable" />
+                      )}
                     </Stack>
                     <Typography variant="caption" color="text.secondary">
                       {status.meaning}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {'Publisher: '}
-                      {detail.publisherSlug ? (
-                        <AppLink
-                          // The storefront route takes a handle now
-                          // (AGL-1001). This payload carries the org's slug
-                          // and name, not the publisher profile's handle, so
-                          // it passes the id — which that page still
-                          // resolves, the same fallback that keeps existing
-                          // links working.
-                          href={buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, {
-                            orgSlug: detail.publisherSlug,
-                            handle: detail.publisherId,
-                          })}
-                        >
-                          {detail.publisherName}
-                        </AppLink>
-                      ) : (
-                        detail.publisherName
-                      )}
-                      {` · ${detail.listingId}`}
-                    </Typography>
-                    {/* Grandfathering (AGL-965): plugins listed before the
-                        checklist existed are still listed — retroactively
-                        emptying the marketplace would be worse than the gap
-                        — but staff should be able to see which ones carry
-                        no recorded review for the bytes running today. */}
-                    {['listed', 'verified'].includes(detail.reviewStatus) &&
-                    detail.checklistOutstanding.length ? (
-                      <Alert severity="warning">
-                        {`Live in the marketplace with no recorded review for these bytes (${detail.checklistOutstanding.length} required item(s) outstanding). Work through the checklist, or delist while you do.`}
-                      </Alert>
-                    ) : null}
-                    {detail.rejectionReason ? (
-                      <Alert severity="error">
-                        {`Rejected: ${detail.rejectionReason}`}
-                      </Alert>
-                    ) : null}
-                    {detail.hidden ? (
-                      <Alert severity="error">
-                        {detail.hiddenReason
-                          ? `Taken down: ${detail.hiddenReason}`
-                          : 'Taken down (no reason recorded)'}
-                      </Alert>
-                    ) : null}
                   </Stack>
-                </CardDisplay>
 
-                <CardDisplay header="Overview" contentGutterX contentGutterY>
-                  <Stack spacing={1.5}>
-                    <Typography variant="body2">
-                      {detail.description || 'No description.'}
+                  <Divider />
+
+                  {/* The verdict that matters is per VERSION (AGL-966).
+                      Approving these bytes is what makes them installable;
+                      listing-level state only says whether the plugin is
+                      in the marketplace at all. */}
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle2">
+                      {`Verdict on v${detail.reviewVersion}`}
                     </Typography>
                     <Stack
                       direction="row"
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                     >
-                      {detail.license ? (
-                        <Chip size="small" variant="outlined" label={detail.license} />
-                      ) : (
-                        <Chip size="small" color="warning" label="No license" />
-                      )}
-                      {detail.categories.map((category) => (
-                        <Chip key={category} size="small" label={category} />
-                      ))}
-                    </Stack>
-                    {detail.homepageUrl || detail.repositoryUrl ? (
-                      <Typography variant="body2" color="text.secondary">
-                        {detail.homepageUrl ? `Homepage: ${detail.homepageUrl}` : ''}
-                        {detail.homepageUrl && detail.repositoryUrl ? ' · ' : ''}
-                        {detail.repositoryUrl
-                          ? `Repository: ${detail.repositoryUrl}`
-                          : ''}
-                      </Typography>
-                    ) : null}
-                    <Divider />
-                    {/* A reviewer needs both halves (AGL-989): the rendered
-                        page a buyer lands on, and the exact source the
-                        publisher submitted. */}
-                    <Stack
-                      direction="row"
-                      sx={{
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 1,
-                      }}
-                    >
-                      <Typography variant="subtitle2">{'README'}</Typography>
-                      <ToggleButtonGroup
-                        exclusive
+                      <TextField
                         size="small"
-                        value={readmeView}
-                        onChange={(_event, next) => {
-                          if (next) setReadmeView(next as 'rendered' | 'source')
-                        }}
+                        select
+                        value={detail.reviewVersion}
+                        onChange={(event) =>
+                          setSelectedVersion(event.target.value)
+                        }
+                        sx={{ minWidth: 160 }}
                       >
-                        <ToggleButton value="rendered">
-                          <Typography variant="caption">
-                            {'Rendered'}
-                          </Typography>
-                        </ToggleButton>
-                        <ToggleButton value="source">
-                          <Typography variant="caption">{'Source'}</Typography>
-                        </ToggleButton>
-                      </ToggleButtonGroup>
-                    </Stack>
-                    {detail.readme ? (
-                      // Framed (AGL-991): everything inside this border is
-                      // publisher-submitted content, not our page. On a review
-                      // screen that boundary is the whole job.
-                      <Box
-                        sx={{
-                          maxHeight: 480,
-                          overflowY: 'auto',
-                          border: 1,
-                          borderColor: 'divider',
-                          borderRadius: 1,
-                          p: 2,
-                          bgcolor: 'action.hover',
-                        }}
-                      >
-                        {readmeView === 'rendered' ? (
-                          <MarkdownLiteView source={detail.readme} />
-                        ) : (
-                          <Typography
-                            variant="body2"
-                            component="pre"
-                            sx={{
-                              whiteSpace: 'pre-wrap',
-                              fontFamily: 'monospace',
-                              fontSize: 12,
-                              m: 0,
-                            }}
-                          >
-                            {detail.readme}
-                          </Typography>
-                        )}
-                      </Box>
-                    ) : (
-                      <Alert severity="warning">
-                        {'No README — publishers are expected to ship one.'}
-                      </Alert>
-                    )}
-                  </Stack>
-                </CardDisplay>
-
-                {/* What the bundle is allowed to reach, and what the static
-                    verifier found in it. The two questions that decide
-                    whether this code may run in the app realm. */}
-                <CardDisplay header="Security" contentGutterX contentGutterY>
-                  <Stack spacing={1.5}>
-                    <Typography variant="body2" color="text.secondary">
-                      {`Declared network: ${
-                        detail.versions[0]?.capabilities?.network?.join(', ') ||
-                        'none'
-                      } · events: ${
-                        detail.versions[0]?.capabilities?.events?.join(', ') ||
-                        'none'
-                      }`}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {`Host ABI: declared ${
-                        detail.versions[0]?.hostAbi ?? 'none (legacy)'
-                      }, platform runs ${detail.platformHostAbi}`}
-                    </Typography>
-                    {/* "No findings" and "never checked" must not look the
-                        same. A null verdict means the artifacts bucket is
-                        unreachable or unconfigured, and rendering that as a
-                        clean bill of health would invite a reviewer to
-                        approve a bundle nobody has inspected. */}
-                    {!detail.verifier ? (
-                      <Alert severity="warning">
-                        {'The static verifier has not run for this version — ' +
-                          'no artifact was reachable. Treat this as unchecked, ' +
-                          'not as clean.'}
-                      </Alert>
-                    ) : detail.verifier.error ? (
-                      <Alert severity="warning">
-                        {`Verifier could not run: ${detail.verifier.error}`}
-                      </Alert>
-                    ) : findings.length ? (
-                      <Stack spacing={0.75}>
-                        {findings.map((problem, index) => (
-                          <Alert
-                            key={`${problem.level}-${index}`}
-                            severity={
-                              problem.level === 'error' ? 'error' : 'warning'
-                            }
-                          >
-                            {problem.message}
-                          </Alert>
+                        {detail.versions.map((entry) => (
+                          <MenuItem key={entry.version} value={entry.version}>
+                            {`v${entry.version} · ${entry.reviewState}`}
+                          </MenuItem>
                         ))}
-                      </Stack>
-                    ) : (
-                      <Alert severity="success">
-                        {'Static verifier found nothing.'}
-                        {/* Says WHICH bytes, because that is what makes a
-                            stored verdict trustworthy — not when it ran. */}
-                        {detail.verifierCached
-                          ? ' Stored verdict for these exact bytes.'
-                          : ''}
-                      </Alert>
-                    )}
-                  </Stack>
-                </CardDisplay>
-
-                {/* The checklist is the actual review (AGL-963). The static
-                    verifier matches source TEXT, so computed access like
-                    g['ev'+'al'] walks straight past it — these items are the
-                    things a machine structurally cannot judge. */}
-                <CardDisplay
-                  header={`Review checklist — v${detail.reviewVersion} (${
-                    PLUGIN_REVIEW_CHECKLIST.filter(
-                      (item) => detail.checklist?.[item.id],
-                    ).length
-                  }/${PLUGIN_REVIEW_CHECKLIST.length})`}
-                  contentGutterX
-                  contentGutterY
-                >
-                  <Stack spacing={1}>
-                    <Typography variant="body2" color="text.secondary">
-                      {'The static verifier is a lint, not a boundary — it ' +
-                        'cannot see computed property access, tell code from ' +
-                        'comments, or judge intent. These are the checks only ' +
-                        'a person can make. Ticks are recorded against this ' +
-                        "version's exact bytes and reset if it is republished."}
-                    </Typography>
-                    {detail.checklistOutstanding.length ? (
-                      <Alert severity="info">
-                        {`${detail.checklistOutstanding.length} required item(s) outstanding — List and Verify stay blocked until they are done. Rejecting never needs the checklist.`}
-                      </Alert>
-                    ) : (
-                      <Alert severity="success">
-                        {'Every required item is recorded for these bytes.'}
-                      </Alert>
-                    )}
-                    {PLUGIN_REVIEW_CHECKLIST.map((item) => (
-                      <Stack key={item.id} spacing={0.25} sx={{ pl: 0.5 }}>
-                        <FormControlLabel
-                          control={
-                            <Checkbox
-                              size="small"
-                              checked={Boolean(detail.checklist?.[item.id])}
-                              disabled={busy}
-                              onChange={(event) =>
-                                void post(
-                                  {
-                                    action: 'checklist',
-                                    version: detail.reviewVersion,
-                                    itemId: item.id,
-                                    checked: event.target.checked,
-                                  },
-                                  event.target.checked
-                                    ? 'Recorded'
-                                    : 'Cleared',
-                                )
-                              }
-                            />
-                          }
-                          label={
-                            <Stack
-                              direction="row"
-                              spacing={1}
-                              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                            >
-                              <Typography variant="body2">
-                                {item.label}
-                              </Typography>
-                              {item.required ? (
-                                <Chip size="small" label="Required" />
-                              ) : null}
-                              {item.realmOnly ? (
-                                <Chip
-                                  size="small"
-                                  variant="outlined"
-                                  label="Realm trust"
-                                />
-                              ) : null}
-                            </Stack>
-                          }
-                        />
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ pl: 4 }}
-                        >
-                          {item.detail}
-                        </Typography>
-                        {(() => {
-                          const link = checklistLink(item.id)
-                          // The stored object sits beside what it serves
-                          // (AGL-990) — read the code, then inspect the bytes.
-                          const bucket =
-                            item.id === 'source-read' && detail
-                              ? bucketUrl(detail.reviewVersion)
-                              : null
-                          if (!link && !bucket) return null
-                          // External targets (the raw bundle, the publisher's
-                          // repo) are plain anchors on purpose; internal ones
-                          // go through AppLink so the SPA does not full-reload.
-                          return (
-                            <Stack
-                              direction="row"
-                              spacing={2}
-                              sx={{ pl: 4, flexWrap: 'wrap' }}
-                            >
-                              {link ? (
-                                <Typography variant="caption">
-                                  {link.external ? (
-                                    <MuiLink
-                                      href={link.href}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                    >
-                                      {`${link.label} ↗`}
-                                    </MuiLink>
-                                  ) : (
-                                    <AppLink href={link.href}>
-                                      {link.label}
-                                    </AppLink>
-                                  )}
-                                </Typography>
-                              ) : null}
-                              {bucket ? (
-                                <Typography variant="caption">
-                                  <MuiLink
-                                    href={bucket}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    {'Object in Cloud Storage ↗'}
-                                  </MuiLink>
-                                </Typography>
-                              ) : null}
-                            </Stack>
-                          )
-                        })()}
-                      </Stack>
-                    ))}
-                  </Stack>
-                </CardDisplay>
-
-                {/* Verdicts, ordered by consequence rather than by the
-                    order they were built (AGL-966). The old card was a flat
-                    row of same-weight text buttons where "List" — the click
-                    that makes a plugin installable by every workspace — sat
-                    between "Start review" and a rejection box. */}
-                <CardDisplay
-                  header="Review verdict"
-                  contentGutterX
-                  contentGutterY
-                  help={docsHelp('manifestAndEnvs', {
-                    anchor: '#review--trust-lifecycle',
-                    excerpt:
-                      'Move this submission through the review lifecycle — list, verify, or reject with a reason.',
-                  })}
-                >
-                  <Stack spacing={2}>
-                    <Stack spacing={0.5}>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                      >
-                        <Typography variant="body2">{'Currently:'}</Typography>
-                        <Chip
-                          size="small"
-                          color={status.color}
-                          label={status.label}
-                        />
-                        {status.live ? (
-                          <Chip size="small" color="warning" label="Live to customers" />
-                        ) : (
-                          <Chip size="small" variant="outlined" label="Not installable" />
-                        )}
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary">
-                        {status.meaning}
-                      </Typography>
-                    </Stack>
-
-                    <Divider />
-
-                    {/* The verdict that matters is per VERSION (AGL-966).
-                        Approving these bytes is what makes them installable;
-                        listing-level state only says whether the plugin is
-                        in the marketplace at all. */}
-                    <Stack spacing={0.5}>
-                      <Typography variant="subtitle2">
-                        {`Verdict on v${detail.reviewVersion}`}
-                      </Typography>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                      >
-                        <TextField
-                          size="small"
-                          select
-                          value={detail.reviewVersion}
-                          onChange={(event) =>
-                            setSelectedVersion(event.target.value)
-                          }
-                          sx={{ minWidth: 160 }}
-                        >
-                          {detail.versions.map((entry) => (
-                            <MenuItem key={entry.version} value={entry.version}>
-                              {`v${entry.version} · ${entry.reviewState}`}
-                            </MenuItem>
-                          ))}
-                        </TextField>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          color="success"
-                          disabled={busy || blocked}
-                          onClick={() =>
-                            void post(
-                              {
-                                action: 'approve-version',
-                                version: detail.reviewVersion,
-                              },
-                              `v${detail.reviewVersion} approved`,
-                            )
-                          }
-                        >
-                          {'Approve version'}
-                        </Button>
-                        <Button
-                          size="small"
-                          color="error"
-                          disabled={busy}
-                          onClick={() =>
-                            void post(
-                              {
-                                action: 'reject-version',
-                                version: detail.reviewVersion,
-                                reason,
-                              },
-                              `v${detail.reviewVersion} rejected`,
-                            )
-                          }
-                        >
-                          {'Reject version'}
-                        </Button>
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary">
-                        {'Approving makes these bytes the version new ' +
-                          'installs receive. Existing installs are pinned and ' +
-                          'do not move. A pending version is never installed ' +
-                          'by anyone but its publisher, so an update cannot ' +
-                          'ship past review.'}
-                      </Typography>
-                      {blocked ? (
-                        <Alert severity="info" sx={{ mt: 0.5 }}>
-                          {`Blocked: ${detail.checklistOutstanding.length} required checklist item(s) outstanding for these bytes.`}
-                        </Alert>
-                      ) : null}
-                    </Stack>
-
-                    <Divider />
-
-                    {/* Listing-level distribution, unchanged. */}
-                    <Stack spacing={0.5}>
-                      <Typography variant="subtitle2">
-                        {'Marketplace listing'}
-                      </Typography>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                      >
-                        {detail.reviewStatus !== 'verified' ? (
-                          <Button
-                            size="small"
-                            color="success"
-                            variant="outlined"
-                            disabled={busy || blocked}
-                            onClick={() => void post({ action: 'verify' }, 'Verified')}
-                          >
-                            {'Verify ✓ (badge)'}
-                          </Button>
-                        ) : null}
-                        {detail.private ? (
-                          <Chip size="small" label="Private — never listed" />
-                        ) : null}
-                      </Stack>
-                    </Stack>
-
-                    <Divider />
-
-                    {/* Back down the ladder. Never checklist-gated — a
-                        retreat must always be available — and deliberately
-                        quieter than the danger zone below, which is the only
-                        control that reaches code already running. */}
-                    <Stack spacing={0.5}>
-                      <Typography variant="subtitle2">{'Step back'}</Typography>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                      >
-                        <TextField
-                          size="small"
-                          placeholder="Reason (required to reject)"
-                          value={reason}
-                          onChange={(event) => setReason(event.target.value)}
-                          sx={{ minWidth: 260 }}
-                        />
-                        {status.live ? (
-                          <Button
-                            size="small"
-                            color="warning"
-                            disabled={busy}
-                            onClick={() =>
-                              void post(
-                                { action: 'delist', reason },
-                                'Delisted — back in review',
-                              )
-                            }
-                          >
-                            {'Delist'}
-                          </Button>
-                        ) : null}
-                        {detail.reviewStatus === 'verified' ? (
-                          <Button
-                            size="small"
-                            disabled={busy}
-                            onClick={() =>
-                              void post({ action: 'unverify' }, 'Badge removed')
-                            }
-                          >
-                            {'Unverify'}
-                          </Button>
-                        ) : null}
-                        <Button
-                          size="small"
-                          color="error"
-                          disabled={busy}
-                          onClick={() =>
-                            void post({ action: 'reject', reason }, 'Rejected')
-                          }
-                        >
-                          {'Reject'}
-                        </Button>
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary">
-                        {'Delist pulls it from the marketplace and blocks new ' +
-                          'installs; existing installs keep working. Unverify ' +
-                          'only drops the badge. Reject notifies the publisher. ' +
-                          'None of these stop code already running — that is ' +
-                          'the danger zone.'}
-                      </Typography>
-                    </Stack>
-                  </Stack>
-                </CardDisplay>
-
-                <CardDisplay header="Versions" contentGutterX contentGutterY>
-                  <Stack spacing={1}>
-                    <Typography variant="body2" color="text.secondary">
-                      {'Granting realm trust signs a version to run inside ' +
-                        'the app realm instead of the sandbox iframe. ' +
-                        'Super-staff only, audited.'}
-                    </Typography>
-                    {/* The two axes get conflated constantly (AGL-966):
-                        review status is per LISTING and controls who can
-                        install; trust is per VERSION and controls what the
-                        code can reach once installed. Verified is not realm
-                        trust, and realm trust is the far more dangerous of
-                        the two. */}
-                    <Alert severity="info">
-                      {'This is a different axis from the review verdict above. ' +
-                        'Listing and verifying apply to the whole listing and ' +
-                        'decide who may install it. Trust applies to ONE ' +
-                        'version and decides where its code runs: sandboxed in ' +
-                        'a cross-origin iframe capped by the manifest CSP, or ' +
-                        'inside the app realm with neither of those between it ' +
-                        'and user data. A verified plugin can be sandboxed, and ' +
-                        'a sandboxed version of a verified plugin is the normal ' +
-                        'case — realm trust is the exception that needs a ' +
-                        'reason.'}
-                    </Alert>
-                    {detail.versions.map((entry) => (
-                      <Stack
-                        key={entry.version}
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                      >
-                        <Typography variant="body2" sx={{ minWidth: 64 }}>
-                          {`v${entry.version}`}
-                        </Typography>
-                        {entry.version === detail.latestVersion ? (
-                          <Chip size="small" label="Latest" />
-                        ) : null}
-                        <Chip
-                          size="small"
-                          color={
-                            entry.reviewState === 'approved'
-                              ? 'success'
-                              : entry.reviewState === 'rejected'
-                                ? 'error'
-                                : 'warning'
-                          }
-                          variant="outlined"
-                          label={
-                            entry.grandfathered
-                              ? 'approved (grandfathered)'
-                              : entry.reviewState
-                          }
-                        />
-                        <Chip
-                          size="small"
-                          color={entry.trust === 'realm' ? 'success' : 'default'}
-                          variant={entry.trust === 'realm' ? 'filled' : 'outlined'}
-                          label={
-                            entry.trust === 'realm' ? 'Realm-trusted' : 'Sandboxed'
-                          }
-                        />
-                        <Typography variant="caption" color="text.secondary">
-                          {entry.publishedAt
-                            ? new Date(entry.publishedAt).toLocaleDateString()
-                            : '—'}
-                          {` · ${entry.sha256.slice(0, 12)}`}
-                          {/* The blast radius of revoking THIS version
-                              (AGL-1036) — the listing total above answers a
-                              different question. */}
-                          {entry.activeInstalls
-                            ? ` · ${entry.activeInstalls} pinned here`
-                            : ''}
-                        </Typography>
-                        <Button
-                          size="small"
-                          color={entry.trust === 'realm' ? 'error' : 'success'}
-                          disabled={busy}
-                          onClick={() =>
-                            void signRealm(
-                              entry.version,
-                              entry.trust === 'realm' ? 'revoke' : 'grant',
-                            )
-                          }
-                        >
-                          {entry.trust === 'realm'
-                            ? 'Revoke realm trust'
-                            : 'Grant realm trust'}
-                        </Button>
-                      </Stack>
-                    ))}
-                  </Stack>
-                </CardDisplay>
-
-                {/* Separated on purpose: this is the only control here that
-                    reaches code already running in customers' workspaces. */}
-                <CardDisplay header="Danger zone" contentGutterX contentGutterY>
-                  <Stack spacing={1.5}>
-                    <Typography variant="body2" color="text.secondary">
-                      {'Taking a plugin down de-lists it AND writes the kill ' +
-                        'switch: every workspace that already installed it ' +
-                        'stops loading it on the next render, and new ' +
-                        'installs are refused. Restoring clears both.'}
-                    </Typography>
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                    >
-                      {detail.hidden ? null : (
-                        <TextField
-                          size="small"
-                          placeholder="Takedown reason"
-                          value={takedownReason}
-                          onChange={(event) =>
-                            setTakedownReason(event.target.value)
-                          }
-                          sx={{ minWidth: 260 }}
-                        />
-                      )}
+                      </TextField>
                       <Button
                         size="small"
-                        variant={detail.hidden ? 'text' : 'outlined'}
-                        color={detail.hidden ? 'success' : 'error'}
-                        disabled={busy}
-                        onClick={() => void takedown()}
+                        variant="contained"
+                        color="success"
+                        disabled={busy || blocked}
+                        onClick={() =>
+                          void post(
+                            {
+                              action: 'approve-version',
+                              version: detail.reviewVersion,
+                            },
+                            `v${detail.reviewVersion} approved`,
+                          )
+                        }
                       >
-                        {detail.hidden ? 'Restore listing' : 'Take down'}
+                        {'Approve version'}
+                      </Button>
+                      <Button
+                        size="small"
+                        color="error"
+                        disabled={busy}
+                        onClick={() =>
+                          void post(
+                            {
+                              action: 'reject-version',
+                              version: detail.reviewVersion,
+                              reason,
+                            },
+                            `v${detail.reviewVersion} rejected`,
+                          )
+                        }
+                      >
+                        {'Reject version'}
                       </Button>
                     </Stack>
+                    <Typography variant="caption" color="text.secondary">
+                      {'Approving makes these bytes the version new ' +
+                        'installs receive. Existing installs are pinned and ' +
+                        'do not move. A pending version is never installed ' +
+                        'by anyone but its publisher, so an update cannot ' +
+                        'ship past review.'}
+                    </Typography>
+                    {blocked ? (
+                      <Alert severity="info" sx={{ mt: 0.5 }}>
+                        {`Blocked: ${detail.checklistOutstanding.length} required checklist item(s) outstanding for these bytes.`}
+                      </Alert>
+                    ) : null}
                   </Stack>
-                </CardDisplay>
-              </Stack>
-            )}
-          </StaffOnly>
-        </Container>
-      </DashboardLayout>
-    </>
+
+                  <Divider />
+
+                  {/* Listing-level distribution, unchanged. */}
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle2">
+                      {'Marketplace listing'}
+                    </Typography>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                    >
+                      {detail.reviewStatus !== 'verified' ? (
+                        <Button
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                          disabled={busy || blocked}
+                          onClick={() => void post({ action: 'verify' }, 'Verified')}
+                        >
+                          {'Verify ✓ (badge)'}
+                        </Button>
+                      ) : null}
+                      {detail.private ? (
+                        <Chip size="small" label="Private — never listed" />
+                      ) : null}
+                    </Stack>
+                  </Stack>
+
+                  <Divider />
+
+                  {/* Back down the ladder. Never checklist-gated — a
+                      retreat must always be available — and deliberately
+                      quieter than the danger zone below, which is the only
+                      control that reaches code already running. */}
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle2">{'Step back'}</Typography>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                    >
+                      <TextField
+                        size="small"
+                        placeholder="Reason (required to reject)"
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                        sx={{ minWidth: 260 }}
+                      />
+                      {status.live ? (
+                        <Button
+                          size="small"
+                          color="warning"
+                          disabled={busy}
+                          onClick={() =>
+                            void post(
+                              { action: 'delist', reason },
+                              'Delisted — back in review',
+                            )
+                          }
+                        >
+                          {'Delist'}
+                        </Button>
+                      ) : null}
+                      {detail.reviewStatus === 'verified' ? (
+                        <Button
+                          size="small"
+                          disabled={busy}
+                          onClick={() =>
+                            void post({ action: 'unverify' }, 'Badge removed')
+                          }
+                        >
+                          {'Unverify'}
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="small"
+                        color="error"
+                        disabled={busy}
+                        onClick={() =>
+                          void post({ action: 'reject', reason }, 'Rejected')
+                        }
+                      >
+                        {'Reject'}
+                      </Button>
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary">
+                      {'Delist pulls it from the marketplace and blocks new ' +
+                        'installs; existing installs keep working. Unverify ' +
+                        'only drops the badge. Reject notifies the publisher. ' +
+                        'None of these stop code already running — that is ' +
+                        'the danger zone.'}
+                    </Typography>
+                  </Stack>
+                </Stack>
+              </CardDisplay>
+
+              <CardDisplay header="Versions" contentGutterX contentGutterY>
+                <Stack spacing={1}>
+                  <Typography variant="body2" color="text.secondary">
+                    {'Granting realm trust signs a version to run inside ' +
+                      'the app realm instead of the sandbox iframe. ' +
+                      'Super-staff only, audited.'}
+                  </Typography>
+                  {/* The two axes get conflated constantly (AGL-966):
+                      review status is per LISTING and controls who can
+                      install; trust is per VERSION and controls what the
+                      code can reach once installed. Verified is not realm
+                      trust, and realm trust is the far more dangerous of
+                      the two. */}
+                  <Alert severity="info">
+                    {'This is a different axis from the review verdict above. ' +
+                      'Listing and verifying apply to the whole listing and ' +
+                      'decide who may install it. Trust applies to ONE ' +
+                      'version and decides where its code runs: sandboxed in ' +
+                      'a cross-origin iframe capped by the manifest CSP, or ' +
+                      'inside the app realm with neither of those between it ' +
+                      'and user data. A verified plugin can be sandboxed, and ' +
+                      'a sandboxed version of a verified plugin is the normal ' +
+                      'case — realm trust is the exception that needs a ' +
+                      'reason.'}
+                  </Alert>
+                  {detail.versions.map((entry) => (
+                    <Stack
+                      key={entry.version}
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                    >
+                      <Typography variant="body2" sx={{ minWidth: 64 }}>
+                        {`v${entry.version}`}
+                      </Typography>
+                      {entry.version === detail.latestVersion ? (
+                        <Chip size="small" label="Latest" />
+                      ) : null}
+                      <Chip
+                        size="small"
+                        color={
+                          entry.reviewState === 'approved'
+                            ? 'success'
+                            : entry.reviewState === 'rejected'
+                              ? 'error'
+                              : 'warning'
+                        }
+                        variant="outlined"
+                        label={
+                          entry.grandfathered
+                            ? 'approved (grandfathered)'
+                            : entry.reviewState
+                        }
+                      />
+                      <Chip
+                        size="small"
+                        color={entry.trust === 'realm' ? 'success' : 'default'}
+                        variant={entry.trust === 'realm' ? 'filled' : 'outlined'}
+                        label={
+                          entry.trust === 'realm' ? 'Realm-trusted' : 'Sandboxed'
+                        }
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        {entry.publishedAt
+                          ? new Date(entry.publishedAt).toLocaleDateString()
+                          : '—'}
+                        {` · ${entry.sha256.slice(0, 12)}`}
+                        {/* The blast radius of revoking THIS version
+                            (AGL-1036) — the listing total above answers a
+                            different question. */}
+                        {entry.activeInstalls
+                          ? ` · ${entry.activeInstalls} pinned here`
+                          : ''}
+                      </Typography>
+                      <Button
+                        size="small"
+                        color={entry.trust === 'realm' ? 'error' : 'success'}
+                        disabled={busy}
+                        onClick={() =>
+                          void signRealm(
+                            entry.version,
+                            entry.trust === 'realm' ? 'revoke' : 'grant',
+                          )
+                        }
+                      >
+                        {entry.trust === 'realm'
+                          ? 'Revoke realm trust'
+                          : 'Grant realm trust'}
+                      </Button>
+                    </Stack>
+                  ))}
+                </Stack>
+              </CardDisplay>
+
+              {/* Separated on purpose: this is the only control here that
+                  reaches code already running in customers' workspaces. */}
+              <CardDisplay header="Danger zone" contentGutterX contentGutterY>
+                <Stack spacing={1.5}>
+                  <Typography variant="body2" color="text.secondary">
+                    {'Taking a plugin down de-lists it AND writes the kill ' +
+                      'switch: every workspace that already installed it ' +
+                      'stops loading it on the next render, and new ' +
+                      'installs are refused. Restoring clears both.'}
+                  </Typography>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                  >
+                    {detail.hidden ? null : (
+                      <TextField
+                        size="small"
+                        placeholder="Takedown reason"
+                        value={takedownReason}
+                        onChange={(event) =>
+                          setTakedownReason(event.target.value)
+                        }
+                        sx={{ minWidth: 260 }}
+                      />
+                    )}
+                    <Button
+                      size="small"
+                      variant={detail.hidden ? 'text' : 'outlined'}
+                      color={detail.hidden ? 'success' : 'error'}
+                      disabled={busy}
+                      onClick={() => void takedown()}
+                    >
+                      {detail.hidden ? 'Restore listing' : 'Take down'}
+                    </Button>
+                  </Stack>
+                </Stack>
+              </CardDisplay>
+            </Stack>
+          )}
+        </StaffOnly>
+      </Container>
+    </DashboardLayout>
   )
 }
 

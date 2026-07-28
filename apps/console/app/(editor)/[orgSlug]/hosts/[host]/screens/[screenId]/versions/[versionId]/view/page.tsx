@@ -607,7 +607,7 @@ function ScreenDetails() {
   ]
 
   return (
-    <MainLayout title={[displayName, 'Screen']}>
+    <MainLayout>
       {/*
         This page sits in the full-screen `(editor)` group but wants the normal
         console chrome, so it mounts MainLayout itself — and, since AGL-755

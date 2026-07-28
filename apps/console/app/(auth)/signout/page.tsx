@@ -17,9 +17,7 @@
 
 'use client'
 
-import { APP_CONSOLE } from '@aglyn/shared-data-enums'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx'
-import { useNextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { CircularProgress } from '@mui/material'
 import { signOut } from 'firebase/auth'
 import { useEffect } from 'react'
@@ -29,12 +27,6 @@ import AuthenticatingLayout from '../../../components/layouts/authenticating.lay
 import { markInteractiveSignOut } from '../../../utils/interactive-signin'
 
 function SignOut() {
-  useNextPageTitle({
-    screen: 'Sign out',
-    suffix: APP_CONSOLE.AFFIX,
-    separator: ` ${APP_CONSOLE.SEP} `,
-  })
-
   const firebaseAuth = useAuth()
 
   useEffect(() => {

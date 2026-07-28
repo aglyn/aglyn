@@ -20,7 +20,6 @@
 import { ICON_VARIANT_HOST_GROUP } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { AppLink } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { Button, Typography } from '@mui/material'
 import { useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -95,164 +94,161 @@ function HostsContent() {
   const { invites } = usePendingInvites()
 
   return (
-    <>
-      <NextPageTitle screen={'Settings'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: 'Sites',
-            href: buildRoute(Route.HOST_LIST, { orgSlug }),
-          },
-        ]}
-        help="gettingStarted"
-        header={{
-          children: 'All Sites',
-          icon: { path: ICON_VARIANT_HOST_GROUP.path },
-        }}
-        headerRight={
-          permissions.createHosts ? (
-            <Button
-              variant="contained"
-              color="secondary"
-              onClick={() => setCreating(true)}
-            >
-              {'Create site'}
-            </Button>
-          ) : undefined
-        }
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {/* Pending org invites (AGL-234). */}
-          <OrgInvitesBanner />
-          {!orgsLoading && (data?.length ?? 0) === 0 && invites.length === 0 ? (
-            <EmptyState
-              iconPath={ICON_VARIANT_HOST_GROUP.path}
-              title={
-                currentOrg ? 'No sites yet' : 'Create your first site'
-              }
-              description={
-                currentOrg
-                  ? 'Create a site to start building — it will live in this ' +
-                    'workspace.'
-                  : 'Your first site sets up your workspace automatically — ' +
-                    'no separate setup needed.'
-              }
-              action={
-                permissions.createHosts ? (
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    onClick={() => setCreating(true)}
-                  >
-                    {'Create site'}
-                  </Button>
-                ) : undefined
-              }
-            />
-          ) : (
-          <GridItems
-            spacing={3}
-            items={[
-              ...(data || []).map((host) => ({
-                size: {
-                  xs: 12,
-                  md: 4,
-                },
-                children: (
-                  <CardDisplay
-                    contentGutterX
-                    contentGutterY
-                    contentBordered="bottom"
-                    HeaderProps={{
-                      // The site's own favicon when it has one (AGL-647),
-                      // falling back to the generic glyph — same treatment as
-                      // the site switcher.
-                      avatar: (
-                        <HostIcon
-                          host={host}
-                          size={28}
-                          fontSize="large"
-                          color="secondary"
-                        />
-                      ),
-                      slotProps: {
-                        title: {
-                          // variant: 'h6',
-                          noWrap: true,
-                          sx: {
-                            // Function callbacks and textOverflow must live
-                            // inside sx — passing them as direct Typography
-                            // props causes React DOM attribute warnings in v9.
-                            textOverflow: 'ellipsis',
-                            overflow: 'hidden',
-                            fontSize: ({ typography }) =>
-                              typography.subtitle1.fontSize,
-                            fontWeight: ({ typography }) =>
-                              typography.h6.fontWeight,
-                          },
-                        },
-                        subheader: {
-                          sx: {
-                            fontSize: ({ typography }) =>
-                              typography.caption.fontSize,
-                          },
+    <DashboardLayout
+      breadcrumbItems={[
+        {
+          children: 'Sites',
+          href: buildRoute(Route.HOST_LIST, { orgSlug }),
+        },
+      ]}
+      help="gettingStarted"
+      header={{
+        children: 'All Sites',
+        icon: { path: ICON_VARIANT_HOST_GROUP.path },
+      }}
+      headerRight={
+        permissions.createHosts ? (
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => setCreating(true)}
+          >
+            {'Create site'}
+          </Button>
+        ) : undefined
+      }
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        {/* Pending org invites (AGL-234). */}
+        <OrgInvitesBanner />
+        {!orgsLoading && (data?.length ?? 0) === 0 && invites.length === 0 ? (
+          <EmptyState
+            iconPath={ICON_VARIANT_HOST_GROUP.path}
+            title={
+              currentOrg ? 'No sites yet' : 'Create your first site'
+            }
+            description={
+              currentOrg
+                ? 'Create a site to start building — it will live in this ' +
+                  'workspace.'
+                : 'Your first site sets up your workspace automatically — ' +
+                  'no separate setup needed.'
+            }
+            action={
+              permissions.createHosts ? (
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  onClick={() => setCreating(true)}
+                >
+                  {'Create site'}
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+        <GridItems
+          spacing={3}
+          items={[
+            ...(data || []).map((host) => ({
+              size: {
+                xs: 12,
+                md: 4,
+              },
+              children: (
+                <CardDisplay
+                  contentGutterX
+                  contentGutterY
+                  contentBordered="bottom"
+                  HeaderProps={{
+                    // The site's own favicon when it has one (AGL-647),
+                    // falling back to the generic glyph — same treatment as
+                    // the site switcher.
+                    avatar: (
+                      <HostIcon
+                        host={host}
+                        size={28}
+                        fontSize="large"
+                        color="secondary"
+                      />
+                    ),
+                    slotProps: {
+                      title: {
+                        // variant: 'h6',
+                        noWrap: true,
+                        sx: {
+                          // Function callbacks and textOverflow must live
+                          // inside sx — passing them as direct Typography
+                          // props causes React DOM attribute warnings in v9.
+                          textOverflow: 'ellipsis',
+                          overflow: 'hidden',
+                          fontSize: ({ typography }) =>
+                            typography.subtitle1.fontSize,
+                          fontWeight: ({ typography }) =>
+                            typography.h6.fontWeight,
                         },
                       },
-                    }}
-                    subheader={host?.$id}
-                    header={host?.displayName}
-                    help={docsHelp('gettingStarted', {
-                      anchor: '#what-a-site-contains',
-                      title: 'Your sites',
-                      excerpt:
-                        'Each site has its own screens, media, users, and ' +
-                        'settings. Visit opens the live site; Manage opens ' +
-                        'its dashboard.',
-                    })}
-                    actions={
-                      <>
-                        <AppLink
-                          componentVariant="button"
-                          href={`https://${
-                            host?.cname || `${host?.subdomain}.aglyn.app`
-                          }`}
-                          target={'_blank'}
-                          rel={'nofollow'}
-                        >
-                          {'Visit'}
-                        </AppLink>
-                        <AppLink
-                          componentVariant="button"
-                          href={buildRoute(Route.HOST_DASHBOARD, {
-                            orgSlug,
-                            host: host.subdomain,
-                          })}
-                        >
-                          {'Manage'}
-                        </AppLink>
-                      </>
-                    }
-                  >
-                    <Typography color="textSecondary" component="div">
-                      <HostInfoItem
-                        label={'Aglyn Domain'}
-                        value={`${host?.subdomain}.aglyn.app`}
-                      />
-                      <HostInfoItem
-                        label={'Custom Domain'}
-                        value={host?.cname}
-                      />
-                    </Typography>
-                  </CardDisplay>
-                ),
-              })),
-            ]}
-          />
-          )}
-        </Container>
-        <CreateHostDialog open={creating} onClose={() => setCreating(false)} />
-      </DashboardLayout>
-    </>
+                      subheader: {
+                        sx: {
+                          fontSize: ({ typography }) =>
+                            typography.caption.fontSize,
+                        },
+                      },
+                    },
+                  }}
+                  subheader={host?.$id}
+                  header={host?.displayName}
+                  help={docsHelp('gettingStarted', {
+                    anchor: '#what-a-site-contains',
+                    title: 'Your sites',
+                    excerpt:
+                      'Each site has its own screens, media, users, and ' +
+                      'settings. Visit opens the live site; Manage opens ' +
+                      'its dashboard.',
+                  })}
+                  actions={
+                    <>
+                      <AppLink
+                        componentVariant="button"
+                        href={`https://${
+                          host?.cname || `${host?.subdomain}.aglyn.app`
+                        }`}
+                        target={'_blank'}
+                        rel={'nofollow'}
+                      >
+                        {'Visit'}
+                      </AppLink>
+                      <AppLink
+                        componentVariant="button"
+                        href={buildRoute(Route.HOST_DASHBOARD, {
+                          orgSlug,
+                          host: host.subdomain,
+                        })}
+                      >
+                        {'Manage'}
+                      </AppLink>
+                    </>
+                  }
+                >
+                  <Typography color="textSecondary" component="div">
+                    <HostInfoItem
+                      label={'Aglyn Domain'}
+                      value={`${host?.subdomain}.aglyn.app`}
+                    />
+                    <HostInfoItem
+                      label={'Custom Domain'}
+                      value={host?.cname}
+                    />
+                  </Typography>
+                </CardDisplay>
+              ),
+            })),
+          ]}
+        />
+        )}
+      </Container>
+      <CreateHostDialog open={creating} onClose={() => setCreating(false)} />
+    </DashboardLayout>
   )
 }
 

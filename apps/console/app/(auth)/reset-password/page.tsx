@@ -18,7 +18,6 @@
 'use client'
 
 import type { AuthResultError } from '@aglyn/shared-data-enums'
-import { APP_CONSOLE } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_PASSWORD,
   FIELD_SCHEMA_PASSWORD_CONFIRM,
@@ -26,7 +25,6 @@ import {
 import { AppLink, LoadingTextComponent, useLoading } from '@aglyn/shared-ui-jsx'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
-import { useNextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { CircularProgress, Typography } from '@mui/material'
 import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth'
 import { useSearchParams } from 'next/navigation'
@@ -50,11 +48,6 @@ type ResetStatus = 'verifying' | 'ready' | 'invalid' | 'done'
  * point at this route for the link to reach us (see docs).
  */
 function ResetPasswordInner() {
-  useNextPageTitle({
-    screen: 'Reset password',
-    suffix: APP_CONSOLE.AFFIX,
-    separator: ` ${APP_CONSOLE.SEP} `,
-  })
   const searchParams = useSearchParams()
   const oobCode = searchParams.get('oobCode')
   const mode = searchParams.get('mode')

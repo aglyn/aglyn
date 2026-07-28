@@ -18,7 +18,6 @@
 
 import { mdiAccountMultipleOutline } from '@aglyn/shared-data-mdi'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import OrgActivityCard from '../../../../components/org-activity-card.component'
@@ -43,48 +42,45 @@ const ManageTeam: NextPageWithLayout<Record<string, never>> = () => {
   const { currentOrg } = useOrgScope()
   const { can, loaded: permissionsLoaded } = useOrgPermissions()
   return (
-    <>
-      <NextPageTitle screen={'Team'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: 'Team',
-            href: buildRoute(Route.MANAGE_TEAM, { orgSlug }),
-          },
-        ]}
-        help="team"
-        header={{
+    <DashboardLayout
+      breadcrumbItems={[
+        {
           children: 'Team',
-          icon: { path: mdiAccountMultipleOutline.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <GridItems
-            spacing={3}
-            items={[
-              {
-                size: { xs: 12 },
-                children: <OrgMembersCard />,
-              },
-              {
-                size: { xs: 12 },
-                children: <OrgRolesCard />,
-              },
-              // Activity is permission-gated (AGL-243, org.auditLog).
-              ...(currentOrg?.$id &&
-              (!permissionsLoaded || can('org.auditLog'))
-                ? [
-                    {
-                      size: { xs: 12 },
-                      children: <OrgActivityCard orgId={currentOrg.$id} />,
-                    },
-                  ]
-                : []),
-            ]}
-          />
-        </Container>
-      </DashboardLayout>
-    </>
+          href: buildRoute(Route.MANAGE_TEAM, { orgSlug }),
+        },
+      ]}
+      help="team"
+      header={{
+        children: 'Team',
+        icon: { path: mdiAccountMultipleOutline.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <GridItems
+          spacing={3}
+          items={[
+            {
+              size: { xs: 12 },
+              children: <OrgMembersCard />,
+            },
+            {
+              size: { xs: 12 },
+              children: <OrgRolesCard />,
+            },
+            // Activity is permission-gated (AGL-243, org.auditLog).
+            ...(currentOrg?.$id &&
+            (!permissionsLoaded || can('org.auditLog'))
+              ? [
+                  {
+                    size: { xs: 12 },
+                    children: <OrgActivityCard orgId={currentOrg.$id} />,
+                  },
+                ]
+              : []),
+          ]}
+        />
+      </Container>
+    </DashboardLayout>
   )
 }
 ManageTeam.displayName = 'Page:ManageTeam'

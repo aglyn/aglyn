@@ -41,7 +41,6 @@ import {
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack } from '@mui/material'
@@ -391,7 +390,6 @@ function Layouts(props) {
 
   return (
     <>
-      <NextPageTitle screen={'Layouts'} />
       <DashboardLayout
         breadcrumbItems={[
           {

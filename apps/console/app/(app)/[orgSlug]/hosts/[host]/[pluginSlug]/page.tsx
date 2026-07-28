@@ -21,7 +21,6 @@ import { resolveConsolePluginPage } from '@aglyn/aglyn'
 import { useEnabledPluginIds } from '../../../../../../components/console-plugins-gate.component'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Box, CircularProgress } from '@mui/material'
 import { useParams } from 'next/navigation'
@@ -112,27 +111,24 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   return (
-    <>
-      <NextPageTitle screen={title} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: <HostDisplayNameComponent hostId={hostId} />,
-            href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
-          },
-          { children: title },
-        ]}
-        help="plugins"
-        header={{
-          children: title,
-          icon: { path: header?.icon?.path ?? ICON_VARIANT_APP_SETTINGS.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {releaseFlag ? <FeatureGate flag={releaseFlag}>{body}</FeatureGate> : body}
-        </Container>
-      </DashboardLayout>
-    </>
+    <DashboardLayout
+      breadcrumbItems={[
+        {
+          children: <HostDisplayNameComponent hostId={hostId} />,
+          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
+        },
+        { children: title },
+      ]}
+      help="plugins"
+      header={{
+        children: title,
+        icon: { path: header?.icon?.path ?? ICON_VARIANT_APP_SETTINGS.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        {releaseFlag ? <FeatureGate flag={releaseFlag}>{body}</FeatureGate> : body}
+      </Container>
+    </DashboardLayout>
   )
 }
 HostPluginPage.displayName = 'Page:HostPluginPage'

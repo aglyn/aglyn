@@ -24,7 +24,6 @@ import {
 import { mdiBellOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Button,
@@ -291,234 +290,231 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   }
 
   return (
-    <>
-      <NextPageTitle screen={'Notifications'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: 'Notifications',
-            href: buildRoute(Route.MANAGE_NOTIFICATIONS),
-          },
-        ]}
-        header={{
+    <DashboardLayout
+      breadcrumbItems={[
+        {
           children: 'Notifications',
-          icon: { path: mdiBellOutline.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <CardDisplay
-            header={'All notifications'}
-            help={docsHelp('consoleTour', {
-              anchor: '#workspace-settings--notifications',
-              excerpt:
-                'Every console notification, newest first — mark all read ' +
-                "and mute the categories you don't want.",
-            })}
-            contentGutterX
-            contentGutterY
-            contentBordered="all"
-          >
-            <Stack spacing={1.5}>
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
+          href: buildRoute(Route.MANAGE_NOTIFICATIONS),
+        },
+      ]}
+      header={{
+        children: 'Notifications',
+        icon: { path: mdiBellOutline.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <CardDisplay
+          header={'All notifications'}
+          help={docsHelp('consoleTour', {
+            anchor: '#workspace-settings--notifications',
+            excerpt:
+              'Every console notification, newest first — mark all read ' +
+              "and mute the categories you don't want.",
+          })}
+          contentGutterX
+          contentGutterY
+          contentBordered="all"
+        >
+          <Stack spacing={1.5}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
+            >
+              <Button
+                size="small"
+                color="secondary"
+                disabled={markingAll}
+                onClick={() => void handleMarkAllRead()}
               >
-                <Button
-                  size="small"
-                  color="secondary"
-                  disabled={markingAll}
-                  onClick={() => void handleMarkAllRead()}
+                {markingAll ? 'Marking…' : 'Mark all read'}
+              </Button>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ ml: 'auto' }}
+              >
+                {'Mute categories:'}
+              </Typography>
+              {(
+                Object.entries(NOTIFICATION_CATEGORY_LABELS) as Array<
+                  [NotificationCategory, string]
                 >
-                  {markingAll ? 'Marking…' : 'Mark all read'}
-                </Button>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ ml: 'auto' }}
-                >
-                  {'Mute categories:'}
-                </Typography>
-                {(
-                  Object.entries(NOTIFICATION_CATEGORY_LABELS) as Array<
-                    [NotificationCategory, string]
-                  >
-                ).map(([category, label]) => (
-                  <FormControlLabel
-                    key={category}
-                    control={
-                      <Switch
-                        size="small"
-                        checked={prefs[category] !== false}
-                        onChange={() => togglePref(category)}
-                      />
+              ).map(([category, label]) => (
+                <FormControlLabel
+                  key={category}
+                  control={
+                    <Switch
+                      size="small"
+                      checked={prefs[category] !== false}
+                      onChange={() => togglePref(category)}
+                    />
+                  }
+                  label={label}
+                  slotProps={{ typography: { variant: 'caption' } }}
+                />
+              ))}
+            </Stack>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
+            >
+              <Typography variant="caption" color="text.secondary">
+                {'Alerts on this device:'}
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={alertPrefs.tabBadge}
+                    onChange={() =>
+                      setAlertPrefs({ tabBadge: !alertPrefs.tabBadge })
                     }
-                    label={label}
-                    slotProps={{ typography: { variant: 'caption' } }}
                   />
-                ))}
-              </Stack>
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
+                }
+                label="Unread count in tab title"
+                slotProps={{ typography: { variant: 'caption' } }}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={alertPrefs.sound}
+                    onChange={() =>
+                      setAlertPrefs({ sound: !alertPrefs.sound })
+                    }
+                  />
+                }
+                label="Sound"
+                slotProps={{ typography: { variant: 'caption' } }}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={alertPrefs.desktop}
+                    disabled={
+                      permission === 'unsupported' || permission === 'denied'
+                    }
+                    onChange={() => void handleDesktopToggle()}
+                  />
+                }
+                label="Desktop notifications"
+                slotProps={{ typography: { variant: 'caption' } }}
+              />
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => void handleTestAlerts()}
               >
+                {'Send test alert'}
+              </Button>
+              {permission === 'denied' || permission === 'unsupported' ? (
                 <Typography variant="caption" color="text.secondary">
-                  {'Alerts on this device:'}
-                </Typography>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      size="small"
-                      checked={alertPrefs.tabBadge}
-                      onChange={() =>
-                        setAlertPrefs({ tabBadge: !alertPrefs.tabBadge })
-                      }
-                    />
-                  }
-                  label="Unread count in tab title"
-                  slotProps={{ typography: { variant: 'caption' } }}
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      size="small"
-                      checked={alertPrefs.sound}
-                      onChange={() =>
-                        setAlertPrefs({ sound: !alertPrefs.sound })
-                      }
-                    />
-                  }
-                  label="Sound"
-                  slotProps={{ typography: { variant: 'caption' } }}
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      size="small"
-                      checked={alertPrefs.desktop}
-                      disabled={
-                        permission === 'unsupported' || permission === 'denied'
-                      }
-                      onChange={() => void handleDesktopToggle()}
-                    />
-                  }
-                  label="Desktop notifications"
-                  slotProps={{ typography: { variant: 'caption' } }}
-                />
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => void handleTestAlerts()}
-                >
-                  {'Send test alert'}
-                </Button>
-                {permission === 'denied' || permission === 'unsupported' ? (
-                  <Typography variant="caption" color="text.secondary">
-                    {permission === 'denied'
-                      ? 'Blocked for this site — re-allow notifications in your ' +
-                        'browser settings to switch this on.'
-                      : 'This browser does not support desktop notifications.'}
-                  </Typography>
-                ) : (
-                  <Typography variant="caption" color="text.secondary">
-                    {'Shown only while this tab is in the background.'}
-                  </Typography>
-                )}
-              </Stack>
-              {rows.length === 0 && !loading ? (
-                <Typography variant="body2" color="text.secondary">
-                  {"You're all caught up."}
+                  {permission === 'denied'
+                    ? 'Blocked for this site — re-allow notifications in your ' +
+                      'browser settings to switch this on.'
+                    : 'This browser does not support desktop notifications.'}
                 </Typography>
               ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{'Notification'}</TableCell>
-                      <TableCell>{'Type'}</TableCell>
-                      <TableCell>{'When'}</TableCell>
-                      <TableCell align="right" />
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {rows.map((notification) => (
-                      <TableRow
-                        key={notification.$id}
-                        hover
-                        sx={{ cursor: 'pointer' }}
-                        onClick={() => handleOpen(notification)}
-                      >
-                        <TableCell>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: notification.readAt
-                                ? 'fontWeightRegular'
-                                : 'fontWeightMedium',
-                            }}
-                          >
-                            {notification.title}
-                          </Typography>
-                          {notification.body ? (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {notification.body}
-                            </Typography>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            size="small"
-                            label={
-                              (NOTIFICATION_TYPE_LABELS as any)[
-                                notification.type
-                              ] ?? notification.type
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {notification.createdAt
-                            ?.toDate?.()
-                            .toLocaleString() ?? ''}
-                        </TableCell>
-                        <TableCell align="right">
-                          {notification.readAt ? null : (
-                            <Chip size="small" color="secondary" label="New" />
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                <Button
-                  size="small"
-                  color="secondary"
-                  disabled={loading || page === 0}
-                  onClick={() => loadPage(page - 1, cursors[page - 2])}
-                >
-                  {'Previous'}
-                </Button>
                 <Typography variant="caption" color="text.secondary">
-                  {`Page ${page + 1}`}
+                  {'Shown only while this tab is in the background.'}
                 </Typography>
-                <Button
-                  size="small"
-                  color="secondary"
-                  disabled={loading || !hasMore}
-                  onClick={() => loadPage(page + 1, cursors[page])}
-                >
-                  {'Next'}
-                </Button>
-              </Stack>
+              )}
             </Stack>
-          </CardDisplay>
-        </Container>
-      </DashboardLayout>
-    </>
+            {rows.length === 0 && !loading ? (
+              <Typography variant="body2" color="text.secondary">
+                {"You're all caught up."}
+              </Typography>
+            ) : (
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>{'Notification'}</TableCell>
+                    <TableCell>{'Type'}</TableCell>
+                    <TableCell>{'When'}</TableCell>
+                    <TableCell align="right" />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rows.map((notification) => (
+                    <TableRow
+                      key={notification.$id}
+                      hover
+                      sx={{ cursor: 'pointer' }}
+                      onClick={() => handleOpen(notification)}
+                    >
+                      <TableCell>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: notification.readAt
+                              ? 'fontWeightRegular'
+                              : 'fontWeightMedium',
+                          }}
+                        >
+                          {notification.title}
+                        </Typography>
+                        {notification.body ? (
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                          >
+                            {notification.body}
+                          </Typography>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={
+                            (NOTIFICATION_TYPE_LABELS as any)[
+                              notification.type
+                            ] ?? notification.type
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {notification.createdAt
+                          ?.toDate?.()
+                          .toLocaleString() ?? ''}
+                      </TableCell>
+                      <TableCell align="right">
+                        {notification.readAt ? null : (
+                          <Chip size="small" color="secondary" label="New" />
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Button
+                size="small"
+                color="secondary"
+                disabled={loading || page === 0}
+                onClick={() => loadPage(page - 1, cursors[page - 2])}
+              >
+                {'Previous'}
+              </Button>
+              <Typography variant="caption" color="text.secondary">
+                {`Page ${page + 1}`}
+              </Typography>
+              <Button
+                size="small"
+                color="secondary"
+                disabled={loading || !hasMore}
+                onClick={() => loadPage(page + 1, cursors[page])}
+              >
+                {'Next'}
+              </Button>
+            </Stack>
+          </Stack>
+        </CardDisplay>
+      </Container>
+    </DashboardLayout>
   )
 }
 ManageNotifications.displayName = 'Page:ManageNotifications'

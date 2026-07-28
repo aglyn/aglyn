@@ -25,9 +25,10 @@ import SecondaryNavBarComponent from '../../components/secondary-nav-bar.compone
  * The console's authenticated shell (App Router route group, AGL-401). Every
  * signed-in page lived behind `[AuthenticatedLayout, MainLayout]` in the
  * Pages Router `.layouts` array; this folder layout provides that shell once.
- * MainLayout's optional `title` only fed the document title, so pages set
- * their own via `NextPageTitle`/metadata. Pages wrap their body in
- * `DashboardLayout` (per-page header/breadcrumbs) inside their page.
+ * This layout is a client component and so cannot carry `metadata`; document
+ * titles come from the title-only server layout beside each route (AGL-1059).
+ * Pages wrap their body in `DashboardLayout` (per-page header/breadcrumbs)
+ * inside their page.
  *
  * The secondary app bar is deliberately NOT in there with them (AGL-755):
  * this is the only position above every route boundary in the group, so it is

@@ -18,7 +18,6 @@
 
 import { mdiLifebuoy } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -178,7 +177,6 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
 
   return (
     <>
-      <NextPageTitle screen={'Support – Admin'} />
       <DashboardLayout
         breadcrumbItems={[
           { children: 'Support', href: buildRoute(Route.ADMIN_SUPPORT) },

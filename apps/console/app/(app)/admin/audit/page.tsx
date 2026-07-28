@@ -18,7 +18,6 @@
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Button,
@@ -108,120 +107,117 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
   }
 
   return (
-    <>
-      <NextPageTitle screen={'Audit – Staff'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
-          { children: 'Audit log', href: buildRoute(Route.ADMIN_AUDIT) },
-        ]}
-        help="staffConsole"
-        header={{
-          children: 'Audit Log',
-          icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <StaffOnly>
-            <CardDisplay
-              header={'Admin actions'}
-              help={docsHelp('staffConsole', {
-                anchor: '#whats-there',
-                excerpt:
-                  'Append-only record of every staff mutation with before/after diffs. Filter by actor, action, or target and export the slice as CSV.',
-              })}
-              contentGutterX
-              contentGutterY
-            >
-              <Stack spacing={2}>
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <TextField
-                    size="small"
-                    label="Filter (actor, action, target)"
-                    value={filter}
-                    onChange={(event) => setFilter(event.target.value)}
-                    sx={{ width: 360 }}
-                  />
-                  <Button
-                    size="small"
-                    onClick={handleExport}
-                    disabled={!entries.length}
-                  >
-                    {'Export CSV'}
-                  </Button>
-                </Stack>
-                {entries.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    {'No audit entries match.'}
-                  </Typography>
-                ) : (
-                  entries.map((entry: any) => (
-                    <Stack
-                      key={entry.$id}
-                      spacing={0.5}
-                      sx={{
-                        cursor: 'pointer',
-                        borderBottom: 1,
-                        borderColor: 'divider',
-                        pb: 1,
-                      }}
-                      onClick={() =>
-                        setExpanded((previous) =>
-                          previous === entry.$id ? null : entry.$id,
-                        )
-                      }
-                    >
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                      >
-                        <Chip label={entry.action} size="small" />
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                          {entry.target}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ ml: 'auto' }}
-                        >
-                          {`${entry.actorUid} · ${
-                            entry.at?.seconds
-                              ? new Date(
-                                  entry.at.seconds * 1000,
-                                ).toLocaleString()
-                              : '—'
-                          }`}
-                        </Typography>
-                      </Stack>
-                      {expanded === entry.$id ? (
-                        <Typography
-                          component="pre"
-                          variant="caption"
-                          sx={{
-                            m: 0,
-                            p: 1,
-                            bgcolor: 'action.hover',
-                            borderRadius: 1,
-                            overflowX: 'auto',
-                          }}
-                        >
-                          {JSON.stringify(
-                            { before: entry.before, after: entry.after },
-                            null,
-                            2,
-                          )}
-                        </Typography>
-                      ) : null}
-                    </Stack>
-                  ))
-                )}
+    <DashboardLayout
+      breadcrumbItems={[
+        { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
+        { children: 'Audit log', href: buildRoute(Route.ADMIN_AUDIT) },
+      ]}
+      help="staffConsole"
+      header={{
+        children: 'Audit Log',
+        icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <StaffOnly>
+          <CardDisplay
+            header={'Admin actions'}
+            help={docsHelp('staffConsole', {
+              anchor: '#whats-there',
+              excerpt:
+                'Append-only record of every staff mutation with before/after diffs. Filter by actor, action, or target and export the slice as CSV.',
+            })}
+            contentGutterX
+            contentGutterY
+          >
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <TextField
+                  size="small"
+                  label="Filter (actor, action, target)"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  sx={{ width: 360 }}
+                />
+                <Button
+                  size="small"
+                  onClick={handleExport}
+                  disabled={!entries.length}
+                >
+                  {'Export CSV'}
+                </Button>
               </Stack>
-            </CardDisplay>
-          </StaffOnly>
-        </Container>
-      </DashboardLayout>
-    </>
+              {entries.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  {'No audit entries match.'}
+                </Typography>
+              ) : (
+                entries.map((entry: any) => (
+                  <Stack
+                    key={entry.$id}
+                    spacing={0.5}
+                    sx={{
+                      cursor: 'pointer',
+                      borderBottom: 1,
+                      borderColor: 'divider',
+                      pb: 1,
+                    }}
+                    onClick={() =>
+                      setExpanded((previous) =>
+                        previous === entry.$id ? null : entry.$id,
+                      )
+                    }
+                  >
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                    >
+                      <Chip label={entry.action} size="small" />
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                        {entry.target}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ ml: 'auto' }}
+                      >
+                        {`${entry.actorUid} · ${
+                          entry.at?.seconds
+                            ? new Date(
+                                entry.at.seconds * 1000,
+                              ).toLocaleString()
+                            : '—'
+                        }`}
+                      </Typography>
+                    </Stack>
+                    {expanded === entry.$id ? (
+                      <Typography
+                        component="pre"
+                        variant="caption"
+                        sx={{
+                          m: 0,
+                          p: 1,
+                          bgcolor: 'action.hover',
+                          borderRadius: 1,
+                          overflowX: 'auto',
+                        }}
+                      >
+                        {JSON.stringify(
+                          { before: entry.before, after: entry.after },
+                          null,
+                          2,
+                        )}
+                      </Typography>
+                    ) : null}
+                  </Stack>
+                ))
+              )}
+            </Stack>
+          </CardDisplay>
+        </StaffOnly>
+      </Container>
+    </DashboardLayout>
   )
 }
 AdminAudit.displayName = 'Page:AdminAudit'

@@ -28,7 +28,6 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { doc, setDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import HostComponentsCard from '../../../../../../components/host-components-card.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
@@ -106,68 +105,65 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   return (
-    <>
-      <NextPageTitle screen={'Components'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: <HostDisplayNameComponent hostId={hostId} />,
-            href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
-          },
-          {
-            children: 'Components',
-            href: buildRoute(Route.HOST_COMPONENTS, { orgSlug,  host }),
-          },
-        ]}
-        help="components"
-        header={{
-          children: 'Reusable Components',
-          icon: { path: ICON_VARIANT_APP_SETTINGS.path },
-        }}
-        headerRight={
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => setTemplatesOpen(true)}
-            >
-              {'Templates'}
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              disabled={creating}
-              onClick={() => setCreateOpen(true)}
-            >
-              {creating ? 'Creating…' : 'Create Component'}
-            </Button>
-          </Stack>
-        }
-        aside={
-          <CreateArtifactDrawer
-            open={createOpen}
-            onClose={() => setCreateOpen(false)}
-            title="Create new component"
-            onSubmit={handleCreate}
-            error={createError}
-          />
-        }
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <HostComponentsCard hostId={hostId} />
-          <TemplateGalleryDialog
-            hostId={hostId}
-            open={templatesOpen}
-            onClose={() => setTemplatesOpen(false)}
-            existingSlugs={[]}
-            screenCount={0}
-            kind="component"
-            title="Start from a component template"
-            blurb="Component templates add a ready-made element tree you can restyle in the besigner. Existing components are never touched."
-          />
-        </Container>
-      </DashboardLayout>
-    </>
+    <DashboardLayout
+      breadcrumbItems={[
+        {
+          children: <HostDisplayNameComponent hostId={hostId} />,
+          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
+        },
+        {
+          children: 'Components',
+          href: buildRoute(Route.HOST_COMPONENTS, { orgSlug,  host }),
+        },
+      ]}
+      help="components"
+      header={{
+        children: 'Reusable Components',
+        icon: { path: ICON_VARIANT_APP_SETTINGS.path },
+      }}
+      headerRight={
+        <Stack direction="row" spacing={1}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => setTemplatesOpen(true)}
+          >
+            {'Templates'}
+          </Button>
+          <Button
+            size="small"
+            variant="contained"
+            disabled={creating}
+            onClick={() => setCreateOpen(true)}
+          >
+            {creating ? 'Creating…' : 'Create Component'}
+          </Button>
+        </Stack>
+      }
+      aside={
+        <CreateArtifactDrawer
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          title="Create new component"
+          onSubmit={handleCreate}
+          error={createError}
+        />
+      }
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <HostComponentsCard hostId={hostId} />
+        <TemplateGalleryDialog
+          hostId={hostId}
+          open={templatesOpen}
+          onClose={() => setTemplatesOpen(false)}
+          existingSlugs={[]}
+          screenCount={0}
+          kind="component"
+          title="Start from a component template"
+          blurb="Component templates add a ready-made element tree you can restyle in the besigner. Existing components are never touched."
+        />
+      </Container>
+    </DashboardLayout>
   )
 }
 HostComponents.displayName = 'Page:HostComponents'
