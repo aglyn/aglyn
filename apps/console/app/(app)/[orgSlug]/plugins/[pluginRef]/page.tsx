@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { FIRST_PARTY_PLUGINS } from '@aglyn/aglyn'
+import {
+  FIRST_PARTY_PLUGINS,
+  resolveUpdateState,
+  updateStateLabel,
+} from '@aglyn/aglyn'
 import { mdiPuzzleOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
@@ -33,6 +37,18 @@ import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
+
+/**
+ * How loudly each update state reads (AGL-1016). `unknown` and `ahead` are
+ * warnings rather than neutral text: both mean the workspace is running
+ * something the marketplace cannot vouch for right now.
+ */
+const UPDATE_SEVERITY = {
+  current: 'success',
+  'update-available': 'info',
+  ahead: 'warning',
+  unknown: 'warning',
+} as const
 
 /**
  * A plugin installation, as its own page (AGL-1007).
@@ -154,6 +170,18 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
       ? pin.manifest.networkHosts
       : []
 
+  // The listing behind the pin, for the update line (AGL-1016). A public
+  // read, and absent for first-party plugins — which have no listing and no
+  // version, so there is nothing to be behind.
+  const { data: listing } = useFirestoreDoc<any>(
+    () => doc(firestore, 'communityListings', listingId || '-missing-'),
+    [firestore, listingId],
+  )
+  const updateStatus = useMemo(
+    () => resolveUpdateState(pin as never, listing ?? null, 'plugin'),
+    [pin, listing],
+  )
+
   const onChanged = useCallback(
     () => setPinsNonce((current) => current + 1),
     [],
@@ -205,6 +233,32 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
               <Alert severity="info">
                 {'This plugin is not installed in this organization. Install ' +
                   'it from its marketplace listing.'}
+              </Alert>
+            ) : null}
+
+            {/* Version, said plainly (AGL-1016). Read-only for now: this
+                page could show v1 while the listing page showed v2 and
+                nothing reconciled them. Applying the update is AGL-1017. */}
+            {!firstParty && installedAnywhere ? (
+              <Alert
+                severity={UPDATE_SEVERITY[updateStatus.state]}
+                variant="outlined"
+                action={
+                  updateStatus.state === 'update-available' ? (
+                    <AppLink
+                      href={buildRoute(Route.ORG_MARKETPLACE_LISTING, {
+                        orgSlug,
+                        listingId,
+                      })}
+                    >
+                      <Button size="small" color="inherit" component="span">
+                        {'View listing'}
+                      </Button>
+                    </AppLink>
+                  ) : undefined
+                }
+              >
+                {updateStateLabel(updateStatus)}
               </Alert>
             ) : null}
 

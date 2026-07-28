@@ -17,6 +17,8 @@
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { newestApprovedVersion } from '../model/community'
+import { compareArtifactVersions } from '@aglyn/aglyn/server'
 
 /**
  * Public version history for a plugin listing (AGL-431). The
@@ -33,11 +35,12 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
   const listingId = String(req.query?.listingId ?? '')
   if (!listingId) return res.status(400).json({ error: 'Missing listingId' })
   try {
-    const snapshot = await firebaseAdmin
+    const listingRef = firebaseAdmin
       .app()
       .firestore()
       .collection('communityListings')
       .doc(listingId)
+    const snapshot = await listingRef
       .collection('pluginVersions')
       .orderBy('publishedAt', 'desc')
       .limit(20)
@@ -64,6 +67,34 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
         : {}),
       publishedAtMs: doc.get('publishedAt')?.toMillis?.() ?? null,
     }))
+
+    // Repair `latestApprovedVersion` when it is missing or behind (AGL-1016).
+    //
+    // The field is written by the approval route, so every plugin approved
+    // before it existed carries none — and the console would report those as
+    // "no published version to compare against" forever, which is a worse lie
+    // than the one it replaced. The approved set is already in hand here and
+    // `pluginVersions` is server-only, so this is the one place that can
+    // repair it. Idempotent, and it only ever moves the value forward.
+    const newest = newestApprovedVersion(
+      snapshot.docs.map((doc) => ({
+        version: String(doc.get('version') ?? doc.id),
+        reviewState: doc.get('reviewState'),
+        publishedAt: doc.get('publishedAt'),
+      })) as never,
+    ) as { version?: string } | null
+    if (newest?.version) {
+      const stored = (await listingRef.get()).get('latestApprovedVersion')
+      if (
+        stored == null ||
+        (compareArtifactVersions(String(stored), newest.version) ?? 0) < 0
+      ) {
+        await listingRef
+          .set({ latestApprovedVersion: newest.version }, { merge: true })
+          .catch(() => undefined)
+      }
+    }
+
     return res.status(200).json({ versions })
   } catch (error) {
     console.error(error)

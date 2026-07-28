@@ -29,7 +29,11 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
-import { buildRoute, Route } from '@aglyn/aglyn/server'
+import {
+  buildRoute,
+  compareArtifactVersions,
+  Route,
+} from '@aglyn/aglyn/server'
 import {
   outstandingChecklistItems,
   PLUGIN_REVIEW_CHECKLIST,
@@ -646,6 +650,31 @@ async function handler(request: Request): Promise<Response> {
           { reviewStatus: 'listed', updatedAt: FieldValue.serverTimestamp() },
           { merge: true },
         )
+      }
+
+      // Denormalise the newest approved version onto the listing (AGL-1016).
+      // `pluginVersions` is server-only, so a console showing "update
+      // available" has nothing else to read — and reading `latestVersion`
+      // instead would advertise a version the install route refuses, leaking
+      // AGL-966's guarantee back out through a badge.
+      //
+      // Only ever moves forward: approving an older version after a newer one
+      // is a real sequence (a reviewer working through a backlog) and must not
+      // walk the offer backwards.
+      if (approving) {
+        const previous = listing.latestApprovedVersion
+        if (
+          previous == null ||
+          (compareArtifactVersions(String(previous), version) ?? 0) < 0
+        ) {
+          await listingRef.set(
+            {
+              latestApprovedVersion: version,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          )
+        }
       }
 
       await firestore.collection('adminAudit').add({

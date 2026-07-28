@@ -23,7 +23,7 @@ import {
   ARTIFACT_BASE_MAX_BYTES,
   type InstalledFrom,
   stableStringify,
-} from '../model/provenance'
+} from '@aglyn/aglyn/server'
 
 /**
  * The one writer every install route uses to stamp provenance (AGL-1015).

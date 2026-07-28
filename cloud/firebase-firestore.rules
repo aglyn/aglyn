@@ -575,6 +575,13 @@ service cloud.firestore {
             .hasAny(['installCount', 'priceUsd', 'profileId',
                      'reviewStatus', 'reviewedBy', 'reviewedAt',
                      'rejectionReason',
+                     // The newest version that passed review (AGL-1016),
+                     // denormalised here because `pluginVersions` is
+                     // server-only. It is what the console's update badge
+                     // offers, so a publisher who could write it could
+                     // advertise unreviewed code as an available update —
+                     // the exact leak AGL-966 closed.
+                     'latestApprovedVersion',
                      // Rating aggregates (AGL-655) drive ranking and the
                      // trust signal buyers read, so they are maintained by
                      // the reviews API alone — a publisher who could write

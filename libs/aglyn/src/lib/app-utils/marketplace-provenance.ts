@@ -15,7 +15,22 @@
  * limitations under the License.
  */
 
-import type { CommunityArtifactType } from './community'
+/**
+ * Everything an org can publish to the marketplace (AGL-654).
+ *
+ * The union lives in core rather than the community plugin because the
+ * console reasons about installed artifacts too — a Plugins index that cannot
+ * name an artifact type cannot render an update chip — and module boundaries
+ * (rightly) forbid an app depending on an addon lib. The community model
+ * re-exports it, so publishing code still reads it from one place.
+ */
+export type CommunityArtifactType =
+  | 'component'
+  | 'template'
+  | 'plugin'
+  | 'layout'
+  | 'datasetSchema'
+  | 'emailTemplate'
 
 /**
  * Install provenance (AGL-1015): where an installed artifact came from, at

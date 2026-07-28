@@ -31,7 +31,9 @@ import {
   buildRoute,
   parseMarkdownLite,
   PLUGIN_HOST_ABI_VERSION,
+  resolveUpdateState,
   Route,
+  updateStateLabel,
   type MarkdownBlock,
   type MarkdownInline,
 } from '@aglyn/aglyn'
@@ -457,14 +459,28 @@ export function CommunityListingContent({
     return undefined
   }, [artifactType, datasetInstalls, emailInstalls])
 
+  /**
+   * The version this listing actually offers (AGL-1016).
+   *
+   * For a plugin that is the newest APPROVED version, not `latestVersion`.
+   * This page used to compare against `latestVersion`, so publishing v1.1.0
+   * lit up "Update to v1.1.0" for every workspace the moment it was uploaded —
+   * and the install route then refused it, because AGL-966 only ever hands out
+   * reviewed bytes. The badge was advertising what the marketplace would not
+   * give you.
+   */
+  const offeredVersion = isPlugin
+    ? listing?.latestApprovedVersion
+    : listing?.latestVersion
+
   const pluginState = useMemo(
     () =>
       resolvePluginInstallState(
-        listing?.latestVersion,
+        offeredVersion,
         isPlugin ? hostPin : null,
         isPlugin ? orgPin : null,
       ),
-    [listing?.latestVersion, isPlugin, hostPin, orgPin],
+    [offeredVersion, isPlugin, hostPin, orgPin],
   )
 
   // Public version history + trust tier (AGL-431): the pluginVersions
@@ -536,6 +552,44 @@ export function CommunityListingContent({
   const upToDate = isPlugin
     ? installed && !pluginState.updateAvailable
     : componentInstall && installedVersion >= listing?.latestVersion
+  /**
+   * The same update comparison the Plugins index and the installation page
+   * make (AGL-1016), so all three agree on the version pair rather than each
+   * re-deriving it. Only rendered when the viewer already has it installed —
+   * "you have v1.0.0 · v1.1.0 available" is meaningless to a first-time buyer.
+   */
+  const updateStatus = useMemo(
+    () =>
+      resolveUpdateState(
+        isPlugin
+          ? ((hostPin ?? orgPin) as never)
+          : // Copied artifacts are found through four different install
+            // collections here, each with its own field for the version, so
+            // they are normalised to the one shape provenance reads. The
+            // `installedFrom` stamp wins when AGL-1015 wrote one.
+            ({
+              ...(componentInstall?.installedFrom
+                ? { installedFrom: componentInstall.installedFrom }
+                : {}),
+              ...(installedVersion != null && listingId
+                ? { listingId, version: installedVersion }
+                : {}),
+            } as never),
+        listing ?? null,
+        artifactType,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      isPlugin,
+      hostPin,
+      orgPin,
+      componentInstall,
+      installedVersion,
+      listingId,
+      listing,
+      artifactType,
+    ],
+  )
   const priceUsd = Number(listing?.priceUsd ?? 0)
   const mustBuy =
     priceUsd > 0 && !purchased && listing?.profileId !== viewerOrgId && !installed
@@ -907,12 +961,31 @@ export function CommunityListingContent({
                         {/* The site set (AGL-997), shared with the
                             installation detail page (AGL-1007) so the two
                             surfaces cannot drift apart. */}
+                        {/* The version pair, for a viewer who already has this
+                            (AGL-1016). Without it the listing could advertise
+                            v2 while the workspace quietly ran v1 and no page
+                            said so — this is the same `resolveUpdateState` the
+                            Plugins index and installation page ask. */}
+                        {installed &&
+                        updateStatus.state !== 'current' &&
+                        updateStatus.installedVersion ? (
+                          <Alert
+                            severity={
+                              updateStatus.state === 'update-available'
+                                ? 'info'
+                                : 'warning'
+                            }
+                            variant="outlined"
+                          >
+                            {updateStateLabel(updateStatus)}
+                          </Alert>
+                        ) : null}
                         {orgPluginScope ? (
                           <PluginSiteSet
                             listing={listing}
                             hosts={hosts ?? []}
                             orgInstall={orgInstall}
-                            latestVersion={listing?.latestVersion}
+                            latestVersion={offeredVersion}
                             installPlan={installPlan}
                             uninstall={uninstall}
                             onChanged={() =>
@@ -951,7 +1024,7 @@ export function CommunityListingContent({
                                       `(v${installedVersion}) — available on every site.`
                                     : `Installed on this site (v${installedVersion}).`}
                                 {pluginState.updateAvailable
-                                  ? ` A newer version (v${listing?.latestVersion}) is available.`
+                                  ? ` A newer version (v${offeredVersion}) is available.`
                                   : ''}
                               </Typography>
                             </Stack>
@@ -1134,7 +1207,7 @@ export function CommunityListingContent({
                                       : 'Added'
                                   } (v${installedVersion}) · add again`
                                 : installed
-                                  ? `Update to v${listing?.latestVersion}`
+                                  ? `Update to v${offeredVersion}`
                                   : mustBuy
                                     ? `Buy for $${priceUsd}`
                                     : orgTargeting || installTargets.length > 1
