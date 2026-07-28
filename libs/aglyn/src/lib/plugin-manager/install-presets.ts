@@ -66,6 +66,15 @@ export interface KnownPluginInstall {
 }
 
 let knownInstalls: Map<string, KnownPluginInstall> | undefined
+/**
+ * Bumped on every publish so consumers can depend on "the set changed"
+ * (AGL-1030). The install set arrives from a live Firestore subscription and
+ * can land AFTER the element panel has built its fields — installing a plugin
+ * in another tab, or simply a slow first read — and without a change signal
+ * the picker would sit on "No plugins installed for this site" until remount.
+ */
+let knownInstallsVersion = 0
+const knownInstallListeners = new Set<() => void>()
 
 /** Called by the console when the install set changes; undefined to forget. */
 export function setKnownPluginInstalls(
@@ -74,6 +83,20 @@ export function setKnownPluginInstalls(
   knownInstalls = installs
     ? new Map(installs.map((install) => [install.listingId, install]))
     : undefined
+  knownInstallsVersion += 1
+  for (const listener of knownInstallListeners) listener()
+}
+
+/** `useSyncExternalStore` pair for the element panel's plugin picker. */
+export function subscribeKnownPluginInstalls(listener: () => void): () => void {
+  knownInstallListeners.add(listener)
+  return () => {
+    knownInstallListeners.delete(listener)
+  }
+}
+
+export function getKnownPluginInstallsVersion(): number {
+  return knownInstallsVersion
 }
 
 /** True once a surface has published its install set — see the note above. */
