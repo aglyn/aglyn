@@ -28,6 +28,29 @@
  *
  * Re-run after changing `paths` in tsconfig.base.json:
  *   node tools/scripts/sync-next-tsconfigs.mjs
+ *
+ * ## `--check` (AGL-1069)
+ *
+ * Regenerates in memory and exits non-zero if what is on disk differs,
+ * without touching anything. CI runs this as its own step.
+ *
+ * It needs a dedicated step because **nothing else can catch this drift**.
+ * `npm run typecheck` is the workspace's only type gate (builds transpile
+ * with swc and never resolve types) and it skips these files BY NAME — the
+ * right call, since they exist for `next.config`'s `typescript.tsconfigPath`
+ * rather than for the native compiler, but it leaves the one job that would
+ * notice a broken `paths` map structurally unable to.
+ *
+ * It also must not be `nx affected`-scoped: "a generated file no longer
+ * matches its source" is a workspace-level fact about three apps at once,
+ * and the input that invalidates it (tsconfig.base.json) is not any app's
+ * source. Same reasoning as `npm run test:eslint-rules` in nx-ci.yml.
+ *
+ * Left unchecked this fails silently and permanently: the files carry a
+ * do-not-edit header, so nobody edits them and nobody notices they are
+ * stale — until someone points a compiler at one and gets a wall of
+ * fabricated "Cannot find module" errors in front of their real change.
+ * That is how a genuine error gets filtered away with the noise.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -48,9 +71,11 @@ const rebased = Object.fromEntries(
   ]),
 )
 
-for (const app of NEXT_APPS) {
-  const file = join(root, 'apps', app, 'tsconfig.next.json')
-  const content =
+const check = process.argv.includes('--check')
+
+/** The file this app's config should contain, byte for byte. */
+function expectedContent() {
+  return (
     JSON.stringify(
       {
         '//': [
@@ -65,6 +90,81 @@ for (const app of NEXT_APPS) {
       null,
       2,
     ) + '\n'
-  writeFileSync(file, content)
-  console.log('wrote', join('apps', app, 'tsconfig.next.json'))
+  )
 }
+
+/**
+ * Alias-level detail for the failure message.
+ *
+ * The verdict is whole-file equality — formatting drift is drift too — but
+ * "the file differs" is not an actionable thing to read in CI output, and
+ * the drift that actually happened (AGL-1069) was a handful of missing
+ * aliases in a 94-entry map.
+ */
+function describeDrift(actualJson) {
+  const actual = actualJson?.compilerOptions?.paths
+  if (!actual) return ['  the file is missing its `compilerOptions.paths`']
+  const missing = Object.keys(rebased).filter((alias) => !(alias in actual))
+  const extra = Object.keys(actual).filter((alias) => !(alias in rebased))
+  const wrong = Object.keys(rebased).filter(
+    (alias) =>
+      alias in actual &&
+      JSON.stringify(actual[alias]) !== JSON.stringify(rebased[alias]),
+  )
+  const lines = []
+  if (missing.length) lines.push(`  missing (${missing.length}): ${missing.join(', ')}`)
+  if (extra.length) lines.push(`  extra (${extra.length}): ${extra.join(', ')}`)
+  if (wrong.length) lines.push(`  wrong target (${wrong.length}): ${wrong.join(', ')}`)
+  // Every alias matches but the bytes do not — formatting or key order.
+  if (!lines.length) lines.push('  aliases all match; the file formatting differs')
+  return lines
+}
+
+const drifted = []
+
+for (const app of NEXT_APPS) {
+  const relative = join('apps', app, 'tsconfig.next.json')
+  const file = join(root, relative)
+  const content = expectedContent()
+
+  if (!check) {
+    writeFileSync(file, content)
+    console.log('wrote', relative)
+    continue
+  }
+
+  let actualText = null
+  try {
+    actualText = readFileSync(file, 'utf8')
+  } catch {
+    // Absent counts as drift, not a crash: the fix is the same command.
+  }
+  if (actualText === content) {
+    console.log('ok', relative)
+    continue
+  }
+  let actualJson = null
+  try {
+    actualJson = actualText === null ? null : JSON.parse(actualText)
+  } catch {
+    // Unparseable also counts as drift; describeDrift handles the null.
+  }
+  drifted.push(
+    actualText === null
+      ? `${relative}\n  the file does not exist`
+      : `${relative}\n${describeDrift(actualJson).join('\n')}`,
+  )
+}
+
+if (check && drifted.length) {
+  console.error(
+    `\n${drifted.length} generated tsconfig(s) no longer match tsconfig.base.json:\n\n` +
+      drifted.join('\n\n') +
+      '\n\nThese files are generated. Do not hand-edit them — run:\n' +
+      '  node tools/scripts/sync-next-tsconfigs.mjs\n' +
+      'and commit the result.\n',
+  )
+  process.exit(1)
+}
+
+if (check) console.log(`\n${NEXT_APPS.length} generated tsconfigs in sync`)

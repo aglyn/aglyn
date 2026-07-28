@@ -36,4 +36,15 @@ jobs:
       # run explicitly on every CI run — never affected-scoped).
       - run: npm run test:eslint-rules
 
+      # apps/*/tsconfig.next.json are GENERATED from tsconfig.base.json, and
+      # the typecheck above skips them by name — correctly, since they exist
+      # for next.config's `typescript.tsconfigPath` rather than the native
+      # compiler. That leaves nothing able to notice when they go stale, and
+      # they did (AGL-1069): a `paths` entry was added to the base config,
+      # the generator was never re-run, and three apps quietly resolved
+      # nothing for that alias. Explicit and never affected-scoped for the
+      # same reason as the step above — the input that invalidates these is
+      # tsconfig.base.json, which is no app's source.
+      - run: npm run sync:next-tsconfigs:check
+
       - run: npx nx affected -t lint test build --parallel=3
