@@ -22,10 +22,15 @@ import Avatar from '@mui/material/Avatar'
 
 export interface HostIconProps {
   /**
-   * The host doc; its `seo.favicon` is preferred when set. Taken as `unknown`
-   * and narrowed below: host docs come through as `DocumentData`, which shares
-   * no declared property with a favicon-shaped type and so trips TypeScript's
-   * weak-type check.
+   * A host doc OR a `hostMemberships` projection row — this component serves
+   * both, and they spell the favicon differently (AGL-1071):
+   *
+   * - host doc: nested, `seo.favicon`, alongside the rest of the SEO block
+   * - projection row: flat, `favicon`, like its `displayName` / `subdomain`
+   *
+   * Taken as `unknown` and narrowed below: host docs come through as
+   * `DocumentData`, which shares no declared property with a favicon-shaped
+   * type and so trips TypeScript's weak-type check.
    */
   host?: unknown
   /** Favicon box size in px (the fallback glyph uses `fontSize`). */
@@ -42,8 +47,14 @@ export interface HostIconProps {
  */
 export function HostIcon(props: HostIconProps) {
   const { host, size = 20, fontSize = 'small', color } = props
-  const favicon = (host as { seo?: { favicon?: string } } | null | undefined)
-    ?.seo?.favicon
+  // Accept both shapes. Reading only `seo.favicon` is why the switcher showed
+  // the generic glyph for every site while the sites list — same component,
+  // real host docs — showed favicons fine (AGL-1071).
+  const source = host as
+    | { seo?: { favicon?: string }; favicon?: string }
+    | null
+    | undefined
+  const favicon = source?.seo?.favicon || source?.favicon
   if (favicon) {
     return (
       <Avatar
