@@ -203,6 +203,17 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                     label: 'Installed',
                     content: (
                       <Stack spacing={3}>
+                        {/* Marketplace installs first (AGL-1003). This is the
+                            Installed tab OF THE MARKETPLACE, and these pins
+                            are the only thing on it that varies by workspace
+                            — they used to sit below a dozen always-present
+                            system toggles and every config card, off the
+                            bottom of the screen. Renders nothing when the
+                            community plugin is disabled. */}
+                        <PluginWidgetSlot
+                          slot="orgAddons"
+                          hostId={actingHost}
+                        />
                         {/* First-party plugins (AGL-423/797): the org
                             switchboard and each loaded plugin's settings,
                             folded in from the retired Plugins page so
@@ -215,13 +226,6 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                         <PluginConfigCards
                           orgId={currentOrg?.$id ?? ''}
                           disabled={!canManage}
-                        />
-                        {/* Marketplace install pins (host + org): the
-                            community plugin's orgAddons card. Renders nothing
-                            when that plugin is disabled for the workspace. */}
-                        <PluginWidgetSlot
-                          slot="orgAddons"
-                          hostId={actingHost}
                         />
                       </Stack>
                     ),
