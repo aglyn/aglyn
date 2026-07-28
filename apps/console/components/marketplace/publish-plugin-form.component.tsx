@@ -114,17 +114,12 @@ const EMPTY_DRAFT: PublishDraft = {
   attested: [],
 }
 
-const draftKey = (orgId: string) => `aglyn.publish-plugin.draft.${orgId}`
+// Scoped per listing (AGL-1008): an update draft and a new-listing draft
+// are different submissions, and sharing one key would let a half-written
+// update reappear on top of a first publish.
+const draftKey = (orgId: string, listingId?: string) =>
+  `aglyn.publish-plugin.draft.${orgId}${listingId ? `.${listingId}` : ''}`
 
-/**
- * Whether a stored draft is worth telling anyone about.
- *
- * The persist effect runs on mount, so an untouched form writes an empty
- * draft — and without this the NEXT first visit would announce "picked up
- * where you left off" over a form nobody had typed in. A restore notice
- * that fires when nothing was restored is how a publisher learns to ignore
- * it, which is expensive on the one visit it matters.
- */
 /**
  * Read the stored draft, during render.
  *
@@ -136,10 +131,10 @@ const draftKey = (orgId: string) => `aglyn.publish-plugin.draft.${orgId}`
  * draft looked correct in jsdom (no Strict Mode) and silently vanished in
  * the browser. A read during initialization has no ordering to lose.
  */
-function readDraft(orgId: string): PublishDraft {
+function readDraft(orgId: string, listingId?: string): PublishDraft {
   if (typeof window === 'undefined' || !orgId) return EMPTY_DRAFT
   try {
-    const stored = window.localStorage.getItem(draftKey(orgId))
+    const stored = window.localStorage.getItem(draftKey(orgId, listingId))
     if (!stored) return EMPTY_DRAFT
     return { ...EMPTY_DRAFT, ...(JSON.parse(stored) as Partial<PublishDraft>) }
   } catch {
@@ -148,17 +143,109 @@ function readDraft(orgId: string): PublishDraft {
   }
 }
 
-function draftHasContent(draft: Partial<PublishDraft>): boolean {
+/**
+ * Fill an update's form from the listing it is bound to (AGL-1008).
+ *
+ * A saved draft wins over the listing on every field: the listing is where
+ * you START from, and overwriting an edit someone made and reloaded away
+ * from would be the same data loss the draft exists to prevent.
+ *
+ * `changelog` is deliberately never seeded. It is the one field that
+ * describes THIS version, and carrying the previous version's text forward
+ * is how a changelog ends up describing a release it has nothing to do
+ * with — which the AGL-969 attestation then asks the publisher to confirm.
+ */
+function seedDraft(
+  draft: PublishDraft,
+  listing: UpdateTargetListing | null | undefined,
+): PublishDraft {
+  if (!listing?.$id) return draft
+  const seeded = { ...draft }
+  const carry = <K extends keyof PublishDraft>(
+    key: K,
+    value: string | undefined,
+  ) => {
+    if (seeded[key] === EMPTY_DRAFT[key] && value) {
+      seeded[key] = value as PublishDraft[K]
+    }
+  }
+  carry('displayName', listing.displayName)
+  carry('description', listing.description)
+  carry('category', listing.categories?.[0] ?? listing.category)
+  carry('readme', listing.readme)
+  carry('license', listing.license)
+  carry('repositoryUrl', listing.repositoryUrl)
+  if (seeded.priceUsd === EMPTY_DRAFT.priceUsd && listing.priceUsd) {
+    seeded.priceUsd = String(listing.priceUsd)
+  }
+  // Visibility is set on FIRST publish only — the server ignores it on a
+  // version bump — so reflect what the listing actually is rather than
+  // offering a choice that would be silently discarded.
+  if (listing.visibility === 'private') seeded.visibility = 'private'
+  return seeded
+}
+
+/**
+ * Whether a stored draft is worth telling anyone about.
+ *
+ * The persist effect runs on mount, so an untouched form writes its
+ * starting state straight back — and without this the NEXT first visit
+ * would announce "picked up where you left off" over a form nobody had
+ * typed in. A restore notice that fires when nothing was restored is how a
+ * publisher learns to ignore it, which is expensive on the one visit it
+ * matters.
+ *
+ * Compared against the BASELINE rather than the empty draft: on an update
+ * the baseline is the listing's own content (AGL-1008), so an untouched
+ * update form is not a resumed one.
+ */
+function draftDiffersFrom(
+  draft: Partial<PublishDraft>,
+  baseline: PublishDraft,
+): boolean {
   return (Object.keys(EMPTY_DRAFT) as Array<keyof PublishDraft>).some((key) => {
     const value = draft[key]
-    if (Array.isArray(value)) return value.length > 0
-    return value !== undefined && value !== EMPTY_DRAFT[key]
+    if (value === undefined) return false
+    if (Array.isArray(value)) {
+      const other = baseline[key]
+      return (
+        !Array.isArray(other) ||
+        value.length !== other.length ||
+        value.some((entry, index) => entry !== other[index])
+      )
+    }
+    return value !== baseline[key]
   })
+}
+
+/** The listing an update is bound to (AGL-1008), as the console reads it. */
+export interface UpdateTargetListing {
+  $id: string
+  displayName?: string
+  pluginId?: string
+  latestVersion?: string | number
+  latestApprovedVersion?: string | number
+  description?: string
+  category?: string
+  categories?: string[]
+  readme?: string
+  license?: string
+  repositoryUrl?: string
+  priceUsd?: number
+  visibility?: string
 }
 
 export interface PublishPluginFormProps {
   orgId: string
   orgSlug: string
+  /**
+   * Set when publishing a NEW VERSION of an existing listing (AGL-1008).
+   * The server still decides whether a submission is an update, from
+   * `profileId` + the manifest id — this only pre-binds the form so the
+   * publisher is not retyping a listing they already own, and so the page
+   * can say what is about to happen.
+   */
+  listing?: UpdateTargetListing | null
 }
 
 /**
@@ -177,7 +264,8 @@ export interface PublishPluginFormProps {
  * to go afterwards.
  */
 export function PublishPluginForm(props: PublishPluginFormProps) {
-  const { orgId, orgSlug } = props
+  const { orgId, orgSlug, listing } = props
+  const isUpdate = Boolean(listing?.$id)
   const { data: user } = useUser()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
@@ -190,9 +278,17 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
   // Inline README images come from the shared DAM, like everywhere else.
   const readmeEditorRef = useRef<MarkdownFieldHandle | null>(null)
   const [pickingReadmeImage, setPickingReadmeImage] = useState(false)
-  const [draft, setDraft] = useState<PublishDraft>(() => readDraft(orgId))
+  // What an untouched form looks like: empty for a first publish, the
+  // listing's own content for an update (AGL-1008).
+  const baseline = seedDraft(EMPTY_DRAFT, listing)
+  const [draft, setDraft] = useState<PublishDraft>(() =>
+    seedDraft(readDraft(orgId, listing?.$id), listing),
+  )
   const [draftRestored, setDraftRestored] = useState(() =>
-    draftHasContent(readDraft(orgId)),
+    draftDiffersFrom(
+      seedDraft(readDraft(orgId, listing?.$id), listing),
+      seedDraft(EMPTY_DRAFT, listing),
+    ),
   )
 
   // Server-side problems, held against the field that caused them (AGL-1078)
@@ -214,19 +310,22 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
   useEffect(() => {
     if (!orgId) return
     try {
-      window.localStorage.setItem(draftKey(orgId), JSON.stringify(draft))
+      window.localStorage.setItem(
+        draftKey(orgId, listing?.$id),
+        JSON.stringify(draft),
+      )
     } catch {
       // Storage full or blocked — the form still works, it just won't survive.
     }
-  }, [orgId, draft])
+  }, [orgId, listing?.$id, draft])
 
   const clearDraft = useCallback(() => {
     try {
-      window.localStorage.removeItem(draftKey(orgId))
+      window.localStorage.removeItem(draftKey(orgId, listing?.$id))
     } catch {
       // Nothing to do; the next publish overwrites it anyway.
     }
-  }, [orgId])
+  }, [orgId, listing?.$id])
 
   const toggleAttestation = (id: string) =>
     setDraft((current) => ({
@@ -239,21 +338,52 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
   /**
    * What this page blocks on locally.
    *
-   * The changelog item is `updateOnly` and this form genuinely cannot know
-   * whether the manifest id already has a listing — the server answers that
-   * and names it in a 428. Demanding a changelog attestation from a
-   * first-time publisher would be the worse failure: an item that does not
-   * apply teaches people to tick without reading.
+   * On a first publish the changelog item is `updateOnly` and this form
+   * genuinely cannot know whether the manifest id already has a listing —
+   * the server answers that and names it in a 428. Demanding a changelog
+   * attestation from a first-time publisher would be the worse failure: an
+   * item that does not apply teaches people to tick without reading.
+   *
+   * Bound to a listing (AGL-1008) we DO know, so the update-only item is
+   * asked here rather than arriving as a refusal after the upload.
    */
-  const unattested = requiredAttestationIds(false).filter(
+  const unattested = requiredAttestationIds(isUpdate).filter(
     (id) => !draft.attested.includes(id),
   )
   const unfilledSubjects = missingAttestationSubjects(
     { repositoryUrl: draft.repositoryUrl },
-    false,
+    isUpdate,
   )
   const repositoryInvalid =
     Boolean(draft.repositoryUrl.trim()) && !isHttpsUrl(draft.repositoryUrl)
+
+  /**
+   * The manifest id typed or pasted so far, if it parses.
+   *
+   * Only used to catch the one way a pre-bound update silently isn't one:
+   * the server decides update-vs-new from `profileId` + the manifest id, so
+   * a bundle whose id does not match this listing creates a SECOND listing
+   * while the page says "new version". Cheap to notice here; impossible to
+   * undo afterwards, because a published version is immutable.
+   */
+  const typedManifestId = (() => {
+    const raw = draft.manifestText.trim()
+    if (!raw) return ''
+    try {
+      const parsed = JSON.parse(raw) as { id?: unknown }
+      return typeof parsed?.id === 'string' ? parsed.id : ''
+    } catch {
+      return ''
+    }
+  })()
+  const manifestIdMismatch = Boolean(
+    isUpdate && typedManifestId && listing?.pluginId &&
+      typedManifestId !== listing.pluginId,
+  )
+
+  const liveVersion = String(
+    listing?.latestApprovedVersion ?? listing?.latestVersion ?? '',
+  )
 
   const readManifest = async (): Promise<Record<string, unknown> | null> => {
     // A pasted manifest wins; otherwise read the chosen file.
@@ -383,15 +513,47 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
     !bundleFile ||
     unattested.length > 0 ||
     unfilledSubjects.length > 0 ||
-    repositoryInvalid
+    repositoryInvalid ||
+    manifestIdMismatch
 
   return (
     <Stack spacing={2}>
-      <Alert severity="info">
-        {'Plugins publish sandboxed — they run isolated and can’t touch site ' +
-          'data directly. A reviewer verifies and signs yours before it can ' +
-          'run trusted.'}
-      </Alert>
+      {isUpdate ? (
+        /* AGL-1008. The mechanism was always right — same profileId plus
+           manifest id bumps the listing, the new version enters review as
+           pending, and the approved one keeps installing (AGL-966). The UI
+           never told that story, so updating read like creating a second
+           listing. */
+        <Alert severity="info">
+          <Typography variant="subtitle2">
+            {`New version of ${listing?.displayName ?? 'your plugin'}`}
+          </Typography>
+          <Typography variant="caption" component="div">
+            {liveVersion
+              ? `v${liveVersion} is what installs today. It keeps installing ` +
+                'until a reviewer approves this one — nobody is upgraded ' +
+                'onto unreviewed code, and nothing you publish here can ' +
+                'change a version already installed.'
+              : 'This version enters review. Nothing installs until a ' +
+                'reviewer approves it.'}
+          </Typography>
+        </Alert>
+      ) : (
+        <Alert severity="info">
+          {'Plugins publish sandboxed — they run isolated and can’t touch ' +
+            'site data directly. A reviewer verifies and signs yours before ' +
+            'it can run trusted.'}
+        </Alert>
+      )}
+
+      {manifestIdMismatch ? (
+        <Alert severity="warning">
+          {`This manifest says "${typedManifestId}", but ${
+            listing?.displayName ?? 'this listing'
+          } publishes "${listing?.pluginId}". Publishing it would create a ` +
+            'separate new listing rather than a new version of this one.'}
+        </Alert>
+      ) : null}
 
       {draftRestored ? (
         <Alert severity="info" onClose={() => setDraftRestored(false)}>
@@ -405,7 +567,7 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
       ) : null}
 
       <CardDisplay
-        header={'Bundle and manifest'}
+        header={isUpdate ? 'The new bundle and manifest' : 'Bundle and manifest'}
         help={docsHelp('publisherHandbook', {
           anchor: '#publishing-a-version',
           excerpt:
@@ -569,11 +731,18 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
             label="Changelog"
             placeholder="Fixed the timer drift on Safari; added a compact layout"
             helperText={
-              'Two audiences: the reviewer, comparing this version against ' +
-              'the last approved one, and every installer who reads it on ' +
-              'your listing’s changelog tab before updating. On a first ' +
-              'version there is nothing to compare against — say what the ' +
-              'plugin does instead, or leave it.'
+              isUpdate
+                ? 'The field that matters most on an update. Two audiences: ' +
+                  'the reviewer, comparing these bytes against ' +
+                  (liveVersion ? `v${liveVersion}` : 'the last approved ' +
+                    'version') +
+                  ', and every installer deciding whether to move off the ' +
+                  'version they are running.'
+                : 'Two audiences: the reviewer, comparing this version ' +
+                  'against the last approved one, and every installer who ' +
+                  'reads it on your listing’s changelog tab before ' +
+                  'updating. On a first version there is nothing to compare ' +
+                  'against — say what the plugin does instead, or leave it.'
             }
             value={draft.changelog}
             onChange={(event) => set('changelog')(event.target.value)}
@@ -629,18 +798,26 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
             select
             label="Who can install this"
             value={draft.visibility}
+            // Set on FIRST publish only — the server ignores it on a version
+            // bump (AGL-968), so offering the choice here would be a control
+            // that silently does nothing. Change it from the listing.
+            disabled={isUpdate}
             onChange={(event) =>
               set('visibility')(event.target.value as 'public' | 'private')
             }
             size="small"
             helperText={
+              isUpdate
+                ? 'Set when the listing was created. Change it from the ' +
+                  'listing — a new version never changes who can install it.'
+                :
               draft.visibility === 'private'
-                ? 'Private plugins take the same review path — same queue, ' +
-                  'same checklist, same verifier, same signature for realm ' +
-                  'trust. They are never listed in the marketplace, and only ' +
-                  'your sites can install them.'
-                : 'Listed in the marketplace for every workspace once a ' +
-                  'reviewer approves it.'
+                  ? 'Private plugins take the same review path — same ' +
+                    'queue, same checklist, same verifier, same signature ' +
+                    'for realm trust. They are never listed in the ' +
+                    'marketplace, and only your sites can install them.'
+                  : 'Listed in the marketplace for every workspace once a ' +
+                    'reviewer approves it.'
             }
           >
             <MenuItem value="public">
@@ -759,6 +936,8 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
               ? `Confirm ${unattested.length} more`
             : unfilledSubjects.length || repositoryInvalid
               ? 'Add a repository URL'
+            : isUpdate
+              ? 'Publish new version'
             : draft.visibility === 'private'
               ? 'Publish privately'
               : 'Publish plugin'}
@@ -767,7 +946,7 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
           disabled={busy}
           onClick={() => {
             clearDraft()
-            setDraft(EMPTY_DRAFT)
+            setDraft(baseline)
             setBundleFile(null)
             setManifestFile(null)
             setDraftRestored(false)

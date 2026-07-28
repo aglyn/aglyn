@@ -279,6 +279,13 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       orgSlug,
       listingId: listing.$id,
     })
+  // Shipping a new version was invisible as a path (AGL-1008): the only door
+  // was the generic publish form, which reads entirely like first-time
+  // publishing, so updating looked like creating a second listing. Same
+  // form, pre-bound to the listing.
+  const newVersionHref = (listing: any) =>
+    `${buildRoute(Route.ORG_MARKETPLACE_PUBLISH_PLUGIN, { orgSlug })}` +
+    `?listing=${encodeURIComponent(listing.$id)}`
 
   // Private ⇄ public (AGL-968/994). Goes through the API rather than a client
   // write: making a listing public is gated on it actually carrying the docs
@@ -601,6 +608,20 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           open={Boolean(rowMenu)}
           onClose={closeRowMenu}
         >
+          {/* Plugins only: bytes are the thing being shipped, and only a
+              plugin listing has a bundle (AGL-1008). */}
+          {(rowMenu?.listing?.artifactType ?? rowMenu?.listing?.type) ===
+          'plugin' ? (
+            <MenuItem
+              onClick={() => {
+                const listing = rowMenu?.listing
+                closeRowMenu()
+                if (listing) router.push(newVersionHref(listing))
+              }}
+            >
+              {'Publish new version…'}
+            </MenuItem>
+          ) : null}
           <MenuItem
             onClick={() => {
               setEditListing(rowMenu?.listing ?? null)

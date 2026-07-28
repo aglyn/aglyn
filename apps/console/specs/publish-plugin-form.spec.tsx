@@ -65,7 +65,7 @@ function publishButton(): HTMLButtonElement {
   const button = screen
     .getAllByRole('button')
     .find((entry) =>
-      /Publish plugin|Publish privately|Confirm \d+ more|Choose a bundle|Add a repository URL/.test(
+      /Publish plugin|Publish new version|Publish privately|Confirm \d+ more|Choose a bundle|Add a repository URL/.test(
         entry.textContent ?? '',
       ),
     )
@@ -246,6 +246,110 @@ describe('PublishPluginForm (AGL-969 / AGL-1076 / AGL-1078)', () => {
         screen.getByText(/already has a published version/),
       ).toBeTruthy(),
     )
+  })
+
+  /**
+   * The update path (AGL-1008).
+   *
+   * Shipping a new version was invisible: the only door read entirely like
+   * first-time publishing, so updating looked like creating a second
+   * listing. Bound to a listing, the same form says what is about to
+   * happen, starts from what the publisher already owns, and — because it
+   * now KNOWS this is an update — asks the changelog attestation up front
+   * instead of letting it come back as a 428 after the upload.
+   */
+  describe('bound to an existing listing', () => {
+    const LISTING = {
+      $id: 'listing-1',
+      displayName: 'Office Hours',
+      pluginId: 'office-hours',
+      latestApprovedVersion: '1.0.0',
+      readme: '## What it does\n\nShows opening hours.',
+      license: 'MIT',
+      repositoryUrl: REPO_URL,
+    }
+    const openUpdate = () =>
+      render(
+        <PublishPluginForm
+          orgId="org-1"
+          orgSlug="acme"
+          listing={LISTING}
+        />,
+      )
+
+    it('says which version installs today and what happens to it', () => {
+      openUpdate()
+      expect(screen.getByText(/New version of Office Hours/)).toBeTruthy()
+      expect(
+        screen.getByText(/v1\.0\.0 is what installs today/),
+      ).toBeTruthy()
+    })
+
+    it('starts from the listing rather than an empty form', () => {
+      openUpdate()
+      expect(
+        (screen.getByLabelText(/Listing name/) as HTMLInputElement).value,
+      ).toBe('Office Hours')
+      expect(
+        (screen.getByPlaceholderText('https://github.com/acme/widget') as
+          HTMLInputElement).value,
+      ).toBe(REPO_URL)
+    })
+
+    it('never carries the previous changelog forward', () => {
+      // The one field that describes THIS version. Seeding it is how a
+      // changelog ends up describing a release it has nothing to do with —
+      // which the attestation then asks the publisher to confirm.
+      openUpdate()
+      const changelog = screen.getByPlaceholderText(
+        /Fixed the timer drift on Safari/,
+      ) as HTMLTextAreaElement
+      expect(changelog.value).toBe('')
+    })
+
+    it('asks the update-only attestation up front', () => {
+      openUpdate()
+      chooseBundle()
+      // Exactly what a first publish is allowed to send.
+      for (const id of ALWAYS_REQUIRED) tick(id)
+      expect(publishButton().disabled).toBe(true)
+      expect(publishButton().textContent).toMatch(/Confirm 1 more/)
+      tick('changelog')
+      expect(publishButton().disabled).toBe(false)
+      expect(publishButton().textContent).toMatch(/Publish new version/)
+    })
+
+    it('refuses a manifest id that would create a second listing', () => {
+      // The server decides update-vs-new from profileId plus the manifest
+      // id, so a mismatched id publishes a SEPARATE listing while the page
+      // says "new version" — and a published version is immutable.
+      openUpdate()
+      chooseBundle()
+      for (const id of requiredAttestationIds(true)) tick(id)
+      expect(publishButton().disabled).toBe(false)
+      fireEvent.change(screen.getByPlaceholderText(/"id": "acme-widget"/), {
+        target: {
+          value: JSON.stringify({
+            id: 'something-else',
+            name: 'X',
+            version: '1.0.1',
+            entry: 'index.js',
+          }),
+        },
+      })
+      expect(screen.getByText(/separate new listing/)).toBeTruthy()
+      expect(publishButton().disabled).toBe(true)
+    })
+
+    it('does not announce a restore on an untouched update form', () => {
+      // The seeded listing content is the BASELINE here, not typed input —
+      // comparing it against an empty draft would greet every publisher
+      // with "picked up where you left off" on their first visit.
+      const first = openUpdate()
+      first.unmount()
+      openUpdate()
+      expect(screen.queryByText(/not saved — choose them again/)).toBeNull()
+    })
   })
 
   /**

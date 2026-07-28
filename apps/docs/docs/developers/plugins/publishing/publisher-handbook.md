@@ -181,8 +181,8 @@ Each publish uploads your bundle (content-addressed by sha256 —
 **immutable**; a new build is a new object), writes a version document
 with your manifest and changelog, and bumps the listing's
 `latestVersion`. To ship an update, bump `version` in the manifest and
-upload again through the same page. There's a daily publish cap per
-publisher.
+upload again — see [Shipping a new version](#shipping-a-new-version).
+There's a daily publish cap per publisher.
 
 ## Review: what happens after you publish
 
@@ -254,6 +254,33 @@ unverified sandbox listings show buyers a risk disclaimer, and good docs
 are what overcomes it.
 
 ## Versioning & updates
+
+### Shipping a new version
+
+**Publish new version** on your listing — the button on the listing's own
+detail page, or the action in the row menu on **Marketplace → Listings**.
+It opens the same publish page bound to that listing, so you upload the
+new bundle and manifest and write a changelog rather than describing a
+listing you already own; name, description, README, license, repository
+and price arrive filled in from the listing and are yours to edit.
+
+What the page tells you, because it is the part worth knowing: **the
+version that installs today keeps installing** until a reviewer approves
+the new one. Nobody is upgraded onto unreviewed code, and nothing you
+publish can change a version somebody already has.
+
+Two things it will stop you on:
+
+- **A mismatched manifest `id`.** An update is recognised by your
+  publisher organization plus the manifest `id` — so a bundle carrying a
+  different `id` would create a *separate listing*, not a new version.
+  The page says so and refuses rather than letting you find out from a
+  duplicate listing you cannot un-publish the bytes of.
+- **The changelog confirmation.** On an update the pre-publish checklist
+  asks for it up front, because here we know it applies.
+
+**Who can install it** is fixed when the listing is created and a new
+version never changes it — change that from the listing itself.
 
 - Artifacts are immutable and installs pin `{version, sha256}` — you can
   never change the code a consumer runs; ship a new version instead.

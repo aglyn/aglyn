@@ -571,7 +571,7 @@ export const DOCS_HELP_ANCHORS = {
   plugins: ['#install--upgrade', '#how-plugins-run', '#configure', '#publish-your-own', '#related'],
   pos: ['#registers', '#the-register', '#when-something-disconnects', '#reservations', '#related'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#tips', '#related'],
-  publisherHandbook: ['#before-your-first-publish', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#publishing-a-version', '#before-you-publish', '#review-what-happens-after-you-publish', '#private-plugins', '#authoring-your-listing', '#versioning--updates', '#how-installs-work-the-buyer-side', '#getting-paid'],
+  publisherHandbook: ['#before-your-first-publish', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#publishing-a-version', '#before-you-publish', '#review-what-happens-after-you-publish', '#private-plugins', '#authoring-your-listing', '#versioning--updates', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#getting-paid'],
   publishYourFirstScreen: ['#1-create-a-screen', '#2-design-it-in-the-besigner', '#3-preview-and-publish', '#next'],
   realmBundles: ['#build-against-the-host-abi', '#the-chain-that-runs-before-a-byte-executes', '#granting-trust-staff', '#where-realm-bundles-load', '#key-rotation', '#troubleshooting'],
   redirects: ['#manage-redirects', '#metrics', '#match-modes-v2', '#related'],

@@ -27,7 +27,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { doc } from 'firebase/firestore'
-import { Container } from '@aglyn/shared-ui-jsx'
+import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import ListingDetailEditor from '../../../../../components/marketplace/listing-detail-editor.component'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
@@ -118,13 +118,33 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
       // the org had a site yet.
       headerRight={
         isOwner && !editing ? (
-          <Button
-            variant="outlined"
-            color="secondary"
-            onClick={() => setEditing(true)}
-          >
-            {'Edit listing'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {/* Shipping a new version had no door on the listing itself
+                (AGL-1008) — Edit changes metadata and View changes nothing,
+                so the only reading left was "make a second listing". Same
+                publish form, pre-bound to this listing. Plugins only: a
+                bundle is the thing a new version ships. */}
+            {(listing?.artifactType ?? listing?.type) === 'plugin' ? (
+              <AppLink
+                href={
+                  `${buildRoute(Route.ORG_MARKETPLACE_PUBLISH_PLUGIN, {
+                    orgSlug,
+                  })}?listing=${encodeURIComponent(listingId)}`
+                }
+              >
+                <Button variant="contained" color="secondary" component="span">
+                  {'Publish new version'}
+                </Button>
+              </AppLink>
+            ) : null}
+            <Button
+              variant="outlined"
+              color="secondary"
+              onClick={() => setEditing(true)}
+            >
+              {'Edit listing'}
+            </Button>
+          </Stack>
         ) : undefined
       }
       help="plugins"
