@@ -8,10 +8,14 @@ import reactPlugin from 'eslint-plugin-react'
 import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import eslintPluginTsdoc from 'eslint-plugin-tsdoc'
 import noPlanGatedEntitlement from './tools/eslint-rules/no-plan-gated-entitlement.mjs'
+import noUnguardedLoadingHook from './tools/eslint-rules/no-unguarded-loading-hook.mjs'
 
 // Local rules that guard Aglyn-specific invariants (not published as a plugin).
 const aglynPlugin = {
-  rules: { 'no-plan-gated-entitlement': noPlanGatedEntitlement },
+  rules: {
+    'no-plan-gated-entitlement': noPlanGatedEntitlement,
+    'no-unguarded-loading-hook': noUnguardedLoadingHook,
+  },
 }
 
 // Mirrors the legacy eslintrc "overrides" semantics: each nx preset only
@@ -83,6 +87,10 @@ export default [
       // A plan-less org resolves as `free`; never gate a paid feature on the
       // presence of the `plan` field (AGL-46x free-tier leak regression guard).
       'aglyn/no-plan-gated-entitlement': 'error',
+      // A hook that reports a value plus a readiness flag means both or
+      // neither — taking the value alone is AGL-1047/1061/1064, three times
+      // the same defect.
+      'aglyn/no-unguarded-loading-hook': 'error',
       'mobx/exhaustive-make-observable': 'off',
       'mobx/unconditional-make-observable': 'off',
       'mobx/missing-make-observable': 'off',
