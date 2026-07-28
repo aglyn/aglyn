@@ -31,6 +31,18 @@ import '../public/_static/styles/styles.css'
  */
 const SOCIAL_CARD = '/_static/images/social/aglyn-console-social-card.png'
 
+// The console is an installable PWA. The manifest and its icons are plain
+// static files under `/_static`, which middleware excludes from the auth
+// matcher so the browser can fetch them pre-login (AGL-1052).
+const PWA_MANIFEST = '/_static/_pwa/manifest.json'
+const BRAND_ICONS = '/_static/images/brand'
+
+// The installable app icon, distinct from the transparent favicon glyph. This
+// is the brand drive's light/solid variant: an opaque white plate that bleeds
+// to the edges, which is what a maskable icon requires — the platform supplies
+// its own mask, so the artwork must not be pre-inset.
+const APP_ICONS = '/_static/images/brand/app-icon'
+
 // Resolves the relative og:image above to an absolute URL for crawlers. The
 // console apex is `app.aglyn.com` (see middleware); override via env per deploy.
 const SITE_URL = process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'https://app.aglyn.com'
@@ -39,6 +51,24 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: { default: APP_CONSOLE.TITLE ?? 'Aglyn', template: '%s · Aglyn' },
   description: APP_CONSOLE.DESCRIPTION,
+  manifest: PWA_MANIFEST,
+  applicationName: 'Aglyn Console',
+  icons: {
+    icon: [
+      { url: `${BRAND_ICONS}/icon-32x32.png`, sizes: '32x32', type: 'image/png' },
+      { url: `${BRAND_ICONS}/icon-256x256.png`, sizes: '256x256', type: 'image/png' },
+      { url: `${BRAND_ICONS}/icon-24x24.svg`, type: 'image/svg+xml' },
+    ],
+    // iOS applies its own rounded mask and composites transparency against
+    // black, so the home-screen icon must be the opaque plate — never the
+    // transparent glyph used for the favicon above.
+    apple: [{ url: `${APP_ICONS}/light-solid-180.png`, sizes: '180x180', type: 'image/png' }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: 'Aglyn',
+    statusBarStyle: 'default',
+  },
   openGraph: {
     title: APP_CONSOLE.TITLE,
     description: APP_CONSOLE.DESCRIPTION,
@@ -64,6 +94,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // Matches `theme_color` in the manifest; without it the installed window
+  // renders its title bar in the browser default rather than Aglyn's slate.
+  themeColor: '#404c5c',
 }
 
 // The console is a fully client-rendered authoring app (firebase/reactfire/

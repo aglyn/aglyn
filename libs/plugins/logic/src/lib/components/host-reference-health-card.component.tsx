@@ -19,12 +19,13 @@
 import { auditHostReferences } from '../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Chip, Stack, Typography } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
+import { collection, limit, query, where } from 'firebase/firestore'
 import { useMemo } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
   useHostOrgId,
+  useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
 
 export interface HostReferenceHealthCardProps {
@@ -65,13 +66,21 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   const productDocs = useHostCollection('products')
   const collectionDocs = useHostCollection('collections')
   const categoryDocs = useHostCollection('productCategories')
+  // Scoped (AGL-1044) — see the note in host-actions-card: an unfiltered
+  // list is rejected, not filtered.
+  const { tokens: scopeTokens, orgWide: viewerOrgWide } =
+    useScopeTokens(hostOrgId ?? undefined)
+  const needsScope = Boolean(hostOrgId) && !viewerOrgWide
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
       query(
         collection(firestore, dataScope[0], dataScope[1], 'datasets'),
+        ...(needsScope
+          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+          : []),
         limit(100),
       ),
-    [firestore, hostId, hostOrgId],
+    [firestore, hostId, hostOrgId, needsScope, scopeTokens],
     { idField: '$id' },
   )
   const { data: listDocs } = useFirestoreCollection<any>(

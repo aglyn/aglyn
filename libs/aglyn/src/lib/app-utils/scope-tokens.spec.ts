@@ -17,6 +17,7 @@
 
 import {
   describeScope,
+  hostQualifiedCdnPath,
   hostIdsFromScope,
   hostScopeToken,
   isOrgWideScope,
@@ -198,5 +199,44 @@ describe('describeScope', () => {
 
   it('says so when a scope names nobody', () => {
     expect(describeScope([], names)).toBe('No sites')
+  })
+})
+
+describe('hostQualifiedCdnPath (AGL-1043/1045)', () => {
+  const PATH = '/api/media/cdn/org:acme/med123'
+
+  it('leaves an org-wide asset alone', () => {
+    expect(hostQualifiedCdnPath(PATH, ['org'], 'site-a')).toBe(PATH)
+    expect(hostQualifiedCdnPath(PATH, undefined, 'site-a')).toBe(PATH)
+  })
+
+  it('names the site for a restricted asset', () => {
+    expect(hostQualifiedCdnPath(PATH, ['host:site-a'], 'site-a')).toBe(
+      '/api/media/cdn/org:acme:site-a/med123',
+    )
+  })
+
+  it('keeps the immutable hash segment', () => {
+    expect(
+      hostQualifiedCdnPath(`${PATH}/abc123`, ['host:site-a'], 'site-a'),
+    ).toBe('/api/media/cdn/org:acme:site-a/med123/abc123')
+  })
+
+  it('does no harm when there is nothing to qualify', () => {
+    expect(hostQualifiedCdnPath(PATH, ['host:site-a'], undefined)).toBe(PATH)
+    // A host-library asset: its scope segment is not an org one.
+    const hostPath = '/api/media/cdn/site-a/med123'
+    expect(hostQualifiedCdnPath(hostPath, ['host:site-a'], 'site-a')).toBe(
+      hostPath,
+    )
+    expect(hostQualifiedCdnPath(undefined, ['host:x'], 'site-a')).toBeUndefined()
+    expect(hostQualifiedCdnPath('https://cdn.example/x.png', ['host:x'], 'a')).toBe(
+      'https://cdn.example/x.png',
+    )
+  })
+
+  it('does not double-qualify an already-scoped path', () => {
+    const already = '/api/media/cdn/org:acme:site-a/med123'
+    expect(hostQualifiedCdnPath(already, ['host:site-a'], 'site-b')).toBe(already)
   })
 })

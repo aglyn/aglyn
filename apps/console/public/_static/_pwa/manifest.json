@@ -1,72 +1,67 @@
 {
-  "name": "Aglyn",
+  "id": "/",
+  "name": "Aglyn Console",
   "short_name": "Aglyn",
+  "description": "Build, manage and publish your Aglyn sites.",
   "display": "standalone",
   "start_url": "/",
+  "scope": "/",
   "theme_color": "#404c5c",
   "background_color": "#ffffff",
   "icons": [
     {
-      "src": "icons/icon-16x16.png",
-      "sizes": "16x16"
+      "src": "/_static/images/brand/app-icon/light-solid-16.png",
+      "sizes": "16x16",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "icons/icon-24x24.png",
-      "sizes": "24x24"
+      "src": "/_static/images/brand/app-icon/light-solid-32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "icons/icon-32x32.png",
-      "sizes": "32x32"
+      "src": "/_static/images/brand/app-icon/light-solid-64.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "icons/icon-64x64.png",
-      "sizes": "64x64"
-    },
-    {
-      "src": "icons/icon-100x100.png",
-      "sizes": "100x100",
-      "type": "image/png"
-    },
-    {
-      "src": "icons/icon-128x128.png",
+      "src": "/_static/images/brand/app-icon/light-solid-128.png",
       "sizes": "128x128",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "icons/icon-144x144.png",
-      "sizes": "144x144",
-      "type": "image/png"
+      "src": "/_static/images/brand/app-icon/light-solid-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "icons/icon-152x152.png",
-      "sizes": "152x152",
-      "type": "image/png"
-    },
-    {
-      "src": "icons/icon-180x180.png",
-      "sizes": "180x180",
-      "type": "image/png"
-    },
-    {
-      "src": "icons/icon-256x256.png",
+      "src": "/_static/images/brand/app-icon/light-solid-256.png",
       "sizes": "256x256",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "icons/icon-512x512.png",
+      "src": "/_static/images/brand/app-icon/light-solid-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "icons/icon-1024x1024.png",
-      "sizes": "1024x1024",
-      "type": "image/png"
+      "src": "/_static/images/brand/app-icon/light-solid-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
-      "src": "icons/icon-24x24.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "/_static/images/brand/app-icon/light-solid-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
-  ],
-  "splash_pages": null
+  ]
 }

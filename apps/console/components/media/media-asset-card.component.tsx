@@ -17,7 +17,9 @@
 'use client'
 
 import type * as Aglyn from '@aglyn/aglyn'
+import { describeScope, isOrgWideScope } from '@aglyn/aglyn'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import {
@@ -29,6 +31,7 @@ import {
   Menu,
   MenuItem,
   Stack,
+  Chip,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -212,6 +215,19 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
           >
             {`${typeLabel(media.contentType)} · ${formatBytes(media.sizeBytes ?? 0)}`}
           </Typography>
+          {/* Restriction is visible without opening the drawer (AGL-1045).
+              Only shown when it is actually restricted — badging every
+              org-wide asset would be noise on the common case. */}
+          {media.visibleTo && !isOrgWideScope(media.visibleTo) ? (
+            <Tooltip title={describeScope(media.visibleTo)}>
+              <Chip
+                size="small"
+                icon={<LockOutlinedIcon />}
+                label={describeScope(media.visibleTo)}
+                sx={{ mt: 0.5, maxWidth: '100%' }}
+              />
+            </Tooltip>
+          ) : null}
         </Box>
         {picker ? null : (
           <IconButton

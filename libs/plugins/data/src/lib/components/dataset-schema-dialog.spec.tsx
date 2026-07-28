@@ -29,6 +29,10 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useHostOrgId: () => undefined,
+  // Scoped sharing (AGL-1044). Org-wide by default so these specs exercise
+  // the editable path; the read-only branch is covered by the rules tests.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
+  useFirestoreCollection: () => ({ data: [] }),
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),

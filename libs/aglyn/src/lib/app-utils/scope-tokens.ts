@@ -190,3 +190,38 @@ export function describeScope(
   }
   return `${hostIds.length} sites`
 }
+
+/**
+ * Rewrites an org media CDN path so it names the site using the asset
+ * (AGL-1043/1045).
+ *
+ * `/api/media/cdn/org:{orgId}/{mediaId}` serves ORG-WIDE assets only. A
+ * restricted asset has to be requested through the form that names the
+ * site — `org:{orgId}:{hostId}` — because the CDN is unauthenticated and
+ * the URL is the only thing it can decide from.
+ *
+ * Returns the path untouched when there is nothing to do: an org-wide
+ * asset, a host-library asset, no host context, or a path that is not an
+ * org CDN URL. That keeps it safe to apply blindly at every pick site.
+ */
+export function hostQualifiedCdnPath(
+  cdnPath: string | undefined | null,
+  visibleTo: readonly string[] | undefined | null,
+  hostId: string | undefined | null,
+): string | undefined {
+  if (!cdnPath) return cdnPath ?? undefined
+  if (!hostId || isOrgWideScope(visibleTo)) return cdnPath
+  // `/api/media/cdn/{scope}/{mediaId}[/{hash}]`
+  const marker = '/api/media/cdn/'
+  const at = cdnPath.indexOf(marker)
+  if (at === -1) return cdnPath
+  const head = cdnPath.slice(0, at + marker.length)
+  const rest = cdnPath.slice(at + marker.length)
+  const [scopeSegment, ...tail] = rest.split('/')
+  // Only the bare `org:{orgId}` form is rewritten; an already-qualified
+  // scope is left alone rather than gaining a second host.
+  if (!scopeSegment.startsWith('org:') || scopeSegment.includes(':', 4)) {
+    return cdnPath
+  }
+  return [`${head}${scopeSegment}:${hostId}`, ...tail].join('/')
+}
