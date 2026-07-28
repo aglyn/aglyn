@@ -7,58 +7,58 @@
   "start_url": "/",
   "scope": "/",
   "theme_color": "#404c5c",
-  "background_color": "#2c3540",
+  "background_color": "#ffffff",
   "icons": [
     {
-      "src": "/_static/images/brand/app-icon/clipped-16.png",
+      "src": "/_static/images/brand/app-icon/light-solid-16.png",
       "sizes": "16x16",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/app-icon/clipped-32.png",
+      "src": "/_static/images/brand/app-icon/light-solid-32.png",
       "sizes": "32x32",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/app-icon/clipped-64.png",
+      "src": "/_static/images/brand/app-icon/light-solid-64.png",
       "sizes": "64x64",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/app-icon/clipped-128.png",
+      "src": "/_static/images/brand/app-icon/light-solid-128.png",
       "sizes": "128x128",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/app-icon/clipped-256.png",
+      "src": "/_static/images/brand/app-icon/light-solid-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/_static/images/brand/app-icon/light-solid-256.png",
       "sizes": "256x256",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/app-icon/clipped-512.png",
+      "src": "/_static/images/brand/app-icon/light-solid-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/app-icon/solid-192.png",
+      "src": "/_static/images/brand/app-icon/light-solid-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/_static/images/brand/app-icon/solid-256.png",
-      "sizes": "256x256",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/_static/images/brand/app-icon/solid-512.png",
+      "src": "/_static/images/brand/app-icon/light-solid-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
