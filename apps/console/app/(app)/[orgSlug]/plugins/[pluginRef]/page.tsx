@@ -51,17 +51,20 @@ import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
  * take their plugin id off the pin's own manifest rather than the URL, so
  * the two identifiers cannot disagree.
  *
- * The folder is still named `[listingId]`; renaming a dynamic segment costs
- * a dev-server restart for everyone (see AGL-1001), so it is left for a
- * moment when that is not disruptive.
+ * The segment is `[pluginRef]` (AGL-1013), which is also the key `useParams`
+ * answers to — see the read below.
  */
 const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const { currentOrg, loading } = useOrgScope()
   const { data: user } = useUser()
   const firestore = useFirestore()
-  const params = useParams<{ listingId: string }>()
-  const pluginRef = String(params.listingId ?? '')
+  // Keyed by the SEGMENT name (AGL-1025). AGL-1013 renamed the folder to
+  // `[pluginRef]` and left this reading `listingId`, which Next then resolved
+  // to undefined: every pin fell through to the `-missing-` sentinel and the
+  // page told admins a plugin running org-wide was not installed anywhere.
+  const params = useParams<{ pluginRef: string }>()
+  const pluginRef = String(params.pluginRef ?? '')
   const orgId = currentOrg?.$id ?? ''
   // First-party plugins are a registry entry, not an install pin: they have
   // no listing, no version and no per-site scope — they are on or off for
