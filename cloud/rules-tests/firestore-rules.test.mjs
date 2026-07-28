@@ -31,7 +31,17 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
@@ -551,12 +561,18 @@ describe('org-shared data (AGL-237)', () => {
   beforeEach(async () => {
     await env.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore()
-      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1'), { name: 'Team' })
+      // Every org resource carries a scope now (AGL-1041); the rules fail
+      // closed without one, exactly as production does post-backfill.
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1'), {
+        name: 'Team', visibleTo: ['org'],
+      })
       await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1'), { a: 1 })
       await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1'), { name: 'Newsletter' })
       await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1', 'members', 'm1'), { email: 'x@y.z' })
       await setDoc(doc(db, 'orgs', ORG, 'contacts', 'c1'), { email: 'x@y.z' })
-      await setDoc(doc(db, 'orgs', ORG, 'media', 'm1'), { url: 'u' })
+      await setDoc(doc(db, 'orgs', ORG, 'media', 'm1'), {
+        url: 'u', visibleTo: ['org'],
+      })
       await setDoc(doc(db, 'orgs', ORG, 'installs', 'p1'), { version: '1' })
     })
   })
@@ -617,10 +633,14 @@ describe('org-shared data (AGL-237)', () => {
       setDoc(doc(authed(EDITOR), 'orgs', ORG, 'media', 'm1'), { folderId: 'f1' }, { merge: true }),
     )
     await assertSucceeds(
-      setDoc(doc(authed(OWNER), 'orgs', ORG, 'mediaFolders', 'f1'), { name: 'Brand' }),
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'mediaFolders', 'f1'), {
+        name: 'Brand', visibleTo: ['org'],
+      }),
     )
     await assertFails(
-      setDoc(doc(authed(VIEWER), 'orgs', ORG, 'mediaFolders', 'f2'), { name: 'No' }),
+      setDoc(doc(authed(VIEWER), 'orgs', ORG, 'mediaFolders', 'f2'), {
+        name: 'No', visibleTo: ['org'],
+      }),
     )
     await assertFails(
       setDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'media', 'm2'), { url: 'x' }),
@@ -738,12 +758,21 @@ describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
     await assertFails(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-theirs')))
   })
 
-  it('a doc with NO visibleTo stays readable — pre-backfill safety', async () => {
-    // hasAny on a missing field errors rather than returning false, so the
-    // guard in canReadScoped is load-bearing: without it every unstamped
-    // doc would deny instead of degrading to org-wide.
-    await assertSucceeds(
+  it('a doc with NO visibleTo is DENIED — fail closed (AGL-1047)', async () => {
+    // Reversed deliberately. Allowing unstamped docs through required an
+    // `'visibleTo' in resource.data` check, and that check made the rule
+    // unprovable per-document for LIST queries — Firestore then admitted an
+    // UNFILTERED list of the whole collection, restricted docs included.
+    // The backfill has run and every writer stamps the field, so an absent
+    // `visibleTo` is a bug, and denying it is both correct and what keeps
+    // the list contract below working.
+    await assertFails(
       getDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds-legacy')),
+    )
+    // An org-wide member still reads it — they short-circuit before the
+    // field is consulted, so one unstamped doc cannot lock an owner out.
+    await assertSucceeds(
+      getDoc(doc(authed(OWNER), 'orgs', ORG, 'datasets', 'ds-legacy')),
     )
   })
 
@@ -811,6 +840,70 @@ describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
     )
     await assertFails(
       deleteDoc(doc(db, 'orgs', ORG, 'mediaFolders', 'f-theirs')),
+    )
+  })
+
+  // LIST queries, which every console page issues and no test covered
+  // before. Rules evaluate per DOCUMENT on a list and Firestore fails the
+  // WHOLE query if any candidate would fail — so an unfiltered list does
+  // not come back filtered, it comes back denied. This is the contract
+  // AGL-1044/1045's client queries are written against; if it breaks, the
+  // Data and Media pages error rather than showing less.
+  it('a scoped list is DENIED without the filter and ALLOWED with it', async () => {
+    const db = authed(EDITOR)
+    const datasets = collection(db, 'orgs', ORG, 'datasets')
+    await assertFails(getDocs(datasets))
+    await assertSucceeds(
+      getDocs(
+        query(
+          datasets,
+          where('visibleTo', 'array-contains-any', ['org', `host:${HOST}`]),
+        ),
+      ),
+    )
+  })
+
+  it('the filtered list returns exactly what the member may see', async () => {
+    const snapshot = await getDocs(
+      query(
+        collection(authed(EDITOR), 'orgs', ORG, 'datasets'),
+        where('visibleTo', 'array-contains-any', ['org', `host:${HOST}`]),
+      ),
+    )
+    const ids = snapshot.docs.map((entry) => entry.id).sort()
+    // ds-legacy carries no `visibleTo`, so array-contains-any cannot match
+    // it — the reason the AGL-1040 backfill had to run BEFORE these rules.
+    assert.deepEqual(ids, ['ds-mine', 'ds-org'])
+  })
+
+  it('a member cannot widen the filter to another site', async () => {
+    // Asking for a site they were never granted must not succeed just
+    // because the query is well-formed.
+    await assertFails(
+      getDocs(
+        query(
+          collection(authed(EDITOR), 'orgs', ORG, 'datasets'),
+          where('visibleTo', 'array-contains-any', [`host:${OTHER_HOST}`]),
+        ),
+      ),
+    )
+  })
+
+  it('an org-wide member lists everything, unfiltered', async () => {
+    const snapshot = await getDocs(collection(authed(OWNER), 'orgs', ORG, 'datasets'))
+    assert.ok(snapshot.docs.length >= 4)
+  })
+
+  it('media and folder lists follow the same contract', async () => {
+    const db = authed(EDITOR)
+    await assertFails(getDocs(collection(db, 'orgs', ORG, 'media')))
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, 'orgs', ORG, 'media'),
+          where('visibleTo', 'array-contains-any', ['org', `host:${HOST}`]),
+        ),
+      ),
     )
   })
 

@@ -189,16 +189,25 @@ service cloud.firestore {
        * Rules have no `.map()`, which is why both sides are denormalized
        * arrays: `hasAny` is the only set-intersection primitive available.
        *
-       * A MISSING `visibleTo` reads as visible. Every doc was stamped by the
-       * AGL-1040 backfill, but a doc created between that run and this rule
-       * deploying must not vanish. `hasAny` on a missing field errors rather
-       * than returning false, so the guard is load-bearing, not cosmetic.
+       * NO missing-field escape hatch, deliberately (AGL-1047). An earlier
+       * version allowed a doc with no `visibleTo` through, as safety for the
+       * window between the AGL-1040 backfill and this rule deploying. That
+       * `in` check made the whole rule unprovable per-document for LIST
+       * queries, and Firestore then admitted an UNFILTERED list of the
+       * entire collection — including other sites' restricted docs. Verified
+       * against the emulator: with the hatch a scoped member lists
+       * everything; without it the unfiltered list is denied and the
+       * filtered one succeeds.
+       *
+       * The hatch is also no longer needed: the backfill has run in
+       * production (zero docs left unstamped) and every writer now stamps
+       * the field, so an absent `visibleTo` means a bug, and failing closed
+       * on it is correct.
        */
       function canReadScoped() {
         return isOrgWideMember() ||
           (isOrgMember() &&
-           (!('visibleTo' in resource.data) ||
-            resource.data.visibleTo.hasAny(orgMember().get('scopeTokens', ['org']))));
+           resource.data.visibleTo.hasAny(orgMember().get('scopeTokens', ['org'])));
       }
       function canWriteScopedOrgData() {
         return canWriteOrgData() && canReadScoped();
@@ -221,8 +230,7 @@ service cloud.firestore {
        */
       function canCreateScoped() {
         return isOrgWideMember() ||
-          (!('visibleTo' in request.resource.data) ||
-           request.resource.data.visibleTo.hasAny(orgMember().get('scopeTokens', ['org'])));
+          request.resource.data.visibleTo.hasAny(orgMember().get('scopeTokens', ['org']));
       }
       // Dataset/record CREATES are API-only (AGL-473): the console route
       // enforces the dataStore entitlement and dataset/record quotas
@@ -260,7 +268,7 @@ service cloud.firestore {
             return isOrgWideMember() ||
               (isOrgMember() &&
                get(/databases/$(database)/documents/orgs/$(orgId)/datasets/$(datasetId))
-                 .data.get('visibleTo', ['org'])
+                 .data.visibleTo
                  .hasAny(orgMember().get('scopeTokens', ['org'])));
           }
           allow read: if isStaff() || parentDatasetVisible();
