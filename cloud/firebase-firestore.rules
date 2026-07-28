@@ -611,6 +611,21 @@ service cloud.firestore {
       }
     }
 
+    // Immutable base snapshots of installed marketplace content (AGL-1015),
+    // keyed by their own content hash. Written only by the install routes
+    // through the Admin SDK, and never rewritten — a document at a given hash
+    // already holds byte-identical content, which is what makes re-installing
+    // the same version free.
+    //
+    // Closed to clients in both directions. Reads because a base can hold paid
+    // content: the hash is recorded on the installed document, so a client that
+    // could read this collection could fetch any listing's content by hash
+    // without buying it — exactly the leak the version subcollection is closed
+    // for. The diff and reset paths (AGL-1018) read it server-side.
+    match /communityArtifactBases/{sha256} {
+      allow read, write: if false;
+    }
+
     // Plugin kill switch (AGL-45): loaders check this before executing a
     // pinned plugin, so it is a PUBLIC read; only staff (or the Admin SDK)
     // may write a revocation.

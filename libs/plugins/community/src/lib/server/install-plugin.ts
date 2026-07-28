@@ -25,6 +25,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
+import { pinnedProvenance } from './provenance'
 import {
   isListingBrowsable,
   isPrivateListing,
@@ -328,6 +329,17 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
         sha256: versionData.sha256,
         objectPath: versionData.objectPath,
         manifest: versionData.manifest,
+        // The same provenance stamp every other artifact type now carries
+        // (AGL-1015), so one reader answers "where did this come from" for
+        // pinned and copied artifacts alike. The flat pin fields stay: they
+        // are what the loader reads.
+        installedFrom: pinnedProvenance({
+          listingId,
+          listing,
+          version,
+          sha256: versionData.sha256,
+          artifactType: 'plugin',
+        }),
         ...(existing.exists ? {} : { installedAt: now }),
         updatedAt: now,
       },

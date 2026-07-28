@@ -20,6 +20,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
+import { recordInstallProvenance } from './provenance'
 import { listingArtifactType } from '../model/community'
 
 /**
@@ -168,6 +169,18 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
       listingId,
       version: listing.latestVersion ?? null,
     }
+    // Provenance + base snapshot (AGL-1015). One snapshot for the whole
+    // bundle, matching how the bundle is replaced: the published screens carry
+    // no stable identity, so per-template bases would key on nothing and could
+    // not be paired back up on update.
+    const provenance = await recordInstallProvenance({
+      firestore,
+      listingId,
+      listing,
+      version: listing.latestVersion,
+      artifactType: 'template',
+      content: { screens, ...(template.theme ? { theme: template.theme } : {}) },
+    })
     // Re-installing the same listing REPLACES its previous bundle rather
     // than stacking a second copy (AGL-671) — that is what makes "Update
     // available" actionable with no separate refresh route.
@@ -207,6 +220,7 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
         // template and the decision moves to whoever uses it.
         ...(template.theme ? { theme: template.theme } : {}),
         source,
+        installedFrom: provenance.installedFrom,
         createdAt: now,
         updatedAt: now,
       })
@@ -226,6 +240,7 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
       /** Prior templates from this listing, superseded by this install. */
       replaced,
       version: listing.latestVersion ?? null,
+      baseStored: provenance.baseStored,
       // Retained so an older client doesn't render "Added undefined screens".
       screens: 0,
       themeApplied: false,

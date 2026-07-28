@@ -21,3 +21,4 @@
  * other plugins/apps via `@aglyn/plugins-community/model`.
  */
 export * from './community'
+export * from './provenance'

@@ -28,6 +28,7 @@ import {
   resolveInstalledDatasetSchema,
 } from '../model/community'
 import { canActAsPublisher } from './publisher-profile'
+import { recordInstallProvenance } from './provenance'
 
 /**
  * Installs a marketplace dataset schema into an org (AGL-657).
@@ -148,6 +149,18 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
 
     const datasetId = createResourceUid()
     const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
+    // Provenance + base snapshot (AGL-1015). The RELINKED schema, not the
+    // published one: relinking rewrites reference fields onto this org's
+    // datasets, so a base holding the publisher's ids would report every
+    // relinked field as a user edit the moment anything is diffed.
+    const provenance = await recordInstallProvenance({
+      firestore,
+      listingId,
+      listing,
+      version: listing.latestVersion,
+      artifactType: 'datasetSchema',
+      content: schema,
+    })
     await orgRef
       .collection('datasets')
       .doc(datasetId)
@@ -163,6 +176,7 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
           listingId,
           version: listing.latestVersion ?? null,
         },
+        installedFrom: provenance.installedFrom,
         createdAt: now,
       })
 
@@ -178,6 +192,7 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
       fields: schema.order.length,
       degradedFieldIds,
       version: listing.latestVersion ?? null,
+      baseStored: provenance.baseStored,
     })
   } catch (error) {
     console.error(error)
