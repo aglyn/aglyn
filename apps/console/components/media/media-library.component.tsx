@@ -48,6 +48,7 @@ import {
   Link,
   Menu,
   MenuItem,
+  Select,
   Stack,
   TextField,
   Typography,
@@ -88,6 +89,7 @@ import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
+import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -103,6 +105,20 @@ export interface MediaLibraryComponentProps {
   orgId?: string
   /** When set, clicking an item selects it instead of exposing row actions. */
   onSelect?: (media: Aglyn.AglynHostMedia) => void
+  /**
+   * Restrict the ORG library to what one site may actually render
+   * (AGL-1045). Set by the picker: you can only place an asset the target
+   * site is allowed to use, regardless of how much the person browsing can
+   * see. An agency owner sees every internal asset in the org library — but
+   * not while choosing an image for a client's page, where placing one
+   * would 404 on that site's domain.
+   *
+   * Filtering by the TARGET host's tokens also satisfies the AGL-1042
+   * rules: `['org', 'host:{target}']` is a subset of the viewer's own
+   * tokens whenever they can edit that site at all, so every returned doc
+   * passes their check too.
+   */
+  forHostId?: string
 }
 
 /** Page size for cursor pagination (AGL-174). */
@@ -212,7 +228,7 @@ function fileToBase64(file: File): Promise<string> {
  * Doubles as the browse grid inside MediaPickerDialog via `onSelect`.
  */
 export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
-  const { hostId, orgId, onSelect } = props
+  const { hostId, orgId, onSelect, forHostId } = props
   // Scope plumbing: one library serves both a site's media and the org
   // DAM — only the Firestore base path and the API identity differ.
   const scopeCollection = orgId ? 'orgs' : 'hosts'
@@ -224,13 +240,27 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // for the page to work at all, not a nicety. Org-wide members skip it:
   // they read everything, and adding the filter would cost them a
   // composite index for nothing.
-  const { tokens: scopeTokens, orgWide: viewerOrgWide } = useScopeTokens(orgId)
-  const needsScope = Boolean(orgId) && !viewerOrgWide
+  const { tokens: viewerTokens, orgWide: viewerOrgWide } = useScopeTokens(orgId)
+  // Picking for a site narrows to THAT site's read set; otherwise a scoped
+  // member narrows to their own. An org-wide member browsing the library
+  // outright needs no filter.
+  const scopeTokens = forHostId
+    ? [Aglyn.ORG_SCOPE_TOKEN, Aglyn.hostScopeToken(forHostId)]
+    : viewerTokens
+  const needsScope = Boolean(orgId) && (Boolean(forHostId) || !viewerOrgWide)
 
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  // Sites in this org, for the "Selected sites…" chips and for turning
+  // stored `host:` tokens back into names.
+  const { hosts: orgHostList } = useOrgHosts(
+    firestore,
+    (user as any)?.uid,
+    orgId ?? undefined,
+  )
+
   const { org } = useCurrentOrg()
   // The org is a path segment in every console route; the "Used on" deep
   // links (AGL-845) build `/[orgSlug]/hosts/[subdomain]/…` from it.
@@ -923,6 +953,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     // Custom metadata (AGL-822) edited as ordered rows, not a map, so
     // blank/duplicate keys are tolerable mid-edit and reorder is stable.
     customMeta: Array<{ key: string; value: string }>
+    /** Scope tokens being edited (AGL-1045); org library only. */
+    visibleTo: string[]
   } | null>(null)
   const handleEditorSave = useCallback(async () => {
     if (!editor) return
@@ -942,6 +974,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     const metaChanged =
       JSON.stringify(Object.entries(nextMeta).sort()) !==
       JSON.stringify(Object.entries(prevMeta).sort())
+    const previousScope: string[] = Array.isArray(editor.media?.visibleTo)
+      ? editor.media.visibleTo
+      : [Aglyn.ORG_SCOPE_TOKEN]
+    const scopeChanged =
+      JSON.stringify([...previousScope].sort()) !==
+      JSON.stringify([...editor.visibleTo].sort())
     try {
       await updateDoc(
         doc(firestore, scopeCollection, scopeId, 'media', editor.id),
@@ -949,6 +987,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           folderId,
           // Legacy string kept in sync until every reader is on folderId.
           folder: folderId ? (folderNameById[folderId] ?? '') : '',
+          // Sharing scope (AGL-1045). Only an org-wide member may change
+          // it — the AGL-1042 rules deny anyone else, so sending it would
+          // fail the whole write rather than just this field.
+          ...(orgId && viewerOrgWide && scopeChanged
+            ? { visibleTo: Aglyn.normalizeVisibleTo(editor.visibleTo) ?? [Aglyn.ORG_SCOPE_TOKEN] }
+            : {}),
           // Rename (AGL-184): display-name only; the Storage object id/URL
           // stays stable so existing references keep resolving.
           ...(editor.fileName.trim()
@@ -1895,6 +1939,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                       customMeta: Object.entries(
                         (media as any).customMetadata ?? {},
                       ).map(([key, value]) => ({ key, value: String(value) })),
+                      visibleTo: Array.isArray((media as any).visibleTo)
+                        ? (media as any).visibleTo
+                        : [Aglyn.ORG_SCOPE_TOKEN],
                     })
                   }
                   onDelete={handleDelete(media)}
@@ -2059,6 +2106,96 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             multiline
             minRows={2}
           />
+          {/* Sharing scope (AGL-1045). Org library only — a site's own
+              library is private by construction. Read-only for scoped
+              members: the AGL-1042 rules deny them the write, so offering
+              a control that always fails would be worse than showing the
+              value. */}
+          {orgId ? (
+            <Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                component="div"
+                sx={{ mb: 0.5 }}
+              >
+                {'Shared with'}
+              </Typography>
+              {viewerOrgWide ? (
+                <>
+                  <Select
+                    size="small"
+                    fullWidth
+                    value={
+                      (editor?.visibleTo ?? []).includes(Aglyn.ORG_SCOPE_TOKEN)
+                        ? 'org'
+                        : 'hosts'
+                    }
+                    onChange={(event) =>
+                      setEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              visibleTo:
+                                event.target.value === 'org'
+                                  ? [Aglyn.ORG_SCOPE_TOKEN]
+                                  : // Default the narrowed case to the site
+                                    // being browsed, or none — never a guess
+                                    // at which sites the author meant.
+                                    [],
+                            }
+                          : prev,
+                      )
+                    }
+                  >
+                    <MenuItem value="org">{'All sites'}</MenuItem>
+                    <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
+                  </Select>
+                  {!(editor?.visibleTo ?? []).includes(Aglyn.ORG_SCOPE_TOKEN) ? (
+                    <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {orgHostList.map((host) => {
+                        const token = Aglyn.hostScopeToken(host.$id)
+                        const on = (editor?.visibleTo ?? []).includes(token)
+                        return (
+                          <Chip
+                            key={host.$id}
+                            size="small"
+                            label={host.name ?? host.subdomain ?? host.$id}
+                            color={on ? 'secondary' : 'default'}
+                            variant={on ? 'filled' : 'outlined'}
+                            onClick={() =>
+                              setEditor((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      visibleTo: on
+                                        ? prev.visibleTo.filter((t) => t !== token)
+                                        : [...prev.visibleTo, token],
+                                    }
+                                  : prev,
+                              )
+                            }
+                          />
+                        )
+                      })}
+                    </Box>
+                  ) : null}
+                </>
+              ) : (
+                <Typography variant="body2">
+                  {Aglyn.describeScope(
+                    editor?.visibleTo,
+                    Object.fromEntries(
+                      orgHostList.map((host) => [
+                        host.$id,
+                        host.name ?? host.subdomain ?? host.$id,
+                      ]),
+                    ),
+                  )}
+                </Typography>
+              )}
+            </Box>
+          ) : null}
           <Box>
             <Typography
               variant="caption"

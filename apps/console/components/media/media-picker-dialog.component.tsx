@@ -50,6 +50,10 @@ export interface MediaPickerDialogProps {
  * are in play, a tab switches between the site-private library and the
  * organization's shared one — replacing the old hand-rolled OrgMediaStrip
  * so every picker gets the same folders, upload, and polished grid.
+ *
+ * The Organization tab is scoped to the site being edited (AGL-1045):
+ * you can only place what that site is allowed to render. Opened without a
+ * host — the org Media page — it shows everything the viewer may see.
  */
 export function MediaPickerDialog(props: MediaPickerDialogProps) {
   const { hostId, orgId, open, onClose, onPick } = props
@@ -84,7 +88,15 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
           <MediaLibraryComponent hostId={hostId} onSelect={pick} />
         ) : null}
         {showOrg && orgScope ? (
-          <MediaLibraryComponent orgId={orgScope} onSelect={pick} />
+          <MediaLibraryComponent
+            orgId={orgScope}
+            // Show only what THIS site may render (AGL-1045). This is the
+            // discovery boundary the project exists for: an agency employee
+            // building a client's page cannot find — let alone place — an
+            // asset restricted to the agency's internal sites.
+            forHostId={hostId}
+            onSelect={pick}
+          />
         ) : null}
       </DialogContent>
       <DialogActions>
