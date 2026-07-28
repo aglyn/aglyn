@@ -22,6 +22,7 @@ import {
   COMMUNITY_EMAIL_COMPONENT_ID_ALLOWLIST,
   installTargetsFor,
   isListingBrowsable,
+  isPrivateListing,
   resolveInstallPlan,
   resolveInstalledDatasetSchema,
   resolvePluginInstallState,
@@ -381,6 +382,34 @@ describe('isListingBrowsable (AGL-658)', () => {
         hiddenAt: new Date(),
       }),
     ).toBe(false)
+  })
+
+  // Private is not a review state (AGL-968): a private plugin can be fully
+  // approved and even verified, and still must never be browsable. Passing
+  // review is what makes it INSTALLABLE by its owner, not what puts it in
+  // front of other workspaces.
+  it('keeps a private listing out of browse at every review state', () => {
+    for (const reviewStatus of [
+      undefined,
+      'submitted',
+      'listed',
+      'verified',
+      'rejected',
+    ]) {
+      expect(
+        isListingBrowsable({
+          artifactType: 'plugin',
+          visibility: 'private',
+          ...(reviewStatus ? { reviewStatus } : {}),
+        }),
+      ).toBe(false)
+    }
+  })
+
+  it('treats any other visibility value as public', () => {
+    expect(isPrivateListing({})).toBe(false)
+    expect(isPrivateListing({ visibility: 'public' })).toBe(false)
+    expect(isPrivateListing({ visibility: 'private' })).toBe(true)
   })
 })
 

@@ -38,6 +38,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import {
   isListingBrowsable,
+  isPrivateListing,
   listingArtifactType,
   listingArtifactLabel,
   resolvePluginInstallState,
@@ -304,6 +305,15 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   const items = useMemo(() => {
     const needle = search.trim().toLowerCase()
     const filtered = (listings ?? []).filter((listing: any) => {
+      // Private plugins never appear here, not even for the org that owns
+      // them (AGL-968/993). The owner exemption below exists so a publisher
+      // can watch their own SUBMISSION move through review — but a private
+      // listing is not waiting to be listed, it is deliberately not for the
+      // marketplace, and showing it in this grid is the one thing "private"
+      // promises will not happen. Owners reach theirs from
+      // Marketplace › Listings, whose View opens the same detail page
+      // installs happen on.
+      if (isPrivateListing(listing)) return false
       // Review queue gate (AGL-432): unreviewed/rejected plugin listings
       // stay off the public browse; the owner still sees their own (the
       // detail page shows them the status). UX-level only — the docs are

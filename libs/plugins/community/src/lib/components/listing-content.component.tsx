@@ -21,6 +21,7 @@ import {
   listingArtifactType,
   listingArtifactLabel,
   installTargetsFor,
+  isPrivateListing,
   resolveInstallPlan,
   resolvePluginInstallState,
   type InstallTargeting,
@@ -653,6 +654,18 @@ export function CommunityListingContent({
                           {listing?.reviewStatus === 'verified' ? (
                             <Chip size="small" color="info" label="Verified" />
                           ) : null}
+                          {/* Private listings never reach browse (AGL-993),
+                              so this page is the only place their state is
+                              ever shown — say it beside Verified rather than
+                              letting an approved private plugin read exactly
+                              like a marketplace one. */}
+                          {isPrivateListing(listing ?? {}) ? (
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label="Private"
+                            />
+                          ) : null}
                           <Chip
                             size="small"
                             color={priceUsd > 0 ? 'secondary' : 'default'}
@@ -685,6 +698,14 @@ export function CommunityListingContent({
                             {'Community plugin: runs sandboxed and cannot ' +
                               'access your site data directly. Review the ' +
                               'publisher and docs before installing.'}
+                          </Alert>
+                        ) : null}
+                        {isPrivateListing(listing ?? {}) ? (
+                          <Alert severity="info">
+                            {'Private plugin: it is never listed in the ' +
+                              'marketplace, and only your organization’s ' +
+                              'sites can install it. It passes the same ' +
+                              'review as every other plugin.'}
                           </Alert>
                         ) : null}
                         {abiIncompatible ? (
