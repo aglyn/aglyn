@@ -211,6 +211,14 @@ export type VersionUid = string
 export type LayoutUid = string
 
 /**
+ * Who may see an org-owned resource (AGL-1037): `'org'` is every site in
+ * the org, `host:{hostId}` names one. Lives here rather than beside its
+ * helpers in `app-utils/scope-tokens` because foundation cannot import
+ * app-utils; that module re-exports this type along with the helpers.
+ */
+export type ScopeToken = 'org' | `host:${string}`
+
+/**
  * Uploaded media metadata (AGL-72): the binary lives in Firebase Storage at
  * `hosts/{hostId}/media/{mediaId}`; this doc mirrors it in Firestore at the
  * same logical path so the library can list without Storage list calls.
@@ -252,6 +260,12 @@ export interface AglynHostMedia {
    * `custom-metadata`); this doc copy is the source of truth for display.
    */
   customMetadata?: Record<string, string>
+  /**
+   * Which sites may see this asset (AGL-1037); absent = org-wide until the
+   * AGL-1040 backfill stamps it. Only meaningful on the org-scoped library
+   * (`orgs/{orgId}/media`) — a host's own library is private already.
+   */
+  visibleTo?: ScopeToken[]
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
   deletedAt?: ITimestamp
@@ -267,6 +281,12 @@ export interface AglynHostMediaFolder {
   /** Parent folder id; null = root. Depth capped at 5 (see app-utils). */
   parentId?: string | null
   order?: number
+  /**
+   * Which sites may see this folder (AGL-1037). Assets carry their own
+   * scope — a folder's is applied to them by an explicit write-time
+   * cascade (AGL-1042), never inherited at read time.
+   */
+  visibleTo?: ScopeToken[]
   createdAt?: ITimestamp
 }
 

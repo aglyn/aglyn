@@ -38,6 +38,11 @@ export interface HostDataset {
   model?: import('./dataset-models').DatasetModel
   /** dod.ts Schema.Name shape (AGL-178). */
   names?: { singular?: string; plural?: string }
+  /**
+   * Which sites may see this dataset (AGL-1037). Absent = org-wide, until
+   * the AGL-1040 backfill stamps it. See `app-utils/scope-tokens`.
+   */
+  visibleTo?: import('../foundation').ScopeToken[]
 }
 
 export interface HostDatasetRecord {
