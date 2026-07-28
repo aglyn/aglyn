@@ -23,7 +23,7 @@ import { type DatasetFieldEntry, humanizeDatasetFieldId } from './datasets'
  * blueprint in `libs/shared/data/types/src/lib/dod.ts` (kept as the
  * referenced design doc — this module is the single runtime source of
  * truth). A model lives on the dataset doc
- * (`hosts/{hostId}/datasets/{id}.model`) and drives the typed editor,
+ * (`orgs/{orgId}/datasets/{id}.model`) and drives the typed editor,
  * import validation, and any server-side writes through the shared
  * `validateDocument`/`coerceDocumentValues` pair so they can't disagree.
  *
