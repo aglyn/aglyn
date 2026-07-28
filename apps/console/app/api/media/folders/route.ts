@@ -16,7 +16,11 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { isSiblingNameTaken, normalizeFolderName } from '@aglyn/aglyn/server'
+import {
+  isSiblingNameTaken,
+  normalizeFolderName,
+  normalizeVisibleTo,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -32,6 +36,8 @@ import {
 
 /** Bounded per request — console-triggered admin op, not a batch job. */
 const MAX_ASSETS_PER_OP = 500
+/** Firestore's hard cap on writes in one batched commit. */
+const FIRESTORE_BATCH_LIMIT = 500
 
 /**
  * Folder mutations that move REAL Storage objects (org DAM work): the
@@ -244,6 +250,62 @@ async function handler(request: Request): Promise<Response> {
         moved += 1
       }
       return Response.json({ ok: true, moved }, { status: 200 })
+    }
+
+    // Folder scope cascade (AGL-1045). Assets carry their OWN `visibleTo`
+    // rather than inheriting a folder's at read time — the tree is five
+    // levels deep, so inheritance would cost up to five gets per rule
+    // evaluation (AGL-1042). Applying a folder's scope is therefore an
+    // explicit, auditable WRITE over its subtree, which is what this does.
+    //
+    // Server-side because it is a bulk write over docs the client would
+    // otherwise have to enumerate, and because the org-wide check belongs
+    // next to the other privileged media operations.
+    if (action === 'set-scope') {
+      const folderId = String(body?.folderId ?? '')
+      const visibleTo = normalizeVisibleTo(
+        Array.isArray(body?.visibleTo) ? (body.visibleTo as string[]) : [],
+      )
+      if (!folderId || !visibleTo) {
+        return Response.json(
+          { error: 'Missing folderId or an unusable scope' },
+          { status: 400 },
+        )
+      }
+      // Only an org-wide member may set a scope — same rule the client-side
+      // writes get from AGL-1042, enforced here because this route uses the
+      // Admin SDK and never sees them.
+      if (!scope.viewerOrgWide) {
+        return Response.json(
+          { error: 'Only an organization admin can change sharing' },
+          { status: 403 },
+        )
+      }
+      if (scope.collection !== 'orgs') {
+        return Response.json(
+          { error: 'A site library is private already' },
+          { status: 400 },
+        )
+      }
+      const cascade = body?.cascade !== false
+      const assets = cascade ? await subtreeAssets(folderId) : []
+      // Chunked: a folder can hold hundreds of assets and a Firestore batch
+      // caps at 500 writes.
+      const targets: FirebaseFirestore.DocumentReference[] = [
+        foldersRef.doc(folderId),
+        ...assets.map((asset) => asset.ref),
+      ]
+      for (let i = 0; i < targets.length; i += FIRESTORE_BATCH_LIMIT) {
+        const batch = firebaseAdmin.app().firestore().batch()
+        for (const ref of targets.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
+          batch.set(ref, { visibleTo }, { merge: true })
+        }
+        await batch.commit()
+      }
+      return Response.json(
+        { ok: true, folders: 1, assets: assets.length },
+        { status: 200 },
+      )
     }
 
     if (action === 'custom-metadata') {

@@ -17,6 +17,7 @@
 'use client'
 
 import type * as Aglyn from '@aglyn/aglyn'
+import { hostQualifiedCdnPath } from '@aglyn/aglyn'
 import { useHostOrgId } from '@aglyn/tenant-feature-instance'
 import {
   Button,
@@ -63,7 +64,13 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
   const [tab, setTab] = useState<'site' | 'org'>(hostId ? 'site' : 'org')
 
   const pick = (media: Aglyn.AglynHostMedia) => {
-    onPick(media)
+    // Hand back a CDN path that names the site using the asset (AGL-1043).
+    // `cdnPath` is one stored string and a restricted asset can be visible
+    // to N sites, so the qualified form has to be built at pick time — the
+    // doc cannot store a URL that works for all of them. A no-op for
+    // org-wide assets, which is every asset unless someone restricted one.
+    const qualified = hostQualifiedCdnPath(media.cdnPath, media.visibleTo, hostId)
+    onPick(qualified === media.cdnPath ? media : { ...media, cdnPath: qualified })
     onClose()
   }
 
