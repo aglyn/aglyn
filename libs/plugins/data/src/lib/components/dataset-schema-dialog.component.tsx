@@ -125,7 +125,14 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
 
   // Sharing scope (AGL-1044) — org datasets only; the legacy host path is
   // site-private by construction.
-  const { orgWide: viewerOrgWide } = useScopeTokens(orgId ?? undefined)
+  // `orgWide` reads TRUE while the member doc loads (AGL-1047), which would
+  // offer a scoped collaborator the scope Select for a beat before replacing
+  // it with the read-only summary — and offering a control the AGL-1041
+  // rules will reject is the thing the branch below exists to avoid. Hold
+  // the whole block until `loaded` rather than flash the wrong one.
+  const { orgWide: viewerOrgWide, loaded: scopeLoaded } = useScopeTokens(
+    orgId ?? undefined,
+  )
   // Sites in this org, for naming what a narrowing would cost. Queried
   // here rather than via the console's useOrgHosts — this component lives
   // in a lib and cannot import from an app.
@@ -425,7 +432,11 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
               <Typography variant="caption" color="text.secondary">
                 {'Shared with'}
               </Typography>
-              {viewerOrgWide ? (
+              {!scopeLoaded ? (
+                <Typography variant="body2" color="text.secondary">
+                  {'Checking your access…'}
+                </Typography>
+              ) : viewerOrgWide ? (
                 <>
                   <Select
                     size="small"
