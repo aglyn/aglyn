@@ -38,6 +38,7 @@ import {
   outstandingChecklistItems,
   PLUGIN_REVIEW_CHECKLIST,
 } from '../../../../constants/plugin-review-checklist'
+import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestation'
 import { FieldValue } from 'firebase-admin/firestore'
 import { listOrgMembers, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 import { sendEmail } from '@aglyn/shared-util-email'
@@ -158,6 +159,7 @@ async function listingDetail(
       // recomputing; stripped before the payload goes out.
       verification: doc.get('verification') ?? null,
       reviewChecklist: doc.get('reviewChecklist') ?? null,
+      publisherAttestation: doc.get('publisherAttestation') ?? null,
     }
   })
 
@@ -241,6 +243,29 @@ async function listingDetail(
     }
   }
 
+  // Who attested, by name (AGL-969). "A named publisher said this on a date"
+  // is the half that makes a false attestation actionable, and a raw uid
+  // names nobody. Best effort — a deleted account must not blank the page.
+  const attestationEntries = Object.values(
+    (reviewEntry?.publisherAttestation ?? {}) as Record<
+      string,
+      { by?: string; at?: { toDate?: () => Date }; sha256?: string }
+    >,
+  ).filter((entry) => entry?.sha256 === reviewSha)
+  const attesterUid = attestationEntries.find((entry) => entry.by)?.by
+  const attestedAt =
+    attestationEntries.find((entry) => entry.at)?.at?.toDate?.()?.toISOString() ??
+    null
+  let attestedBy: string | null = attesterUid ?? null
+  if (attesterUid) {
+    try {
+      const user = await firebaseAdmin.app().auth().getUser(attesterUid)
+      attestedBy = user.email ?? user.displayName ?? attesterUid
+    } catch {
+      // Account gone — the uid still identifies the statement.
+    }
+  }
+
   return Response.json(
     {
       listingId,
@@ -278,7 +303,8 @@ async function listingDetail(
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       versions: versions.map(
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        ({ verification, reviewChecklist, ...entry }) => entry,
+        ({ verification, reviewChecklist, publisherAttestation, ...entry }) =>
+          entry,
       ),
       // Review checklist for the version under review (AGL-963). Ticks made
       // against different bytes do not count, so a republish starts clean.
@@ -296,6 +322,17 @@ async function listingDetail(
         reviewEntry?.reviewChecklist as never,
         reviewSha ?? '',
       ),
+      // What the publisher stated about THESE bytes (AGL-969). Not a review
+      // input — a reviewer still checks everything themselves — but it says
+      // what was claimed, so a discrepancy is a documented false statement
+      // rather than a difference of opinion. Attestations recorded against
+      // other bytes are dropped, exactly like staff ticks.
+      attestation: attestationsForBytes(
+        reviewEntry?.publisherAttestation as never,
+        reviewSha ?? '',
+      ),
+      attestedBy,
+      attestedAt,
       verifier,
       verifierCached,
       verifierVersion: PLUGIN_VERIFIER_VERSION,

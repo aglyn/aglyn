@@ -45,6 +45,7 @@ import MarkdownLiteView from '../../../../../components/markdown-lite-view.compo
 import StaffOnly from '../../../../../components/staff-only.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { PLUGIN_REVIEW_CHECKLIST } from '../../../../../constants/plugin-review-checklist'
+import { PUBLISHER_ATTESTATION } from '@aglyn/aglyn/app-utils/publisher-attestation'
 import { reviewStatusMeaning } from '../../../../../constants/plugin-review-status'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
@@ -100,6 +101,11 @@ interface ListingDetail {
   /** Ticked items, keyed by id, for THIS version's bytes (AGL-963). */
   checklist: Record<string, { by: string | null }>
   checklistOutstanding: string[]
+  /** Ids the publisher attested to for THIS version's bytes (AGL-969). */
+  attestation: string[]
+  /** Who signed the attestation, and when. */
+  attestedBy: string | null
+  attestedAt: string | null
   /** The version the checklist and verifier verdict above refer to. */
   reviewVersion: string
   private: boolean
@@ -642,6 +648,66 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         : ''}
                     </Alert>
                   )}
+                </Stack>
+              </CardDisplay>
+
+              {/* What the PUBLISHER claimed (AGL-969), read before the
+                  reviewer's own list below. Not evidence — nothing here is
+                  verified by anyone but the person who submitted it — but it
+                  says where to look: an attestation that contradicts the
+                  bundle is a documented false statement by a named publisher
+                  on a date, which is what makes removal defensible rather
+                  than a judgement call. */}
+              <CardDisplay
+                header={`Publisher attestation — v${detail.reviewVersion} (${detail.attestation.length}/${PUBLISHER_ATTESTATION.length})`}
+                contentGutterX
+                contentGutterY
+              >
+                <Stack spacing={1}>
+                  <Typography variant="body2" color="text.secondary">
+                    {detail.attestedBy
+                      ? `Stated by ${detail.attestedBy}${
+                          detail.attestedAt
+                            ? ` on ${new Date(
+                                detail.attestedAt,
+                              ).toLocaleDateString()}`
+                            : ''
+                        }, against this version's exact bytes.`
+                      : 'Nothing recorded for these bytes.'}
+                  </Typography>
+                  {detail.attestation.length ? null : (
+                    <Alert severity="info">
+                      {'Published before publishers were asked to attest, or ' +
+                        'republished since. Check everything yourself — the ' +
+                        'absence of a claim is not a claim.'}
+                    </Alert>
+                  )}
+                  {PUBLISHER_ATTESTATION.map((item) => {
+                    const claimed = detail.attestation.includes(item.id)
+                    return (
+                      <Stack key={item.id} spacing={0.25}>
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                        >
+                          <Typography
+                            variant="body2"
+                            color={claimed ? undefined : 'text.secondary'}
+                          >
+                            {claimed ? '✓' : '—'} {item.label}
+                          </Typography>
+                          {item.updateOnly ? (
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label="Updates only"
+                            />
+                          ) : null}
+                        </Stack>
+                      </Stack>
+                    )
+                  })}
                 </Stack>
               </CardDisplay>
 

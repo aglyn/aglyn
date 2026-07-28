@@ -90,6 +90,28 @@ the JSON). Set the listing name, description, changelog, category, and
 price, and publish. Uploads always publish **sandboxed** — a reviewer
 verifies and signs a version before it can run trusted.
 
+### Before you publish
+
+The dialog asks you to confirm a short checklist, and **publishing is
+blocked until you do**:
+
+- The repository URL is public and contains the source for this bundle
+- A license is included and you have the right to publish this code
+- The README documents what data the plugin reads, stores or sends, and
+  where it goes
+- Every declared network host is required — the ones you don't use are
+  gone
+- You have tested **this version** on a site you control
+- The changelog describes what changed since the last version — asked
+  only when you're updating an existing listing
+
+These aren't paperwork. They're the questions that send most submissions
+back, so answering them up front is the fastest route through the queue.
+Your answers are recorded against **that exact bundle** with your name
+and the date, and the reviewer sees them beside their own checklist —
+which also means republishing the same version number asks again, because
+the bytes changed.
+
 Each publish uploads your bundle (content-addressed by sha256 —
 **immutable**; a new build is a new object), writes a version document
 with your manifest and changelog, and bumps the listing's
@@ -112,7 +134,10 @@ Outcomes:
   placement for plugins that earn it.
 
 Speed the review up: a real README, a license, sane `capabilities`
-(request only the network origins you use), and working links.
+(request only the network origins you use), and working links — which is
+exactly what the pre-publish checklist above asks you to confirm. A
+confirmation that turns out to be false is a dated statement by a named
+publisher, and it's grounds for removal.
 
 ## Private plugins
 
