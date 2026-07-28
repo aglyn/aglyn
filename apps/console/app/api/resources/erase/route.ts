@@ -19,6 +19,7 @@ import { hostCollectionKind, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 // Shared, unit-tested scope decision lives in _lib: route.ts may only
 // export handlers.
 import { eraseScopeDenial } from '../../_lib/erase-scope'
+import { isErasable, type Scope } from '../../_lib/erasable'
 import {
   emailUnverifiedResponse,
   eraseSubtree,
@@ -32,24 +33,6 @@ const ORG_WRITER_ROLES = new Set(['owner', 'admin', 'editor'])
 /** Roles allowed to delete host content — mirrors canWriteHostContent(). */
 const HOST_WRITER_ROLES = new Set(['admin', 'editor'])
 
-type Scope = 'orgs' | 'hosts'
-
-/**
- * The resources whose deletion has to cascade (AGL-945/946/947). Each of
- * these parents owns a subcollection, and a client-side `deleteDoc` would
- * orphan it. The kind is a whitelist, not a passthrough: the caller names
- * a resource, never a Firestore path, so no request can walk this route
- * into an arbitrary subtree.
- */
-const ERASABLE: Record<string, { scopes: readonly Scope[]; label: string }> = {
-  // orgs/{orgId}/datasets/{id}/records — form submissions, automation rows.
-  datasets: { scopes: ['orgs', 'hosts'], label: 'Dataset' },
-  // orgs/{orgId}/lists/{id}/members — enrolled contacts (PII).
-  lists: { scopes: ['orgs', 'hosts'], label: 'List' },
-  // hosts/{hostId}/collections/{id}/entries — published content entries.
-  collections: { scopes: ['hosts'], label: 'Collection' },
-}
-
 /**
  * Recursive delete for the org/host resources that own subcollections.
  *
@@ -58,9 +41,22 @@ const ERASABLE: Record<string, { scopes: readonly Scope[]; label: string }> = {
  * parent docs (the child collections stay client-writable, so deleting a
  * single record/entry is unaffected).
  *
- * The cards resolve their scope as `['orgs', orgId]`, falling back to
- * `['hosts', hostId]` when a host has no owning org yet, so both scopes are
- * accepted and each is authorized against its own membership model.
+ * Both scopes are still accepted, but they are no longer two ways to reach
+ * the SAME resource (AGL-1050 follow-up). `datasets` and `lists` are org
+ * resources, full stop — the `['hosts', hostId]` fallback the cards used to
+ * resolve to is deleted, production held nothing under it, and the rules now
+ * deny it. `collections` is the one genuinely host-scoped kind.
+ *
+ * That mattered for more than tidiness. The `scope === 'orgs'` branch below
+ * is where `eraseScopeDenial` runs — the AGL-1046 boundary that stops a site
+ * collaborator recursiveDelete-ing a dataset AGL-1041 forbids them to read.
+ * The host branch checks `memberRoles` and never consults `visibleTo`,
+ * because host content has none. So while `datasets`/`lists` accepted
+ * `'hosts'`, naming that scope was a way to ASK FOR THE WEAKER CHECK. It
+ * targeted `hosts/{hostId}/datasets/*`, which is empty in production, so
+ * nothing was ever destroyable through it — but the Admin SDK evaluates no
+ * rules, and a second accepted scope is a second boundary to keep correct
+ * forever. Now an unknown scope for a kind is a 400 before any read.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -73,11 +69,13 @@ async function handler(request: Request): Promise<Response> {
   const scopeId = String(body?.scopeId ?? '')
   const kind = String(body?.kind ?? '')
   const id = String(body?.id ?? '')
-  const erasable = ERASABLE[kind]
+  // Kind AND scope together: a known kind named under a scope it does not
+  // live in is rejected here, before any read (AGL-1050 follow-up).
+  const erasable = isErasable(kind, scope)
   if (!scopeId || !id) {
     return Response.json({ error: 'Missing scopeId or id' }, { status: 400 })
   }
-  if (!erasable || !erasable.scopes.includes(scope)) {
+  if (!erasable) {
     return Response.json({ error: 'Unknown resource' }, { status: 400 })
   }
 
