@@ -65,7 +65,12 @@ export function registerEventsCalendarConsole(): void {
         // is unchanged now that the tab comes from the plugin (AGL-394).
         navTabId: 'nav-tab-events',
         icon: { path: mdiCalendarMonthOutline.path },
-        header: { title: 'Events', icon: { path: mdiCalendarMonthOutline.path } },
+        header: {
+          title: 'Events',
+          icon: { path: mdiCalendarMonthOutline.path },
+          // No docsTopic: the events calendar has no docs page yet, so this
+          // surface keeps the Plugins & Marketplace fallback (AGL-1075).
+        },
         Component: EventsConsolePage,
       },
     ],

@@ -40,7 +40,11 @@ export function registerInboxConsole(): void {
         href: '/inbox',
         navTabId: 'nav-tab-inbox',
         icon: { path: mdiInboxArrowDown.path },
-        header: { title: 'Inbox', icon: { path: mdiInboxArrowDown.path } },
+        header: {
+          title: 'Inbox',
+          icon: { path: mdiInboxArrowDown.path },
+          docsTopic: 'forms',
+        },
         Component: InboxConsolePage,
       },
     ],

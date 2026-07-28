@@ -45,7 +45,11 @@ export function registerRedirectsConsole(): void {
         // unchanged now that the tab comes from the plugin (AGL-395).
         navTabId: 'nav-tab-redirects',
         icon: { path: mdiSignDirection.path },
-        header: { title: 'Redirects', icon: { path: mdiSignDirection.path } },
+        header: {
+          title: 'Redirects',
+          icon: { path: mdiSignDirection.path },
+          docsTopic: 'redirects',
+        },
         Component: RedirectsConsolePage,
       },
     ],

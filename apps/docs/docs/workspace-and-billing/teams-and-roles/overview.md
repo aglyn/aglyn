@@ -42,6 +42,12 @@ Team, Media, Data, Plugins, Marketplace, Billing, Settings — aren't part of th
 console at all. With access to more than one site, they get the sites list to choose
 from. Organization-wide members see everything as before.
 
+**Support** is one of those organization pages, so a site collaborator raises problems
+with **whoever invited them** rather than with Aglyn directly — see
+[Support & community](../support-and-community.md). Quota warnings still reach them on
+their own site's pages, since a full site is a limit they will run into; the warning
+names the workspace admin to ask instead of offering an upgrade they cannot buy.
+
 ## Site membership
 
 - Visitors can **sign in / sign up** to your site.

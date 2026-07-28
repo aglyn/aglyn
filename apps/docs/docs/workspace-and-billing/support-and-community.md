@@ -12,6 +12,17 @@ Aglyn team, and a **community forum** shared with other Aglyn builders.
 Open it from **Organization → Support**, or from **Support** in your
 [account menu](../getting-started/console-tour.md#the-app-bar).
 
+:::note If you were invited to a single site
+Support isn't part of a [site collaborator's console](teams-and-roles/overview.md#what-a-site-collaborator-sees).
+A ticket is a conversation between the **organization** and Aglyn — it isn't scoped to
+one site, and the thread is readable by the organization's team — so the console doesn't
+offer it to someone whose access stops at a single site.
+
+Raise anything you run into with whoever invited you. They can open a ticket, and
+because tickets belong to the organization rather than to the person who filed them,
+any of their teammates can carry the thread on.
+:::
+
 :::info Plan availability
 **Paid.** Support tickets and the community forum are included with every paid plan.
 On Free, both are read-gated — the page explains the upgrade. See

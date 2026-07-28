@@ -31,10 +31,14 @@
  * they addressed.
  */
 
-import { render, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 
 const countedPaths: string[] = []
 const scope = { orgWide: true, loaded: false }
+const currentOrg: { org: Record<string, unknown>; orgId: string } = {
+  org: { plan: 'business' },
+  orgId: 'org-1',
+}
 
 jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
@@ -52,9 +56,26 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useScopeTokens: () => scope,
 }))
 
+// Small enough that the mocked count of 3 breaches every host row, so the
+// rendering cases below have a banner to assert about at all.
+jest.mock('@aglyn/aglyn', () => ({
+  ...jest.requireActual('@aglyn/aglyn'),
+  resolveOrgEntitlements: () => ({
+    screensPerHost: 3,
+    storagePerHostMb: 100,
+    datasetsPerOrg: 5,
+  }),
+}))
+
+jest.mock('@aglyn/shared-ui-jsx', () => ({
+  AppLink: ({ href, children }: { href: string; children: string }) => (
+    <a href={href}>{children}</a>
+  ),
+}))
+
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { plan: 'business' }, orgId: 'org-1', ready: true }),
+  default: () => ({ ...currentOrg, ready: true }),
 }))
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgSlug: () => 'acme',
@@ -72,6 +93,7 @@ beforeEach(() => {
   countedPaths.length = 0
   scope.orgWide = true
   scope.loaded = false
+  currentOrg.org = { plan: 'business' }
   sessionStorage.clear()
 })
 
@@ -108,5 +130,66 @@ describe('QuotaWarningsBanner org-wide counts (AGL-1068)', () => {
     render(<QuotaWarningsBanner />)
     await waitFor(() => expect(countedPaths).toContain('hosts/host-1/screens'))
     expect(countedPaths).not.toContain('hosts/host-1/datasets')
+  })
+})
+
+/**
+ * AGL-1072: the actions, not the queries. Billing is gone from a site
+ * collaborator's console and AGL-1032 redirects them off the URL, so a link
+ * to it here is a round trip back to where they started.
+ *
+ * Every case asserts the WARNING is still rendered alongside the missing
+ * link — "no link to billing" passes trivially on a banner that never
+ * appeared, which would be the other bug (a collaborator hitting a screens
+ * limit with nothing on screen to explain it).
+ */
+const billingLinks = () =>
+  screen
+    .queryAllByRole('link')
+    .filter((link) => link.getAttribute('href')?.includes('billing'))
+
+describe('QuotaWarningsBanner actions for a scoped viewer (AGL-1072)', () => {
+  it('offers Upgrade to an org-wide viewer', async () => {
+    scope.loaded = true
+    scope.orgWide = true
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/reached your screens limit/)
+    expect(billingLinks()).toHaveLength(1)
+    expect(billingLinks()[0].textContent).toBe('Upgrade')
+  })
+
+  it('warns a site collaborator without linking to Billing', async () => {
+    scope.loaded = true
+    scope.orgWide = false
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/ask a workspace admin to upgrade/)
+    expect(billingLinks()).toEqual([])
+  })
+
+  it('offers no Upgrade while the viewer scope is still loading', async () => {
+    // Withheld, but NOT reworded: the button costs an owner one render,
+    // whereas the collaborator wording would spend that render telling the
+    // owner to go ask an admin — themselves.
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/reached your screens limit/)
+    expect(billingLinks()).toEqual([])
+  })
+
+  it('sends a site collaborator to an admin when payment is past due', async () => {
+    scope.loaded = true
+    scope.orgWide = false
+    currentOrg.org = { plan: 'business', subscription: { status: 'past_due' } }
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/A workspace admin needs to update the payment/)
+    expect(billingLinks()).toEqual([])
+  })
+
+  it('keeps Fix payment for an org-wide viewer', async () => {
+    scope.loaded = true
+    scope.orgWide = true
+    currentOrg.org = { plan: 'business', subscription: { status: 'past_due' } }
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/Update your payment method/)
+    expect(billingLinks()[0].textContent).toBe('Fix payment')
   })
 })

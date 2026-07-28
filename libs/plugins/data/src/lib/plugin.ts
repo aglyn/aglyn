@@ -55,7 +55,11 @@ export function registerDataConsole(): void {
         // unchanged now that the tab comes from the plugin (AGL-395).
         navTabId: 'nav-tab-data',
         icon: { path: mdiDatabaseOutline.path },
-        header: { title: 'Data', icon: { path: mdiDatabaseOutline.path } },
+        header: {
+          title: 'Data',
+          icon: { path: mdiDatabaseOutline.path },
+          docsTopic: 'datasets',
+        },
         Component: DataConsolePage,
       },
     ],

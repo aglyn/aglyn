@@ -45,6 +45,26 @@ export function buildDocsUrl(path = '/'): string {
   return `${DOCS_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
 }
 
+/**
+ * Narrow a topic key that arrives as an untyped string — from a plugin's
+ * `ConsoleNavItem.header.docsTopic` (AGL-1074) — to one the registry holds,
+ * or the given fallback.
+ *
+ * Plugins declare the topic in `@aglyn/aglyn`, which cannot import this
+ * registry (a lib importing an app), so the string is unvalidated by
+ * construction, and a third-party plugin can name anything at all. Indexing
+ * the registry with it would produce an `undefined` topic and a help button
+ * that throws when it renders — hence a resolver rather than a cast.
+ */
+export function resolveDocsHelpTopic(
+  topic: string | undefined,
+  fallback: DocsHelpTopicKey,
+): DocsHelpTopicKey {
+  return topic && topic in DOCS_HELP_TOPICS
+    ? (topic as DocsHelpTopicKey)
+    : fallback
+}
+
 export interface DocsHelpOverrides<
   K extends DocsHelpTopicKey = DocsHelpTopicKey,
 > {

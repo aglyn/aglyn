@@ -46,6 +46,19 @@ Team members act **in the owner's organization**, not their own — so their cha
 site, and permissions are enforced across the console's APIs and surfaces. Seat limits are
 enforced per tier; if you're at your limit, add a **seat add-on** before inviting more.
 
+## You are a site collaborator's support channel
+
+Someone you invite to a **single site** gets a console scoped to that site, which
+leaves out the organization pages — including **Support**. That is deliberate: a
+support ticket is a conversation between the whole organization and Aglyn, readable by
+your team, not a per-site channel.
+
+The practical consequence is that a site collaborator who hits a problem comes to
+**you**. Open a ticket on their behalf if it needs Aglyn — include the site and the
+exact error, as [Support & community](../support-and-community.md#what-to-include)
+describes, since you will be relaying rather than reproducing. Someone invited to the
+whole organization keeps Support unchanged.
+
 ## Help a teammate who is locked out
 
 Open the member from the **Team** page and use the **Password** card. It has two

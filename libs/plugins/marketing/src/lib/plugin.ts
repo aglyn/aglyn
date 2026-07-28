@@ -47,7 +47,11 @@ export function registerMarketingConsole(): void {
         href: '/marketing',
         navTabId: 'nav-tab-marketing',
         icon: { path: mdiBullhornOutline.path },
-        header: { title: 'Marketing', icon: { path: mdiBullhornOutline.path } },
+        header: {
+          title: 'Marketing',
+          icon: { path: mdiBullhornOutline.path },
+          docsTopic: 'marketingOverlays',
+        },
         Component: MarketingConsolePage,
       },
     ],

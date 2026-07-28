@@ -57,7 +57,11 @@ export function registerWorkflowsConsole(): void {
         // unchanged now that the tab comes from the plugin (AGL-395).
         navTabId: 'nav-tab-workflows',
         icon: { path: mdiSitemap.path },
-        header: { title: 'Workflows', icon: { path: mdiSitemap.path } },
+        header: {
+          title: 'Workflows',
+          icon: { path: mdiSitemap.path },
+          docsTopic: 'workflows',
+        },
         Component: WorkflowsConsolePage,
       },
     ],
