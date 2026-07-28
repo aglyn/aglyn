@@ -76,6 +76,11 @@ const GUARDED_HOOKS = {
   // `org: undefined` is not "unknown" to `checkQuota`/`checkEntitlement`, it
   // is the FREE tier (AGL-1064).
   useOrgPlan: { flag: 'ready', unsafe: ['org'] },
+  // Same lie as `useScopeTokens`, on the navigation side (AGL-1032):
+  // `orgWide` reads true until the memberships load — deliberately, since
+  // the alternative blanks the console for every owner on a cold load — so a
+  // caller hiding org UI on it without `ready` hides nothing at all.
+  useOrgReach: { flag: 'ready', unsafe: ['orgWide'] },
 }
 
 /** The static key a destructuring property reads, or null if computed. */

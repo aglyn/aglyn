@@ -28,6 +28,7 @@ import type {
   HostUid,
   OrgRole,
   ScopeToken,
+  UserOrgMembership,
 } from '../foundation'
 import {
   generateSubdomain,
@@ -147,6 +148,36 @@ export function isOrgWideMember(
   return (
     member.allHosts === undefined && !Object.keys(scoping ?? {}).length
   )
+}
+
+/**
+ * The same question as `isOrgWideMember`, asked of the `users/{uid}/orgs`
+ * reverse-index row instead of the member doc (AGL-1032).
+ *
+ * The console navigates from the index — it is what `useOrgScope` loads —
+ * and the index carries a MIRROR of the predicate, not the inputs to it, so
+ * this cannot recompute: `role: 'viewer'` on the index means "viewer",
+ * whether the member reaches every site or one.
+ *
+ * Reads a missing flag as org-wide, for the same reason `isOrgWideMember`
+ * reads a missing `allHosts` that way: rows written before the mirror
+ * existed have no flag, and hiding the workspace from a real member is a
+ * worse failure than showing org chrome to a collaborator whose reads the
+ * rules refuse anyway. Owner/admin are org-wide by role regardless of the
+ * mirror, so a stale row can never lock an admin out.
+ *
+ * Navigation only — never an access decision. AGL-1026 (rules) and the
+ * Admin-SDK scope checks are the boundary.
+ */
+export function isOrgWideMembership(
+  membership:
+    | Pick<UserOrgMembership, 'role' | 'orgWide'>
+    | null
+    | undefined,
+): boolean {
+  if (!membership) return true
+  if (membership.role === 'owner' || membership.role === 'admin') return true
+  return membership.orgWide !== false
 }
 
 /**

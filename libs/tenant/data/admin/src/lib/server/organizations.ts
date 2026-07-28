@@ -26,6 +26,7 @@ import {
   createResourceUid,
   generateOrgSlug,
   hasOrgPermission,
+  isOrgWideMember,
   isValidOrgSlug,
   projectHostMemberRoles,
   projectMemberScopeTokens,
@@ -127,7 +128,8 @@ export async function createOrganization(
     )
     tx.set(
       db.collection('users').doc(ownerUid).collection('orgs').doc(orgId),
-      { role: 'owner', orgName: name, slug },
+      // The owner reaches every site by definition (AGL-1032).
+      { role: 'owner', orgName: name, slug, orgWide: true },
     )
   })
   return orgId
@@ -632,7 +634,20 @@ export async function upsertOrgMember(
     )
     tx.set(
       db.collection('users').doc(uid).collection('orgs').doc(orgId),
-      { role, orgName: org.name ?? null, slug: org.slug ?? null },
+      {
+        role,
+        orgName: org.name ?? null,
+        slug: org.slug ?? null,
+        // Mirrored from the member doc written just above (AGL-1032) — this
+        // `set` has no merge, so the flag has to be part of it or the
+        // console loses the collaborator/viewer distinction until the
+        // projection pass below rewrites it.
+        orgWide: isOrgWideMember({
+          role,
+          allHosts: allHosts ?? false,
+          hostAccess: hostAccess ?? {},
+        }),
+      },
     )
   })
   await syncOrgAuthProjections(orgId)
@@ -679,12 +694,15 @@ export async function transferOrgOwnership(
     )
     tx.set(
       db.collection('users').doc(toUid).collection('orgs').doc(orgId),
-      { role: 'owner' },
+      // Both principals end up owner/admin, which is org-wide reach whatever
+      // they were before — a promoted site collaborator must lose the scoped
+      // console along with the scoped membership (AGL-1032).
+      { role: 'owner', orgWide: true },
       { merge: true },
     )
     tx.set(
       db.collection('users').doc(fromUid).collection('orgs').doc(orgId),
-      { role: 'admin' },
+      { role: 'admin', orgWide: true },
       { merge: true },
     )
   })
@@ -744,6 +762,12 @@ export async function grantHostAccess(options: {
         role: 'viewer',
         orgName: org.name ?? null,
         slug: org.slug ?? null,
+        // A brand-new site collaborator: on the org roster, but their console
+        // is one site (AGL-1032). `role: 'viewer'` here is indistinguishable
+        // from a genuine org-wide viewer's, which is the whole reason for
+        // this flag. An EXISTING member keeps whatever reach they had — a
+        // host grant never widens or narrows it.
+        orgWide: false,
       })
     }
   })
