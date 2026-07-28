@@ -76,6 +76,7 @@ import {
   useFirestoreDoc,
   useHostOrgId,
   useUser,
+  useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
 import HubTabs from '@aglyn/shared-ui-next/components/hub-tabs'
 import ListingReviews from './listing-reviews.component'
@@ -444,14 +445,22 @@ export function CommunityListingContent({
   // (AGL-789) — they become an org dataset or a draft email version, each
   // stamped with the listing it came from. Scoped to this listing rather than
   // reading the whole collection, since the detail page only speaks for one.
+  // Scoped (AGL-1044): the AGL-1041 rules reject an unfiltered list for a
+  // scoped member, so this would error rather than show fewer installs.
+  const { tokens: scopeTokens, orgWide: viewerOrgWide } =
+    useScopeTokens(orgId ?? undefined)
+  const needsScope = Boolean(orgId) && !viewerOrgWide
   const { data: datasetInstalls } = useFirestoreCollection<any>(
     () =>
       query(
         collection(firestore, 'orgs', orgId ?? '-pending-', 'datasets'),
         where('source.listingId', '==', listingId || '-missing-'),
+        ...(needsScope
+          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+          : []),
         limit(20),
       ),
-    [firestore, orgId, listingId],
+    [firestore, orgId, listingId, needsScope, scopeTokens],
     { idField: '$id' },
   )
   const { data: emailInstalls } = useFirestoreCollection<any>(

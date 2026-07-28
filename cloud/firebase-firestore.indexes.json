@@ -331,6 +331,20 @@
           "arrayConfig": "CONTAINS"
         }
       ]
+    },
+    {
+      "collectionGroup": "datasets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "source.listingId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

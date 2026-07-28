@@ -36,6 +36,7 @@ import {
   useFirestoreCollection,
   useHostOrgId,
   useUser,
+  useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
 import {
   isListingBrowsable,
@@ -197,6 +198,11 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
     [firestore, orgId],
     { idField: '$id' },
   )
+  // Scoped (AGL-1044): an unfiltered list is REJECTED for a scoped member,
+  // not filtered, so this would error without the constraint.
+  const { tokens: scopeTokens, orgWide: viewerOrgWide } =
+    useScopeTokens(orgId ?? undefined)
+  const needsScope = Boolean(orgId) && !viewerOrgWide
   // The AGL-657 types land in neither the components collection nor a pin
   // (AGL-789): a dataset schema becomes an org dataset, an email template a
   // draft version. Both installers stamp the source listing, so read those.
@@ -204,9 +210,12 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
     () =>
       query(
         collection(firestore, 'orgs', orgId ?? '-pending-', 'datasets'),
+        ...(needsScope
+          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+          : []),
         limit(200),
       ),
-    [firestore, orgId],
+    [firestore, orgId, needsScope, scopeTokens],
     { idField: '$id' },
   )
   const { data: emailDocs } = useFirestoreCollection<any>(

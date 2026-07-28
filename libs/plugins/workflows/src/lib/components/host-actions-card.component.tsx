@@ -58,12 +58,14 @@ import {
   query,
   setDoc,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
   useHostOrgId,
+  useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
 import HostActivityCard from './host-activity-card.component'
 
@@ -176,9 +178,22 @@ export function HostActionsCard(props: {
     [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
+  // Scoped (AGL-1044): the AGL-1041 rules reject a scoped member's
+  // UNFILTERED list outright, so without this the picker errors rather than
+  // offering fewer datasets.
+  const { tokens: scopeTokens, orgWide: viewerOrgWide } =
+    useScopeTokens(hostOrgId ?? undefined)
+  const needsScope = Boolean(hostOrgId) && !viewerOrgWide
   const { data: datasetDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, dataScope[0], dataScope[1], 'datasets'), limit(100)),
-    [firestore, hostId, hostOrgId],
+    () =>
+      query(
+        collection(firestore, dataScope[0], dataScope[1], 'datasets'),
+        ...(needsScope
+          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+          : []),
+        limit(100),
+      ),
+    [firestore, hostId, hostOrgId, needsScope, scopeTokens],
     { idField: '$id' },
   )
   const { data: overlayDocs } = useFirestoreCollection<any>(
