@@ -20,6 +20,90 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { listingArtifactType, newestApprovedVersion } from '../model/community'
 import { compareArtifactVersions } from '@aglyn/aglyn/server'
 import { versionCollectionFor } from './version-stats'
+import { canActAsPublisher } from './publisher-profile'
+import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestation'
+
+/**
+ * The publisher's own view of their versions (AGL-1079).
+ *
+ * AGL-966 made review per-version and got the mechanics right — a new
+ * version enters `pending`, the previously approved one keeps installing,
+ * nothing ships past a reviewer. The publisher was told none of it: an
+ * email on the outcome, and in between a listing row identical to the one
+ * they had before they published.
+ *
+ * Separate from the buyer projection above on purpose. `reviewState`, the
+ * rejection reason, the sha and what was attested are the publisher's own
+ * business and nobody else's — a buyer has no need to read why a version
+ * they will never be offered was sent back. So this branch demands a token
+ * and org membership rather than widening what the public route returns.
+ */
+const publisherVersions: PluginApiHandler = async (req, res) => {
+  const listingId = String(req.query?.listingId ?? '')
+  const authorization = String(req.headers.authorization ?? '')
+  const idToken = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined
+  if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
+  const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+  const firestore = firebaseAdmin.app().firestore()
+  const listingRef = firestore.collection('communityListings').doc(listingId)
+  const listingSnapshot = await listingRef.get()
+  const listing = listingSnapshot.data()
+  if (!listing || listing.deletedAt) {
+    return res.status(404).json({ error: 'Unknown listing' })
+  }
+  // Listings are org-owned (AGL-652), so this is an org-membership question,
+  // not a uid comparison — the same gate the publish and edit paths use.
+  const isPublisher = await canActAsPublisher(
+    firestore,
+    decoded.uid,
+    listing.profileId,
+  )
+  if (!isPublisher && decoded['staff'] !== true) {
+    // 404, not 403: whether a listing exists is not a stranger's business.
+    return res.status(404).json({ error: 'Unknown listing' })
+  }
+  const artifactType = listingArtifactType(listing)
+  const snapshot = await listingRef
+    .collection(versionCollectionFor(artifactType))
+    .orderBy('publishedAt', 'desc')
+    .limit(20)
+    .get()
+  const versions = snapshot.docs.map((doc) => {
+    const sha256 = String(doc.get('sha256') ?? '')
+    return {
+      version: String(doc.get('version') ?? doc.id),
+      publishedAtMs: doc.get('publishedAt')?.toMillis?.() ?? null,
+      sha256,
+      // Absent on every version published before AGL-966, which is what
+      // `grandfathered` marks — those were never reviewed and saying
+      // "pending" about them would be a lie in both directions.
+      reviewState: String(doc.get('reviewState') ?? ''),
+      grandfathered: Boolean(doc.get('grandfathered')),
+      signed: Boolean(doc.get('signature')),
+      changelog: String(doc.get('changelog') ?? ''),
+      // Only reached an email before this (AGL-1079), where it got buried
+      // under everything else in an inbox.
+      rejectionReason: String(doc.get('reviewRejectionReason') ?? ''),
+      activeInstalls: Number(doc.get('activeInstalls') ?? 0),
+      // What they claimed about THESE bytes (AGL-969) — so they can see it
+      // before they claim it again on the next version.
+      attestation: attestationsForBytes(
+        doc.get('publisherAttestation') as never,
+        sha256,
+      ),
+    }
+  })
+  return res.status(200).json({
+    versions,
+    // The version installs actually resolve to (AGL-1016/966). Deliberately
+    // NOT `latestVersion`, which names a version installs may refuse.
+    latestApprovedVersion: String(listing.latestApprovedVersion ?? ''),
+    latestVersion: String(listing.latestVersion ?? ''),
+    reviewStatus: String(listing.reviewStatus ?? ''),
+  })
+}
 
 /**
  * Public version history for a plugin listing (AGL-431). The
@@ -36,6 +120,11 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
   const listingId = String(req.query?.listingId ?? '')
   if (!listingId) return res.status(400).json({ error: 'Missing listingId' })
   try {
+    // The publisher's own view (AGL-1079) — same collection, a different
+    // question, and one that needs a token.
+    if (String(req.query?.scope ?? '') === 'publisher') {
+      return await publisherVersions(req, res)
+    }
     const listingRef = firebaseAdmin
       .app()
       .firestore()

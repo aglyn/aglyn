@@ -204,6 +204,31 @@ exactly what the pre-publish checklist above asks you to confirm. A
 confirmation that turns out to be false is a dated statement by a named
 publisher, and it's grounds for removal.
 
+### Watching your own submission
+
+Open your own listing and the **Review status** card — visible only to
+you — answers what an email cannot:
+
+- **Which version installs today**, from the newest *approved* version
+  rather than the newest one you published. When they differ it says so:
+  *"v1.0.3 is in review. New installs get v1.0.2 until it is approved,
+  and anyone already running it stays where they are."*
+- **Every version's state** in words — *In review*, *Approved*,
+  *Rejected*, or *Published before review* for versions that predate
+  per-version review and so carry no verdict at all.
+- **Why a version was rejected**, on the version it belongs to.
+- **What you confirmed** on the pre-publish checklist for those exact
+  bytes, so you can see the claims you already made before making them
+  again.
+
+Two things it states that you would otherwise have to infer:
+
+- **Editing your listing while a version is in review changes nothing
+  about the review.** Name, description, README, screenshots and links go
+  through a different path, because approval is about the bundle's bytes.
+- **The bytes are never edited.** Changing them means publishing a new
+  version — there is no "resubmit" for a rejected one.
+
 ## Private plugins
 
 Choose **Only this organization** under *Who can install this* when you
