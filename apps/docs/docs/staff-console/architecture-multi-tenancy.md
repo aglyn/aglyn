@@ -116,6 +116,14 @@ Invites follow the same path: an org admin records the invite, the invited perso
 in with a **verified matching email** and accepts, which materializes the membership
 through the identical transaction + fan-out.
 
+The reverse index also carries an `orgWide` mirror of the member doc's scoping, because
+a **site collaborator is an org member doc** with `role: 'viewer'` — indistinguishable
+from a genuine org-wide viewer by role alone. The console routes from the index, so it
+uses the mirror to send a scoped collaborator into their site and drop the org tab strip
+for them. An absent flag reads as org-wide (rows predating the mirror have none;
+`tools/scripts/backfill-org-reach.mjs` stamps them). Navigation only — the rules remain
+the access boundary.
+
 ## Workspace subdomains
 
 Each org gets a Slack-style workspace address. Host sites keep their own domains — the

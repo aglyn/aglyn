@@ -25,6 +25,7 @@ import hostNavTabItems from '../constants/host-nav-tabs'
 import manageNavTabItems from '../constants/manage-nav-tabs'
 import useIsStaff from './use-is-staff'
 import useOrgNavTabItems from './use-org-nav-tabs'
+import { useOrgReach } from './use-org-reach'
 import { useOrgScope } from './use-org-scope'
 
 export interface NavTabItem {
@@ -158,6 +159,9 @@ export function useSecondaryNav(): {
   // Scopes the plugin-contributed tabs to this workspace (AGL-758).
   const enabledPluginIds = useEnabledPluginIds()
   const isStaff = useIsStaff()
+  // A site collaborator gets no org strip at all (AGL-1032) — the tab set is
+  // the one place to do this, since the bar mounts once for every route.
+  const { orgWide, ready: reachReady } = useOrgReach()
 
   const addressable = useMemo(
     () =>
@@ -182,7 +186,13 @@ export function useSecondaryNav(): {
           enabledPluginIds,
         )
       case 'org':
-        return orgNavTabItems
+        // Sites, Team, Media, Data, Billing, Settings — none of which a
+        // scoped collaborator may open (AGL-1032). They are being redirected
+        // into their site anyway; publishing the tabs on the way out just
+        // advertises pages that answer with nothing. Unresolved reach keeps
+        // the strip, like every other check here: the bar must not blink out
+        // while memberships load (AGL-755).
+        return reachReady && !orgWide ? [] : orgNavTabItems
       case 'admin':
         // Staff-claim gated (AGL-953). StaffGuard/StaffOnly 404 the PAGES,
         // but the strip rendered for anyone who typed an /admin URL, which
@@ -196,7 +206,15 @@ export function useSecondaryNav(): {
       default:
         return []
     }
-  }, [addressable, section, orgNavTabItems, enabledPluginIds, isStaff])
+  }, [
+    addressable,
+    section,
+    orgNavTabItems,
+    enabledPluginIds,
+    isStaff,
+    orgWide,
+    reachReady,
+  ])
 
   const activeTab = useMemo(
     () => resolveActiveTab(pathname, section.base, navTabItems),

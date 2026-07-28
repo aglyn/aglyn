@@ -21,6 +21,7 @@ import {
   generateOrgSlug,
   hostRoleFor,
   isOrgWideMember,
+  isOrgWideMembership,
   isValidOrgSlug,
   memberCanSee,
   memberScopeTokens,
@@ -135,6 +136,35 @@ describe('isOrgWideMember (AGL-1038)', () => {
   it('denies a missing member', () => {
     expect(isOrgWideMember(null)).toBe(false)
     expect(isOrgWideMember(undefined)).toBe(false)
+  })
+})
+
+describe('isOrgWideMembership (AGL-1032)', () => {
+  it('scopes only on an explicit false', () => {
+    expect(isOrgWideMembership({ role: 'viewer', orgWide: false })).toBe(false)
+    expect(isOrgWideMembership({ role: 'viewer', orgWide: true })).toBe(true)
+  })
+
+  it('reads an unmirrored row as org-wide', () => {
+    // Rows predating the mirror carry no flag. Hiding the workspace from a
+    // real member is worse than showing org chrome to a collaborator whose
+    // reads the rules refuse anyway — the boundary is elsewhere.
+    expect(isOrgWideMembership({ role: 'editor' })).toBe(true)
+    expect(isOrgWideMembership(null)).toBe(true)
+    expect(isOrgWideMembership(undefined)).toBe(true)
+  })
+
+  it('keeps owner and admin org-wide even against a stale mirror', () => {
+    expect(isOrgWideMembership({ role: 'owner', orgWide: false })).toBe(true)
+    expect(isOrgWideMembership({ role: 'admin', orgWide: false })).toBe(true)
+  })
+
+  it('disagrees with isOrgWideMember by design on a null argument', () => {
+    // Different questions: `isOrgWideMember(null)` is "no membership, so no
+    // reach" (an access answer); this one is "nothing says to narrow the
+    // console" (a navigation answer). OrgGuard resolves membership first.
+    expect(isOrgWideMember(null)).toBe(false)
+    expect(isOrgWideMembership(null)).toBe(true)
   })
 })
 

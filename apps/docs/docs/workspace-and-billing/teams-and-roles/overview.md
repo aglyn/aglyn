@@ -34,6 +34,14 @@ Slack-style workspace address (`your-org.aglyn.com`).
 Every account operates inside an organization — solo accounts simply get a personal
 workspace automatically. The team features above keep working unchanged.
 
+### What a site collaborator sees
+
+Someone invited to a **specific site** rather than the whole organization gets a console
+scoped to that site: they land on it when they sign in, and the organization pages —
+Team, Media, Data, Plugins, Marketplace, Billing, Settings — aren't part of their
+console at all. With access to more than one site, they get the sites list to choose
+from. Organization-wide members see everything as before.
+
 ## Site membership
 
 - Visitors can **sign in / sign up** to your site.

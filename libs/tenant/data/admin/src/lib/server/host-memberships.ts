@@ -39,6 +39,7 @@
 
 import {
   hostRoleFor,
+  isOrgWideMember,
   nameSearchKey,
   type AglynOrganization,
   type AglynOrgMember,
@@ -147,6 +148,37 @@ const commitChunked = async (
 }
 
 /**
+ * Mirror the member's org-wide reach onto their `users/{uid}/orgs/{orgId}`
+ * row (AGL-1032), so the console can tell a site collaborator from an
+ * org-wide viewer without a second read on every org route.
+ *
+ * Rides the projection pass rather than being a call the membership APIs
+ * each have to remember: every path that changes a member's reach — add,
+ * role change, grant, revoke, ownership transfer — already re-syncs their
+ * host rows, so one funnel keeps the mirror true and self-heals a row an
+ * earlier failure left stale.
+ *
+ * Only ever UPDATES an existing row. The reverse index is created with the
+ * membership and deleted with it; a `set`/merge here on a removed member
+ * would resurrect a half-row with no `orgName` or `slug`, and the console
+ * renders that as a nameless workspace nobody can open.
+ */
+async function syncMemberOrgReach(
+  db: FirebaseFirestore.Firestore,
+  orgId: string,
+  uid: string,
+  member: AglynOrgMember | null,
+): Promise<void> {
+  if (!member) return
+  const ref = db.collection('users').doc(uid).collection('orgs').doc(orgId)
+  const snap = await ref.get()
+  if (!snap.exists) return
+  const orgWide = isOrgWideMember(member)
+  if (snap.get('orgWide') === orgWide) return
+  await ref.set({ orgWide }, { merge: true })
+}
+
+/**
  * Re-sync ONE member's projection rows across all the org's hosts: set a row
  * for every host the member can reach, delete the row for every host they
  * cannot (a role downgrade silently drops hosts). Call after any change to a
@@ -164,6 +196,7 @@ export async function syncMemberHostProjections(
   const member = memberSnap.exists
     ? ({ $id: uid, ...memberSnap.data() } as AglynOrgMember)
     : null
+  await syncMemberOrgReach(db, orgId, uid, member)
   const meta = await readHostMeta(db, hostIds)
   const ops = hostIds.map((hostId) => (batch: FirebaseFirestore.WriteBatch) => {
     const role = hostRoleFor(member, hostId)

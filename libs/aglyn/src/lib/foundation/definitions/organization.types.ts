@@ -163,6 +163,26 @@ export interface UserOrgMembership extends AglynDocument {
   role?: OrgRole
   orgName?: string
   slug?: OrgSlug
+  /**
+   * Mirror of `isOrgWideMember(orgs/{orgId}/members/{uid})` (AGL-1032): does
+   * this membership reach the whole org, or only a list of sites?
+   *
+   * `role` alone cannot answer it — `grantHostAccess` writes `role: 'viewer'`
+   * here for a site collaborator, exactly what a genuine org-wide viewer
+   * carries, so the console could not tell them apart without a second read
+   * of the member doc on every org route. Denormalized because the console
+   * navigation guard has to be synchronous: an async answer flashes the org
+   * chrome before hiding it.
+   *
+   * ABSENT means org-wide. Rows predating the mirror carry no flag, and a
+   * missing field must never lock a real member out of their own workspace
+   * (the same legacy shape `isOrgWideMember` handles). Only an explicit
+   * `false` scopes the console — see `isOrgWideMembership`.
+   *
+   * Navigation only. The Firestore rules are the access boundary (AGL-1026);
+   * a stale mirror at worst shows a page whose reads then come back empty.
+   */
+  orgWide?: boolean
 }
 
 /**

@@ -53,6 +53,7 @@ import { buildDocsUrl } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useIsStaff } from '../hooks/use-is-staff'
+import { useOrgReach } from '../hooks/use-org-reach'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 
 // 'advanced' is the top plan (org-billing.types) — nothing to upgrade to.
@@ -72,6 +73,11 @@ export function UserMenu() {
   const { currentOrg } = useOrgScope()
   const { org, ready: orgReady } = useCurrentOrg()
   const isStaff = useIsStaff()
+  // Team / Billing / Support are org pages (AGL-1032). This menu is org nav
+  // as much as the tab strip is — leaving the rows here would send a site
+  // collaborator to a page the guard immediately bounces them off.
+  const { orgWide, ready: reachReady } = useOrgReach()
+  const showOrgLinks = !reachReady || orgWide
   const { mode, setMode } = useColorScheme()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
 
@@ -89,7 +95,10 @@ export function UserMenu() {
   // Only pitch an upgrade once the org doc has resolved (AGL-887) — while
   // it's loading (or the read failed) `plan` is undefined, which would show
   // the CTA to a top-plan workspace.
-  const showUpgrade = Boolean(orgSlug) && orgReady && plan !== TOP_PLAN
+  // …and a collaborator cannot buy anything either — the CTA lands on the
+  // Billing page they may not open (AGL-1032).
+  const showUpgrade =
+    Boolean(orgSlug) && orgReady && plan !== TOP_PLAN && showOrgLinks
 
   const themeValue = mode ?? 'system'
 
@@ -202,9 +211,13 @@ export function UserMenu() {
         </Box>
         <Divider />
 
-        {row(orgLink(Route.MANAGE_TEAM), 'Manage Team', mdiAccountGroupOutline.path)}
-        {row(orgLink(Route.MANAGE_BILLING), 'Billing', mdiCreditCardOutline.path)}
-        {row(orgLink(Route.MANAGE_SUPPORT), 'Support', mdiLifebuoy.path)}
+        {showOrgLinks ? (
+          <>
+            {row(orgLink(Route.MANAGE_TEAM), 'Manage Team', mdiAccountGroupOutline.path)}
+            {row(orgLink(Route.MANAGE_BILLING), 'Billing', mdiCreditCardOutline.path)}
+            {row(orgLink(Route.MANAGE_SUPPORT), 'Support', mdiLifebuoy.path)}
+          </>
+        ) : null}
         {isStaff
           ? row(Route.ADMIN_OVERVIEW, 'Staff console', ICON_VARIANT_SYMBOL_SECURE.path)
           : null}

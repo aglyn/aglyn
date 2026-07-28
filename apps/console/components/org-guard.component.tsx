@@ -17,9 +17,11 @@
 'use client'
 
 import { Box, CircularProgress } from '@mui/material'
-import { notFound } from 'next/navigation'
-import { type ReactNode } from 'react'
+import { notFound, usePathname, useRouter } from 'next/navigation'
+import { useEffect, type ReactNode } from 'react'
 import { useOrgScope } from '../hooks/use-org-scope'
+import { useOrgReach, useReachableSites } from '../hooks/use-org-reach'
+import { collaboratorRedirect } from '../utils/collaborator-navigation'
 
 function GuardSpinner() {
   return (
@@ -35,10 +37,36 @@ function GuardSpinner() {
  * the designed 404 (`notFound()`) — NEVER a sign-out (that was the cross-org
  * logout bug). A definitive answer is required first, so nothing happens while
  * memberships load.
+ *
+ * It also decides WHICH org pages a member may see (AGL-1032): a site
+ * collaborator belongs to the org but not to it — they are redirected into
+ * their site rather than shown org pages the AGL-1026 rules answer with
+ * nothing. Guards are not the boundary; the rules are. This one makes the
+ * console honest about what a collaborator can do, and nothing here should be
+ * relied on for access control.
  */
 export function OrgGuard({ children }: { children?: ReactNode }) {
   const { orgs, pathOrgSlug, loading, confirmed } = useOrgScope()
   const known = !pathOrgSlug || orgs.some((org) => org.slug === pathOrgSlug)
+  const pathname = usePathname()
+  const router = useRouter()
+  // A site collaborator gets their site, not the org (AGL-1032). Scoped is
+  // only ever true on a RESOLVED membership — `orgWide` fails open while the
+  // list loads, so without `ready` this would bounce every owner on a cold
+  // load.
+  const { orgWide, ready: reachReady } = useOrgReach()
+  const scoped = Boolean(pathOrgSlug) && known && reachReady && !orgWide
+  const { sites, ready: sitesReady } = useReachableSites(scoped)
+  const target =
+    scoped && sitesReady
+      ? collaboratorRedirect(pathname, pathOrgSlug ?? '', sites)
+      : null
+
+  useEffect(() => {
+    // `replace`, not `push`: the org URL they cannot open must not sit in
+    // history for Back to walk into, which is a bounce loop.
+    if (target) router.replace(target)
+  }, [target, router])
 
   // Hold the child tree until memberships resolve to avoid flashing the 404
   // (or a foreign org's shell) before the slug is confirmed.
@@ -49,6 +77,11 @@ export function OrgGuard({ children }: { children?: ReactNode }) {
   // the server has echoed the membership list; a hit renders immediately.
   if (!known && !confirmed) return <GuardSpinner />
   if (!known) notFound()
+  // Hold the org page a collaborator is being moved off. The navigation is
+  // async, so rendering it meanwhile shows exactly the empty Team/Billing
+  // page this issue exists to stop them seeing — briefly, but that is the
+  // frame people screenshot.
+  if (scoped && (!sitesReady || target)) return <GuardSpinner />
   return <>{children}</>
 }
 OrgGuard.displayName = 'OrgGuard'

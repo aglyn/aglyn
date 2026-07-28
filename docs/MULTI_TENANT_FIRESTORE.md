@@ -200,6 +200,15 @@ Org roles (org-wide), then per-host refinement:
     pre-`allHosts` shape) is decided by one shared `isOrgWideMember()` in
     `app-utils/organizations`, mirrored by `isOrgWideMember()` in the
     rules. Three copies of that predicate disagreeing is a privilege bug.
+  - **Console navigation (AGL-1032).** The same predicate is mirrored a
+    third time, as `orgWide` on the `users/{uid}/orgs/{orgId}` reverse index,
+    because the console routes from that index and `role` alone cannot tell a
+    site collaborator (`grantHostAccess` writes `role: 'viewer'`) from a
+    genuine org-wide viewer. A scoped member is redirected out of the org
+    pages into their site and gets no org tab strip; an ABSENT `orgWide`
+    reads as org-wide, so an unbackfilled row never hides a real member's
+    workspace (`tools/scripts/backfill-org-reach.mjs` stamps it). This is
+    chrome, not a boundary — the rules above are the boundary.
 
 ### Rules v2 sketch
 
