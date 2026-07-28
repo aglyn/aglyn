@@ -78,13 +78,16 @@ import {
   useRef,
   useState,
 } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useScopeTokens,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import { checkOrgQuota } from '../../constants/entitlements'
 import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
-import useScopeTokens from '../../hooks/use-scope-tokens'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'

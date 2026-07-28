@@ -25,7 +25,7 @@ import {
 } from '@aglyn/aglyn'
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from './firebase/firebase-services'
 
 export interface ScopeTokensState {
   /** The caller's read set, for `array-contains-any` (AGL-1037). */
