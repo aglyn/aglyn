@@ -54,10 +54,11 @@ export const metadata: Metadata = {
   // (AGL-1059). Before that, pages titled themselves through `NextPageTitle`
   // → `next/head`, which the App Router ignores — so every route in the
   // console rendered the default below.
-  title: {
-    default: APP_CONSOLE.TITLE ?? 'Aglyn',
-    template: `%s ${APP_CONSOLE.SEP} ${APP_CONSOLE.AFFIX}`,
-  },
+  // Separator and affix are the pre-AGL-1059 pair on purpose: a middle dot
+  // and the bare brand, not `APP_CONSOLE.SEP`/`AFFIX` ('–' / 'Aglyn Platform
+  // Console'). Those read as a marketing string in a browser tab, and the
+  // tab is where a console user distinguishes between several open pages.
+  title: { default: APP_CONSOLE.TITLE ?? 'Aglyn', template: '%s · Aglyn' },
   description: APP_CONSOLE.DESCRIPTION,
   manifest: PWA_MANIFEST,
   applicationName: 'Aglyn Console',
