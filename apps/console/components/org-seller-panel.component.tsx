@@ -16,30 +16,19 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack, TextField, Typography } from '@mui/material'
 import { collection, doc, query, updateDoc, where } from 'firebase/firestore'
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { buildRoute, Route } from '../constants/route-links'
 import { docsHelp } from '../constants/docs-links'
+import { useOrgSlug } from '../hooks/use-org-scope'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
-import MediaPickerDialog from './media/media-picker-dialog.component'
 import EditListingDialog from './marketplace/edit-listing-dialog.component'
-
-/** Absolute src for a chosen DAM asset — prefer the direct URL, fall back to
- * the stable relative CDN path made absolute so the server's https check and
- * off-console (social card) rendering both accept it. */
-function mediaSrc(media: { url?: string; cdnPath?: string }): string {
-  if (media.url) return media.url
-  if (media.cdnPath)
-    return typeof window === 'undefined'
-      ? media.cdnPath
-      : `${window.location.origin}${media.cdnPath}`
-  return ''
-}
 
 const HANDLE_PATTERN = /^[a-z0-9][a-z0-9-]{2,29}$/
 
@@ -62,6 +51,7 @@ export interface OrgSellerPanelProps {
  */
 export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const { orgId, section } = props
+  const orgSlug = useOrgSlug()
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -197,58 +187,8 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     }
   }, [orgId, validHandle, handle, displayName, bio, user, enqueueSnackbar])
 
-  // Listing preview image (AGL-95/863): pick from the shared DAM library
-  // rather than a raw OS file dialog. The pending listing id records which row
-  // opened the picker; a non-null id both opens the dialog and names its target.
-  const [previewPickerListingId, setPreviewPickerListingId] = useState<
-    string | null
-  >(null)
   // The listing open in the full editor (AGL-862), or null when closed.
   const [editListing, setEditListing] = useState<any | null>(null)
-  const handlePickPreview = useCallback(
-    (listing: any) => () => setPreviewPickerListingId(listing.$id),
-    [],
-  )
-  const handlePreviewPicked = useCallback(
-    async (media: { url?: string; cdnPath?: string }) => {
-      const listingId = previewPickerListingId
-      setPreviewPickerListingId(null)
-      const url = mediaSrc(media)
-      if (!listingId || !url) return
-      try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/community/preview-image', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          // An already-hosted DAM asset (AGL-863) — the server points
-          // previewImageUrl at it instead of re-uploading bytes.
-          body: JSON.stringify({ listingId, url }),
-        })
-        const payload = await response.json()
-        if (!response.ok) {
-          return void enqueueSnackbar(payload?.error ?? 'Could not set image', {
-            variant: 'error',
-            allowDuplicate: true,
-          })
-        }
-        enqueueSnackbar('Preview image saved', {
-          variant: 'success',
-          persist: false,
-        })
-      } catch (error) {
-        console.error(error)
-        enqueueSnackbar('An error has occurred', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
-      }
-    },
-    [previewPickerListingId, user, enqueueSnackbar],
-  )
-
   const handleUnpublish = useCallback(
     (listing: any) => async () => {
       try {
@@ -344,12 +284,6 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           </Typography>
         ) : (
           <Stack spacing={1}>
-            <MediaPickerDialog
-              orgId={orgId}
-              open={Boolean(previewPickerListingId)}
-              onClose={() => setPreviewPickerListingId(null)}
-              onPick={handlePreviewPicked}
-            />
             {(listings ?? []).map((listing: any) => (
               <Stack
                 key={listing.$id}
@@ -377,13 +311,20 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                 >
                   {'Edit'}
                 </Button>
-                <Button
-                  size="small"
-                  color="secondary"
-                  onClick={handlePickPreview(listing)}
+                {/* View what a buyer sees (AGL-988). The preview image is
+                    edited inside Edit, beside everything else about the
+                    listing, so this row no longer offers a second door to
+                    that one field. */}
+                <AppLink
+                  href={buildRoute(Route.ORG_MARKETPLACE_LISTING, {
+                    orgSlug,
+                    listingId: listing.$id,
+                  })}
                 >
-                  {listing.previewImageUrl ? 'Replace' : 'Image'}
-                </Button>
+                  <Button size="small" color="secondary" component="span">
+                    {'View'}
+                  </Button>
+                </AppLink>
                 <Button
                   size="small"
                   color={listing.deletedAt ? 'secondary' : 'error'}
