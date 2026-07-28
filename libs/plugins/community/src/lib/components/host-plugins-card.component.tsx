@@ -17,16 +17,13 @@
 'use client'
 
 import { buildRoute, PLUGIN_COMPONENT_ID, Route } from '@aglyn/aglyn'
-import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
-  Alert,
-  Button,
-  Chip,
-  Stack,
-  Tooltip,
-  Typography,
-} from '@mui/material'
+  AppLink,
+  CardDisplay,
+  useConfirmationContext,
+} from '@aglyn/shared-ui-jsx'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { Alert, Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import {
   collection,
   deleteDoc,
@@ -37,6 +34,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
+import { compareArtifactVersions } from '@aglyn/aglyn'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -69,7 +67,10 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   // row stays clickable without swallowing its own action buttons.
   const installationHref = (listingId: string) =>
     orgSlug
-      ? buildRoute(Route.ORG_PLUGIN_INSTALLATION, { orgSlug, pluginRef: listingId })
+      ? buildRoute(Route.ORG_PLUGIN_INSTALLATION, {
+          orgSlug,
+          pluginRef: listingId,
+        })
       : undefined
   const firestore = useFirestore()
   const { data: user } = useUser()
@@ -123,10 +124,14 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
     [firestore, listingIds.join(',')],
     { idField: '$id' },
   )
+  // The newest APPROVED version, not the newest published one (AGL-1016).
+  // Offering `latestVersion` here put an Upgrade button in front of every
+  // workspace the moment a publisher uploaded, and the install route then
+  // refused the click — AGL-966 only ever hands out reviewed bytes.
   const latestByListing = useMemo(() => {
     const map: Record<string, string> = {}
     for (const listing of (listingDocs as any[]) ?? []) {
-      map[listing.$id] = String(listing.latestVersion ?? '')
+      map[listing.$id] = String(listing.latestApprovedVersion ?? '')
     }
     return map
   }, [listingDocs])
@@ -223,7 +228,9 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
           scope: 'org',
         })
         if (!payload) return
-        await deleteDoc(doc(firestore, 'hosts', hostId, 'installs', install.$id))
+        await deleteDoc(
+          doc(firestore, 'hosts', hostId, 'installs', install.$id),
+        )
         enqueueSnackbar('Plugin now installed for the whole organization', {
           variant: 'success',
           persist: false,
@@ -334,7 +341,8 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
         ) : (
           installs.map((install) => {
             const latest = latestByListing[install.$id]
-            const canUpgrade = latest && latest !== install.version
+            const canUpgrade =
+              (compareArtifactVersions(install.version, latest) ?? 0) < 0
             const revoked = revokedByListing[install.$id]
             const capabilities = install.manifest?.capabilities ?? {}
             return (
@@ -404,9 +412,7 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
                 </Typography>
                 {(capabilities.network?.length ||
                   capabilities.events?.length) && (
-                  <Tooltip
-                    title="Declared in the plugin manifest, enforced by the sandbox"
-                  >
+                  <Tooltip title="Declared in the plugin manifest, enforced by the sandbox">
                     <Typography variant="caption" color="text.secondary">
                       {[
                         capabilities.network?.length
@@ -434,7 +440,8 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
         )}
         {orgInstalls.map((install) => {
           const latest = latestByListing[install.$id]
-          const canUpgrade = latest && latest !== install.version
+          const canUpgrade =
+            (compareArtifactVersions(install.version, latest) ?? 0) < 0
           const shadowed = installs.some((entry) => entry.$id === install.$id)
           return (
             <Stack

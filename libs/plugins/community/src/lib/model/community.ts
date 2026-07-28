@@ -21,6 +21,12 @@
  * public listing. Pure data module — safe to import from API routes.
  */
 
+// The leaf module, not a barrel: this model is reached from both the browser
+// and API routes, and `@aglyn/aglyn` carries `createContext` (illegal in a
+// Server Component) while `@aglyn/aglyn/server` carries `node:fs` (illegal in
+// the browser). Neither is safe from here; the deep path has no dependencies.
+import type { CommunityArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
+
 /**
  * `profiles/{uid}` — a person's public identity.
  *
@@ -156,14 +162,14 @@ export interface CommunityListing {
   rejectionReason?: string
 }
 
-/** Everything an org can publish to the marketplace (AGL-654). */
-export type CommunityArtifactType =
-  | 'component'
-  | 'template'
-  | 'plugin'
-  | 'layout'
-  | 'datasetSchema'
-  | 'emailTemplate'
+/**
+ * Everything an org can publish to the marketplace (AGL-654).
+ *
+ * Defined in core and re-exported here (AGL-1016): the console needs it to
+ * render update state for installed artifacts, and an app may not depend on an
+ * addon lib. Publishing code keeps importing it from this model unchanged.
+ */
+export type { CommunityArtifactType }
 
 /**
  * Human-readable label for each artifact type (AGL-864).

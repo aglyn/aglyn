@@ -20,14 +20,16 @@ import {
   canManageOrg,
   FIRST_PARTY_PLUGINS,
   resolveEnabledPlugins,
+  resolveUpdateState,
+  updateStateLabel,
 } from '@aglyn/aglyn'
 import { mdiChevronRight, mdiPuzzleOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Alert, Button, Stack, Switch, Typography } from '@mui/material'
-import { collection, getDocs, limit, query } from 'firebase/firestore'
+import { Alert, Button, Chip, Stack, Switch, Tooltip, Typography } from '@mui/material'
+import { collection, documentId, getDocs, limit, query, where } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
@@ -148,6 +150,50 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
     }
     return [...byListing.values()]
   }, [orgInstalls, hostList, sitePins])
+
+  /**
+   * The listings behind those installs, for the update chip (AGL-1016).
+   *
+   * Listings are public reads, so this is a plain fetch — but `in` caps at 30
+   * ids, and a workspace can run more plugins than that, so it chunks. A
+   * failure leaves the map empty and every row resolves to `unknown`, which
+   * reads as "we can't say" rather than a false "up to date".
+   */
+  const listingIdsKey = installations.map((install) => install.$id).sort().join('|')
+  const [listings, setListings] = useState<Record<string, any>>({})
+  useEffect(() => {
+    const ids = listingIdsKey ? listingIdsKey.split('|') : []
+    if (!ids.length) return
+    let active = true
+    const chunks: string[][] = []
+    for (let index = 0; index < ids.length; index += 30) {
+      chunks.push(ids.slice(index, index + 30))
+    }
+    void Promise.all(
+      chunks.map((chunk) =>
+        getDocs(
+          query(
+            collection(firestore, 'communityListings'),
+            where(documentId(), 'in', chunk),
+          ),
+        ),
+      ),
+    )
+      .then((results) => {
+        if (!active) return
+        setListings(
+          Object.fromEntries(
+            results.flatMap((snapshot) =>
+              snapshot.docs.map((entry) => [entry.id, entry.data()]),
+            ),
+          ),
+        )
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [firestore, listingIdsKey])
 
   const enabled = useMemo(
     () => new Set(resolveEnabledPlugins((org as any)?.enabledPlugins)),
@@ -273,8 +319,16 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
             >
               {installations.length ? (
                 <Stack>
-                  {installations.map((install) =>
-                    row(
+                  {installations.map((install) => {
+                    // The update signal (AGL-1016), from the one shared
+                    // comparison — for plugins that is the newest APPROVED
+                    // version, so this can never offer what install refuses.
+                    const status = resolveUpdateState(
+                      install as never,
+                      listings[install.$id] ?? null,
+                      'plugin',
+                    )
+                    return row(
                       install.$id,
                       install.$id,
                       install.displayName ?? install.pluginId ?? install.$id,
@@ -284,8 +338,20 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
                           : install.siteLabels.length === 1
                             ? install.siteLabels[0]
                             : `${install.siteLabels.length} sites`),
-                    ),
-                  )}
+                      status.state === 'update-available' ? (
+                        <Chip
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                          label={`v${status.availableVersion} available`}
+                        />
+                      ) : status.state === 'unknown' ? (
+                        <Tooltip title={updateStateLabel(status)}>
+                          <Chip size="small" variant="outlined" label={'Unknown'} />
+                        </Tooltip>
+                      ) : undefined,
+                    )
+                  })}
                 </Stack>
               ) : (
                 <Alert severity="info">

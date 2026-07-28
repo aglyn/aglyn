@@ -587,16 +587,18 @@ describe('org-shared data (AGL-237)', () => {
       deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1')),
     )
     // Same for an email LIST and its enrolled `members` (PII) — AGL-946.
-    // Editors still manage the list itself and individual enrollments.
+    // Org-wide editors still manage the list itself and individual
+    // enrollments; EDITOR is scoped to one site, so the CRM is not theirs to
+    // write any more than it is theirs to read (AGL-1026).
     await assertSucceeds(
-      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'lists', 'l1'), { name: 'News' }),
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1'), { name: 'News' }),
     )
     await assertSucceeds(
-      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')),
+      deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')),
     )
-    await assertFails(deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'lists', 'l1')))
+    await assertFails(deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1')))
     await assertSucceeds(
-      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'c2'), { email: 'n@y.z' }),
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c2'), { email: 'n@y.z' }),
     )
     await assertFails(
       setDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c3'), { email: 'v@y.z' }),
@@ -620,6 +622,76 @@ describe('org-shared data (AGL-237)', () => {
       setDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'media', 'm2'), { url: 'x' }),
     )
     await assertFails(setDoc(doc(authed(OWNER), 'orgs', ORG, 'installs', 'p2'), { version: '2' }))
+  })
+})
+
+/**
+ * Site collaborators are org members, and the rules used not to notice
+ * (AGL-1026).
+ *
+ * EDITOR is the scoped shape `grantHostAccess` writes: on the roster, but
+ * with `allHosts: false` and a `hostAccess` map naming one site. Before this,
+ * `isOrgMember()` was a bare exists(), so that person could read the org's
+ * whole CRM, the billing meters, the activity log and every colleague's email.
+ */
+describe('site collaborators are scoped out of the org (AGL-1026)', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'c1'), { email: 'x@y.z' })
+      await setDoc(doc(db, 'orgs', ORG, 'contactSegments', 's1'), { name: 'VIPs' })
+      await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1'), { name: 'Newsletter' })
+      await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1', 'members', 'm1'), { email: 'x@y.z' })
+      await setDoc(doc(db, 'orgs', ORG, 'usage', '2026-07'), { pageviews: 1 })
+      await setDoc(doc(db, 'orgs', ORG, 'apiUsage', '2026-07'), { requests: 1 })
+      await setDoc(doc(db, 'orgs', ORG, 'activity', 'a1'), { action: 'x' })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1'), { name: 'Team' })
+      await setDoc(doc(db, 'orgs', ORG, 'media', 'm1'), { url: 'u' })
+    })
+  })
+
+  it('cannot read the roster, but can always read their own membership', async () => {
+    await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'members', OWNER)))
+    // Their own doc stays readable — it is how the console resolves their
+    // role and site access. Denying it would lock them out of their own site.
+    await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'members', EDITOR)))
+    // An org-wide viewer still sees the whole roster.
+    await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'members', OWNER)))
+  })
+
+  it('cannot read the CRM — contacts, segments, lists or enrolled members', async () => {
+    await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'c1')))
+    await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'contactSegments', 's1')))
+    await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'lists', 'l1')))
+    await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')))
+  })
+
+  it('cannot WRITE the CRM either — no write-only access to other people\'s customers', async () => {
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'c9'), { email: 'n@y.z' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'lists', 'l1'), { name: 'Mine' }),
+    )
+    await assertFails(
+      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')),
+    )
+  })
+
+  it('cannot read billing usage or the org-wide activity log', async () => {
+    await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'usage', '2026-07')))
+    await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'apiUsage', '2026-07')))
+    await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'activity', 'a1')))
+    await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'usage', '2026-07')))
+  })
+
+  it('KEEPS what building a site needs: the org doc, datasets and media', async () => {
+    // Deliberate (AGL-1026): a site's pages bind org datasets and place org
+    // media, and there is no per-site association to filter on. The org doc
+    // carries the entitlements every console surface gates features on.
+    await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG)))
+    await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1')))
+    await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'media', 'm1')))
   })
 })
 

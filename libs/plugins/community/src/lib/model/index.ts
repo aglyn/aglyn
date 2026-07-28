@@ -21,3 +21,33 @@
  * other plugins/apps via `@aglyn/plugins-community/model`.
  */
 export * from './community'
+/**
+ * Provenance and update state live in core (AGL-1015/1016) so the console can
+ * read them too, but they are marketplace vocabulary — re-exported here so a
+ * publishing or install route still imports the whole model from one place.
+ * Named rather than star-exported: `CommunityArtifactType` is re-exported by
+ * `./community` already, and two barrels claiming it is an ambiguity.
+ *
+ * Deep paths rather than a core barrel, for the same reason `./community`
+ * uses one: this module is in the browser bundle AND in API routes, so
+ * `@aglyn/aglyn` (createContext) and `@aglyn/aglyn/server` (node:fs) are both
+ * unusable from here.
+ */
+export {
+  ARTIFACT_BASE_COLLECTION,
+  ARTIFACT_BASE_MAX_BYTES,
+  resolveProvenance,
+  stableStringify,
+  type InstalledFrom,
+  type ProvenanceState,
+  type ResolvedProvenance,
+} from '@aglyn/aglyn/app-utils/marketplace-provenance'
+export {
+  compareArtifactVersions,
+  resolveUpdateState,
+  updateStateLabel,
+  type UpdateComparableInstall,
+  type UpdateComparableListing,
+  type UpdateState,
+  type UpdateStatus,
+} from '@aglyn/aglyn/app-utils/marketplace-update-state'

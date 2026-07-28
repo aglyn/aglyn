@@ -26,6 +26,7 @@ import {
 } from '@aglyn/shared-util-email'
 import { listingArtifactType } from '../model/community'
 import { canActAsPublisher } from './publisher-profile'
+import { recordInstallProvenance } from './provenance'
 
 /**
  * Installs a marketplace email template into a site (AGL-657).
@@ -149,6 +150,22 @@ export const installEmailTemplateHandler: PluginApiHandler = async (
       .doc(templateKey)
     const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
     const versionId = createResourceUid()
+    // Provenance + base snapshot (AGL-1015). The subject and preheader are
+    // part of the design and travel with it, so they belong in the base — a
+    // reworded subject is a user edit like any other.
+    const provenance = await recordInstallProvenance({
+      firestore,
+      listingId,
+      listing,
+      version: listing.latestVersion,
+      artifactType: 'emailTemplate',
+      content: {
+        rootId: versionSnapshot.get('rootId') ?? null,
+        nodes,
+        subject: String(versionSnapshot.get('subject') ?? ''),
+        preheader: String(versionSnapshot.get('preheader') ?? ''),
+      },
+    })
     const batch = firestore.batch()
     batch.set(
       templateRef.collection('versions').doc(versionId),
@@ -163,6 +180,7 @@ export const installEmailTemplateHandler: PluginApiHandler = async (
           listingId,
           version: listing.latestVersion ?? null,
         },
+        installedFrom: provenance.installedFrom,
         createdAt: now,
         updatedAt: now,
       },
@@ -179,11 +197,10 @@ export const installEmailTemplateHandler: PluginApiHandler = async (
       templateRef,
       {
         updatedAt: now,
-        installedFrom: {
-          listingId,
-          version: listing.latestVersion ?? null,
-          versionId,
-        },
+        // The full AGL-1015 stamp, plus the `versionId` pointer this marker
+        // has carried since AGL-789 so "is this listing installed here?" stays
+        // a single flat read.
+        installedFrom: { ...provenance.installedFrom, versionId },
       },
       { merge: true },
     )
@@ -201,6 +218,7 @@ export const installEmailTemplateHandler: PluginApiHandler = async (
       versionId,
       activated: false,
       version: listing.latestVersion ?? null,
+      baseStored: provenance.baseStored,
     })
   } catch (error) {
     console.error(error)

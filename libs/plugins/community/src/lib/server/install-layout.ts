@@ -21,6 +21,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { listingArtifactType } from '../model/community'
 import { canActAsPublisher } from './publisher-profile'
+import { recordInstallProvenance } from './provenance'
 
 /**
  * Installs a marketplace layout into a host's template library (AGL-671).
@@ -120,6 +121,16 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
     }
 
     const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
+    // Provenance + base snapshot (AGL-1015) — the layout tree as published,
+    // without the display name the user is free to change.
+    const provenance = await recordInstallProvenance({
+      firestore,
+      listingId,
+      listing,
+      version: listing.latestVersion,
+      artifactType: 'layout',
+      content: { rootId: layout.rootId, nodes: layout.nodes },
+    })
     // Re-install replaces the prior copy rather than stacking (AGL-671).
     const batch = firestore.batch()
     let replaced = 0
@@ -141,6 +152,7 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
         listingId,
         version: listing.latestVersion ?? null,
       },
+      installedFrom: provenance.installedFrom,
       createdAt: now,
       updatedAt: now,
     })
@@ -157,6 +169,7 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
       templates: 1,
       replaced,
       version: listing.latestVersion ?? null,
+      baseStored: provenance.baseStored,
     })
   } catch (error) {
     console.error(error)

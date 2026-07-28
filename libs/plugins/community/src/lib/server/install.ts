@@ -20,6 +20,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
+import { recordInstallProvenance } from './provenance'
 
 /**
  * Installs (or updates) a community listing into a host (AGL-44/46).
@@ -116,6 +117,18 @@ export const installHandler: PluginApiHandler = async (req, res) => {
       ? componentsRef.doc(createResourceUid())
       : existing.docs[0].ref
     const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
+    // Provenance + base snapshot (AGL-1015). The snapshot holds only the
+    // vendored tree — the display name and description come from the listing
+    // and the user may rename their copy, so including them would make every
+    // rename read as a diverged component.
+    const provenance = await recordInstallProvenance({
+      firestore,
+      listingId,
+      listing,
+      version: listing.latestVersion,
+      artifactType: 'component',
+      content: { rootId: version.rootId, nodes: version.nodes },
+    })
     await componentRef.set(
       {
         displayName: listing.displayName,
@@ -128,6 +141,7 @@ export const installHandler: PluginApiHandler = async (req, res) => {
           profileId: listing.profileId,
           version: listing.latestVersion,
         },
+        installedFrom: provenance.installedFrom,
         ...(existing.empty && { createdAt: now }),
         updatedAt: now,
       },
@@ -146,6 +160,7 @@ export const installHandler: PluginApiHandler = async (req, res) => {
       installed: true,
       updated: !existing.empty,
       version: listing.latestVersion,
+      baseStored: provenance.baseStored,
     })
   } catch (error) {
     console.error(error)
