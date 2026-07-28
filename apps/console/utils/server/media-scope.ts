@@ -19,8 +19,8 @@ import {
   checkEntitlement,
   hostScopeToken,
   isOrgWideMember,
+  memberScopeTokens,
   ORG_SCOPE_TOKEN,
-  projectMemberScopeTokens,
   visibleToTokens,
 } from '@aglyn/aglyn/server'
 import {
@@ -107,7 +107,12 @@ export async function resolveMediaScope(
         scopeRef: firestore.collection('orgs').doc(orgId),
         billing: org as Record<string, unknown>,
         cdnScope: `org:${orgId}`,
-        viewerTokens: projectMemberScopeTokens(membership?.member),
+        // The stored projection when there is one — this used to always
+        // recompute, which is the same answer for every member the
+        // AGL-1040 backfill reached and a DIFFERENT one for anybody whose
+        // `scopeTokens` were later narrowed by `revokeHostAccess` without
+        // `hostAccess` being rewritten. One rule, one helper.
+        viewerTokens: memberScopeTokens(membership?.member),
         viewerOrgWide: isOrgWideMember(membership?.member),
       },
     }

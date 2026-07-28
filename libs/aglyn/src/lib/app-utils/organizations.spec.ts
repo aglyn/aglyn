@@ -22,6 +22,8 @@ import {
   hostRoleFor,
   isOrgWideMember,
   isValidOrgSlug,
+  memberCanSee,
+  memberScopeTokens,
   orgRoleAtLeast,
   projectHostMemberRoles,
   projectMemberScopeTokens,
@@ -171,5 +173,80 @@ describe('projectMemberScopeTokens (AGL-1038)', () => {
     expect(
       projectMemberScopeTokens({ role: 'viewer', allHosts: false, hostAccess }),
     ).toHaveLength(41)
+  })
+})
+
+describe('memberScopeTokens (AGL-1045 review: one copy of the fallback)', () => {
+  it('prefers the stored projection', () => {
+    expect(
+      memberScopeTokens({
+        role: 'viewer',
+        allHosts: false,
+        hostAccess: { h1: 'editor' },
+        scopeTokens: ['org', 'host:h9'],
+      } as never),
+    ).toEqual(['org', 'host:h9'])
+  })
+
+  it('recomputes when the backfill has not stamped the doc', () => {
+    // The case the hand-written copies existed for. Falling through to
+    // "no tokens" would lock a real collaborator out of their own site.
+    expect(
+      memberScopeTokens({
+        role: 'viewer',
+        allHosts: false,
+        hostAccess: { h1: 'editor' },
+      }),
+    ).toEqual(['org', 'host:h1'])
+  })
+
+  it('treats an EMPTY stored array as unstamped, not as "sees nothing"', () => {
+    // The `.length` guard is the whole subtlety: `[]` is what a partially
+    // written member doc looks like, and reading it literally would deny a
+    // member every resource in the org.
+    expect(
+      memberScopeTokens({
+        role: 'viewer',
+        allHosts: false,
+        hostAccess: { h1: 'editor' },
+        scopeTokens: [],
+      } as never),
+    ).toEqual(['org', 'host:h1'])
+  })
+})
+
+describe('memberCanSee (AGL-1037/1038)', () => {
+  const collaborator = {
+    role: 'editor' as const,
+    allHosts: false,
+    hostAccess: { h1: 'editor' as const },
+  }
+
+  it('lets an org-wide member see a resource scoped away from them', () => {
+    expect(memberCanSee({ role: 'owner' }, ['host:h9'])).toBe(true)
+  })
+
+  it('lets a collaborator see a resource shared with their site', () => {
+    expect(memberCanSee(collaborator, ['host:h1'])).toBe(true)
+  })
+
+  it('hides another site’s resource from a collaborator', () => {
+    expect(memberCanSee(collaborator, ['host:h9'])).toBe(false)
+  })
+
+  it('treats an absent or empty scope as org-wide', () => {
+    // An unbackfilled resource must not vanish (AGL-1040 ordering hazard).
+    expect(memberCanSee(collaborator, undefined)).toBe(true)
+    expect(memberCanSee(collaborator, null)).toBe(true)
+    expect(memberCanSee(collaborator, ['org'])).toBe(true)
+  })
+
+  it('is a SCOPE test, not a membership test', () => {
+    // A caller with no membership "can see" an org-wide resource here, and
+    // that is deliberate: this answers "is the resource in that reach", not
+    // "is this person in the org". Every caller resolves membership first —
+    // conflating the two is how AGL-1026 exposed a whole org.
+    expect(memberCanSee(null, ['host:h1'])).toBe(false)
+    expect(memberCanSee(undefined, ['org'])).toBe(true)
   })
 })

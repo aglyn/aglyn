@@ -19,8 +19,8 @@
 
 import {
   isOrgWideMember,
+  memberScopeTokens,
   ORG_SCOPE_TOKEN,
-  projectMemberScopeTokens,
   type AglynOrgMember,
 } from '@aglyn/aglyn'
 import { doc, getDoc } from 'firebase/firestore'
@@ -76,11 +76,12 @@ export function useScopeTokens(orgId: string | undefined): ScopeTokensState {
         const member = snapshot.exists()
           ? ({ $id: uid, ...snapshot.data() } as Partial<AglynOrgMember>)
           : undefined
-        // Prefer the stored projection; recompute as a fallback so a member
-        // doc the backfill has not reached yet still resolves sensibly.
-        const stored = (member as { scopeTokens?: string[] })?.scopeTokens
+        // `memberScopeTokens` owns the "stored projection, else recompute"
+        // rule so the client and every Admin-SDK gate answer it the same
+        // way — a member doc the AGL-1040 backfill has not reached must
+        // still resolve to what `grantHostAccess` would have stamped.
         setState({
-          tokens: stored?.length ? stored : projectMemberScopeTokens(member),
+          tokens: memberScopeTokens(member),
           orgWide: isOrgWideMember(member),
           loaded: true,
         })

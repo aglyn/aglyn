@@ -15,12 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  isOrgWideMember,
-  pluginRequestFromWeb,
-  projectMemberScopeTokens,
-  visibleToTokens,
-} from '@aglyn/aglyn/server'
+import { memberCanSee, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -94,12 +89,7 @@ async function handler(request: Request): Promise<Response> {
       const membership = await resolveOrgMembership(decoded.uid, orgId)
       const member = membership?.member as any
       if (!member || member.orgSuspended === true) return refuse()
-      if (!isOrgWideMember(member)) {
-        const tokens = member.scopeTokens?.length
-          ? member.scopeTokens
-          : projectMemberScopeTokens(member)
-        if (!visibleToTokens(snapshot.get('visibleTo'), tokens)) return refuse()
-      }
+      if (!memberCanSee(member, snapshot.get('visibleTo'))) return refuse()
     }
 
     if (snapshot.get('private') !== true) return refuse()

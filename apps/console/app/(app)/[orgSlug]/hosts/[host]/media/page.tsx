@@ -27,7 +27,7 @@ import DashboardLayout from '../../../../../../components/layouts/dashboard.layo
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import MediaLibraryComponent from '../../../../../../components/media/media-library.component'
-import useHostOrgId from '../../../../../../hooks/use-host-org-id'
+import { useOrgDataScope } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
@@ -37,7 +37,11 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
-  const hostOrgId = useHostOrgId(hostId)
+  // `ready` rather than truthiness (AGL-1061): `useHostOrgId` cannot tell
+  // "still looking" from "no owning org", so branching on the id alone
+  // renders the site-only page for a beat on every mount and then pops the
+  // shared library in underneath it.
+  const { orgId: hostOrgId, ready: orgResolved } = useOrgDataScope({ hostId })
 
   return (
     <DashboardLayout
@@ -73,20 +77,26 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
         </CardDisplay>
         {/* Shared org library (AGL-237/821) below the host-private one —
             now the same canonical DAM component as the org media page. */}
-        {hostOrgId ? (
+        {orgResolved && hostOrgId ? (
           <Box sx={{ mt: 3 }}>
             <CardDisplay
-              header={'Organization media (shared with all sites)'}
+              header={'Organization media (shared with this site)'}
               help={docsHelp('media', {
                 excerpt:
-                  'A shared library for the whole organization — any site ' +
-                  'can use these assets, unlike the site-private library.',
+                  'Workspace assets this site is allowed to use, unlike the ' +
+                  'site-private library above.',
               })}
               contentGutterX
               contentGutterY
               contentBordered="all"
             >
-              <MediaLibraryComponent orgId={hostOrgId} />
+              {/* `forHostId` narrows the shared library to what THIS site
+                  may render (AGL-1045) — the same rule the picker follows.
+                  Without it this page listed every workspace asset the
+                  VIEWER can see, so an agency owner sitting on a client's
+                  media page saw the agency's internal artwork under a
+                  heading promising the opposite. */}
+              <MediaLibraryComponent orgId={hostOrgId} forHostId={hostId} />
             </CardDisplay>
           </Box>
         ) : null}

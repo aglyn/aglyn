@@ -19,10 +19,8 @@ import type { AglynOrgMember } from '@aglyn/aglyn/server'
 import {
   describeScope,
   hostScopeToken,
-  isOrgWideMember,
   isOrgWideScope,
-  projectMemberScopeTokens,
-  visibleToTokens,
+  memberCanSee,
 } from '@aglyn/aglyn/server'
 
 /**
@@ -79,13 +77,10 @@ export function eraseScopeDenial(
   const { visibleTo, member, fromHostId, label, exists } = input
   if (!exists) return null
 
-  if (!isOrgWideMember(member)) {
-    const tokens = member?.scopeTokens?.length
-      ? member.scopeTokens
-      : projectMemberScopeTokens(member)
-    if (!visibleToTokens(visibleTo, tokens)) {
-      return { error: `${label} not found`, status: 404 }
-    }
+  // 404, not 403: a scoped collaborator learning that a resource EXISTS is
+  // the leak this project closes (feedback_role_gate_admits_site_collaborators).
+  if (!memberCanSee(member, visibleTo)) {
+    return { error: `${label} not found`, status: 404 }
   }
 
   if (!fromHostId) return null
