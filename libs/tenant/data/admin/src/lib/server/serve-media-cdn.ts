@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { isOrgWideScope, visibleToHost } from '@aglyn/aglyn/server'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { firebaseAdmin } from './firebase-admin'
 
@@ -22,6 +23,63 @@ import { firebaseAdmin } from './firebase-admin'
 export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280] as const
 
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
+
+/**
+ * The parsed CDN scope segment (AGL-1043). Shapes:
+ *
+ * - `{hostId}` — that host's own library
+ * - `org:{orgId}` — the org library, ORG-WIDE assets only
+ * - `org:{orgId}:{hostId}` — an org asset in one site's context
+ *
+ * The host is in the URL rather than sniffed from the `Host` header on
+ * purpose. A header is the requester's CHOICE: anyone holding a restricted
+ * asset's id could fetch it through a domain that IS permitted and get the
+ * bytes, so header-based enforcement stops accidents while looking like a
+ * boundary. Here the decision is a pure function of (URL, doc), and since
+ * the cache key IS the URL, one host's answer can never reach another.
+ */
+export interface MediaCdnScope {
+  isOrg: boolean
+  scopeId: string
+  /** Only on the `org:{orgId}:{hostId}` form. */
+  contextHostId?: string
+}
+
+export function parseMediaCdnScope(
+  scopeSegment: string,
+): MediaCdnScope | null {
+  if (!scopeSegment.startsWith('org:')) {
+    return SEGMENT.test(scopeSegment)
+      ? { isOrg: false, scopeId: scopeSegment }
+      : null
+  }
+  const parts = scopeSegment.slice('org:'.length).split(':')
+  if (parts.length > 2) return null
+  const [scopeId, contextHostId] = parts
+  if (!SEGMENT.test(scopeId ?? '')) return null
+  if (contextHostId !== undefined && !SEGMENT.test(contextHostId)) return null
+  return {
+    isOrg: true,
+    scopeId,
+    ...(contextHostId ? { contextHostId } : {}),
+  }
+}
+
+/**
+ * Whether the asset may be served under this URL. Host-library assets are
+ * private by construction and carry no `visibleTo`, so only the org branch
+ * is checked.
+ */
+export function mediaCdnAllows(
+  scope: MediaCdnScope,
+  visibleTo: unknown,
+): boolean {
+  if (!scope.isOrg) return true
+  const scoped = Array.isArray(visibleTo) ? (visibleTo as string[]) : undefined
+  return scope.contextHostId
+    ? visibleToHost(scoped, scope.contextHostId)
+    : isOrgWideScope(scoped)
+}
 
 /**
  * CDN media delivery (AGL-175 / AGL-829). Two URL shapes resolve the same
@@ -55,14 +113,14 @@ export async function serveMediaCdn(
   const [scopeSegment, mediaId, hash] = path.map((value) =>
     String(value ?? ''),
   )
-  // Org DAM assets serve under `org:{orgId}` (host ids otherwise).
-  const isOrg = scopeSegment.startsWith('org:')
-  const scopeId = isOrg ? scopeSegment.slice('org:'.length) : scopeSegment
+  const scope = parseMediaCdnScope(scopeSegment)
+  const isOrg = scope?.isOrg ?? false
+  const scopeId = scope?.scopeId ?? ''
   // 3 segments = the immutable content-hashed URL; 2 = the stable URL.
   const hashed = path.length === 3
   if (
+    !scope ||
     (path.length !== 2 && path.length !== 3) ||
-    !SEGMENT.test(scopeId) ||
     !SEGMENT.test(mediaId) ||
     (hashed && !SEGMENT.test(hash))
   ) {
@@ -80,6 +138,22 @@ export async function serveMediaCdn(
       .get()
     const currentHash = String(snapshot.get('contentHash') ?? '')
     if (!snapshot.exists || snapshot.get('deletedAt')) {
+      res.setHeader('Cache-Control', 'public, max-age=60')
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+    // Scope check (AGL-1043). The bare `org:` form serves ORG-WIDE assets
+    // only; a restricted asset must be requested through the form that
+    // names the site using it. Today every asset is `['org']` after the
+    // AGL-1040 backfill, so this is a no-op on existing URLs and starts
+    // biting exactly when someone restricts an asset — which is when
+    // AGL-1045's confirmation already warns which pages are affected.
+    //
+    // 404 rather than 403: whether a restricted asset exists is itself
+    // something the caller has no standing to learn. Short max-age so
+    // re-widening a scope propagates quickly instead of being pinned by a
+    // long-lived negative cache entry.
+    if (!mediaCdnAllows(scope, snapshot.get('visibleTo'))) {
       res.setHeader('Cache-Control', 'public, max-age=60')
       res.status(404).json({ error: 'Not found' })
       return
