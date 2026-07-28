@@ -43,10 +43,7 @@ const PLUGINS_ROOT = join(REPO_ROOT, 'libs/plugins')
  * the reason — an entry here is a claim that the docs do not cover it, not
  * that the topic was hard to pick.
  */
-const NO_TOPIC_YET: Record<string, string> = {
-  'events-calendar:Events':
-    'No events-calendar page exists under apps/docs/docs — tracked in AGL-1075.',
-}
+const NO_TOPIC_YET: Record<string, string> = {}
 
 /** The balanced `{...}` starting at `from`, braces included. */
 function braceBlock(source: string, from: number): string {

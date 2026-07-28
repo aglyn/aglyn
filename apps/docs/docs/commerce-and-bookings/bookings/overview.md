@@ -48,4 +48,5 @@ Use the console **bookings** page to see and manage upcoming appointments.
 ## Related
 
 - [Commerce](../commerce/overview.md)
+- [Events calendar](../../content-and-data/events/overview.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)

@@ -213,6 +213,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Design custom error screens',
     excerpt: 'Replace generic 404/401/403/503 pages with branded screens you design.',
   },
+  events: {
+    path: '/content-and-data/events/overview',
+    title: 'Events Calendar',
+    excerpt: 'Keep a schedule of events in the console and publish the ones you choose to any screen, with search-engine event markup.',
+  },
   examples: {
     path: '/developers/plugins/guides/examples',
     title: 'Worked examples',
@@ -537,6 +542,7 @@ export const DOCS_HELP_ANCHORS = {
   editYourTheme: ['#open-the-editor', '#set-colors-and-fonts', '#it-follows-you-into-the-besigner', '#tips', '#related'],
   emailCampaigns: ['#send-a-campaign', '#personalize-with-merge-tags', '#schedule-a-send', '#email-lists', '#experiments', '#opens--clicks', '#compliance', '#related'],
   errorScreens: ['#the-error-screens', '#design-one', '#tips', '#related'],
+  events: ['#manage-events', '#show-events-on-a-screen', '#search-engines', '#related'],
   featureFlags: ['#how-a-flag-is-evaluated', '#how-gating-behaves', '#managing-flags', '#under-the-hood'],
   firstPlugin: ['#1-scaffold', '#2-write-the-entry', '#3-develop-against-a-live-workspace', '#4-verify', '#5-publish', '#6-install-enable-load', '#7-uninstall', '#troubleshooting'],
   forms: ['#build-a-form', '#field-types', '#example-a-quick-survey', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#where-submissions-go', '#related'],

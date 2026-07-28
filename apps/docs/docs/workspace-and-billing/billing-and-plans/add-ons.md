@@ -28,7 +28,8 @@ pick a plan first).
 - **Prices are per unit per month.** On annual billing, add-ons bill yearly alongside
   your plan (12× the monthly price) — a subscription has one billing interval.
 - **POS registers** also require a plan with POS (Pro and above).
-- **Event Calendar** is a single workspace-wide toggle, not a per-site charge.
+- **Event Calendar** is a single workspace-wide toggle, not a per-site charge — see
+  [Events calendar](../../content-and-data/events/overview.md).
 
 ## How changes bill
 
