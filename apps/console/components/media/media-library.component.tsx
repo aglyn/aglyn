@@ -521,7 +521,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         setPageCursor(page.last)
         setHasMore(page.more)
       })
-      .catch((error) => console.error('media query', error))
+      // Name the path and the scope state. "Missing or insufficient
+      // permissions" with no context cost real time to diagnose — the
+      // useful question is always WHICH collection, under WHICH scope,
+      // with WHICH filter.
+      .catch((error) =>
+        console.error(
+          `media query ${scopeCollection}/${scopeId}/media` +
+            ` needsScope=${needsScope} tokens=${JSON.stringify(scopeTokens)}` +
+            ` sort=${sortBy} folder=${String(currentFolder)}`,
+          error,
+        ),
+      )
       .then(() => {
         if (active) setLoadingMedia(false)
       })

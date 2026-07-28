@@ -37,6 +37,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
   setDoc,
   updateDoc,
@@ -742,8 +744,15 @@ describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
           values: { a: '1' },
         })
       }
+      // `createdAt` matters: the grid sorts by it, and a list query with
+      // no MATCHING candidates is allowed vacuously — which is how an
+      // earlier version of the ordered-list test below passed while the
+      // real page was denied. Every fixture doc must be a candidate.
       await setDoc(doc(db, 'orgs', ORG, 'media', 'me-theirs'), {
-        url: 'u', visibleTo: [`host:${OTHER_HOST}`],
+        url: 'u', visibleTo: [`host:${OTHER_HOST}`], createdAt: new Date(),
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'media', 'me-org'), {
+        url: 'u', visibleTo: ['org'], createdAt: new Date(),
       })
       await setDoc(doc(db, 'orgs', ORG, 'mediaFolders', 'f-theirs'), {
         name: 'Internal', visibleTo: [`host:${OTHER_HOST}`],
@@ -860,6 +869,53 @@ describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
           where('visibleTo', 'array-contains-any', ['org', `host:${HOST}`]),
         ),
       ),
+    )
+  })
+
+  // The case nothing covered: an ORG-WIDE member listing UNFILTERED, which
+  // is what the console actually sends for an owner (they get no filter by
+  // design — adding one would cost a composite index and hide any doc the
+  // backfill missed). AGL-1047 removed the missing-field escape hatch on
+  // the strength of "an org-wide member short-circuits before `visibleTo`
+  // is consulted"; this asserts that claim instead of assuming it.
+  it('an OWNER lists unfiltered — datasets, media and folders', async () => {
+    const db = authed(OWNER)
+    await assertSucceeds(getDocs(collection(db, 'orgs', ORG, 'datasets')))
+    await assertSucceeds(getDocs(collection(db, 'orgs', ORG, 'media')))
+    await assertSucceeds(getDocs(collection(db, 'orgs', ORG, 'mediaFolders')))
+  })
+
+  it('an OWNER lists media the way the grid actually queries it', async () => {
+    // The console sends orderBy + limit, not a bare collection read. The
+    // plain case above passed while the real Media page was denied in
+    // production, so the shape is asserted verbatim rather than
+    // approximated.
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(authed(OWNER), 'orgs', ORG, 'media'),
+          orderBy('createdAt', 'desc'),
+          limit(24),
+        ),
+      ),
+    )
+  })
+
+  it('an allHosts VIEWER lists unfiltered too', async () => {
+    // `allHosts` without owner/admin is the other org-wide shape, and it
+    // reaches `isOrgWideMember()` by a different branch.
+    const db = authed(VIEWER)
+    await assertSucceeds(getDocs(collection(db, 'orgs', ORG, 'datasets')))
+    await assertSucceeds(getDocs(collection(db, 'orgs', ORG, 'media')))
+  })
+
+  it('one UNSTAMPED doc cannot lock an org-wide member out of the list', async () => {
+    // `ds-legacy` carries no `visibleTo`. For a scoped member that is a
+    // fail-closed miss (asserted above). For an owner it must not deny the
+    // whole query — the failure mode would be an empty Data page for the
+    // person who owns the org.
+    await assertSucceeds(
+      getDocs(collection(authed(OWNER), 'orgs', ORG, 'datasets')),
     )
   })
 
