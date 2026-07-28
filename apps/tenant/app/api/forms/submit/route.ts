@@ -170,10 +170,11 @@ export async function POST(request: Request): Promise<Response> {
         // Org-scoped datasets (AGL-237): the form's dataset resolves
         // against the org so every host shares it.
         const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
-        const datasetDoc = await resolveDatasetDoc(datasetsRef, {
-          datasetId: boundDatasetId,
-          datasetName,
-        })
+        const datasetDoc = await resolveDatasetDoc(
+          datasetsRef,
+          { datasetId: boundDatasetId, datasetName },
+          hostId,
+        )
         if (datasetDoc?.exists && !datasetDoc.get('deletedAt')) {
           const values = Aglyn.buildDatasetRecordValues(
             {

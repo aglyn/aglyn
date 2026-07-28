@@ -39,6 +39,7 @@ import {
   getOrgForHost,
   notifyHostManagers,
   orgDataCollectionForHost,
+  orgDataQueryForHost,
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
@@ -223,7 +224,7 @@ async function executeAction(
       } else if (step.type === 'datasetAppend') {
         // Id-first lookup (AGL-261/556); the name query is the legacy path.
         const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
-        const datasetDoc = await resolveDatasetDoc(datasetsRef, step)
+        const datasetDoc = await resolveDatasetDoc(datasetsRef, step, hostId)
         if (!datasetDoc?.exists || datasetDoc.get('deletedAt')) {
           stepErrors.push(
             `unknown dataset "${step.datasetName || step.datasetId}"`,
@@ -251,7 +252,7 @@ async function executeAction(
         // Update-or-append (AGL-257): matches the record whose `email`
         // field equals the payload's email; appends when nothing matches.
         const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
-        const datasetDoc = await resolveDatasetDoc(datasetsRef, step)
+        const datasetDoc = await resolveDatasetDoc(datasetsRef, step, hostId)
         if (!datasetDoc?.exists || datasetDoc.get('deletedAt')) {
           stepErrors.push(
             `unknown dataset "${step.datasetName || step.datasetId}"`,
@@ -364,9 +365,14 @@ async function executeAction(
           stepErrors.push('no contact email to assign')
           continue
         }
-        const contactsRef = await orgDataCollectionForHost(hostId, 'contacts')
+        // Scoped to this host (AGL-1039): a site must not reach a contact
+        // it cannot see, even to tag it onto a campaign.
+        const { query: contactsQuery } = await orgDataQueryForHost(
+          hostId,
+          'contacts',
+        )
         const contact = (
-          await contactsRef.where('email', '==', email).limit(1).get()
+          await contactsQuery.where('email', '==', email).limit(1).get()
         ).docs[0]
         if (!contact) {
           stepErrors.push(`no contact for ${email}`)

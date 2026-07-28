@@ -74,14 +74,18 @@ beforeEach(async () => {
       name: 'Acme', slug: 'acme', ownerUid: OWNER,
       hosts: { [HOST]: true }, plan: 'pro',
     })
+    // `scopeTokens` mirrors what syncOrgAuthProjections writes (AGL-1038):
+    // org-wide members get ['org']; a scoped collaborator gets 'org' plus
+    // one token per granted host.
     await setDoc(doc(db, 'orgs', ORG, 'members', OWNER), {
-      role: 'owner', allHosts: true,
+      role: 'owner', allHosts: true, scopeTokens: ['org'],
     })
     await setDoc(doc(db, 'orgs', ORG, 'members', EDITOR), {
       role: 'editor', allHosts: false, hostAccess: { [HOST]: 'editor' },
+      scopeTokens: ['org', `host:${HOST}`],
     })
     await setDoc(doc(db, 'orgs', ORG, 'members', VIEWER), {
-      role: 'viewer', allHosts: true,
+      role: 'viewer', allHosts: true, scopeTokens: ['org'],
     })
     await setDoc(doc(db, 'orgs', ORG, 'invites', 'invite-1'), {
       email: 'new@acme.test', role: 'editor', acceptedAt: null,
@@ -645,8 +649,8 @@ describe('site collaborators are scoped out of the org (AGL-1026)', () => {
       await setDoc(doc(db, 'orgs', ORG, 'usage', '2026-07'), { pageviews: 1 })
       await setDoc(doc(db, 'orgs', ORG, 'apiUsage', '2026-07'), { requests: 1 })
       await setDoc(doc(db, 'orgs', ORG, 'activity', 'a1'), { action: 'x' })
-      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1'), { name: 'Team' })
-      await setDoc(doc(db, 'orgs', ORG, 'media', 'm1'), { url: 'u' })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1'), { name: 'Team', visibleTo: ['org'] })
+      await setDoc(doc(db, 'orgs', ORG, 'media', 'm1'), { url: 'u', visibleTo: ['org'] })
     })
   })
 
@@ -685,13 +689,143 @@ describe('site collaborators are scoped out of the org (AGL-1026)', () => {
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'usage', '2026-07')))
   })
 
-  it('KEEPS what building a site needs: the org doc, datasets and media', async () => {
-    // Deliberate (AGL-1026): a site's pages bind org datasets and place org
-    // media, and there is no per-site association to filter on. The org doc
-    // carries the entitlements every console surface gates features on.
+  it('KEEPS what building a site needs: the org doc and ORG-WIDE data', async () => {
+    // The org doc still carries the entitlements every console surface
+    // gates features on. Datasets and media are readable here because they
+    // are org-wide; AGL-1041/1042 below cover the restricted case, which
+    // AGL-1026 could not express for lack of a per-site association.
     await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG)))
     await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1')))
     await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'media', 'm1')))
+  })
+})
+
+describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
+  const OTHER_HOST = 'host-other'
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-org'), {
+        name: 'Shared', visibleTo: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-mine'), {
+        name: 'Mine', visibleTo: [`host:${HOST}`],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-theirs'), {
+        name: 'Internal', visibleTo: [`host:${OTHER_HOST}`],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-legacy'), {
+        name: 'Unstamped',
+      })
+      for (const id of ['ds-org', 'ds-mine', 'ds-theirs']) {
+        await setDoc(doc(db, 'orgs', ORG, 'datasets', id, 'records', 'r1'), {
+          values: { a: '1' },
+        })
+      }
+      await setDoc(doc(db, 'orgs', ORG, 'media', 'me-theirs'), {
+        url: 'u', visibleTo: [`host:${OTHER_HOST}`],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'mediaFolders', 'f-theirs'), {
+        name: 'Internal', visibleTo: [`host:${OTHER_HOST}`],
+      })
+    })
+  })
+
+  it('a collaborator reads org-wide and their OWN site data, not another site\'s', async () => {
+    const db = authed(EDITOR)
+    await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-org')))
+    await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-mine')))
+    await assertFails(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-theirs')))
+  })
+
+  it('a doc with NO visibleTo stays readable — pre-backfill safety', async () => {
+    // hasAny on a missing field errors rather than returning false, so the
+    // guard in canReadScoped is load-bearing: without it every unstamped
+    // doc would deny instead of degrading to org-wide.
+    await assertSucceeds(
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds-legacy')),
+    )
+  })
+
+  it('an org-wide member still reads everything the org owns', async () => {
+    await assertSucceeds(getDoc(doc(authed(OWNER), 'orgs', ORG, 'datasets', 'ds-theirs')))
+    await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds-theirs')))
+    await assertSucceeds(getDoc(doc(authed(OWNER), 'orgs', ORG, 'media', 'me-theirs')))
+  })
+
+  it('records inherit their dataset\'s scope', async () => {
+    const db = authed(EDITOR)
+    await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-org', 'records', 'r1')))
+    await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-mine', 'records', 'r1')))
+    await assertFails(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-theirs', 'records', 'r1')))
+  })
+
+  it('a collaborator cannot WRITE another site\'s dataset or its records', async () => {
+    const db = authed(EDITOR)
+    await assertFails(
+      updateDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-theirs'), { name: 'Taken' }),
+    )
+    await assertFails(
+      updateDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-theirs', 'records', 'r1'), {
+        values: { a: '2' },
+      }),
+    )
+    await assertFails(
+      deleteDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-theirs', 'records', 'r1')),
+    )
+  })
+
+  it('a scoped member cannot CHANGE who a resource is shared with', async () => {
+    const db = authed(EDITOR)
+    // Widening their own site's dataset to the whole org...
+    await assertFails(
+      updateDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-mine'), { visibleTo: ['org'] }),
+    )
+    // ...or narrowing an org-wide one to just their site, taking it from
+    // everyone else. Both are the org's call.
+    await assertFails(
+      updateDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-org'), {
+        visibleTo: [`host:${HOST}`],
+      }),
+    )
+    // Editing CONTENT on something they can see is still fine.
+    await assertSucceeds(
+      updateDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-mine'), { name: 'Renamed' }),
+    )
+  })
+
+  it('an org-wide member CAN change the scope', async () => {
+    await assertSucceeds(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG, 'datasets', 'ds-mine'), {
+        visibleTo: ['org'],
+      }),
+    )
+  })
+
+  it('media and folders follow the same rules', async () => {
+    const db = authed(EDITOR)
+    await assertFails(getDoc(doc(db, 'orgs', ORG, 'media', 'me-theirs')))
+    await assertFails(getDoc(doc(db, 'orgs', ORG, 'mediaFolders', 'f-theirs')))
+    await assertFails(
+      updateDoc(doc(db, 'orgs', ORG, 'media', 'me-theirs'), { alt: 'x' }),
+    )
+    await assertFails(
+      deleteDoc(doc(db, 'orgs', ORG, 'mediaFolders', 'f-theirs')),
+    )
+  })
+
+  it('a collaborator cannot CREATE a folder scoped to a site they lack', async () => {
+    const db = authed(EDITOR)
+    await assertFails(
+      setDoc(doc(db, 'orgs', ORG, 'mediaFolders', 'f-new'), {
+        name: 'Sneaky', visibleTo: [`host:${OTHER_HOST}`],
+      }),
+    )
+    await assertSucceeds(
+      setDoc(doc(db, 'orgs', ORG, 'mediaFolders', 'f-ok'), {
+        name: 'Mine', visibleTo: [`host:${HOST}`],
+      }),
+    )
   })
 })
 

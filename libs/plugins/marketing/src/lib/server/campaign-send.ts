@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-import { checkQuota, contactMatchesSegment, createResourceUid } from '@aglyn/aglyn/server'
+import { checkQuota, contactMatchesSegment, createResourceUid, visibleToHost } from '@aglyn/aglyn/server'
 import { renderEmailHtml, resolveMergeTags, type EmailRenderProduct } from '@aglyn/plugins-email/model'
 import { assignExperimentVariant, type HostExperiment } from '../model'
 import { productPriceRange } from '@aglyn/plugins-commerce/model'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import {
   orgDataCollectionForHost,
+  orgDataQueryForHost,
   firebaseAdmin,
   getOrgForHost,
 } from '@aglyn/tenant-data-admin'
@@ -198,14 +199,25 @@ export async function performCampaignSend(
     const segmentSnapshot = segmentId
       ? await (await orgDataCollectionForHost(hostId, 'contactSegments')).doc(segmentId).get()
       : null
-    if (!segmentSnapshot?.exists) {
+    // A doc get cannot carry the scope filter, so check after the read
+    // (AGL-1039). Reported as "unknown" rather than "forbidden": whether a
+    // segment exists in another site's scope is not this caller's business.
+    if (
+      !segmentSnapshot?.exists ||
+      !visibleToHost(segmentSnapshot.get('visibleTo'), hostId)
+    ) {
       throw new CampaignSendError('Unknown segment', 400)
     }
     const segment = {
       tags: segmentSnapshot.get('tags') ?? [],
       sources: segmentSnapshot.get('sources') ?? [],
     }
-    const contacts = await (await orgDataCollectionForHost(hostId, 'contacts')).limit(5000).get()
+    // Scoped (AGL-1039): a campaign sent from one site must not reach
+    // another site's audience — the agency case is a client's campaign
+    // blasting the whole org's contact list.
+    const contacts = await (
+      await orgDataQueryForHost(hostId, 'contacts')
+    ).query.limit(5000).get()
     recipients = contacts.docs
       .filter((doc) =>
         contactMatchesSegment(

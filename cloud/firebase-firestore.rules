@@ -158,6 +158,11 @@ service cloud.firestore {
       // belongs to the org and nothing records which sites use it. Scoping
       // these needs that association to exist first, which is a schema change,
       // not a rules edit.
+      //
+      // AGL-1037/1038 made that schema change, so the scoping below is now
+      // possible: resources carry `visibleTo` (['org'] or ['host:{id}', …])
+      // and members carry a denormalized `scopeTokens`. The intersection is
+      // the association that was missing.
       function canWriteOrgData() {
         return isOrgMember() &&
           orgMember().role in ['owner', 'admin', 'editor'] &&
@@ -175,6 +180,50 @@ service cloud.firestore {
           orgMember().role in ['owner', 'admin', 'editor'] &&
           orgNotSuspended();
       }
+      /**
+       * Scoped-resource read (AGL-1041/1042): may the caller see THIS doc?
+       *
+       * Org-wide members read everything the org owns — they are the org.
+       * Everyone else needs their `scopeTokens` (AGL-1038, written by
+       * `syncOrgAuthProjections`) to intersect the resource's `visibleTo`.
+       * Rules have no `.map()`, which is why both sides are denormalized
+       * arrays: `hasAny` is the only set-intersection primitive available.
+       *
+       * A MISSING `visibleTo` reads as visible. Every doc was stamped by the
+       * AGL-1040 backfill, but a doc created between that run and this rule
+       * deploying must not vanish. `hasAny` on a missing field errors rather
+       * than returning false, so the guard is load-bearing, not cosmetic.
+       */
+      function canReadScoped() {
+        return isOrgWideMember() ||
+          (isOrgMember() &&
+           (!('visibleTo' in resource.data) ||
+            resource.data.visibleTo.hasAny(orgMember().get('scopeTokens', ['org']))));
+      }
+      function canWriteScopedOrgData() {
+        return canWriteOrgData() && canReadScoped();
+      }
+      /**
+       * Only an org-wide member may change who a resource is shared with.
+       * Without this a scoped editor could widen their own site's dataset to
+       * `['org']`, or — worse — narrow an org-wide one to just their site,
+       * taking it away from everyone else.
+       */
+      function scopeUnchanged() {
+        return !request.resource.data.diff(resource.data)
+          .affectedKeys().hasAny(['visibleTo']);
+      }
+      /**
+       * Create-time twin of `canReadScoped` — it reads `request.resource`
+       * because `resource` does not exist yet. Stops a scoped member
+       * creating a resource they would immediately be unable to see, or
+       * quietly seeding one into another site's scope.
+       */
+      function canCreateScoped() {
+        return isOrgWideMember() ||
+          (!('visibleTo' in request.resource.data) ||
+           request.resource.data.visibleTo.hasAny(orgMember().get('scopeTokens', ['org'])));
+      }
       // Dataset/record CREATES are API-only (AGL-473): the console route
       // enforces the dataStore entitlement and dataset/record quotas
       // server-side. Record updates/deletes stay editor-writable — they
@@ -184,15 +233,40 @@ service cloud.firestore {
       // delete orphaned every record beneath it (still billed, still
       // matched by the rule below, which doesn't check that its parent
       // exists). /api/resources/erase recursiveDeletes the whole subtree.
+      // Scoped to the sites that may see them (AGL-1041). NOTE for anyone
+      // debugging "the Data page is empty for a collaborator": rules
+      // evaluate per document on a LIST, and Firestore rejects the whole
+      // query if any candidate would fail — so a scoped member MUST send
+      // `where('visibleTo', 'array-contains-any', scopeTokens)`. An
+      // unfiltered list is permission-denied, not a filtered result. That
+      // is the enforcement working; the client side is AGL-1044.
       match /datasets/{datasetId} {
-        allow read: if isStaff() || isOrgMember();
+        allow read: if isStaff() || canReadScoped();
         allow create: if isStaff();
-        allow update: if isStaff() || canWriteOrgData();
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
         allow delete: if isStaff();
         match /records/{recordId} {
-          allow read: if isStaff() || isOrgMember();
+          // A record has no `visibleTo` of its own; it inherits the
+          // dataset's. That costs one extra document read per evaluation,
+          // including per candidate on a list query. The alternative —
+          // denormalizing `visibleTo` onto every record — is cheaper to
+          // read and much harder to keep correct when a dataset's scope
+          // changes (an N-record backfill on every scope edit, with a
+          // window where records disagree with their parent). Correctness
+          // wins here; revisit if record listing shows up in Firestore
+          // costs.
+          function parentDatasetVisible() {
+            return isOrgWideMember() ||
+              (isOrgMember() &&
+               get(/databases/$(database)/documents/orgs/$(orgId)/datasets/$(datasetId))
+                 .data.get('visibleTo', ['org'])
+                 .hasAny(orgMember().get('scopeTokens', ['org'])));
+          }
+          allow read: if isStaff() || parentDatasetVisible();
           allow create: if isStaff();
-          allow update, delete: if isStaff() || canWriteOrgData();
+          allow update, delete: if isStaff() ||
+            (canWriteOrgData() && parentDatasetVisible());
         }
       }
       // The CRM is org-wide-only (AGL-1026). Contacts and segments are people
@@ -235,13 +309,32 @@ service cloud.firestore {
       // host in the org. Storage objects stay API-managed (upload/delete
       // routes enforce quota), but editors mutate the metadata docs the
       // same way they do on a host's library (rename, folder moves).
+      //
+      // Scoped like datasets (AGL-1042). Assets carry their OWN `visibleTo`
+      // rather than inheriting their folder's: the tree is five levels deep
+      // (`media-folders.ts`), so read-time inheritance would cost up to five
+      // `get()`s per evaluation. A folder's scope is instead applied to its
+      // contents by an explicit, auditable write-time cascade in the console
+      // (AGL-1045) — and moving an asset between folders does NOT re-scope
+      // it, which the UI has to say out loud because the opposite is what
+      // people assume.
+      // `write` is split into create/update/delete here because
+      // `canReadScoped()` inspects `resource.data`, which does not exist on
+      // a create — media folders ARE created client-side, so that path is
+      // real and would error rather than deny.
       match /media/{mediaId} {
-        allow read: if isStaff() || isOrgMember();
-        allow write: if isStaff() || canWriteOrgData();
+        allow read: if isStaff() || canReadScoped();
+        allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+        allow delete: if isStaff() || canWriteScopedOrgData();
       }
       match /mediaFolders/{folderId} {
-        allow read: if isStaff() || isOrgMember();
-        allow write: if isStaff() || canWriteOrgData();
+        allow read: if isStaff() || canReadScoped();
+        allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+        allow delete: if isStaff() || canWriteScopedOrgData();
       }
       // Storage quota meter for the org library.
       match /counters/{counterId} {

@@ -41,6 +41,10 @@ export const SCOPED_COLLECTIONS = [
   'datasets',
   'media',
   'mediaFolders',
+  // CRM (AGL-1039): the tenant reads these per host too — a campaign sent
+  // from one site must not reach another site's audience.
+  'contacts',
+  'contactSegments',
 ] as const
 
 export type ScopedCollection = (typeof SCOPED_COLLECTIONS)[number]
@@ -127,6 +131,8 @@ export interface ScopeBackfillTotals {
   datasets: { written: number; skipped: number }
   media: { written: number; skipped: number }
   mediaFolders: { written: number; skipped: number }
+  contacts: { written: number; skipped: number }
+  contactSegments: { written: number; skipped: number }
   /**
    * Legacy `hosts/{hostId}/datasets` docs seen (AGL-237's pre-migration
    * fallback). Counted, never touched: those are already site-private by
@@ -144,6 +150,8 @@ export function emptyTotals(): ScopeBackfillTotals {
     datasets: { written: 0, skipped: 0 },
     media: { written: 0, skipped: 0 },
     mediaFolders: { written: 0, skipped: 0 },
+    contacts: { written: 0, skipped: 0 },
+    contactSegments: { written: 0, skipped: 0 },
     legacyHostDatasets: 0,
   }
 }

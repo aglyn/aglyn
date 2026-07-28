@@ -15,21 +15,33 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn/server'
+
 /**
  * Resolves a dataset by its human name: console-created docs store it as
  * `displayName` (AGL-536); the `name` fallback covers pre-migration docs.
+ *
+ * `scope` narrows the candidates to what one host may see (AGL-1039). It
+ * is applied INSIDE the query rather than to the result, which is what
+ * makes the collision case come out right: when a host-scoped dataset and
+ * an org-wide one share a display name, an unscoped `limit(1)` would pick
+ * one arbitrarily and a post-filter would then reject it — reading as
+ * "no such dataset" when a perfectly visible one exists.
  */
 export async function findDatasetByName(
   datasetsRef: FirebaseFirestore.CollectionReference,
   datasetName: string,
+  scope?: (query: FirebaseFirestore.Query) => FirebaseFirestore.Query,
 ): Promise<FirebaseFirestore.QueryDocumentSnapshot | undefined> {
-  const byDisplayName = await datasetsRef
-    .where('displayName', '==', datasetName)
+  const narrow = scope ?? ((query: FirebaseFirestore.Query) => query)
+  const byDisplayName = await narrow(
+    datasetsRef.where('displayName', '==', datasetName),
+  )
     .limit(1)
     .get()
   if (!byDisplayName.empty) return byDisplayName.docs[0]
   return (
-    await datasetsRef.where('name', '==', datasetName).limit(1).get()
+    await narrow(datasetsRef.where('name', '==', datasetName)).limit(1).get()
   ).docs[0]
 }
 
@@ -44,13 +56,41 @@ export async function findDatasetByName(
 export async function resolveDatasetDoc(
   datasetsRef: FirebaseFirestore.CollectionReference,
   binding: { datasetId?: string | null; datasetName?: string | null },
+  hostId: string,
 ): Promise<FirebaseFirestore.DocumentSnapshot | undefined> {
+  // `hostId` is required rather than optional on purpose (AGL-1039): every
+  // caller here writes records into whatever comes back, and an optional
+  // scope is one a future caller forgets to pass. The Admin SDK ignores
+  // rules, so this is the only thing standing between a client site and
+  // another client's dataset.
+  const orgScoped = datasetsRef.parent?.parent?.id === 'orgs'
   const datasetId = binding.datasetId?.trim()
   if (datasetId) {
     const datasetDoc = await datasetsRef.doc(datasetId).get()
-    if (datasetDoc.exists) return datasetDoc
+    if (
+      datasetDoc.exists &&
+      (!orgScoped ||
+        Aglyn.visibleToHost(datasetDoc.get('visibleTo'), hostId))
+    ) {
+      return datasetDoc
+    }
+    // A hit this host cannot see is NOT a reason to fall through to the
+    // name lookup — that would answer "which dataset is called X" for a
+    // binding that already named a specific one.
+    if (datasetDoc.exists) return undefined
   }
   const datasetName = binding.datasetName?.trim()
   if (!datasetName) return undefined
-  return findDatasetByName(datasetsRef, datasetName)
+  return findDatasetByName(
+    datasetsRef,
+    datasetName,
+    orgScoped
+      ? (query) =>
+          query.where(
+            'visibleTo',
+            'array-contains-any',
+            Aglyn.scopeTokensForHost(hostId),
+          )
+      : undefined,
+  )
 }

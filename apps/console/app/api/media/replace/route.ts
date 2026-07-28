@@ -30,6 +30,7 @@ import {
 import {
   mediaObjectPath,
   resolveMediaScope,
+  scopeAllows,
 } from '../../../../utils/server/media-scope'
 import { createHash, randomUUID } from 'crypto'
 
@@ -94,7 +95,13 @@ async function handler(request: Request): Promise<Response> {
 
     const mediaRef = scope.scopeRef.collection('media').doc(mediaId)
     const mediaSnapshot = await mediaRef.get()
-    if (!mediaSnapshot.exists || mediaSnapshot.get('deletedAt')) {
+    if (
+      !mediaSnapshot.exists ||
+      mediaSnapshot.get('deletedAt') ||
+      // Replacing an asset you cannot see would swap the bytes behind
+      // another site's image (AGL-1043).
+      !scopeAllows(scope, mediaSnapshot.get('visibleTo'))
+    ) {
       return Response.json({ error: 'Unknown media' }, { status: 404 })
     }
     // Concurrent-edit guard: the client passes the doc's updatedAt it saw.

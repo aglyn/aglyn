@@ -16,10 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
-import {
-  firebaseAdmin,
-  orgDataCollectionForHost,
-} from '@aglyn/tenant-data-admin'
+import { orgDataQueryForHost } from '@aglyn/tenant-data-admin'
 
 /**
  * Fetches the host's datasets with their records for repeatable expansion
@@ -27,19 +24,26 @@ import {
  * friendly name into the Repeat attribute). Records are editor-ordered and
  * capped at the repeat bound. Fail-open: on error an empty map is returned
  * and repeatable containers render their template untouched.
+ *
+ * Scoped to what THIS host may see (AGL-1039). It used to load every
+ * dataset the org owned for whichever host was rendering, which — because
+ * the map is keyed by `displayName` as well as id — let a client site bind
+ * a repeatable to `products` and publicly render the agency's internal
+ * `products`. The Admin SDK does not evaluate rules, so AGL-1041 does not
+ * cover this path; the filter has to live here.
  */
 export async function getDatasets(options: {
   hostId: string
 }): Promise<Record<string, Aglyn.RepeatableDataset>> {
   const datasets: Record<string, Aglyn.RepeatableDataset> = {}
   try {
-    // Datasets are org-scoped (AGL-237); helper falls back to the host
-    // path for hosts not yet org-wired.
-    const datasetsRef = await orgDataCollectionForHost(
-      options.hostId,
-      'datasets',
-    )
-    const snapshot = await datasetsRef.limit(50).get()
+    // Datasets are org-scoped (AGL-237); the helper falls back to the host
+    // path for hosts not yet org-wired, and narrows the org path to this
+    // host's scope tokens. The cap applies AFTER the scope filter, so a
+    // host still sees up to 50 of the datasets it may actually use rather
+    // than 50 of the org's and then nothing.
+    const { query } = await orgDataQueryForHost(options.hostId, 'datasets')
+    const snapshot = await query.limit(50).get()
     await Promise.all(
       snapshot.docs.map(async (docSnapshot) => {
         const recordsSnapshot = await docSnapshot.ref

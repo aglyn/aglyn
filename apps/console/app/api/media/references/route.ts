@@ -24,6 +24,7 @@ import {
 import {
   mediaObjectPath,
   resolveMediaScope,
+  scopeAllows,
 } from '../../../../utils/server/media-scope'
 
 export interface MediaReference {
@@ -82,7 +83,12 @@ async function handler(request: Request): Promise<Response> {
       .collection('media')
       .doc(mediaId)
       .get()
-    if (!mediaSnapshot.exists) {
+    if (
+      !mediaSnapshot.exists ||
+      !scopeAllows(scope, mediaSnapshot.get('visibleTo'))
+    ) {
+      // "Unknown" rather than "forbidden" (AGL-1043): whether a restricted
+      // asset exists is not something this caller has standing to learn.
       return Response.json({ error: 'Unknown media' }, { status: 404 })
     }
     const needles = [
@@ -107,6 +113,13 @@ async function handler(request: Request): Promise<Response> {
         .where('orgId', '==', scope.scopeId)
         .get()
       for (const host of orgHosts.docs) {
+        // Only sites the CALLER can see (AGL-1043). This endpoint returns
+        // each referencing host's id AND subdomain, so an unfiltered scan
+        // hands a one-site collaborator the name of every other client
+        // site in the org — a roster leak dressed up as a usage report.
+        if (!scope.viewerOrgWide && !scopeAllows(scope, ['host:' + host.id])) {
+          continue
+        }
         hosts.push({
           ref: host.ref,
           id: host.id,

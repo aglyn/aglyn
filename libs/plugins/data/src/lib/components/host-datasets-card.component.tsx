@@ -45,6 +45,7 @@ import {
   getDocs,
   limit,
   query,
+  where,
   setDoc,
   writeBatch,
 } from 'firebase/firestore'
@@ -54,6 +55,7 @@ import {
   useFirestoreCollection,
   useHostActivityLogger,
   useHostOrgId,
+  useScopeTokens,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
@@ -90,6 +92,14 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const dataScope = orgId
     ? (['orgs', orgId] as const)
     : (['hosts', hostId ?? '-none-'] as const)
+  // Scoped sharing (AGL-1044). Required, not cosmetic: under the AGL-1041
+  // rules a scoped member's UNFILTERED list is rejected outright —
+  // Firestore fails the whole query if any candidate would fail — so
+  // without this the Data page errors rather than showing fewer rows.
+  // Org-wide members get no filter: they read everything, and adding one
+  // would hide any dataset the AGL-1040 backfill missed.
+  const { tokens: scopeTokens, orgWide: viewerOrgWide } = useScopeTokens(orgId)
+  const needsScope = Boolean(orgId) && !viewerOrgWide
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -122,8 +132,15 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   )
 
   const { data: datasetDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, dataScope[0], dataScope[1], 'datasets'), limit(100)),
-    [firestore, hostId, orgId],
+    () =>
+      query(
+        collection(firestore, dataScope[0], dataScope[1], 'datasets'),
+        ...(needsScope
+          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+          : []),
+        limit(100),
+      ),
+    [firestore, hostId, orgId, needsScope, scopeTokens],
     { idField: '$id' },
   )
   const datasets = useMemo(
