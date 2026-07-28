@@ -413,6 +413,32 @@ export function isPrivateListing(listing: {
   return listing.visibility === 'private'
 }
 
+/**
+ * What a listing is still missing before it can face the marketplace
+ * (AGL-968/994).
+ *
+ * A private plugin is allowed to be undocumented — its only audience already
+ * knows what it is and why it exists. A public one is not: description,
+ * README and license are what a stranger deciding whether to run your code
+ * has to go on, and they are exactly the fields the review checklist asks
+ * about. So going public is gated on the METADATA, never on a re-review —
+ * approval is a statement about bytes, and the bytes did not change.
+ *
+ * Returns the human field names, so the caller can say what to fix rather
+ * than just refusing.
+ */
+export function missingPublicListingContent(listing: {
+  description?: string
+  readme?: string
+  license?: string
+}): string[] {
+  const missing: string[] = []
+  if (!listing.description?.trim()) missing.push('a description')
+  if (!listing.readme?.trim()) missing.push('a README')
+  if (!listing.license?.trim()) missing.push('a license')
+  return missing
+}
+
 /** Whether a plugin listing is publicly browsable (AGL-432). */
 export function isListingBrowsable(listing: {
   artifactType?: string
