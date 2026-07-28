@@ -37,7 +37,34 @@ export async function firestoreOneShotRetry<T>(
       return await run()
     } catch (error) {
       const code = (error as { code?: string })?.code
-      if (code !== 'permission-denied' || attempt >= MAX_RETRIES) throw error
+      if (code !== 'permission-denied') throw error
+      if (attempt >= MAX_RETRIES) {
+        /**
+         * Surviving every retry means this is NOT the post-sign-in race
+         * above — that one resolves in well under two seconds. A denial
+         * that persists is either a genuine authorization answer or a
+         * session that has gone bad, and the two are indistinguishable
+         * from here.
+         *
+         * Said out loud because the alternative is what happened on
+         * 2026-07-28 (AGL-1062): a stale session denied every server read,
+         * `persistentLocalCache` kept serving listeners from IndexedDB so
+         * most pages looked fine, and the pages that used one-shot reads
+         * rendered empty states. Hours went into rules, indexes and
+         * transport theories before "sign out and back in" turned out to
+         * be the answer. Whoever sees this next should get that for free.
+         */
+        console.error(
+          'Firestore denied a read after ' +
+            `${MAX_RETRIES} retries — this is not the transient ` +
+            'post-sign-in race. Either this account genuinely lacks access, ' +
+            'or the session is stale: signing out and back in is the first ' +
+            'thing to try. Note that cached pages can keep rendering ' +
+            'normally while this is happening.',
+          error,
+        )
+        throw error
+      }
       attempt += 1
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
     }
