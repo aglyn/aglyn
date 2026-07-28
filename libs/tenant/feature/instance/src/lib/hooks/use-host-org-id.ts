@@ -17,7 +17,7 @@
 'use client'
 
 import { doc, getDoc } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useFirestore } from './firebase/firebase-services'
 
 export interface HostOrgIdState {
@@ -37,15 +37,11 @@ export interface HostOrgIdState {
  *
  * For a read that is a harmless flash of an empty list. For a WRITE it is
  * not: a `setDoc` resolving inside that window lands under
- * `hosts/{hostId}/…`, and since AGL-1050 removed the server-side host
- * branch nothing will ever read it again. The row is not misplaced, it is
- * orphaned — invisible on the site, absent from the console after reload,
- * uncounted by quota, unreached by the AGL-1040 backfill, and carrying no
- * `visibleTo`. The save appears to succeed and the data is gone.
+ * `hosts/{hostId}/…`, which AGL-1050 left with no readers — so the save
+ * appears to succeed and the row is unreachable from anywhere afterwards.
  *
- * So anything that can write must gate on `loaded` and hold rather than
- * guess. A control disabled for 200ms is the right trade against a silent
- * write to a path with no readers.
+ * Anything that can write must therefore gate on `loaded` and hold rather
+ * than guess.
  */
 export function useHostOrgIdState(
   hostId: string | undefined,
@@ -141,13 +137,25 @@ export function useOrgDataScope(options: {
   const { hostId, orgId: explicitOrgId } = options
   const state = useHostOrgIdState(explicitOrgId ? undefined : hostId)
   const orgId = explicitOrgId ?? state.orgId
-  return {
-    orgId,
-    ready: Boolean(explicitOrgId) || state.loaded,
-    scope: orgId
-      ? (['orgs', orgId] as const)
-      : (['hosts', hostId ?? '-none-'] as const),
-  }
+  const loaded = Boolean(explicitOrgId) || state.loaded
+  // Memoised because `scope` is a QUERY DEPENDENCY. A fresh tuple every
+  // render, passed to `useFirestoreCollection`, tears down and reopens the
+  // listener (and clears its data) on every render — so hand out a stable
+  // reference rather than trusting every caller to destructure primitives.
+  return useMemo(
+    () => ({
+      orgId,
+      // With neither an org nor a host there is no path to be ready FOR.
+      // Reporting ready here would hand callers `['hosts','-none-']` as a
+      // trustworthy scope, which is the one state this flag exists to
+      // prevent — a confidently wrong path rather than a pending one.
+      ready: loaded && Boolean(orgId || hostId),
+      scope: orgId
+        ? (['orgs', orgId] as const)
+        : (['hosts', hostId ?? '-none-'] as const),
+    }),
+    [orgId, hostId, loaded],
+  )
 }
 
 export default useHostOrgId

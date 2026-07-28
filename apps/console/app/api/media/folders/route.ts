@@ -32,6 +32,7 @@ import {
   mediaObjectPath,
   resolveMediaScope,
   sanitizeCustomMetadata,
+  mediaCdnPathUpdate,
 } from '../../../../utils/server/media-scope'
 
 /** Bounded per request — console-triggered admin op, not a batch job. */
@@ -343,11 +344,14 @@ async function handler(request: Request): Promise<Response> {
       await snapshot.ref.set(
         {
           private: makePrivate,
-          ...(makePrivate
-            ? { cdnPath: firebaseAdmin.firestore.FieldValue.delete() }
-            : {
-                cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}`,
-              }),
+          // Shared with upload and replace — publishing must not hand out a
+          // CDN path the plan doesn't include, which this branch used to do.
+          cdnPath: mediaCdnPathUpdate({
+            billing: scope.billing,
+            cdnScope: scope.cdnScope,
+            mediaId,
+            isPrivate: makePrivate,
+          }),
           updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true },

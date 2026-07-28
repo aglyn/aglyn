@@ -264,9 +264,19 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // Picking for a site narrows to THAT site's read set; otherwise a scoped
   // member narrows to their own. An org-wide member browsing the library
   // outright needs no filter.
-  const scopeTokens = forHostId
-    ? [Aglyn.ORG_SCOPE_TOKEN, Aglyn.hostScopeToken(forHostId)]
-    : viewerTokens
+  // Memoised because it is a QUERY DEPENDENCY, not just a value. The
+  // `forHostId` branch built a fresh array every render, and the effects
+  // below end in `setFolderCounts`/`setPages` — so a new array meant
+  // re-render → new array → re-run, a self-sustaining loop firing one
+  // `getCountFromServer` per folder (up to 500) for as long as the picker
+  // stayed open. `viewerTokens` is already stable state.
+  const scopeTokens = useMemo(
+    () =>
+      forHostId
+        ? [Aglyn.ORG_SCOPE_TOKEN, Aglyn.hostScopeToken(forHostId)]
+        : viewerTokens,
+    [forHostId, viewerTokens],
+  )
   const needsScope = Boolean(orgId) && (Boolean(forHostId) || !viewerOrgWide)
 
   const firestore = useFirestore()

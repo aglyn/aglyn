@@ -94,6 +94,9 @@ async function handler(request: Request): Promise<Response> {
     }
     const firestore = firebaseAdmin.app().firestore()
     const isStaff = decoded['staff'] === true
+    // Hoisted so the collection-kind check below can reuse it rather than
+    // re-reading the same document.
+    let target: FirebaseFirestore.DocumentSnapshot | undefined
 
     if (!isStaff && scope === 'orgs') {
       const membership = await resolveOrgMembership(decoded.uid, scopeId)
@@ -110,7 +113,7 @@ async function handler(request: Request): Promise<Response> {
 
       // The role check above is NOT sufficient (AGL-1046) — see
       // `eraseScopeDenial` for what it misses and why it is a 404.
-      const target = await firestore
+      target = await firestore
         .collection(scope)
         .doc(scopeId)
         .collection(kind)
@@ -159,12 +162,17 @@ async function handler(request: Request): Promise<Response> {
     // content collection's `entries`, however stale its list is.
     const expectedCollectionKind = body?.collectionKind
     if (kind === 'collections' && expectedCollectionKind) {
-      const snapshot = await firestore
-        .collection(scope)
-        .doc(scopeId)
-        .collection(kind)
-        .doc(id)
-        .get()
+      // Reuses the org-scope read above when there was one — `collections`
+      // is host-scoped, so in practice this fetches; the guard just avoids
+      // a second read of the identical doc if that ever changes.
+      const snapshot =
+        target ??
+        (await firestore
+          .collection(scope)
+          .doc(scopeId)
+          .collection(kind)
+          .doc(id)
+          .get())
       if (
         snapshot.exists &&
         hostCollectionKind(snapshot.data()) !== expectedCollectionKind

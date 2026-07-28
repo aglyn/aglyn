@@ -36,6 +36,7 @@ import {
   folderStoragePath,
   mediaObjectPath,
   resolveMediaScope,
+  mediaCdnPathUpdate,
 } from '../../../../utils/server/media-scope'
 
 // Base64 JSON payloads: ~25MB of media encodes to ~34MB of body.
@@ -275,13 +276,15 @@ async function handler(request: Request): Promise<Response> {
             }),
           }
         : {}),
-      ...(cdnAllowed
-        ? {
-            // Stable, mediaId-keyed CDN URL (AGL-829): no content hash, so
-            // it survives replace and folder moves — references never break.
-            cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}`,
-          }
-        : {}),
+      // Stable, mediaId-keyed CDN URL (AGL-829): no content hash, so it
+      // survives replace and folder moves — references never break. The
+      // path/no-path rule is shared with replace and set-private.
+      cdnPath: mediaCdnPathUpdate({
+        billing: org,
+        cdnScope: scope.cdnScope,
+        mediaId,
+        isPrivate: isPrivateUpload,
+      }),
       ...(isPrivateUpload ? { private: true } : {}),
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })

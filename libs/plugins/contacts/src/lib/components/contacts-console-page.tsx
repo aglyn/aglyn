@@ -16,7 +16,13 @@
  */
 'use client'
 
-import { checkContactQuota, type ContactSegment, type ContactSource, contactMatchesSegment, type HostContact } from '@aglyn/aglyn'
+import {
+  checkContactQuota,
+  type ContactSegment,
+  type ContactSource,
+  contactMatchesSegment,
+  type HostContact,
+} from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -60,7 +66,11 @@ const SOURCE_LABELS: Record<ContactSource, string> = {
   newsletter: 'Newsletter',
 }
 
-type ContactDoc = HostContact & { $id: string; createdAt?: any; updatedAt?: any }
+type ContactDoc = HostContact & {
+  $id: string
+  createdAt?: any
+  updatedAt?: any
+}
 
 const csvEscape = (value: unknown) => {
   const text = String(value ?? '')
@@ -87,16 +97,24 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   // The org lookup is async (AGL-1061). `scopeReady` stays false until
   // it settles, so nothing acts on the host fallback during the window —
   // a path nothing has read since AGL-1050.
-  const { scope: dataScope, orgId: hostOrgId, ready: scopeReady } =
-    useOrgDataScope({ hostId })
+  const {
+    scope: dataScope,
+    orgId: hostOrgId,
+    ready: scopeReady,
+  } = useOrgDataScope({ hostId })
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
   const { data: contactDocs } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, dataScope[0], dataScope[1], 'contacts'), limit(1000)),
-    [firestore, hostId, hostOrgId],
+      scopeReady
+        ? query(
+            collection(firestore, dataScope[0], dataScope[1], 'contacts'),
+            limit(1000),
+          )
+        : null,
+    [firestore, hostId, hostOrgId, scopeReady],
     { idField: '$id' },
   )
   const contacts: ContactDoc[] = useMemo(
@@ -120,11 +138,18 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   // Saved segments (AGL-199): reusable audience filters.
   const { data: segmentDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, dataScope[0], dataScope[1], 'contactSegments'),
-        limit(50),
-      ),
-    [firestore, hostId, hostOrgId],
+      scopeReady
+        ? query(
+            collection(
+              firestore,
+              dataScope[0],
+              dataScope[1],
+              'contactSegments',
+            ),
+            limit(50),
+          )
+        : null,
+    [firestore, hostId, hostOrgId, scopeReady],
     { idField: '$id' },
   )
   const segments = [...(segmentDocs ?? [])].sort((a, b) =>
@@ -165,12 +190,15 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     const name = segmentName.trim().slice(0, 60)
     if (!name || !filterActive) return
     try {
-      await addDoc(collection(firestore, dataScope[0], dataScope[1], 'contactSegments'), {
-        name,
-        tags: filterSegment.tags ?? [],
-        sources: filterSegment.sources ?? [],
-        createdAt: new Date(),
-      })
+      await addDoc(
+        collection(firestore, dataScope[0], dataScope[1], 'contactSegments'),
+        {
+          name,
+          tags: filterSegment.tags ?? [],
+          sources: filterSegment.sources ?? [],
+          createdAt: new Date(),
+        },
+      )
       setSegmentName('')
       enqueueSnackbar(
         `Segment "${name}" saved — usable as a campaign audience`,
@@ -221,7 +249,9 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
       .catch(() => false)
     if (!confirmed) return
     try {
-      await deleteDoc(doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId))
+      await deleteDoc(
+        doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId),
+      )
       setSelectedId(null)
       enqueueSnackbar('Contact deleted', {
         variant: 'success',
@@ -248,10 +278,13 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
       ),
     ]
     try {
-      await updateDoc(doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId), {
-        tags,
-        notes: notesDraft.slice(0, 2000),
-      })
+      await updateDoc(
+        doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId),
+        {
+          tags,
+          notes: notesDraft.slice(0, 2000),
+        },
+      )
       enqueueSnackbar('Contact saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
@@ -288,191 +321,191 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   return (
     <>
       <CardDisplay header={'Contacts'} contentGutterX contentGutterY>
-              <Stack spacing={2}>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+        <Stack spacing={2}>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+          >
+            <TextField
+              size="small"
+              label="Search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              sx={{ minWidth: 220 }}
+            />
+            <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+              {`${contacts.length.toLocaleString()} contacts · ${
+                Number.isFinite(quota.included)
+                  ? `${quota.included.toLocaleString()} included`
+                  : '∞'
+              }`}
+            </Typography>
+            <Button
+              size="small"
+              onClick={handleExport}
+              disabled={!visible.length}
+            >
+              {'Export CSV'}
+            </Button>
+          </Stack>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+          >
+            <TextField
+              select
+              size="small"
+              label="Source"
+              value={sourceFilter}
+              onChange={(event) => setSourceFilter(event.target.value as any)}
+              sx={{ minWidth: 140 }}
+            >
+              <MenuItem value="">{'Any source'}</MenuItem>
+              {Object.entries(SOURCE_LABELS).map(([value, label]) => (
+                <MenuItem key={value} value={value}>
+                  {label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              size="small"
+              label="Tags"
+              placeholder="vip, beta"
+              value={tagFilter}
+              onChange={(event) => setTagFilter(event.target.value)}
+              sx={{ minWidth: 160 }}
+            />
+            {filterActive ? (
+              <>
+                <TextField
+                  size="small"
+                  label="Segment name"
+                  value={segmentName}
+                  onChange={(event) => setSegmentName(event.target.value)}
+                  sx={{ minWidth: 160 }}
+                />
+                <Button
+                  size="small"
+                  disabled={!segmentName.trim()}
+                  onClick={handleSaveSegment}
                 >
-                  <TextField
-                    size="small"
-                    label="Search"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    sx={{ minWidth: 220 }}
-                  />
-                  <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-                    {`${contacts.length.toLocaleString()} contacts · ${
-                      Number.isFinite(quota.included)
-                        ? `${quota.included.toLocaleString()} included`
-                        : '∞'
-                    }`}
-                  </Typography>
-                  <Button size="small" onClick={handleExport} disabled={!visible.length}>
-                    {'Export CSV'}
-                  </Button>
-                </Stack>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-                >
-                  <TextField
-                    select
-                    size="small"
-                    label="Source"
-                    value={sourceFilter}
-                    onChange={(event) =>
-                      setSourceFilter(event.target.value as any)
-                    }
-                    sx={{ minWidth: 140 }}
+                  {'Save segment'}
+                </Button>
+              </>
+            ) : null}
+            {segments.map((segment: any) => (
+              <Chip
+                key={segment.$id}
+                label={segment.name}
+                size="small"
+                onClick={() => {
+                  setTagFilter((segment.tags ?? []).join(', '))
+                  setSourceFilter(segment.sources?.[0] ?? '')
+                }}
+                onDelete={() =>
+                  deleteDoc(
+                    doc(
+                      firestore,
+                      dataScope[0],
+                      dataScope[1],
+                      'contactSegments',
+                      segment.$id,
+                    ),
+                  )
+                }
+              />
+            ))}
+          </Stack>
+          {!quota.allowed ? (
+            <Alert severity="warning">
+              {'Contact limit reached — new visitors are no longer ' +
+                'captured' +
+                (droppedTotal > 0
+                  ? ` (${droppedTotal.toLocaleString()} missed so far)`
+                  : '') +
+                '. Upgrade in Billing to keep collecting.'}
+            </Alert>
+          ) : quota.overageContacts > 0 && quota.overageRateUsd != null ? (
+            <Alert severity="info">
+              {`${quota.overageContacts.toLocaleString()} contacts over ` +
+                `your plan's included ${quota.included.toLocaleString()} — ` +
+                `metered at $${quota.overageRateUsd}/1,000 per month ` +
+                `(≈$${quota.overageMonthlyUsd.toFixed(2)} this month). ` +
+                'Upgrade in Billing for a larger included audience.'}
+            </Alert>
+          ) : droppedTotal > 0 ? (
+            <Alert severity="info">
+              {`${droppedTotal.toLocaleString()} earlier visitor${
+                droppedTotal === 1 ? ' was' : 's were'
+              } not captured while your contact band was full.`}
+            </Alert>
+          ) : null}
+          {contacts.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {'No contacts yet — form submissions, member sign-ups, ' +
+                'orders, and bookings all become contacts automatically.'}
+            </Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>{'Contact'}</TableCell>
+                  <TableCell>{'Sources'}</TableCell>
+                  <TableCell>{'Tags'}</TableCell>
+                  <TableCell align="right">{'Last activity'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {visible.map((contact) => (
+                  <TableRow
+                    key={contact.$id}
+                    hover
+                    sx={{ cursor: 'pointer' }}
+                    onClick={() => openContact(contact)}
                   >
-                    <MenuItem value="">{'Any source'}</MenuItem>
-                    {Object.entries(SOURCE_LABELS).map(([value, label]) => (
-                      <MenuItem key={value} value={value}>
-                        {label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <TextField
-                    size="small"
-                    label="Tags"
-                    placeholder="vip, beta"
-                    value={tagFilter}
-                    onChange={(event) => setTagFilter(event.target.value)}
-                    sx={{ minWidth: 160 }}
-                  />
-                  {filterActive ? (
-                    <>
-                      <TextField
-                        size="small"
-                        label="Segment name"
-                        value={segmentName}
-                        onChange={(event) => setSegmentName(event.target.value)}
-                        sx={{ minWidth: 160 }}
-                      />
-                      <Button
-                        size="small"
-                        disabled={!segmentName.trim()}
-                        onClick={handleSaveSegment}
-                      >
-                        {'Save segment'}
-                      </Button>
-                    </>
-                  ) : null}
-                  {segments.map((segment: any) => (
-                    <Chip
-                      key={segment.$id}
-                      label={segment.name}
-                      size="small"
-                      onClick={() => {
-                        setTagFilter((segment.tags ?? []).join(', '))
-                        setSourceFilter(segment.sources?.[0] ?? '')
-                      }}
-                      onDelete={() =>
-                        deleteDoc(
-                          doc(
-                            firestore,
-                            dataScope[0],
-                            dataScope[1],
-                            'contactSegments',
-                            segment.$id,
-                          ),
-                        )
-                      }
-                    />
-                  ))}
-                </Stack>
-                {!quota.allowed ? (
-                  <Alert severity="warning">
-                    {'Contact limit reached — new visitors are no longer ' +
-                      'captured' +
-                      (droppedTotal > 0
-                        ? ` (${droppedTotal.toLocaleString()} missed so far)`
-                        : '') +
-                      '. Upgrade in Billing to keep collecting.'}
-                  </Alert>
-                ) : quota.overageContacts > 0 &&
-                  quota.overageRateUsd != null ? (
-                  <Alert severity="info">
-                    {`${quota.overageContacts.toLocaleString()} contacts over ` +
-                      `your plan's included ${quota.included.toLocaleString()} — ` +
-                      `metered at $${quota.overageRateUsd}/1,000 per month ` +
-                      `(≈$${quota.overageMonthlyUsd.toFixed(2)} this month). ` +
-                      'Upgrade in Billing for a larger included audience.'}
-                  </Alert>
-                ) : droppedTotal > 0 ? (
-                  <Alert severity="info">
-                    {`${droppedTotal.toLocaleString()} earlier visitor${
-                      droppedTotal === 1 ? ' was' : 's were'
-                    } not captured while your contact band was full.`}
-                  </Alert>
-                ) : null}
-                {contacts.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    {'No contacts yet — form submissions, member sign-ups, ' +
-                      'orders, and bookings all become contacts automatically.'}
-                  </Typography>
-                ) : (
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>{'Contact'}</TableCell>
-                        <TableCell>{'Sources'}</TableCell>
-                        <TableCell>{'Tags'}</TableCell>
-                        <TableCell align="right">{'Last activity'}</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {visible.map((contact) => (
-                        <TableRow
-                          key={contact.$id}
-                          hover
-                          sx={{ cursor: 'pointer' }}
-                          onClick={() => openContact(contact)}
-                        >
-                          <TableCell>
-                            <Typography variant="body2">
-                              {contact.name || contact.email}
-                            </Typography>
-                            {contact.name ? (
-                              <Typography variant="caption" color="text.secondary">
-                                {contact.email}
-                              </Typography>
-                            ) : null}
-                          </TableCell>
-                          <TableCell>
-                            <Stack direction="row" spacing={0.5}>
-                              {Object.keys(contact.sources ?? {}).map((source) => (
-                                <Chip
-                                  key={source}
-                                  label={
-                                    SOURCE_LABELS[source as ContactSource] ??
-                                    source
-                                  }
-                                  size="small"
-                                />
-                              ))}
-                            </Stack>
-                          </TableCell>
-                          <TableCell>
-                            {(contact.tags ?? []).slice(0, 3).join(', ')}
-                          </TableCell>
-                          <TableCell align="right">
-                            <Typography variant="caption" color="text.secondary">
-                              {contact.interactions?.[0]
-                                ? new Date(
-                                    contact.interactions[0].atMs,
-                                  ).toLocaleDateString()
-                                : '—'}
-                            </Typography>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </Stack>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {contact.name || contact.email}
+                      </Typography>
+                      {contact.name ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {contact.email}
+                        </Typography>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={0.5}>
+                        {Object.keys(contact.sources ?? {}).map((source) => (
+                          <Chip
+                            key={source}
+                            label={
+                              SOURCE_LABELS[source as ContactSource] ?? source
+                            }
+                            size="small"
+                          />
+                        ))}
+                      </Stack>
+                    </TableCell>
+                    <TableCell>
+                      {(contact.tags ?? []).slice(0, 3).join(', ')}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography variant="caption" color="text.secondary">
+                        {contact.interactions?.[0]
+                          ? new Date(
+                              contact.interactions[0].atMs,
+                            ).toLocaleDateString()
+                          : '—'}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Stack>
       </CardDisplay>
       <Drawer
         anchor="right"

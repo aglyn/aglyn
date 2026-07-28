@@ -233,6 +233,24 @@ describeEmulated('media CDN scope boundary (AGL-1047)', () => {
       expect(res.captured.status).toBe(404)
     })
 
+    it('keeps no-store even on the stale-hash 404', async () => {
+      // The exit that used to escape the guard: a signed request for the
+      // immutable URL with a hash that no longer matches overwrote
+      // `private, no-store` with `public, max-age=60`. Every exit now goes
+      // through one helper so a private asset cannot be shared-cached at
+      // any of them.
+      const { mintMediaSignature } = await import('./media-signing')
+      const scope = `org:${ORG}`
+      const signature = mintMediaSignature(scope, 'm-private')
+      const res = await getSigned(
+        serveMediaCdn,
+        [scope, 'm-private', 'deadbeefdeadbeef'],
+        signature,
+      )
+      expect(res.captured.status).toBe(404)
+      expect(res.headers['cache-control']).toBe('private, no-store')
+    }, 60_000)
+
     it('does not sign away the SCOPE check', async () => {
       // A valid signature is not a bypass for `visibleTo`. Both gates run.
       const { mintMediaSignature } = await import('./media-signing')

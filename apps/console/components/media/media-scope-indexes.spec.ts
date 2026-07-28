@@ -87,27 +87,27 @@ const DESC = (f: string) => `${f}:DESCENDING`
  * date facet) needs no extra index, which is why "last 7 days + newest"
  * does not appear separately: it is covered by the plain newest shape.
  */
-const REQUIRED: Array<{ what: string; index: string }> = [
-  { what: 'all files, Newest (the default view)', index: [ARRAY, DESC('createdAt')].join(' > ') },
-  { what: 'all files, Oldest', index: [ARRAY, ASC('createdAt')].join(' > ') },
-  { what: 'all files, Name', index: [ARRAY, ASC('fileName')].join(' > ') },
-  { what: 'all files, Size', index: [ARRAY, DESC('sizeBytes')].join(' > ') },
-  { what: 'inside a folder, Newest', index: [ASC('folderId'), ARRAY, DESC('createdAt')].join(' > ') },
-  { what: 'inside a folder, Oldest', index: [ASC('folderId'), ARRAY, ASC('createdAt')].join(' > ') },
-  { what: 'inside a folder, Name', index: [ASC('folderId'), ARRAY, ASC('fileName')].join(' > ') },
-  { what: 'inside a folder, Size', index: [ASC('folderId'), ARRAY, DESC('sizeBytes')].join(' > ') },
+const REQUIRED: Array<{ what: string; index: string[] }> = [
+  { what: 'all files, Newest (the default view)', index: [ARRAY, DESC('createdAt')] },
+  { what: 'all files, Oldest', index: [ARRAY, ASC('createdAt')] },
+  { what: 'all files, Name', index: [ARRAY, ASC('fileName')] },
+  { what: 'all files, Size', index: [ARRAY, DESC('sizeBytes')] },
+  { what: 'inside a folder, Newest', index: [ASC('folderId'), ARRAY, DESC('createdAt')] },
+  { what: 'inside a folder, Oldest', index: [ASC('folderId'), ARRAY, ASC('createdAt')] },
+  { what: 'inside a folder, Name', index: [ASC('folderId'), ARRAY, ASC('fileName')] },
+  { what: 'inside a folder, Size', index: [ASC('folderId'), ARRAY, DESC('sizeBytes')] },
   // The type facet has two shapes: PDF is an equality on contentType, while
   // image/video are a RANGE plus a leading orderBy('contentType').
-  { what: 'type=PDF, Newest', index: [ASC('contentType'), ARRAY, DESC('createdAt')].join(' > ') },
-  { what: 'type=PDF, Oldest', index: [ASC('contentType'), ARRAY, ASC('createdAt')].join(' > ') },
-  { what: 'type=image/video (range), Newest', index: [ARRAY, ASC('contentType'), DESC('createdAt')].join(' > ') },
-  { what: 'type=image/video (range), Oldest', index: [ARRAY, ASC('contentType'), ASC('createdAt')].join(' > ') },
-  { what: 'folder + type=PDF, Newest', index: [ASC('folderId'), ASC('contentType'), ARRAY, DESC('createdAt')].join(' > ') },
-  { what: 'folder + type=PDF, Oldest', index: [ASC('folderId'), ASC('contentType'), ARRAY, ASC('createdAt')].join(' > ') },
-  { what: 'folder + type=image/video (range), Newest', index: [ASC('folderId'), ARRAY, ASC('contentType'), DESC('createdAt')].join(' > ') },
-  { what: 'folder + type=image/video (range), Oldest', index: [ASC('folderId'), ARRAY, ASC('contentType'), ASC('createdAt')].join(' > ') },
+  { what: 'type=PDF, Newest', index: [ASC('contentType'), ARRAY, DESC('createdAt')] },
+  { what: 'type=PDF, Oldest', index: [ASC('contentType'), ARRAY, ASC('createdAt')] },
+  { what: 'type=image/video (range), Newest', index: [ARRAY, ASC('contentType'), DESC('createdAt')] },
+  { what: 'type=image/video (range), Oldest', index: [ARRAY, ASC('contentType'), ASC('createdAt')] },
+  { what: 'folder + type=PDF, Newest', index: [ASC('folderId'), ASC('contentType'), ARRAY, DESC('createdAt')] },
+  { what: 'folder + type=PDF, Oldest', index: [ASC('folderId'), ASC('contentType'), ARRAY, ASC('createdAt')] },
+  { what: 'folder + type=image/video (range), Newest', index: [ASC('folderId'), ARRAY, ASC('contentType'), DESC('createdAt')] },
+  { what: 'folder + type=image/video (range), Oldest', index: [ASC('folderId'), ARRAY, ASC('contentType'), ASC('createdAt')] },
   // The per-folder count (AGL-1047) — no orderBy, still needs the pair.
-  { what: 'per-folder file count', index: [ASC('folderId'), ARRAY].join(' > ') },
+  { what: 'per-folder file count', index: [ASC('folderId'), ARRAY] },
 ]
 
 describe('scoped media grid composite indexes (AGL-1045)', () => {
@@ -115,7 +115,7 @@ describe('scoped media grid composite indexes (AGL-1045)', () => {
     // Missing here means FAILED_PRECONDITION in production and a silent
     // pass locally. Add the index to cloud/firebase-firestore.indexes.json
     // and deploy it BEFORE the code that queries it.
-    expect(MEDIA_SIGNATURES.has(index)).toBe(true)
+    expect(MEDIA_SIGNATURES.has(index.join(' > '))).toBe(true)
   })
 
   it('keeps the scope filter paired with every sort the grid offers', () => {

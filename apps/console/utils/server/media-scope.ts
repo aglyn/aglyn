@@ -16,6 +16,7 @@
  */
 
 import {
+  checkEntitlement,
   hostScopeToken,
   isOrgWideMember,
   ORG_SCOPE_TOKEN,
@@ -219,4 +220,34 @@ export function mediaObjectPath(
   return typeof stored === 'string' && stored
     ? stored
     : `${base}/media/${mediaSnapshot.id}`
+}
+
+/**
+ * The `cdnPath` field value for a media doc — a path, or the sentinel that
+ * removes it (AGL-1051).
+ *
+ * One helper because three writers decide this — upload, replace, and the
+ * `set-private` toggle — and three copies of a rule is how the third drifts.
+ * It already had: `set-private` minted a path on un-privating with no
+ * entitlement check, so an org without `mediaCdn` could obtain a CDN URL
+ * that upload and replace would both have withheld.
+ *
+ * Two independent reasons to have no path, and both must hold to get one:
+ * the plan does not include CDN delivery, or the asset is PRIVATE — and a
+ * private asset's missing `cdnPath` is not a detail, it is the mechanism
+ * that keeps it out of pickers and page nodes.
+ */
+export function mediaCdnPathUpdate(options: {
+  /** Org billing doc — `MediaScope.billing`. */
+  billing: Record<string, unknown> | undefined
+  /** `MediaScope.cdnScope` — `{hostId}` or `org:{orgId}`. */
+  cdnScope: string
+  mediaId: string
+  isPrivate: boolean
+}): string | FirebaseFirestore.FieldValue {
+  const allowed =
+    checkEntitlement(options.billing as never, 'mediaCdn') && !options.isPrivate
+  return allowed
+    ? `/api/media/cdn/${options.cdnScope}/${options.mediaId}`
+    : firebaseAdmin.firestore.FieldValue.delete()
 }

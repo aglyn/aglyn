@@ -50,8 +50,7 @@ const besignerHref = (
   host: string,
   screenId: string,
   versionId: string,
-) =>
-  buildRoute(Route.SCREEN_BESIGNER, { orgSlug, host, screenId, versionId })
+) => buildRoute(Route.SCREEN_BESIGNER, { orgSlug, host, screenId, versionId })
 
 /**
  * Email campaigns (AGL-161): compose + send to leads or site members via
@@ -66,8 +65,11 @@ export function HostCampaignsCard(props: { hostId: string }) {
   // The org lookup is async (AGL-1061). `scopeReady` stays false until
   // it settles, so nothing acts on the host fallback during the window —
   // a path nothing has read since AGL-1050.
-  const { scope: dataScope, orgId: hostOrgId, ready: scopeReady } =
-    useOrgDataScope({ hostId })
+  const {
+    scope: dataScope,
+    orgId: hostOrgId,
+    ready: scopeReady,
+  } = useOrgDataScope({ hostId })
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const { data: user } = useUser()
@@ -77,8 +79,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
   // No orderBy: scheduled campaigns have no sentAt yet (AGL-272), and an
   // orderBy on a missing field would drop them from the history.
   const { data: campaignDocs } = useFirestoreCollection<any>(
-    () =>
-      query(collection(firestore, 'hosts', hostId, 'campaigns'), limit(30)),
+    () => query(collection(firestore, 'hosts', hostId, 'campaigns'), limit(30)),
     [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
@@ -91,11 +92,18 @@ export function HostCampaignsCard(props: { hostId: string }) {
   // Contact segments (AGL-199) join the built-in audiences.
   const { data: segmentDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, dataScope[0], dataScope[1], 'contactSegments'),
-        limit(50),
-      ),
-    [firestore, hostId, hostOrgId],
+      scopeReady
+        ? query(
+            collection(
+              firestore,
+              dataScope[0],
+              dataScope[1],
+              'contactSegments',
+            ),
+            limit(50),
+          )
+        : null,
+    [firestore, hostId, hostOrgId, scopeReady],
     { idField: '$id' },
   )
   const segments = [...(segmentDocs ?? [])].sort((a, b) =>
@@ -104,11 +112,13 @@ export function HostCampaignsCard(props: { hostId: string }) {
   // Org email lists (AGL-254) join the audiences.
   const { data: listDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, dataScope[0], dataScope[1], 'lists'),
-        limit(50),
-      ),
-    [firestore, hostId, hostOrgId],
+      scopeReady
+        ? query(
+            collection(firestore, dataScope[0], dataScope[1], 'lists'),
+            limit(50),
+          )
+        : null,
+    [firestore, hostId, hostOrgId, scopeReady],
     { idField: '$id' },
   )
   const lists = [...(listDocs ?? [])].sort((a, b) =>
@@ -167,9 +177,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
         createHostResource,
       )
       if (orgSlug && subdomain) {
-        void router.push(
-          besignerHref(orgSlug, subdomain, screenId, versionId),
-        )
+        void router.push(besignerHref(orgSlug, subdomain, screenId, versionId))
       }
     } catch (error: any) {
       console.error(error)
@@ -307,7 +315,19 @@ export function HostCampaignsCard(props: { hostId: string }) {
     } finally {
       setBusy(false)
     }
-  }, [subject, body, audience, experimentId, templateScreenId, sendAt, busy, user, hostId, confirm, enqueueSnackbar])
+  }, [
+    subject,
+    body,
+    audience,
+    experimentId,
+    templateScreenId,
+    sendAt,
+    busy,
+    user,
+    hostId,
+    confirm,
+    enqueueSnackbar,
+  ])
 
   // Cancel a scheduled campaign before the processor picks it up.
   const handleCancelSchedule = useCallback(
@@ -457,17 +477,11 @@ export function HostCampaignsCard(props: { hostId: string }) {
             variant="contained"
             color="secondary"
             disabled={
-              busy ||
-              !subject.trim() ||
-              (!templateScreenId && !body.trim())
+              busy || !subject.trim() || (!templateScreenId && !body.trim())
             }
             onClick={handleSend}
           >
-            {busy
-              ? 'Working…'
-              : sendAt
-                ? 'Schedule campaign'
-                : 'Send campaign'}
+            {busy ? 'Working…' : sendAt ? 'Schedule campaign' : 'Send campaign'}
           </Button>
           <Button
             size="small"
@@ -517,9 +531,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
                       <Button
                         size="small"
                         color="inherit"
-                        onClick={() =>
-                          void handleCancelSchedule(campaign.$id)
-                        }
+                        onClick={() => void handleCancelSchedule(campaign.$id)}
                       >
                         {'Cancel'}
                       </Button>
