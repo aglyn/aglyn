@@ -38,6 +38,7 @@ import {
 import {
   attestationLabels,
   missingAttestations,
+  missingAttestationSubjects,
   PUBLISHER_ATTESTATION,
 } from '@aglyn/aglyn/app-utils/publisher-attestation'
 import { createHash } from 'crypto'
@@ -357,13 +358,38 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     ).filter((id: string) =>
       PUBLISHER_ATTESTATION.some((item) => item.id === id),
     )
-    const missing = missingAttestations(ticked, !existing.empty)
+    const isUpdate = !existing.empty
+    const missing = missingAttestations(ticked, isUpdate)
     if (missing.length) {
       return res.status(428).json({
         error:
           'Confirm the pre-submission checklist before publishing: ' +
           attestationLabels(missing).join('; '),
         missingAttestations: missing,
+      })
+    }
+
+    // An attestation needs something to be about (AGL-1076). `repository`
+    // was confirmable in a form with no repository field, so listings
+    // reached review carrying a signed claim that a URL we never collected
+    // was public and matched — and the reviewer's first link went nowhere.
+    //
+    // Checked against the SUBMISSION, not the listing doc: a first publish
+    // has no listing, and on an update the tick is a statement about what
+    // this publish declares. `contentVerdict.content` is the normalized
+    // value about to be stored, so the gate and the write cannot disagree.
+    const missingSubjects = missingAttestationSubjects(
+      contentVerdict.content as Record<string, unknown>,
+      isUpdate,
+    )
+    if (missingSubjects.length) {
+      return res.status(428).json({
+        error:
+          'These are confirmed above but not filled in: ' +
+          missingSubjects.map((subject) => subject.label).join('; '),
+        missingAttestationSubjects: missingSubjects.map(
+          (subject) => subject.field,
+        ),
       })
     }
 
@@ -427,6 +453,14 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         objectPath,
         manifest,
         ...(changelog.trim() && { changelog: changelog.trim() }),
+        // The repository as declared FOR THESE BYTES (AGL-1076). The listing
+        // carries whatever the latest publish said, and a publisher may move
+        // or rename a repo between versions — a reviewer looking at v1.0.2
+        // needs the link that was attested against v1.0.2's sha256, which is
+        // the same reasoning that pins the attestation itself.
+        ...(contentVerdict.content?.repositoryUrl && {
+          repositoryUrl: contentVerdict.content.repositoryUrl,
+        }),
         publishedAt: now,
         // What the publisher stated about these bytes (AGL-969). Same shape
         // as the staff `reviewChecklist` and pinned to the same sha256, so

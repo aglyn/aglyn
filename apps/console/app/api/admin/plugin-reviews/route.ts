@@ -153,6 +153,9 @@ async function listingDetail(
       installCount: Number(doc.get('installCount') ?? 0),
       activeInstalls: Number(doc.get('activeInstalls') ?? 0),
       signed: Boolean(doc.get('signature')),
+      // The repo as declared for THESE bytes (AGL-1076); absent on versions
+      // published before it was collected.
+      repositoryUrl: String(doc.get('repositoryUrl') ?? ''),
       reviewState: String(doc.get('reviewState') ?? 'pending'),
       grandfathered: Boolean(doc.get('grandfathered')),
       // Server-side only — used to decide whether the verdict below needs
@@ -275,7 +278,12 @@ async function listingDetail(
       license: listing.license ?? '',
       categories: listing.categories ?? [],
       homepageUrl: listing.homepageUrl ?? '',
-      repositoryUrl: listing.repositoryUrl ?? '',
+      // Prefer what the version under review declared (AGL-1076). The
+      // listing carries whatever the most recent publish said, and a repo
+      // can move between versions — the link a reviewer opens should be the
+      // one attested against the bytes in front of them. Falls back to the
+      // listing for versions published before this was collected.
+      repositoryUrl: reviewEntry?.repositoryUrl || listing.repositoryUrl || '',
       publisherId,
       publisherName: publisher?.get('name') ?? publisherId,
       publisherSlug: publisher?.get('slug') ?? null,

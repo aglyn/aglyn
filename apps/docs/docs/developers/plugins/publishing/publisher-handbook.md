@@ -86,8 +86,9 @@ node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs
 Then upload it from the console: **Marketplace → Publish**, choose
 **"A plugin (upload a bundle)"**, and pick your built
 `plugin.bundle.mjs` plus its `manifest.json` (choose the file or paste
-the JSON). Set the listing name, description, changelog, category, and
-price, and publish. Uploads always publish **sandboxed** — a reviewer
+the JSON). Set the listing name, description, changelog, category,
+**repository URL** and price, and publish. Uploads always publish
+**sandboxed** — a reviewer
 verifies and signs a version before it can run trusted.
 
 ### Before you publish
@@ -104,6 +105,13 @@ blocked until you do**:
 - You have tested **this version** on a site you control
 - The changelog describes what changed since the last version — asked
   only when you're updating an existing listing
+
+The first item has a field to go with it: **Repository URL** is asked
+for on the publish form itself, and publishing is refused if you confirm
+the item without filling it in — an attestation about a repository we
+never collected is a statement about nothing. It's recorded on the
+version too, so a reviewer opening v1.0.2 gets the repo you declared for
+*those* bytes, even if you move the code later.
 
 These aren't paperwork. They're the questions that send most submissions
 back, so answering them up front is the fastest route through the queue.
@@ -181,7 +189,7 @@ whole page becomes the editor), or use the **Edit** action on
 | Screenshots | Up to 6, from the media library or https URLs; the detail page shows a gallery with click-to-zoom. |
 | Categories | Up to 3 from the fixed taxonomy. |
 | License | Short label (e.g. `MIT`) — listings without one get flagged in review. |
-| Homepage / repository | Public links build trust; reviewers check them. |
+| Homepage / repository | Public links build trust; reviewers check them. The repository is asked for at publish and required — editing it here changes the listing, not what past versions declared. |
 
 Be explicit about **data & permissions** in the README: what your plugin
 reads/writes and every host in your manifest's network allowlist —

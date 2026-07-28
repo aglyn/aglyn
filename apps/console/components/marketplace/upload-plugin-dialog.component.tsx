@@ -35,6 +35,7 @@ import {
 import { useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
+  missingAttestationSubjects,
   PUBLISHER_ATTESTATION,
   requiredAttestationIds,
 } from '@aglyn/aglyn/app-utils/publisher-attestation'
@@ -55,6 +56,11 @@ const LISTING_CATEGORIES = [
   'seo',
   'security',
 ] as const
+
+// Mirrors `validateListingContent`'s URL rule, which is what the publish
+// route enforces — this only saves a round trip (AGL-1076).
+const isHttpsUrl = (value: string) =>
+  /^https:\/\/[^\s]+$/.test(value.trim()) && value.trim().length <= 500
 
 /** Base64-encode file bytes without a data: prefix. */
 async function fileToBase64(file: File): Promise<string> {
@@ -108,6 +114,9 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
   const [priceUsd, setPriceUsd] = useState('0')
   const [readme, setReadme] = useState('')
   const [license, setLicense] = useState('')
+  // The subject of the `repository` attestation (AGL-1076) — ticking that
+  // item used to be a claim about a field this form never asked for.
+  const [repositoryUrl, setRepositoryUrl] = useState('')
   // Private plugins (AGL-968/992): only settable on FIRST publish — the
   // server ignores it on a version bump, and changing it later is the
   // deliberate flip in Marketplace › Listings.
@@ -129,6 +138,7 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
     setPriceUsd('0')
     setReadme('')
     setLicense('')
+    setRepositoryUrl('')
     setVisibility('public')
     setAttested([])
     setMissingAttestations([])
@@ -155,6 +165,18 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
    */
   const unattested = requiredAttestationIds(false).filter(
     (id) => !attested.includes(id),
+  )
+
+  /**
+   * Attestations with nothing to be about (AGL-1076).
+   *
+   * The server refuses these with the same 428, but a publisher should not
+   * have to submit to find out that the box they ticked refers to a field
+   * they left empty. Same helper as the route, so the two cannot drift.
+   */
+  const unfilledSubjects = missingAttestationSubjects(
+    { repositoryUrl },
+    false,
   )
 
   const close = () => {
@@ -237,6 +259,12 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
           // No license" and rendered a bare detail page.
           ...(readme.trim() ? { readme: readme.trim() } : {}),
           ...(license.trim() ? { license: license.trim() } : {}),
+          // The subject of the repository attestation (AGL-1076) — stored on
+          // the listing AND on this version, so a reviewer opens the repo as
+          // it was declared for these bytes.
+          ...(repositoryUrl.trim()
+            ? { repositoryUrl: repositoryUrl.trim() }
+            : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -418,6 +446,25 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
             multiline
             minRows={4}
           />
+          {/* Repository (AGL-1076). Sits with the listing content rather
+              than inside the checklist below: it is a field, and the item
+              that confirms it is a statement — but it is required exactly
+              because that item is, so the helper text says which. */}
+          <TextField
+            label="Repository URL"
+            placeholder="https://github.com/acme/widget"
+            required
+            error={Boolean(repositoryUrl.trim()) && !isHttpsUrl(repositoryUrl)}
+            helperText={
+              Boolean(repositoryUrl.trim()) && !isHttpsUrl(repositoryUrl)
+                ? 'Must be an https URL.'
+                : 'The source for this bundle. A reviewer opens it first — ' +
+                  'it is what the repository confirmation below is about.'
+            }
+            value={repositoryUrl}
+            onChange={(event) => setRepositoryUrl(event.target.value)}
+            size="small"
+          />
           <Stack direction="row" spacing={1}>
             <TextField
               label="License"
@@ -540,12 +587,20 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
           variant="contained"
           color="secondary"
           onClick={() => void submit()}
-          disabled={busy || !bundleFile || unattested.length > 0}
+          disabled={
+            busy ||
+            !bundleFile ||
+            unattested.length > 0 ||
+            unfilledSubjects.length > 0 ||
+            !isHttpsUrl(repositoryUrl)
+          }
         >
           {busy
             ? 'Publishing…'
             : unattested.length
               ? `Confirm ${unattested.length} more`
+            : unfilledSubjects.length || !isHttpsUrl(repositoryUrl)
+              ? 'Add a repository URL'
             : visibility === 'private'
               ? 'Publish privately'
               : 'Publish plugin'}

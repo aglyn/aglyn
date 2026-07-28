@@ -19,6 +19,9 @@
 
 import { requiredAttestationIds } from '@aglyn/aglyn/app-utils/publisher-attestation'
 
+/** A valid subject for the `repository` attestation (AGL-1076). */
+const REPO_URL = 'https://github.com/acme/widget'
+
 /**
  * The publish route's attestation gate (AGL-969).
  *
@@ -150,7 +153,10 @@ function respond() {
   return { res, result }
 }
 
-async function publish(attestation: string[] | undefined) {
+async function publish(
+  attestation: string[] | undefined,
+  overrides: Record<string, unknown> = { repositoryUrl: REPO_URL },
+) {
   const { res, result } = respond()
   await publishPluginHandler(
     {
@@ -162,6 +168,7 @@ async function publish(attestation: string[] | undefined) {
         bundle: Buffer.from('export function register() {}').toString('base64'),
         manifest: { id: 'acme.widget', version: '1.0.0' },
         ...(attestation ? { attestation } : {}),
+        ...overrides,
       },
     } as never,
     res as never,
@@ -237,6 +244,59 @@ describe('publish-plugin attestation gate (AGL-969)', () => {
       expect(entry.sha256).toBe(written.sha256)
       expect(entry.by).toBe('uid-1')
     }
+  })
+
+  /**
+   * The subject gate (AGL-1076).
+   *
+   * `repository` shipped as a confirmable claim about a field the form never
+   * collected, so listings reached review carrying a signed statement that a
+   * URL was public and matched — with nothing behind the reviewer's first
+   * link. A tick with no subject is refused like a missing tick.
+   */
+  describe('attested fields must actually be submitted', () => {
+    it('refuses a full attestation with no repository URL', async () => {
+      const result = await publish(requiredAttestationIds(false), {})
+      expect(result.status).toBe(428)
+      expect(
+        (result.body as { missingAttestationSubjects: string[] })
+          .missingAttestationSubjects,
+      ).toEqual(['repositoryUrl'])
+      // Refused means refused — no bytes, no version doc, no claim recorded.
+      expect(adminMock.__versionWrites).toHaveLength(0)
+    })
+
+    it('refuses a blank repository URL, not only an absent one', async () => {
+      const result = await publish(requiredAttestationIds(false), {
+        repositoryUrl: '   ',
+      })
+      // `validateListingContent` rejects a non-https string first; either
+      // way the publish does not land, which is the property under test.
+      expect(result.status).not.toBe(200)
+      expect(adminMock.__versionWrites).toHaveLength(0)
+    })
+
+    it('gates an UPDATE on the request, never on the stored listing', async () => {
+      adminMock.__listingExists = true
+      // The listing doc in this mock answers `{}` to everything, so a gate
+      // reading the listing would behave identically here — but a gate
+      // reading the listing would also let an update omit the field and
+      // inherit last year's URL as this version's attested subject.
+      const result = await publish(requiredAttestationIds(true), {})
+      expect(result.status).toBe(428)
+      expect(adminMock.__versionWrites).toHaveLength(0)
+    })
+
+    it('pins the declared repository to the version, not only the listing', async () => {
+      const result = await publish(requiredAttestationIds(false))
+      expect(result.status).toBe(200)
+      const written = adminMock.__versionWrites[0] as {
+        repositoryUrl?: string
+      }
+      // A reviewer opening v1.0.0 gets the repo declared for v1.0.0's bytes,
+      // whatever the listing says after the next publish.
+      expect(written.repositoryUrl).toBe(REPO_URL)
+    })
   })
 
   it('ignores ids that are not attestation items', async () => {

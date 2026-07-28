@@ -33,8 +33,8 @@ are reproducible and upgrades are deliberate:
    — the publish API enforces the same checks.
 3. Publish a **version** to the marketplace: **Marketplace → Publish →
    "A plugin (upload a bundle)"** — upload the bundle and its
-   `manifest.json`, choose who can install it, and set the listing details
-   and price. You confirm a short
+   `manifest.json`, choose who can install it, and set the listing details,
+   repository URL and price. You confirm a short
    [pre-publish checklist](publishing/publisher-handbook.md#before-you-publish)
    — repository, license, data disclosure, network hosts, testing — which is
    recorded against that exact bundle and shown to the reviewer. Uploads
