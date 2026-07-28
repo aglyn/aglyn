@@ -7,72 +7,61 @@
   "start_url": "/",
   "scope": "/",
   "theme_color": "#404c5c",
-  "background_color": "#ffffff",
+  "background_color": "#2c3540",
   "icons": [
     {
-      "src": "/_static/images/brand/icon-16x16.png",
+      "src": "/_static/images/brand/app-icon/clipped-16.png",
       "sizes": "16x16",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/icon-24x24.png",
-      "sizes": "24x24",
-      "type": "image/png"
-    },
-    {
-      "src": "/_static/images/brand/icon-32x32.png",
+      "src": "/_static/images/brand/app-icon/clipped-32.png",
       "sizes": "32x32",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/icon-64x64.png",
+      "src": "/_static/images/brand/app-icon/clipped-64.png",
       "sizes": "64x64",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/icon-100x100.png",
-      "sizes": "100x100",
-      "type": "image/png"
-    },
-    {
-      "src": "/_static/images/brand/icon-128x128.png",
+      "src": "/_static/images/brand/app-icon/clipped-128.png",
       "sizes": "128x128",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/icon-144x144.png",
-      "sizes": "144x144",
-      "type": "image/png"
-    },
-    {
-      "src": "/_static/images/brand/icon-152x152.png",
-      "sizes": "152x152",
-      "type": "image/png"
-    },
-    {
-      "src": "/_static/images/brand/icon-180x180.png",
-      "sizes": "180x180",
-      "type": "image/png"
-    },
-    {
-      "src": "/_static/images/brand/icon-256x256.png",
+      "src": "/_static/images/brand/app-icon/clipped-256.png",
       "sizes": "256x256",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/icon-512x512.png",
+      "src": "/_static/images/brand/app-icon/clipped-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/_static/images/brand/icon-1024x1024.png",
-      "sizes": "1024x1024",
-      "type": "image/png"
+      "src": "/_static/images/brand/app-icon/solid-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
-      "src": "/_static/images/brand/icon-24x24.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "/_static/images/brand/app-icon/solid-256.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/_static/images/brand/app-icon/solid-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

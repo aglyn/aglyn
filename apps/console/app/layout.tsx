@@ -37,6 +37,12 @@ const SOCIAL_CARD = '/_static/images/social/aglyn-console-social-card.png'
 const PWA_MANIFEST = '/_static/_pwa/manifest.json'
 const BRAND_ICONS = '/_static/images/brand'
 
+// The installable app icon, distinct from the favicon glyph. `clipped` is the
+// pre-masked macOS squircle; `solid` is the full-bleed square that a maskable
+// icon needs, since the platform supplies the mask and would crop the
+// squircle's own margin a second time.
+const APP_ICONS = '/_static/images/brand/app-icon'
+
 // Resolves the relative og:image above to an absolute URL for crawlers. The
 // console apex is `app.aglyn.com` (see middleware); override via env per deploy.
 const SITE_URL = process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'https://app.aglyn.com'
@@ -53,7 +59,10 @@ export const metadata: Metadata = {
       { url: `${BRAND_ICONS}/icon-256x256.png`, sizes: '256x256', type: 'image/png' },
       { url: `${BRAND_ICONS}/icon-24x24.svg`, type: 'image/svg+xml' },
     ],
-    apple: [{ url: `${BRAND_ICONS}/icon-180x180.png`, sizes: '180x180', type: 'image/png' }],
+    // iOS applies its own rounded mask and composites transparency against
+    // black, so the home-screen icon must be the opaque full-bleed variant —
+    // never the transparent glyph used for the favicon above.
+    apple: [{ url: `${APP_ICONS}/solid-180.png`, sizes: '180x180', type: 'image/png' }],
   },
   appleWebApp: {
     capable: true,
