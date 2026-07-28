@@ -68,8 +68,7 @@ export function registerEventsCalendarConsole(): void {
         header: {
           title: 'Events',
           icon: { path: mdiCalendarMonthOutline.path },
-          // No docsTopic: the events calendar has no docs page yet, so this
-          // surface keeps the Plugins & Marketplace fallback (AGL-1075).
+          docsTopic: 'events',
         },
         Component: EventsConsolePage,
       },

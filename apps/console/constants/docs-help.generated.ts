@@ -213,6 +213,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Design custom error screens',
     excerpt: 'Replace generic 404/401/403/503 pages with branded screens you design.',
   },
+  events: {
+    path: '/content-and-data/events/overview',
+    title: 'Events Calendar',
+    excerpt: 'Keep a schedule of events in the console and publish the ones you choose to any screen, with search-engine event markup.',
+  },
   examples: {
     path: '/developers/plugins/guides/examples',
     title: 'Worked examples',
@@ -537,6 +542,7 @@ export const DOCS_HELP_ANCHORS = {
   editYourTheme: ['#open-the-editor', '#set-colors-and-fonts', '#it-follows-you-into-the-besigner', '#tips', '#related'],
   emailCampaigns: ['#send-a-campaign', '#personalize-with-merge-tags', '#schedule-a-send', '#email-lists', '#experiments', '#opens--clicks', '#compliance', '#related'],
   errorScreens: ['#the-error-screens', '#design-one', '#tips', '#related'],
+  events: ['#manage-events', '#show-events-on-a-screen', '#search-engines', '#related'],
   featureFlags: ['#how-a-flag-is-evaluated', '#how-gating-behaves', '#managing-flags', '#under-the-hood'],
   firstPlugin: ['#1-scaffold', '#2-write-the-entry', '#3-develop-against-a-live-workspace', '#4-verify', '#5-publish', '#6-install-enable-load', '#7-uninstall', '#troubleshooting'],
   forms: ['#build-a-form', '#field-types', '#example-a-quick-survey', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#where-submissions-go', '#related'],
@@ -565,7 +571,7 @@ export const DOCS_HELP_ANCHORS = {
   plugins: ['#install--upgrade', '#how-plugins-run', '#configure', '#publish-your-own', '#related'],
   pos: ['#registers', '#the-register', '#when-something-disconnects', '#reservations', '#related'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#tips', '#related'],
-  publisherHandbook: ['#before-your-first-publish', '#where-to-publish-from', '#what-installing-each-type-does', '#publishing-a-version', '#review-what-happens-after-you-publish', '#private-plugins', '#authoring-your-listing', '#versioning--updates', '#how-installs-work-the-buyer-side', '#getting-paid'],
+  publisherHandbook: ['#before-your-first-publish', '#where-to-publish-from', '#what-installing-each-type-does', '#publishing-a-version', '#before-you-publish', '#review-what-happens-after-you-publish', '#private-plugins', '#authoring-your-listing', '#versioning--updates', '#how-installs-work-the-buyer-side', '#getting-paid'],
   publishYourFirstScreen: ['#1-create-a-screen', '#2-design-it-in-the-besigner', '#3-preview-and-publish', '#next'],
   realmBundles: ['#build-against-the-host-abi', '#the-chain-that-runs-before-a-byte-executes', '#granting-trust-staff', '#where-realm-bundles-load', '#key-rotation', '#troubleshooting'],
   redirects: ['#manage-redirects', '#metrics', '#match-modes-v2', '#related'],

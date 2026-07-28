@@ -35,6 +35,11 @@ import {
   canActAsPublisher,
   resolvePublisherProfile,
 } from './publisher-profile'
+import {
+  attestationLabels,
+  missingAttestations,
+  PUBLISHER_ATTESTATION,
+} from '@aglyn/aglyn/app-utils/publisher-attestation'
 import { createHash } from 'crypto'
 import {
   COMMUNITY_MAX_PRICE_USD,
@@ -338,6 +343,30 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
       ? firestore.collection('communityListings').doc(createResourceUid())
       : existing.docs[0].ref
 
+    // Pre-submission attestation (AGL-969). Blocks the publish rather than
+    // warning, because the whole point is that these answers exist BEFORE a
+    // reviewer spends time on the bundle.
+    //
+    // Whether this is an update is decided here, from whether a listing
+    // already exists — never from a client flag, which would make "this is
+    // my first version" a way to skip the changelog item.
+    const ticked = (
+      Array.isArray(body?.attestation)
+        ? body.attestation.map((id: unknown) => String(id))
+        : []
+    ).filter((id: string) =>
+      PUBLISHER_ATTESTATION.some((item) => item.id === id),
+    )
+    const missing = missingAttestations(ticked, !existing.empty)
+    if (missing.length) {
+      return res.status(428).json({
+        error:
+          'Confirm the pre-submission checklist before publishing: ' +
+          attestationLabels(missing).join('; '),
+        missingAttestations: missing,
+      })
+    }
+
     // Immutable content-addressed write — a new build is a new object, so a
     // consumer's pinned version can never be overwritten underneath it.
     const objectPath = pluginArtifactPath(
@@ -399,6 +428,17 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         manifest,
         ...(changelog.trim() && { changelog: changelog.trim() }),
         publishedAt: now,
+        // What the publisher stated about these bytes (AGL-969). Same shape
+        // as the staff `reviewChecklist` and pinned to the same sha256, so
+        // a republish under this version string re-asks rather than
+        // inheriting an attestation made about code that has since changed.
+        //
+        // `by` is the uid that submitted, not the org: takedown and removal
+        // are defensible because a named person said this on a date, and an
+        // org id names nobody.
+        publisherAttestation: Object.fromEntries(
+          ticked.map((id: string) => [id, { by: decoded.uid, at: now, sha256 }]),
+        ),
         // Every version starts UNREVIEWED (AGL-966). This doc is written
         // with .set() and no merge, so a republish of the same version
         // string also resets it — new bytes, new review, by construction.

@@ -34,8 +34,11 @@ are reproducible and upgrades are deliberate:
 3. Publish a **version** to the marketplace: **Marketplace → Publish →
    "A plugin (upload a bundle)"** — upload the bundle and its
    `manifest.json`, choose who can install it, and set the listing details
-   and price. Uploads publish **sandboxed**; staff review lists (and may
-   sign) them.
+   and price. You confirm a short
+   [pre-publish checklist](publishing/publisher-handbook.md#before-you-publish)
+   — repository, license, data disclosure, network hosts, testing — which is
+   recorded against that exact bundle and shown to the reviewer. Uploads
+   publish **sandboxed**; staff review lists (and may sign) them.
 4. Installers get that pinned version and choose when to **upgrade** —
    ship updates by bumping the manifest `version` and uploading again.
 

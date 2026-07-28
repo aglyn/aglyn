@@ -20,10 +20,13 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
+  Checkbox,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   MenuItem,
   Stack,
   TextField,
@@ -31,6 +34,10 @@ import {
 } from '@mui/material'
 import { useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import {
+  PUBLISHER_ATTESTATION,
+  requiredAttestationIds,
+} from '@aglyn/aglyn/app-utils/publisher-attestation'
 
 // Mirrors the server taxonomy; the server re-validates (see other marketplace
 // dialogs for why the console can't import the community plugin's model).
@@ -105,6 +112,11 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
   // server ignores it on a version bump, and changing it later is the
   // deliberate flip in Marketplace › Listings.
   const [visibility, setVisibility] = useState<'public' | 'private'>('public')
+  // Pre-submission attestation (AGL-969). The server is the gate — it
+  // decides which items are required from whether a listing already exists,
+  // and refuses the publish with 428 — so this state only drives the UI.
+  const [attested, setAttested] = useState<string[]>([])
+  const [missingAttestations, setMissingAttestations] = useState<string[]>([])
 
   const reset = () => {
     setBundleFile(null)
@@ -118,8 +130,32 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
     setReadme('')
     setLicense('')
     setVisibility('public')
+    setAttested([])
+    setMissingAttestations([])
     setProblems([])
   }
+
+  const toggleAttestation = (id: string) =>
+    setAttested((current) =>
+      current.includes(id)
+        ? current.filter((entry) => entry !== id)
+        : [...current, id],
+    )
+
+  /**
+   * What this dialog blocks on locally.
+   *
+   * The changelog item is `updateOnly`, and this dialog genuinely cannot
+   * know whether the manifest id already has a listing — the server answers
+   * that. So we gate on the items that always apply, and let the server's
+   * 428 name the rest, which the alert below renders. Guessing here and
+   * demanding a changelog attestation from a first-time publisher would be
+   * the worse failure: an item that does not apply teaches people to tick
+   * without reading.
+   */
+  const unattested = requiredAttestationIds(false).filter(
+    (id) => !attested.includes(id),
+  )
 
   const close = () => {
     if (busy) return
@@ -145,6 +181,7 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
 
   const submit = async () => {
     setProblems([])
+    setMissingAttestations([])
     if (!bundleFile) {
       return void enqueueSnackbar('Choose a plugin bundle (.js) to upload', {
         variant: 'warning',
@@ -190,6 +227,10 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
           // only this org's sites can install it. Honoured on first publish
           // only; re-publishing an existing listing leaves it alone.
           visibility,
+          // What the publisher stated about these bytes (AGL-969). Recorded
+          // on the version doc, pinned to its sha256, and shown to the
+          // reviewer beside their own checklist.
+          attestation: attested,
           // Listing docs (AGL-927): the publish API already validates and
           // stores these (validateListingContent); without them every
           // bundle-published listing hit review flagged "README: MISSING ·
@@ -201,6 +242,12 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         if (Array.isArray(payload?.problems)) setProblems(payload.problems)
+        // 428 (AGL-969): an item this dialog could not know was required —
+        // in practice the update-only changelog attestation. Highlight it
+        // rather than only shouting the error in a snackbar.
+        if (Array.isArray(payload?.missingAttestations)) {
+          setMissingAttestations(payload.missingAttestations)
+        }
         return void enqueueSnackbar(payload?.error ?? 'Upload failed', {
           variant: response.status === 501 ? 'info' : 'error',
           allowDuplicate: true,
@@ -400,6 +447,75 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
             />
           </Stack>
 
+          {/* Pre-submission checklist (AGL-969). Sits directly above the
+              publish button because it is the last thing a publisher should
+              read, and because most review round-trips are one of these six
+              questions going unanswered. Every item is a statement only the
+              publisher can make — the staff checklist asks different things,
+              and self-attesting to "the publisher is contactable" would mean
+              nothing. */}
+          <Stack spacing={1}>
+            <Typography variant="subtitle2">
+              {'Before you publish'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {'Recorded against this exact bundle, with your name and the ' +
+                'date, and shown to the reviewer. Republishing the same ' +
+                'version number asks again — the bytes changed.'}
+            </Typography>
+            {missingAttestations.length ? (
+              <Alert severity="warning">
+                {'This plugin already has a published version, so the ' +
+                  'highlighted item applies too.'}
+              </Alert>
+            ) : null}
+            {PUBLISHER_ATTESTATION.map((item) => {
+              const flagged = missingAttestations.includes(item.id)
+              return (
+                <Stack key={item.id} spacing={0.25}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={attested.includes(item.id)}
+                        disabled={busy}
+                        onChange={() => toggleAttestation(item.id)}
+                      />
+                    }
+                    label={
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <Typography
+                          variant="body2"
+                          color={flagged ? 'warning.main' : undefined}
+                        >
+                          {item.label}
+                        </Typography>
+                        {item.updateOnly ? (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label="Updates only"
+                          />
+                        ) : null}
+                      </Stack>
+                    }
+                  />
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ pl: 4 }}
+                  >
+                    {item.detail}
+                  </Typography>
+                </Stack>
+              )
+            })}
+          </Stack>
+
           {problems.length ? (
             <Alert severity="error">
               <Typography variant="subtitle2">
@@ -424,10 +540,12 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
           variant="contained"
           color="secondary"
           onClick={() => void submit()}
-          disabled={busy || !bundleFile}
+          disabled={busy || !bundleFile || unattested.length > 0}
         >
           {busy
             ? 'Publishing…'
+            : unattested.length
+              ? `Confirm ${unattested.length} more`
             : visibility === 'private'
               ? 'Publish privately'
               : 'Publish plugin'}
