@@ -149,7 +149,7 @@ describe('MarkdownVisualEditor', () => {
     expect(rows[3]?.getAttribute('contenteditable')).toBe('false')
   })
 
-  it('renders code and table rows read-only (AGL-974)', () => {
+  it('renders code and table rows as their own editing surfaces (AGL-983)', () => {
     renderEditor(
       'Intro\n\n```ts\nconst a = 1\n```\n\n' +
         '| Prop | Default |\n| --- | --- |\n| size | 8 |',
@@ -160,19 +160,48 @@ describe('MarkdownVisualEditor', () => {
       'code',
       'table',
     ])
-    expect(rows[1]?.querySelector('code')?.textContent).toBe('const a = 1')
-    expect(rows[1]?.getAttribute('contenteditable')).toBe('false')
+    // The snippet is a textarea over row.text, not a frozen <pre>.
     expect(
-      Array.from(rows[2]?.querySelectorAll('th') ?? []).map(
-        (cell) => cell.textContent,
-      ),
+      rows[1]?.querySelector<HTMLTextAreaElement>('textarea')?.value,
+    ).toBe('const a = 1')
+    // The row itself stays out of the document's caret flow; the surfaces
+    // inside it are what the caret enters.
+    expect(rows[1]?.getAttribute('contenteditable')).toBe('false')
+    const headerCells = Array.from(rows[2]?.querySelectorAll('th') ?? [])
+    expect(
+      headerCells
+        .filter((cell) => cell.getAttribute('contenteditable') === 'true')
+        .map((cell) => cell.textContent),
     ).toEqual(['Prop', 'Default'])
     expect(
-      Array.from(rows[2]?.querySelectorAll('td') ?? []).map(
-        (cell) => cell.textContent,
-      ),
+      Array.from(rows[2]?.querySelectorAll('td') ?? [])
+        .filter((cell) => cell.getAttribute('contenteditable') === 'true')
+        .map((cell) => cell.textContent),
     ).toEqual(['size', '8'])
-    expect(rows[2]?.getAttribute('contenteditable')).toBe('false')
+  })
+
+  it('inserts a code block and a table from the toolbar (AGL-983)', () => {
+    const ref = createRef<MarkdownVisualEditorHandle>()
+    const onChange = jest.fn()
+    render(
+      <MarkdownVisualEditor ref={ref} value={'Intro'} onChange={onChange} />,
+    )
+    act(() => ref.current?.exec('code'))
+    act(() => ref.current?.exec('table'))
+    // Each insert leaves a paragraph behind it — a caret landing spot, so
+    // the document never ends on a block the caret cannot enter.
+    expect(rowEls().map((row) => row.dataset['rowKind'])).toEqual([
+      'paragraph',
+      'code',
+      'paragraph',
+      'table',
+      'paragraph',
+    ])
+    // An empty starter table still serializes as a real table, so what the
+    // author sees is what the listing renders.
+    expect(onChange).toHaveBeenLastCalledWith(
+      'Intro\n\n```\n```\n\n|  |  |\n| --- | --- |\n|  |  |\n|  |  |',
+    )
   })
 
   it('typing syncs the DOM back into the model', () => {

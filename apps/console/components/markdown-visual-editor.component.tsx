@@ -43,8 +43,13 @@ import {
   Popover,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
+import FormatAlignCenterIcon from '@mui/icons-material/FormatAlignCenter'
+import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft'
+import FormatAlignRightIcon from '@mui/icons-material/FormatAlignRight'
 import type { ReactNode } from 'react'
 import {
   forwardRef,
@@ -63,8 +68,23 @@ export type MarkdownEditorCommand =
   | 'bold'
   | 'italic'
   | 'heading'
+  | 'heading3'
+  | 'list'
   | 'link'
   | 'image'
+  | 'code'
+  | 'table'
+
+/**
+ * What the caret is sitting in (AGL-984), so a toolbar can show its state.
+ * `kind` is the caret row's kind, or null when the caret is in a block row
+ * (a table cell or a snippet), where the mark commands do not apply.
+ */
+export interface MarkdownEditorContext {
+  bold: boolean
+  italic: boolean
+  kind: 'paragraph' | 'heading2' | 'heading3' | 'listItem' | null
+}
 
 export interface MarkdownVisualEditorHandle {
   /** Applies a toolbar command at the current (or last known) selection. */
@@ -84,6 +104,8 @@ export interface MarkdownVisualEditorProps {
    * its media picker and inserts via the imperative handle (AGL-596).
    */
   onPickImageFromMedia?: () => void
+  /** Fires when the caret's formatting context changes (AGL-984). */
+  onContextChange?: (context: MarkdownEditorContext) => void
   minHeight?: number | string
   maxHeight?: number | string
 }
@@ -112,6 +134,12 @@ type TableRow = {
  */
 type BlockRow = ImageRow | CodeRow | TableRow
 export type EditorRow = TextRow | BlockRow
+
+/** A block row before it has a key — Omit must distribute over the union. */
+type NewBlockRow =
+  | Omit<ImageRow, 'key'>
+  | Omit<CodeRow, 'key'>
+  | Omit<TableRow, 'key'>
 
 const isTextRow = (row: EditorRow): row is TextRow =>
   row.kind !== 'image' && row.kind !== 'code' && row.kind !== 'table'
@@ -432,46 +460,183 @@ const TextRowView = memo(function TextRowView(props: TextRowViewProps) {
 
 interface BlockRowViewProps {
   row: BlockRow
+  version: number
+  /** Mutates this row in the model, then re-renders it from the model. */
+  onEdit: (mutate: (row: BlockRow) => BlockRow) => void
+  /** Same, but silent: the DOM is already correct, the caret must not move. */
+  onEditSilently: (mutate: (row: BlockRow) => BlockRow) => void
   onRemove: () => void
 }
 
+/** A cell edited to nothing parses back to nothing — keep it canonical. */
+const cellFromElement = (el: HTMLElement): Aglyn.MarkdownInline[] =>
+  readInlinesFromElement(el)
+
+const CODE_LANGUAGES = ['', 'ts', 'tsx', 'js', 'json', 'bash', 'html', 'css', 'md']
+
 /**
- * A non-editable row: an image, a code block or a table (AGL-974). The
- * caret never enters one — it renders from the model and travels through
- * the document unchanged, with a hover Remove button as its only edit.
+ * A block row: an image, a code block or a table (AGL-983). The document
+ * caret never enters one — each brings its own editing surface instead, and
+ * the row travels through the model as a unit. Hover reveals its controls.
+ *
+ * Editing follows the same rule as text rows: while the user types, the DOM
+ * is the source of truth and the model syncs SILENTLY (no re-render, no lost
+ * caret). Only structural edits — adding a column, changing alignment —
+ * re-render, and they bump `version`, which re-keys this row.
  */
 const BlockRowView = memo(function BlockRowView({
   row,
+  version,
+  onEdit,
+  onEditSilently,
   onRemove,
 }: BlockRowViewProps) {
+  const table = row.kind === 'table' ? row : null
+  const columns = table?.header.length ?? 0
+
+  /**
+   * Cell contents are rendered ONCE, exactly like a text row's (this view is
+   * re-keyed on `version`, so a model change remounts it). Re-rendering them
+   * would have React reconcile DOM the browser owns while the caret is in
+   * it — typing into an empty cell replaces its <br>, and the next render
+   * threw NotFoundError trying to remove a node that was already gone.
+   */
+  const frozenHeader = useMemo(
+    () => (table?.header ?? []).map((cell) => renderRowInlines(cell)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+  const frozenRows = useMemo(
+    () =>
+      (table?.rows ?? []).map((cells) =>
+        cells.map((cell) => renderRowInlines(cell)),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
+  /** Writes one cell back from its live DOM. Header row is index -1. */
+  const syncCell = (rowIndex: number, cellIndex: number, el: HTMLElement) => {
+    const inlines = cellFromElement(el)
+    onEditSilently((current) => {
+      if (current.kind !== 'table') return current
+      if (rowIndex < 0) {
+        const header = [...current.header]
+        header[cellIndex] = inlines
+        return { ...current, header }
+      }
+      const rows = current.rows.map((cells, index) =>
+        index === rowIndex
+          ? cells.map((cell, i) => (i === cellIndex ? inlines : cell))
+          : cells,
+      )
+      return { ...current, rows }
+    })
+  }
+
+  const cellProps = (rowIndex: number, cellIndex: number) => ({
+    contentEditable: true,
+    suppressContentEditableWarning: true,
+    onInput: (event: React.FormEvent<HTMLTableCellElement>) =>
+      syncCell(rowIndex, cellIndex, event.currentTarget),
+    style: { textAlign: table?.align[cellIndex] ?? 'left' } as const,
+  })
+
   return (
     <Box
       contentEditable={false}
       data-row-key={row.key}
       data-row-kind={row.kind}
-      sx={{ my: 1, position: 'relative', '&:hover [data-md-image-remove]': { opacity: 1 } }}
+      sx={{
+        my: 1,
+        position: 'relative',
+        '&:hover [data-md-block-controls]': { opacity: 1 },
+      }}
     >
       {row.kind === 'image' ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={row.src} alt={row.alt} />
       ) : row.kind === 'code' ? (
         <Box
-          component="pre"
           sx={{
-            m: 0,
-            p: 1.5,
-            overflowX: 'auto',
             borderRadius: 1,
             border: '1px solid',
             borderColor: 'divider',
             bgcolor: 'action.hover',
-            fontFamily: 'monospace',
-            fontSize: 13,
+            overflow: 'hidden',
+            '&:focus-within': { borderColor: 'primary.main' },
           }}
         >
-          <code>{row.text}</code>
+          <Box
+            component="textarea"
+            spellCheck={false}
+            defaultValue={row.text}
+            placeholder="Your snippet…"
+            rows={Math.max(2, row.text.split('\n').length)}
+            onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => {
+              const text = event.target.value
+              // Grow with the snippet rather than scrolling a 2-row box.
+              event.target.style.height = 'auto'
+              event.target.style.height = `${event.target.scrollHeight}px`
+              onEditSilently((current) =>
+                current.kind === 'code' ? { ...current, text } : current,
+              )
+            }}
+            sx={{
+              display: 'block',
+              width: '100%',
+              border: 0,
+              outline: 'none',
+              resize: 'vertical',
+              p: 1.5,
+              bgcolor: 'transparent',
+              color: 'text.primary',
+              fontFamily: 'monospace',
+              fontSize: 13,
+              lineHeight: 1.6,
+            }}
+          />
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1,
+              py: 0.5,
+              borderTop: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              {'Language'}
+            </Typography>
+            <Box
+              component="select"
+              defaultValue={row.lang}
+              onChange={(event: React.ChangeEvent<HTMLSelectElement>) => {
+                const lang = event.target.value
+                onEditSilently((current) =>
+                  current.kind === 'code' ? { ...current, lang } : current,
+                )
+              }}
+              sx={{
+                border: 0,
+                bgcolor: 'transparent',
+                color: 'text.secondary',
+                font: 'inherit',
+                fontSize: 12,
+                outline: 'none',
+              }}
+            >
+              {CODE_LANGUAGES.map((lang) => (
+                <option key={lang} value={lang}>
+                  {lang || 'plain'}
+                </option>
+              ))}
+            </Box>
+          </Box>
         </Box>
-      ) : (
+      ) : table ? (
         <Box sx={{ overflowX: 'auto' }}>
           <Box
             component="table"
@@ -484,47 +649,220 @@ const BlockRowView = memo(function BlockRowView({
                 borderColor: 'divider',
                 px: 1,
                 py: 0.5,
+                minWidth: 64,
               },
               '& th': { bgcolor: 'action.hover' },
+              '& [contenteditable]': { outline: 'none' },
+              '& [contenteditable]:focus': {
+                boxShadow: (theme) => `inset 0 0 0 2px ${theme.palette.primary.main}`,
+              },
             }}
           >
             <thead>
               <tr>
-                {row.header.map((cell, index) => (
-                  <th
-                    key={index}
-                    style={{ textAlign: row.align[index] ?? 'left' }}
-                  >
-                    {renderRowInlines(cell)}
+                {table.header.map((_cell, index) => (
+                  <th key={index} {...cellProps(-1, index)}>
+                    {frozenHeader[index]}
                   </th>
                 ))}
+                {/* Column controls live in a trailing spacer column so they
+                    never sit inside a cell the caret can enter. */}
+                <Box
+                  component="th"
+                  data-md-block-controls=""
+                  sx={{
+                    border: '0 !important',
+                    bgcolor: 'transparent !important',
+                    opacity: 0,
+                    transition: 'opacity 120ms',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <Button
+                    size="small"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() =>
+                      onEdit((current) =>
+                        current.kind === 'table'
+                          ? {
+                              ...current,
+                              align: [...current.align, 'left'],
+                              header: [...current.header, []],
+                              rows: current.rows.map((cells) => [...cells, []]),
+                            }
+                          : current,
+                      )
+                    }
+                  >
+                    {'+ Column'}
+                  </Button>
+                  {columns > 1 ? (
+                    <Button
+                      size="small"
+                      color="error"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() =>
+                        onEdit((current) =>
+                          current.kind === 'table'
+                            ? {
+                                ...current,
+                                align: current.align.slice(0, -1),
+                                header: current.header.slice(0, -1),
+                                rows: current.rows.map((cells) =>
+                                  cells.slice(0, -1),
+                                ),
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      {'− Column'}
+                    </Button>
+                  ) : null}
+                </Box>
               </tr>
+              {/* Per-column alignment, on the same axis as the column. */}
+              <Box
+                component="tr"
+                data-md-block-controls=""
+                sx={{ opacity: 0, transition: 'opacity 120ms' }}
+              >
+                {table.align.map((align, index) => (
+                  <Box
+                    component="td"
+                    key={index}
+                    sx={{
+                      border: '0 !important',
+                      p: '0 !important',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <ToggleButtonGroup
+                      exclusive
+                      size="small"
+                      value={align}
+                      onChange={(_event, next) => {
+                        if (!next) return
+                        onEdit((current) =>
+                          current.kind === 'table'
+                            ? {
+                                ...current,
+                                align: current.align.map((entry, i) =>
+                                  i === index
+                                    ? (next as Aglyn.MarkdownTableAlign)
+                                    : entry,
+                                ),
+                              }
+                            : current,
+                        )
+                      }}
+                      sx={{ '& .MuiToggleButton-root': { px: 0.75, py: 0, border: 0 } }}
+                    >
+                      <ToggleButton value="left" aria-label="Align left">
+                        <FormatAlignLeftIcon fontSize="inherit" />
+                      </ToggleButton>
+                      <ToggleButton value="center" aria-label="Align center">
+                        <FormatAlignCenterIcon fontSize="inherit" />
+                      </ToggleButton>
+                      <ToggleButton value="right" aria-label="Align right">
+                        <FormatAlignRightIcon fontSize="inherit" />
+                      </ToggleButton>
+                    </ToggleButtonGroup>
+                  </Box>
+                ))}
+                <Box component="td" sx={{ border: '0 !important' }} />
+              </Box>
             </thead>
             <tbody>
-              {row.rows.map((cells, rowIndex) => (
+              {table.rows.map((cells, rowIndex) => (
                 <tr key={rowIndex}>
-                  {cells.map((cell, index) => (
-                    <td
-                      key={index}
-                      style={{ textAlign: row.align[index] ?? 'left' }}
-                    >
-                      {renderRowInlines(cell)}
+                  {cells.map((_cell, index) => (
+                    <td key={index} {...cellProps(rowIndex, index)}>
+                      {frozenRows[rowIndex]?.[index]}
                     </td>
                   ))}
+                  <Box
+                    component="td"
+                    data-md-block-controls=""
+                    sx={{
+                      border: '0 !important',
+                      bgcolor: 'transparent !important',
+                      opacity: 0,
+                      transition: 'opacity 120ms',
+                    }}
+                  >
+                    <Button
+                      size="small"
+                      color="error"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() =>
+                        onEdit((current) =>
+                          current.kind === 'table'
+                            ? {
+                                ...current,
+                                rows: current.rows.filter(
+                                  (_cells, index) => index !== rowIndex,
+                                ),
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      {'Delete row'}
+                    </Button>
+                  </Box>
                 </tr>
               ))}
+              <tr>
+                <Box
+                  component="td"
+                  colSpan={columns + 1}
+                  data-md-block-controls=""
+                  sx={{
+                    border: '0 !important',
+                    opacity: 0,
+                    transition: 'opacity 120ms',
+                  }}
+                >
+                  <Button
+                    size="small"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() =>
+                      onEdit((current) =>
+                        current.kind === 'table'
+                          ? {
+                              ...current,
+                              rows: [
+                                ...current.rows,
+                                current.header.map(() => []),
+                              ],
+                            }
+                          : current,
+                      )
+                    }
+                  >
+                    {'+ Row'}
+                  </Button>
+                </Box>
+              </tr>
             </tbody>
           </Box>
         </Box>
-      )}
+      ) : null}
       <Button
         size="small"
         color="error"
         variant="contained"
-        data-md-image-remove=""
+        data-md-block-controls=""
         onMouseDown={(event) => event.preventDefault()}
         onClick={onRemove}
-        sx={{ position: 'absolute', top: 8, left: 8, opacity: 0, transition: 'opacity 120ms' }}
+        sx={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          opacity: 0,
+          transition: 'opacity 120ms',
+        }}
       >
         {'Remove'}
       </Button>
@@ -571,7 +909,14 @@ const MarkdownVisualEditor = forwardRef<
   MarkdownVisualEditorHandle,
   MarkdownVisualEditorProps
 >(function MarkdownVisualEditor(
-  { value, onChange, onPickImageFromMedia, minHeight = 280, maxHeight = 480 },
+  {
+    value,
+    onChange,
+    onPickImageFromMedia,
+    onContextChange,
+    minHeight = 280,
+    maxHeight = 480,
+  },
   ref,
 ) {
   const [version, setVersion] = useState(0)
@@ -650,8 +995,9 @@ const MarkdownVisualEditor = forwardRef<
     const rowEl = rootRef.current?.querySelector<HTMLElement>(
       `[data-row-key="${pending.key}"]`,
     )
-    // Block rows (image / code / table) have no caret to restore.
-    if (!rowEl || !rowEl.isContentEditable) return
+    // Block rows (image / code / table) have no caret to restore. The
+    // attribute, not `isContentEditable` — jsdom does not compute the latter.
+    if (!rowEl || rowEl.getAttribute('contenteditable') !== 'true') return
     rowEl.focus()
     setSelectionIn(rowEl, pending.start, pending.end)
   }, [version])
@@ -690,9 +1036,59 @@ const MarkdownVisualEditor = forwardRef<
     return snapshot
   }, [])
 
+  /**
+   * Publishes the caret's formatting context (AGL-984). A collapsed caret
+   * reports the mark of the character BEHIND it — the same character the
+   * next keystroke would extend. Deduped, so a toolbar re-renders only when
+   * something it draws actually changed.
+   */
+  const contextKeyRef = useRef('')
+  const onContextChangeRef = useRef(onContextChange)
+  onContextChangeRef.current = onContextChange
+  const reportContext = useCallback(() => {
+    const notify = onContextChangeRef.current
+    if (!notify) return
+    const selection = lastSelectionRef.current
+    const rows = rowsRef.current ?? []
+    const row = selection
+      ? rows.find((entry) => entry.key === selection.key)
+      : undefined
+    let context: MarkdownEditorContext = {
+      bold: false,
+      italic: false,
+      kind: null,
+    }
+    if (selection && row && isTextRow(row)) {
+      const from =
+        selection.start === selection.end
+          ? Math.max(0, selection.start - 1)
+          : selection.start
+      const covered = sliceInlines(row.inlines, from, selection.end)
+      context = {
+        bold:
+          covered.length > 0 &&
+          covered.every((inline) => inline.type === 'bold'),
+        italic:
+          covered.length > 0 &&
+          covered.every((inline) => inline.type === 'italic'),
+        kind: row.kind,
+      }
+    }
+    const key = `${context.bold}:${context.italic}:${context.kind}`
+    if (key === contextKeyRef.current) return
+    contextKeyRef.current = key
+    notify(context)
+  }, [])
+
   const handleSelectionPing = useCallback(() => {
     captureSelection()
-  }, [captureSelection])
+    reportContext()
+  }, [captureSelection, reportContext])
+
+  // A structural edit moves the caret without a ping of its own.
+  useEffect(() => {
+    reportContext()
+  }, [version, reportContext])
 
   const undo = useCallback(() => {
     const { past, future } = historyRef.current
@@ -749,24 +1145,55 @@ const MarkdownVisualEditor = forwardRef<
     return null
   }, [captureSelection])
 
-  const insertImageRow = useCallback(
-    (alt: string, url: string, afterIndex: number | null) => {
-      if (!isValidImageUrl(url)) return
+  /** Splices a block row in after `afterIndex` (end of document if null). */
+  const insertBlockRow = useCallback(
+    (block: NewBlockRow, afterIndex: number | null) => {
       const current = rowsRef.current ?? []
       pushHistory()
       const index = afterIndex == null ? current.length : afterIndex + 1
-      current.splice(index, 0, {
-        key: nextRowKey(),
-        kind: 'image',
-        src: url,
-        alt,
-      })
-      // Keep a caret landing spot after a trailing image.
+      current.splice(index, 0, { key: nextRowKey(), ...block } as BlockRow)
+      // Keep a caret landing spot after a trailing block.
       if (index === current.length - 1) current.push(emptyParagraph())
       const next = current[index + 1]
       commit(next && isTextRow(next) ? { key: next.key, start: 0, end: 0 } : null)
     },
     [commit, pushHistory],
+  )
+
+  const insertImageRow = useCallback(
+    (alt: string, url: string, afterIndex: number | null) => {
+      if (!isValidImageUrl(url)) return
+      insertBlockRow({ kind: 'image', src: url, alt }, afterIndex)
+    },
+    [insertBlockRow],
+  )
+
+  /** Edits one block row in place; `silent` skips the re-render (AGL-983). */
+  const editBlockRow = useCallback(
+    (key: string, mutate: (row: BlockRow) => BlockRow, silent: boolean) => {
+      const current = rowsRef.current ?? []
+      const index = findRowIndex(key)
+      const row = current[index]
+      if (!row || isTextRow(row)) return
+      // Typing in a cell or a snippet batches its history the same way
+      // typing in a paragraph does: one undo step per burst, not per key.
+      if (silent) {
+        if (!typingBatchRef.current) {
+          pushHistory()
+          typingBatchRef.current = true
+        }
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+        typingTimerRef.current = setTimeout(() => {
+          typingBatchRef.current = false
+        }, 800)
+      } else {
+        pushHistory()
+      }
+      current[index] = mutate(row)
+      if (silent) emitChange()
+      else commit(null)
+    },
+    [commit, emitChange, findRowIndex, pushHistory],
   )
 
   const execCommand = useCallback(
@@ -780,17 +1207,38 @@ const MarkdownVisualEditor = forwardRef<
         setUrlDialog({ kind: 'image', url: '', text: '' })
         return
       }
+      // Block inserts (AGL-983) land after the caret row, like an image.
+      if (command === 'code') {
+        insertBlockRow({ kind: 'code', lang: '', text: '' }, target?.index ?? null)
+        return
+      }
+      if (command === 'table') {
+        const empty = (): Aglyn.MarkdownTableCell[] => [[], []]
+        insertBlockRow(
+          {
+            kind: 'table',
+            align: ['left', 'left'],
+            header: empty(),
+            rows: [empty(), empty()],
+          },
+          target?.index ?? null,
+        )
+        return
+      }
       if (!target) return
       const row = current[target.index] as TextRow
-      if (command === 'heading') {
+      // Block-kind toggles: pressing the row's own kind returns it to prose.
+      const toggleKind = (kind: TextRowKind) => {
         pushHistory()
         current[target.index] = {
           ...row,
-          kind: row.kind === 'heading2' ? 'paragraph' : 'heading2',
+          kind: row.kind === kind ? 'paragraph' : kind,
         }
         commit({ key: row.key, start: target.start, end: target.end })
-        return
       }
+      if (command === 'heading') return toggleKind('heading2')
+      if (command === 'heading3') return toggleKind('heading3')
+      if (command === 'list') return toggleKind('listItem')
       if (command === 'link') {
         dialogTargetRef.current = target
         setUrlDialog({
@@ -831,7 +1279,7 @@ const MarkdownVisualEditor = forwardRef<
         end: target.start + toggled.length,
       })
     },
-    [commit, pushHistory, resolveTarget],
+    [commit, insertBlockRow, pushHistory, resolveTarget],
   )
 
   useImperativeHandle(
@@ -1304,6 +1752,10 @@ const MarkdownVisualEditor = forwardRef<
         data-testid="markdown-visual-editor"
         onKeyDown={handleRootKeyDown}
         onMouseDown={handleRootMouseDown}
+        // Clicking into a table cell or a snippet is a selection change the
+        // text rows never see; the toolbar still has to hear about it.
+        onMouseUp={handleSelectionPing}
+        onKeyUp={handleSelectionPing}
         sx={{
           position: 'relative',
           border: '1px solid',
@@ -1367,8 +1819,13 @@ const MarkdownVisualEditor = forwardRef<
         {rows.map((row) =>
           !isTextRow(row) ? (
             <BlockRowView
-              key={row.key}
+              // Re-keyed on version so a re-parse (or an undo) rebuilds the
+              // block's own editing surfaces from the model.
+              key={`${row.key}:${version}`}
               row={row}
+              version={version}
+              onEdit={(mutate) => editBlockRow(row.key, mutate, false)}
+              onEditSilently={(mutate) => editBlockRow(row.key, mutate, true)}
               onRemove={handleBlockRemove(row.key)}
             />
           ) : (
