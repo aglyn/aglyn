@@ -26,7 +26,13 @@ import {
   type DatasetFieldDefinition,
   type DatasetFieldType,
   type DatasetModel,
+  describeScope,
   effectiveDatasetModel,
+  hostScopeToken,
+  narrowsScope,
+  normalizeVisibleTo,
+  ORG_SCOPE_TOKEN,
+  visibleToHost,
 } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -41,13 +47,19 @@ import {
   FormControlLabel,
   IconButton,
   MenuItem,
+  Select,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
-import { doc, updateDoc } from 'firebase/firestore'
+import { collection, doc, limit, query, updateDoc, where } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
-import { useFirestore, useHostOrgId } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  useHostOrgId,
+  useScopeTokens,
+} from '@aglyn/tenant-feature-instance'
 
 /** Types surfaced in the picker; the rest exist for compat, not authoring. */
 const AUTHORABLE_TYPES: DatasetFieldType[] = [
@@ -107,6 +119,26 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
+  // Sharing scope (AGL-1044) — org datasets only; the legacy host path is
+  // site-private by construction.
+  const { orgWide: viewerOrgWide } = useScopeTokens(orgId ?? undefined)
+  // Sites in this org, for naming what a narrowing would cost. Queried
+  // here rather than via the console's useOrgHosts — this component lives
+  // in a lib and cannot import from an app.
+  const { data: orgHostDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts'),
+        where('orgId', '==', orgId ?? '-none-'),
+        limit(200),
+      ),
+    [firestore, orgId],
+    { idField: '$id' },
+  )
+  const orgHostList: Array<{ $id: string; name?: string; subdomain?: string }> =
+    orgHostDocs ?? []
+  const [visibleTo, setVisibleTo] = useState<string[]>([ORG_SCOPE_TOKEN])
+
   const [model, setModel] = useState<DatasetModel>({ fields: {}, order: [] })
   const [names, setNames] = useState<{ singular: string; plural: string }>({
     singular: '',
@@ -114,6 +146,11 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   })
   useEffect(() => {
     if (!dataset) return
+    setVisibleTo(
+      Array.isArray((dataset as { visibleTo?: string[] }).visibleTo)
+        ? ((dataset as { visibleTo?: string[] }).visibleTo as string[])
+        : [ORG_SCOPE_TOKEN],
+    )
     const effective = effectiveDatasetModel(dataset)
     setModel({
       fields: JSON.parse(JSON.stringify(effective.fields)),
@@ -258,6 +295,34 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
 
   const handleSave = useCallback(async () => {
     if (!dataset) return
+    const previousScope: string[] = Array.isArray(
+      (dataset as { visibleTo?: string[] }).visibleTo,
+    )
+      ? ((dataset as { visibleTo?: string[] }).visibleTo as string[])
+      : [ORG_SCOPE_TOKEN]
+    const scopeChanged =
+      JSON.stringify([...previousScope].sort()) !==
+      JSON.stringify([...visibleTo].sort())
+    if (scopeChanged && narrowsScope(previousScope, visibleTo)) {
+      // Narrowing takes a dataset away from sites whose pages may bind it,
+      // and a repeatable bound to a dataset it can no longer see renders
+      // nothing (AGL-1039). Name the cost before paying it.
+      const losing = orgHostList
+        .filter((host) => visibleToHost(previousScope, host.$id))
+        .filter((host) => !visibleToHost(visibleTo, host.$id))
+        .map((host) => host.name ?? host.subdomain ?? host.$id)
+      const proceed = await confirm({
+        title: 'Limit which sites can use this collection?',
+        description: losing.length
+          ? `${losing.join(', ')} will stop seeing this collection. Pages ` +
+            'that repeat over it will render nothing. No data is deleted.'
+          : 'No site loses access, so nothing breaks today.',
+        confirmationText: 'Limit access',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!proceed) return
+    }
     if (!model.order.length) {
       return void enqueueSnackbar('A collection needs at least one field', {
         variant: 'warning',
@@ -274,6 +339,11 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
       // v1 compat: keep the flat column list mirroring the model order so
       // unmigrated consumers (AGL-103 bindings) keep working.
       fields: model.order,
+      // Only an org-wide member may change the scope — the AGL-1041 rules
+      // deny anyone else, and a rejected field fails the WHOLE write.
+      ...(orgId && viewerOrgWide && scopeChanged
+        ? { visibleTo: normalizeVisibleTo(visibleTo) ?? [ORG_SCOPE_TOKEN] }
+        : {}),
     })
       .then(() => {
         enqueueSnackbar('Schema saved', { variant: 'success', persist: false })
@@ -282,7 +352,20 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
       .catch(() =>
         enqueueSnackbar('An error has occurred', { variant: 'error' }),
       )
-  }, [dataset, model, names, firestore, hostId, orgId, enqueueSnackbar, onClose])
+  }, [
+    dataset,
+    model,
+    names,
+    visibleTo,
+    viewerOrgWide,
+    orgHostList,
+    confirm,
+    firestore,
+    hostId,
+    orgId,
+    enqueueSnackbar,
+    onClose,
+  ])
 
   const editorDefinition = fieldEditor?.definition
   // Reference ID editing (AGL-578): the id is editable only while creating a
@@ -328,6 +411,75 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
               helperText="e.g. Products (shown as the title)"
             />
           </Stack>
+          {/* Sharing scope (AGL-1044). Org datasets only; the legacy host
+              path is site-private already. Read-only for scoped members —
+              the rules deny them the write and it would fail the whole
+              document, so a control that always errors is worse than the
+              value. */}
+          {orgId ? (
+            <Stack spacing={0.5}>
+              <Typography variant="caption" color="text.secondary">
+                {'Shared with'}
+              </Typography>
+              {viewerOrgWide ? (
+                <>
+                  <Select
+                    size="small"
+                    value={visibleTo.includes(ORG_SCOPE_TOKEN) ? 'org' : 'hosts'}
+                    onChange={(event) =>
+                      setVisibleTo(
+                        event.target.value === 'org' ? [ORG_SCOPE_TOKEN] : [],
+                      )
+                    }
+                  >
+                    <MenuItem value="org">{'All sites'}</MenuItem>
+                    <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
+                  </Select>
+                  {!visibleTo.includes(ORG_SCOPE_TOKEN) ? (
+                    <Stack
+                      direction="row"
+                      spacing={0.5}
+                      useFlexGap
+                      sx={{ flexWrap: 'wrap' }}
+                    >
+                      {orgHostList.map((host) => {
+                        const token = hostScopeToken(host.$id)
+                        const on = visibleTo.includes(token)
+                        return (
+                          <Chip
+                            key={host.$id}
+                            size="small"
+                            label={host.name ?? host.subdomain ?? host.$id}
+                            color={on ? 'secondary' : 'default'}
+                            variant={on ? 'filled' : 'outlined'}
+                            onClick={() =>
+                              setVisibleTo((prev) =>
+                                on
+                                  ? prev.filter((t) => t !== token)
+                                  : [...prev, token],
+                              )
+                            }
+                          />
+                        )
+                      })}
+                    </Stack>
+                  ) : null}
+                </>
+              ) : (
+                <Typography variant="body2">
+                  {describeScope(
+                    visibleTo,
+                    Object.fromEntries(
+                      orgHostList.map((host) => [
+                        host.$id,
+                        host.name ?? host.subdomain ?? host.$id,
+                      ]),
+                    ),
+                  )}
+                </Typography>
+              )}
+            </Stack>
+          ) : null}
           <Stack spacing={0.5}>
             {model.order.map((fieldId, index) => {
               const field = model.fields[fieldId]
