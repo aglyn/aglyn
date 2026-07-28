@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { type AglynOrgBilling, applyDatasetQuery, checkDatasetQuota, checkEntitlement, checkQuota, coerceDocumentValues, createResourceUid, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, parseDatasetFieldEntries, parseDatasetFilter, parseDatasetSort, sortDatasetRecords, validateDocument, getCustomFieldType } from '@aglyn/aglyn'
+import { type AglynOrgBilling, applyDatasetQuery, checkDatasetQuota, checkEntitlement, checkQuota, coerceDocumentValues, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, parseDatasetFieldEntries, parseDatasetFilter, parseDatasetSort, sortDatasetRecords, validateDocument, getCustomFieldType } from '@aglyn/aglyn'
 import { datasetRecordsToCsv, mapImportColumns, parseImportRows, serializeDatasetValue } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -87,14 +87,14 @@ export interface HostDatasetsCardProps {
  */
 export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const { hostId } = props
-  // `dataScope` is only trustworthy once `scopeReady` (AGL-1061): the org
-  // lookup is async, and acting on the host fallback before it settles
-  // writes to a path nothing has read since AGL-1050.
-  const {
-    scope: dataScope,
-    orgId,
-    ready: scopeResolved,
-  } = useOrgDataScope({ hostId, orgId: props.orgId })
+  // `dataScope` is null until the async org lookup settles (AGL-1061), and
+  // for a host with no owning org — there is no host fallback to act on
+  // any more (AGL-1050), so every path built from it is guarded rather
+  // than redirected.
+  const { scope: dataScope, orgId } = useOrgDataScope({
+    hostId,
+    orgId: props.orgId,
+  })
   // Scoped sharing (AGL-1044). Required, not cosmetic: under the AGL-1041
   // rules a scoped member's UNFILTERED list is rejected outright —
   // Firestore fails the whole query if any candidate would fail — so
@@ -106,13 +106,18 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     orgWide: viewerOrgWide,
     loaded: scopeLoaded,
   } = useScopeTokens(orgId)
-  const needsScope = Boolean(orgId) && !viewerOrgWide
-  // Wait for the member doc before listing (AGL-1047). `useScopeTokens`
-  // reports org-wide while loading, so without this a scoped collaborator's
-  // first render sends an UNFILTERED list that the AGL-1041 rules deny per
+  // Every dataset this card can now reach is an org dataset, and org
+  // datasets are all scoped (AGL-1041) — so the filter turns purely on
+  // whether the VIEWER is org-wide. It used to also ask whether an org had
+  // resolved, for the sake of unscoped rows on the host path.
+  const needsScope = !viewerOrgWide
+  // Two answers must be in before listing: the org path (AGL-1061) and the
+  // viewer's scope tokens (AGL-1047). `useScopeTokens` reports org-wide
+  // while loading, so without `scopeLoaded` a scoped collaborator's first
+  // render sends an UNFILTERED list that the AGL-1041 rules deny per
   // document. It recovers on the next render, which is exactly what makes
   // it easy to miss: the page looks right and logs a denial every mount.
-  const scopeReady = scopeResolved && (!orgId || scopeLoaded)
+  const scopeReady = Boolean(dataScope) && scopeLoaded
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -146,7 +151,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
 
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
-      scopeReady
+      // `scopeReady` already implies a non-null `dataScope`; testing it
+      // directly is what lets the compiler see that too.
+      dataScope && scopeReady
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'datasets'),
             ...(needsScope
@@ -155,7 +162,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             limit(100),
           )
         : null,
-    [firestore, hostId, orgId, needsScope, scopeTokens, scopeReady],
+    [firestore, dataScope, needsScope, scopeTokens, scopeReady],
     { idField: '$id' },
   )
   const datasets = useMemo(
@@ -179,18 +186,20 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
 
   const { data: recordDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(
-          firestore,
-          dataScope[0],
-          dataScope[1],
-          'datasets',
-          selected?.$id ?? '-none-',
-          'records',
-        ),
-        limit(500),
-      ),
-    [firestore, hostId, orgId, selected?.$id],
+      dataScope
+        ? query(
+            collection(
+              firestore,
+              dataScope[0],
+              dataScope[1],
+              'datasets',
+              selected?.$id ?? '-none-',
+              'records',
+            ),
+            limit(500),
+          )
+        : null,
+    [firestore, dataScope, selected?.$id],
     { idField: '$id' },
   )
   const records = useMemo(
@@ -247,28 +256,23 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const creatorEntries = parseDatasetFieldEntries(creator?.fields ?? '')
   const creatorFields = creatorEntries.map((entry) => entry.id)
   const handleCreate = useCallback(async () => {
-    if (!creator?.name.trim() || creatorFields.length === 0) return
+    // No org, no create. The `else` that used to sit below this was the
+    // legacy host-scope client write (AGL-1050) — the one path by which a
+    // dataset could be created with NO quota check, since /api/orgs/datasets
+    // is where AGL-473 enforces it. The rules now deny that path outright;
+    // this is the client side of the same closure. The Add button is
+    // disabled without a scope, so reaching the guard means a stale closure.
+    if (!creator?.name.trim() || creatorFields.length === 0 || !orgId) return
     let id: string
     try {
-      if (orgId) {
-        const result = await callDatasetApi({
-          action: 'create-dataset',
-          displayName: creator.name.trim(),
-          fields: creatorFields,
-          // Typed model from day one (AGL-178); refine in the Schema dialog.
-          model: modelFromFieldEntries(creatorEntries),
-        })
-        id = String(result.id)
-      } else {
-        // Legacy host scope (pre-org hosts): client write, rules unchanged.
-        id = createResourceUid()
-        await setDoc(doc(firestore, dataScope[0], dataScope[1], 'datasets', id), {
-          displayName: creator.name.trim(),
-          fields: creatorFields,
-          model: modelFromFieldEntries(creatorEntries),
-          createdAt: Timestamp.now(),
-        })
-      }
+      const result = await callDatasetApi({
+        action: 'create-dataset',
+        displayName: creator.name.trim(),
+        fields: creatorFields,
+        // Typed model from day one (AGL-178); refine in the Schema dialog.
+        model: modelFromFieldEntries(creatorEntries),
+      })
+      id = String(result.id)
     } catch (error: any) {
       return void enqueueSnackbar(error?.message ?? 'Dataset create failed', {
         variant: 'warning',
@@ -286,7 +290,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       id,
       name: creator.name.trim(),
     })
-  }, [creator, creatorEntries, creatorFields, firestore, hostId, orgId, callDatasetApi, enqueueSnackbar, logActivity])
+  }, [creator, creatorEntries, creatorFields, orgId, callDatasetApi, enqueueSnackbar, logActivity])
 
   // Join collection template (AGL-180): extrinsic many-to-many as a
   // visible, editable collection of FKey pairs — no magic.
@@ -295,7 +299,10 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     if (!joiner?.a || !joiner?.b || joiner.a === joiner.b) return
     const a = datasets.find((item) => item.$id === joiner.a)
     const b = datasets.find((item) => item.$id === joiner.b)
-    if (!a || !b) return
+    // A join collection is a dataset and consumes the same quota, so it
+    // takes the same API-only route (AGL-1050) — the host-scope client
+    // write that used to stand in for it is gone.
+    if (!a || !b || !orgId) return
     const fieldFor = (target: any, fieldId: string) => ({
       name: String(target.displayName ?? fieldId),
       type: 'reference' as const,
@@ -316,20 +323,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     }
     let id: string
     try {
-      if (orgId) {
-        const result = await callDatasetApi({
-          action: 'create-dataset',
-          ...payload,
-        })
-        id = String(result.id)
-      } else {
-        // Legacy host scope (pre-org hosts): client write, rules unchanged.
-        id = createResourceUid()
-        await setDoc(doc(firestore, dataScope[0], dataScope[1], 'datasets', id), {
-          ...payload,
-          createdAt: Timestamp.now(),
-        })
-      }
+      const result = await callDatasetApi({
+        action: 'create-dataset',
+        ...payload,
+      })
+      id = String(result.id)
     } catch (error: any) {
       return void enqueueSnackbar(error?.message ?? 'Join create failed', {
         variant: 'warning',
@@ -342,7 +340,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       variant: 'success',
       persist: false,
     })
-  }, [joiner, datasets, firestore, hostId, orgId, callDatasetApi, enqueueSnackbar])
+  }, [joiner, datasets, orgId, callDatasetApi, enqueueSnackbar])
 
   const handleDeleteDataset = useCallback(async () => {
     if (!selected) return
@@ -360,7 +358,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     })
       .then(() => true)
       .catch(() => false)
-    if (!confirmed) return
+    if (!confirmed || !dataScope) return
     // Deleting the dataset doc client-side would strand its `records`
     // subcollection — Firestore doesn't cascade and only the Admin SDK has
     // `recursiveDelete`, so the delete goes through the erase route
@@ -403,8 +401,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     selected,
     records.length,
     confirm,
-    dataScope[0],
-    dataScope[1],
+    dataScope,
     hostId,
     user,
     enqueueSnackbar,
@@ -423,7 +420,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         model.fields[fieldId]?.type === 'reference' &&
         model.fields[fieldId]?.reference?.datasetId,
     )
-    if (!referenceFields.length) {
+    if (!referenceFields.length || !dataScope) {
       setRefOptions({})
       return
     }
@@ -467,7 +464,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     return () => {
       active = false
     }
-  }, [model, datasets, firestore, hostId, orgId])
+  }, [model, datasets, firestore, dataScope])
   const referenceLabel = useCallback(
     (fieldId: string, value: unknown): string => {
       const options = refOptions[fieldId] ?? []
@@ -525,7 +522,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     [org, records.length, model, enqueueSnackbar],
   )
   const handleSaveRecord = useCallback(async () => {
-    if (!editor || !selected) return
+    if (!editor || !selected || !dataScope) return
     const coerced = coerceDocumentValues(model, editor.values)
     const errors = validateDocument(model, coerced)
     if (Object.keys(errors).length) {
@@ -550,29 +547,15 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           { values: coerced, updatedAt: Timestamp.now() },
           { mergeFields: ['values', 'updatedAt'] },
         )
-      } else if (orgId) {
-        // Creates go through the quota-enforcing API (AGL-473).
+      } else {
+        // Creates go through the quota-enforcing API (AGL-473). The legacy
+        // host-scope client write that used to follow this branch is gone
+        // (AGL-1050): a non-null `dataScope` is an org scope, so `orgId` is
+        // set and there is no third case to fall into.
         await callDatasetApi({
           action: 'create-record',
           datasetId: selected.$id,
           values: coerced,
-        })
-      } else {
-        // Legacy host scope (pre-org hosts): client write, rules unchanged.
-        const recordRef = doc(
-          firestore,
-          dataScope[0],
-          dataScope[1],
-          'datasets',
-          selected.$id,
-          'records',
-          createResourceUid(),
-        )
-        await setDoc(recordRef, {
-          values: coerced,
-          order: records.length,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
         })
       }
     } catch (error: any) {
@@ -595,17 +578,15 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     editor,
     selected,
     firestore,
-    hostId,
-    orgId,
+    dataScope,
     model,
-    records.length,
     callDatasetApi,
     enqueueSnackbar,
     logActivity,
   ])
   const handleDeleteRecord = useCallback(
     (record: any) => async () => {
-      if (!selected) return
+      if (!selected || !dataScope) return
       // Delete integrity (AGL-180): scan collections whose models
       // reference this one; `restrict` blocks, `setNull` strips the FKey.
       for (const other of datasets) {
@@ -678,7 +659,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       )
       enqueueSnackbar('Record deleted', { variant: 'success', persist: false })
     },
-    [selected, datasets, firestore, hostId, orgId, enqueueSnackbar],
+    [selected, datasets, firestore, dataScope, enqueueSnackbar],
   )
 
   // CSV/JSON round-tripping (AGL-182) over the loaded window.
@@ -757,7 +738,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     }
   }, [importer, model])
   const handleImport = useCallback(async () => {
-    if (!selected || !importPreview) return
+    if (!selected || !importPreview || !dataScope) return
     const validRows = importPreview.prepared.filter((row) => row.valid)
 
     // Unique-key upsert (wave v6): with a key field picked, incoming rows
@@ -827,39 +808,17 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       })
       await batch.commit()
     }
-    // Creates go through the quota-enforcing API (AGL-473); the legacy
-    // host scope (no org resolved) keeps the old client batch.
+    // Creates go through the quota-enforcing API (AGL-473). The legacy
+    // host-scope client batch that used to be the `else` here is gone
+    // (AGL-1050) — it was the largest of the quota bypasses, since a CSV
+    // import could create records by the hundred without ever asking.
     try {
-      if (toWrite.length && orgId) {
+      if (toWrite.length) {
         await callDatasetApi({
           action: 'import-records',
           datasetId: selected.$id,
           records: toWrite.map((row) => ({ values: row.values })),
         })
-      } else if (toWrite.length) {
-        let createdSoFar = 0
-        for (let start = 0; start < toWrite.length; start += 400) {
-          const batch = writeBatch(firestore)
-          toWrite.slice(start, start + 400).forEach((row) => {
-            const ref = doc(
-              firestore,
-              dataScope[0],
-              dataScope[1],
-              'datasets',
-              selected.$id,
-              'records',
-              createResourceUid(),
-            )
-            batch.set(ref, {
-              values: row.values,
-              order: records.length + createdSoFar,
-              createdAt: Timestamp.now(),
-              updatedAt: Timestamp.now(),
-            })
-            createdSoFar += 1
-          })
-          await batch.commit()
-        }
       }
     } catch (error: any) {
       return void enqueueSnackbar(error?.message ?? 'Import failed', {
@@ -889,8 +848,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     org,
     records,
     firestore,
-    hostId,
-    orgId,
+    dataScope,
     callDatasetApi,
     enqueueSnackbar,
     logActivity,

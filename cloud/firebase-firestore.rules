@@ -555,12 +555,21 @@ service cloud.firestore {
         // install route enforces entitlement + purchase + kill-switch before
         // writing the pin; only DELETE (uninstall) stays client-side, so
         // update/delete is split to allow the console's uninstall.
+        // `datasets` is excluded from all three (AGL-1050). Datasets moved to
+        // the org in AGL-237 and the org block above has enforced API-only
+        // create/delete since AGL-473/945 — but this catch-all never learned
+        // the name, so `hosts/{hostId}/datasets/*` stayed a client-writable
+        // path with NO quota enforcement: the same resource, one path over,
+        // free. Nothing in production lives there (AGL-1061 counted 0 across
+        // every host) and AGL-1050 removed the client fallback that used to
+        // address it, so the exclusion takes the whole subtree — `records`
+        // included, since {document=**} spans them — with nothing to re-grant.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
               'locations', 'products', 'components', 'registers', 'installs',
-              'templates', 'collections']));
+              'templates', 'collections', 'datasets']));
         // `templates` is excluded from update as well as create: its
         // dedicated block above freezes `source`, and leaving it here would
         // re-grant the unrestricted update this catch-all allows (AGL-666).
@@ -573,7 +582,7 @@ service cloud.firestore {
         allow update: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'installs',
-              'templates', 'collections']));
+              'templates', 'collections', 'datasets']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -582,7 +591,8 @@ service cloud.firestore {
         // re-grants those (rules OR, so a dedicated allow still wins).
         allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
-            !(subcollection in ['screens', 'layouts', 'collections']));
+            !(subcollection in ['screens', 'layouts', 'collections',
+              'datasets']));
       }
       // Editors keep full client control of a collection doc EXCEPT the two
       // identity keys: `slug` is its public address (uniqueness is claimed in

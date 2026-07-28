@@ -92,29 +92,24 @@ const csvEscape = (value: unknown) => {
  */
 export function ContactsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, org } = props
-  // Org-shared data root (AGL-237); the host path is the pre-migration
-  // fallback for hosts not yet org-wired.
-  // The org lookup is async (AGL-1061). `scopeReady` stays false until
-  // it settles, so nothing acts on the host fallback during the window —
-  // a path nothing has read since AGL-1050.
-  const {
-    scope: dataScope,
-    orgId: hostOrgId,
-    ready: scopeReady,
-  } = useOrgDataScope({ hostId })
+  // Org-shared data root (AGL-237). Null until the org lookup settles
+  // (AGL-1061), and for a host with no owning org — the pre-migration host
+  // path this used to fall back to is gone (AGL-1050), so the CRM lists
+  // nothing rather than listing somewhere else.
+  const { scope: dataScope } = useOrgDataScope({ hostId })
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
   const { data: contactDocs } = useFirestoreCollection<any>(
     () =>
-      scopeReady
+      dataScope
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'contacts'),
             limit(1000),
           )
         : null,
-    [firestore, hostId, hostOrgId, scopeReady],
+    [firestore, dataScope],
     { idField: '$id' },
   )
   const contacts: ContactDoc[] = useMemo(
@@ -138,7 +133,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   // Saved segments (AGL-199): reusable audience filters.
   const { data: segmentDocs } = useFirestoreCollection<any>(
     () =>
-      scopeReady
+      dataScope
         ? query(
             collection(
               firestore,
@@ -149,7 +144,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
             limit(50),
           )
         : null,
-    [firestore, hostId, hostOrgId, scopeReady],
+    [firestore, dataScope],
     { idField: '$id' },
   )
   const segments = [...(segmentDocs ?? [])].sort((a, b) =>
@@ -188,7 +183,9 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   const [segmentName, setSegmentName] = useState('')
   const handleSaveSegment = useCallback(async () => {
     const name = segmentName.trim().slice(0, 60)
-    if (!name || !filterActive) return
+    // No org, no place to put it (AGL-1050). The button is disabled in
+    // this state; the guard is here so the callback cannot outlive it.
+    if (!name || !filterActive || !dataScope) return
     try {
       await addDoc(
         collection(firestore, dataScope[0], dataScope[1], 'contactSegments'),
@@ -216,7 +213,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     filterActive,
     filterSegment,
     firestore,
-    hostId,
+    dataScope,
     enqueueSnackbar,
   ])
 
@@ -233,7 +230,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   // Right-to-erasure (AGL-209): hard-deletes the contact doc. Source
   // records (inbox, orders, bookings, members) live in their own managers.
   const handleDeleteContact = useCallback(async () => {
-    if (!selectedId) return
+    if (!selectedId || !dataScope) return
     const contact = contacts.find((item) => item.$id === selectedId)
     const confirmed = await confirm({
       title: 'Delete this contact?',
@@ -264,10 +261,10 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
         allowDuplicate: true,
       })
     }
-  }, [selectedId, contacts, confirm, firestore, hostId, enqueueSnackbar])
+  }, [selectedId, contacts, confirm, firestore, dataScope, enqueueSnackbar])
 
   const handleProfileSave = useCallback(async () => {
-    if (!selectedId) return
+    if (!selectedId || !dataScope) return
     const tags = [
       ...new Set(
         tagsDraft
@@ -293,7 +290,14 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
         allowDuplicate: true,
       })
     }
-  }, [selectedId, tagsDraft, notesDraft, firestore, hostId, enqueueSnackbar])
+  }, [
+    selectedId,
+    tagsDraft,
+    notesDraft,
+    firestore,
+    dataScope,
+    enqueueSnackbar,
+  ])
 
   const handleExport = useCallback(() => {
     const rows = [
@@ -388,7 +392,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                 />
                 <Button
                   size="small"
-                  disabled={!segmentName.trim()}
+                  disabled={!segmentName.trim() || !dataScope}
                   onClick={handleSaveSegment}
                 >
                   {'Save segment'}
@@ -404,16 +408,23 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                   setTagFilter((segment.tags ?? []).join(', '))
                   setSourceFilter(segment.sources?.[0] ?? '')
                 }}
-                onDelete={() =>
-                  deleteDoc(
-                    doc(
-                      firestore,
-                      dataScope[0],
-                      dataScope[1],
-                      'contactSegments',
-                      segment.$id,
-                    ),
-                  )
+                // A segment can only have come FROM an org scope, so this
+                // is unreachable in practice — but the scope is nullable
+                // now (AGL-1050) and an unguarded deref would be a crash
+                // rather than a no-op if that ever stopped being true.
+                onDelete={
+                  dataScope
+                    ? () =>
+                        deleteDoc(
+                          doc(
+                            firestore,
+                            dataScope[0],
+                            dataScope[1],
+                            'contactSegments',
+                            segment.$id,
+                          ),
+                        )
+                    : undefined
                 }
               />
             ))}

@@ -110,15 +110,15 @@ export interface DatasetSchemaDialogProps {
  */
 export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   const { hostId, dataset, datasets, recordCount, onClose } = props
-  // Org-shared data root (AGL-237/239); the host path is the pre-migration
-  // fallback for hosts not yet org-wired. `scopeReady` is false until the
-  // async org lookup settles (AGL-1061) — saving before then would write
-  // the schema to a path nothing has read since AGL-1050.
-  const {
-    scope: dataScope,
-    orgId,
-    ready: scopeReady,
-  } = useOrgDataScope({ hostId, orgId: props.orgId })
+  // Org-shared data root (AGL-237/239). Null until the async org lookup
+  // settles (AGL-1061), and for a host with no owning org. Saving is held
+  // on it rather than redirected: the host path this used to fall back to
+  // is now denied by the rules outright (AGL-1050), so a save there would
+  // fail loudly instead of quietly — but it should not be attempted at all.
+  const { scope: dataScope, orgId } = useOrgDataScope({
+    hostId,
+    orgId: props.orgId,
+  })
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -298,7 +298,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   )
 
   const handleSave = useCallback(async () => {
-    if (!dataset) return
+    if (!dataset || !dataScope) return
     const previousScope: string[] = Array.isArray(
       (dataset as { visibleTo?: string[] }).visibleTo,
     )
@@ -365,7 +365,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     orgHostList,
     confirm,
     firestore,
-    hostId,
+    dataScope,
     orgId,
     enqueueSnackbar,
     onClose,
@@ -586,7 +586,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
           <Button
             variant="contained"
             color="secondary"
-            disabled={!scopeReady}
+            disabled={!dataScope}
             onClick={handleSave}
           >
             {'Save schema'}
