@@ -213,6 +213,9 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                         <PluginWidgetSlot
                           slot="orgAddons"
                           hostId={actingHost}
+                          // Lets each row link to its installation page
+                          // (AGL-1007).
+                          orgSlug={orgSlug}
                         />
                         {/* First-party plugins (AGL-423/797): the org
                             switchboard and each loaded plugin's settings,

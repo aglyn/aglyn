@@ -16,8 +16,8 @@
  */
 'use client'
 
-import { PLUGIN_COMPONENT_ID } from '@aglyn/aglyn'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { buildRoute, PLUGIN_COMPONENT_ID, Route } from '@aglyn/aglyn'
+import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -46,6 +46,12 @@ import {
 
 export interface HostPluginsCardProps {
   hostId: string
+  /**
+   * Org slug from the URL, when this card is rendered at org scope. With it,
+   * each row links through to that installation's own page (AGL-1007);
+   * without it the rows stay plain text rather than linking to nowhere.
+   */
+  orgSlug?: string
 }
 
 /**
@@ -58,7 +64,13 @@ export interface HostPluginsCardProps {
  * plugin on a screen with the Plugin element (listing id).
  */
 export function HostPluginsCard(props: HostPluginsCardProps) {
-  const { hostId } = props
+  const { hostId, orgSlug } = props
+  // One row → one installation page (AGL-1007). The name is the link, so a
+  // row stays clickable without swallowing its own action buttons.
+  const installationHref = (listingId: string) =>
+    orgSlug
+      ? buildRoute(Route.ORG_PLUGIN_INSTALLATION, { orgSlug, listingId })
+      : undefined
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -337,7 +349,17 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
                   sx={{ alignItems: 'center' }}
                 >
                   <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-                    {install.displayName ?? install.pluginId ?? install.$id}
+                    {installationHref(install.$id) ? (
+                      <AppLink
+                        href={installationHref(install.$id)}
+                        color="inherit"
+                        underline="hover"
+                      >
+                        {install.displayName ?? install.pluginId ?? install.$id}
+                      </AppLink>
+                    ) : (
+                      (install.displayName ?? install.pluginId ?? install.$id)
+                    )}
                   </Typography>
                   <Chip size="small" label={`v${install.version}`} />
                   {revoked ? (
@@ -422,7 +444,17 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
             >
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-                  {install.displayName ?? install.pluginId ?? install.$id}
+                  {installationHref(install.$id) ? (
+                    <AppLink
+                      href={installationHref(install.$id)}
+                      color="inherit"
+                      underline="hover"
+                    >
+                      {install.displayName ?? install.pluginId ?? install.$id}
+                    </AppLink>
+                  ) : (
+                    (install.displayName ?? install.pluginId ?? install.$id)
+                  )}
                 </Typography>
                 <Chip size="small" color="secondary" label="Organization" />
                 <Chip size="small" label={`v${install.version}`} />
