@@ -308,6 +308,56 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    /**
+     * Turn a single asset private, or publish it again (AGL-1051).
+     *
+     * Server-side because it is the CDN's own gate: `private` decides
+     * whether the unauthenticated route serves the bytes, and `cdnPath`
+     * has to move with it — going private DELETES the field (that is what
+     * keeps the asset out of pickers and page nodes), and going public
+     * mints it back. A client-side write could set one without the other
+     * and leave an asset that is flagged private and still publicly
+     * fetchable at its old URL, which is worse than never having offered
+     * the switch.
+     *
+     * Org-wide members only, matching `set-scope`. Turning an asset public
+     * is a publish, and a collaborator scoped to one client site has no
+     * standing to publish the agency's files.
+     */
+    if (action === 'set-private') {
+      const mediaId = String(body?.mediaId ?? '')
+      const makePrivate = body?.private === true
+      if (!mediaId) {
+        return Response.json({ error: 'Missing mediaId' }, { status: 400 })
+      }
+      if (!scope.viewerOrgWide) {
+        return Response.json(
+          { error: 'Only an organization admin can change this' },
+          { status: 403 },
+        )
+      }
+      const snapshot = await mediaRef.doc(mediaId).get()
+      if (!snapshot.exists || snapshot.get('deletedAt')) {
+        return Response.json({ error: 'Unknown media' }, { status: 404 })
+      }
+      await snapshot.ref.set(
+        {
+          private: makePrivate,
+          ...(makePrivate
+            ? { cdnPath: firebaseAdmin.firestore.FieldValue.delete() }
+            : {
+                cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}`,
+              }),
+          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+      // Anything already embedding this asset keeps its stored URL, which
+      // now 404s — the same trade as deleting an asset, and the reason the
+      // picker refuses private assets in the first place.
+      return Response.json({ ok: true, private: makePrivate }, { status: 200 })
+    }
+
     if (action === 'custom-metadata') {
       const mediaId = String(body?.mediaId ?? '')
       if (!mediaId) {

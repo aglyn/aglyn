@@ -860,6 +860,60 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
   }, [folderPrompt])
 
+  /**
+   * Turn one asset private, or publish it again (AGL-1051).
+   *
+   * Confirmed in BOTH directions, because both are one-way for anything
+   * already pointing at the asset. Going private breaks every existing
+   * embed of it; going public hands out a URL that then works forever, for
+   * anyone it reaches — that is the property the private flag existed to
+   * remove, so it deserves the same pause.
+   */
+  const setAssetPrivate = useCallback(
+    async (mediaId: string, makePrivate: boolean) => {
+      const confirmed = await confirm({
+        title: makePrivate ? 'Make this file private?' : 'Publish this file?',
+        description: makePrivate
+          ? 'It will stop working anywhere it is already used, and can no ' +
+            'longer be placed on a page. You will still be able to view and ' +
+            'download it here through a temporary link.'
+          : 'It gets a permanent public URL. Anyone that URL reaches can ' +
+            'open the file, and there is no way to withdraw it afterwards.',
+        confirmationText: makePrivate ? 'Make private' : 'Publish',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/media/folders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          ...scopeBody,
+          action: 'set-private',
+          mediaId,
+          private: makePrivate,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        return void enqueueSnackbar(payload?.error ?? 'Could not update', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+      refresh()
+      enqueueSnackbar(makePrivate ? 'File is now private' : 'File published', {
+        variant: 'success',
+        persist: false,
+      })
+    },
+    [user, scopeId, confirm, enqueueSnackbar, refresh],
+  )
+
   // Multi-select + move (AGL-172): checkboxes are the accessible path;
   // dragging a selected card moves the whole selection.
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -2031,6 +2085,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     })
                   }
                   onDelete={handleDelete(media)}
+                  // Org library only, and org-wide members only (AGL-1051).
+                  // A host's own library is already unreachable from other
+                  // sites, and the route refuses a scoped collaborator
+                  // anyway — offering a control that always 403s is worse
+                  // than not offering it.
+                  onSetPrivate={
+                    orgId && viewerOrgWide && !onSelect
+                      ? (makePrivate) =>
+                          void setAssetPrivate(media.$id as string, makePrivate)
+                      : undefined
+                  }
                 />
               </DraggableCard>
             </Grid>
