@@ -24,7 +24,7 @@ import { doc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
-import { useHostOrgId } from '@aglyn/tenant-feature-instance'
+import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 
 export interface PaymentsSettingsCardProps {
   hostId: string
@@ -41,11 +41,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [busy, setBusy] = useState(false)
-  const orgId = useHostOrgId(hostId)
-  const { data: org } = useFirestoreDoc<any>(
-    () => doc(firestore, 'orgs', orgId ?? '-pending-'),
-    [firestore, orgId],
-  )
+  const { org, ready: planReady } = useOrgPlan(hostId)
   const { data: profile } = useFirestoreDoc<any>(
     () => doc(firestore, 'profiles', (user as any)?.uid ?? '-pending-'),
     [firestore, (user as any)?.uid],
@@ -115,24 +111,42 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
             variant="outlined"
           />
         </Stack>
-        {!commerceEnabled ? (
-          <Alert severity="info">
-            {'Selling requires a paid plan — upgrade on the billing page.'}
-          </Alert>
-        ) : null}
-        <Typography variant="body2" color="text.secondary">
-          {'Buyers pay on your own Stripe account; Aglyn collects a ' +
-            'platform fee per sale based on your plan:'}
-        </Typography>
-        <Typography variant="body2">
-          {`Physical products: ${physicalPct}% · Digital products: ${digitalPct}%`}
-          {physicalPct > 0 || digitalPct > 0 ? (
-            <Typography component="span" variant="caption" color="text.secondary">
-              {' — higher plans reduce fees to 0%'}
+        {/*
+          Every line below reads the plan, and an org doc still in flight
+          resolves to the FREE tier (AGL-1064) — which would flash "Selling
+          requires a paid plan" and the wrong fee percentages at a paying
+          seller, then correct itself. Say nothing until it is known.
+        */}
+        {!planReady ? (
+          <Typography variant="body2" color="text.secondary">
+            {'Checking your plan…'}
+          </Typography>
+        ) : (
+          <>
+            {!commerceEnabled ? (
+              <Alert severity="info">
+                {'Selling requires a paid plan — upgrade on the billing page.'}
+              </Alert>
+            ) : null}
+            <Typography variant="body2" color="text.secondary">
+              {'Buyers pay on your own Stripe account; Aglyn collects a ' +
+                'platform fee per sale based on your plan:'}
             </Typography>
-          ) : null}
-        </Typography>
-        {isOwner ? (
+            <Typography variant="body2">
+              {`Physical products: ${physicalPct}% · Digital products: ${digitalPct}%`}
+              {physicalPct > 0 || digitalPct > 0 ? (
+                <Typography
+                  component="span"
+                  variant="caption"
+                  color="text.secondary"
+                >
+                  {' — higher plans reduce fees to 0%'}
+                </Typography>
+              ) : null}
+            </Typography>
+          </>
+        )}
+        {!planReady ? null : isOwner ? (
           <Button
             size="small"
             variant={chargesEnabled ? 'text' : 'contained'}

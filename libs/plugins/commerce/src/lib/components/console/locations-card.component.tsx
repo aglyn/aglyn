@@ -32,9 +32,8 @@ import {
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
-import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
-import { useHostOrgId } from '@aglyn/tenant-feature-instance'
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
+import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 
 export interface LocationsCardProps {
   hostId: string
@@ -52,11 +51,7 @@ export function LocationsCard(props: LocationsCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const createHostResource = useHostResourceApi()
-  const orgId = useHostOrgId(hostId)
-  const { data: org } = useFirestoreDoc<any>(
-    () => doc(firestore, 'orgs', orgId ?? '-pending-'),
-    [firestore, orgId],
-  )
+  const { org, ready: planReady } = useOrgPlan(hostId)
   const { data: locationDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'locations'), limit(25)),
     [firestore, hostId],
@@ -70,6 +65,11 @@ export function LocationsCard(props: LocationsCardProps) {
 
   const handleAdd = useCallback(async () => {
     if (!name.trim()) return
+    // Held until the org doc lands (AGL-1064): an absent org resolves to
+    // the free tier's `inventoryLocations: 1`, so a site that already has
+    // its default location would be refused with an upgrade prompt it does
+    // not need. The button is disabled too; this guards the race.
+    if (!planReady) return
     if (!quota.allowed) {
       return void enqueueSnackbar(
         `Your plan includes ${quota.limit} locations — upgrade for more`,
@@ -93,7 +93,15 @@ export function LocationsCard(props: LocationsCardProps) {
         persist: false,
       })
     }
-  }, [name, quota, locations.length, hostId, createHostResource, enqueueSnackbar])
+  }, [
+    name,
+    planReady,
+    quota,
+    locations.length,
+    hostId,
+    createHostResource,
+    enqueueSnackbar,
+  ])
 
   const handleDelete = useCallback(
     (location: any) => async () => {
@@ -174,12 +182,20 @@ export function LocationsCard(props: LocationsCardProps) {
             sx={{ flex: 1 }}
             placeholder="Main warehouse"
           />
-          <Button size="small" disabled={!name.trim()} onClick={handleAdd}>
+          <Button
+            size="small"
+            disabled={!name.trim() || !planReady}
+            onClick={handleAdd}
+          >
             {'Add'}
           </Button>
         </Stack>
         <Typography variant="caption" color="text.secondary">
-          {`${locations.length}/${quota.limit === Aglyn.UNLIMITED ? '∞' : quota.limit} locations on your plan`}
+          {planReady
+            ? `${locations.length}/${quota.limit === Aglyn.UNLIMITED ? '∞' : quota.limit} locations on your plan`
+            : `${locations.length} location${
+                locations.length === 1 ? '' : 's'
+              } · checking your plan…`}
         </Typography>
       </Stack>
     </CardDisplay>
