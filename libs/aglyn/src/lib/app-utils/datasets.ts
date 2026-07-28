@@ -16,7 +16,7 @@
  */
 
 /**
- * Datasets (AGL-102): tabular data at `hosts/{hostId}/datasets/{id}` with a
+ * Datasets (AGL-102): tabular data at `orgs/{orgId}/datasets/{id}` with a
  * `records` subcollection, edited in the console Data card and consumed by
  * repeatable components (AGL-103) via `{{item.field}}` bindings.
  */

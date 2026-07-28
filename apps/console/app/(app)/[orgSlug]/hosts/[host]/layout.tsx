@@ -15,8 +15,21 @@
  * limitations under the License.
  */
 
+import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import HostGuard from '../../../../../components/host-guard.component'
+
+// Titles the site dashboard, and stands in for any host page that adds no
+// title of its own (AGL-1059). The subdomain is a free `params` read; the
+// site's display name would cost a Firestore lookup on every render.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ host: string }>
+}): Promise<Metadata> {
+  const { host } = await params
+  return { title: `Dashboard · ${host}` }
+}
 
 /**
  * Host shell (AGL-622): resolves the `[host]` subdomain to a doc id (spinner

@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { scopeTokensForHost } from '@aglyn/aglyn'
 import { auditHostReferences } from '../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Chip, Stack, Typography } from '@mui/material'
@@ -25,7 +26,6 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostOrgId,
-  useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
 
 export interface HostReferenceHealthCardProps {
@@ -68,9 +68,13 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   const categoryDocs = useHostCollection('productCategories')
   // Scoped (AGL-1044) — see the note in host-actions-card: an unfiltered
   // list is rejected, not filtered.
-  const { tokens: scopeTokens, orgWide: viewerOrgWide } =
-    useScopeTokens(hostOrgId ?? undefined)
-  const needsScope = Boolean(hostOrgId) && !viewerOrgWide
+  // Scoped to the HOST, not the viewer (AGL-1044): the audit speaks for this host, so it must judge against what THIS host can reach — an org-wide
+  // admin would otherwise be offered datasets that resolve to nothing at
+  // render time. Filtering by the host's tokens also satisfies the
+  // AGL-1041 rules, since they are a subset of any viewer's who can reach
+  // this host at all.
+  const scopeTokens = scopeTokensForHost(hostId)
+  const needsScope = Boolean(hostOrgId)
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
       query(

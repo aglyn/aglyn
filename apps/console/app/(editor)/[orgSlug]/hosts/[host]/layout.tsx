@@ -15,8 +15,20 @@
  * limitations under the License.
  */
 
+import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import HostGuard from '../../../../../components/host-guard.component'
+
+// Fallback title for the editor routes of one site (AGL-1059); each editor
+// page below names the artifact it opens.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ host: string }>
+}): Promise<Metadata> {
+  const { host } = await params
+  return { title: `Besigner · ${host}` }
+}
 
 /**
  * Host shell for the full-screen editor routes (AGL-622): resolves the

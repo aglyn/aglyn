@@ -192,6 +192,47 @@ export function describeScope(
 }
 
 /**
+ * The scope a newly created resource starts with (AGL-1048).
+ *
+ * Honours the org's `defaultResourceScope`, but only when a site is
+ * actually in context: created from the org Media or Data page there is no
+ * host to scope to, and inventing one would hide the resource from the
+ * page that just created it.
+ */
+export function defaultScopeForNewResource(options: {
+  defaultResourceScope?: 'org' | 'host'
+  hostId?: string | null
+}): ScopeToken[] {
+  return options.defaultResourceScope === 'host' && options.hostId
+    ? [hostScopeToken(options.hostId)]
+    : [ORG_SCOPE_TOKEN]
+}
+
+/**
+ * Whether `target` is visible everywhere `source` is — the condition a
+ * cross-dataset REFERENCE has to satisfy (AGL-1044).
+ *
+ * A reference field on dataset A pointing at dataset B is only resolvable
+ * on the sites that can see BOTH. If A is shared with a site that cannot
+ * see B, a page there resolves the reference to nothing: the row renders
+ * with a blank where the linked value should be, and nothing says why. So
+ * B's scope must COVER A's.
+ *
+ * Org-wide covers everything. A missing scope reads as org-wide, matching
+ * the rest of this module.
+ */
+export function scopeCovers(
+  target: readonly string[] | undefined | null,
+  source: readonly string[] | undefined | null,
+): boolean {
+  if (isOrgWideScope(target)) return true
+  // The target is restricted; an org-wide source reaches sites it cannot.
+  if (isOrgWideScope(source)) return false
+  const reach = new Set(target ?? [])
+  return (source ?? []).every((token) => reach.has(token))
+}
+
+/**
  * Rewrites an org media CDN path so it names the site using the asset
  * (AGL-1043/1045).
  *

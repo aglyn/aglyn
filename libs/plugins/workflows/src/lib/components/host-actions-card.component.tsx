@@ -34,6 +34,7 @@ import {
   type TriggerCombinator,
   type TriggerConditionOp,
   validateHostAction,
+  scopeTokensForHost,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -65,7 +66,6 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostOrgId,
-  useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
 import HostActivityCard from './host-activity-card.component'
 
@@ -181,9 +181,13 @@ export function HostActionsCard(props: {
   // Scoped (AGL-1044): the AGL-1041 rules reject a scoped member's
   // UNFILTERED list outright, so without this the picker errors rather than
   // offering fewer datasets.
-  const { tokens: scopeTokens, orgWide: viewerOrgWide } =
-    useScopeTokens(hostOrgId ?? undefined)
-  const needsScope = Boolean(hostOrgId) && !viewerOrgWide
+  // Scoped to the HOST, not the viewer (AGL-1044): an action runs ON this host, so it may only reach datasets THIS host can use — an org-wide
+  // admin would otherwise be offered datasets that resolve to nothing at
+  // render time. Filtering by the host's tokens also satisfies the
+  // AGL-1041 rules, since they are a subset of any viewer's who can reach
+  // this host at all.
+  const scopeTokens = scopeTokensForHost(hostId)
+  const needsScope = Boolean(hostOrgId)
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
       query(

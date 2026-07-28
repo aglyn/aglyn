@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  defaultScopeForNewResource,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
   checkQuota,
@@ -257,7 +260,16 @@ async function handler(request: Request): Promise<Response> {
       // `array-contains-any` matches nothing on a doc lacking the field.
       // Flipping this default to the uploading site is AGL-1048's
       // `defaultResourceScope` decision, not this route's.
-      ...(scope.collection === 'orgs' ? { visibleTo: ['org'] } : {}),
+      ...(scope.collection === 'orgs'
+        ? {
+            visibleTo: defaultScopeForNewResource({
+              defaultResourceScope: (scope.billing as {
+                defaultResourceScope?: 'org' | 'host'
+              }).defaultResourceScope,
+              hostId: String(body?.['forHostId'] ?? '') || null,
+            }),
+          }
+        : {}),
       ...(cdnAllowed
         ? {
             // Stable, mediaId-keyed CDN URL (AGL-829): no content hash, so

@@ -337,19 +337,28 @@ export async function getOrgForUser(
 
 /**
  * Org-scoped data collection for a host (AGL-237): datasets, contacts and
- * contactSegments live on the org so every host shares them. Falls back
- * to the host's own subcollection for hosts not yet org-wired (pre-
- * migration safety) — callers use the returned ref for reads AND writes
- * so both sides stay consistent either way.
+ * contactSegments live on the org so every host shares them.
+ *
+ * The pre-migration fallback to `hosts/{hostId}/{name}` is GONE (AGL-1050).
+ * The AGL-1040 backfill counted the docs still on it in production and
+ * found zero, so it was dead code rather than a migration — and a second
+ * storage path that can still be WRITTEN is a second boundary to enforce
+ * forever, which undoes the premise of scoped sharing: one home per
+ * resource plus an explicit scope.
+ *
+ * A host with no org is now an error rather than a silent write into a
+ * collection nothing reads. Every host has an org; `hostIndex` is written
+ * by `registerOrgHost` at creation.
  */
 export async function orgDataCollectionForHost(
   hostId: string,
   name: 'datasets' | 'contacts' | 'contactSegments',
 ): Promise<FirebaseFirestore.CollectionReference> {
   const orgId = await resolveOrgIdForHost(hostId)
-  return orgId
-    ? firestore().collection('orgs').doc(orgId).collection(name)
-    : firestore().collection('hosts').doc(hostId).collection(name)
+  if (!orgId) {
+    throw new Error(`Host ${hostId} has no org — cannot resolve ${name}`)
+  }
+  return firestore().collection('orgs').doc(orgId).collection(name)
 }
 
 /**
@@ -370,6 +379,10 @@ export function scopedToHost(
   ref: FirebaseFirestore.CollectionReference,
   hostId: string,
 ): FirebaseFirestore.Query {
+  // The org-path check is retained even though AGL-1050 removed the host
+  // fallback: this helper is also handed refs by callers that build their
+  // own paths, and a host-library ref must never be filtered — its docs
+  // carry no `visibleTo`, so the filter would match nothing.
   const orgScoped = ref.parent?.parent?.id === 'orgs'
   if (!orgScoped) return ref
   return ref.where(

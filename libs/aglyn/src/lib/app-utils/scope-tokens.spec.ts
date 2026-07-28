@@ -16,8 +16,10 @@
  */
 
 import {
+  defaultScopeForNewResource,
   describeScope,
   hostQualifiedCdnPath,
+  scopeCovers,
   hostIdsFromScope,
   hostScopeToken,
   isOrgWideScope,
@@ -238,5 +240,55 @@ describe('hostQualifiedCdnPath (AGL-1043/1045)', () => {
   it('does not double-qualify an already-scoped path', () => {
     const already = '/api/media/cdn/org:acme:site-a/med123'
     expect(hostQualifiedCdnPath(already, ['host:site-a'], 'site-b')).toBe(already)
+  })
+})
+
+describe('scopeCovers (AGL-1044)', () => {
+  it('org-wide covers everything', () => {
+    expect(scopeCovers(['org'], ['host:a'])).toBe(true)
+    expect(scopeCovers(['org'], ['org'])).toBe(true)
+    expect(scopeCovers(undefined, ['host:a'])).toBe(true)
+  })
+
+  it('a restricted target cannot cover an org-wide source', () => {
+    // A page on ANY site can bind the source; most cannot resolve the
+    // target, so the reference renders blank with no explanation.
+    expect(scopeCovers(['host:a'], ['org'])).toBe(false)
+    expect(scopeCovers(['host:a'], undefined)).toBe(false)
+  })
+
+  it('covers when the target reaches every site the source does', () => {
+    expect(scopeCovers(['host:a', 'host:b'], ['host:a'])).toBe(true)
+    expect(scopeCovers(['host:a'], ['host:a'])).toBe(true)
+  })
+
+  it('does not cover when the source reaches further', () => {
+    expect(scopeCovers(['host:a'], ['host:a', 'host:b'])).toBe(false)
+  })
+})
+
+describe('defaultScopeForNewResource (AGL-1048)', () => {
+  it('is org-wide unless the org opted into site-private', () => {
+    expect(defaultScopeForNewResource({ hostId: 'h1' })).toEqual(['org'])
+    expect(
+      defaultScopeForNewResource({ defaultResourceScope: 'org', hostId: 'h1' }),
+    ).toEqual(['org'])
+  })
+
+  it('starts site-private when the org asked for it', () => {
+    expect(
+      defaultScopeForNewResource({ defaultResourceScope: 'host', hostId: 'h1' }),
+    ).toEqual(['host:h1'])
+  })
+
+  it('falls back to org-wide with no site in context', () => {
+    // Created from the org Media/Data page: inventing a host would hide the
+    // resource from the page that just created it.
+    expect(defaultScopeForNewResource({ defaultResourceScope: 'host' })).toEqual([
+      'org',
+    ])
+    expect(
+      defaultScopeForNewResource({ defaultResourceScope: 'host', hostId: null }),
+    ).toEqual(['org'])
   })
 })

@@ -72,6 +72,18 @@ export interface AglynOrganization extends AglynDocument {
   suspendedAt?: ITimestamp | null
   suspendedReason?: string
   erasureRequestedAt?: ITimestamp | null
+  /**
+   * Scope applied to newly created datasets and media when nobody chooses
+   * (AGL-1048). `'org'` — the default and today's behavior — shares them
+   * with every site. `'host'` starts them private to the site they were
+   * created in, which is what an agency running client sites wants: safe
+   * by default rather than safe by discipline.
+   *
+   * Only meaningful when there IS a site in context. Created from the org
+   * Media or Data page there is no host to scope to, so those stay `'org'`
+   * either way.
+   */
+  defaultResourceScope?: 'org' | 'host'
 }
 
 /**

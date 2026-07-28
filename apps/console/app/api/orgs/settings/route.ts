@@ -102,6 +102,28 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ ok: true, name }, { status: 200 })
     }
 
+    // Default sharing for new resources (AGL-1048). Does NOT touch a
+    // single existing doc — only what the next dataset or upload starts
+    // as. Retroactively narrowing an org's library from a settings toggle
+    // would break live pages with no confirmation, which is exactly what
+    // AGL-1044/1045's per-resource flow exists to prevent.
+    if (body?.action === 'set-default-resource-scope') {
+      const value = String(body?.defaultResourceScope ?? '')
+      if (value !== 'org' && value !== 'host') {
+        return Response.json(
+          { error: 'defaultResourceScope must be "org" or "host"' },
+          { status: 400 },
+        )
+      }
+      await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('orgs')
+        .doc(orgId)
+        .set({ defaultResourceScope: value }, { merge: true })
+      return Response.json({ ok: true }, { status: 200 })
+    }
+
     // Plugin switchboard (AGL-416): which plugins the workspace loads.
     // Ids are opaque strings (first-party catalog + future realm-trusted
     // marketplace ids); always-on ids are re-unioned at read time by

@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { ORG_SCOPE_TOKEN, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  defaultScopeForNewResource,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   checkDatasetQuota,
   checkEntitlement,
@@ -128,12 +131,18 @@ async function handler(request: Request): Promise<Response> {
           displayName,
           fields,
           ...(model ? { model } : {}),
-          // Org-wide by default (AGL-1044). Without this every NEW dataset
-          // is invisible to the scoped reads — `array-contains-any` matches
-          // nothing on a doc missing the field — so it would not render on
-          // ANY site, not just for scoped members. Narrowing is an explicit
-          // act; the default has to be today's behavior.
-          visibleTo: [ORG_SCOPE_TOKEN],
+          // Honours the org's `defaultResourceScope` (AGL-1048), falling
+          // back to org-wide — which is both today's behavior and the only
+          // safe answer with no site in context. Stamping SOMETHING is
+          // mandatory either way: `array-contains-any` matches nothing on a
+          // doc missing the field, so an unstamped dataset renders on no
+          // site at all (AGL-1044).
+          visibleTo: defaultScopeForNewResource({
+            defaultResourceScope: (org as {
+              defaultResourceScope?: 'org' | 'host'
+            })?.defaultResourceScope,
+            hostId: String(body?.hostId ?? '') || null,
+          }),
           createdAt: Timestamp.now(),
         })
       return Response.json({ ok: true, id }, { status: 200 })
