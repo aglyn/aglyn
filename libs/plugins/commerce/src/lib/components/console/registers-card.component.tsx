@@ -26,9 +26,8 @@ import { useCallback, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
-  useFirestoreDoc,
-  useHostOrgId,
   useHostResourceApi,
+  useOrgPlan,
 } from '@aglyn/tenant-feature-instance'
 
 export interface RegistersCardProps {
@@ -48,11 +47,7 @@ export function RegistersCard(props: RegistersCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const createHostResource = useHostResourceApi()
-  const orgId = useHostOrgId(hostId)
-  const { data: org } = useFirestoreDoc<any>(
-    () => doc(firestore, 'orgs', orgId ?? '-pending-'),
-    [firestore, orgId],
-  )
+  const { org, ready: planReady } = useOrgPlan(hostId)
   const { data: registerDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'registers'), limit(25)),
     [firestore, hostId],
@@ -70,12 +65,21 @@ export function RegistersCard(props: RegistersCardProps) {
   const quota = Aglyn.checkQuota(org, 'posRegisters', registers.length)
   // Registers beyond the plan cap (e.g. after a downgrade) can't transact —
   // pos-order.ts blocks them by creation rank (AGL-482); mirror that here.
-  const withinCap = CommerceModel.registersWithinCap(registers, quota.limit)
+  //
+  // Only once the org doc has arrived (AGL-1064). An absent org resolves to
+  // the free tier's `posRegisters: 0`, which would badge EVERY register
+  // "Over plan limit" for the first render or two of every mount.
+  const withinCap = planReady
+    ? CommerceModel.registersWithinCap(registers, quota.limit)
+    : new Set<string>(registers.map((register: any) => register.$id))
   const [name, setName] = useState('')
   const [locationId, setLocationId] = useState('')
 
   const handleAdd = useCallback(async () => {
     if (!name.trim()) return
+    // The button is disabled until the plan is known; this guards the case
+    // where a click and the org doc race (AGL-1064).
+    if (!planReady) return
     if (!quota.allowed) {
       return void enqueueSnackbar(
         quota.limit === 0
@@ -194,14 +198,22 @@ export function RegistersCard(props: RegistersCardProps) {
               ))}
             </TextField>
           ) : null}
-          <Button size="small" disabled={!name.trim()} onClick={handleAdd}>
+          <Button
+            size="small"
+            disabled={!name.trim() || !planReady}
+            onClick={handleAdd}
+          >
             {'Add'}
           </Button>
         </Stack>
         <Typography variant="caption" color="text.secondary">
-          {`${registers.length}/${
-            quota.limit === Aglyn.UNLIMITED ? '∞' : quota.limit
-          } registers on your plan`}
+          {planReady
+            ? `${registers.length}/${
+                quota.limit === Aglyn.UNLIMITED ? '∞' : quota.limit
+              } registers on your plan`
+            : `${registers.length} register${
+                registers.length === 1 ? '' : 's'
+              } · checking your plan…`}
         </Typography>
       </Stack>
     </CardDisplay>

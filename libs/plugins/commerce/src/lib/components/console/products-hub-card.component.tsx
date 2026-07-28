@@ -50,9 +50,8 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
-import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
-import { useHostOrgId } from '@aglyn/tenant-feature-instance'
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
+import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import ProductEditorDialog from './product-editor-dialog.component'
 
 export interface ProductsHubCardProps {
@@ -82,11 +81,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   // Product cap (AGL-471): per-plan `productsPerHost`, same pattern as
   // locations. Console-side gate; server enforcement rides AGL-473.
   const createHostResource = useHostResourceApi()
-  const orgId = useHostOrgId(hostId)
-  const { data: org } = useFirestoreDoc<any>(
-    () => doc(firestore, 'orgs', orgId ?? '-pending-'),
-    [firestore, orgId],
-  )
+  const { org, ready: planReady } = useOrgPlan(hostId)
   const { confirm } = useConfirmationContext()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -165,16 +160,26 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   // Gate only once the org doc has loaded: an unresolved org reads as the
   // free tier's 0-product cap, which swallowed every Add/Duplicate click.
   // The resources API (AGL-473) stays the authoritative cap on create.
+  //
+  // `planReady` rather than `org` truthiness (AGL-1064): a host with no
+  // owning org never produces one, and waiting on the value alone would
+  // hold this open forever. The old fallback allowed UNLIMITED during the
+  // window — safe only because the API re-checks; the controls now disable
+  // instead, which does not lean on that backstop.
+  // NULL means "not known yet", which a boolean cannot say — the old
+  // fallback object claimed UNLIMITED and every consumer believed it.
   const productQuota = useMemo(
     () =>
-      org
+      planReady
         ? Aglyn.checkQuota(org, 'productsPerHost', productCount)
-        : { allowed: true, limit: Aglyn.UNLIMITED, remaining: Aglyn.UNLIMITED },
-    [org, productCount],
+        : null,
+    [org, planReady, productCount],
   )
 
   const handleDuplicate = useCallback(
     (product: ProductRow) => async () => {
+      // Plan unknown — the control is disabled; this guards the race.
+      if (!productQuota) return
       if (!productQuota.allowed) {
         return void enqueueSnackbar(
           `Your plan includes ${productQuota.limit} products — upgrade for more`,
@@ -257,14 +262,16 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     const parsed = importing?.parsed
     if (!parsed || parsed.products.length === 0) return
     // Batch-aware cap (AGL-471): the whole import must fit the plan.
-    const batchQuota = org
-      ? Aglyn.checkQuota(
-          org,
-          'productsPerHost',
-          productCount + parsed.products.length - 1,
-        )
-      : null
-    if (batchQuota && !batchQuota.allowed) {
+    // Not startable until the plan is known (AGL-1064) — the old `org ?`
+    // guard let an import begin against an unknown cap and leaned on the
+    // API rejecting it partway through, leaving a half-imported catalog.
+    if (!planReady) return
+    const batchQuota = Aglyn.checkQuota(
+      org,
+      'productsPerHost',
+      productCount + parsed.products.length - 1,
+    )
+    if (!batchQuota.allowed) {
       return void enqueueSnackbar(
         `This import needs ${parsed.products.length} product slots — your ` +
           `plan allows ${batchQuota.limit}. See Billing to upgrade.`,
@@ -304,7 +311,16 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       variant: 'success',
       persist: false,
     })
-  }, [importing, products, hostId, createHostResource, enqueueSnackbar, org, productCount])
+  }, [
+    importing,
+    products,
+    hostId,
+    createHostResource,
+    enqueueSnackbar,
+    org,
+    planReady,
+    productCount,
+  ])
 
   const handleAdjustSave = useCallback(async () => {
     if (!adjusting) return
@@ -380,7 +396,9 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             variant="contained"
             color="secondary"
             size="small"
+            disabled={!productQuota}
             onClick={() => {
+              if (!productQuota) return
               if (!productQuota.allowed) {
                 return void enqueueSnackbar(
                   `Your plan includes ${productQuota.limit} products — ` +
@@ -395,6 +413,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           </Button>
           <Button
             size="small"
+            disabled={!planReady}
             onClick={() => setImporting({ text: '', parsed: null })}
           >
             {'Import'}

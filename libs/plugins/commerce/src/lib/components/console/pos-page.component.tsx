@@ -37,11 +37,11 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query } from 'firebase/firestore'
+import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
-import { useFirestoreDoc, useHostOrgId } from '@aglyn/tenant-feature-instance'
+import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 
 interface RegisterLine {
   productId: string
@@ -81,19 +81,21 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
-  const orgId = useHostOrgId(hostId)
-  const { data: org } = useFirestoreDoc<any>(
-    () => doc(firestore, 'orgs', orgId ?? '-pending-'),
-    [firestore, orgId],
-  )
+  const { org, ready: planReady } = useOrgPlan(hostId)
   const registers = [...(registerDocs ?? [])].sort((a: any, b: any) =>
     String(a.name ?? '').localeCompare(String(b.name ?? '')),
   )
   // Only registers within the plan cap can transact (pos-order.ts enforces
   // this at sale time by creation rank, AGL-482) — offer only those.
+  //
+  // Not until the org doc has arrived (AGL-1064): an absent org resolves to
+  // the free tier's `posRegisters: 0`, which empties this list and tells a
+  // paying seller their registers exceed a plan nobody has read yet.
   const registerCap = Aglyn.checkQuota(org, 'posRegisters', registers.length).limit
   const withinCap = CommerceModel.registersWithinCap(registers, registerCap)
-  const usableRegisters = registers.filter((r: any) => withinCap.has(r.$id))
+  const usableRegisters = planReady
+    ? registers.filter((r: any) => withinCap.has(r.$id))
+    : []
   const { data: reservationDocs } = useFirestoreCollection<any>(
     () =>
       query(
@@ -385,7 +387,11 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           }}
         >
           <Typography variant="h6">{'Register'}</Typography>
-          {usableRegisters.length === 0 ? (
+          {!planReady ? (
+            <Typography variant="body2" color="text.secondary">
+              {'Checking your plan…'}
+            </Typography>
+          ) : usableRegisters.length === 0 ? (
             <Typography variant="body2" color="warning.main">
               {registers.length > 0
                 ? 'Your registers exceed your plan — remove extras or ' +
