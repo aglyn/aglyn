@@ -63,7 +63,11 @@ export function registerBookingsConsole(): void {
         // unchanged now that the tab comes from the plugin (AGL-395).
         navTabId: 'nav-tab-bookings',
         icon: { path: mdiCalendarClock.path },
-        header: { title: 'Bookings', icon: { path: mdiCalendarClock.path } },
+        header: {
+          title: 'Bookings',
+          icon: { path: mdiCalendarClock.path },
+          docsTopic: 'bookings',
+        },
         Component: BookingsConsolePage,
       },
     ],

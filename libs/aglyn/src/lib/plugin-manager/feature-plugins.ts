@@ -172,8 +172,22 @@ export interface ConsoleNavItem {
    * the plugin owns the whole surface — no core page file needed.
    */
   Component?: ConsolePluginPage
-  /** Dashboard header for the plugin page (title + icon). */
-  header?: { title: string; icon?: MdiIconProps }
+  /**
+   * Dashboard header for the plugin page (title + icon), and the docs topic
+   * its help `?` explains.
+   *
+   * `docsTopic` is a plain string rather than the console's
+   * `DocsHelpTopicKey` because that registry lives in `apps/console` and a
+   * lib cannot import from an app. The console validates it and falls back
+   * to the marketplace topic when it does not resolve — which is not just
+   * defensive: a third-party plugin can name any string, and the alternative
+   * to a fallback is a help button that throws on hover (AGL-1074).
+   *
+   * Every surface mounted by the shell's generic plugin route shares one
+   * `help=` prop, so a surface that omits this is not "help-less" — it
+   * inherits Plugins & Marketplace, which reads as if it were its own.
+   */
+  header?: { title: string; icon?: MdiIconProps; docsTopic?: string }
 }
 
 export interface ConsoleDashboardCard {

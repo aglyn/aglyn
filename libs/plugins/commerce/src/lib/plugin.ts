@@ -160,7 +160,13 @@ export function registerCommerceConsole(): void {
         label: 'Products',
         href: '/products',
         icon: { path: mdiStorefrontOutline.path },
-        header: { title: 'Products', icon: { path: mdiStorefrontOutline.path } },
+        header: {
+          title: 'Products',
+          icon: { path: mdiStorefrontOutline.path },
+          // The overview, not `catalog`: this surface is the whole commerce
+          // console — Catalog, Orders, Promotions and Reservations.
+          docsTopic: 'commerce',
+        },
         Component: CommerceConsolePage,
       },
       {
@@ -169,7 +175,7 @@ export function registerCommerceConsole(): void {
         label: 'POS',
         href: '/pos',
         icon: { path: mdiStorefrontOutline.path },
-        header: { title: 'Point of Sale' },
+        header: { title: 'Point of Sale', docsTopic: 'pos' },
         Component: PosConsolePage,
       },
     ],

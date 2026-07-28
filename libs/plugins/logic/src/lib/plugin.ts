@@ -60,6 +60,7 @@ export function registerLogicConsole(): void {
         header: {
           title: 'Functions & Variables',
           icon: { path: mdiFunctionVariant.path },
+          docsTopic: 'bindings',
         },
         Component: LogicConsolePage,
       },

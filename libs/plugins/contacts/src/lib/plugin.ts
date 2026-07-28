@@ -45,6 +45,7 @@ export function registerContactsConsole(): void {
         header: {
           title: 'Contacts',
           icon: { path: mdiCardAccountDetailsOutline.path },
+          docsTopic: 'contacts',
         },
         Component: ContactsConsolePage,
       },

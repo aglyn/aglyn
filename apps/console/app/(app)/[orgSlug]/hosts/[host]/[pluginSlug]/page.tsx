@@ -32,6 +32,7 @@ import AuthenticatedLayout from '../../../../../../components/layouts/authentica
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
+import { resolveDocsHelpTopic } from '../../../../../../constants/docs-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
@@ -119,7 +120,10 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         },
         { children: title },
       ]}
-      help="plugins"
+      // The surface's own docs page, not the marketplace's (AGL-1074). One
+      // route renders every plugin page, so a hardcoded topic here told
+      // twelve different surfaces they were about Plugins & Marketplace.
+      help={resolveDocsHelpTopic(header?.docsTopic, 'plugins')}
       header={{
         children: title,
         icon: { path: header?.icon?.path ?? ICON_VARIANT_APP_SETTINGS.path },

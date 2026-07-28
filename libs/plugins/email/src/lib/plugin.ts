@@ -64,7 +64,11 @@ export function registerEmailConsole(): void {
         label: 'Emails',
         href: '/emails',
         icon: { path: mdiEmailOutline.path },
-        header: { title: 'Emails', icon: { path: mdiEmailOutline.path } },
+        header: {
+          title: 'Emails',
+          icon: { path: mdiEmailOutline.path },
+          docsTopic: 'emailCampaigns',
+        },
         Component: EmailsConsolePage,
       },
     ],
