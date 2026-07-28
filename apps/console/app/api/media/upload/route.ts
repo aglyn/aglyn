@@ -252,6 +252,12 @@ async function handler(request: Request): Promise<Response> {
       uploadedBy: decoded.uid,
       contentHash,
       variants,
+      // Org-wide by default — today's behavior (AGL-1043). Stamping it on
+      // every new asset is what makes the scoped reads work at all:
+      // `array-contains-any` matches nothing on a doc lacking the field.
+      // Flipping this default to the uploading site is AGL-1048's
+      // `defaultResourceScope` decision, not this route's.
+      ...(scope.collection === 'orgs' ? { visibleTo: ['org'] } : {}),
       ...(cdnAllowed
         ? {
             // Stable, mediaId-keyed CDN URL (AGL-829): no content hash, so

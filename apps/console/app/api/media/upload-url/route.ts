@@ -195,6 +195,9 @@ async function handler(request: Request): Promise<Response> {
       url,
       storagePath: objectPath,
       folderId,
+      // Org-wide by default, same as the direct upload route (AGL-1043) —
+      // the scoped reads need the field present on every asset.
+      ...(scope.collection === 'orgs' ? { visibleTo: ['org'] } : {}),
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
     await counterRef.set(

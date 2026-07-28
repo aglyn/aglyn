@@ -16,6 +16,13 @@
  */
 
 import {
+  hostScopeToken,
+  isOrgWideMember,
+  ORG_SCOPE_TOKEN,
+  projectMemberScopeTokens,
+  visibleToTokens,
+} from '@aglyn/aglyn/server'
+import {
   firebaseAdmin,
   getOrgDoc,
   getOrgForHost,
@@ -35,6 +42,27 @@ export interface MediaScope {
   billing: Record<string, unknown>
   /** Segment used in cdnPath — `{hostId}` or `org:{orgId}`. */
   cdnScope: string
+  /**
+   * What the CALLER may see (AGL-1043), as scope tokens. Distinct from the
+   * scope itself: two members can address the same org library and be
+   * entitled to different assets within it. Consumers filter with
+   * `scopeAllows` rather than assuming access to everything under `base`.
+   */
+  viewerTokens: string[]
+  /** Whether the caller's reach is the whole org rather than named sites. */
+  viewerOrgWide: boolean
+}
+
+/** Whether the caller behind a resolved scope may see one asset/folder. */
+export function scopeAllows(
+  scope: Pick<MediaScope, 'viewerTokens' | 'viewerOrgWide'>,
+  visibleTo: unknown,
+): boolean {
+  if (scope.viewerOrgWide) return true
+  return visibleToTokens(
+    Array.isArray(visibleTo) ? (visibleTo as string[]) : undefined,
+    scope.viewerTokens,
+  )
 }
 
 export interface MediaScopeError {
@@ -78,6 +106,8 @@ export async function resolveMediaScope(
         scopeRef: firestore.collection('orgs').doc(orgId),
         billing: org as Record<string, unknown>,
         cdnScope: `org:${orgId}`,
+        viewerTokens: projectMemberScopeTokens(membership?.member),
+        viewerOrgWide: isOrgWideMember(membership?.member),
       },
     }
   }
@@ -103,6 +133,10 @@ export async function resolveMediaScope(
       scopeRef: hostRef,
       billing: billing as Record<string, unknown>,
       cdnScope: hostId,
+      // A host's own library is private by construction and its docs carry
+      // no `visibleTo`; the memberRoles check above is the whole gate.
+      viewerTokens: [ORG_SCOPE_TOKEN, hostScopeToken(hostId)],
+      viewerOrgWide: true,
     },
   }
 }
