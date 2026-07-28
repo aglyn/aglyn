@@ -84,6 +84,7 @@ import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
+import useScopeTokens from '../../hooks/use-scope-tokens'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -214,6 +215,15 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const scopeCollection = orgId ? 'orgs' : 'hosts'
   const scopeId = (orgId ?? hostId) as string
   const scopeBody = orgId ? { orgId } : { hostId }
+  // Scoped sharing (AGL-1045). Under the AGL-1042 rules a scoped member's
+  // UNFILTERED list is rejected outright — Firestore fails the whole query
+  // if any candidate document would fail — so this constraint is required
+  // for the page to work at all, not a nicety. Org-wide members skip it:
+  // they read everything, and adding the filter would cost them a
+  // composite index for nothing.
+  const { tokens: scopeTokens, orgWide: viewerOrgWide } = useScopeTokens(orgId)
+  const needsScope = Boolean(orgId) && !viewerOrgWide
+
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -272,8 +282,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // free-text `folder` string. Legacy strings migrate lazily below.
   const { data: folderDocs } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, scopeCollection, scopeId, 'mediaFolders'), limit(500)),
-    [firestore, scopeId],
+      query(
+        collection(firestore, scopeCollection, scopeId, 'mediaFolders'),
+        ...(needsScope
+          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+          : []),
+        limit(500),
+      ),
+    [firestore, scopeId, needsScope, scopeTokens],
     { idField: '$id' },
   )
   const folderList: Array<Aglyn.AglynHostMediaFolder> = useMemo(
@@ -353,6 +369,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // filter pass below still applies everything within loaded pages, so
   // downgrades only affect which docs get fetched, never correctness of
   // what's shown.
+  // Firestore permits ONE array-contains/array-contains-any per query, and
+  // the scope filter has to be the one that survives — it is the security
+  // constraint, and the tag filter already has a client-side twin below.
+  const tagFilterServerSide = Boolean(tagFilter) && !needsScope
   const buildConstraints = useCallback(
     (cursor: QueryDocumentSnapshot | null): QueryConstraint[] => {
       const constraints: QueryConstraint[] = []
@@ -360,7 +380,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       if (typeof currentFolder === 'string' && currentFolder !== 'all') {
         constraints.push(where('folderId', '==', currentFolder))
       }
-      if (tagFilter) constraints.push(where('tags', 'array-contains', tagFilter))
+      if (needsScope) {
+        constraints.push(
+          where('visibleTo', 'array-contains-any', scopeTokens),
+        )
+      }
+      if (tagFilterServerSide) {
+        constraints.push(where('tags', 'array-contains', tagFilter))
+      }
       const typeQuerySide = Boolean(typeFilter) && !tagFilter && dateSort
       if (typeQuerySide) {
         if (typeFilter === 'pdf') {
@@ -393,7 +420,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       constraints.push(limit(MEDIA_PAGE_SIZE))
       return constraints
     },
-    [currentFolder, tagFilter, typeFilter, dateFilter, sortBy],
+    [
+      currentFolder,
+      tagFilter,
+      tagFilterServerSide,
+      typeFilter,
+      dateFilter,
+      sortBy,
+      needsScope,
+      scopeTokens,
+    ],
   )
   const fetchPage = useCallback(
     async (cursor: QueryDocumentSnapshot | null) => {
