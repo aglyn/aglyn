@@ -25,7 +25,7 @@ import { useMemo } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
-  useHostOrgId,
+  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 
 export interface HostReferenceHealthCardProps {
@@ -42,10 +42,11 @@ export interface HostReferenceHealthCardProps {
 export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
-  const hostOrgId = useHostOrgId(hostId)
-  const dataScope = hostOrgId
-    ? (['orgs', hostOrgId] as const)
-    : (['hosts', hostId] as const)
+  // The org lookup is async (AGL-1061). `scopeReady` stays false until
+  // it settles, so nothing acts on the host fallback during the window —
+  // a path nothing has read since AGL-1050.
+  const { scope: dataScope, orgId: hostOrgId, ready: scopeReady } =
+    useOrgDataScope({ hostId })
 
   const useHostCollection = (name: string) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks

@@ -43,7 +43,7 @@ import { useEffect, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
-  useHostOrgId,
+  useOrgDataScope,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 
@@ -63,10 +63,11 @@ export function OrgListsCard(props: OrgListsCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { data: user } = useUser()
-  const hostOrgId = useHostOrgId(hostId)
-  const scope = hostOrgId
-    ? (['orgs', hostOrgId] as const)
-    : (['hosts', hostId] as const)
+  // The org lookup is async (AGL-1061). `scopeReady` stays false until
+  // it settles, so nothing acts on the host fallback during the window —
+  // a path nothing has read since AGL-1050.
+  const { scope: scope, orgId: hostOrgId, ready: scopeReady } =
+    useOrgDataScope({ hostId })
 
   const { data: listDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, scope[0], scope[1], 'lists'), limit(50)),

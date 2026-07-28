@@ -24,7 +24,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
-  useHostOrgId,
+  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -84,10 +84,11 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, org } = props
   // Org-shared data root (AGL-237); the host path is the pre-migration
   // fallback for hosts not yet org-wired.
-  const hostOrgId = useHostOrgId(hostId)
-  const dataScope = hostOrgId
-    ? (['orgs', hostOrgId] as const)
-    : (['hosts', hostId] as const)
+  // The org lookup is async (AGL-1061). `scopeReady` stays false until
+  // it settles, so nothing acts on the host fallback during the window —
+  // a path nothing has read since AGL-1050.
+  const { scope: dataScope, orgId: hostOrgId, ready: scopeReady } =
+    useOrgDataScope({ hostId })
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
