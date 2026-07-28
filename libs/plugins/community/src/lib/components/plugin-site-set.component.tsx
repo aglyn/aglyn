@@ -19,17 +19,23 @@
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { mdiCheckCircle } from '@aglyn/shared-data-mdi'
 import {
+  Alert,
   Box,
   Button,
   Checkbox,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   FormControlLabel,
   FormGroup,
   Stack,
   Typography,
 } from '@mui/material'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { compareArtifactVersions } from '@aglyn/aglyn'
 import type { OrgInstallSummary } from '../model/community'
 
 export interface PluginSiteSetProps {
@@ -45,6 +51,7 @@ export interface PluginSiteSetProps {
   installPlan: (
     listing: any,
     steps: ReadonlyArray<{ scope: 'org' | 'host'; hostId?: string }>,
+    options?: { intent?: 'install' | 'update'; version?: string | number | null },
   ) => Promise<unknown>
   /** Drop a pin — org-wide, or from one named site. */
   uninstall: (
@@ -80,16 +87,56 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
   } = props
   const [addHostIds, setAddHostIds] = useState<string[]>([])
   const [siteBusy, setSiteBusy] = useState(false)
+  /**
+   * A site is behind only when its pin is genuinely OLDER (AGL-1017). "Not
+   * equal" also fires when a site runs something newer than the offer — a
+   * publisher testing their own build, or a version withdrawn after install —
+   * and offering to "update" those would quietly move them backwards.
+   */
   const staleSites = useMemo(
     () =>
       orgInstall.sites.filter(
-        (site) =>
-          site.version != null &&
-          latestVersion != null &&
-          String(latestVersion) !== site.version,
+        (site) => (compareArtifactVersions(site.version, latestVersion) ?? 0) < 0,
       ),
     [orgInstall.sites, latestVersion],
   )
+  /**
+   * Update is per-site FIRST (AGL-1017). A version with breaking changes has
+   * to be absorbable one site at a time — take it on a quiet site, see what
+   * breaks, then decide about the rest — so each site behind the offer gets
+   * its own control and the bulk action is the convenience on top.
+   *
+   * An org pin cannot do that: it is one pointer covering every site, so
+   * moving it moves all of them at once. Rather than hide that behind a
+   * button that looks per-site, the panel says so and points at the split.
+   */
+  const [pending, setPending] = useState<
+    { hostIds: string[] | null; label: string } | null
+  >(null)
+  const [changelog, setChangelog] = useState<string | null>(null)
+  useEffect(() => {
+    if (!pending || !listing?.$id || !latestVersion) return
+    let active = true
+    setChangelog(null)
+    void fetch(
+      `/api/community/listing-versions?listingId=${encodeURIComponent(
+        String(listing.$id),
+      )}`,
+    )
+      .then((response) => (response.ok ? response.json() : { versions: [] }))
+      .then((payload) => {
+        if (!active) return
+        const entry = (payload?.versions ?? []).find(
+          (version: { version?: string }) =>
+            String(version?.version) === String(latestVersion),
+        )
+        setChangelog(entry?.changelog ?? '')
+      })
+      .catch(() => active && setChangelog(''))
+    return () => {
+      active = false
+    }
+  }, [pending, listing?.$id, latestVersion])
   const runSiteEdit = async (work: () => Promise<unknown>) => {
     setSiteBusy(true)
     try {
@@ -159,6 +206,26 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
               pin: dropping a site covered by the org
               pin would mean writing an exclusion the
               loader has no concept of. */}
+          {/* This site alone (AGL-1017). Only where the site owns its pin —
+              a site covered by the org pin has no pointer of its own to
+              move, and pretending otherwise would update every site. */}
+          {site.pinnedBy === 'host' &&
+          staleSites.some((stale) => stale.hostId === site.hostId) ? (
+            <Button
+              size="small"
+              variant="outlined"
+              color="secondary"
+              disabled={siteBusy}
+              onClick={() =>
+                setPending({
+                  hostIds: [site.hostId],
+                  label: site.label,
+                })
+              }
+            >
+              {`Update to v${latestVersion}`}
+            </Button>
+          ) : null}
           {site.pinnedBy === 'host' ? (
             <Button
               size="small"
@@ -178,30 +245,113 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
     </Stack>
 
     {staleSites.length ? (
-      <Button
-        size="small"
-        variant="outlined"
-        color="secondary"
-        disabled={siteBusy}
-        onClick={() =>
-          void runSiteEdit(() =>
-            installPlan(
-              listing,
-              orgInstall.orgWide
-                ? [{ scope: 'org' as const }]
-                : orgInstall.hostPinnedIds.map(
-                    (hostId) => ({
+      <Stack spacing={1}>
+        {orgInstall.orgWide ? (
+          // Said out loud rather than discovered afterwards (AGL-1017): an
+          // org pin is a single pointer, so there is no half of it to move.
+          // A workspace that wants to stage a breaking update has to be on
+          // per-site pins, and the way there is the split below.
+          <Alert severity="info" variant="outlined">
+            {'This is one organization-wide pin, so updating moves every ' +
+              'site at once. To take a version on one site first, install ' +
+              'per site instead.'}
+          </Alert>
+        ) : null}
+        <Box>
+          <Button
+            size="small"
+            variant="outlined"
+            color="secondary"
+            disabled={siteBusy}
+            onClick={() =>
+              setPending({
+                hostIds: orgInstall.orgWide ? null : staleSites.map((site) => site.hostId),
+                label: orgInstall.orgWide
+                  ? 'every site in this organization'
+                  : `${staleSites.length} site${staleSites.length === 1 ? '' : 's'}`,
+              })
+            }
+          >
+            {orgInstall.orgWide
+              ? `Update to v${latestVersion}`
+              : `Update all ${staleSites.length} to v${latestVersion}`}
+          </Button>
+        </Box>
+      </Stack>
+    ) : null}
+
+    {/* What changes, before it changes (AGL-1017). Third-party code moving
+        in a workspace deserves more than a spinner: the version pair, the
+        publisher's changelog, and which sites are about to take it. */}
+    <Dialog
+      open={Boolean(pending)}
+      onClose={() => setPending(null)}
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle>{`Update to v${latestVersion}?`}</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={1.5}>
+          <Typography variant="body2">
+            {`${listing?.displayName ?? 'This plugin'} moves from the version ` +
+              `running now to v${latestVersion} on ${pending?.label ?? ''}.`}
+          </Typography>
+          {pending?.hostIds && pending.hostIds.length === 1 ? (
+            <Typography variant="body2" color="text.secondary">
+              {'Other sites stay on the version they are running.'}
+            </Typography>
+          ) : null}
+          <Stack spacing={0.5}>
+            <Typography variant="subtitle2">{"What's new"}</Typography>
+            {changelog === null ? (
+              <Typography variant="body2" color="text.secondary">
+                {'Loading the changelog…'}
+              </Typography>
+            ) : changelog ? (
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                {changelog}
+              </Typography>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                {'The publisher did not describe this version.'}
+              </Typography>
+            )}
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            {'Pins only move forward — there is no going back to the ' +
+              'previous version from here.'}
+          </Typography>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button color="inherit" onClick={() => setPending(null)}>
+          {'Cancel'}
+        </Button>
+        <Button
+          variant="contained"
+          disabled={siteBusy}
+          onClick={() => {
+            const target = pending
+            setPending(null)
+            if (!target) return
+            void runSiteEdit(() =>
+              installPlan(
+                listing,
+                target.hostIds
+                  ? target.hostIds.map((hostId) => ({
                       scope: 'host' as const,
                       hostId,
-                    }),
-                  ),
-            ),
-          )
-        }
-      >
-        {`Update to v${latestVersion}`}
-      </Button>
-    ) : null}
+                    }))
+                  : [{ scope: 'org' as const }],
+                { intent: 'update', version: latestVersion },
+              ),
+            )
+          }}
+        >
+          {'Update'}
+        </Button>
+      </DialogActions>
+    </Dialog>
 
     {/* Add sites after the fact. The picker used to
         render only when nothing was installed, which
@@ -279,19 +429,52 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
         membership: one org pin covers sites made
         later, which no set of host pins can. */}
     {orgInstall.orgWide ? (
-      <Button
-        fullWidth
-        size="small"
-        color="inherit"
-        disabled={siteBusy}
-        onClick={() =>
-          void runSiteEdit(() =>
-            uninstall(listing, 'org'),
-          )
-        }
-      >
-        {'Uninstall org-wide'}
-      </Button>
+      <>
+        {/* The inverse of promote (AGL-1017), and the thing that makes
+            per-site updates reachable at all: one org pin cannot be moved
+            for one site, so a workspace that needs to stage a breaking
+            version has to hold per-site pins first. Sites added later are
+            no longer covered automatically — that is the trade, and the
+            button says so rather than discovering it weeks later. */}
+        <Button
+          fullWidth
+          size="small"
+          variant="outlined"
+          color="secondary"
+          disabled={siteBusy || !hosts.length}
+          onClick={() =>
+            void runSiteEdit(async () => {
+              // Pin every site BEFORE dropping the org pin, so a failure
+              // part-way leaves the plugin installed everywhere it already
+              // was rather than nowhere.
+              await installPlan(
+                listing,
+                hosts.map((host) => ({ scope: 'host' as const, hostId: host.id })),
+              )
+              await uninstall(listing, 'org')
+            })
+          }
+        >
+          {'Split into per-site installs'}
+        </Button>
+        <Typography variant="caption" color="text.secondary">
+          {'Pins each site separately so you can update them one at a time. ' +
+            'Sites you add later will not get this plugin automatically.'}
+        </Typography>
+        <Button
+          fullWidth
+          size="small"
+          color="inherit"
+          disabled={siteBusy}
+          onClick={() =>
+            void runSiteEdit(() =>
+              uninstall(listing, 'org'),
+            )
+          }
+        >
+          {'Uninstall org-wide'}
+        </Button>
+      </>
     ) : (
       <Button
         fullWidth

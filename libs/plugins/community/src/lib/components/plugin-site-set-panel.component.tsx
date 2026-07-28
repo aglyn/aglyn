@@ -86,6 +86,15 @@ export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, listingId, hostIdsKey, pinsNonce])
 
+  // The listing, for the version actually on offer (AGL-1017). This used to
+  // pass a PIN's own version as `latestVersion`, which is by definition the
+  // version that pin is already at — so no site ever looked stale and the
+  // update control never appeared on this page at all.
+  const { data: listing } = useFirestoreDoc<any>(
+    () => doc(firestore, 'communityListings', listingId || '-missing-'),
+    [firestore, listingId],
+  )
+
   const orgInstall = useMemo(
     () => resolveOrgInstallSummary(hosts ?? [], sitePins, orgPin ?? null),
     [hosts, sitePins, orgPin],
@@ -94,14 +103,14 @@ export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
   // the actions actually read (`$id`, `displayName`), so this page does not
   // pay for a second read of the listing itself.
   const anyPin = orgPin ?? Object.values(sitePins).find(Boolean) ?? null
-  const listing = useMemo(
+  const actionListing = useMemo(
     () => ({
       $id: listingId,
-      displayName: anyPin?.displayName ?? listingId,
+      displayName: listing?.displayName ?? anyPin?.displayName ?? listingId,
       artifactType: 'plugin',
-      latestVersion: anyPin?.version,
+      latestVersion: listing?.latestVersion ?? anyPin?.version,
     }),
-    [listingId, anyPin?.displayName, anyPin?.version],
+    [listingId, listing?.displayName, listing?.latestVersion, anyPin?.displayName, anyPin?.version],
   )
 
   if (!orgInstall.installedAnywhere) {
@@ -114,10 +123,12 @@ export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
 
   return (
     <PluginSiteSet
-      listing={listing}
+      listing={actionListing}
       hosts={hosts ?? []}
       orgInstall={orgInstall}
-      latestVersion={anyPin?.version}
+      // The newest APPROVED version (AGL-1016) — never `latestVersion`, or the
+      // page would offer an update the install route refuses.
+      latestVersion={listing?.latestApprovedVersion}
       installPlan={installPlan}
       uninstall={uninstall}
       onChanged={() => setPinsNonce((current) => current + 1)}

@@ -158,7 +158,21 @@ export function useCommunityActions(hostId: string) {
    * an All-sites / Selected-sites choice into these steps.
    */
   const installPlan = useCallback(
-    async (listing: any, steps: readonly InstallPlanStep[]) => {
+    async (
+      listing: any,
+      steps: readonly InstallPlanStep[],
+      options?: {
+        /**
+         * Re-pinning something already installed (AGL-1017). Only the wording
+         * changes — the route is the same, because moving a pin forward IS
+         * installing — but "Installed on 1 site" is the wrong sentence to read
+         * after pressing Update.
+         */
+        intent?: 'install' | 'update'
+        /** The version being moved to, for the update summary. */
+        version?: string | number | null
+      },
+    ) => {
       if (!steps.length) return
       const dequeue = queueLoading()
       try {
@@ -167,6 +181,13 @@ export function useCommunityActions(hostId: string) {
         const endpoint = endpointForArtifact(artifactType)
         let installed = 0
         const errors: string[] = []
+        /**
+         * Surfaced separately from success (AGL-1017/429): the pin is written
+         * either way — it is an explicit choice — but a bundle built for a
+         * different host ABI will not load, and a green "Updated" toast alone
+         * would leave the workspace believing it did.
+         */
+        const abiWarnings = new Set<string>()
         for (const step of steps) {
           // Org steps still need a host to resolve the org server-side, so
           // fall back to the acting host; host steps target their own site.
@@ -184,16 +205,27 @@ export function useCommunityActions(hostId: string) {
             }),
           })
           const payload = await response.json().catch(() => ({}))
-          if (response.ok) installed += 1
-          else errors.push(payload?.error ?? 'Install failed')
+          if (response.ok) {
+            installed += 1
+            if (payload?.hostAbiWarning) {
+              abiWarnings.add(String(payload.hostAbiWarning))
+            }
+          } else errors.push(payload?.error ?? 'Install failed')
         }
         const orgWide = steps.some((step) => step.scope === 'org')
-        const noun = landingMessage(artifactType, '') ? 'Saved' : 'Installed'
+        const updating = options?.intent === 'update'
+        const noun = updating
+          ? 'Updated'
+          : landingMessage(artifactType, '')
+            ? 'Saved'
+            : 'Installed'
+        const toVersion =
+          updating && options?.version != null ? ` to v${options.version}` : ''
         if (installed && !errors.length) {
           enqueueSnackbar(
             orgWide
-              ? `${noun} "${listing.displayName}" for the whole organization`
-              : `${noun} "${listing.displayName}" on ${installed} site` +
+              ? `${noun} "${listing.displayName}"${toVersion} for the whole organization`
+              : `${noun} "${listing.displayName}"${toVersion} on ${installed} site` +
                 (installed === 1 ? '' : 's'),
             { variant: 'success', persist: false },
           )
@@ -207,6 +239,9 @@ export function useCommunityActions(hostId: string) {
             variant: 'error',
             allowDuplicate: true,
           })
+        }
+        for (const warning of abiWarnings) {
+          enqueueSnackbar(warning, { variant: 'warning', allowDuplicate: true })
         }
       } catch (error) {
         console.error(error)
