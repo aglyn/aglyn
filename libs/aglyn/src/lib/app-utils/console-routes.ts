@@ -49,9 +49,10 @@ export enum Route {
   ORG_DATA = '/[orgSlug]/data',
   ORG_PLUGINS = '/[orgSlug]/plugins',
   // One plugin, as installed in this workspace (AGL-1007): scope, settings
-  // and permissions in one place. Keyed by LISTING id, which is what an
-  // install pin is keyed by.
-  ORG_PLUGIN_INSTALLATION = '/[orgSlug]/plugins/[listingId]',
+  // and permissions in one place. The segment takes EITHER identifier
+  // (AGL-1010) — a listing id for a marketplace install, a registry id for a
+  // first-party plugin — hence `pluginRef` rather than `listingId`.
+  ORG_PLUGIN_INSTALLATION = '/[orgSlug]/plugins/[pluginRef]',
   // Org-scope marketplace (AGL-772): the single place to browse, view and
   // install marketplace items — the per-site community tab
   // (`HOST_COMMUNITY*`) is being retired in favor of this.
@@ -170,7 +171,7 @@ export interface RoutePayload {
   [Route.ORG_MEDIA]: { orgSlug: string }
   [Route.ORG_DATA]: { orgSlug: string }
   [Route.ORG_PLUGINS]: { orgSlug: string }
-  [Route.ORG_PLUGIN_INSTALLATION]: { orgSlug: string; listingId: string }
+  [Route.ORG_PLUGIN_INSTALLATION]: { orgSlug: string; pluginRef: string }
   [Route.ORG_MARKETPLACE]: { orgSlug: string }
   [Route.ORG_MARKETPLACE_LISTING]: { orgSlug: string; listingId: string }
   [Route.ORG_MARKETPLACE_PUBLISHER]: { orgSlug: string; handle: string }

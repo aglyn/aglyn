@@ -69,7 +69,7 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   // row stays clickable without swallowing its own action buttons.
   const installationHref = (listingId: string) =>
     orgSlug
-      ? buildRoute(Route.ORG_PLUGIN_INSTALLATION, { orgSlug, listingId })
+      ? buildRoute(Route.ORG_PLUGIN_INSTALLATION, { orgSlug, pluginRef: listingId })
       : undefined
   const firestore = useFirestore()
   const { data: user } = useUser()

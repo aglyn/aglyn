@@ -203,7 +203,7 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
       key={key}
       href={buildRoute(Route.ORG_PLUGIN_INSTALLATION, {
         orgSlug,
-        listingId: pluginRef,
+        pluginRef,
       })}
       color="inherit"
       underline="none"

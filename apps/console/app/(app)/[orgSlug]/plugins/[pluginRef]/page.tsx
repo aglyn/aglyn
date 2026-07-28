@@ -171,7 +171,7 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
             children: displayName,
             href: buildRoute(Route.ORG_PLUGIN_INSTALLATION, {
               orgSlug,
-              listingId: pluginRef,
+              pluginRef,
             }),
           },
         ]}
