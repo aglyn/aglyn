@@ -15,8 +15,21 @@
  * limitations under the License.
  */
 
+import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import OrgGuard from '../../../components/org-guard.component'
+
+// Fallback title for the org area (AGL-1059) — the slug is the only org
+// identity available without a read, and every real page below overrides it
+// with its own segment.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ orgSlug: string }>
+}): Promise<Metadata> {
+  const { orgSlug } = await params
+  return { title: orgSlug }
+}
 
 /**
  * Org-scoped shell (AGL-621): everything under `/[orgSlug]` is gated on the

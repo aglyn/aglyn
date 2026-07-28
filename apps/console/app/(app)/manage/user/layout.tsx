@@ -14,18 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import StaffGuard from '../../../components/staff-guard.component'
 
-// Fallback title for the staff area (AGL-1059); each page below names itself.
-export const metadata: Metadata = { title: 'Staff' }
+// Title-only shell (AGL-1059): the page is a client component, and a client
+// component cannot export `metadata` — so its title lives here, in the
+// nearest server layout. The suffix comes from the root title template.
+export const metadata: Metadata = { title: 'Manage account' }
 
-/**
- * Staff console layout (AGL-847). One gate for every `/admin/*` page: non-staff
- * get a 404 for the whole area instead of the per-page "staff only" alert that
- * used to leak the grant-script name.
- */
-export default function AdminLayout({ children }: { children: ReactNode }) {
-  return <StaffGuard>{children}</StaffGuard>
+export default function ManageUserTitleLayout({
+  children,
+}: {
+  children: ReactNode
+}) {
+  return <>{children}</>
 }

@@ -49,7 +49,15 @@ const SITE_URL = process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'https://app.aglyn.com'
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: APP_CONSOLE.TITLE ?? 'Aglyn', template: '%s · Aglyn' },
+  // Every page supplies a bare segment ("Billing", "Screens · acme") from a
+  // server layout beside its route, and this template affixes the brand
+  // (AGL-1059). Before that, pages titled themselves through `NextPageTitle`
+  // → `next/head`, which the App Router ignores — so every route in the
+  // console rendered the default below.
+  title: {
+    default: APP_CONSOLE.TITLE ?? 'Aglyn',
+    template: `%s ${APP_CONSOLE.SEP} ${APP_CONSOLE.AFFIX}`,
+  },
   description: APP_CONSOLE.DESCRIPTION,
   manifest: PWA_MANIFEST,
   applicationName: 'Aglyn Console',

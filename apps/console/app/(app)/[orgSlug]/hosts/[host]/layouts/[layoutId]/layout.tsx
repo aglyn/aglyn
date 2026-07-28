@@ -17,25 +17,23 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import HostGuard from '../../../../../components/host-guard.component'
 
-// Titles the site dashboard, and stands in for any host page that adds no
-// title of its own (AGL-1059). The subdomain is a free `params` read; the
-// site's display name would cost a Firestore lookup on every render.
+// Title-only shell (AGL-1059): the page is a client component, and a client
+// component cannot export `metadata` — so its title lives here, in the
+// nearest server layout. The suffix comes from the root title template.
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ host: string }>
 }): Promise<Metadata> {
   const { host } = await params
-  return { title: `Dashboard · ${host}` }
+  return { title: `Layout · ${host}` }
 }
 
-/**
- * Host shell (AGL-622): resolves the `[host]` subdomain to a doc id (spinner
- * while pending) and 404s an unknown subdomain, inside the route tree so the
- * designed not-found boundary catches it.
- */
-export default function HostLayout({ children }: { children: ReactNode }) {
-  return <HostGuard>{children}</HostGuard>
+export default function HostLayoutTitleLayout({
+  children,
+}: {
+  children: ReactNode
+}) {
+  return <>{children}</>
 }
