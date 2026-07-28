@@ -23,6 +23,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
+  Box,
   Button,
   Checkbox,
   Chip,
@@ -33,12 +34,15 @@ import {
   Skeleton,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import MarkdownLiteView from '../../../../../components/markdown-lite-view.component'
 import StaffOnly from '../../../../../components/staff-only.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { PLUGIN_REVIEW_CHECKLIST } from '../../../../../constants/plugin-review-checklist'
@@ -113,6 +117,11 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [detail, setDetail] = useState<ListingDetail | null>(null)
+  // Rendered by default (AGL-989) — the reviewer's first question is what a
+  // buyer sees; Source is for auditing exactly what was submitted.
+  const [readmeView, setReadmeView] = useState<'rendered' | 'source'>(
+    'rendered',
+  )
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [reason, setReason] = useState('')
@@ -481,21 +490,55 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       </Typography>
                     ) : null}
                     <Divider />
-                    <Typography variant="subtitle2">{'README'}</Typography>
-                    {detail.readme ? (
-                      <Typography
-                        variant="body2"
-                        component="pre"
-                        sx={{
-                          whiteSpace: 'pre-wrap',
-                          fontFamily: 'inherit',
-                          maxHeight: 320,
-                          overflowY: 'auto',
-                          m: 0,
+                    {/* A reviewer needs both halves (AGL-989): the rendered
+                        page a buyer lands on, and the exact source the
+                        publisher submitted. */}
+                    <Stack
+                      direction="row"
+                      sx={{
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 1,
+                      }}
+                    >
+                      <Typography variant="subtitle2">{'README'}</Typography>
+                      <ToggleButtonGroup
+                        exclusive
+                        size="small"
+                        value={readmeView}
+                        onChange={(_event, next) => {
+                          if (next) setReadmeView(next as 'rendered' | 'source')
                         }}
                       >
-                        {detail.readme}
-                      </Typography>
+                        <ToggleButton value="rendered">
+                          <Typography variant="caption">
+                            {'Rendered'}
+                          </Typography>
+                        </ToggleButton>
+                        <ToggleButton value="source">
+                          <Typography variant="caption">{'Source'}</Typography>
+                        </ToggleButton>
+                      </ToggleButtonGroup>
+                    </Stack>
+                    {detail.readme ? (
+                      <Box sx={{ maxHeight: 480, overflowY: 'auto' }}>
+                        {readmeView === 'rendered' ? (
+                          <MarkdownLiteView source={detail.readme} />
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            component="pre"
+                            sx={{
+                              whiteSpace: 'pre-wrap',
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              m: 0,
+                            }}
+                          >
+                            {detail.readme}
+                          </Typography>
+                        )}
+                      </Box>
                     ) : (
                       <Alert severity="warning">
                         {'No README — publishers are expected to ship one.'}
