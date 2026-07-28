@@ -192,6 +192,23 @@ export function describeScope(
 }
 
 /**
+ * The scope a newly created resource starts with (AGL-1048).
+ *
+ * Honours the org's `defaultResourceScope`, but only when a site is
+ * actually in context: created from the org Media or Data page there is no
+ * host to scope to, and inventing one would hide the resource from the
+ * page that just created it.
+ */
+export function defaultScopeForNewResource(options: {
+  defaultResourceScope?: 'org' | 'host'
+  hostId?: string | null
+}): ScopeToken[] {
+  return options.defaultResourceScope === 'host' && options.hostId
+    ? [hostScopeToken(options.hostId)]
+    : [ORG_SCOPE_TOKEN]
+}
+
+/**
  * Whether `target` is visible everywhere `source` is — the condition a
  * cross-dataset REFERENCE has to satisfy (AGL-1044).
  *

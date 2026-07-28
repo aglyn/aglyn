@@ -425,6 +425,7 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                         id: 'profile',
                         label: 'Profile',
                         content: (
+                          <>
             <CardDisplay
               header={'Organization profile'}
               help={docsHelp('glossary', {
@@ -509,6 +510,52 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                 </Stack>
               </Stack>
             </CardDisplay>
+            {/* Default sharing (AGL-1048): what a NEW dataset or upload
+                starts as. Changes nothing that already exists — narrowing a
+                whole library from a toggle would break live pages with no
+                confirmation, which is what the per-resource flow prevents. */}
+            <CardDisplay
+              header={'Default sharing for new data and media'}
+              contentGutterX
+              contentGutterY
+              sx={{ mt: 3 }}
+            >
+              <Stack spacing={2} sx={{ maxWidth: 480 }}>
+                <TextField
+                  select
+                  size="small"
+                  label="New datasets and files are shared with"
+                  value={currentOrg?.defaultResourceScope ?? 'org'}
+                  disabled={!canManage || busy}
+                  onChange={(event) =>
+                    void settingsRequest({
+                      action: 'set-default-resource-scope',
+                      defaultResourceScope: event.target.value,
+                    })
+                      .then(() =>
+                        enqueueSnackbar('Default sharing updated', {
+                          variant: 'success',
+                          persist: false,
+                        }),
+                      )
+                      .catch((error: Error) =>
+                        enqueueSnackbar(error.message, { variant: 'error' }),
+                      )
+                  }
+                  helperText={
+                    'Only affects things created from now on. Created from ' +
+                    'an organization page there is no site to limit them to, ' +
+                    'so those stay shared with all sites either way.'
+                  }
+                >
+                  <MenuItem value="org">{'All sites'}</MenuItem>
+                  <MenuItem value="host">
+                    {'Only the site they were created in'}
+                  </MenuItem>
+                </TextField>
+              </Stack>
+            </CardDisplay>
+                          </>
                         ),
                       },
                       {

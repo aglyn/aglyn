@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  defaultScopeForNewResource,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import { checkEntitlement, checkQuota, createResourceUid } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -197,7 +200,16 @@ async function handler(request: Request): Promise<Response> {
       folderId,
       // Org-wide by default, same as the direct upload route (AGL-1043) —
       // the scoped reads need the field present on every asset.
-      ...(scope.collection === 'orgs' ? { visibleTo: ['org'] } : {}),
+      ...(scope.collection === 'orgs'
+        ? {
+            visibleTo: defaultScopeForNewResource({
+              defaultResourceScope: (scope.billing as {
+                defaultResourceScope?: 'org' | 'host'
+              }).defaultResourceScope,
+              hostId: String(body?.['forHostId'] ?? '') || null,
+            }),
+          }
+        : {}),
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
     await counterRef.set(

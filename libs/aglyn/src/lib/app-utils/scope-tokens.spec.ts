@@ -16,6 +16,7 @@
  */
 
 import {
+  defaultScopeForNewResource,
   describeScope,
   hostQualifiedCdnPath,
   scopeCovers,
@@ -263,5 +264,31 @@ describe('scopeCovers (AGL-1044)', () => {
 
   it('does not cover when the source reaches further', () => {
     expect(scopeCovers(['host:a'], ['host:a', 'host:b'])).toBe(false)
+  })
+})
+
+describe('defaultScopeForNewResource (AGL-1048)', () => {
+  it('is org-wide unless the org opted into site-private', () => {
+    expect(defaultScopeForNewResource({ hostId: 'h1' })).toEqual(['org'])
+    expect(
+      defaultScopeForNewResource({ defaultResourceScope: 'org', hostId: 'h1' }),
+    ).toEqual(['org'])
+  })
+
+  it('starts site-private when the org asked for it', () => {
+    expect(
+      defaultScopeForNewResource({ defaultResourceScope: 'host', hostId: 'h1' }),
+    ).toEqual(['host:h1'])
+  })
+
+  it('falls back to org-wide with no site in context', () => {
+    // Created from the org Media/Data page: inventing a host would hide the
+    // resource from the page that just created it.
+    expect(defaultScopeForNewResource({ defaultResourceScope: 'host' })).toEqual([
+      'org',
+    ])
+    expect(
+      defaultScopeForNewResource({ defaultResourceScope: 'host', hostId: null }),
+    ).toEqual(['org'])
   })
 })
