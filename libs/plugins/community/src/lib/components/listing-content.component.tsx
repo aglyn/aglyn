@@ -41,12 +41,18 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
+  FormControl,
+  FormControlLabel,
+  FormGroup,
+  FormHelperText,
+  FormLabel,
   Link as MuiLink,
   Stack,
   Typography,
@@ -826,34 +832,66 @@ export function CommunityListingContent({
                                 </MenuItem>
                               ) : null}
                             </TextField>
+                            {/* A visible checkbox list, not a multi-select
+                                (AGL-996). The MUI `select multiple` this
+                                replaced rendered its options as bare rows
+                                with no tick and no renderValue, so the
+                                control that decides WHERE third-party code
+                                gets installed could not be read at all:
+                                picked and unpicked sites looked identical,
+                                and the closed field showed raw host ids. */}
                             {targeting === 'selected-sites' &&
                             canSelectSites ? (
-                              <TextField
-                                select
-                                size="small"
-                                label="Sites"
-                                value={selectedHostIds}
-                                onChange={(event) =>
-                                  setSelectedHostIds(
-                                    typeof event.target.value === 'string'
-                                      ? event.target.value.split(',')
-                                      : (event.target
-                                          .value as unknown as string[]),
-                                  )
-                                }
-                                slotProps={{ select: { multiple: true } }}
-                                helperText={
-                                  selectedHostIds.length
-                                    ? ' '
-                                    : 'Pick at least one site.'
-                                }
+                              <FormControl
+                                component="fieldset"
+                                error={!selectedHostIds.length}
                               >
-                                {(hosts ?? []).map((host) => (
-                                  <MenuItem key={host.id} value={host.id}>
-                                    {host.label}
-                                  </MenuItem>
-                                ))}
-                              </TextField>
+                                <FormLabel
+                                  component="legend"
+                                  sx={{ typography: 'caption' }}
+                                >
+                                  {'Sites'}
+                                </FormLabel>
+                                <FormGroup
+                                  // Scrolls rather than pushing Install off
+                                  // the page on an org with many sites.
+                                  sx={{ maxHeight: 240, overflowY: 'auto' }}
+                                >
+                                  {(hosts ?? []).map((host) => (
+                                    <FormControlLabel
+                                      key={host.id}
+                                      control={
+                                        <Checkbox
+                                          size="small"
+                                          checked={selectedHostIds.includes(
+                                            host.id,
+                                          )}
+                                          onChange={(event) =>
+                                            setSelectedHostIds((current) =>
+                                              event.target.checked
+                                                ? [...current, host.id]
+                                                : current.filter(
+                                                    (id) => id !== host.id,
+                                                  ),
+                                            )
+                                          }
+                                        />
+                                      }
+                                      label={host.label}
+                                      slotProps={{
+                                        typography: { variant: 'body2' },
+                                      }}
+                                    />
+                                  ))}
+                                </FormGroup>
+                                <FormHelperText>
+                                  {selectedHostIds.length
+                                    ? `${selectedHostIds.length} of ${
+                                        (hosts ?? []).length
+                                      } selected.`
+                                    : 'Pick at least one site.'}
+                                </FormHelperText>
+                              </FormControl>
                             ) : null}
                           </Stack>
                         ) : installTargets.length > 1 && !installed ? (
