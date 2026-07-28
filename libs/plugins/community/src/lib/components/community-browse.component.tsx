@@ -445,21 +445,24 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                       }}
                     />
                   ) : null}
+                  {/* The name gets the whole line (AGL-1002). Sharing a row
+                      with the chips meant the title was the only thing that
+                      gave way when they did not fit — "Promo Countdown"
+                      truncated to "Promo Coun…" beside chips with room to
+                      spare, which inverts what matters on a browse card. */}
+                  <AppLink
+                    href={listingHref(listing.$id)}
+                    color="inherit"
+                    underline="hover"
+                    variant="subtitle2"
+                  >
+                    {listing.displayName}
+                  </AppLink>
                   <Stack
                     direction="row"
                     spacing={1}
-                    sx={{ alignItems: 'center' }}
+                    sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
                   >
-                    <AppLink
-                      href={listingHref(listing.$id)}
-                      color="inherit"
-                      underline="hover"
-                      variant="subtitle2"
-                      sx={{ flex: 1 }}
-                      noWrap
-                    >
-                      {listing.displayName}
-                    </AppLink>
                     {/* Primary classification, said first (AGL-864). */}
                     <Chip
                       size="small"
@@ -476,6 +479,13 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                         variant="outlined"
                         label={pluginState.shadowed ? 'Org-wide (shadowed)' : 'Org-wide'}
                       />
+                    ) : null}
+                    {/* The reviewed badge belongs HERE most of all
+                        (AGL-1002): the detail page showed it, but browse is
+                        where someone is comparing options and deciding whose
+                        code to run. */}
+                    {listing.reviewStatus === 'verified' ? (
+                      <Chip size="small" color="info" label="Verified" />
                     ) : null}
                     {priceUsd > 0 ? (
                       <Chip
@@ -519,6 +529,23 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                       variant="body2"
                       color="text.secondary"
                       sx={{ flex: 1 }}
+                      // Four lines, then ellipsis (AGL-1002). Grid rows
+                      // stretch to their tallest card, so one publisher's
+                      // essay used to leave every card beside it mostly white
+                      // space; the full text is one click away.
+                      //
+                      // Plain `style`, not `sx`: emotion drops the
+                      // `-webkit-box` display value on the way through, and
+                      // without it the other three properties clamp nothing
+                      // (measured — `display` computed to `flow-root` while
+                      // line-clamp and box-orient came through fine). Nothing
+                      // here reads the theme, so there is nothing to lose.
+                      style={{
+                        display: '-webkit-box',
+                        WebkitBoxOrient: 'vertical',
+                        WebkitLineClamp: 4,
+                        overflow: 'hidden',
+                      }}
                     >
                       {listing.description}
                     </Typography>
