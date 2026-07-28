@@ -26,7 +26,6 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { doc, setDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import CreateArtifactDrawer from '../../../../../../components/create-artifact-drawer.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
@@ -109,50 +108,47 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   return (
-    <>
-      <NextPageTitle screen={'Templates'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: <HostDisplayNameComponent hostId={hostId} />,
-            href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, host }),
-          },
-          {
-            children: 'Templates',
-            href: buildRoute(Route.HOST_TEMPLATES, { orgSlug, host }),
-          },
-        ]}
-        help="templatesLibrary"
-        header={{
+    <DashboardLayout
+      breadcrumbItems={[
+        {
+          children: <HostDisplayNameComponent hostId={hostId} />,
+          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, host }),
+        },
+        {
           children: 'Templates',
-          icon: { path: mdiBookmarkOutline.path },
-        }}
-        headerRight={
-          <Button
-            size="small"
-            variant="contained"
-            disabled={creating}
-            onClick={() => setCreateOpen(true)}
-          >
-            {creating ? 'Creating…' : 'Create Template'}
-          </Button>
-        }
-        aside={
-          <CreateArtifactDrawer
-            open={createOpen}
-            onClose={() => setCreateOpen(false)}
-            title="Create new template"
-            onSubmit={handleCreate}
-            error={createError}
-            extraFields={TEMPLATE_KIND_FIELD}
-          />
-        }
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <HostTemplatesCard hostId={hostId} />
-        </Container>
-      </DashboardLayout>
-    </>
+          href: buildRoute(Route.HOST_TEMPLATES, { orgSlug, host }),
+        },
+      ]}
+      help="templatesLibrary"
+      header={{
+        children: 'Templates',
+        icon: { path: mdiBookmarkOutline.path },
+      }}
+      headerRight={
+        <Button
+          size="small"
+          variant="contained"
+          disabled={creating}
+          onClick={() => setCreateOpen(true)}
+        >
+          {creating ? 'Creating…' : 'Create Template'}
+        </Button>
+      }
+      aside={
+        <CreateArtifactDrawer
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          title="Create new template"
+          onSubmit={handleCreate}
+          error={createError}
+          extraFields={TEMPLATE_KIND_FIELD}
+        />
+      }
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <HostTemplatesCard hostId={hostId} />
+      </Container>
+    </DashboardLayout>
   )
 }
 /**

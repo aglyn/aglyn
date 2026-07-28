@@ -25,7 +25,6 @@ import {
 } from '@aglyn/aglyn'
 import { mdiChevronRight, mdiPuzzleOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Chip, Stack, Switch, Tooltip, Typography } from '@mui/material'
@@ -285,126 +284,123 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   return (
-    <>
-      <NextPageTitle screen={'Plugins'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: 'Plugins',
-            href: buildRoute(Route.ORG_PLUGINS, { orgSlug }),
-          },
-        ]}
-        header={{
+    <DashboardLayout
+      breadcrumbItems={[
+        {
           children: 'Plugins',
-          icon: { path: mdiPuzzleOutline.path },
-        }}
-        // A way onward (AGL-1024). Now that Plugins is its own section,
-        // landing here with nothing installed used to offer no route to
-        // getting any — the marketplace was a tab away with nothing saying so.
-        headerRight={
-          <AppLink href={buildRoute(Route.ORG_MARKETPLACE, { orgSlug })}>
-            <Button variant="outlined" color="secondary" component="span">
-              {'Install a plugin'}
-            </Button>
-          </AppLink>
-        }
-        help="plugins"
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <Stack spacing={3}>
-            <CardDisplay
-              header={'Installed from the marketplace'}
-              contentGutterX
-              contentGutterY
-            >
-              {installations.length ? (
-                <Stack>
-                  {installations.map((install) => {
-                    // The update signal (AGL-1016), from the one shared
-                    // comparison — for plugins that is the newest APPROVED
-                    // version, so this can never offer what install refuses.
-                    const status = resolveUpdateState(
-                      install as never,
-                      listings[install.$id] ?? null,
-                      'plugin',
-                    )
-                    return row(
-                      install.$id,
-                      install.$id,
-                      install.displayName ?? install.pluginId ?? install.$id,
-                      `v${install.version} · ` +
-                        (install.orgWide
-                          ? 'every site in this organization'
-                          : install.siteLabels.length === 1
-                            ? install.siteLabels[0]
-                            : `${install.siteLabels.length} sites`),
-                      status.state === 'update-available' ? (
-                        <Chip
-                          size="small"
-                          color="primary"
-                          variant="outlined"
-                          label={`v${status.availableVersion} available`}
-                        />
-                      ) : status.state === 'unknown' ? (
-                        <Tooltip title={updateStateLabel(status)}>
-                          <Chip size="small" variant="outlined" label={'Unknown'} />
-                        </Tooltip>
-                      ) : undefined,
-                    )
-                  })}
-                </Stack>
-              ) : (
-                <Alert severity="info">
-                  {'Nothing installed from the marketplace yet — browse it to ' +
-                    'add one.'}
-                </Alert>
-              )}
-            </CardDisplay>
-
-            <CardDisplay
-              header={'Built in'}
-              contentGutterX
-              contentGutterY
-            >
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: 'block', mb: 1 }}
-              >
-                {'The plugins that ship with Aglyn. Turning one off removes ' +
-                  'it from navigation, the editor, published sites and the ' +
-                  'API for every site in this organization.'}
-              </Typography>
+          href: buildRoute(Route.ORG_PLUGINS, { orgSlug }),
+        },
+      ]}
+      header={{
+        children: 'Plugins',
+        icon: { path: mdiPuzzleOutline.path },
+      }}
+      // A way onward (AGL-1024). Now that Plugins is its own section,
+      // landing here with nothing installed used to offer no route to
+      // getting any — the marketplace was a tab away with nothing saying so.
+      headerRight={
+        <AppLink href={buildRoute(Route.ORG_MARKETPLACE, { orgSlug })}>
+          <Button variant="outlined" color="secondary" component="span">
+            {'Install a plugin'}
+          </Button>
+        </AppLink>
+      }
+      help="plugins"
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <Stack spacing={3}>
+          <CardDisplay
+            header={'Installed from the marketplace'}
+            contentGutterX
+            contentGutterY
+          >
+            {installations.length ? (
               <Stack>
-                {FIRST_PARTY_PLUGINS.map((plugin) =>
-                  row(
-                    plugin.id,
-                    plugin.id,
-                    plugin.label,
-                    plugin.description ?? '',
-                    <Switch
-                      size="small"
-                      checked={plugin.alwaysOn || enabled.has(plugin.id)}
-                      disabled={plugin.alwaysOn || !canManage}
-                      // The row is a link, so the switch has to stop the
-                      // click reaching it — otherwise toggling a plugin also
-                      // navigates away from the list you were toggling in.
-                      onClick={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                      }}
-                      onChange={(event) =>
-                        toggle(plugin.id, event.target.checked)
-                      }
-                    />,
-                  ),
-                )}
+                {installations.map((install) => {
+                  // The update signal (AGL-1016), from the one shared
+                  // comparison — for plugins that is the newest APPROVED
+                  // version, so this can never offer what install refuses.
+                  const status = resolveUpdateState(
+                    install as never,
+                    listings[install.$id] ?? null,
+                    'plugin',
+                  )
+                  return row(
+                    install.$id,
+                    install.$id,
+                    install.displayName ?? install.pluginId ?? install.$id,
+                    `v${install.version} · ` +
+                      (install.orgWide
+                        ? 'every site in this organization'
+                        : install.siteLabels.length === 1
+                          ? install.siteLabels[0]
+                          : `${install.siteLabels.length} sites`),
+                    status.state === 'update-available' ? (
+                      <Chip
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        label={`v${status.availableVersion} available`}
+                      />
+                    ) : status.state === 'unknown' ? (
+                      <Tooltip title={updateStateLabel(status)}>
+                        <Chip size="small" variant="outlined" label={'Unknown'} />
+                      </Tooltip>
+                    ) : undefined,
+                  )
+                })}
               </Stack>
-            </CardDisplay>
-          </Stack>
-        </Container>
-      </DashboardLayout>
-    </>
+            ) : (
+              <Alert severity="info">
+                {'Nothing installed from the marketplace yet — browse it to ' +
+                  'add one.'}
+              </Alert>
+            )}
+          </CardDisplay>
+
+          <CardDisplay
+            header={'Built in'}
+            contentGutterX
+            contentGutterY
+          >
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', mb: 1 }}
+            >
+              {'The plugins that ship with Aglyn. Turning one off removes ' +
+                'it from navigation, the editor, published sites and the ' +
+                'API for every site in this organization.'}
+            </Typography>
+            <Stack>
+              {FIRST_PARTY_PLUGINS.map((plugin) =>
+                row(
+                  plugin.id,
+                  plugin.id,
+                  plugin.label,
+                  plugin.description ?? '',
+                  <Switch
+                    size="small"
+                    checked={plugin.alwaysOn || enabled.has(plugin.id)}
+                    disabled={plugin.alwaysOn || !canManage}
+                    // The row is a link, so the switch has to stop the
+                    // click reaching it — otherwise toggling a plugin also
+                    // navigates away from the list you were toggling in.
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                    }}
+                    onChange={(event) =>
+                      toggle(plugin.id, event.target.checked)
+                    }
+                  />,
+                ),
+              )}
+            </Stack>
+          </CardDisplay>
+        </Stack>
+      </Container>
+    </DashboardLayout>
   )
 }
 OrgPlugins.displayName = 'Page:OrgPlugins'

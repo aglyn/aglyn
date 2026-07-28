@@ -17,11 +17,13 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { segmentTitle } from '../../../page-title'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
-// nearest server layout. The suffix comes from the root title template.
-export const metadata: Metadata = { title: 'Staff plugin reviews' }
+// nearest server layout.  re-declares the brand template so
+// it keeps applying to the titled routes nested below (AGL-1059).
+export const metadata: Metadata = { title: segmentTitle('Staff plugin reviews') }
 
 export default function AdminPluginReviewsTitleLayout({
   children,

@@ -24,7 +24,6 @@ import {
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Alert,
@@ -422,709 +421,706 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     value === UNLIMITED ? '∞' : value.toLocaleString()
 
   return (
-    <>
-      <NextPageTitle screen={'Organization – Staff'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
-          { children: 'Organizations', href: buildRoute(Route.ADMIN_ORGS) },
-          { children: org?.name ?? orgId },
-        ]}
-        header={{
-          children: 'Organization Detail',
-          icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <StaffOnly>
-            <>
-              <Alert severity="info" sx={{ mb: 3 }}>
-                {'Plan/entitlement overrides happen on the Organizations ' +
-                  'page; profile edits below are audited to the org ' +
-                  'activity log (AGL-358).'}
-              </Alert>
-              <GridItems
-                spacing={3}
-                items={[
-                  {
-                    size: { xs: 12, md: 6 },
-                    children: (
-                      <CardDisplay
-                        header={'Summary'}
-                        help={docsHelp('staffConsole', {
-                          anchor: '#whats-there',
-                          excerpt:
-                            'Plan, subscription, and suspension state at a glance. Impersonating the owner replaces your session and is audited.',
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        <Stack spacing={1}>
-                          <Stack direction="row" spacing={1}>
+    <DashboardLayout
+      breadcrumbItems={[
+        { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
+        { children: 'Organizations', href: buildRoute(Route.ADMIN_ORGS) },
+        { children: org?.name ?? orgId },
+      ]}
+      header={{
+        children: 'Organization Detail',
+        icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <StaffOnly>
+          <>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              {'Plan/entitlement overrides happen on the Organizations ' +
+                'page; profile edits below are audited to the org ' +
+                'activity log (AGL-358).'}
+            </Alert>
+            <GridItems
+              spacing={3}
+              items={[
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    <CardDisplay
+                      header={'Summary'}
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt:
+                          'Plan, subscription, and suspension state at a glance. Impersonating the owner replaces your session and is audited.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <Stack spacing={1}>
+                        <Stack direction="row" spacing={1}>
+                          <Chip
+                            label={org?.plan ?? 'no plan'}
+                            size="small"
+                            color={org?.plan ? 'secondary' : 'default'}
+                          />
+                          {org?.suspendedAt ? (
                             <Chip
-                              label={org?.plan ?? 'no plan'}
+                              label={`suspended${
+                                org?.suspendedReason
+                                  ? `: ${org.suspendedReason}`
+                                  : ''
+                              }`}
                               size="small"
-                              color={org?.plan ? 'secondary' : 'default'}
+                              color="error"
                             />
-                            {org?.suspendedAt ? (
-                              <Chip
-                                label={`suspended${
-                                  org?.suspendedReason
-                                    ? `: ${org.suspendedReason}`
-                                    : ''
-                                }`}
-                                size="small"
-                                color="error"
-                              />
-                            ) : null}
-                            {org?.subscription?.status ? (
-                              <Chip
-                                label={org.subscription.status}
-                                size="small"
-                                variant="outlined"
-                              />
-                            ) : null}
-                          </Stack>
-                          <Typography variant="body2">
-                            {org?.name ?? '—'}
-                          </Typography>
+                          ) : null}
+                          {org?.subscription?.status ? (
+                            <Chip
+                              label={org.subscription.status}
+                              size="small"
+                              variant="outlined"
+                            />
+                          ) : null}
+                        </Stack>
+                        <Typography variant="body2">
+                          {org?.name ?? '—'}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ fontFamily: 'monospace' }}
+                        >
+                          {`${orgId} · ${org?.slug ?? 'no slug'}`}
+                        </Typography>
+                        {/* The owner uid is the one identifier on this
+                            card that has a page of its own (AGL-244). */}
+                        {org?.ownerUid ? (
+                          <AppLink
+                            variant="caption"
+                            color="text.secondary"
+                            underline="hover"
+                            sx={{ fontFamily: 'monospace' }}
+                            href={buildRoute(Route.ADMIN_USER_DETAIL, {
+                              uid: org.ownerUid,
+                            })}
+                          >
+                            {`Owner: ${org.ownerUid}`}
+                          </AppLink>
+                        ) : (
                           <Typography
                             variant="caption"
                             color="text.secondary"
                             sx={{ fontFamily: 'monospace' }}
                           >
-                            {`${orgId} · ${org?.slug ?? 'no slug'}`}
+                            {'Owner: —'}
                           </Typography>
-                          {/* The owner uid is the one identifier on this
-                              card that has a page of its own (AGL-244). */}
-                          {org?.ownerUid ? (
-                            <AppLink
-                              variant="caption"
-                              color="text.secondary"
-                              underline="hover"
-                              sx={{ fontFamily: 'monospace' }}
-                              href={buildRoute(Route.ADMIN_USER_DETAIL, {
-                                uid: org.ownerUid,
-                              })}
-                            >
-                              {`Owner: ${org.ownerUid}`}
-                            </AppLink>
-                          ) : (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ fontFamily: 'monospace' }}
-                            >
-                              {'Owner: —'}
-                            </Typography>
-                          )}
-                          <Typography variant="caption" color="text.secondary">
-                            {`Stripe: ${org?.stripeCustomerId ?? '—'}`}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {`Created ${
-                              org?.createdAt?.seconds
-                                ? new Date(
-                                    org.createdAt.seconds * 1000,
-                                  ).toLocaleDateString()
-                                : '—'
-                            }`}
-                          </Typography>
-                          {org?.ownerUid ? (
-                            // Org impersonation (AGL-357).
-                            <Button
-                              size="small"
-                              color="warning"
-                              variant="outlined"
-                              sx={{ alignSelf: 'flex-start' }}
-                              onClick={() => void handleImpersonateOwner()}
-                            >
-                              {'Impersonate owner (replaces your session)'}
-                            </Button>
-                          ) : null}
-                        </Stack>
-                      </CardDisplay>
-                    ),
-                  },
-                  {
-                    size: { xs: 12, md: 6 },
-                    children: (
-                      // Direct editing (AGL-358).
-                      <CardDisplay
-                        header={'Edit organization'}
-                        help={docsHelp('team', {
-                          anchor: '#organizations',
-                          excerpt:
-                            'Rename the organization, update its logo and contact details, or transfer ownership to another member — audited to the org activity log.',
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        <Stack spacing={1.5}>
-                          <TextField
-                            size="small"
-                            label="Name"
-                            value={orgEdit.name}
-                            onChange={(event) =>
-                              setOrgEdit((prev) => ({
-                                ...prev,
-                                name: event.target.value,
-                              }))
-                            }
-                          />
-                          <MediaUrlField
-                            label="Logo URL"
-                            orgId={orgId}
-                            value={orgEdit.logoUrl}
-                            onChange={(logoUrl) =>
-                              setOrgEdit((prev) => ({ ...prev, logoUrl }))
-                            }
-                          />
-                          <TextField
-                            size="small"
-                            label="Contact email"
-                            value={orgEdit.contactEmail}
-                            onChange={(event) =>
-                              setOrgEdit((prev) => ({
-                                ...prev,
-                                contactEmail: event.target.value,
-                              }))
-                            }
-                          />
-                          <TextField
-                            size="small"
-                            label="Phone"
-                            value={orgEdit.contactPhone}
-                            onChange={(event) =>
-                              setOrgEdit((prev) => ({
-                                ...prev,
-                                contactPhone: event.target.value,
-                              }))
-                            }
-                          />
-                          <TextField
-                            size="small"
-                            label="Website"
-                            value={orgEdit.contactWebsite}
-                            onChange={(event) =>
-                              setOrgEdit((prev) => ({
-                                ...prev,
-                                contactWebsite: event.target.value,
-                              }))
-                            }
-                          />
-                          <TextField
-                            size="small"
-                            label="Address"
-                            multiline
-                            minRows={2}
-                            value={orgEdit.contactAddress}
-                            onChange={(event) =>
-                              setOrgEdit((prev) => ({
-                                ...prev,
-                                contactAddress: event.target.value,
-                              }))
-                            }
-                          />
+                        )}
+                        <Typography variant="caption" color="text.secondary">
+                          {`Stripe: ${org?.stripeCustomerId ?? '—'}`}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {`Created ${
+                            org?.createdAt?.seconds
+                              ? new Date(
+                                  org.createdAt.seconds * 1000,
+                                ).toLocaleDateString()
+                              : '—'
+                          }`}
+                        </Typography>
+                        {org?.ownerUid ? (
+                          // Org impersonation (AGL-357).
                           <Button
                             size="small"
+                            color="warning"
                             variant="outlined"
-                            disabled={orgEditBusy}
                             sx={{ alignSelf: 'flex-start' }}
-                            onClick={() => void handleOrgEditSave()}
+                            onClick={() => void handleImpersonateOwner()}
                           >
-                            {orgEditBusy ? 'Saving…' : 'Save organization'}
+                            {'Impersonate owner (replaces your session)'}
                           </Button>
-                          {/* Ownership transfer (AGL-390): staff can hand
-                              the org to another member; audited. */}
-                          <Stack
-                            direction="row"
-                            spacing={1}
-                            sx={{ alignItems: 'flex-start', mt: 1 }}
-                          >
-                            <TextField
-                              select
-                              size="small"
-                              label="Transfer ownership to"
-                              value={transferTarget}
-                              onChange={(event) =>
-                                setTransferTarget(event.target.value)
-                              }
-                              sx={{ flex: 1 }}
-                            >
-                              <MenuItem value="">{'Select a member…'}</MenuItem>
-                              {(memberDocs ?? [])
-                                .filter((m: any) => m.$id !== org?.ownerUid)
-                                .map((m: any) => (
-                                  <MenuItem key={m.$id} value={m.$id}>
-                                    {m.displayName ?? m.email ?? m.$id}
-                                  </MenuItem>
-                                ))}
-                            </TextField>
-                            <Button
-                              size="small"
-                              color="error"
-                              disabled={orgEditBusy || !transferTarget}
-                              onClick={() => void handleTransferOwnership()}
-                              sx={{ mt: 0.5 }}
-                            >
-                              {'Transfer'}
-                            </Button>
-                          </Stack>
-                        </Stack>
-                      </CardDisplay>
-                    ),
-                  },
-                  {
-                    size: { xs: 12, md: 6 },
-                    children: (
-                      <CardDisplay
-                        header={`Sites (${(hostDocs ?? []).length})`}
-                        help={docsHelp('architectureMultiTenancy', {
-                          anchor: '#data-model',
-                          excerpt:
-                            'Every site (host) this organization owns — open one for its staff detail page with usage and subdomain controls.',
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        <Stack spacing={1}>
-                          {(hostDocs ?? []).length === 0 ? (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                            >
-                              {'No sites.'}
-                            </Typography>
-                          ) : (
-                            (hostDocs ?? []).map((host: any) => (
-                              <Stack
-                                key={host.$id}
-                                direction="row"
-                                spacing={1}
-                                sx={{
-                                  justifyContent: 'space-between',
-                                  alignItems: 'center',
-                                }}
-                              >
-                                {/* Host detail page link (AGL-392). */}
-                                <AppLink
-                                  href={buildRoute(
-                                    Route.ADMIN_ORG_HOST_DETAIL,
-                                    { orgId, hostId: host.$id },
-                                  )}
-                                  color="secondary"
-                                  underline="hover"
-                                  variant="body2"
-                                  noWrap
-                                >
-                                  {host.displayName ??
-                                    host.subdomain ??
-                                    host.$id}
-                                </AppLink>
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ fontFamily: 'monospace' }}
-                                >
-                                  {host.subdomain ?? host.$id}
-                                </Typography>
-                              </Stack>
-                            ))
-                          )}
-                        </Stack>
-                      </CardDisplay>
-                    ),
-                  },
-                  {
-                    size: { xs: 12, md: 6 },
-                    children: (
-                      <CardDisplay
-                        header={`Members (${(memberDocs ?? []).length})`}
-                        help={docsHelp('architectureMultiTenancy', {
-                          anchor: '#membership-lifecycle',
-                          excerpt:
-                            "The organization's member roster with each person's role and whether they can reach all sites.",
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        <Stack spacing={1}>
-                          {(memberDocs ?? []).length === 0 ? (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                            >
-                              {'No members.'}
-                            </Typography>
-                          ) : (
-                            (memberDocs ?? []).map((member: any) => (
-                              <Stack
-                                key={member.$id}
-                                direction="row"
-                                spacing={1}
-                                sx={{
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                }}
-                              >
-                                {/* Member docs are keyed by uid, so the
-                                    roster links straight to the account. */}
-                                <AppLink
-                                  variant="body2"
-                                  color="inherit"
-                                  underline="hover"
-                                  noWrap
-                                  href={buildRoute(Route.ADMIN_USER_DETAIL, {
-                                    uid: member.$id,
-                                  })}
-                                >
-                                  {member.email ??
-                                    member.displayName ??
-                                    member.$id}
-                                </AppLink>
-                                <Stack direction="row" spacing={1}>
-                                  <Chip
-                                    label={member.role ?? 'viewer'}
-                                    size="small"
-                                    variant="outlined"
-                                  />
-                                  {member.allHosts ? (
-                                    <Chip
-                                      label="all sites"
-                                      size="small"
-                                    />
-                                  ) : null}
-                                </Stack>
-                              </Stack>
-                            ))
-                          )}
-                        </Stack>
-                      </CardDisplay>
-                    ),
-                  },
-                  {
-                    size: { xs: 12, md: 6 },
-                    children: (
-                      <CardDisplay
-                        header={'Effective entitlements'}
-                        help={docsHelp('billing', {
-                          anchor: '#tiers--entitlements',
-                          excerpt:
-                            'Resolved limits after plan defaults and per-org overrides, with current usage against each cap. Overrides are edited on the Organizations page.',
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        {resolved ? (
-                          <Table size="small">
-                            <TableHead>
-                              <TableRow>
-                                <TableCell>{'Key'}</TableCell>
-                                <TableCell align="right">{'Used'}</TableCell>
-                                <TableCell align="right">
-                                  {'Effective'}
-                                </TableCell>
-                                <TableCell align="right">
-                                  {'Plan default'}
-                                </TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              {Object.entries(resolved)
-                                .filter(
-                                  ([key, value]) =>
-                                    key !== 'features' &&
-                                    typeof value === 'number',
-                                )
-                                .map(([key, value]) => {
-                                  const fallback = (planDefaults as any)?.[
-                                    key
-                                  ]
-                                  const overridden =
-                                    org?.entitlements?.[key] != null
-                                  return (
-                                    <TableRow key={key}>
-                                      <TableCell>
-                                        {key}
-                                        {overridden ? (
-                                          <Chip
-                                            label="override"
-                                            size="small"
-                                            variant="outlined"
-                                            sx={{ ml: 1 }}
-                                          />
-                                        ) : null}
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {usageByKey[key] != null
-                                          ? usageByKey[key].toLocaleString()
-                                          : '—'}
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {formatLimit(value as number)}
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {fallback != null
-                                          ? formatLimit(fallback)
-                                          : '—'}
-                                      </TableCell>
-                                    </TableRow>
-                                  )
-                                })}
-                            </TableBody>
-                          </Table>
                         ) : null}
-                      </CardDisplay>
-                    ),
-                  },
-                  {
-                    size: { xs: 12, md: 6 },
-                    children: (
-                      <CardDisplay
-                        header={'Billing history & payment method'}
-                        help={docsHelp('billing', {
-                          anchor: '#payments',
-                          excerpt:
-                            "The organization's Stripe invoice history and default payment method, including delinquency — read-only.",
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        {billingError ? (
-                          <Alert severity="info">{billingError}</Alert>
-                        ) : !billing ? (
-                          <Typography variant="body2" color="text.secondary">
-                            {'Loading…'}
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    // Direct editing (AGL-358).
+                    <CardDisplay
+                      header={'Edit organization'}
+                      help={docsHelp('team', {
+                        anchor: '#organizations',
+                        excerpt:
+                          'Rename the organization, update its logo and contact details, or transfer ownership to another member — audited to the org activity log.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <Stack spacing={1.5}>
+                        <TextField
+                          size="small"
+                          label="Name"
+                          value={orgEdit.name}
+                          onChange={(event) =>
+                            setOrgEdit((prev) => ({
+                              ...prev,
+                              name: event.target.value,
+                            }))
+                          }
+                        />
+                        <MediaUrlField
+                          label="Logo URL"
+                          orgId={orgId}
+                          value={orgEdit.logoUrl}
+                          onChange={(logoUrl) =>
+                            setOrgEdit((prev) => ({ ...prev, logoUrl }))
+                          }
+                        />
+                        <TextField
+                          size="small"
+                          label="Contact email"
+                          value={orgEdit.contactEmail}
+                          onChange={(event) =>
+                            setOrgEdit((prev) => ({
+                              ...prev,
+                              contactEmail: event.target.value,
+                            }))
+                          }
+                        />
+                        <TextField
+                          size="small"
+                          label="Phone"
+                          value={orgEdit.contactPhone}
+                          onChange={(event) =>
+                            setOrgEdit((prev) => ({
+                              ...prev,
+                              contactPhone: event.target.value,
+                            }))
+                          }
+                        />
+                        <TextField
+                          size="small"
+                          label="Website"
+                          value={orgEdit.contactWebsite}
+                          onChange={(event) =>
+                            setOrgEdit((prev) => ({
+                              ...prev,
+                              contactWebsite: event.target.value,
+                            }))
+                          }
+                        />
+                        <TextField
+                          size="small"
+                          label="Address"
+                          multiline
+                          minRows={2}
+                          value={orgEdit.contactAddress}
+                          onChange={(event) =>
+                            setOrgEdit((prev) => ({
+                              ...prev,
+                              contactAddress: event.target.value,
+                            }))
+                          }
+                        />
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={orgEditBusy}
+                          sx={{ alignSelf: 'flex-start' }}
+                          onClick={() => void handleOrgEditSave()}
+                        >
+                          {orgEditBusy ? 'Saving…' : 'Save organization'}
+                        </Button>
+                        {/* Ownership transfer (AGL-390): staff can hand
+                            the org to another member; audited. */}
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ alignItems: 'flex-start', mt: 1 }}
+                        >
+                          <TextField
+                            select
+                            size="small"
+                            label="Transfer ownership to"
+                            value={transferTarget}
+                            onChange={(event) =>
+                              setTransferTarget(event.target.value)
+                            }
+                            sx={{ flex: 1 }}
+                          >
+                            <MenuItem value="">{'Select a member…'}</MenuItem>
+                            {(memberDocs ?? [])
+                              .filter((m: any) => m.$id !== org?.ownerUid)
+                              .map((m: any) => (
+                                <MenuItem key={m.$id} value={m.$id}>
+                                  {m.displayName ?? m.email ?? m.$id}
+                                </MenuItem>
+                              ))}
+                          </TextField>
+                          <Button
+                            size="small"
+                            color="error"
+                            disabled={orgEditBusy || !transferTarget}
+                            onClick={() => void handleTransferOwnership()}
+                            sx={{ mt: 0.5 }}
+                          >
+                            {'Transfer'}
+                          </Button>
+                        </Stack>
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    <CardDisplay
+                      header={`Sites (${(hostDocs ?? []).length})`}
+                      help={docsHelp('architectureMultiTenancy', {
+                        anchor: '#data-model',
+                        excerpt:
+                          'Every site (host) this organization owns — open one for its staff detail page with usage and subdomain controls.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <Stack spacing={1}>
+                        {(hostDocs ?? []).length === 0 ? (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                          >
+                            {'No sites.'}
                           </Typography>
                         ) : (
-                          <Stack spacing={1.5}>
-                            <Stack direction="row" spacing={1}>
-                              {billing.paymentMethod ? (
-                                <Chip
-                                  size="small"
-                                  label={describePaymentMethod(
-                                    billing.paymentMethod,
-                                  )}
-                                />
-                              ) : (
-                                <Chip
-                                  size="small"
-                                  label={
-                                    billing.hasCustomer === false
-                                      ? 'Never subscribed'
-                                      : 'No payment method'
-                                  }
-                                />
-                              )}
-                              {billing.delinquent ? (
-                                <Chip
-                                  size="small"
-                                  color="error"
-                                  label="Delinquent"
-                                />
-                              ) : null}
-                            </Stack>
-                            {billing.stripeError ? (
-                              <Alert severity="warning">
-                                {`Couldn't reach Stripe — this is not "no invoices". ${billing.stripeError}`}
-                              </Alert>
-                            ) : billing.invoices.length === 0 ? (
-                              <Typography
+                          (hostDocs ?? []).map((host: any) => (
+                            <Stack
+                              key={host.$id}
+                              direction="row"
+                              spacing={1}
+                              sx={{
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                              }}
+                            >
+                              {/* Host detail page link (AGL-392). */}
+                              <AppLink
+                                href={buildRoute(
+                                  Route.ADMIN_ORG_HOST_DETAIL,
+                                  { orgId, hostId: host.$id },
+                                )}
+                                color="secondary"
+                                underline="hover"
                                 variant="body2"
+                                noWrap
+                              >
+                                {host.displayName ??
+                                  host.subdomain ??
+                                  host.$id}
+                              </AppLink>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ fontFamily: 'monospace' }}
+                              >
+                                {host.subdomain ?? host.$id}
+                              </Typography>
+                            </Stack>
+                          ))
+                        )}
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    <CardDisplay
+                      header={`Members (${(memberDocs ?? []).length})`}
+                      help={docsHelp('architectureMultiTenancy', {
+                        anchor: '#membership-lifecycle',
+                        excerpt:
+                          "The organization's member roster with each person's role and whether they can reach all sites.",
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <Stack spacing={1}>
+                        {(memberDocs ?? []).length === 0 ? (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                          >
+                            {'No members.'}
+                          </Typography>
+                        ) : (
+                          (memberDocs ?? []).map((member: any) => (
+                            <Stack
+                              key={member.$id}
+                              direction="row"
+                              spacing={1}
+                              sx={{
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                              }}
+                            >
+                              {/* Member docs are keyed by uid, so the
+                                  roster links straight to the account. */}
+                              <AppLink
+                                variant="body2"
+                                color="inherit"
+                                underline="hover"
+                                noWrap
+                                href={buildRoute(Route.ADMIN_USER_DETAIL, {
+                                  uid: member.$id,
+                                })}
+                              >
+                                {member.email ??
+                                  member.displayName ??
+                                  member.$id}
+                              </AppLink>
+                              <Stack direction="row" spacing={1}>
+                                <Chip
+                                  label={member.role ?? 'viewer'}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                                {member.allHosts ? (
+                                  <Chip
+                                    label="all sites"
+                                    size="small"
+                                  />
+                                ) : null}
+                              </Stack>
+                            </Stack>
+                          ))
+                        )}
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    <CardDisplay
+                      header={'Effective entitlements'}
+                      help={docsHelp('billing', {
+                        anchor: '#tiers--entitlements',
+                        excerpt:
+                          'Resolved limits after plan defaults and per-org overrides, with current usage against each cap. Overrides are edited on the Organizations page.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      {resolved ? (
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>{'Key'}</TableCell>
+                              <TableCell align="right">{'Used'}</TableCell>
+                              <TableCell align="right">
+                                {'Effective'}
+                              </TableCell>
+                              <TableCell align="right">
+                                {'Plan default'}
+                              </TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {Object.entries(resolved)
+                              .filter(
+                                ([key, value]) =>
+                                  key !== 'features' &&
+                                  typeof value === 'number',
+                              )
+                              .map(([key, value]) => {
+                                const fallback = (planDefaults as any)?.[
+                                  key
+                                ]
+                                const overridden =
+                                  org?.entitlements?.[key] != null
+                                return (
+                                  <TableRow key={key}>
+                                    <TableCell>
+                                      {key}
+                                      {overridden ? (
+                                        <Chip
+                                          label="override"
+                                          size="small"
+                                          variant="outlined"
+                                          sx={{ ml: 1 }}
+                                        />
+                                      ) : null}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {usageByKey[key] != null
+                                        ? usageByKey[key].toLocaleString()
+                                        : '—'}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {formatLimit(value as number)}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {fallback != null
+                                        ? formatLimit(fallback)
+                                        : '—'}
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                          </TableBody>
+                        </Table>
+                      ) : null}
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    <CardDisplay
+                      header={'Billing history & payment method'}
+                      help={docsHelp('billing', {
+                        anchor: '#payments',
+                        excerpt:
+                          "The organization's Stripe invoice history and default payment method, including delinquency — read-only.",
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      {billingError ? (
+                        <Alert severity="info">{billingError}</Alert>
+                      ) : !billing ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {'Loading…'}
+                        </Typography>
+                      ) : (
+                        <Stack spacing={1.5}>
+                          <Stack direction="row" spacing={1}>
+                            {billing.paymentMethod ? (
+                              <Chip
+                                size="small"
+                                label={describePaymentMethod(
+                                  billing.paymentMethod,
+                                )}
+                              />
+                            ) : (
+                              <Chip
+                                size="small"
+                                label={
+                                  billing.hasCustomer === false
+                                    ? 'Never subscribed'
+                                    : 'No payment method'
+                                }
+                              />
+                            )}
+                            {billing.delinquent ? (
+                              <Chip
+                                size="small"
+                                color="error"
+                                label="Delinquent"
+                              />
+                            ) : null}
+                          </Stack>
+                          {billing.stripeError ? (
+                            <Alert severity="warning">
+                              {`Couldn't reach Stripe — this is not "no invoices". ${billing.stripeError}`}
+                            </Alert>
+                          ) : billing.invoices.length === 0 ? (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                            >
+                              {billing.hasCustomer === false
+                                ? 'This organization has never subscribed.'
+                                : 'No invoices yet.'}
+                            </Typography>
+                          ) : (
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell>{'Invoice'}</TableCell>
+                                  <TableCell>{'Status'}</TableCell>
+                                  <TableCell>{'Amount'}</TableCell>
+                                  <TableCell>{'Period end'}</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {billing.invoices.map((invoice) => (
+                                  <TableRow key={invoice.id}>
+                                    <TableCell>
+                                      {invoice.hostedInvoiceUrl ? (
+                                        <a
+                                          href={invoice.hostedInvoiceUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          {invoice.number ?? invoice.id}
+                                        </a>
+                                      ) : (
+                                        (invoice.number ?? invoice.id)
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {invoice.status ?? '—'}
+                                    </TableCell>
+                                    <TableCell>
+                                      {`$${(invoice.amountDueCents / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`}
+                                    </TableCell>
+                                    <TableCell>
+                                      {invoice.periodEnd
+                                        ? new Date(
+                                            invoice.periodEnd,
+                                          ).toLocaleDateString()
+                                        : '—'}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          )}
+                        </Stack>
+                      )}
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    <CardDisplay
+                      header={'Recent admin actions on this organization'}
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt:
+                          'The audit-log slice referencing this organization — the full record lives on the Audit log page.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <Stack spacing={1}>
+                        {orgAudit.length === 0 ? (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                          >
+                            {'No audit entries reference this ' +
+                              'organization in the latest 200.'}
+                          </Typography>
+                        ) : (
+                          orgAudit.map((entry: any) => (
+                            <Stack
+                              key={entry.$id}
+                              direction="row"
+                              spacing={1}
+                              sx={{ justifyContent: 'space-between' }}
+                            >
+                              <Chip label={entry.action} size="small" />
+                              <Typography
+                                variant="caption"
                                 color="text.secondary"
                               >
-                                {billing.hasCustomer === false
-                                  ? 'This organization has never subscribed.'
-                                  : 'No invoices yet.'}
+                                {`${entry.actorUid} · ${
+                                  entry.at?.seconds
+                                    ? new Date(
+                                        entry.at.seconds * 1000,
+                                      ).toLocaleString()
+                                    : '—'
+                                }`}
                               </Typography>
-                            ) : (
-                              <Table size="small">
-                                <TableHead>
-                                  <TableRow>
-                                    <TableCell>{'Invoice'}</TableCell>
-                                    <TableCell>{'Status'}</TableCell>
-                                    <TableCell>{'Amount'}</TableCell>
-                                    <TableCell>{'Period end'}</TableCell>
-                                  </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {billing.invoices.map((invoice) => (
-                                    <TableRow key={invoice.id}>
-                                      <TableCell>
-                                        {invoice.hostedInvoiceUrl ? (
-                                          <a
-                                            href={invoice.hostedInvoiceUrl}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                          >
-                                            {invoice.number ?? invoice.id}
-                                          </a>
-                                        ) : (
-                                          (invoice.number ?? invoice.id)
-                                        )}
-                                      </TableCell>
-                                      <TableCell>
-                                        {invoice.status ?? '—'}
-                                      </TableCell>
-                                      <TableCell>
-                                        {`$${(invoice.amountDueCents / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`}
-                                      </TableCell>
-                                      <TableCell>
-                                        {invoice.periodEnd
-                                          ? new Date(
-                                              invoice.periodEnd,
-                                            ).toLocaleDateString()
-                                          : '—'}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            )}
-                          </Stack>
+                            </Stack>
+                          ))
                         )}
-                      </CardDisplay>
-                    ),
-                  },
-                  {
-                    size: { xs: 12, md: 6 },
-                    children: (
-                      <CardDisplay
-                        header={'Recent admin actions on this organization'}
-                        help={docsHelp('staffConsole', {
-                          anchor: '#whats-there',
-                          excerpt:
-                            'The audit-log slice referencing this organization — the full record lives on the Audit log page.',
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        <Stack spacing={1}>
-                          {orgAudit.length === 0 ? (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                            >
-                              {'No audit entries reference this ' +
-                                'organization in the latest 200.'}
-                            </Typography>
-                          ) : (
-                            orgAudit.map((entry: any) => (
-                              <Stack
-                                key={entry.$id}
-                                direction="row"
-                                spacing={1}
-                                sx={{ justifyContent: 'space-between' }}
-                              >
-                                <Chip label={entry.action} size="small" />
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  {`${entry.actorUid} · ${
-                                    entry.at?.seconds
-                                      ? new Date(
-                                          entry.at.seconds * 1000,
-                                        ).toLocaleString()
-                                      : '—'
-                                  }`}
-                                </Typography>
-                              </Stack>
-                            ))
-                          )}
-                        </Stack>
-                      </CardDisplay>
-                    ),
-                  },
-                  {
-                    size: { xs: 12, md: 6 },
-                    children: (
-                      <CardDisplay
-                        header={'Staff notes'}
-                        help={docsHelp('staffConsole', {
-                          anchor: '#whats-there',
-                          excerpt:
-                            'Support and billing context on this organization, visible to staff only — never written into tenant-readable data. Audited.',
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        <Stack spacing={1.5}>
-                          <Typography variant="body2" color="text.secondary">
-                            {'Visible to staff only — support and billing ' +
-                              'context that stays out of tenant data.'}
-                          </Typography>
-                          <Stack
-                            direction="row"
-                            spacing={1}
-                            sx={{ alignItems: 'flex-start' }}
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    <CardDisplay
+                      header={'Staff notes'}
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt:
+                          'Support and billing context on this organization, visible to staff only — never written into tenant-readable data. Audited.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <Stack spacing={1.5}>
+                        <Typography variant="body2" color="text.secondary">
+                          {'Visible to staff only — support and billing ' +
+                            'context that stays out of tenant data.'}
+                        </Typography>
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ alignItems: 'flex-start' }}
+                        >
+                          <TextField
+                            size="small"
+                            label="Add a note"
+                            multiline
+                            maxRows={4}
+                            value={noteDraft}
+                            onChange={(event) =>
+                              setNoteDraft(event.target.value)
+                            }
+                            sx={{ flex: 1 }}
+                          />
+                          <Button
+                            variant="contained"
+                            color="secondary"
+                            size="small"
+                            disabled={noteBusy || !noteDraft.trim()}
+                            onClick={() => void handleAddNote()}
                           >
-                            <TextField
-                              size="small"
-                              label="Add a note"
-                              multiline
-                              maxRows={4}
-                              value={noteDraft}
-                              onChange={(event) =>
-                                setNoteDraft(event.target.value)
-                              }
-                              sx={{ flex: 1 }}
-                            />
-                            <Button
-                              variant="contained"
-                              color="secondary"
-                              size="small"
-                              disabled={noteBusy || !noteDraft.trim()}
-                              onClick={() => void handleAddNote()}
-                            >
-                              {'Save'}
-                            </Button>
-                          </Stack>
-                          {notes.length === 0 ? (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                            >
-                              {'No notes yet.'}
-                            </Typography>
-                          ) : (
-                            notes.map((note) => (
-                              <Stack key={note.$id} spacing={0.25}>
-                                <Typography
-                                  variant="body2"
-                                  sx={{ whiteSpace: 'pre-wrap' }}
-                                >
-                                  {note.text}
-                                </Typography>
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  {`${note.actorEmail ?? 'staff'} · ${
-                                    note.createdAt
-                                      ? new Date(
-                                          note.createdAt,
-                                        ).toLocaleString()
-                                      : '—'
-                                  }`}
-                                </Typography>
-                              </Stack>
-                            ))
-                          )}
+                            {'Save'}
+                          </Button>
                         </Stack>
-                      </CardDisplay>
-                    ),
-                  },
-                ]}
-              />
-            </>
-          </StaffOnly>
-          {/* Plugin zone (AGL-433): staff adminOrgDetail widgets. */}
-          <PluginWidgetSlot slot="adminOrgDetail" orgId={orgId} />
-        </Container>
-      </DashboardLayout>
-    </>
+                        {notes.length === 0 ? (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                          >
+                            {'No notes yet.'}
+                          </Typography>
+                        ) : (
+                          notes.map((note) => (
+                            <Stack key={note.$id} spacing={0.25}>
+                              <Typography
+                                variant="body2"
+                                sx={{ whiteSpace: 'pre-wrap' }}
+                              >
+                                {note.text}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {`${note.actorEmail ?? 'staff'} · ${
+                                  note.createdAt
+                                    ? new Date(
+                                        note.createdAt,
+                                      ).toLocaleString()
+                                    : '—'
+                                }`}
+                              </Typography>
+                            </Stack>
+                          ))
+                        )}
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+              ]}
+            />
+          </>
+        </StaffOnly>
+        {/* Plugin zone (AGL-433): staff adminOrgDetail widgets. */}
+        <PluginWidgetSlot slot="adminOrgDetail" orgId={orgId} />
+      </Container>
+    </DashboardLayout>
   )
 }
 AdminOrgDetail.displayName = 'Page:AdminOrgDetail'

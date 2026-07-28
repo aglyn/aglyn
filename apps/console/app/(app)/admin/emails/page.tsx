@@ -24,7 +24,6 @@ import {
 } from '@aglyn/shared-util-email'
 import { ICON_VARIANT_SYMBOL_MAIL } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
@@ -149,7 +148,6 @@ function AdminEmails() {
 
   return (
     <>
-      <NextPageTitle screen={'System emails'} />
       <DashboardLayout
         help="staffConsole"
         breadcrumbItems={[

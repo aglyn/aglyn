@@ -18,7 +18,6 @@
 
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Alert,
@@ -183,215 +182,212 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   return (
-    <>
-      <NextPageTitle screen={'Plugin reviews – Admin'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: 'Plugin reviews',
-            href: buildRoute(Route.ADMIN_PLUGIN_REVIEWS),
-          },
-        ]}
-        help="staffConsole"
-        header={{
+    <DashboardLayout
+      breadcrumbItems={[
+        {
           children: 'Plugin reviews',
-          icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {/* Without this a non-staff visitor is told "No plugin submissions
-              waiting for review" — the queue fetch 403s and the empty result
-              reads as good news rather than as a refusal (AGL-760). */}
-          <StaffOnly>
-            <Stack spacing={3}>
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+          href: buildRoute(Route.ADMIN_PLUGIN_REVIEWS),
+        },
+      ]}
+      help="staffConsole"
+      header={{
+        children: 'Plugin reviews',
+        icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        {/* Without this a non-staff visitor is told "No plugin submissions
+            waiting for review" — the queue fetch 403s and the empty result
+            reads as good news rather than as a refusal (AGL-760). */}
+        <StaffOnly>
+          <Stack spacing={3}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+            >
+              <TextField
+                size="small"
+                placeholder="Search name, publisher or listing id"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                sx={{ minWidth: 320 }}
+              />
+              <TextField
+                size="small"
+                select
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+                sx={{ minWidth: 180 }}
               >
-                <TextField
-                  size="small"
-                  placeholder="Search name, publisher or listing id"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  sx={{ minWidth: 320 }}
-                />
-                <TextField
-                  size="small"
-                  select
-                  value={status}
-                  onChange={(event) => setStatus(event.target.value)}
-                  sx={{ minWidth: 180 }}
-                >
-                  {STATUS_FILTERS.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Stack>
-
-              {!loaded ? (
-                <Stack spacing={2}>
-                  <Skeleton variant="rounded" height={140} />
-                  <Skeleton variant="rounded" height={200} />
-                </Stack>
-              ) : (
-                <>
-                  <CardDisplay
-                    header={`Awaiting review (${visibleQueue.length})`}
-                    help={docsHelp('manifestAndEnvs', {
-                      anchor: '#review--trust-lifecycle',
-                      excerpt:
-                        'Submissions waiting on a staff verdict. Open one to read its manifest, verifier findings and act.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ display: 'block', mb: 1 }}
-                    >
-                      {'Submitted and In review are not installable by anyone.'}
-                    </Typography>
-                    {visibleQueue.length ? (
-                      <Stack>
-                        {visibleQueue.map((entry) =>
-                          row(
-                            entry.listingId,
-                            entry.listingId,
-                            entry.displayName,
-                            entry.profileId,
-                            <>
-                              <Chip
-                                size="small"
-                                color={reviewStatusMeaning(entry.reviewStatus).color}
-                                label={reviewStatusMeaning(entry.reviewStatus).label}
-                              />
-                              <Chip
-                                size="small"
-                                variant="outlined"
-                                label={`v${entry.version || '—'}`}
-                              />
-                              {/* Same bar, smaller audience (AGL-968/995).
-                                  Worth flagging so a reviewer knows the
-                                  blast radius is one workspace — never so
-                                  they review it more loosely. */}
-                              {entry.private ? (
-                                <Chip
-                                  size="small"
-                                  variant="outlined"
-                                  label="Private"
-                                />
-                              ) : null}
-                              {/* A private plugin has no marketplace listing
-                                  page, so "no license" is not a finding. */}
-                              {entry.license || entry.private ? null : (
-                                <Chip
-                                  size="small"
-                                  color="warning"
-                                  label="No license"
-                                />
-                              )}
-                            </>,
-                            entry.priceUsd > 0 ? `$${entry.priceUsd}` : 'Free',
-                          ),
-                        )}
-                      </Stack>
-                    ) : (
-                      <Alert severity={filtering ? 'info' : 'success'}>
-                        {filtering
-                          ? 'No submissions match this filter.'
-                          : 'No plugin submissions waiting for review.'}
-                      </Alert>
-                    )}
-                  </CardDisplay>
-
-                  <CardDisplay
-                    header={`Listed plugins (${visibleListed.length})`}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    {/* Listed vs Verified is the distinction reviewers get
-                        wrong (AGL-966): both are LIVE. Verified only adds a
-                        badge — it does not change who can install. */}
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ display: 'block', mb: 1 }}
-                    >
-                      {'Both states are live — installable by every workspace. ' +
-                        'Verified additionally carries the reviewed badge on ' +
-                        'its listing page; it does not change installability. ' +
-                        // The sentence above is false for a private row
-                        // (AGL-968/995), and it sits directly over the rows
-                        // it would misdescribe.
-                        'Rows marked Private are the exception: approved and ' +
-                        'live, but only for the org that published them.'}
-                    </Typography>
-                    {visibleListed.length ? (
-                      <Stack>
-                        {visibleListed.map((entry) =>
-                          row(
-                            entry.listingId,
-                            entry.listingId,
-                            entry.displayName,
-                            entry.profileId,
-                            <>
-                              <Chip
-                                size="small"
-                                color={reviewStatusMeaning(entry.reviewStatus).color}
-                                label={reviewStatusMeaning(entry.reviewStatus).label}
-                              />
-                              <Chip
-                                size="small"
-                                variant="outlined"
-                                label={`v${entry.latestVersion || '—'}`}
-                              />
-                              {entry.private ? (
-                                <Chip
-                                  size="small"
-                                  variant="outlined"
-                                  label="Private"
-                                />
-                              ) : null}
-                              {entry.realmVersions ? (
-                                <Chip
-                                  size="small"
-                                  color="success"
-                                  label={`${entry.realmVersions} realm-trusted`}
-                                />
-                              ) : null}
-                              {entry.hidden ? (
-                                <Chip
-                                  size="small"
-                                  color="error"
-                                  label="Taken down"
-                                />
-                              ) : null}
-                            </>,
-                            `${entry.versionCount} version${
-                              entry.versionCount === 1 ? '' : 's'
-                            }${entry.hidden && entry.hiddenReason ? ` · ${entry.hiddenReason}` : ''}`,
-                          ),
-                        )}
-                      </Stack>
-                    ) : (
-                      <Alert severity="info">
-                        {filtering
-                          ? 'No listed plugins match this filter.'
-                          : 'No listed plugins yet.'}
-                      </Alert>
-                    )}
-                  </CardDisplay>
-                </>
-              )}
+                {STATUS_FILTERS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </TextField>
             </Stack>
-          </StaffOnly>
-        </Container>
-      </DashboardLayout>
-    </>
+
+            {!loaded ? (
+              <Stack spacing={2}>
+                <Skeleton variant="rounded" height={140} />
+                <Skeleton variant="rounded" height={200} />
+              </Stack>
+            ) : (
+              <>
+                <CardDisplay
+                  header={`Awaiting review (${visibleQueue.length})`}
+                  help={docsHelp('manifestAndEnvs', {
+                    anchor: '#review--trust-lifecycle',
+                    excerpt:
+                      'Submissions waiting on a staff verdict. Open one to read its manifest, verifier findings and act.',
+                  })}
+                  contentGutterX
+                  contentGutterY
+                >
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', mb: 1 }}
+                  >
+                    {'Submitted and In review are not installable by anyone.'}
+                  </Typography>
+                  {visibleQueue.length ? (
+                    <Stack>
+                      {visibleQueue.map((entry) =>
+                        row(
+                          entry.listingId,
+                          entry.listingId,
+                          entry.displayName,
+                          entry.profileId,
+                          <>
+                            <Chip
+                              size="small"
+                              color={reviewStatusMeaning(entry.reviewStatus).color}
+                              label={reviewStatusMeaning(entry.reviewStatus).label}
+                            />
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label={`v${entry.version || '—'}`}
+                            />
+                            {/* Same bar, smaller audience (AGL-968/995).
+                                Worth flagging so a reviewer knows the
+                                blast radius is one workspace — never so
+                                they review it more loosely. */}
+                            {entry.private ? (
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label="Private"
+                              />
+                            ) : null}
+                            {/* A private plugin has no marketplace listing
+                                page, so "no license" is not a finding. */}
+                            {entry.license || entry.private ? null : (
+                              <Chip
+                                size="small"
+                                color="warning"
+                                label="No license"
+                              />
+                            )}
+                          </>,
+                          entry.priceUsd > 0 ? `$${entry.priceUsd}` : 'Free',
+                        ),
+                      )}
+                    </Stack>
+                  ) : (
+                    <Alert severity={filtering ? 'info' : 'success'}>
+                      {filtering
+                        ? 'No submissions match this filter.'
+                        : 'No plugin submissions waiting for review.'}
+                    </Alert>
+                  )}
+                </CardDisplay>
+
+                <CardDisplay
+                  header={`Listed plugins (${visibleListed.length})`}
+                  contentGutterX
+                  contentGutterY
+                >
+                  {/* Listed vs Verified is the distinction reviewers get
+                      wrong (AGL-966): both are LIVE. Verified only adds a
+                      badge — it does not change who can install. */}
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', mb: 1 }}
+                  >
+                    {'Both states are live — installable by every workspace. ' +
+                      'Verified additionally carries the reviewed badge on ' +
+                      'its listing page; it does not change installability. ' +
+                      // The sentence above is false for a private row
+                      // (AGL-968/995), and it sits directly over the rows
+                      // it would misdescribe.
+                      'Rows marked Private are the exception: approved and ' +
+                      'live, but only for the org that published them.'}
+                  </Typography>
+                  {visibleListed.length ? (
+                    <Stack>
+                      {visibleListed.map((entry) =>
+                        row(
+                          entry.listingId,
+                          entry.listingId,
+                          entry.displayName,
+                          entry.profileId,
+                          <>
+                            <Chip
+                              size="small"
+                              color={reviewStatusMeaning(entry.reviewStatus).color}
+                              label={reviewStatusMeaning(entry.reviewStatus).label}
+                            />
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label={`v${entry.latestVersion || '—'}`}
+                            />
+                            {entry.private ? (
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label="Private"
+                              />
+                            ) : null}
+                            {entry.realmVersions ? (
+                              <Chip
+                                size="small"
+                                color="success"
+                                label={`${entry.realmVersions} realm-trusted`}
+                              />
+                            ) : null}
+                            {entry.hidden ? (
+                              <Chip
+                                size="small"
+                                color="error"
+                                label="Taken down"
+                              />
+                            ) : null}
+                          </>,
+                          `${entry.versionCount} version${
+                            entry.versionCount === 1 ? '' : 's'
+                          }${entry.hidden && entry.hiddenReason ? ` · ${entry.hiddenReason}` : ''}`,
+                        ),
+                      )}
+                    </Stack>
+                  ) : (
+                    <Alert severity="info">
+                      {filtering
+                        ? 'No listed plugins match this filter.'
+                        : 'No listed plugins yet.'}
+                    </Alert>
+                  )}
+                </CardDisplay>
+              </>
+            )}
+          </Stack>
+        </StaffOnly>
+      </Container>
+    </DashboardLayout>
   )
 }
 

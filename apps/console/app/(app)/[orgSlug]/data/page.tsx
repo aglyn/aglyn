@@ -18,7 +18,6 @@
 
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert } from '@mui/material'
 import FeatureGate from '../../../../components/feature-gate.component'
@@ -41,36 +40,33 @@ const OrgData: NextPageWithLayout<Record<string, never>> = () => {
   const { currentOrg, loading } = useOrgScope()
   const { org } = useCurrentOrg()
   return (
-    <>
-      <NextPageTitle screen={'Data – Organization'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          { children: 'Data', href: buildRoute(Route.ORG_DATA, { orgSlug }) },
-        ]}
-        help="datasets"
-        header={{
-          children: 'Organization Data',
-          icon: { path: ICON_VARIANT_APP_SETTINGS.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {!loading && !currentOrg ? (
-            <Alert severity="info">
-              {'Create your first site to start an organization, or accept ' +
-                'a pending invite from your dashboard.'}
-            </Alert>
-          ) : currentOrg?.$id ? (
-            <FeatureGate flag="release_data_store">
-              <PluginWidgetSlot
-                slot="orgData"
-                orgId={currentOrg.$id}
-                org={org}
-              />
-            </FeatureGate>
-          ) : null}
-        </Container>
-      </DashboardLayout>
-    </>
+    <DashboardLayout
+      breadcrumbItems={[
+        { children: 'Data', href: buildRoute(Route.ORG_DATA, { orgSlug }) },
+      ]}
+      help="datasets"
+      header={{
+        children: 'Organization Data',
+        icon: { path: ICON_VARIANT_APP_SETTINGS.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        {!loading && !currentOrg ? (
+          <Alert severity="info">
+            {'Create your first site to start an organization, or accept ' +
+              'a pending invite from your dashboard.'}
+          </Alert>
+        ) : currentOrg?.$id ? (
+          <FeatureGate flag="release_data_store">
+            <PluginWidgetSlot
+              slot="orgData"
+              orgId={currentOrg.$id}
+              org={org}
+            />
+          </FeatureGate>
+        ) : null}
+      </Container>
+    </DashboardLayout>
   )
 }
 OrgData.displayName = 'Page:OrgData'

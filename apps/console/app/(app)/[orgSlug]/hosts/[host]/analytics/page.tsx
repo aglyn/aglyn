@@ -18,7 +18,6 @@
 
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Stack } from '@mui/material'
 import HostAnalyticsCard from '../../../../../../components/analytics/host-analytics-card.component'
@@ -44,34 +43,31 @@ const HostAnalytics: NextPageWithLayout<Record<string, never>> = () => {
   const host = useHostSubdomain()
 
   return (
-    <>
-      <NextPageTitle screen={'Analytics'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: <HostDisplayNameComponent hostId={hostId} />,
-            href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
-          },
-          {
-            children: 'Analytics',
-            href: buildRoute(Route.HOST_ANALYTICS, { orgSlug,  host }),
-          },
-        ]}
-        help="analytics"
-        header={{
+    <DashboardLayout
+      breadcrumbItems={[
+        {
+          children: <HostDisplayNameComponent hostId={hostId} />,
+          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
+        },
+        {
           children: 'Analytics',
-          icon: { path: ICON_VARIANT_APP_SETTINGS.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <Stack spacing={3}>
-            <HostAnalyticsCard hostId={hostId} />
-            <PluginWidgetSlot slot="commerceGlance" hostId={hostId} />
-            <CampaignGlanceCard hostId={hostId} />
-          </Stack>
-        </Container>
-      </DashboardLayout>
-    </>
+          href: buildRoute(Route.HOST_ANALYTICS, { orgSlug,  host }),
+        },
+      ]}
+      help="analytics"
+      header={{
+        children: 'Analytics',
+        icon: { path: ICON_VARIANT_APP_SETTINGS.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <Stack spacing={3}>
+          <HostAnalyticsCard hostId={hostId} />
+          <PluginWidgetSlot slot="commerceGlance" hostId={hostId} />
+          <CampaignGlanceCard hostId={hostId} />
+        </Stack>
+      </Container>
+    </DashboardLayout>
   )
 }
 HostAnalytics.displayName = 'Page:HostAnalytics'

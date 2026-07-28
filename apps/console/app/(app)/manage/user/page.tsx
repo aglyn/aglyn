@@ -33,7 +33,6 @@ import {
   FormSchema,
   simpleComponentMapper,
 } from '@aglyn/shared-ui-jsx-forms'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
@@ -569,82 +568,79 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
   )
 
   return (
-    <>
-      <NextPageTitle screen={'Manage Account'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: 'Manage Account',
-            href: buildRoute(Route.MANAGE_USER_SETTINGS),
-          },
-        ]}
-        help="account"
-        header={{
+    <DashboardLayout
+      breadcrumbItems={[
+        {
           children: 'Manage Account',
-          icon: { path: ICON_VARIANT_APP_SETTINGS.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <TabContext value={tab}>
-            <GridItems
-              spacing={3}
-              items={[
-                {
-                  size: { xs: 12, sm: 3 },
-                  children: (
-                    <CardDisplay
-                      header="Navigation"
-                      help={docsHelp('account', {
-                        excerpt:
-                          'Sections of your account — sign-in, profile ' +
-                          'image, basic info and password.',
-                      })}
+          href: buildRoute(Route.MANAGE_USER_SETTINGS),
+        },
+      ]}
+      help="account"
+      header={{
+        children: 'Manage Account',
+        icon: { path: ICON_VARIANT_APP_SETTINGS.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <TabContext value={tab}>
+          <GridItems
+            spacing={3}
+            items={[
+              {
+                size: { xs: 12, sm: 3 },
+                children: (
+                  <CardDisplay
+                    header="Navigation"
+                    help={docsHelp('account', {
+                      excerpt:
+                        'Sections of your account — sign-in, profile ' +
+                        'image, basic info and password.',
+                    })}
+                  >
+                    <TabList
+                      orientation="vertical"
+                      textColor="secondary"
+                      indicatorColor="secondary"
+                      sx={{
+                        ['.MuiTab-root']: {
+                          alignItems: 'start',
+                          maxWidth: 'unset',
+                        },
+                      }}
+                      onChange={onTabChange}
                     >
-                      <TabList
-                        orientation="vertical"
-                        textColor="secondary"
-                        indicatorColor="secondary"
-                        sx={{
-                          ['.MuiTab-root']: {
-                            alignItems: 'start',
-                            maxWidth: 'unset',
-                          },
-                        }}
-                        onChange={onTabChange}
-                      >
-                        {sections.map((section) => (
-                          <Tab
-                            key={section.id}
-                            value={section.id}
-                            label={section.label}
-                          />
-                        ))}
-                      </TabList>
-                    </CardDisplay>
-                  ),
-                },
-                {
-                  size: { xs: 12, sm: 9 },
-                  children: (
-                    <>
                       {sections.map((section) => (
-                        <TabPanel
+                        <Tab
                           key={section.id}
                           value={section.id}
-                          sx={{ padding: 'unset' }}
-                        >
-                          {section.content}
-                        </TabPanel>
+                          label={section.label}
+                        />
                       ))}
-                    </>
-                  ),
-                },
-              ]}
-            />
-          </TabContext>
-        </Container>
-      </DashboardLayout>
-    </>
+                    </TabList>
+                  </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12, sm: 9 },
+                children: (
+                  <>
+                    {sections.map((section) => (
+                      <TabPanel
+                        key={section.id}
+                        value={section.id}
+                        sx={{ padding: 'unset' }}
+                      >
+                        {section.content}
+                      </TabPanel>
+                    ))}
+                  </>
+                ),
+              },
+            ]}
+          />
+        </TabContext>
+      </Container>
+    </DashboardLayout>
   )
 }
 ManageUser.displayName = 'Page:ManageUser'

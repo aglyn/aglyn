@@ -35,7 +35,6 @@ import {
   LOADING_OVERLAY_ELEMENT,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   getGoogleFontsUrl,
@@ -235,7 +234,6 @@ function LayoutBesignerPage(props) {
         </Head>
       ) : null}
       <MainLayout
-        title={'Besigner'}
         enableAppBarElevation
         besigner
         centerPrefix={
@@ -337,8 +335,6 @@ function LayoutBesignerPage(props) {
           },
         ]}
       >
-        <NextPageTitle screen={'Layout Besigner'} />
-
         {error || notFound ? (
           <Stack
             sx={{

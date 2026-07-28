@@ -23,7 +23,6 @@ import {
   Container,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -668,7 +667,6 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
 
   return (
     <>
-      <NextPageTitle screen={'Content'} />
       <DashboardLayout
         breadcrumbItems={[
           {

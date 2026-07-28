@@ -19,7 +19,6 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { AglynNodeRenderer, useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import {
   getGoogleFontsUrl,
   ThemeProvider,
@@ -155,7 +154,6 @@ function ScreenPreviewPage() {
         </Head>
       ) : null}
       <CssBaseline enableColorScheme />
-      <NextPageTitle screen={'Screen Preview'} />
       {/* Shared hidden-class rule (AGL-562/830): the tenant page ships this in
           its SSR HTML so author-hidden elements (a mega-menu panel carries the
           class to start closed) paint hidden from the first frame. Preview

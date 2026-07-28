@@ -17,14 +17,17 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { segmentTitle } from '../../../page-title'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
-// nearest server layout.  re-declares the brand template so
-// it keeps applying to the titled routes nested below (AGL-1059).
-export const metadata: Metadata = { title: segmentTitle('Team') }
+// nearest server layout. The suffix comes from the root title template.
+//
+// The console home is `(app)/page.tsx`, whose nearest layout is the `(app)`
+// group shell — a client component that cannot carry metadata either. The
+// `(home)` route group exists only to give this page a server layout of its
+// own without changing its URL, which stays `/`.
+export const metadata: Metadata = { title: 'Workspaces' }
 
-export default function TeamTitleLayout({ children }: { children: ReactNode }) {
+export default function HomeTitleLayout({ children }: { children: ReactNode }) {
   return <>{children}</>
 }

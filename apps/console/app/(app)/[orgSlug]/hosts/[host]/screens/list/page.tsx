@@ -45,7 +45,6 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -635,7 +634,6 @@ function Screens(props) {
 
   return (
     <>
-      <NextPageTitle screen={'Screens'} />
       <DashboardLayout
         breadcrumbItems={[
           {

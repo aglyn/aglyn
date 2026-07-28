@@ -28,7 +28,6 @@ import {
   MdiIcon,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -227,189 +226,186 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
   const dirty = name != null || description != null
 
   return (
-    <>
-      <NextPageTitle screen={definition?.displayName ?? 'Component'} />
-      <DashboardLayout
-        // Keep the parent tab lit on a detail page, the way the
-        // admin detail pages do — without this the nav loses its
-        // selected state as soon as you open a row.
-        breadcrumbItems={[
-          {
-            children: <HostDisplayNameComponent hostId={hostId} />,
-            href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, host }),
-          },
-          { children: 'Components', href: listUrl },
-          {
-            children: definition?.displayName ?? componentId,
-            href: buildRoute(Route.COMPONENT_DETAILS, {
-              orgSlug,
-              host,
-              componentId,
-            }),
-          },
-        ]}
-        help="components"
-        header={{
-          children: definition?.displayName ?? 'Component',
-          icon: { path: ICON_VARIANT_APP_SETTINGS.path },
-        }}
-        // The besigner is what this page exists to reach, so it belongs in
-        // the hero like the screen detail page's, not as a text button at
-        // the bottom of a card (AGL-702).
-        // Withheld when there is no component: Open Besigner would mint a
-        // version document under an id that has none (AGL-706).
-        headerRight={
-          notFound ? null : (
-            <Button
-              size="small"
-              variant="contained"
-              disabled={opening}
-              onClick={handleOpen()}
-              startIcon={
-                <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
-              }
-            >
-              {opening ? 'Opening…' : 'Open Besigner'}
-            </Button>
-          )
-        }
-      >
-        {notFound ? (
-          <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-            <ArtifactNotFound
-              noun="component"
-              listUrl={listUrl}
-              listLabel="components"
-              id={componentId}
-            />
-          </Container>
-        ) : (
+    <DashboardLayout
+      // Keep the parent tab lit on a detail page, the way the
+      // admin detail pages do — without this the nav loses its
+      // selected state as soon as you open a row.
+      breadcrumbItems={[
+        {
+          children: <HostDisplayNameComponent hostId={hostId} />,
+          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, host }),
+        },
+        { children: 'Components', href: listUrl },
+        {
+          children: definition?.displayName ?? componentId,
+          href: buildRoute(Route.COMPONENT_DETAILS, {
+            orgSlug,
+            host,
+            componentId,
+          }),
+        },
+      ]}
+      help="components"
+      header={{
+        children: definition?.displayName ?? 'Component',
+        icon: { path: ICON_VARIANT_APP_SETTINGS.path },
+      }}
+      // The besigner is what this page exists to reach, so it belongs in
+      // the hero like the screen detail page's, not as a text button at
+      // the bottom of a card (AGL-702).
+      // Withheld when there is no component: Open Besigner would mint a
+      // version document under an id that has none (AGL-706).
+      headerRight={
+        notFound ? null : (
+          <Button
+            size="small"
+            variant="contained"
+            disabled={opening}
+            onClick={handleOpen()}
+            startIcon={
+              <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
+            }
+          >
+            {opening ? 'Opening…' : 'Open Besigner'}
+          </Button>
+        )
+      }
+    >
+      {notFound ? (
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <GridItems
-            spacing={3}
-            items={[
-              {
-                size: { xs: 12, lg: 5 },
-                children: (
-          <CardDisplay header={'Details'} contentGutterX contentGutterY>
-            <Stack spacing={2}>
-              <TextField
-                label="Display name"
-                size="small"
-                value={name ?? definition?.displayName ?? ''}
-                onChange={(event) => setName(event.target.value)}
-                fullWidth
-              />
-              <TextField
-                label="Description"
-                size="small"
-                value={description ?? definition?.description ?? ''}
-                onChange={(event) => setDescription(event.target.value)}
-                fullWidth
-                multiline
-                minRows={2}
-                helperText="Shown in the components list and the element drawer"
-              />
-              <Typography variant="caption" color="text.secondary">
-                {`ID ${componentId} — persisted in screen documents, so it never changes`}
-              </Typography>
-              {/* Save stays with the fields it saves. Open-besigner moved to
-                  the hero, and "Back to components" is dropped — the
-                  breadcrumb already goes there, and the screen detail page
-                  carries no back button either (AGL-702). */}
-              <Stack direction="row" spacing={1}>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  size="small"
-                  disabled={!dirty}
-                  onClick={handleSave}
-                >
-                  {'Save'}
-                </Button>
-              </Stack>
-            </Stack>
-          </CardDisplay>
-                ),
-              },
-              {
-                size: { xs: 12, lg: 7 },
-                children: (
-          <CardDisplay header={'Versions'} contentGutterX contentGutterY>
-            {versions.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                {'No versions yet — opening the besigner creates the first one.'}
-              </Typography>
-            ) : (
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>{'Version'}</TableCell>
-                    <TableCell>{'Created'}</TableCell>
-                    <TableCell>{'Updated'}</TableCell>
-                    <TableCell align="right">{'Actions'}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {versions.map((version: any) => (
-                    <TableRow key={version.$id} hover>
-                      <TableCell>
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'center' }}
-                        >
-                          <Typography variant="body2">
-                            {version.displayName ?? version.$id}
-                          </Typography>
-                          {version.$id === publishedVersionId ? (
-                            <Chip label="Current" color="success" size="small" />
-                          ) : null}
-                        </Stack>
-                      </TableCell>
-                      <TableCell>
-                        {version.createdAt?.toDate?.().toLocaleString() ?? '--'}
-                      </TableCell>
-                      <TableCell>
-                        {version.updatedAt?.toDate?.().toLocaleString() ?? '--'}
-                      </TableCell>
-                      <TableCell align="right">
-                        <Button
-                          size="small"
-                          disabled={opening}
-                          onClick={handleOpen(version.$id)}
-                        >
-                          {'Open'}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardDisplay>
-                ),
-              },
-              {
-                // Sits under Details, beside Versions: what USES this
-                // component is a property of the component, not of any one
-                // version (AGL-703).
-                size: { xs: 12, lg: 5 },
-                children: (
-                  <UsedByCard
-                    hostId={hostId}
-                    kind="component"
-                    id={componentId}
-                    noun="component"
-                  />
-                ),
-              },
-            ]}
+          <ArtifactNotFound
+            noun="component"
+            listUrl={listUrl}
+            listLabel="components"
+            id={componentId}
           />
         </Container>
-        )}
-      </DashboardLayout>
-    </>
+      ) : (
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <GridItems
+          spacing={3}
+          items={[
+            {
+              size: { xs: 12, lg: 5 },
+              children: (
+        <CardDisplay header={'Details'} contentGutterX contentGutterY>
+          <Stack spacing={2}>
+            <TextField
+              label="Display name"
+              size="small"
+              value={name ?? definition?.displayName ?? ''}
+              onChange={(event) => setName(event.target.value)}
+              fullWidth
+            />
+            <TextField
+              label="Description"
+              size="small"
+              value={description ?? definition?.description ?? ''}
+              onChange={(event) => setDescription(event.target.value)}
+              fullWidth
+              multiline
+              minRows={2}
+              helperText="Shown in the components list and the element drawer"
+            />
+            <Typography variant="caption" color="text.secondary">
+              {`ID ${componentId} — persisted in screen documents, so it never changes`}
+            </Typography>
+            {/* Save stays with the fields it saves. Open-besigner moved to
+                the hero, and "Back to components" is dropped — the
+                breadcrumb already goes there, and the screen detail page
+                carries no back button either (AGL-702). */}
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="contained"
+                color="secondary"
+                size="small"
+                disabled={!dirty}
+                onClick={handleSave}
+              >
+                {'Save'}
+              </Button>
+            </Stack>
+          </Stack>
+        </CardDisplay>
+              ),
+            },
+            {
+              size: { xs: 12, lg: 7 },
+              children: (
+        <CardDisplay header={'Versions'} contentGutterX contentGutterY>
+          {versions.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {'No versions yet — opening the besigner creates the first one.'}
+            </Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>{'Version'}</TableCell>
+                  <TableCell>{'Created'}</TableCell>
+                  <TableCell>{'Updated'}</TableCell>
+                  <TableCell align="right">{'Actions'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {versions.map((version: any) => (
+                  <TableRow key={version.$id} hover>
+                    <TableCell>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center' }}
+                      >
+                        <Typography variant="body2">
+                          {version.displayName ?? version.$id}
+                        </Typography>
+                        {version.$id === publishedVersionId ? (
+                          <Chip label="Current" color="success" size="small" />
+                        ) : null}
+                      </Stack>
+                    </TableCell>
+                    <TableCell>
+                      {version.createdAt?.toDate?.().toLocaleString() ?? '--'}
+                    </TableCell>
+                    <TableCell>
+                      {version.updatedAt?.toDate?.().toLocaleString() ?? '--'}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button
+                        size="small"
+                        disabled={opening}
+                        onClick={handleOpen(version.$id)}
+                      >
+                        {'Open'}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardDisplay>
+              ),
+            },
+            {
+              // Sits under Details, beside Versions: what USES this
+              // component is a property of the component, not of any one
+              // version (AGL-703).
+              size: { xs: 12, lg: 5 },
+              children: (
+                <UsedByCard
+                  hostId={hostId}
+                  kind="component"
+                  id={componentId}
+                  noun="component"
+                />
+              ),
+            },
+          ]}
+        />
+      </Container>
+      )}
+    </DashboardLayout>
   )
 }
 ComponentDetails.displayName = 'Page:ComponentDetails'

@@ -17,6 +17,7 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { segmentTitle } from '../../../../page-title'
 import HostGuard from '../../../../../components/host-guard.component'
 
 // Fallback title for the editor routes of one site (AGL-1059); each editor
@@ -27,7 +28,7 @@ export async function generateMetadata({
   params: Promise<{ host: string }>
 }): Promise<Metadata> {
   const { host } = await params
-  return { title: `Besigner · ${host}` }
+  return { title: segmentTitle(`Besigner · ${host}`) }
 }
 
 /**

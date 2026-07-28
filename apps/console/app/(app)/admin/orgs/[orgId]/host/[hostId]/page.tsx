@@ -18,7 +18,6 @@
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -152,180 +151,177 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   return (
-    <>
-      <NextPageTitle screen={'Host – Staff'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
-          {
-            children: 'Organization',
-            href: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }),
-          },
-          { children: host?.displayName ?? hostId },
-        ]}
-        header={{
-          children: host?.displayName ?? 'Host',
-          icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <StaffOnly>
-            <GridItems
-              spacing={3}
-              items={[
-                {
-                  size: { xs: 12, md: 6 },
-                  children: (
-                    <CardDisplay
-                      header={'Site'}
-                      help={docsHelp('architectureMultiTenancy', {
-                        anchor: '#workspace-subdomains',
-                        excerpt:
-                          "The site's live URL, custom domain, and publish state. Retargeting the subdomain is audited and takes effect within a minute.",
-                      })}
-                      contentGutterX
-                      contentGutterY
-                    >
-                      <Stack spacing={1}>
-                        <Typography variant="body2">
-                          {host?.displayName ?? '—'}
-                        </Typography>
-                        {liveUrl ? (
-                          <MuiLink
-                            href={liveUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            color="secondary"
-                            underline="hover"
-                          >
-                            {liveUrl}
-                          </MuiLink>
-                        ) : (
-                          <Typography variant="caption" color="text.secondary">
-                            {'Not published'}
-                          </Typography>
-                        )}
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ fontFamily: 'monospace' }}
+    <DashboardLayout
+      breadcrumbItems={[
+        { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
+        {
+          children: 'Organization',
+          href: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }),
+        },
+        { children: host?.displayName ?? hostId },
+      ]}
+      header={{
+        children: host?.displayName ?? 'Host',
+        icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <StaffOnly>
+          <GridItems
+            spacing={3}
+            items={[
+              {
+                size: { xs: 12, md: 6 },
+                children: (
+                  <CardDisplay
+                    header={'Site'}
+                    help={docsHelp('architectureMultiTenancy', {
+                      anchor: '#workspace-subdomains',
+                      excerpt:
+                        "The site's live URL, custom domain, and publish state. Retargeting the subdomain is audited and takes effect within a minute.",
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <Stack spacing={1}>
+                      <Typography variant="body2">
+                        {host?.displayName ?? '—'}
+                      </Typography>
+                      {liveUrl ? (
+                        <MuiLink
+                          href={liveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          color="secondary"
+                          underline="hover"
                         >
-                          {`host id ${hostId}`}
+                          {liveUrl}
+                        </MuiLink>
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          {'Not published'}
                         </Typography>
-                        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
-                          {host?.cname ? (
-                            <Chip size="small" label={`domain: ${host.cname}`} />
-                          ) : null}
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            label={host?.published ? 'published' : 'draft'}
-                          />
-                        </Stack>
-                        {/* Subdomain edit (AGL-390). */}
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'flex-start', mt: 1 }}
-                        >
-                          <TextField
-                            size="small"
-                            label="Subdomain"
-                            value={subdomain}
-                            onChange={(event) =>
-                              setSubdomain(event.target.value.toLowerCase())
-                            }
-                            helperText={`${subdomain || '…'}.${TENANT_ROOT}`}
-                            sx={{ flex: 1 }}
-                          />
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            disabled={
-                              busy ||
-                              !subdomain.trim() ||
-                              subdomain === (host?.subdomain ?? '')
-                            }
-                            onClick={() => void handleSubdomainSave()}
-                            sx={{ mt: 0.5 }}
-                          >
-                            {'Save'}
-                          </Button>
-                        </Stack>
+                      )}
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ fontFamily: 'monospace' }}
+                      >
+                        {`host id ${hostId}`}
+                      </Typography>
+                      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
+                        {host?.cname ? (
+                          <Chip size="small" label={`domain: ${host.cname}`} />
+                        ) : null}
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={host?.published ? 'published' : 'draft'}
+                        />
                       </Stack>
-                    </CardDisplay>
-                  ),
-                },
-                {
-                  size: { xs: 12, md: 6 },
-                  children: (
-                    <CardDisplay
-                      header={'Usage'}
-                      help={docsHelp('billing', {
-                        anchor: '#usage-meters',
-                        excerpt:
-                          "Live counts for this site — pages, screens, media, members, and storage — the figures metered against the org's entitlements.",
-                      })}
-                      contentGutterX
-                      contentGutterY
-                    >
+                      {/* Subdomain edit (AGL-390). */}
                       <Stack
                         direction="row"
-                        spacing={3}
-                        sx={{ flexWrap: 'wrap', gap: 2 }}
+                        spacing={1}
+                        sx={{ alignItems: 'flex-start', mt: 1 }}
                       >
-                        {stat('Published pages', publishedPages)}
-                        {stat('Screens', counts.screens)}
-                        {stat('Media files', counts.media)}
-                        {stat('Site members', counts.members)}
-                        {stat('Storage (MB)', storageMb)}
+                        <TextField
+                          size="small"
+                          label="Subdomain"
+                          value={subdomain}
+                          onChange={(event) =>
+                            setSubdomain(event.target.value.toLowerCase())
+                          }
+                          helperText={`${subdomain || '…'}.${TENANT_ROOT}`}
+                          sx={{ flex: 1 }}
+                        />
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={
+                            busy ||
+                            !subdomain.trim() ||
+                            subdomain === (host?.subdomain ?? '')
+                          }
+                          onClick={() => void handleSubdomainSave()}
+                          sx={{ mt: 0.5 }}
+                        >
+                          {'Save'}
+                        </Button>
                       </Stack>
-                    </CardDisplay>
-                  ),
-                },
-                {
-                  size: { xs: 12 },
-                  children: (
-                    <CardDisplay
-                      header={'Settings snapshot'}
-                      help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt:
-                          "A read-only snapshot of the site's locales, analytics id, password protection, and store template screens.",
-                      })}
-                      contentGutterX
-                      contentGutterY
+                    </Stack>
+                  </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12, md: 6 },
+                children: (
+                  <CardDisplay
+                    header={'Usage'}
+                    help={docsHelp('billing', {
+                      anchor: '#usage-meters',
+                      excerpt:
+                        "Live counts for this site — pages, screens, media, members, and storage — the figures metered against the org's entitlements.",
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <Stack
+                      direction="row"
+                      spacing={3}
+                      sx={{ flexWrap: 'wrap', gap: 2 }}
                     >
-                      <Stack spacing={0.5}>
-                        <Typography variant="body2" color="text.secondary">
-                          {`Locales: ${(host?.locales ?? []).join(', ') || '—'}`}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {/* The field lives at analytics.gaMeasurementId —
-                              what the Setup form writes and the tenant reads.
-                              The flat path never existed, so this always
-                              showed '—' even for hosts with GA configured. */}
-                          {`GA measurement id: ${
-                            (host as { analytics?: { gaMeasurementId?: string } })
-                              ?.analytics?.gaMeasurementId ?? '—'
-                          }`}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {`Password protected: ${host?.protectPassword ? 'yes' : 'no'}`}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {`Store templates: PDP ${host?.settings?.store?.pdpScreenId ?? '—'}, collection ${host?.settings?.store?.collectionScreenId ?? '—'}`}
-                        </Typography>
-                      </Stack>
-                    </CardDisplay>
-                  ),
-                },
-              ]}
-            />
-          </StaffOnly>
-        </Container>
-      </DashboardLayout>
-    </>
+                      {stat('Published pages', publishedPages)}
+                      {stat('Screens', counts.screens)}
+                      {stat('Media files', counts.media)}
+                      {stat('Site members', counts.members)}
+                      {stat('Storage (MB)', storageMb)}
+                    </Stack>
+                  </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12 },
+                children: (
+                  <CardDisplay
+                    header={'Settings snapshot'}
+                    help={docsHelp('staffConsole', {
+                      anchor: '#whats-there',
+                      excerpt:
+                        "A read-only snapshot of the site's locales, analytics id, password protection, and store template screens.",
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <Stack spacing={0.5}>
+                      <Typography variant="body2" color="text.secondary">
+                        {`Locales: ${(host?.locales ?? []).join(', ') || '—'}`}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {/* The field lives at analytics.gaMeasurementId —
+                            what the Setup form writes and the tenant reads.
+                            The flat path never existed, so this always
+                            showed '—' even for hosts with GA configured. */}
+                        {`GA measurement id: ${
+                          (host as { analytics?: { gaMeasurementId?: string } })
+                            ?.analytics?.gaMeasurementId ?? '—'
+                        }`}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {`Password protected: ${host?.protectPassword ? 'yes' : 'no'}`}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {`Store templates: PDP ${host?.settings?.store?.pdpScreenId ?? '—'}, collection ${host?.settings?.store?.collectionScreenId ?? '—'}`}
+                      </Typography>
+                    </Stack>
+                  </CardDisplay>
+                ),
+              },
+            ]}
+          />
+        </StaffOnly>
+      </Container>
+    </DashboardLayout>
   )
 }
 AdminHostDetail.displayName = 'Page:AdminHostDetail'

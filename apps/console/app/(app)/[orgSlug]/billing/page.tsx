@@ -29,7 +29,6 @@ import {
   useLoading,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -376,393 +375,390 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   }, [orgId, user, permissionsLoaded])
 
   return (
-    <>
-      <NextPageTitle screen={'Billing'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          { children: 'Billing', href: buildRoute(Route.MANAGE_BILLING, { orgSlug }) },
-        ]}
-        help="billing"
-        header={{
-          children: 'Billing',
-          icon: { path: ICON_VARIANT_APP_SETTINGS.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {/* Permission guard (AGL-243): billing.view gates the page. */}
-          {permissionsLoaded && !can('billing.view') ? (
-            <Alert severity="warning">
-              {'You do not have permission to view billing for this ' +
-                'organization — ask an organization admin for access.'}
-            </Alert>
-          ) : (
-          <GridItems
-            spacing={3}
-            items={[
-              {
-                size: { xs: 12, md: 4 },
-                children: (
-                  <CardDisplay
-                    header={'Current plan'}
-                    help={docsHelp('billing', {
-                      anchor: '#tiers--entitlements',
-                      excerpt:
-                        'Your subscription tier and its headline limits — ' +
-                        'every plan\'s full entitlements are in the docs.',
-                    })}
-                    contentGutterX
-                    contentGutterY
+    <DashboardLayout
+      breadcrumbItems={[
+        { children: 'Billing', href: buildRoute(Route.MANAGE_BILLING, { orgSlug }) },
+      ]}
+      help="billing"
+      header={{
+        children: 'Billing',
+        icon: { path: ICON_VARIANT_APP_SETTINGS.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        {/* Permission guard (AGL-243): billing.view gates the page. */}
+        {permissionsLoaded && !can('billing.view') ? (
+          <Alert severity="warning">
+            {'You do not have permission to view billing for this ' +
+              'organization — ask an organization admin for access.'}
+          </Alert>
+        ) : (
+        <GridItems
+          spacing={3}
+          items={[
+            {
+              size: { xs: 12, md: 4 },
+              children: (
+                <CardDisplay
+                  header={'Current plan'}
+                  help={docsHelp('billing', {
+                    anchor: '#tiers--entitlements',
+                    excerpt:
+                      'Your subscription tier and its headline limits — ' +
+                      'every plan\'s full entitlements are in the docs.',
+                  })}
+                  contentGutterX
+                  contentGutterY
+                >
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center', mb: 1 }}
                   >
+                    <Typography variant="h5">{PLAN_LABELS[plan]}</Typography>
+                    <Chip
+                      label={org?.subscription?.status ?? 'no subscription'}
+                      size="small"
+                      color={
+                        org?.subscription?.status === 'active'
+                          ? 'success'
+                          : org?.subscription?.status === 'past_due'
+                            ? 'warning'
+                            : 'default'
+                      }
+                      variant="outlined"
+                    />
+                  </Stack>
+                  {/* Plan price + headline entitlements (AGL-367). */}
+                  {PLAN_PRICING[plan]?.basePriceMonthlyUsd ? (
+                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                      {`$${PLAN_PRICING[plan].basePriceMonthlyUsd}/mo · ` +
+                        `$${PLAN_PRICING[plan].basePriceAnnualMonthlyUsd}/mo billed yearly`}
+                    </Typography>
+                  ) : null}
+                  <Stack
+                    direction="row"
+                    spacing={0.5}
+                    sx={{ flexWrap: 'wrap', gap: 0.5, mb: 1 }}
+                  >
+                    {[
+                      `${PLAN_ENTITLEMENTS[plan]?.hostLimit ?? '—'} sites`,
+                      `${PLAN_ENTITLEMENTS[plan]?.emailSendsPerMonth ?? '—'} emails/mo`,
+                    ].map((label) => (
+                      <Chip
+                        key={label}
+                        size="small"
+                        variant="outlined"
+                        label={label}
+                      />
+                    ))}
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary">
+                    {org?.plan
+                      ? 'Usage and limits for your plan are shown beside.'
+                      : 'No plan assigned yet — this organization resolves ' +
+                        'to the Free limits.'}
+                  </Typography>
+                  {cancelAtPeriodEnd ? (
+                    <Chip
+                      label="cancels at period end"
+                      size="small"
+                      color="warning"
+                      sx={{ mt: 1 }}
+                    />
+                  ) : null}
+                  {/* Renewal + addons (AGL-248). */}
+                  {(org?.subscription as any)?.currentPeriodEnd ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mt: 1 }}
+                    >
+                      {`Renews ${new Date(
+                        (org?.subscription as any).currentPeriodEnd
+                          ?.toDate?.()
+                          ?.getTime?.() ??
+                          (org?.subscription as any).currentPeriodEnd,
+                      ).toLocaleDateString()}`}
+                    </Typography>
+                  ) : null}
+                  {can('billing.manage') ? (
                     <Stack
                       direction="row"
                       spacing={1}
-                      sx={{ alignItems: 'center', mb: 1 }}
+                      sx={{ mt: 1.5, flexWrap: 'wrap', gap: 1 }}
                     >
-                      <Typography variant="h5">{PLAN_LABELS[plan]}</Typography>
-                      <Chip
-                        label={org?.subscription?.status ?? 'no subscription'}
+                      {/* Stripe Billing Portal (AGL-275). */}
+                      <Button
                         size="small"
-                        color={
-                          org?.subscription?.status === 'active'
-                            ? 'success'
-                            : org?.subscription?.status === 'past_due'
-                              ? 'warning'
-                              : 'default'
-                        }
                         variant="outlined"
-                      />
-                    </Stack>
-                    {/* Plan price + headline entitlements (AGL-367). */}
-                    {PLAN_PRICING[plan]?.basePriceMonthlyUsd ? (
-                      <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                        {`$${PLAN_PRICING[plan].basePriceMonthlyUsd}/mo · ` +
-                          `$${PLAN_PRICING[plan].basePriceAnnualMonthlyUsd}/mo billed yearly`}
-                      </Typography>
-                    ) : null}
-                    <Stack
-                      direction="row"
-                      spacing={0.5}
-                      sx={{ flexWrap: 'wrap', gap: 0.5, mb: 1 }}
-                    >
-                      {[
-                        `${PLAN_ENTITLEMENTS[plan]?.hostLimit ?? '—'} sites`,
-                        `${PLAN_ENTITLEMENTS[plan]?.emailSendsPerMonth ?? '—'} emails/mo`,
-                      ].map((label) => (
-                        <Chip
-                          key={label}
-                          size="small"
-                          variant="outlined"
-                          label={label}
-                        />
-                      ))}
-                    </Stack>
-                    <Typography variant="body2" color="text.secondary">
-                      {org?.plan
-                        ? 'Usage and limits for your plan are shown beside.'
-                        : 'No plan assigned yet — this organization resolves ' +
-                          'to the Free limits.'}
-                    </Typography>
-                    {cancelAtPeriodEnd ? (
-                      <Chip
-                        label="cancels at period end"
-                        size="small"
-                        color="warning"
-                        sx={{ mt: 1 }}
-                      />
-                    ) : null}
-                    {/* Renewal + addons (AGL-248). */}
-                    {(org?.subscription as any)?.currentPeriodEnd ? (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: 'block', mt: 1 }}
+                        color="secondary"
+                        onClick={() => void handleOpenPortal()}
                       >
-                        {`Renews ${new Date(
-                          (org?.subscription as any).currentPeriodEnd
-                            ?.toDate?.()
-                            ?.getTime?.() ??
-                            (org?.subscription as any).currentPeriodEnd,
-                        ).toLocaleDateString()}`}
-                      </Typography>
-                    ) : null}
-                    {can('billing.manage') ? (
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ mt: 1.5, flexWrap: 'wrap', gap: 1 }}
-                      >
-                        {/* Stripe Billing Portal (AGL-275). */}
+                        {'Manage payment methods'}
+                      </Button>
+                      {subscriptionActive ? (
+                        // Cancel/downgrade flow (AGL-269).
                         <Button
                           size="small"
-                          variant="outlined"
-                          color="secondary"
-                          onClick={() => void handleOpenPortal()}
+                          color={cancelAtPeriodEnd ? 'secondary' : 'error'}
+                          onClick={() => void handleCancelToggle()}
                         >
-                          {'Manage payment methods'}
+                          {cancelAtPeriodEnd
+                            ? 'Resume subscription'
+                            : 'Cancel subscription'}
                         </Button>
-                        {subscriptionActive ? (
-                          // Cancel/downgrade flow (AGL-269).
+                      ) : null}
+                    </Stack>
+                  ) : null}
+                  {org?.seatAddons &&
+                  Object.values(org.seatAddons).some(Boolean) ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block' }}
+                    >
+                      {`Plan add-ons: ${Object.entries(org.seatAddons)
+                        .filter(([, count]) => Number(count) > 0)
+                        .map(([kind, count]) =>
+                          kind === 'eventCalendar'
+                            ? ADDON_LABELS[kind]
+                            : `${count} ${ADDON_LABELS[kind] ?? kind}`)
+                        .join(', ')}`}
+                    </Typography>
+                  ) : null}
+                </CardDisplay>
+              ),
+            },
+            {
+              size: { xs: 12, md: 8 },
+              children: (
+                <CardDisplay
+                  header={'Usage'}
+                  help={docsHelp('billing', {
+                    anchor: '#usage-meters',
+                    excerpt:
+                      'Live meters for sites, storage, bandwidth, and ' +
+                      'email sends against your plan\'s quotas.',
+                  })}
+                  contentGutterX
+                  contentGutterY
+                >
+                  <BillingUsageComponent
+                    org={org}
+                    hosts={hosts ?? []}
+                  />
+                </CardDisplay>
+              ),
+            },
+            {
+              size: { xs: 12, md: 4 },
+              children: (
+                <CardDisplay
+                  header={'Metered usage estimate'}
+                  help={docsHelp('billing', {
+                    anchor: '#usage-meters',
+                    excerpt:
+                      'A cost estimate for metered overages this period, ' +
+                      'based on current usage across your sites.',
+                  })}
+                  contentGutterX
+                  contentGutterY
+                >
+                  <BillingMeteredEstimateComponent hosts={hosts ?? []} />
+                </CardDisplay>
+              ),
+            },
+            {
+              size: { xs: 12, md: 8 },
+              children: (
+                <CardDisplay
+                  header={'Billing history'}
+                  help={docsHelp('billing', {
+                    anchor: '#payments',
+                    excerpt:
+                      'Invoices from Stripe with status and amounts, plus ' +
+                      'links to the hosted invoice, PDF, and receipt.',
+                  })}
+                  contentGutterX
+                  contentGutterY
+                >
+                  {invoices === null ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {'Invoices appear here once billing is configured.'}
+                    </Typography>
+                  ) : invoices.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {'No invoices yet.'}
+                    </Typography>
+                  ) : (
+                    <>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>{'Invoice'}</TableCell>
+                            <TableCell>{'Date'}</TableCell>
+                            <TableCell>{'Status'}</TableCell>
+                            <TableCell>{'Amount'}</TableCell>
+                            <TableCell align="right">{'Documents'}</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {invoices.map((invoice) => (
+                            <TableRow key={invoice.id}>
+                              <TableCell>
+                                {invoice.number ?? invoice.id}
+                              </TableCell>
+                              <TableCell>
+                                {invoice.created
+                                  ? new Date(
+                                      invoice.created,
+                                    ).toLocaleDateString()
+                                  : '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={invoice.status ?? '—'}
+                                  size="small"
+                                  variant="outlined"
+                                  color={
+                                    invoice.status === 'paid'
+                                      ? 'success'
+                                      : invoice.status === 'open'
+                                        ? 'warning'
+                                        : 'default'
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>
+                                {`$${(invoice.totalCents / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`}
+                              </TableCell>
+                              <TableCell align="right">
+                                <Stack
+                                  direction="row"
+                                  spacing={1.5}
+                                  sx={{ justifyContent: 'flex-end' }}
+                                >
+                                  {invoice.hostedInvoiceUrl ? (
+                                    <Link
+                                      href={invoice.hostedInvoiceUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      variant="body2"
+                                    >
+                                      {'View'}
+                                    </Link>
+                                  ) : null}
+                                  {invoice.invoicePdf ? (
+                                    <Link
+                                      href={invoice.invoicePdf}
+                                      variant="body2"
+                                    >
+                                      {'PDF'}
+                                    </Link>
+                                  ) : null}
+                                  {invoice.receiptUrl ? (
+                                    <Link
+                                      href={invoice.receiptUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      variant="body2"
+                                    >
+                                      {'Receipt'}
+                                    </Link>
+                                  ) : null}
+                                </Stack>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      {invoicesHasMore ? (
+                        <Box sx={{ textAlign: 'center', mt: 1 }}>
                           <Button
                             size="small"
-                            color={cancelAtPeriodEnd ? 'secondary' : 'error'}
-                            onClick={() => void handleCancelToggle()}
+                            color="secondary"
+                            disabled={invoicesLoading}
+                            onClick={() => void fetchInvoices(invoiceCursor)}
                           >
-                            {cancelAtPeriodEnd
-                              ? 'Resume subscription'
-                              : 'Cancel subscription'}
+                            {invoicesLoading
+                              ? 'Loading…'
+                              : 'Load older invoices'}
                           </Button>
-                        ) : null}
-                      </Stack>
-                    ) : null}
-                    {org?.seatAddons &&
-                    Object.values(org.seatAddons).some(Boolean) ? (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: 'block' }}
+                        </Box>
+                      ) : null}
+                    </>
+                  )}
+                </CardDisplay>
+              ),
+            },
+            ...(addonStore.visible
+              ? [{
+                  size: { xs: 12 },
+                  children: (
+                    // Self-serve add-ons (AGL-529); #addons anchors the
+                    // point-of-need upsell links (AGL-530).
+                    <Box id="addons">
+                      <CardDisplay
+                        header={'Plan add-ons'}
+                        help={docsHelp('addOns', {
+                          anchor: '#what-you-can-add',
+                        })}
+                        contentGutterX
+                        contentGutterY
                       >
-                        {`Plan add-ons: ${Object.entries(org.seatAddons)
-                          .filter(([, count]) => Number(count) > 0)
-                          .map(([kind, count]) =>
-                            kind === 'eventCalendar'
-                              ? ADDON_LABELS[kind]
-                              : `${count} ${ADDON_LABELS[kind] ?? kind}`)
-                          .join(', ')}`}
-                      </Typography>
-                    ) : null}
-                  </CardDisplay>
-                ),
-              },
-              {
-                size: { xs: 12, md: 8 },
-                children: (
-                  <CardDisplay
-                    header={'Usage'}
-                    help={docsHelp('billing', {
-                      anchor: '#usage-meters',
-                      excerpt:
-                        'Live meters for sites, storage, bandwidth, and ' +
-                        'email sends against your plan\'s quotas.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    <BillingUsageComponent
-                      org={org}
-                      hosts={hosts ?? []}
+                        <BillingAddonsCardComponent
+                          orgId={orgId}
+                          canManage={can('billing.manage')}
+                        />
+                      </CardDisplay>
+                    </Box>
+                  ),
+                }]
+              : []),
+            {
+              size: { xs: 12 },
+              children: (
+                // Annual billing toggle (AGL-269): two months free.
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={interval === 'year'}
+                      onChange={(event) =>
+                        setInterval(event.target.checked ? 'year' : 'month')
+                      }
                     />
-                  </CardDisplay>
-                ),
-              },
-              {
-                size: { xs: 12, md: 4 },
-                children: (
-                  <CardDisplay
-                    header={'Metered usage estimate'}
-                    help={docsHelp('billing', {
-                      anchor: '#usage-meters',
-                      excerpt:
-                        'A cost estimate for metered overages this period, ' +
-                        'based on current usage across your sites.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    <BillingMeteredEstimateComponent hosts={hosts ?? []} />
-                  </CardDisplay>
-                ),
-              },
-              {
-                size: { xs: 12, md: 8 },
-                children: (
-                  <CardDisplay
-                    header={'Billing history'}
-                    help={docsHelp('billing', {
-                      anchor: '#payments',
-                      excerpt:
-                        'Invoices from Stripe with status and amounts, plus ' +
-                        'links to the hosted invoice, PDF, and receipt.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    {invoices === null ? (
-                      <Typography variant="body2" color="text.secondary">
-                        {'Invoices appear here once billing is configured.'}
-                      </Typography>
-                    ) : invoices.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
-                        {'No invoices yet.'}
-                      </Typography>
-                    ) : (
-                      <>
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell>{'Invoice'}</TableCell>
-                              <TableCell>{'Date'}</TableCell>
-                              <TableCell>{'Status'}</TableCell>
-                              <TableCell>{'Amount'}</TableCell>
-                              <TableCell align="right">{'Documents'}</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {invoices.map((invoice) => (
-                              <TableRow key={invoice.id}>
-                                <TableCell>
-                                  {invoice.number ?? invoice.id}
-                                </TableCell>
-                                <TableCell>
-                                  {invoice.created
-                                    ? new Date(
-                                        invoice.created,
-                                      ).toLocaleDateString()
-                                    : '—'}
-                                </TableCell>
-                                <TableCell>
-                                  <Chip
-                                    label={invoice.status ?? '—'}
-                                    size="small"
-                                    variant="outlined"
-                                    color={
-                                      invoice.status === 'paid'
-                                        ? 'success'
-                                        : invoice.status === 'open'
-                                          ? 'warning'
-                                          : 'default'
-                                    }
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  {`$${(invoice.totalCents / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`}
-                                </TableCell>
-                                <TableCell align="right">
-                                  <Stack
-                                    direction="row"
-                                    spacing={1.5}
-                                    sx={{ justifyContent: 'flex-end' }}
-                                  >
-                                    {invoice.hostedInvoiceUrl ? (
-                                      <Link
-                                        href={invoice.hostedInvoiceUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        variant="body2"
-                                      >
-                                        {'View'}
-                                      </Link>
-                                    ) : null}
-                                    {invoice.invoicePdf ? (
-                                      <Link
-                                        href={invoice.invoicePdf}
-                                        variant="body2"
-                                      >
-                                        {'PDF'}
-                                      </Link>
-                                    ) : null}
-                                    {invoice.receiptUrl ? (
-                                      <Link
-                                        href={invoice.receiptUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        variant="body2"
-                                      >
-                                        {'Receipt'}
-                                      </Link>
-                                    ) : null}
-                                  </Stack>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                        {invoicesHasMore ? (
-                          <Box sx={{ textAlign: 'center', mt: 1 }}>
-                            <Button
-                              size="small"
-                              color="secondary"
-                              disabled={invoicesLoading}
-                              onClick={() => void fetchInvoices(invoiceCursor)}
-                            >
-                              {invoicesLoading
-                                ? 'Loading…'
-                                : 'Load older invoices'}
-                            </Button>
-                          </Box>
-                        ) : null}
-                      </>
-                    )}
-                  </CardDisplay>
-                ),
-              },
-              ...(addonStore.visible
-                ? [{
-                    size: { xs: 12 },
-                    children: (
-                      // Self-serve add-ons (AGL-529); #addons anchors the
-                      // point-of-need upsell links (AGL-530).
-                      <Box id="addons">
-                        <CardDisplay
-                          header={'Plan add-ons'}
-                          help={docsHelp('addOns', {
-                            anchor: '#what-you-can-add',
-                          })}
-                          contentGutterX
-                          contentGutterY
-                        >
-                          <BillingAddonsCardComponent
-                            orgId={orgId}
-                            canManage={can('billing.manage')}
-                          />
-                        </CardDisplay>
-                      </Box>
-                    ),
-                  }]
-                : []),
-              {
-                size: { xs: 12 },
-                children: (
-                  // Annual billing toggle (AGL-269): two months free.
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={interval === 'year'}
-                        onChange={(event) =>
-                          setInterval(event.target.checked ? 'year' : 'month')
-                        }
-                      />
-                    }
-                    label={
-                      interval === 'year'
-                        ? 'Annual billing — 2 months free'
-                        : 'Monthly billing (switch for 2 months free)'
-                    }
-                  />
-                ),
-              },
-              {
-                size: { xs: 12 },
-                children: (
-                  <BillingPlanCardsComponent
-                    plan={org?.plan as OrgPlan | undefined}
-                    interval={interval}
-                    onSelect={(tier) =>
-                      permissions.editBilling
-                        ? void handleUpgrade(tier)()
-                        : void enqueueSnackbar(
-                            'Your team role does not allow billing changes',
-                            { variant: 'warning', persist: false },
-                          )
-                    }
-                  />
-                ),
-              },
-            ]}
-          />
-          )}
-        </Container>
-      </DashboardLayout>
-    </>
+                  }
+                  label={
+                    interval === 'year'
+                      ? 'Annual billing — 2 months free'
+                      : 'Monthly billing (switch for 2 months free)'
+                  }
+                />
+              ),
+            },
+            {
+              size: { xs: 12 },
+              children: (
+                <BillingPlanCardsComponent
+                  plan={org?.plan as OrgPlan | undefined}
+                  interval={interval}
+                  onSelect={(tier) =>
+                    permissions.editBilling
+                      ? void handleUpgrade(tier)()
+                      : void enqueueSnackbar(
+                          'Your team role does not allow billing changes',
+                          { variant: 'warning', persist: false },
+                        )
+                  }
+                />
+              ),
+            },
+          ]}
+        />
+        )}
+      </Container>
+    </DashboardLayout>
   )
 }
 

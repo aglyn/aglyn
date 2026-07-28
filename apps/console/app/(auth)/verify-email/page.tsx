@@ -17,13 +17,11 @@
 
 'use client'
 
-import { APP_CONSOLE } from '@aglyn/shared-data-enums'
 import {
   AppLink,
   LoadingTextComponent,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
-import { useNextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useContinueUrl } from '@aglyn/shared-util-next'
 import { Button, CircularProgress, Link, Stack, Typography } from '@mui/material'
 import { sendEmailVerification } from 'firebase/auth'
@@ -38,11 +36,6 @@ import AuthFormComponent from '../../../components/auth-form.component'
 const POLL_MS = 4000
 
 function VerifyEmail() {
-  useNextPageTitle({
-    screen: 'Verify email',
-    suffix: APP_CONSOLE.AFFIX,
-    separator: ` ${APP_CONSOLE.SEP} `,
-  })
   const firebaseAuth = useAuth()
   const router = useRouter()
   const { queueLoading, loading } = useLoading()

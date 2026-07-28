@@ -20,7 +20,6 @@
 import { mdiImageMultipleOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { Box } from '@mui/material'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
@@ -41,61 +40,58 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
   const hostOrgId = useHostOrgId(hostId)
 
   return (
-    <>
-      <NextPageTitle screen={'Media'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          {
-            children: <HostDisplayNameComponent hostId={hostId} />,
-            href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
-          },
-          {
-            children: 'Media',
-            href: buildRoute(Route.HOST_MEDIA, { orgSlug,  host }),
-          },
-        ]}
-        help="media"
-        header={{
+    <DashboardLayout
+      breadcrumbItems={[
+        {
+          children: <HostDisplayNameComponent hostId={hostId} />,
+          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
+        },
+        {
           children: 'Media',
-          icon: { path: mdiImageMultipleOutline.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <CardDisplay
-            header={'Library'}
-            help={docsHelp('media', {
-              excerpt:
-                "This site's private library — organize uploads into " +
-                'folders and serve them fast over the CDN.',
-            })}
-            contentGutterX
-            contentGutterY
-            contentBordered="all"
-          >
-            <MediaLibraryComponent hostId={hostId} />
-          </CardDisplay>
-          {/* Shared org library (AGL-237/821) below the host-private one —
-              now the same canonical DAM component as the org media page. */}
-          {hostOrgId ? (
-            <Box sx={{ mt: 3 }}>
-              <CardDisplay
-                header={'Organization media (shared with all sites)'}
-                help={docsHelp('media', {
-                  excerpt:
-                    'A shared library for the whole organization — any site ' +
-                    'can use these assets, unlike the site-private library.',
-                })}
-                contentGutterX
-                contentGutterY
-                contentBordered="all"
-              >
-                <MediaLibraryComponent orgId={hostOrgId} />
-              </CardDisplay>
-            </Box>
-          ) : null}
-        </Container>
-      </DashboardLayout>
-    </>
+          href: buildRoute(Route.HOST_MEDIA, { orgSlug,  host }),
+        },
+      ]}
+      help="media"
+      header={{
+        children: 'Media',
+        icon: { path: mdiImageMultipleOutline.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <CardDisplay
+          header={'Library'}
+          help={docsHelp('media', {
+            excerpt:
+              "This site's private library — organize uploads into " +
+              'folders and serve them fast over the CDN.',
+          })}
+          contentGutterX
+          contentGutterY
+          contentBordered="all"
+        >
+          <MediaLibraryComponent hostId={hostId} />
+        </CardDisplay>
+        {/* Shared org library (AGL-237/821) below the host-private one —
+            now the same canonical DAM component as the org media page. */}
+        {hostOrgId ? (
+          <Box sx={{ mt: 3 }}>
+            <CardDisplay
+              header={'Organization media (shared with all sites)'}
+              help={docsHelp('media', {
+                excerpt:
+                  'A shared library for the whole organization — any site ' +
+                  'can use these assets, unlike the site-private library.',
+              })}
+              contentGutterX
+              contentGutterY
+              contentBordered="all"
+            >
+              <MediaLibraryComponent orgId={hostOrgId} />
+            </CardDisplay>
+          </Box>
+        ) : null}
+      </Container>
+    </DashboardLayout>
   )
 }
 HostMedia.displayName = 'Page:HostMedia'

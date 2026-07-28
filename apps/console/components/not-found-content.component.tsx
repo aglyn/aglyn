@@ -18,7 +18,6 @@
 
 import { ICON_VARIANT_SEARCH } from '@aglyn/shared-data-enums'
 import { AppLink, Container } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { Button, Stack } from '@mui/material'
 import EmptyState from './empty-state.component'
 import { CONTENT_MAX_WIDTH } from '../constants/shared'
@@ -33,7 +32,6 @@ import { CONTENT_MAX_WIDTH } from '../constants/shared'
 export function NotFoundContent() {
   return (
     <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-      <NextPageTitle screen={'Not found'} />
       <EmptyState
         iconPath={ICON_VARIANT_SEARCH.path}
         title={'This page isn’t here'}

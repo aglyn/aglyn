@@ -16,10 +16,13 @@
  */
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { segmentTitle } from '../../page-title'
 import StaffGuard from '../../../components/staff-guard.component'
 
 // Fallback title for the staff area (AGL-1059); each page below names itself.
-export const metadata: Metadata = { title: 'Staff' }
+export const metadata: Metadata = {
+  title: segmentTitle('Staff'),
+}
 
 /**
  * Staff console layout (AGL-847). One gate for every `/admin/*` page: non-staff

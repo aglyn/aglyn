@@ -23,7 +23,6 @@ import {
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, HelpTip } from '@aglyn/shared-ui-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -165,170 +164,167 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
   }
 
   return (
-    <>
-      <NextPageTitle screen={'Feature flags – Staff'} />
-      <DashboardLayout
-        breadcrumbItems={[
-          { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
-          { children: 'Feature flags', href: buildRoute(Route.ADMIN_FLAGS) },
-        ]}
-        help="featureFlags"
-        header={{
-          children: 'Feature Flags',
-          icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
-        }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <StaffOnly>
-            <Stack spacing={2}>
-              <Alert severity="warning">
-                {
-                  'Release flags are global: publishing a change affects every customer immediately (clients refresh within an hour). Staff always see every feature.'
-                }
-                {canEdit
-                  ? ''
-                  : ' Your staff role is read-only here — editing requires the super role.'}
-                <HelpTip
-                  {...docsHelp('featureFlags', { anchor: '#how-gating-behaves' })}
-                />
-              </Alert>
-              <CardDisplay
-                header={'Release flags'}
-                help={docsHelp('featureFlags', {
-                  anchor: '#managing-flags',
-                  excerpt:
-                    'Toggle a flag or stage a percentage rollout, leave a note, and publish — customers pick up changes within an hour. Editing requires the super staff role.',
-                })}
-                contentGutterX
-                contentGutterY
-              >
-                <Stack spacing={3}>
-                  {loading && rows.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary">
-                      {'Loading flags…'}
-                    </Typography>
-                  ) : (
-                    rows.map((row) => (
+    <DashboardLayout
+      breadcrumbItems={[
+        { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
+        { children: 'Feature flags', href: buildRoute(Route.ADMIN_FLAGS) },
+      ]}
+      help="featureFlags"
+      header={{
+        children: 'Feature Flags',
+        icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
+      }}
+    >
+      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        <StaffOnly>
+          <Stack spacing={2}>
+            <Alert severity="warning">
+              {
+                'Release flags are global: publishing a change affects every customer immediately (clients refresh within an hour). Staff always see every feature.'
+              }
+              {canEdit
+                ? ''
+                : ' Your staff role is read-only here — editing requires the super role.'}
+              <HelpTip
+                {...docsHelp('featureFlags', { anchor: '#how-gating-behaves' })}
+              />
+            </Alert>
+            <CardDisplay
+              header={'Release flags'}
+              help={docsHelp('featureFlags', {
+                anchor: '#managing-flags',
+                excerpt:
+                  'Toggle a flag or stage a percentage rollout, leave a note, and publish — customers pick up changes within an hour. Editing requires the super staff role.',
+              })}
+              contentGutterX
+              contentGutterY
+            >
+              <Stack spacing={3}>
+                {loading && rows.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {'Loading flags…'}
+                  </Typography>
+                ) : (
+                  rows.map((row) => (
+                    <Stack
+                      key={row.key}
+                      spacing={1}
+                      sx={{
+                        borderBottom: 1,
+                        borderColor: 'divider',
+                        pb: 2,
+                        '&:last-of-type': { borderBottom: 0, pb: 0 },
+                      }}
+                    >
                       <Stack
-                        key={row.key}
+                        direction="row"
                         spacing={1}
-                        sx={{
-                          borderBottom: 1,
-                          borderColor: 'divider',
-                          pb: 2,
-                          '&:last-of-type': { borderBottom: 0, pb: 0 },
-                        }}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                       >
+                        <Typography variant="subtitle2">
+                          {row.label}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          sx={{ fontFamily: 'monospace' }}
+                          color="text.secondary"
+                        >
+                          {row.key}
+                        </Typography>
+                        {statusChip(row)}
+                        {/* AGL-422: flags mapped to a first-party plugin
+                            gate its whole LOADER (console, sites, API),
+                            not just nav — surface that blast radius. */}
+                        {pluginForReleaseFlag(row.key) ? (
+                          <Chip
+                            label={`Gates plugin: ${pluginForReleaseFlag(row.key)?.label}`}
+                            size="small"
+                            variant="outlined"
+                            color="warning"
+                          />
+                        ) : null}
+                        {row.published ? null : (
+                          <Chip
+                            label="Not in template (code default)"
+                            size="small"
+                            variant="outlined"
+                          />
+                        )}
+                        <Switch
+                          checked={row.value.enabled}
+                          disabled={!canEdit}
+                          onChange={(event) =>
+                            updateRow(row.key, {
+                              enabled: event.target.checked,
+                            })
+                          }
+                          sx={{ ml: 'auto' }}
+                          slotProps={{
+                            input: { 'aria-label': `${row.label} enabled` },
+                          }}
+                        />
+                      </Stack>
+                      <Typography variant="body2" color="text.secondary">
+                        {row.description}
+                      </Typography>
+                      {row.value.enabled ? null : (
                         <Stack
                           direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                          spacing={2}
+                          sx={{ alignItems: 'center', maxWidth: 480 }}
                         >
-                          <Typography variant="subtitle2">
-                            {row.label}
+                          <Typography variant="caption" sx={{ width: 120 }}>
+                            {`Rollout: ${row.value.rolloutPercent ?? 0}%`}
                           </Typography>
-                          <Typography
-                            variant="caption"
-                            sx={{ fontFamily: 'monospace' }}
-                            color="text.secondary"
-                          >
-                            {row.key}
-                          </Typography>
-                          {statusChip(row)}
-                          {/* AGL-422: flags mapped to a first-party plugin
-                              gate its whole LOADER (console, sites, API),
-                              not just nav — surface that blast radius. */}
-                          {pluginForReleaseFlag(row.key) ? (
-                            <Chip
-                              label={`Gates plugin: ${pluginForReleaseFlag(row.key)?.label}`}
-                              size="small"
-                              variant="outlined"
-                              color="warning"
-                            />
-                          ) : null}
-                          {row.published ? null : (
-                            <Chip
-                              label="Not in template (code default)"
-                              size="small"
-                              variant="outlined"
-                            />
-                          )}
-                          <Switch
-                            checked={row.value.enabled}
+                          <Slider
+                            size="small"
+                            value={row.value.rolloutPercent ?? 0}
                             disabled={!canEdit}
-                            onChange={(event) =>
+                            min={0}
+                            max={100}
+                            step={5}
+                            onChange={(_event, percent) =>
                               updateRow(row.key, {
-                                enabled: event.target.checked,
+                                rolloutPercent: percent as number,
                               })
                             }
-                            sx={{ ml: 'auto' }}
-                            slotProps={{
-                              input: { 'aria-label': `${row.label} enabled` },
-                            }}
+                            aria-label={`${row.label} rollout percent`}
                           />
                         </Stack>
-                        <Typography variant="body2" color="text.secondary">
-                          {row.description}
-                        </Typography>
-                        {row.value.enabled ? null : (
-                          <Stack
-                            direction="row"
-                            spacing={2}
-                            sx={{ alignItems: 'center', maxWidth: 480 }}
-                          >
-                            <Typography variant="caption" sx={{ width: 120 }}>
-                              {`Rollout: ${row.value.rolloutPercent ?? 0}%`}
-                            </Typography>
-                            <Slider
-                              size="small"
-                              value={row.value.rolloutPercent ?? 0}
-                              disabled={!canEdit}
-                              min={0}
-                              max={100}
-                              step={5}
-                              onChange={(_event, percent) =>
-                                updateRow(row.key, {
-                                  rolloutPercent: percent as number,
-                                })
-                              }
-                              aria-label={`${row.label} rollout percent`}
-                            />
-                          </Stack>
-                        )}
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'center' }}
+                      )}
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center' }}
+                      >
+                        <TextField
+                          size="small"
+                          label="Note"
+                          value={row.value.note ?? ''}
+                          disabled={!canEdit}
+                          onChange={(event) =>
+                            updateRow(row.key, { note: event.target.value })
+                          }
+                          sx={{ flexGrow: 1, maxWidth: 480 }}
+                        />
+                        <Button
+                          size="small"
+                          variant="contained"
+                          disabled={!canEdit || savingKey === row.key}
+                          onClick={() => void save(row)}
                         >
-                          <TextField
-                            size="small"
-                            label="Note"
-                            value={row.value.note ?? ''}
-                            disabled={!canEdit}
-                            onChange={(event) =>
-                              updateRow(row.key, { note: event.target.value })
-                            }
-                            sx={{ flexGrow: 1, maxWidth: 480 }}
-                          />
-                          <Button
-                            size="small"
-                            variant="contained"
-                            disabled={!canEdit || savingKey === row.key}
-                            onClick={() => void save(row)}
-                          >
-                            {savingKey === row.key ? 'Publishing…' : 'Publish'}
-                          </Button>
-                        </Stack>
+                          {savingKey === row.key ? 'Publishing…' : 'Publish'}
+                        </Button>
                       </Stack>
-                    ))
-                  )}
-                </Stack>
-              </CardDisplay>
-            </Stack>
-          </StaffOnly>
-        </Container>
-      </DashboardLayout>
-    </>
+                    </Stack>
+                  ))
+                )}
+              </Stack>
+            </CardDisplay>
+          </Stack>
+        </StaffOnly>
+      </Container>
+    </DashboardLayout>
   )
 }
 AdminFlags.displayName = 'Page:AdminFlags'
