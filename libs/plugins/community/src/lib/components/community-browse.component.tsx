@@ -16,7 +16,8 @@
  */
 'use client'
 
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { mdiCheckDecagram } from '@aglyn/shared-data-mdi'
+import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Box,
   Chip,
@@ -472,20 +473,29 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                     {listing.category ? (
                       <Chip size="small" label={listing.category} />
                     ) : null}
-                    {/* Org-wide installs apply to every site (AGL-656). */}
-                    {isPlugin && pluginState.scope === 'org' ? (
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        label={pluginState.shadowed ? 'Org-wide (shadowed)' : 'Org-wide'}
-                      />
-                    ) : null}
                     {/* The reviewed badge belongs HERE most of all
                         (AGL-1002): the detail page showed it, but browse is
                         where someone is comparing options and deciding whose
                         code to run. */}
                     {listing.reviewStatus === 'verified' ? (
-                      <Chip size="small" color="info" label="Verified" />
+                      <Chip
+                        size="small"
+                        color="info"
+                        label="Verified"
+                        // Carries more weight than the neighbouring
+                        // classification chips on purpose: it is the only one
+                        // that says a human vouched for the code, and the
+                        // rest are just taxonomy. The icon is what makes it
+                        // findable when scanning a grid rather than reading
+                        // one card.
+                        icon={
+                          <MdiIcon
+                            path={mdiCheckDecagram.path}
+                            sx={{ fontSize: 16 }}
+                          />
+                        }
+                        sx={{ fontWeight: 600 }}
+                      />
                     ) : null}
                     {priceUsd > 0 ? (
                       <Chip
@@ -555,12 +565,35 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                   {/* Read-only state, then a link to the detail page — the
                       only place an install happens (AGL-867). No install/buy
                       action lives on the grid. */}
+                  {/* Install state reads as one statement (AGL-1002): the
+                      scope belongs with "Installed", not up in the chip row
+                      among the type and category pills, which say what the
+                      listing IS rather than what this workspace has done
+                      with it. Org-wide installs apply to every site
+                      (AGL-656). */}
                   {isInstalled ? (
-                    <Typography variant="caption" color="success.main">
-                      {`Installed${
-                        installedVersion ? ` (v${installedVersion})` : ''
-                      }`}
-                    </Typography>
+                    <Stack
+                      direction="row"
+                      spacing={0.75}
+                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                    >
+                      <Typography variant="caption" color="success.main">
+                        {`Installed${
+                          installedVersion ? ` (v${installedVersion})` : ''
+                        }`}
+                      </Typography>
+                      {isPlugin && pluginState.scope === 'org' ? (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={
+                            pluginState.shadowed
+                              ? 'Org-wide (shadowed)'
+                              : 'Org-wide'
+                          }
+                        />
+                      ) : null}
+                    </Stack>
                   ) : null}
                   <AppLink
                     componentVariant="button"
