@@ -22,6 +22,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined'
 import {
   Box,
   Card,
@@ -224,6 +225,22 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
                 size="small"
                 icon={<LockOutlinedIcon />}
                 label={describeScope(media.visibleTo)}
+                sx={{ mt: 0.5, maxWidth: '100%' }}
+              />
+            </Tooltip>
+          ) : null}
+          {/* Private is a different fact from restricted (AGL-1051) and
+              gets its own badge, not a variant of the scope chip: this one
+              says the bytes need a signed link and the file cannot go on a
+              page at all. Someone scanning the grid for "why won't this
+              one work" needs to see it without opening anything. */}
+          {media.private ? (
+            <Tooltip title="Private — needs a signed link, and cannot be placed on a page">
+              <Chip
+                size="small"
+                color="warning"
+                icon={<VisibilityOffOutlinedIcon />}
+                label="Private"
                 sx={{ mt: 0.5, maxWidth: '100%' }}
               />
             </Tooltip>

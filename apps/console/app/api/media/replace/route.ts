@@ -183,7 +183,11 @@ async function handler(request: Request): Promise<Response> {
       .update(new Uint8Array(buffer))
       .digest('hex')
       .slice(0, 16)
-    const cdnAllowed = checkEntitlement(org, 'mediaCdn')
+    // Replacing the bytes of a PRIVATE asset must not hand it a `cdnPath`
+    // (AGL-1051) — that would quietly publish it, and the `: delete()`
+    // branch below means the field is actively removed if one lingers.
+    const cdnAllowed =
+      checkEntitlement(org, 'mediaCdn') && mediaSnapshot.get('private') !== true
     const variants: number[] = []
     if (cdnAllowed && contentType !== 'image/svg+xml') {
       try {

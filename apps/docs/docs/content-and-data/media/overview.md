@@ -90,10 +90,36 @@ restricted asset to a site it isn't shared with. It does **not** make the bytes 
 anyone holding a delivered media URL can still fetch it, because that URL is public and
 cacheable by design — that is what makes the CDN fast.
 
-Treat a media URL as a shareable link. If an asset must never be fetchable by someone who
-has its URL — signed contracts, unreleased artwork, anything with personal data — the
-media library is the wrong place for it today.
+Treat an ordinary media URL as a shareable link. For files that must never be fetchable by
+someone who simply has the URL, mark them **Private** — see below.
 :::
+
+## Private files
+
+**Private** is a separate switch from sharing, and it answers a different question:
+
+|  | Question it answers |
+| -- | -- |
+| **Sharing** | Which of your sites may *use* this file? |
+| **Private** | May anyone *fetch* these bytes at all? |
+
+A private file:
+
+- has **no public URL** — the normal media link does not exist for it,
+- **cannot be placed on a page**; the picker refuses it and says why,
+- is viewable and downloadable in the console by people who can already see it, through a
+  **temporary link that stops working after about fifteen minutes**.
+
+That expiry is the point. A normal media URL, once shared, works forever and there's no way
+to take it back. A private file's link dies on its own, so a link pasted somewhere it
+shouldn't have been is a short problem instead of a permanent one.
+
+Use Private for things that aren't website assets: a signed contract, unreleased artwork,
+an embargoed announcement, anything with personal data in it. Don't use it to keep an image
+off one particular site — that's what sharing is for, and marking it private will just stop
+the image working everywhere.
+
+To publish a private file later, turn Private off. It gets a normal URL from that moment on.
 
 ## Components
 

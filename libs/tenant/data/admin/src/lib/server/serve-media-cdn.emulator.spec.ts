@@ -112,6 +112,23 @@ const get = async (
   return res
 }
 
+const getSigned = async (
+  serveMediaCdn: typeof import('./serve-media-cdn').serveMediaCdn,
+  path: string[],
+  signature: { exp: number; sig: string },
+) => {
+  const res = makeRes()
+  await serveMediaCdn(
+    {
+      method: 'GET',
+      query: { path, exp: String(signature.exp), sig: signature.sig },
+      headers: {},
+    } as never,
+    res as never,
+  )
+  return res
+}
+
 describeEmulated('media CDN scope boundary (AGL-1047)', () => {
   let db: Firestore
   let serveMediaCdn: typeof import('./serve-media-cdn').serveMediaCdn
@@ -172,6 +189,64 @@ describeEmulated('media CDN scope boundary (AGL-1047)', () => {
     expect(res.headers['cache-control']).toContain('max-age=3600')
   }, 60_000)
 
+  describe('private assets (AGL-1051)', () => {
+    it('404s without a signature, even on the correctly scoped URL', async () => {
+      // The point of the flag: scoping says this SITE may use the asset,
+      // and it still must not hand the bytes to anyone holding the URL.
+      const res = await get(serveMediaCdn, [`org:${ORG}`, 'm-private'])
+      expect(res.captured.status).toBe(404)
+    })
+
+    it('never lets a denial be shared-cached', async () => {
+      const res = await get(serveMediaCdn, [`org:${ORG}`, 'm-private'])
+      expect(res.headers['cache-control']).toBe('private, no-store')
+    })
+
+    it('serves it with a valid signature', async () => {
+      const { mintMediaSignature } = await import('./media-signing')
+      const scope = `org:${ORG}`
+      const signature = mintMediaSignature(scope, 'm-private')
+      const res = await getSigned(serveMediaCdn, [scope, 'm-private'], signature)
+      // Past the gate — see the header note at the top of this file.
+      expect(res.captured.status).not.toBe(404)
+      // And still never shared-cacheable: a signed response cached publicly
+      // would outlive its own signature.
+      expect(res.headers['cache-control']).toBe('private, no-store')
+    })
+
+    it('rejects a signature minted for a different asset', async () => {
+      const { mintMediaSignature } = await import('./media-signing')
+      const scope = `org:${ORG}`
+      const signature = mintMediaSignature(scope, 'm-shared')
+      const res = await getSigned(serveMediaCdn, [scope, 'm-private'], signature)
+      expect(res.captured.status).toBe(404)
+    })
+
+    it('rejects an expired signature', async () => {
+      const { signMediaAccess } = await import('./media-signing')
+      const scope = `org:${ORG}`
+      const exp = Date.now() - 1000
+      const res = await getSigned(serveMediaCdn, [scope, 'm-private'], {
+        exp,
+        sig: signMediaAccess(scope, 'm-private', exp),
+      })
+      expect(res.captured.status).toBe(404)
+    })
+
+    it('does not sign away the SCOPE check', async () => {
+      // A valid signature is not a bypass for `visibleTo`. Both gates run.
+      const { mintMediaSignature } = await import('./media-signing')
+      const scope = `org:${ORG}:${CLIENT}`
+      const signature = mintMediaSignature(scope, 'm-private-internal')
+      const res = await getSigned(
+        serveMediaCdn,
+        [scope, 'm-private-internal'],
+        signature,
+      )
+      expect(res.captured.status).toBe(404)
+    })
+  })
+
   it('rejects a malformed scope segment before touching Firestore', async () => {
     expect(
       (await get(serveMediaCdn, ['org:', 'm-shared'])).captured.status,
@@ -195,6 +270,18 @@ async function seed(db: Firestore): Promise<void> {
     // No `visibleTo` at all — the pre-AGL-1040 shape, which must stay
     // visible rather than vanish.
     ['m-legacy', { fileName: 'old.png' }],
+    // Private (AGL-1051): org-wide by scope, and still unfetchable without
+    // a signature. The two flags are orthogonal and this proves it.
+    ['m-private', { fileName: 'contract.pdf', visibleTo: ['org'], private: true }],
+    // Private AND restricted — both gates must hold independently.
+    [
+      'm-private-internal',
+      {
+        fileName: 'unreleased.png',
+        visibleTo: [`host:${INTERNAL}`],
+        private: true,
+      },
+    ],
   ]
   for (const [id, data] of media) {
     await org
