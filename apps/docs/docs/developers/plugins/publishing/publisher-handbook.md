@@ -118,18 +118,28 @@ and rejects with the exact problem list:
 node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs
 ```
 
-Then upload it from the console: **Marketplace → Publish**, choose
-**"A plugin (upload a bundle)"**, and pick your built
-`plugin.bundle.mjs` plus its `manifest.json` (choose the file or paste
-the JSON). Set the listing name, description, changelog, category,
-**repository URL** and price, and publish. Uploads always publish
-**sandboxed** — a reviewer
+Then publish it from the console: **Marketplace → Publish**, choose
+**"A plugin (upload a bundle)"**, and follow **Publish a plugin…** to
+`/<your-org>/marketplace/publish/plugin`. It is a page, not a dialog, so
+you can link it, reload it, and leave it half-finished — what you have
+typed is kept as a **local draft** until you publish or discard it.
+
+The one thing the draft cannot keep is your **bundle and manifest
+files**: a browser will not let a page hold a file across a reload, so
+you re-choose them, and the page says so rather than pretending it is
+ready to publish.
+
+The sections are: **bundle and manifest** (choose the file or paste the
+JSON), **listing** (name, description, category, README, changelog,
+repository URL, license), **who can install it and for how much**, and
+the pre-publish checklist. Publishing always publishes **sandboxed** — a reviewer
 verifies and signs a version before it can run trusted.
 
 ### Before you publish
 
-The dialog asks you to confirm a short checklist, and **publishing is
-blocked until you do**:
+The last section of the page asks you to confirm a short checklist, in
+full view of the publish button, and **publishing is blocked until you
+do**:
 
 - The repository URL is public and contains the source for this bundle
 - A license is included and you have the right to publish this code
@@ -159,7 +169,7 @@ Each publish uploads your bundle (content-addressed by sha256 —
 **immutable**; a new build is a new object), writes a version document
 with your manifest and changelog, and bumps the listing's
 `latestVersion`. To ship an update, bump `version` in the manifest and
-upload again through the same dialog. There's a daily publish cap per
+upload again through the same page. There's a daily publish cap per
 publisher.
 
 ## Review: what happens after you publish

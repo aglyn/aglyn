@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
   Box,
@@ -31,12 +31,13 @@ import { collection, doc, limit, query } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
+import { buildRoute, Route } from '../constants/route-links'
+import { useOrgSlug } from '../hooks/use-org-scope'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import PublishArtifactDialog, {
   type PublishArtifactTarget,
 } from './templates/publish-artifact-dialog.component'
-import UploadPluginDialog from './marketplace/upload-plugin-dialog.component'
 
 type PublishKind =
   | 'component'
@@ -106,6 +107,7 @@ export function OrgPublishPanel({
   hosts: ReadonlyArray<{ id: string; label: string }>
 }) {
   const firestore = useFirestore()
+  const orgSlug = useOrgSlug()
   const { data: profile } = useFirestoreDoc<any>(
     () => doc(firestore, 'publisherProfiles', orgId || '-none-'),
     [firestore, orgId],
@@ -116,7 +118,6 @@ export function OrgPublishPanel({
   const [kind, setKind] = useState<PublishKind>('component')
   const [artifactId, setArtifactId] = useState('')
   const [target, setTarget] = useState<PublishArtifactTarget | null>(null)
-  const [uploadPluginOpen, setUploadPluginOpen] = useState(false)
 
   const { data: componentDocs } = useFirestoreCollection<any>(
     () =>
@@ -353,26 +354,33 @@ export function OrgPublishPanel({
           </Typography>
         ) : null}
         <Box>
-          <Button
-            variant="contained"
-            color="secondary"
-            disabled={kind === 'plugin' ? false : !canPublish}
-            onClick={
-              kind === 'plugin'
-                ? () => setUploadPluginOpen(true)
-                : openPublish
-            }
-          >
-            {kind === 'plugin' ? 'Upload plugin…' : 'Publish…'}
-          </Button>
+          {/* Publishing a plugin is a page now (AGL-1078), so this is a link
+              — the destination has a URL, a draft that survives a reload,
+              and room for the checklist. AppLink, never an href on Button:
+              a raw href full-reloads the SPA. */}
+          {kind === 'plugin' ? (
+            <AppLink
+              href={buildRoute(Route.ORG_MARKETPLACE_PUBLISH_PLUGIN, {
+                orgSlug,
+              })}
+            >
+              <Button variant="contained" color="secondary">
+                {'Publish a plugin…'}
+              </Button>
+            </AppLink>
+          ) : (
+            <Button
+              variant="contained"
+              color="secondary"
+              disabled={!canPublish}
+              onClick={openPublish}
+            >
+              {'Publish…'}
+            </Button>
+          )}
         </Box>
       </Stack>
       <PublishArtifactDialog target={target} onClose={() => setTarget(null)} />
-      <UploadPluginDialog
-        orgId={orgId}
-        open={uploadPluginOpen}
-        onClose={() => setUploadPluginOpen(false)}
-      />
     </CardDisplay>
   )
 }

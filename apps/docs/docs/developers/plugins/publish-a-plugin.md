@@ -32,9 +32,12 @@ are reproducible and upgrades are deliberate:
 2. Verify locally: `node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs`
    — the publish API enforces the same checks.
 3. Publish a **version** to the marketplace: **Marketplace → Publish →
-   "A plugin (upload a bundle)"** — upload the bundle and its
-   `manifest.json`, choose who can install it, and set the listing details,
-   repository URL and price. You confirm a short
+   "A plugin (upload a bundle)" → Publish a plugin…** — a page at
+   `/<your-org>/marketplace/publish/plugin` where you upload the bundle
+   and its `manifest.json`, choose who can install it, and set the listing
+   details, repository URL and price. What you type is kept as a local
+   draft until you publish; the files are not, so re-choose them. You
+   confirm a short
    [pre-publish checklist](publishing/publisher-handbook.md#before-you-publish)
    — repository, license, data disclosure, network hosts, testing — which is
    recorded against that exact bundle and shown to the reviewer. Uploads
