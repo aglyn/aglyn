@@ -49,6 +49,8 @@ interface QueueRow {
   priceUsd: number
   version: string
   hidden: boolean
+  /** Private plugin (AGL-968): reviewed identically, never listed. */
+  private: boolean
 }
 
 interface ListedRow {
@@ -61,6 +63,7 @@ interface ListedRow {
   hiddenReason: string
   realmVersions: number
   versionCount: number
+  private: boolean
 }
 
 const STATUS_FILTERS = [
@@ -271,7 +274,20 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                                 variant="outlined"
                                 label={`v${entry.version || '—'}`}
                               />
-                              {entry.license ? null : (
+                              {/* Same bar, smaller audience (AGL-968/995).
+                                  Worth flagging so a reviewer knows the
+                                  blast radius is one workspace — never so
+                                  they review it more loosely. */}
+                              {entry.private ? (
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  label="Private"
+                                />
+                              ) : null}
+                              {/* A private plugin has no marketplace listing
+                                  page, so "no license" is not a finding. */}
+                              {entry.license || entry.private ? null : (
                                 <Chip
                                   size="small"
                                   color="warning"
@@ -307,7 +323,12 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                     >
                       {'Both states are live — installable by every workspace. ' +
                         'Verified additionally carries the reviewed badge on ' +
-                        'its listing page; it does not change installability.'}
+                        'its listing page; it does not change installability. ' +
+                        // The sentence above is false for a private row
+                        // (AGL-968/995), and it sits directly over the rows
+                        // it would misdescribe.
+                        'Rows marked Private are the exception: approved and ' +
+                        'live, but only for the org that published them.'}
                     </Typography>
                     {visibleListed.length ? (
                       <Stack>
@@ -328,6 +349,13 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                                 variant="outlined"
                                 label={`v${entry.latestVersion || '—'}`}
                               />
+                              {entry.private ? (
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  label="Private"
+                                />
+                              ) : null}
                               {entry.realmVersions ? (
                                 <Chip
                                   size="small"
