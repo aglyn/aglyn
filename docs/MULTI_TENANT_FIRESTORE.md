@@ -355,6 +355,49 @@ data after a parity check.
   install at org scope (`orgs/{orgId}/pluginInstalls`); host-only plugins
   stay host-scoped. Both levels coexist.
 
+### 11a. Scoped sharing within an org (AGL-1037…1051)
+
+Org scope alone was too coarse for an agency: 15 hosts in one org meant one
+client's collaborator could reach every other client's data. Org-owned
+resources therefore carry a `visibleTo` array — `['org']`, or
+`['host:{id}', …]` — and members carry a denormalized `scopeTokens`. The
+intersection is the boundary.
+
+Applies to `datasets` (records inherit), `media`, `mediaFolders`,
+`contacts` and `contactSegments`. A host's OWN library is private by
+construction and carries no `visibleTo`.
+
+Enforced in three places, because no one of them is sufficient:
+
+1. **Rules** — the client's direct Firestore access (§5).
+2. **Server reads** — the tenant runtime, site search, the media CDN and
+   every media API. These use the Admin SDK, which never evaluates rules,
+   so they filter for themselves.
+3. **Console queries** — not defence, but *necessary*: rules reject an
+   unfiltered list outright rather than filtering it, so a scoped member's
+   query must carry `array-contains-any` or the page errors.
+
+**Two rules that are easy to get wrong:**
+
+- **`array-contains-any` matches NOTHING on a missing field.** So enforcing
+  a filter obliges (a) a backfill for existing docs and (b) *every writer*
+  to stamp the field. Miss (b) and new docs are born invisible — a dataset
+  that renders on no site at all. Writers live in API routes, marketplace
+  installers, automation steps and client-side creates.
+- **Scope answers "which sites may use this", not "who may look".** A
+  picker or per-host audit must filter by the **target host's** tokens, not
+  the viewer's: an org-wide admin can see an internal asset, but must not
+  be offered it while building a client's page.
+
+**What scoping is NOT: a secrecy boundary.** `/api/media/cdn/...` is
+unauthenticated by necessity — it serves images to anonymous visitors — so
+an asset rendered on a site it is scoped to is public. The URL is a bearer
+capability with no revocation short of deleting or replacing the asset;
+`mediaId` is random, so URLs are not enumerable, and that is the whole of
+the protection. Scoping controls **discovery and use**. The DAM is for web
+assets; anything that must never be publicly fetchable needs signed URLs,
+which do not exist today (AGL-1051).
+
 ## 12. Open questions (ALL SETTLED 2026-07-09, closes AGL-232)
 
 - ~~Org-level GDPR erasure~~ — v1 shipped: `erase-tenant.mjs` is org-aware
