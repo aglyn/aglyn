@@ -163,6 +163,18 @@ service cloud.firestore {
           orgMember().role in ['owner', 'admin', 'editor'] &&
           orgNotSuspended();
       }
+      /**
+       * Write access to the org-wide records a site collaborator cannot read
+       * (AGL-1026). Without this, an org role of `editor` scoped to one site
+       * could still WRITE the contacts and lists the read rules now deny
+       * them — write-only access to other people's customer data, which is a
+       * stranger position than either allowing or denying both.
+       */
+      function canWriteOrgWideData() {
+        return isOrgWideMember() &&
+          orgMember().role in ['owner', 'admin', 'editor'] &&
+          orgNotSuspended();
+      }
       // Dataset/record CREATES are API-only (AGL-473): the console route
       // enforces the dataStore entitlement and dataset/record quotas
       // server-side. Record updates/deletes stay editor-writable — they
@@ -193,11 +205,11 @@ service cloud.firestore {
       // them through a server route that filters, not a widened rule.
       match /contacts/{contactId} {
         allow read: if isStaff() || isOrgWideMember();
-        allow write: if isStaff() || canWriteOrgData();
+        allow write: if isStaff() || canWriteOrgWideData();
       }
       match /contactSegments/{segmentId} {
         allow read: if isStaff() || isOrgWideMember();
-        allow write: if isStaff() || canWriteOrgData();
+        allow write: if isStaff() || canWriteOrgWideData();
       }
 
       // Email lists (AGL-254): static audiences shared across the org's
@@ -211,11 +223,11 @@ service cloud.firestore {
         // Enrolled members are contacts, so the list follows the CRM
         // (AGL-1026): org-wide readers only.
         allow read: if isStaff() || isOrgWideMember();
-        allow create, update: if isStaff() || canWriteOrgData();
+        allow create, update: if isStaff() || canWriteOrgWideData();
         allow delete: if isStaff();
         match /members/{memberId} {
           allow read: if isStaff() || isOrgWideMember();
-          allow write: if isStaff() || canWriteOrgData();
+          allow write: if isStaff() || canWriteOrgWideData();
         }
       }
 
