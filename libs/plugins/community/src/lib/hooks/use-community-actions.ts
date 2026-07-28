@@ -92,7 +92,24 @@ export function useCommunityActions(hostId: string) {
   // pin — see INSTALL_TARGETS. Passing it for a template would be ignored
   // server-side, so callers ask the model rather than guessing.
   const install = useCallback(
-    async (listing: any, scope?: 'org' | 'host') => {
+    async (
+      listing: any,
+      scope?: 'org' | 'host',
+      options?: {
+        /**
+         * Called instead of an error toast when the install route refuses
+         * because the workspace's copy has been EDITED since it was installed
+         * (AGL-1018's 409, AGL-1034).
+         *
+         * The refusal is correct — that install would have destroyed their
+         * work — but "review the update" is only useful advice if something
+         * offers the review. Handling it here rather than at each call site
+         * means every surface that installs a copied artifact gets the
+         * recovery, including ones written later.
+         */
+        onDiverged?: () => void
+      },
+    ) => {
       const dequeue = queueLoading()
       try {
         const idToken = await (user as any)?.getIdToken?.()
@@ -112,6 +129,11 @@ export function useCommunityActions(hostId: string) {
         })
         const payload = await response.json()
         if (!response.ok) {
+          // The copy has diverged: hand it to the review rather than telling
+          // someone to review something they cannot reach from here.
+          if (payload?.diverged && options?.onDiverged) {
+            return void options.onDiverged()
+          }
           return void enqueueSnackbar(payload?.error ?? 'Install failed', {
             variant: response.status === 402 ? 'warning' : 'error',
             allowDuplicate: true,

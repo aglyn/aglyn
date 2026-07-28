@@ -705,8 +705,16 @@ export function CommunityListingContent({
    * here, so "Update" is a merge. It goes through the review dialog, never
    * straight to the install route.
    */
+  //
+  // Every non-current state, not just `update-available` (AGL-1034): a copy
+  // whose versions cannot be ordered, or that reports `ahead`, is still a copy
+  // this workspace may have edited, and sending it to the install route would
+  // dead-end on the divergence 409 with nothing offering the review it names.
   const copiedUpdatable =
-    !isPlugin && installed && updateStatus.state === 'update-available'
+    !isPlugin &&
+    installed &&
+    Boolean(componentInstall) &&
+    updateStatus.state !== 'current'
   const openUpdateReview = () => {
     setUpdatePreview(null)
     setUpdateOpen(true)
@@ -727,7 +735,9 @@ export function CommunityListingContent({
       return void (await runUpdate('copy'))
     }
     setUpdateOpen(false)
-    await runSiteEdit(() => install(listing, installTargetScope))
+    await runSiteEdit(() =>
+      install(listing, installTargetScope, { onDiverged: openUpdateReview }),
+    )
   }
   const runUpdate = async (
     mode: 'merge' | 'copy',
@@ -760,7 +770,11 @@ export function CommunityListingContent({
     void runSiteEdit(() =>
       orgTargeting && !installed
         ? installPlan(listing, installPlanSteps)
-        : install(listing, installTargetScope),
+        : // A refused install because the copy was edited opens the review
+          // instead of toasting advice nothing here acts on (AGL-1034).
+          install(listing, installTargetScope, {
+            onDiverged: openUpdateReview,
+          }),
     )
   }
 
@@ -1282,8 +1296,13 @@ export function CommunityListingContent({
                               ? `Installed (v${installedVersion})`
                               : copiedUpdatable
                                 ? // Not "Update": pressing this shows what the
-                                  // update would do and writes nothing.
-                                  `Review update to v${offeredVersion}`
+                                  // update would do and writes nothing. Without
+                                  // an ordered version pair there is no "to
+                                  // vN" to promise (AGL-1034), so it says the
+                                  // honest, smaller thing.
+                                  updateStatus.state === 'update-available'
+                                  ? `Review update to v${offeredVersion}`
+                                  : 'Review this version'
                                 : artifactInstall
                                 ? // Re-adding makes another dataset / another
                                   // draft, so this stays enabled (AGL-789).
