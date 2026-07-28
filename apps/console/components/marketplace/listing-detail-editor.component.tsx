@@ -29,8 +29,14 @@ import {
 } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
+import MarkdownEditorToolbar from '../markdown-editor-toolbar.component'
+import {
+  applyCommandToSource,
+  MARKDOWN_SOURCE_HINT,
+} from '../markdown-source-command'
 import MarkdownVisualEditor, {
   type MarkdownEditorCommand,
+  type MarkdownEditorContext,
   type MarkdownVisualEditorHandle,
 } from '../markdown-visual-editor.component'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
@@ -104,6 +110,13 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
     category: '',
   })
   const [readme, setReadme] = useState('')
+  // Visual by default, raw markdown one click away (AGL-985) — publishers
+  // often arrive holding a README they wrote somewhere else.
+  const [bodyMode, setBodyMode] = useState<'visual' | 'markdown'>('visual')
+  const [bodyContext, setBodyContext] = useState<MarkdownEditorContext | null>(
+    null,
+  )
+  const readmeInputRef = useRef<HTMLTextAreaElement | null>(null)
   const [screenshots, setScreenshots] = useState<string[]>([])
   const originalPreview = useRef<string>('')
 
@@ -204,12 +217,26 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
     }
   }
 
-  const toolbar: Array<{ cmd: MarkdownEditorCommand; label: string }> = [
-    { cmd: 'bold', label: 'B' },
-    { cmd: 'italic', label: 'I' },
-    { cmd: 'heading', label: 'H2' },
-    { cmd: 'link', label: 'Link' },
-  ]
+  // One toolbar, two surfaces (AGL-985): in Visual a command mutates the
+  // editor's block model; in Markdown it wraps the textarea selection.
+  const handleCommand = (command: MarkdownEditorCommand) => {
+    if (bodyMode === 'visual') {
+      editorRef.current?.exec(command)
+      return
+    }
+    const input = readmeInputRef.current
+    const edit = applyCommandToSource(
+      readme,
+      input?.selectionStart ?? readme.length,
+      input?.selectionEnd ?? readme.length,
+      command,
+    )
+    setReadme(edit.body)
+    requestAnimationFrame(() => {
+      input?.focus()
+      input?.setSelectionRange(edit.start, edit.end)
+    })
+  }
 
   return (
     <CardDisplay
@@ -288,51 +315,37 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
 
         {/* Body — the WYSIWYG markdown editor, same as blog content. */}
         <Stack spacing={1}>
-          <Stack
-            direction="row"
-            spacing={0.5}
-            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-          >
-            <Typography variant="subtitle2" sx={{ mr: 1 }}>
-              {'About'}
-            </Typography>
-            {toolbar.map((entry) => (
-              <Button
-                key={entry.cmd}
-                size="small"
-                // mousedown, not click: keep the editor selection alive
-                // while the button takes focus (same as the blog toolbar).
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                  editorRef.current?.exec(entry.cmd)
-                }}
-              >
-                {entry.label}
-              </Button>
-            ))}
-            <Button
-              size="small"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => setPickTarget('body')}
-            >
-              {'Image'}
-            </Button>
-          </Stack>
-          <Box
-            sx={{
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: 1,
-              p: 1.5,
-            }}
-          >
+          <Typography variant="subtitle2">{'About'}</Typography>
+          <MarkdownEditorToolbar
+            onCommand={handleCommand}
+            context={bodyMode === 'visual' ? bodyContext : null}
+            mode={bodyMode}
+            onModeChange={setBodyMode}
+          />
+          {bodyMode === 'visual' ? (
+            // No wrapper box (AGL-982): the editor draws its own border and
+            // focus ring, so a second one read as a box inside a box.
             <MarkdownVisualEditor
+              ref={editorRef}
               value={readme}
               onChange={setReadme}
               onPickImageFromMedia={() => setPickTarget('body')}
+              onContextChange={setBodyContext}
               minHeight={200}
             />
-          </Box>
+          ) : (
+            <TextField
+              label="Markdown source"
+              value={readme}
+              onChange={(event) => setReadme(event.target.value)}
+              size="small"
+              multiline
+              minRows={12}
+              fullWidth
+              inputRef={readmeInputRef}
+              helperText={MARKDOWN_SOURCE_HINT}
+            />
+          )}
         </Stack>
 
         <Divider />
