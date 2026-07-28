@@ -34,7 +34,7 @@ import {
   type MarkdownBlock,
   type MarkdownInline,
 } from '@aglyn/aglyn'
-import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
+import { mdiCheckCircle, mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import {
   AppLink,
   CardDisplay,
@@ -810,45 +810,72 @@ export function CommunityListingContent({
                             <ListingReadme readme={listing.readme} />
                           </>
                         ) : null}
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 4 },
+                  children: (
+                    <Stack spacing={3}>
+                      {/* Install is the point of the page (AGL-1005). It used
+                          to be the LAST thing in the left column, under the
+                          README, the config table and the code sample — below
+                          the fold on any listing with real documentation.
+                          Here it leads the sidebar. */}
+                      <CardDisplay
+                        header={'Install'}
+                        contentGutterX
+                        contentGutterY
+                      >
+                        <Stack spacing={1.5}>
+                          {/* Price and version lead: the two facts someone
+                              decides on before they read anything else. */}
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'baseline' }}
+                          >
+                            <Typography variant="h6">
+                              {priceUsd > 0 ? `$${priceUsd}` : 'Free'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {`v${listing?.latestVersion ?? '…'}`}
+                            </Typography>
+                          </Stack>
                         {/* Existing state, told honestly (AGL-656): an org
                             pin applies everywhere, and this site's own pin
                             shadows it. Showing this is the difference between
                             "Add to this site" lying and the truth. */}
                         {isPlugin && installed ? (
-                          <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
-                            <Alert
-                              severity="success"
-                              icon={false}
-                              sx={{ py: 0.5, width: '100%' }}
+                          <Stack spacing={1}>
+                            {/* A confirmation, not a warning (AGL-1005): a
+                                tick and a sentence, where this used to be a
+                                pale alert with a red text link under it —
+                                which read as something having gone wrong. */}
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              sx={{ alignItems: 'flex-start' }}
                             >
-                              {pluginState.shadowed
-                                ? `Installed on this site (v${installedVersion}), ` +
-                                  'overriding the organization-wide install.'
-                                : pluginState.scope === 'org'
-                                  ? `Installed for the whole organization ` +
-                                    `(v${installedVersion}) — available on every site.`
-                                  : `Installed on this site (v${installedVersion}).`}
-                              {pluginState.updateAvailable
-                                ? ` A newer version (v${listing?.latestVersion}) is available.`
-                                : ''}
-                            </Alert>
-                            {/* Uninstall from the listing too (AGL-881), not
-                                only the installed add-ons card. Targets the
-                                effective pin's scope. */}
-                            <Button
-                              size="small"
-                              color="error"
-                              onClick={() =>
-                                void uninstall(
-                                  listing,
-                                  pluginState.scope ?? undefined,
-                                )
-                              }
-                            >
-                              {pluginState.scope === 'org'
-                                ? 'Uninstall org-wide'
-                                : 'Uninstall'}
-                            </Button>
+                              <MdiIcon
+                                path={mdiCheckCircle.path}
+                                color="success"
+                                sx={{ fontSize: 20, mt: '2px' }}
+                              />
+                              <Typography variant="body2">
+                                {pluginState.shadowed
+                                  ? `Installed on this site (v${installedVersion}), ` +
+                                    'overriding the organization-wide install.'
+                                  : pluginState.scope === 'org'
+                                    ? `Installed for the whole organization ` +
+                                      `(v${installedVersion}) — available on every site.`
+                                    : `Installed on this site (v${installedVersion}).`}
+                                {pluginState.updateAvailable
+                                  ? ` A newer version (v${listing?.latestVersion}) is available.`
+                                  : ''}
+                              </Typography>
+                            </Stack>
                           </Stack>
                         ) : null}
                         {/* Install targeting (AGL-773): at org scope, choose
@@ -973,7 +1000,12 @@ export function CommunityListingContent({
                         ) : null}
                         <Box>
                           <Button
-                            variant={installed ? 'outlined' : 'contained'}
+                            // Full-width and contained (AGL-1005): in a
+                            // sidebar card this is the page's primary action,
+                            // and "already installed and current" is the only
+                            // state where it steps back to an outline.
+                            fullWidth
+                            variant={upToDate ? 'outlined' : 'contained'}
                             color="secondary"
                             disabled={
                               Boolean(upToDate) ||
@@ -1018,14 +1050,32 @@ export function CommunityListingContent({
                                       : 'Add to this site'}
                           </Button>
                         </Box>
-                      </Stack>
-                    </CardDisplay>
-                  ),
-                },
-                {
-                  size: { xs: 12, md: 4 },
-                  children: (
-                    <Stack spacing={3}>
+                        {/* Uninstall from the listing too (AGL-881), not only
+                            the installed add-ons card; targets the effective
+                            pin's scope. Demoted to a quiet full-width
+                            secondary below the primary (AGL-1005) — it used
+                            to be red text directly under the "installed"
+                            notice, which made a successful install look like
+                            a problem to undo. */}
+                        {isPlugin && installed ? (
+                          <Button
+                            fullWidth
+                            size="small"
+                            color="inherit"
+                            onClick={() =>
+                              void uninstall(
+                                listing,
+                                pluginState.scope ?? undefined,
+                              )
+                            }
+                          >
+                            {pluginState.scope === 'org'
+                              ? 'Uninstall org-wide'
+                              : 'Uninstall'}
+                          </Button>
+                        ) : null}
+                        </Stack>
+                      </CardDisplay>
                       <CardDisplay
                         header={'Publisher'}
                         contentGutterX

@@ -112,6 +112,21 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
         children: listingName || 'Marketplace listing',
         icon: { path: mdiStorefrontOutline.path },
       }}
+      // Owner action in the hero (AGL-1005), where the chrome already has a
+      // slot for it. It used to float in a bare right-aligned box above the
+      // content — unanchored to anything, and it moved depending on whether
+      // the org had a site yet.
+      headerRight={
+        isOwner && !editing ? (
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={() => setEditing(true)}
+          >
+            {'Edit listing'}
+          </Button>
+        ) : undefined
+      }
       help="plugins"
     >
       {editing && isOwner && currentOrg?.$id && listing ? (
@@ -126,24 +141,13 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
         </Container>
       ) : !actingHost ? (
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {/* Owners can still edit their listing with no site of their own. */}
+          {/* Owners can still edit their listing with no site of their own —
+              through the hero's Edit listing action (AGL-1005). */}
           {isOwner ? (
-            <Stack spacing={2}>
-              <Box>
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  
-                  onClick={() => setEditing(true)}
-                >
-                  {'Edit listing'}
-                </Button>
-              </Box>
-              <Alert severity="info">
-                {'Add a site to your organization to install marketplace ' +
-                  'items. You can still edit this listing above.'}
-              </Alert>
-            </Stack>
+            <Alert severity="info">
+              {'Add a site to your organization to install marketplace ' +
+                'items. You can still edit this listing above.'}
+            </Alert>
           ) : (
             <Alert severity="info">
               {'Add a site to your organization to view and install ' +
@@ -153,20 +157,6 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
         </Container>
       ) : (
         <>
-          {isOwner ? (
-            <Container maxWidth={CONTENT_MAX_WIDTH}>
-              <Box sx={{ pt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  
-                  onClick={() => setEditing(true)}
-                >
-                  {'Edit listing'}
-                </Button>
-              </Box>
-            </Container>
-          ) : null}
           <PluginWidgetSlot
             slot="communityListing"
             hostId={actingHost}
