@@ -128,18 +128,25 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
             listingId,
           })
         : undefined
+  // Storefront links carry the publisher's HANDLE (AGL-1001), the identity
+  // shown right beside them on the card. The id remains a valid segment on
+  // the page itself, so a publisher whose handle hasn't loaded yet still
+  // links somewhere real rather than nowhere.
   const publisherHref = (profileId: string) =>
     orgScoped
       ? // Org-scope publisher storefront (AGL-869): all of one publisher's
         // listings. Needs the URL slug, which is passed in at org scope.
         orgSlug
-        ? buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, { orgSlug, profileId })
+        ? buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, {
+            orgSlug,
+            handle: handles[profileId] ?? profileId,
+          })
         : undefined
       : orgSlug && subdomain
         ? buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
             orgSlug,
             host: subdomain,
-            profileId,
+            handle: handles[profileId] ?? profileId,
           })
         : undefined
 

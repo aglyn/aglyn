@@ -26,7 +26,7 @@ import { buildRoute, Route } from '../../../../../../../../constants/route-links
 export default async function HostCommunityPublisherRedirect({
   params,
 }: {
-  params: Promise<{ orgSlug: string; host: string; profileId: string }>
+  params: Promise<{ orgSlug: string; host: string; handle: string }>
 }) {
   const { orgSlug } = await params
   redirect(buildRoute(Route.ORG_MARKETPLACE, { orgSlug }))

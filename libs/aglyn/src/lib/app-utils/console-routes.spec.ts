@@ -69,13 +69,21 @@ describe('buildRoute', () => {
         listingId: 'listing-1',
       }),
     ).toBe('/acme/hosts/shop/community/listing-1')
+    // Storefronts are addressed by HANDLE (AGL-1001) — the identity the
+    // publisher chose, not the org document id the route used to carry.
     expect(
       buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
         orgSlug: 'acme',
         host: 'shop',
-        profileId: 'org-9',
+        handle: 'acme-tools',
       }),
-    ).toBe('/acme/hosts/shop/community/publisher/org-9')
+    ).toBe('/acme/hosts/shop/community/publisher/acme-tools')
+    expect(
+      buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, {
+        orgSlug: 'acme',
+        handle: 'acme-tools',
+      }),
+    ).toBe('/acme/marketplace/publisher/acme-tools')
   })
 
   it('builds the besigner deep link the email plugin jumps to', () => {

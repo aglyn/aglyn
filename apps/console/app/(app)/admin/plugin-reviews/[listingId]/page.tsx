@@ -441,9 +441,15 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       {'Publisher: '}
                       {detail.publisherSlug ? (
                         <AppLink
+                          // The storefront route takes a handle now
+                          // (AGL-1001). This payload carries the org's slug
+                          // and name, not the publisher profile's handle, so
+                          // it passes the id — which that page still
+                          // resolves, the same fallback that keeps existing
+                          // links working.
                           href={buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, {
                             orgSlug: detail.publisherSlug,
-                            profileId: detail.publisherId,
+                            handle: detail.publisherId,
                           })}
                         >
                           {detail.publisherName}

@@ -53,7 +53,7 @@ export enum Route {
   // (`HOST_COMMUNITY*`) is being retired in favor of this.
   ORG_MARKETPLACE = '/[orgSlug]/marketplace',
   ORG_MARKETPLACE_LISTING = '/[orgSlug]/marketplace/[listingId]',
-  ORG_MARKETPLACE_PUBLISHER = '/[orgSlug]/marketplace/publisher/[profileId]',
+  ORG_MARKETPLACE_PUBLISHER = '/[orgSlug]/marketplace/publisher/[handle]',
   ORG_SETTINGS = '/[orgSlug]/settings',
   MANAGE_BILLING = '/[orgSlug]/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
@@ -66,7 +66,7 @@ export enum Route {
   HOST_LIST = '/[orgSlug]/hosts',
   HOST_COMMUNITY = '/[orgSlug]/hosts/[host]/community',
   HOST_COMMUNITY_LISTING = '/[orgSlug]/hosts/[host]/community/[listingId]',
-  HOST_COMMUNITY_PUBLISHER = '/[orgSlug]/hosts/[host]/community/publisher/[profileId]',
+  HOST_COMMUNITY_PUBLISHER = '/[orgSlug]/hosts/[host]/community/publisher/[handle]',
   HOST_CONTENT = '/[orgSlug]/hosts/[host]/content',
   MANAGE_COMMUNITY_PROFILE = '/[orgSlug]/community',
   MANAGE_TEAM = '/[orgSlug]/team',
@@ -168,7 +168,7 @@ export interface RoutePayload {
   [Route.ORG_PLUGINS]: { orgSlug: string }
   [Route.ORG_MARKETPLACE]: { orgSlug: string }
   [Route.ORG_MARKETPLACE_LISTING]: { orgSlug: string; listingId: string }
-  [Route.ORG_MARKETPLACE_PUBLISHER]: { orgSlug: string; profileId: string }
+  [Route.ORG_MARKETPLACE_PUBLISHER]: { orgSlug: string; handle: string }
   [Route.MANAGE_USER_SETTINGS]: undefined
   [Route.MANAGE_NOTIFICATIONS]: undefined
   [Route.MANAGE_MY_COMMUNITY]: undefined
@@ -183,7 +183,7 @@ export interface RoutePayload {
   [Route.HOST_COMMUNITY_PUBLISHER]: {
     orgSlug: string
     host: string
-    profileId: string
+    handle: string
   }
   [Route.HOST_CONTENT]: { orgSlug: string; host: string }
   [Route.MANAGE_COMMUNITY_PROFILE]: { orgSlug: string }

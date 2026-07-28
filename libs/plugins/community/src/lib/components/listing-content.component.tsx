@@ -1043,7 +1043,15 @@ export function CommunityListingContent({
                                   ? orgSlug
                                     ? buildRoute(
                                         Route.ORG_MARKETPLACE_PUBLISHER,
-                                        { orgSlug, profileId: listing.profileId },
+                                        {
+                                          orgSlug,
+                                          // Handle, not id (AGL-1001); the id
+                                          // still resolves for the beat
+                                          // before the profile loads.
+                                          handle:
+                                            profile?.handle ??
+                                            listing.profileId,
+                                        },
                                       )
                                     : undefined
                                   : orgSlug && subdomain
@@ -1052,7 +1060,9 @@ export function CommunityListingContent({
                                         {
                                           orgSlug,
                                           host: subdomain,
-                                          profileId: listing.profileId,
+                                          handle:
+                                            profile?.handle ??
+                                            listing.profileId,
                                         },
                                       )
                                     : undefined
