@@ -17,6 +17,7 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { segmentTitle } from '../../page-title'
 import OrgGuard from '../../../components/org-guard.component'
 
 // Fallback title for the org area (AGL-1059) — the slug is the only org
@@ -28,7 +29,7 @@ export async function generateMetadata({
   params: Promise<{ orgSlug: string }>
 }): Promise<Metadata> {
   const { orgSlug } = await params
-  return { title: orgSlug }
+  return { title: segmentTitle(orgSlug) }
 }
 
 /**

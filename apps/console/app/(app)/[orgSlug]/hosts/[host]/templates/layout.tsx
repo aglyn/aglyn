@@ -17,17 +17,19 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { segmentTitle } from '../../../../../page-title'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
-// nearest server layout. The suffix comes from the root title template.
+// nearest server layout.  re-declares the brand template so
+// it keeps applying to the titled routes nested below (AGL-1059).
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ host: string }>
 }): Promise<Metadata> {
   const { host } = await params
-  return { title: `Templates · ${host}` }
+  return { title: segmentTitle(`Templates · ${host}`) }
 }
 
 export default function HostTemplatesTitleLayout({

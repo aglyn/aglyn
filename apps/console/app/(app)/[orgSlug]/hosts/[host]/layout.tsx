@@ -17,6 +17,7 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { segmentTitle } from '../../../../page-title'
 import HostGuard from '../../../../../components/host-guard.component'
 
 // Titles the site dashboard, and stands in for any host page that adds no
@@ -28,7 +29,7 @@ export async function generateMetadata({
   params: Promise<{ host: string }>
 }): Promise<Metadata> {
   const { host } = await params
-  return { title: `Dashboard · ${host}` }
+  return { title: segmentTitle(`Dashboard · ${host}`) }
 }
 
 /**
