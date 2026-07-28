@@ -17,9 +17,10 @@
 
 /**
  * Markdown-lite (AGL-123): the tiny subset blog entries use — headings,
- * bold/italic, links, images, bullet lists, paragraphs. Parsed into plain
- * data blocks that renderers turn into elements themselves (no HTML string
- * is ever produced, so there is nothing to sanitize).
+ * bold/italic, links, images, bullet lists, paragraphs, fenced code blocks
+ * and tables. Parsed into plain data blocks that renderers turn into
+ * elements themselves (no HTML string is ever produced, so there is nothing
+ * to sanitize).
  */
 
 export type MarkdownInline =
@@ -28,11 +29,28 @@ export type MarkdownInline =
   | { type: 'italic'; text: string }
   | { type: 'link'; text: string; href: string }
 
+/** A table cell's content. Cells hold inline runs only — no nesting. */
+export type MarkdownTableCell = MarkdownInline[]
+export type MarkdownTableAlign = 'left' | 'center' | 'right'
+
 export type MarkdownBlock =
   | { type: 'heading'; level: 2 | 3; inlines: MarkdownInline[] }
   | { type: 'paragraph'; inlines: MarkdownInline[] }
   | { type: 'image'; src: string; alt: string }
   | { type: 'list'; items: MarkdownInline[][] }
+  /** Fenced block. `text` is verbatim; `lang` is '' when none was given. */
+  | { type: 'code'; lang: string; text: string }
+  /**
+   * A GFM pipe table (AGL-974). Rectangular by construction: every row and
+   * `align` carry exactly `header.length` cells, so renderers never have to
+   * reason about ragged input and the serializer round-trips exactly.
+   */
+  | {
+      type: 'table'
+      align: MarkdownTableAlign[]
+      header: MarkdownTableCell[]
+      rows: MarkdownTableCell[][]
+    }
 
 const INLINE_PATTERN =
   /(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(\[([^\]]+)\]\(([^)\s]+)\))/g
@@ -96,41 +114,122 @@ export function parseMarkdownInlines(text: string): MarkdownInline[] {
   return inlines
 }
 
+/** ```` ``` ```` or longer, optionally naming a language. */
+const FENCE_PATTERN = /^`{3,}\s*([^\s`]*)\s*$/
+/** A delimiter cell of a GFM table's second row: `---`, `:--`, `:-:`, `--:`. */
+const DELIMITER_CELL = /^:?-+:?$/
+
+/** Splits a table row on `|`, dropping the optional outer pipes. */
+function splitTableRow(line: string): string[] {
+  let text = line.trim()
+  if (text.startsWith('|')) text = text.slice(1)
+  if (text.endsWith('|')) text = text.slice(0, -1)
+  return text.split('|').map((cell) => cell.trim())
+}
+
+function alignOfDelimiter(cell: string): MarkdownTableAlign {
+  const left = cell.startsWith(':')
+  const right = cell.endsWith(':')
+  if (left && right) return 'center'
+  return right ? 'right' : 'left'
+}
+
+/**
+ * A pipe table when the chunk's SECOND line is all delimiter cells — the
+ * same rule GFM uses, and the reason a paragraph mentioning `a | b` is
+ * still a paragraph. Cells are squared off to the header's width: ragged
+ * rows pad with empty cells and overflow is dropped, so the model the
+ * serializer writes back re-parses to itself.
+ */
+function parseTable(lines: string[]): MarkdownBlock | null {
+  const [headerLine, delimiterLine] = lines
+  if (!headerLine || !delimiterLine || !headerLine.includes('|')) return null
+  const delimiters = splitTableRow(delimiterLine)
+  if (!delimiters.every((cell) => DELIMITER_CELL.test(cell))) return null
+  const header = splitTableRow(headerLine).map(parseMarkdownInlines)
+  const columns = header.length
+  const squared = (cells: string[]): MarkdownTableCell[] =>
+    Array.from({ length: columns }, (_, index) =>
+      parseMarkdownInlines(cells[index] ?? ''),
+    )
+  return {
+    type: 'table',
+    align: Array.from({ length: columns }, (_, index) =>
+      alignOfDelimiter(delimiters[index] ?? '---'),
+    ),
+    header,
+    rows: lines.slice(2).map((line) => squared(splitTableRow(line))),
+  }
+}
+
+/** One blank-line-delimited chunk of non-fenced source, as a block. */
+function parseChunk(chunk: string): MarkdownBlock | null {
+  const trimmed = chunk.trim()
+  if (!trimmed) return null
+  const image = /^!\[([^\]]*)\]\(([^)\s]+)\)$/.exec(trimmed)
+  if (image) {
+    const src = safeUrl(image[2])
+    return src ? { type: 'image', src, alt: image[1] } : null
+  }
+  const heading = /^(#{2,3})\s+(.*)$/.exec(trimmed)
+  if (heading) {
+    return {
+      type: 'heading',
+      level: heading[1].length as 2 | 3,
+      inlines: parseMarkdownInlines(heading[2]),
+    }
+  }
+  const lines = trimmed.split('\n')
+  const table = parseTable(lines)
+  if (table) return table
+  if (lines.every((line) => /^[-*]\s+/.test(line.trim()))) {
+    return {
+      type: 'list',
+      items: lines.map((line) =>
+        parseMarkdownInlines(line.trim().replace(/^[-*]\s+/, '')),
+      ),
+    }
+  }
+  return { type: 'paragraph', inlines: parseMarkdownInlines(lines.join(' ')) }
+}
+
+/**
+ * Blocks are blank-line separated, EXCEPT inside a ``` fence — a code
+ * block owns its blank lines, so the scan is line-driven rather than a
+ * split on `\n{2,}` (AGL-974). An unterminated fence runs to the end of
+ * the document, which is what a README truncated mid-snippet needs.
+ */
 export function parseMarkdownLite(body: string): MarkdownBlock[] {
   const blocks: MarkdownBlock[] = []
-  for (const chunk of body.split(/\n{2,}/)) {
-    const trimmed = chunk.trim()
-    if (!trimmed) continue
-    const image = /^!\[([^\]]*)\]\(([^)\s]+)\)$/.exec(trimmed)
-    if (image) {
-      const src = safeUrl(image[2])
-      if (src) blocks.push({ type: 'image', src, alt: image[1] })
-      continue
-    }
-    const heading = /^(#{2,3})\s+(.*)$/.exec(trimmed)
-    if (heading) {
-      blocks.push({
-        type: 'heading',
-        level: heading[1].length as 2 | 3,
-        inlines: parseMarkdownInlines(heading[2]),
-      })
-      continue
-    }
-    const lines = trimmed.split('\n')
-    if (lines.every((line) => /^[-*]\s+/.test(line.trim()))) {
-      blocks.push({
-        type: 'list',
-        items: lines.map((line) =>
-          parseMarkdownInlines(line.trim().replace(/^[-*]\s+/, '')),
-        ),
-      })
-      continue
-    }
-    blocks.push({
-      type: 'paragraph',
-      inlines: parseMarkdownInlines(lines.join(' ')),
-    })
+  const lines = body.split('\n')
+  let pending: string[] = []
+  const flush = (): void => {
+    const block = pending.length ? parseChunk(pending.join('\n')) : null
+    if (block) blocks.push(block)
+    pending = []
   }
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? ''
+    const fence = FENCE_PATTERN.exec(line.trim())
+    if (fence) {
+      flush()
+      const text: string[] = []
+      while (
+        ++index < lines.length &&
+        !FENCE_PATTERN.test((lines[index] ?? '').trim())
+      ) {
+        text.push(lines[index] ?? '')
+      }
+      // Blank edges are the fence's own padding, not part of the snippet.
+      while (text.length && !text[0]?.trim()) text.shift()
+      while (text.length && !text[text.length - 1]?.trim()) text.pop()
+      blocks.push({ type: 'code', lang: fence[1] ?? '', text: text.join('\n') })
+      continue
+    }
+    if (line.trim()) pending.push(line)
+    else flush()
+  }
+  flush()
   return blocks
 }
 
@@ -187,6 +286,48 @@ export function serializeMarkdownLite(blocks: MarkdownBlock[]): string {
         .filter(Boolean)
         .map((line) => `- ${line}`)
       if (lines.length) chunks.push(lines.join('\n'))
+      continue
+    }
+    if (block.type === 'code') {
+      // The fence is the only delimiter the dialect has, so a fence INSIDE
+      // the snippet would end it early — those backticks drop, the same way
+      // an unrepresentable `*` drops from a bold run.
+      const text = block.text
+        .replace(/^(\s*)`{3,}/gm, '$1')
+        .replace(/^(?:[ \t]*\n)+/, '')
+        .replace(/(?:\n[ \t]*)+$/, '')
+      const lang = block.lang.replace(/[^\w+#.-]/g, '')
+      chunks.push([`\`\`\`${lang}`, ...(text ? [text] : []), '```'].join('\n'))
+      continue
+    }
+    if (block.type === 'table') {
+      // `|` separates cells and there are no escapes, so a pipe inside a
+      // cell drops. Empty cells are kept — they are meaningful in a table.
+      const row = (cells: MarkdownTableCell[]): string =>
+        `| ${cells
+          .map((cell) => serializeMarkdownInlines(cell).replace(/\|/g, '').trim())
+          .join(' | ')} |`
+      if (!block.header.length) continue
+      const delimiters = block.header.map((_, index) => {
+        const align = block.align[index] ?? 'left'
+        return align === 'center' ? ':-:' : align === 'right' ? '--:' : '---'
+      })
+      chunks.push(
+        [
+          row(block.header),
+          `| ${delimiters.join(' | ')} |`,
+          // Squared off to the header: the parser reads it back that way,
+          // so writing anything else would not round-trip.
+          ...block.rows.map((cells) =>
+            row(
+              Array.from(
+                { length: block.header.length },
+                (_, index) => cells[index] ?? [],
+              ),
+            ),
+          ),
+        ].join('\n'),
+      )
       continue
     }
     const line = serializeMarkdownInlines(block.inlines).trim()

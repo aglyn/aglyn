@@ -82,6 +82,61 @@ describe('markdown-lite', () => {
     ).toBe(true)
   })
 
+  it('parses a fenced code block verbatim, blank lines and all (AGL-974)', () => {
+    const blocks = parseMarkdownLite(
+      'Before\n\n```ts\nconst a = 1\n\nconst b = 2\n```\n\nAfter',
+    )
+    expect(blocks.map((block) => block.type)).toEqual([
+      'paragraph',
+      'code',
+      'paragraph',
+    ])
+    expect(blocks[1]).toEqual({
+      type: 'code',
+      lang: 'ts',
+      text: 'const a = 1\n\nconst b = 2',
+    })
+  })
+
+  it('runs an unterminated fence to the end of the document (AGL-974)', () => {
+    // A README sliced at LISTING_README_MAX_CHARS ends mid-snippet.
+    expect(parseMarkdownLite('```\nhalf a snippet')).toEqual([
+      { type: 'code', lang: '', text: 'half a snippet' },
+    ])
+  })
+
+  it('parses a pipe table, squaring ragged rows off (AGL-974)', () => {
+    const blocks = parseMarkdownLite(
+      '| Prop | What it does | Default |\n' +
+        '| --- | :-: | ---: |\n' +
+        '| `size` | **how** big | 8 |\n' +
+        '| lonely |',
+    )
+    expect(blocks).toHaveLength(1)
+    const table = blocks[0] as any
+    expect(table.type).toBe('table')
+    expect(table.align).toEqual(['left', 'center', 'right'])
+    expect(table.header.map((cell: any[]) => cell[0]?.text)).toEqual([
+      'Prop',
+      'What it does',
+      'Default',
+    ])
+    // Every row carries exactly header.length cells; the short one pads.
+    expect(table.rows.map((row: any[]) => row.length)).toEqual([3, 3])
+    expect(table.rows[0][1]).toEqual([
+      { type: 'bold', text: 'how' },
+      { type: 'text', text: ' big' },
+    ])
+    expect(table.rows[1][2]).toEqual([])
+  })
+
+  it('needs a delimiter row before it calls something a table (AGL-974)', () => {
+    // Prose that happens to contain pipes stays prose.
+    expect(
+      parseMarkdownLite('a | b\nc | d').map((block) => block.type),
+    ).toEqual(['paragraph'])
+  })
+
   it('classifies internal hrefs for AppLink rendering (AGL-582)', () => {
     expect(isInternalMarkdownHref('/blog/post')).toBe(true)
     expect(isInternalMarkdownHref('//evil.example')).toBe(false)
@@ -124,6 +179,25 @@ describe('serializeMarkdownLite (AGL-582)', () => {
     'unsafe image block is dropped': 'before\n\n![x](/relative.png)\n\nafter',
     'surrounding whitespace': '\n\n  ## Padded  \n\n  body  \n\n',
     'empty document': '',
+    'fenced code block with a language':
+      'Install it:\n\n```bash\nnpm i thing\n```\n\nDone.',
+    'code block with blank lines and no language':
+      '```\nconst a = 1\n\nconst b = 2\n```',
+    'empty code fence': '```\n```',
+    'code block whose text looks like markdown': '```md\n## not a heading\n- x\n```',
+    'unterminated fence runs to the end': '```ts\nconst a = 1',
+    'table with alignments':
+      '| Prop | Does | Default |\n| :-- | :-: | --: |\n| size | how big | 8 |',
+    'table with no body rows': '| A | B |\n| --- | --- |',
+    'ragged table rows square off':
+      '| A | B | C |\n| --- | --- | --- |\n| 1 |\n| 1 | 2 | 3 | 4 |',
+    'table cells with inline marks':
+      '| Prop | Docs |\n| --- | --- |\n| **size** | [read](https://example.com) |',
+    'table with an empty cell': '| A | B |\n| --- | --- |\n|  | 2 |',
+    'pipes in prose are not a table': 'a | b\nc | d',
+    'README shape: heading, table, fence':
+      '## Config\n\n| Prop | Default |\n| --- | --- |\n| size | 8 |\n\n' +
+      '```ts\nregister({ size: 8 })\n```\n\nThat is all.',
   }
 
   it.each(Object.entries(corpus))(

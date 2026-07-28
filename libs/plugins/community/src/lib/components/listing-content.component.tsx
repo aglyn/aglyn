@@ -101,7 +101,8 @@ const renderInlines = (inlines: MarkdownInline[]) =>
 /**
  * Publisher README (AGL-431), rendered through markdown-lite — the parser
  * only ever emits text/bold/italic/http(s)-links/images, so publisher-
- * written docs can't inject markup or javascript: URLs.
+ * written docs can't inject markup or javascript: URLs. Code blocks and
+ * tables carry text only (AGL-974); the same guarantee holds for both.
  */
 function ListingReadme({ readme }: { readme: string }) {
   const blocks = useMemo<MarkdownBlock[]>(
@@ -146,6 +147,84 @@ function ListingReadme({ readme }: { readme: string }) {
                   </Typography>
                 ))}
               </Stack>
+            )
+          // A README's example snippet (AGL-974). Scrolls rather than wraps —
+          // a wrapped command line reads as two commands.
+          case 'code':
+            return (
+              <Box
+                key={index}
+                component="pre"
+                sx={{
+                  my: 0,
+                  p: 1.5,
+                  overflowX: 'auto',
+                  borderRadius: 1,
+                  border: 1,
+                  borderColor: 'divider',
+                  bgcolor: 'action.hover',
+                  typography: 'body2',
+                  fontFamily: 'monospace',
+                }}
+              >
+                <code>{block.text}</code>
+              </Box>
+            )
+          // The config table (AGL-974) — the block a plugin README is
+          // mostly made of. Wrapped in its own scroller so a wide table
+          // never pushes the page sideways.
+          case 'table':
+            return (
+              <Box key={index} sx={{ overflowX: 'auto' }}>
+                <Box
+                  component="table"
+                  sx={{
+                    borderCollapse: 'collapse',
+                    width: '100%',
+                    '& th, & td': {
+                      border: 1,
+                      borderColor: 'divider',
+                      px: 1,
+                      py: 0.5,
+                    },
+                    '& th': { bgcolor: 'action.hover' },
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      {block.header.map((cell, cellIndex) => (
+                        <Typography
+                          key={cellIndex}
+                          component="th"
+                          variant="body2"
+                          sx={{
+                            textAlign: block.align[cellIndex] ?? 'left',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {renderInlines(cell)}
+                        </Typography>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((row, rowIndex) => (
+                      <tr key={rowIndex}>
+                        {row.map((cell, cellIndex) => (
+                          <Typography
+                            key={cellIndex}
+                            component="td"
+                            variant="body2"
+                            sx={{ textAlign: block.align[cellIndex] ?? 'left' }}
+                          >
+                            {renderInlines(cell)}
+                          </Typography>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </Box>
+              </Box>
             )
           default:
             return (

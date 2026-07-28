@@ -99,6 +99,22 @@ describe('markdownToRows / rowsToMarkdown', () => {
     expect(rowsToMarkdown(rows)).toBe(source)
   })
 
+  it('carries code blocks and tables through untouched (AGL-974)', () => {
+    // This editor writes marketplace READMEs, so a block it cannot
+    // represent used to be DELETED the next time the author saved.
+    const source =
+      'Intro.\n\n```ts\nconst a = 1\n\nconst b = 2\n```\n\n' +
+      '| Prop | Default |\n| --- | --: |\n| size | 8 |\n\nOutro.'
+    const rows = markdownToRows(source)
+    expect(rows.map((row) => row.kind)).toEqual([
+      'paragraph',
+      'code',
+      'table',
+      'paragraph',
+    ])
+    expect(rowsToMarkdown(rows)).toBe(source)
+  })
+
   it('yields a single empty paragraph for an empty document', () => {
     const rows = markdownToRows('')
     expect(rows).toHaveLength(1)
@@ -131,6 +147,32 @@ describe('MarkdownVisualEditor', () => {
     // Text rows are live contentEditable surfaces; images are not.
     expect(rows[0]?.getAttribute('contenteditable')).toBe('true')
     expect(rows[3]?.getAttribute('contenteditable')).toBe('false')
+  })
+
+  it('renders code and table rows read-only (AGL-974)', () => {
+    renderEditor(
+      'Intro\n\n```ts\nconst a = 1\n```\n\n' +
+        '| Prop | Default |\n| --- | --- |\n| size | 8 |',
+    )
+    const rows = rowEls()
+    expect(rows.map((row) => row.dataset['rowKind'])).toEqual([
+      'paragraph',
+      'code',
+      'table',
+    ])
+    expect(rows[1]?.querySelector('code')?.textContent).toBe('const a = 1')
+    expect(rows[1]?.getAttribute('contenteditable')).toBe('false')
+    expect(
+      Array.from(rows[2]?.querySelectorAll('th') ?? []).map(
+        (cell) => cell.textContent,
+      ),
+    ).toEqual(['Prop', 'Default'])
+    expect(
+      Array.from(rows[2]?.querySelectorAll('td') ?? []).map(
+        (cell) => cell.textContent,
+      ),
+    ).toEqual(['size', '8'])
+    expect(rows[2]?.getAttribute('contenteditable')).toBe('false')
   })
 
   it('typing syncs the DOM back into the model', () => {
