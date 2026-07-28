@@ -68,6 +68,8 @@
     "test:eslint-rules": "node tools/eslint-rules/no-plan-gated-entitlement.test.mjs",
     "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",
+    "sync:next-tsconfigs": "node tools/scripts/sync-next-tsconfigs.mjs",
+    "sync:next-tsconfigs:check": "node tools/scripts/sync-next-tsconfigs.mjs --check",
     "typecheck": "node tools/scripts/typecheck.mjs",
     "clean:next": "node tools/scripts/clean-next.mjs",
     "clean:next:prune": "node tools/scripts/clean-next.mjs --prune --force",

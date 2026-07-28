@@ -18,10 +18,11 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useHost } from '@aglyn/tenant-feature-instance'
+import { useHost, useUser } from '@aglyn/tenant-feature-instance'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { resyncHostMemberships } from '../utils/resync-host-memberships'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface FaviconCardProps {
@@ -37,6 +38,7 @@ export interface FaviconCardProps {
 export function FaviconCard(props: FaviconCardProps) {
   const { hostId } = props
   const { enqueueSnackbar } = useSnackbar()
+  const { data: user } = useUser()
   const {
     doc: { data },
     setDoc,
@@ -82,12 +84,15 @@ export function FaviconCard(props: FaviconCardProps) {
             color="error"
             onClick={() =>
               setDoc({ seo: { favicon: '' } }, { merge: true })
-                .then(() =>
+                .then(() => {
+                  // Clearing must re-fan too (AGL-1071) — otherwise the
+                  // switcher keeps showing the icon the user just removed.
+                  resyncHostMemberships(hostId, user as never)
                   enqueueSnackbar('Favicon removed', {
                     variant: 'success',
                     persist: false,
-                  }),
-                )
+                  })
+                })
                 .catch(() =>
                   enqueueSnackbar('An error has occurred', {
                     variant: 'error',
@@ -106,12 +111,15 @@ export function FaviconCard(props: FaviconCardProps) {
         onPick={(media) => {
           if (!media.url) return
           void setDoc({ seo: { favicon: media.url } }, { merge: true })
-            .then(() =>
+            .then(() => {
+              // A client write to the host doc bypasses the membership
+              // funnel, so the switcher's projection needs a nudge (AGL-1071).
+              resyncHostMemberships(hostId, user as never)
               enqueueSnackbar('Favicon saved', {
                 variant: 'success',
                 persist: false,
-              }),
-            )
+              })
+            })
             .catch(() =>
               enqueueSnackbar('An error has occurred', { variant: 'error' }),
             )

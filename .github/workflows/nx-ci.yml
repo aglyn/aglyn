@@ -36,4 +36,25 @@ jobs:
       # run explicitly on every CI run — never affected-scoped).
       - run: npm run test:eslint-rules
 
+      # apps/*/tsconfig.next.json are GENERATED from tsconfig.base.json, and
+      # the typecheck above skips them by name — correctly, since they exist
+      # for next.config's `typescript.tsconfigPath` rather than the native
+      # compiler. That leaves nothing able to notice when they go stale, and
+      # they did (AGL-1069): a `paths` entry was added to the base config,
+      # the generator was never re-run, and three apps quietly resolved
+      # nothing for that alias. Explicit and never affected-scoped for the
+      # same reason as the step above — the input that invalidates these is
+      # tsconfig.base.json, which is no app's source.
+      - run: npm run sync:next-tsconfigs:check
+
+      # Same shape: apps/console/constants/docs-help.generated.ts and the
+      # besigner subset are generated from apps/docs frontmatter, and go
+      # stale when a docs page gains a heading or changes its description.
+      # The script has advertised itself as a CI gate since AGL-602 and was
+      # never actually wired to one — written, documented, zero callers
+      # (`feedback_verify_control_is_wired`). Affected-scoping is wrong here
+      # too: the input is apps/docs, the outputs are in console and a
+      # besigner lib.
+      - run: npm run generate:docs-help:check
+
       - run: npx nx affected -t lint test build --parallel=3
