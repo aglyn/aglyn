@@ -17,10 +17,45 @@ the marketplace side.
 1. **Publisher profile** (Marketplace → Profile) — your handle and
    display name appear on every listing. Publishing is **organization-owned**:
    the listing belongs to your organization, not your personal account.
-2. **Plan**: publishing requires a Pro plan.
-3. **Payouts** (paid listings only): complete Stripe Connect onboarding
+2. **Publisher agreement** (Marketplace → Profile) — accept it once, on
+   behalf of the organization. See
+   [The publisher agreement](#the-publisher-agreement).
+3. **Plan**: publishing requires a Pro plan.
+4. **Payouts** (paid listings only): complete Stripe Connect onboarding
    from **Marketplace → Payouts**. The platform fee is 20% (30% on free
    plans).
+
+## The publisher agreement
+
+Your **organization** — not you personally — is the publishing party, so
+the organization accepts the **Marketplace Publisher Agreement** once,
+from **Marketplace → Profile**. Only an owner or admin can accept it,
+because only they can bind the organization, and we record who accepted
+it and when.
+
+It is a different thing from the
+[pre-publish checklist](#before-you-publish), and they are not
+interchangeable:
+
+| | Publisher agreement | Pre-publish checklist |
+| --- | --- | --- |
+| About | The relationship | The bytes in this bundle |
+| Scope | Your organization | One version |
+| Asked | Once, and again when the terms change | Every publish, including a republish of the same version number |
+
+The summary shown above the accept button is the part that tends to
+surprise people later — the license you grant us to host, verify and
+distribute; what you warrant about each version; that you cannot recall
+code already installed; that we can disable a version everywhere without
+notice if it looks dangerous; that review is a safety screen and not an
+endorsement; and that on paid listings you are the seller. Read the full
+agreement before accepting.
+
+**If we change the agreement, publishing stops** until someone who can
+bind your organization reads and accepts the new version. An older
+acceptance is never carried forward — that is the whole reason the
+agreement is versioned. Nothing already published is affected, and
+reviewers can see which version each publisher is under.
 
 ## Where to publish from
 

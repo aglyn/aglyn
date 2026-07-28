@@ -41,6 +41,11 @@ import {
   missingAttestationSubjects,
   PUBLISHER_ATTESTATION,
 } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import {
+  PUBLISHER_AGREEMENT_VERSION,
+  publisherAgreementRefusal,
+  publisherAgreementState,
+} from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { createHash } from 'crypto'
 import {
   COMMUNITY_MAX_PRICE_USD,
@@ -299,6 +304,28 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     if (priceUsd > 0 && !publisher.stripeChargesEnabled) {
       return res.status(412).json({
         error: 'Set up payouts first — Marketplace → Payouts — to sell.',
+      })
+    }
+
+    // The publisher agreement (AGL-1077). A precondition on the ORG, checked
+    // here beside the profile and payout preconditions it belongs with —
+    // deliberately NOT the 428 the attestation uses. "You did not confirm
+    // the checklist for this bundle" and "your organization has never agreed
+    // to our terms" are different problems, fixed in different places, and a
+    // shared status code would send a publisher back to the checklist to
+    // tick something that is already ticked.
+    //
+    // An acceptance of an older version does not count: whoever publishes
+    // next reads the changed agreement and accepts it, or does not publish.
+    const agreementState = publisherAgreementState(publisher.agreement)
+    if (agreementState !== 'current') {
+      return res.status(412).json({
+        error: publisherAgreementRefusal(agreementState),
+        agreement: {
+          required: PUBLISHER_AGREEMENT_VERSION,
+          accepted: publisher.agreement?.version ?? null,
+          state: agreementState,
+        },
       })
     }
 

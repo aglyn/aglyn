@@ -708,10 +708,17 @@ service cloud.firestore {
       // two orgs racing for one handle both "succeed", silently taking each
       // other's marketplace URL. Creates go through the save route entirely;
       // updates may edit the cosmetic fields but never the handle.
+      //
+      // `publisherAgreement` (AGL-1077) is server-owned for the same reason
+      // the payout keys are: an acceptance the accepting party can forge is
+      // not evidence of anything. It is written only by the
+      // `accept-agreement` action, which checks the submitted version
+      // against the one in force.
       allow create: if false;
       allow update: if publisherManager() && publisherFieldsValid() &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['handle', 'stripeAccountId', 'stripeChargesEnabled']);
+          .hasAny(['handle', 'stripeAccountId', 'stripeChargesEnabled',
+                   'publisherAgreement']);
       allow delete: if isStaff();
     }
 

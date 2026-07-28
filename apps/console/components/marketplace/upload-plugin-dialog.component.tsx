@@ -126,6 +126,8 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
   // and refuses the publish with 428 — so this state only drives the UI.
   const [attested, setAttested] = useState<string[]>([])
   const [missingAttestations, setMissingAttestations] = useState<string[]>([])
+  // The org has not accepted the current publisher agreement (AGL-1077).
+  const [agreementProblem, setAgreementProblem] = useState('')
 
   const reset = () => {
     setBundleFile(null)
@@ -142,6 +144,7 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
     setVisibility('public')
     setAttested([])
     setMissingAttestations([])
+    setAgreementProblem('')
     setProblems([])
   }
 
@@ -204,6 +207,7 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
   const submit = async () => {
     setProblems([])
     setMissingAttestations([])
+    setAgreementProblem('')
     if (!bundleFile) {
       return void enqueueSnackbar('Choose a plugin bundle (.js) to upload', {
         variant: 'warning',
@@ -276,6 +280,10 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
         if (Array.isArray(payload?.missingAttestations)) {
           setMissingAttestations(payload.missingAttestations)
         }
+        // 412 with an `agreement` (AGL-1077): a precondition on the ORG, not
+        // on this bundle. Held as an alert rather than a snackbar because the
+        // fix is on another page and a toast will be gone before they read it.
+        if (payload?.agreement) setAgreementProblem(String(payload.error ?? ''))
         return void enqueueSnackbar(payload?.error ?? 'Upload failed', {
           variant: response.status === 501 ? 'info' : 'error',
           allowDuplicate: true,
@@ -562,6 +570,15 @@ export function UploadPluginDialog(props: UploadPluginDialogProps) {
               )
             })}
           </Stack>
+
+          {agreementProblem ? (
+            <Alert severity="warning">
+              <Typography variant="subtitle2">
+                {'Publisher agreement'}
+              </Typography>
+              <Typography variant="caption">{agreementProblem}</Typography>
+            </Alert>
+          ) : null}
 
           {problems.length ? (
             <Alert severity="error">

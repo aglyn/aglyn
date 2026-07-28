@@ -39,6 +39,10 @@ import {
   PLUGIN_REVIEW_CHECKLIST,
 } from '../../../../constants/plugin-review-checklist'
 import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import {
+  PUBLISHER_AGREEMENT_VERSION,
+  publisherAgreementState,
+} from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { FieldValue } from 'firebase-admin/firestore'
 import { listOrgMembers, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 import { sendEmail } from '@aglyn/shared-util-email'
@@ -171,6 +175,17 @@ async function listingDetail(
   const publisher = publisherId
     ? await firestore.collection('orgs').doc(publisherId).get()
     : null
+
+  // Which terms this publisher is actually under (AGL-1077). A reviewer
+  // weighing a takedown, a delist, or a revocation is deciding what we are
+  // entitled to do — and that is answered by the agreement the ORG accepted,
+  // not by the per-version attestation beside it.
+  const publisherProfile = publisherId
+    ? await firestore.collection('publisherProfiles').doc(publisherId).get()
+    : null
+  const acceptance = publisherProfile?.get('publisherAgreement') as
+    | { version?: string; acceptedBy?: string; acceptedAt?: { toDate?: () => Date } }
+    | undefined
 
   // Kill switch, so the page can say whether the plugin is actually stopped
   // rather than only de-listed (AGL-948).
@@ -341,6 +356,16 @@ async function listingDetail(
       ),
       attestedBy,
       attestedAt,
+      // The publisher agreement this ORG is under (AGL-1077). `current` is
+      // computed here rather than shipped as a boolean so the page can say
+      // "on an older version" — which is a different thing from never
+      // having accepted, and matters differently to a takedown decision.
+      publisherAgreement: {
+        version: acceptance?.version ?? null,
+        acceptedAt: acceptance?.acceptedAt?.toDate?.()?.toISOString() ?? null,
+        required: PUBLISHER_AGREEMENT_VERSION,
+        state: publisherAgreementState(acceptance),
+      },
       verifier,
       verifierCached,
       verifierVersion: PLUGIN_VERIFIER_VERSION,

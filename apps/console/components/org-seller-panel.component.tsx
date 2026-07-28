@@ -21,16 +21,25 @@ import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Alert,
   Button,
   Chip,
   Divider,
   IconButton,
+  Link,
   Menu,
   MenuItem,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
+import {
+  PUBLISHER_AGREEMENT_POINTS,
+  PUBLISHER_AGREEMENT_TITLE,
+  PUBLISHER_AGREEMENT_URL,
+  PUBLISHER_AGREEMENT_VERSION,
+  publisherAgreementState,
+} from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { useRouter } from 'next/navigation'
 import { collection, doc, query, updateDoc, where } from 'firebase/firestore'
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
@@ -200,6 +209,62 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     }
   }, [orgId, validHandle, handle, displayName, bio, user, enqueueSnackbar])
 
+  // The publisher agreement (AGL-1077). `none` and `outdated` get different
+  // copy on purpose: "you never agreed" and "the terms moved" are different
+  // situations, and one message for both reads as a bug in whichever case it
+  // does not describe.
+  const agreementState = publisherAgreementState(profile?.publisherAgreement)
+  const acceptedOn = (() => {
+    const at = profile?.publisherAgreement?.acceptedAt
+    const date = at?.toDate?.()
+    return date ? date.toLocaleDateString() : ''
+  })()
+  const [agreementBusy, setAgreementBusy] = useState(false)
+  const handleAcceptAgreement = useCallback(async () => {
+    if (!orgId) return
+    setAgreementBusy(true)
+    try {
+      // Server-owned, like the handle: an acceptance the accepting party can
+      // write itself is not evidence of anything, and the rules block the
+      // field outright.
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/community/publisher-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          action: 'accept-agreement',
+          orgId,
+          // Echoed back so the server can refuse an acceptance of anything
+          // other than the version in force — including one made against a
+          // page left open across a change.
+          version: PUBLISHER_AGREEMENT_VERSION,
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        return void enqueueSnackbar(
+          payload?.error ?? 'Could not record the acceptance',
+          { variant: 'warning', persist: false },
+        )
+      }
+      enqueueSnackbar('Agreement accepted — you can publish now', {
+        variant: 'success',
+        persist: false,
+      })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setAgreementBusy(false)
+    }
+  }, [orgId, user, enqueueSnackbar])
+
   // The listing open in the full editor (AGL-862), or null when closed.
   const [editListing, setEditListing] = useState<any | null>(null)
   // Per-row overflow menu (AGL-999): the anchor plus the row it belongs to,
@@ -286,6 +351,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
 
   const cards: Record<OrgSellerSection, ReactElement> = {
     profile: (
+      <Stack spacing={2}>
       <CardDisplay
         header={'Public profile'}
         help={docsHelp('publisherHandbook', {
@@ -338,6 +404,88 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           </Button>
         </Stack>
       </CardDisplay>
+
+      {/* The publisher agreement (AGL-1077). Its own card, directly under
+          the identity it belongs to, rather than a seventh checkbox on the
+          publish form — an agreement accepted in the same breath as six
+          per-bundle confirmations is an agreement nobody read. Publishing
+          then simply requires it, so the first publish is where it STOPS
+          you rather than where it hides. */}
+      <CardDisplay
+        header={PUBLISHER_AGREEMENT_TITLE}
+        help={docsHelp('publisherHandbook', {
+          anchor: '#the-publisher-agreement',
+          excerpt:
+            'The terms your organization publishes under — accepted once, ' +
+            're-asked when they change.',
+        })}
+        contentGutterX
+        contentGutterY
+      >
+        <Stack spacing={2}>
+          {agreementState === 'current' ? (
+            <Alert severity="success">
+              {`Accepted — version ${profile?.publisherAgreement?.version}` +
+                (acceptedOn ? ` on ${acceptedOn}` : '')}
+            </Alert>
+          ) : (
+            <Alert severity={agreementState === 'outdated' ? 'warning' : 'info'}>
+              {agreementState === 'outdated'
+                ? 'These terms have changed since your organization accepted ' +
+                  `them (you accepted ${profile?.publisherAgreement?.version}). ` +
+                  'Publishing is paused until someone who can bind the ' +
+                  'organization accepts the current version.'
+                : 'Your organization has not accepted these terms. You can ' +
+                  'set up a profile without them, but you cannot publish.'}
+            </Alert>
+          )}
+          <Typography variant="body2" color="text.secondary">
+            {'In summary — this is not the agreement, it is what tends to ' +
+              'surprise people later:'}
+          </Typography>
+          <Stack spacing={1}>
+            {PUBLISHER_AGREEMENT_POINTS.map((point) => (
+              <Stack key={point.id} spacing={0.25}>
+                <Typography variant="body2">{point.label}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {point.detail}
+                </Typography>
+              </Stack>
+            ))}
+          </Stack>
+          <Typography variant="body2">
+            <Link
+              href={PUBLISHER_AGREEMENT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              underline="always"
+            >
+              {`Read the full ${PUBLISHER_AGREEMENT_TITLE}`}
+            </Link>
+            {` (version ${PUBLISHER_AGREEMENT_VERSION})`}
+          </Typography>
+          {agreementState === 'current' ? null : (
+            <Button
+              variant="contained"
+              color="secondary"
+              disabled={agreementBusy}
+              onClick={() => void handleAcceptAgreement()}
+              sx={{ alignSelf: 'flex-start' }}
+            >
+              {agreementBusy
+                ? 'Recording…'
+                : agreementState === 'outdated'
+                  ? 'Accept the current version'
+                  : 'Accept on behalf of this organization'}
+            </Button>
+          )}
+          <Typography variant="caption" color="text.secondary">
+            {'Accepting binds the organization, not you personally — only an ' +
+              'owner or admin can do it, and we record who did and when.'}
+          </Typography>
+        </Stack>
+      </CardDisplay>
+      </Stack>
     ),
     listings: (
       <CardDisplay

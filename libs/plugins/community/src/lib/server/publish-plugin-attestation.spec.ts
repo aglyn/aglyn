@@ -59,6 +59,17 @@ jest.mock('./publisher-profile', () => ({
   resolvePublisherProfile: async () => ({
     orgId: 'org-1',
     stripeChargesEnabled: true,
+    // The org-level publisher agreement (AGL-1077) is a separate gate with
+    // its own spec; hold it satisfied here so these assertions stay about
+    // the per-bundle attestation.
+    agreement: {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      version: (
+        jest.requireActual(
+          '@aglyn/aglyn/app-utils/publisher-agreement',
+        ) as { PUBLISHER_AGREEMENT_VERSION: string }
+      ).PUBLISHER_AGREEMENT_VERSION,
+    },
   }),
 }))
 
