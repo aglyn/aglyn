@@ -283,16 +283,19 @@ export function ArtifactUpdateDialog({
           variant="contained"
           color="secondary"
           disabled={
-            loading ||
-            !preview?.mergeable ||
-            preview.identical ||
-            (destructive && !confirmDestructive)
+            loading || !preview?.mergeable || (destructive && !confirmDestructive)
           }
           onClick={() => onApplyMerge(take, confirmDestructive)}
         >
-          {take.length
-            ? `Apply (${take.length} taken from publisher)`
-            : 'Apply safe changes'}
+          {/* An identical version is still worth taking (AGL-1035): the write
+              is a version re-stamp, and without it the workspace is told it is
+              behind forever. Labelled for what it does, so nobody presses it
+              expecting their copy to change. */}
+          {preview?.identical
+            ? `Take v${preview.availableVersion} (no content changes)`
+            : take.length
+              ? `Apply (${take.length} taken from publisher)`
+              : 'Apply safe changes'}
         </Button>
       </DialogActions>
     </Dialog>

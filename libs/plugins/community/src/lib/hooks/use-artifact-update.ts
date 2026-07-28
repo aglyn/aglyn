@@ -144,10 +144,15 @@ export function useArtifactUpdate(hostId: string) {
           // just as importantly, what was left alone.
           const skipped = payload.skipped?.length ?? 0
           enqueueSnackbar(
-            `Updated to v${payload.version} — ${payload.applied} change(s) ` +
-              `applied, ${payload.keptLocal} of yours kept` +
-              (skipped ? `, ${skipped} conflict(s) left as yours` : '') +
-              '.',
+            // A version bump carrying no content change (AGL-1035). "0 changes
+            // applied" would read as a failure; what happened is that the
+            // version moved, which is the whole point of taking it.
+            !payload.applied && !payload.keptLocal && !skipped
+              ? `Now on v${payload.version} — this version changes nothing in your copy.`
+              : `Updated to v${payload.version} — ${payload.applied} change(s) ` +
+                `applied, ${payload.keptLocal} of yours kept` +
+                (skipped ? `, ${skipped} conflict(s) left as yours` : '') +
+                '.',
             { variant: 'success', persist: false },
           )
         }
