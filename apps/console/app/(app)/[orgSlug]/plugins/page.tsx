@@ -27,12 +27,13 @@ import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-pr
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Stack, Switch, Typography } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { collection, getDocs, limit, query } from 'firebase/firestore'
+import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { buildRoute, Route } from '../../../../constants/route-links'
+import { useOrgHosts } from '../../../../hooks/use-org-hosts'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
@@ -61,9 +62,6 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   const orgId = currentOrg?.$id ?? ''
   const canManage = canManageOrg(currentOrg?.role)
 
-  // Org-wide marketplace pins. Host-pinned installs are reachable from the
-  // listing page's site set; this inventory speaks for the workspace, and
-  // the detail page tells the per-site story.
   const { data: orgInstalls } = useFirestoreCollection<any>(
     () =>
       query(
@@ -73,6 +71,83 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
     [firestore, orgId],
     { idField: '$id' },
   )
+
+  // Site pins too (AGL-1012). Reading only the org pins meant a plugin
+  // targeted at specific sites — installed, running, and the whole point of
+  // AGL-773/997 — was absent from the workspace's own plugin inventory, and
+  // the page said so silently. Fan-in per site, as elsewhere: the host count
+  // is data, so a hook per host would change the hook count between renders.
+  const { hosts } = useOrgHosts(firestore, user?.uid, orgId || null)
+  const hostList = useMemo(
+    () =>
+      ((hosts as Array<{ $id: string; displayName?: string; subdomain?: string }>) ??
+        []).map((host) => ({
+        id: host.$id,
+        label: host.displayName || host.subdomain || host.$id,
+      })),
+    [hosts],
+  )
+  const hostIdsKey = hostList.map((host) => host.id).join('|')
+  const [sitePins, setSitePins] = useState<Record<string, any[]>>({})
+  useEffect(() => {
+    if (!hostList.length) return
+    let active = true
+    void Promise.all(
+      hostList.map(async (host) => {
+        const snapshot = await getDocs(
+          query(
+            collection(firestore, 'hosts', host.id, 'installs'),
+            limit(100),
+          ),
+        )
+        return [
+          host.id,
+          snapshot.docs.map((entry) => ({ $id: entry.id, ...entry.data() })),
+        ] as const
+      }),
+    )
+      .then((entries) => {
+        if (active) setSitePins(Object.fromEntries(entries))
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestore, hostIdsKey])
+
+  /**
+   * One row per INSTALLATION, not per pin: a plugin on three sites is one
+   * thing an admin manages, and the scope is a fact about it rather than
+   * three separate entries. An org pin covers every site, so it wins the
+   * caption outright.
+   */
+  const installations = useMemo(() => {
+    const byListing = new Map<
+      string,
+      { $id: string; displayName?: string; pluginId?: string; version?: string; siteLabels: string[]; orgWide: boolean }
+    >()
+    for (const install of orgInstalls ?? []) {
+      byListing.set(install.$id, {
+        ...install,
+        siteLabels: [],
+        orgWide: true,
+      })
+    }
+    for (const host of hostList) {
+      for (const pin of sitePins[host.id] ?? []) {
+        const existing = byListing.get(pin.$id)
+        if (existing) existing.siteLabels.push(host.label)
+        else
+          byListing.set(pin.$id, {
+            ...pin,
+            siteLabels: [host.label],
+            orgWide: false,
+          })
+      }
+    }
+    return [...byListing.values()]
+  }, [orgInstalls, hostList, sitePins])
 
   const enabled = useMemo(
     () => new Set(resolveEnabledPlugins((org as any)?.enabledPlugins)),
@@ -186,22 +261,26 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterX
               contentGutterY
             >
-              {(orgInstalls ?? []).length ? (
+              {installations.length ? (
                 <Stack>
-                  {(orgInstalls ?? []).map((install: any) =>
+                  {installations.map((install) =>
                     row(
                       install.$id,
                       install.$id,
                       install.displayName ?? install.pluginId ?? install.$id,
-                      `v${install.version} · every site in this organization`,
+                      `v${install.version} · ` +
+                        (install.orgWide
+                          ? 'every site in this organization'
+                          : install.siteLabels.length === 1
+                            ? install.siteLabels[0]
+                            : `${install.siteLabels.length} sites`),
                     ),
                   )}
                 </Stack>
               ) : (
                 <Alert severity="info">
-                  {'Nothing installed org-wide yet. Browse the marketplace to ' +
-                    'add one — or open a listing to install it on chosen ' +
-                    'sites.'}
+                  {'Nothing installed from the marketplace yet — browse it to ' +
+                    'add one.'}
                 </Alert>
               )}
             </CardDisplay>
