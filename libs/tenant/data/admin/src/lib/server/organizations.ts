@@ -28,6 +28,7 @@ import {
   hasOrgPermission,
   isValidOrgSlug,
   projectHostMemberRoles,
+  projectMemberScopeTokens,
   type AglynOrganization,
   type AglynOrgCustomRole,
   type AglynOrgMember,
@@ -43,6 +44,9 @@ import {
 } from './host-memberships'
 
 const firestore = () => firebaseAdmin.app().firestore()
+
+/** Firestore's hard cap on writes in one batched commit. */
+const FIRESTORE_BATCH_LIMIT = 500
 
 export class OrgSlugTakenError extends Error {
   constructor(slug: string) {
@@ -387,38 +391,71 @@ export async function listOrgMembers(
 }
 
 /**
- * Recomputes the `memberRoles` authorization projection on every host the
- * org owns (or one host when given). Called after any membership change
- * and after host creation — the rules read host docs, so this is what
- * makes membership effective (docs/MULTI_TENANT_FIRESTORE.md §5).
+ * Recomputes both denormalized authorization projections after a
+ * membership change: `memberRoles` on every host the org owns (or one host
+ * when given), and `scopeTokens` on every member doc.
+ *
+ * The rules resolve a request from these two reads — the host doc for host
+ * content (docs/MULTI_TENANT_FIRESTORE.md §5), the member doc for scoped
+ * org resources (AGL-1038) — so this is what makes a membership effective.
+ * Both live here, in one writer called by every mutation below, because a
+ * grant path that updates one projection and forgets the other silently
+ * over- or under-grants.
+ *
+ * `scopeTokens` is recomputed for the whole roster rather than the changed
+ * member: the roster is already loaded for `memberRoles`, and a full pass
+ * self-heals rows that an earlier partial failure left stale.
  */
-export async function syncHostMemberRoles(
+export async function syncOrgAuthProjections(
   orgId: string,
   hostId?: string,
 ): Promise<void> {
   const db = firestore()
+  const orgRef = db.collection('orgs').doc(orgId)
   const members = await listOrgMembers(orgId)
   const hostIds = hostId
     ? [hostId]
     : Object.keys(
-        ((await db.collection('orgs').doc(orgId).get()).data() as
-          | AglynOrganization
-          | undefined)?.hosts ?? {},
+        ((await orgRef.get()).data() as AglynOrganization | undefined)
+          ?.hosts ?? {},
       )
-  const batch = db.batch()
-  for (const id of hostIds) {
-    batch.set(
-      db.collection('hosts').doc(id),
-      {
-        orgId,
-        memberRoles: projectHostMemberRoles(members, id),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    )
+  const writes: Array<[FirebaseFirestore.DocumentReference, object]> = [
+    ...hostIds.map(
+      (id) =>
+        [
+          db.collection('hosts').doc(id),
+          {
+            orgId,
+            memberRoles: projectHostMemberRoles(members, id),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+        ] as [FirebaseFirestore.DocumentReference, object],
+    ),
+    ...members.map(
+      (member) =>
+        [
+          orgRef.collection('members').doc(member.$id),
+          { scopeTokens: projectMemberScopeTokens(member) },
+        ] as [FirebaseFirestore.DocumentReference, object],
+    ),
+  ]
+  // Hosts alone rarely approached the 500-write batch cap; hosts plus the
+  // whole roster can, so commit in chunks rather than throwing on big orgs.
+  for (let i = 0; i < writes.length; i += FIRESTORE_BATCH_LIMIT) {
+    const batch = db.batch()
+    for (const [ref, data] of writes.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
+      batch.set(ref, data, { merge: true })
+    }
+    await batch.commit()
   }
-  await batch.commit()
 }
+
+/**
+ * @deprecated Renamed to `syncOrgAuthProjections` (AGL-1038) now that it
+ * also writes member `scopeTokens`. Kept as an alias for out-of-tree
+ * callers; delete once none remain.
+ */
+export const syncHostMemberRoles = syncOrgAuthProjections
 
 /** What an org activity entry points at; `id` lets detail views filter. */
 export interface OrgActivityTarget {
@@ -525,7 +562,7 @@ export async function upsertOrgMember(
       { role, orgName: org.name ?? null, slug: org.slug ?? null },
     )
   })
-  await syncHostMemberRoles(orgId)
+  await syncOrgAuthProjections(orgId)
   // Reverse-index this member's now-current host access (AGL-844).
   await syncMemberHostProjections(orgId, uid)
 }
@@ -578,7 +615,7 @@ export async function transferOrgOwnership(
       { merge: true },
     )
   })
-  await syncHostMemberRoles(orgId)
+  await syncOrgAuthProjections(orgId)
   // Both principals' host access changed (owner spans every host) — AGL-844.
   await Promise.all([
     syncMemberHostProjections(orgId, toUid),
@@ -637,7 +674,7 @@ export async function grantHostAccess(options: {
       })
     }
   })
-  await syncHostMemberRoles(orgId)
+  await syncOrgAuthProjections(orgId)
   await syncMemberHostProjections(orgId, uid)
 }
 
@@ -656,7 +693,7 @@ export async function revokeHostAccess(
       { hostAccess: { [hostId]: FieldValue.delete() } },
       { merge: true },
     )
-  await syncHostMemberRoles(orgId)
+  await syncOrgAuthProjections(orgId)
   await syncMemberHostProjections(orgId, uid)
 }
 
@@ -672,7 +709,7 @@ export async function removeOrgMember(
   )
   batch.delete(db.collection('users').doc(uid).collection('orgs').doc(orgId))
   await batch.commit()
-  await syncHostMemberRoles(orgId)
+  await syncOrgAuthProjections(orgId)
   // The member is off the roster, so the sync above can't reach their rows —
   // drop the reverse index explicitly (AGL-844), like the orgs entry above.
   await deleteMemberHostProjections(orgId, uid)
@@ -702,7 +739,7 @@ export async function registerOrgHost(
     .collection('hostIndex')
     .doc(hostId)
     .set({ orgId, ...(subdomain ? { subdomain } : {}) })
-  await syncHostMemberRoles(orgId, hostId)
+  await syncOrgAuthProjections(orgId, hostId)
   // Seed the per-user projection for everyone who can reach the new host.
   await syncHostProjectionForMembers(orgId, hostId)
 }

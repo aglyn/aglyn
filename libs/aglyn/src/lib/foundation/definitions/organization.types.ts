@@ -34,6 +34,7 @@ import type {
   AglynDocument,
   HostUid,
   OrgUid,
+  ScopeToken,
   UserUid,
 } from './platform.types'
 
@@ -91,6 +92,13 @@ export interface AglynOrgMember extends AglynDocument {
   /** Org-wide host access shortcut; otherwise `hostAccess` decides. */
   allHosts?: boolean
   hostAccess?: Record<HostUid, HostAccessRole>
+  /**
+   * Denormalized reach as scope tokens (AGL-1038), so rules can intersect
+   * it with a resource's `visibleTo` — they cannot derive it from
+   * `hostAccess` because the rules language has no `.map()`. Written only
+   * by `syncOrgAuthProjections`; never edit it by hand.
+   */
+  scopeTokens?: ScopeToken[]
   /** Denormalized for member lists without N user lookups. */
   displayName?: string
   email?: string

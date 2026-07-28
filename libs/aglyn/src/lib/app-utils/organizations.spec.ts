@@ -20,9 +20,11 @@ import {
   canWriteHost,
   generateOrgSlug,
   hostRoleFor,
+  isOrgWideMember,
   isValidOrgSlug,
   orgRoleAtLeast,
   projectHostMemberRoles,
+  projectMemberScopeTokens,
 } from './organizations'
 
 describe('organizations (AGL-233)', () => {
@@ -85,5 +87,89 @@ describe('organizations (AGL-233)', () => {
       owner: 'admin',
       watcher: 'viewer',
     })
+  })
+})
+
+describe('isOrgWideMember (AGL-1038)', () => {
+  it('counts owner and admin regardless of scoping fields', () => {
+    expect(isOrgWideMember({ role: 'owner' })).toBe(true)
+    expect(
+      isOrgWideMember({
+        role: 'admin',
+        allHosts: false,
+        hostAccess: { h1: 'editor' },
+      }),
+    ).toBe(true)
+  })
+
+  it('counts an explicit allHosts editor', () => {
+    expect(isOrgWideMember({ role: 'editor', allHosts: true })).toBe(true)
+  })
+
+  it('does not count a site collaborator', () => {
+    expect(
+      isOrgWideMember({
+        role: 'viewer',
+        allHosts: false,
+        hostAccess: { h1: 'editor' },
+      }),
+    ).toBe(false)
+  })
+
+  it('keeps a legacy pre-allHosts membership org-wide', () => {
+    // Neither flag nor map: predates the field. Reading this as "scoped
+    // with access to nothing" would lock real members out of their own
+    // workspace.
+    expect(isOrgWideMember({ role: 'editor' })).toBe(true)
+    expect(isOrgWideMember({ role: 'viewer', hostAccess: {} })).toBe(true)
+  })
+
+  it('treats an explicit allHosts:false with no grants as scoped', () => {
+    // The flag is present, so this is not the legacy shape — it is a
+    // collaborator whose last host was revoked.
+    expect(isOrgWideMember({ role: 'viewer', allHosts: false })).toBe(false)
+  })
+
+  it('denies a missing member', () => {
+    expect(isOrgWideMember(null)).toBe(false)
+    expect(isOrgWideMember(undefined)).toBe(false)
+  })
+})
+
+describe('projectMemberScopeTokens (AGL-1038)', () => {
+  it('gives org-wide members the org token alone', () => {
+    expect(projectMemberScopeTokens({ role: 'owner' })).toEqual(['org'])
+    expect(
+      projectMemberScopeTokens({ role: 'editor', allHosts: true }),
+    ).toEqual(['org'])
+  })
+
+  it('gives a collaborator org plus one token per granted host', () => {
+    expect(
+      projectMemberScopeTokens({
+        role: 'viewer',
+        allHosts: false,
+        hostAccess: { h1: 'editor', h2: 'viewer' },
+      }),
+    ).toEqual(['org', 'host:h1', 'host:h2'])
+  })
+
+  it('still carries org for a collaborator with no grants left', () => {
+    // Org-WIDE resources stay readable by any member; this project does
+    // not narrow that, it only adds host-scoped ones.
+    expect(
+      projectMemberScopeTokens({ role: 'viewer', allHosts: false }),
+    ).toEqual(['org'])
+  })
+
+  it('does not cap at MAX_SCOPE_HOSTS', () => {
+    // The rules' hasAny has no 30-value limit — only the client
+    // array-contains-any query does, which is AGL-1044's problem to chunk.
+    const hostAccess = Object.fromEntries(
+      Array.from({ length: 40 }, (_, i) => [`h${i}`, 'viewer' as const]),
+    )
+    expect(
+      projectMemberScopeTokens({ role: 'viewer', allHosts: false, hostAccess }),
+    ).toHaveLength(41)
   })
 })
