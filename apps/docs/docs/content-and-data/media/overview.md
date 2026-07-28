@@ -76,10 +76,20 @@ extension**, even though the URL itself doesn't carry one.
 
 ## Who an asset is shared with
 
-Workspace media is shared across every site by default. The **Sharing** control on each
-asset and folder narrows that, with the same three choices as datasets — **All sites**,
-**This site only**, or **Selected sites…**. A folder's sharing applies to what it holds,
-so scoping a "Client A" folder scopes the assets inside it.
+Workspace media is shared across every site by default. The **Shared with** control
+narrows that, with the same three choices as datasets — **All sites**, **This site only**,
+or **Selected sites…**. You'll find it in three places:
+
+- on a single asset, in its details drawer;
+- on a **selection** — tick several files and use **Shared with…** in the toolbar;
+- on a **folder**, from its ⋮ menu, which offers to apply the same sharing to the files
+  inside it and its subfolders (it names the count, so you know what you're about to
+  change).
+
+A folder applies its sharing **when you save it** — files keep their own setting
+afterwards, so moving a file into a "Client A" folder later does not re-share it. Narrowing
+a file that sites are already using names those sites first and asks you to confirm.
+Only workspace owners and admins can change sharing.
 
 In the media picker's **Organization (shared)** tab, a site sees only the assets it may
 use. An agency's internal artwork stays out of the client sites' pickers entirely.
@@ -100,7 +110,7 @@ someone who simply has the URL, mark them **Private** — see below.
 
 |  | Question it answers |
 | -- | -- |
-| **Sharing** | Which of your sites may *use* this file? |
+| **Shared with** | Which of your sites may *use* this file? |
 | **Private** | May anyone *fetch* these bytes at all? |
 
 A private file:

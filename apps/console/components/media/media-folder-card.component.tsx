@@ -43,6 +43,14 @@ export interface MediaFolderCardProps {
   onNewSubfolder?: () => void
   onRename?: () => void
   onDelete?: () => void
+  /**
+   * Open the sharing cascade for this folder (AGL-1045). Omitted for a
+   * site's own library (private by construction) and for anyone but an
+   * org-wide member, who is the only principal the rules let write a scope.
+   */
+  onSetScope?: () => void
+  /** Current sharing, rendered under the name when it is restricted. */
+  scopeLabel?: string
 }
 
 const THUMB_HEIGHT = 116
@@ -65,6 +73,8 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
     onNewSubfolder,
     onRename,
     onDelete,
+    onSetScope,
+    scopeLabel,
   } = props
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const openMenu = (event: MouseEvent<HTMLElement>) => {
@@ -162,6 +172,18 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
           >
             {count === 1 ? '1 file' : `${count} files`}
           </Typography>
+          {scopeLabel ? (
+            <Tooltip title={`Shared with ${scopeLabel}`} enterDelay={600}>
+              <Typography
+                variant="caption"
+                color="secondary"
+                noWrap
+                component="div"
+              >
+                {scopeLabel}
+              </Typography>
+            </Tooltip>
+          ) : null}
         </Box>
         {readOnly ? null : (
           <IconButton
@@ -190,6 +212,9 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
         ) : null}
         {onRename ? (
           <MenuItem onClick={runAction(onRename)}>{'Rename'}</MenuItem>
+        ) : null}
+        {onSetScope ? (
+          <MenuItem onClick={runAction(onSetScope)}>{'Shared with…'}</MenuItem>
         ) : null}
         {onDelete ? (
           <MenuItem onClick={runAction(onDelete)} sx={{ color: 'error.main' }}>

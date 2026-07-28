@@ -237,6 +237,41 @@ export function mediaObjectPath(
  * private asset's missing `cdnPath` is not a detail, it is the mechanism
  * that keeps it out of pickers and page nodes.
  */
+/**
+ * The slice of a folder's scope cascade one request writes (AGL-1045).
+ *
+ * Split out of the route because it is the only arithmetic in that action
+ * and it is where a resumable cursor goes wrong: an off-by-one leaves the
+ * last asset unscoped — a file the caller was told is restricted and is
+ * not — and a cursor past the end must report `done` rather than loop.
+ * Hostile input is normal here: `chunkStart` comes from the client.
+ */
+export function scopeCascadeSlice(options: {
+  /** Docs in the whole operation — the folder plus its subtree assets. */
+  total: number
+  /** Client cursor. Anything not a sane index starts from the beginning. */
+  chunkStart?: unknown
+  /** Client slice size. Absent/unusable means "the rest of it". */
+  chunkSize?: unknown
+  /** Hard ceiling — Firestore's cap on one batched commit. */
+  batchLimit: number
+}): { start: number; size: number; next: number; done: boolean } {
+  const total = Math.max(0, Math.trunc(options.total) || 0)
+  const rawStart = Math.trunc(Number(options.chunkStart ?? 0))
+  const start = Math.min(
+    total,
+    Number.isFinite(rawStart) && rawStart > 0 ? rawStart : 0,
+  )
+  const rawSize = Math.trunc(Number(options.chunkSize ?? 0))
+  const requested =
+    Number.isFinite(rawSize) && rawSize > 0
+      ? Math.min(rawSize, options.batchLimit)
+      : total - start
+  const size = Math.max(0, Math.min(requested, total - start))
+  const next = start + size
+  return { start, size, next, done: next >= total }
+}
+
 export function mediaCdnPathUpdate(options: {
   /** Org billing doc — `MediaScope.billing`. */
   billing: Record<string, unknown> | undefined

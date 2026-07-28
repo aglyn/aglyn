@@ -37,12 +37,14 @@ import {
   Box,
   Breadcrumbs,
   Button,
+  Checkbox,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Drawer,
+  FormControlLabel,
   Grid,
   IconButton,
   LinearProgress,
@@ -124,6 +126,14 @@ export interface MediaLibraryComponentProps {
 
 /** Page size for cursor pagination (AGL-174). */
 const MEDIA_PAGE_SIZE = 60
+
+/**
+ * Docs per request in the folder sharing cascade (AGL-1045). Small enough
+ * that the progress bar moves on a folder of a few hundred files and that
+ * a failure loses at most this much work; large enough that a 500-file
+ * folder is a handful of round-trips, not five hundred.
+ */
+const SCOPE_CHUNK_SIZE = 100
 
 /**
  * One "Used on" reference (AGL-845) as returned by /api/media/references —
@@ -290,6 +300,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     firestore,
     (user as any)?.uid,
     orgId ?? undefined,
+  )
+  /** host id → display name, for turning `host:` tokens back into words. */
+  const hostNameById = useMemo(
+    () =>
+      Object.fromEntries(
+        orgHostList.map((host: any) => [
+          host.$id,
+          host.name ?? host.subdomain ?? host.$id,
+        ]),
+      ) as Record<string, string>,
+    [orgHostList],
   )
 
   const { org } = useCurrentOrg()
@@ -1385,6 +1406,271 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
   }, [selected, confirm, user, scopeId, enqueueSnackbar, logActivity, refresh])
 
+  /**
+   * "Shared with" for a whole selection or a whole folder (AGL-1045).
+   *
+   * One dialog for both, because they ask the same question and answering
+   * it differently in two places is how the two paths drift. The drawer's
+   * per-asset control stays where it is — it edits one asset alongside its
+   * other fields, and folding it in here would mean opening a dialog to
+   * rename a file.
+   *
+   * Org library only, and org-wide members only: the AGL-1042 rules deny a
+   * scoped member the write, and a control that always fails is worse than
+   * no control (same call as the drawer's read-only mode).
+   */
+  const [scopeDialog, setScopeDialog] = useState<{
+    target:
+      | { kind: 'selection'; ids: string[] }
+      | { kind: 'folder'; id: string; name: string }
+    visibleTo: string[]
+    /** True when the chosen assets do not currently agree on a scope. */
+    mixed: boolean
+    /** Files under the folder — null while the count is in flight. */
+    fileCount: number | null
+    applyToFiles: boolean
+  } | null>(null)
+  /** Progress of the running apply, and where a failed one stopped. */
+  const [scopeRun, setScopeRun] = useState<{
+    done: number
+    total: number
+    running: boolean
+  } | null>(null)
+  const canShareScope = Boolean(orgId) && viewerOrgWide && !onSelect
+
+  /** The scope stored on a media doc, defaulted the way the rules do. */
+  const scopeOfMedia = useCallback((media: any): string[] => {
+    const stored = Array.isArray(media?.visibleTo) ? media.visibleTo : null
+    return stored?.length ? stored : [Aglyn.ORG_SCOPE_TOKEN]
+  }, [])
+
+  const openSelectionScope = useCallback(() => {
+    const ids = [...selected]
+    const scopes = ids.map((id) =>
+      JSON.stringify(
+        [...scopeOfMedia(items.find((item: any) => item.$id === id))].sort(),
+      ),
+    )
+    const agreed = scopes.length && scopes.every((s) => s === scopes[0])
+    setScopeRun(null)
+    setScopeDialog({
+      target: { kind: 'selection', ids },
+      // Mixed selections start with nothing chosen. Pre-filling one of the
+      // values would make Apply overwrite the others with a scope nobody
+      // typed — the widening direction of that is a silent leak.
+      visibleTo: agreed ? JSON.parse(scopes[0]) : [],
+      mixed: !agreed,
+      fileCount: ids.length,
+      applyToFiles: true,
+    })
+  }, [selected, items, scopeOfMedia])
+
+  const openFolderScope = useCallback(
+    (folder: any) => {
+      const stored = Array.isArray(folder?.visibleTo) ? folder.visibleTo : null
+      setScopeRun(null)
+      setScopeDialog({
+        target: { kind: 'folder', id: folder.$id, name: folder.name },
+        visibleTo: stored?.length ? stored : [Aglyn.ORG_SCOPE_TOKEN],
+        mixed: false,
+        fileCount: null,
+        applyToFiles: true,
+      })
+      // Count the subtree so the prompt can name it. `preview` runs the
+      // same walk the write does, so the number shown is the number that
+      // will be touched — not a directory-only count that under-reports
+      // every subfolder.
+      void (async () => {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/media/folders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            ...scopeBody,
+            action: 'set-scope',
+            folderId: folder.$id,
+            visibleTo: stored?.length ? stored : [Aglyn.ORG_SCOPE_TOKEN],
+            preview: true,
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        const count = response.ok ? Number(payload?.assets ?? 0) : -1
+        setScopeDialog((prev) =>
+          prev && prev.target.kind === 'folder' && prev.target.id === folder.$id
+            ? { ...prev, fileCount: count }
+            : prev,
+        )
+      })()
+    },
+    [user, scopeId, orgId],
+  )
+
+  /**
+   * Name the sites that lose a file before narrowing it.
+   *
+   * Bounded: the scan is one request per asset, so past a couple of dozen
+   * it costs more than the answer is worth and the warning goes generic.
+   * Returning `null` means "could not check", which the caller says out
+   * loud rather than presenting as "nothing breaks".
+   */
+  const REFERENCE_SCAN_LIMIT = 20
+  const sitesLosingAccess = useCallback(
+    async (mediaIds: string[], nextScope: string[]) => {
+      if (!mediaIds.length || mediaIds.length > REFERENCE_SCAN_LIMIT) return null
+      const idToken = await (user as any)?.getIdToken?.()
+      const scans = await Promise.all(
+        mediaIds.map(async (mediaId) => {
+          const response = await fetch('/api/media/references', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({ ...scopeBody, mediaId }),
+          })
+          if (!response.ok) throw new Error('scan failed')
+          return ((await response.json())?.references ?? []) as MediaUsageRef[]
+        }),
+      ).catch(() => null)
+      if (!scans) return null
+      return [
+        ...new Set(
+          scans
+            .flat()
+            .filter((ref) => !Aglyn.visibleToHost(nextScope, ref.hostId))
+            .map((ref) => ref.hostSubdomain),
+        ),
+      ]
+    },
+    [user, scopeId, orgId],
+  )
+
+  const applyScopeToSelection = useCallback(
+    async (ids: string[], next: string[]) => {
+      const narrowing = ids.filter((id) =>
+        Aglyn.narrowsScope(
+          scopeOfMedia(items.find((item: any) => item.$id === id)),
+          next,
+        ),
+      )
+      if (narrowing.length) {
+        const names = await sitesLosingAccess(narrowing, next)
+        const one = narrowing.length === 1
+        const proceed = await confirm({
+          title: `Limit who can use ${narrowing.length} file${one ? '' : 's'}?`,
+          description: names?.length
+            ? `${names.join(', ')} ${names.length === 1 ? 'uses' : 'use'} ` +
+              `${one ? 'it' : 'these files'} and will stop rendering ` +
+              `${one ? 'it' : 'them'}. This does not delete anything.`
+            : names
+              ? `No page uses ${one ? 'it' : 'them'} yet, so nothing breaks today.`
+              : `Current usage was not checked. Any site losing access ` +
+                `will stop rendering ${one ? 'it' : 'them'}.`,
+          confirmationText: 'Limit access',
+        })
+          .then(() => true)
+          .catch(() => false)
+        if (!proceed) return false
+      }
+      setScopeRun({ done: 0, total: ids.length, running: true })
+      // One write per doc rather than a batch: the rules evaluate per
+      // document, and a batch fails whole — one asset the caller may not
+      // write would take the other 49 down with it.
+      for (const [index, id] of ids.entries()) {
+        await updateDoc(doc(firestore, scopeCollection, scopeId, 'media', id), {
+          visibleTo: Aglyn.normalizeVisibleTo(next) ?? [Aglyn.ORG_SCOPE_TOKEN],
+        })
+        setScopeRun({ done: index + 1, total: ids.length, running: true })
+      }
+      enqueueSnackbar(
+        `Sharing updated for ${ids.length} file${ids.length === 1 ? '' : 's'}`,
+        { variant: 'success', persist: false },
+      )
+      setSelected(new Set())
+      return true
+    },
+    [items, scopeOfMedia, sitesLosingAccess, confirm, firestore, scopeCollection, scopeId, enqueueSnackbar],
+  )
+
+  const applyScopeToFolder = useCallback(
+    async (folderId: string, next: string[], cascade: boolean, from: number) => {
+      const idToken = await (user as any)?.getIdToken?.()
+      let cursor = from
+      // Corrected by the first response; the folder doc itself is one write,
+      // so one is the floor.
+      let total = Math.max(1, cursor)
+      setScopeRun({ done: cursor, total, running: true })
+      // Walked in slices so the dialog can show real progress on a folder
+      // holding hundreds of files, and so a failure resumes from the last
+      // committed slice instead of starting over.
+      for (;;) {
+        const response = await fetch('/api/media/folders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            ...scopeBody,
+            action: 'set-scope',
+            folderId,
+            visibleTo: next,
+            cascade,
+            chunkStart: cursor,
+            chunkSize: SCOPE_CHUNK_SIZE,
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          setScopeRun({ done: cursor, total, running: false })
+          throw new Error(payload?.error ?? 'Applying sharing failed')
+        }
+        total = Number(payload?.total ?? total)
+        cursor = Number(payload?.next ?? cursor)
+        setScopeRun({ done: cursor, total, running: true })
+        if (payload?.done !== false) break
+      }
+      const files = Math.max(0, total - 1)
+      enqueueSnackbar(
+        cascade
+          ? `Sharing updated for the folder and ${files} file${files === 1 ? '' : 's'}`
+          : 'Folder sharing updated',
+        { variant: 'success', persist: false },
+      )
+      return true
+    },
+    [user, scopeId, orgId, enqueueSnackbar],
+  )
+
+  const handleScopeApply = useCallback(async () => {
+    if (!scopeDialog) return
+    const next = Aglyn.normalizeVisibleTo(scopeDialog.visibleTo)
+    if (!next?.length) return
+    try {
+      const finished =
+        scopeDialog.target.kind === 'selection'
+          ? await applyScopeToSelection(scopeDialog.target.ids, next)
+          : await applyScopeToFolder(
+              scopeDialog.target.id,
+              next,
+              scopeDialog.applyToFiles,
+              scopeRun && !scopeRun.running ? scopeRun.done : 0,
+            )
+      if (!finished) return setScopeRun(null)
+      setScopeDialog(null)
+      setScopeRun(null)
+      refresh()
+    } catch (error: any) {
+      enqueueSnackbar(error?.message ?? 'An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [scopeDialog, scopeRun, applyScopeToSelection, applyScopeToFolder, enqueueSnackbar, refresh])
+
   // Per-asset delivery stats (AGL-176), loaded when the drawer opens: 30 days
   // of origin-serve counters from the analytics day-docs (edge cache hits
   // aren't counted — labeled as such). Cheap (30 doc reads), so it auto-loads;
@@ -2001,6 +2287,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           >
             {'Remove tag…'}
           </Button>
+          {canShareScope ? (
+            <Button size="small" onClick={openSelectionScope}>
+              {'Shared with…'}
+            </Button>
+          ) : null}
           <Button size="small" color="error" onClick={handleBulkDelete}>
             {'Delete…'}
           </Button>
@@ -2085,6 +2376,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   })
                 }
                 onDelete={() => void handleFolderDelete(folder)}
+                onSetScope={
+                  canShareScope ? () => openFolderScope(folder) : undefined
+                }
+                scopeLabel={
+                  orgId &&
+                  Array.isArray((folder as any).visibleTo) &&
+                  !Aglyn.isOrgWideScope((folder as any).visibleTo)
+                    ? Aglyn.describeScope((folder as any).visibleTo, hostNameById)
+                    : undefined
+                }
               />
             </Grid>
           ))}
@@ -2381,15 +2682,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 </>
               ) : (
                 <Typography variant="body2">
-                  {Aglyn.describeScope(
-                    editor?.visibleTo,
-                    Object.fromEntries(
-                      orgHostList.map((host) => [
-                        host.$id,
-                        host.name ?? host.subdomain ?? host.$id,
-                      ]),
-                    ),
-                  )}
+                  {Aglyn.describeScope(editor?.visibleTo, hostNameById)}
                 </Typography>
               )}
             </Box>
@@ -2694,6 +2987,161 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             onClick={handleBulkTag}
           >
             {'Apply'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/* Sharing for a selection or a folder subtree (AGL-1045). */}
+      <Dialog
+        open={Boolean(scopeDialog)}
+        onClose={() => {
+          if (scopeRun?.running) return
+          setScopeDialog(null)
+          setScopeRun(null)
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          {scopeDialog?.target.kind === 'folder'
+            ? `Shared with — "${scopeDialog.target.name}"`
+            : `Shared with — ${scopeDialog?.target.ids.length ?? 0} file${
+                scopeDialog?.target.ids.length === 1 ? '' : 's'
+              }`}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ mt: 1 }}>
+            {scopeDialog?.mixed ? (
+              <Alert severity="info">
+                {'These files are not shared the same way today. Choosing ' +
+                  'here replaces the sharing on all of them.'}
+              </Alert>
+            ) : null}
+            <Select
+              size="small"
+              fullWidth
+              value={
+                scopeDialog?.visibleTo.includes(Aglyn.ORG_SCOPE_TOKEN)
+                  ? 'org'
+                  : 'hosts'
+              }
+              onChange={(event) =>
+                setScopeDialog((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        visibleTo:
+                          event.target.value === 'org'
+                            ? [Aglyn.ORG_SCOPE_TOKEN]
+                            : [],
+                      }
+                    : prev,
+                )
+              }
+            >
+              <MenuItem value="org">{'All sites'}</MenuItem>
+              <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
+            </Select>
+            {!scopeDialog?.visibleTo.includes(Aglyn.ORG_SCOPE_TOKEN) ? (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {orgHostList.map((host: any) => {
+                  const token = Aglyn.hostScopeToken(host.$id)
+                  const on = Boolean(scopeDialog?.visibleTo.includes(token))
+                  return (
+                    <Chip
+                      key={host.$id}
+                      size="small"
+                      label={hostNameById[host.$id]}
+                      color={on ? 'secondary' : 'default'}
+                      variant={on ? 'filled' : 'outlined'}
+                      onClick={() =>
+                        setScopeDialog((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                visibleTo: on
+                                  ? prev.visibleTo.filter((t) => t !== token)
+                                  : [...prev.visibleTo, token],
+                              }
+                            : prev,
+                        )
+                      }
+                    />
+                  )
+                })}
+              </Box>
+            ) : null}
+            {scopeDialog?.target.kind === 'folder' ? (
+              <>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={scopeDialog.applyToFiles}
+                      onChange={(event) =>
+                        setScopeDialog((prev) =>
+                          prev
+                            ? { ...prev, applyToFiles: event.target.checked }
+                            : prev,
+                        )
+                      }
+                    />
+                  }
+                  label={
+                    scopeDialog.fileCount == null
+                      ? 'Also apply to the files in this folder and its subfolders?'
+                      : scopeDialog.fileCount < 0
+                        ? 'Also apply to the files in this folder and its subfolders? (count unavailable)'
+                        : `Also apply to the ${scopeDialog.fileCount} file${
+                            scopeDialog.fileCount === 1 ? '' : 's'
+                          } in this folder and its subfolders?`
+                  }
+                />
+                <Typography variant="caption" color="text.secondary">
+                  {'Files keep their own sharing — a folder applies its ' +
+                    'setting when you save it, and moving a file into this ' +
+                    'folder later does not re-share it.'}
+                </Typography>
+              </>
+            ) : null}
+            {scopeRun ? (
+              <Box>
+                <LinearProgress
+                  variant="determinate"
+                  value={
+                    scopeRun.total
+                      ? Math.min(100, (scopeRun.done / scopeRun.total) * 100)
+                      : 0
+                  }
+                />
+                <Typography variant="caption" color="text.secondary">
+                  {scopeRun.running
+                    ? `Updating ${scopeRun.done} of ${scopeRun.total}…`
+                    : `Stopped after ${scopeRun.done} of ${scopeRun.total} — Apply resumes from here.`}
+                </Typography>
+              </Box>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            disabled={scopeRun?.running}
+            onClick={() => {
+              setScopeDialog(null)
+              setScopeRun(null)
+            }}
+          >
+            {'Cancel'}
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            disabled={
+              scopeRun?.running ||
+              !Aglyn.normalizeVisibleTo(scopeDialog?.visibleTo ?? [])?.length
+            }
+            onClick={handleScopeApply}
+          >
+            {scopeRun && !scopeRun.running ? 'Resume' : 'Apply'}
           </Button>
         </DialogActions>
       </Dialog>
