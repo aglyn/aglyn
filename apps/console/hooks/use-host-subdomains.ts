@@ -19,6 +19,7 @@
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 
 /**
  * Resolve `hostId → subdomain` for an arbitrary set of hosts (AGL-672).
@@ -63,7 +64,13 @@ export function useHostSubdomains(
     void Promise.all(
       pending.map(async (id) => {
         try {
-          const snapshot = await getDoc(doc(firestore, 'hostIndex', id))
+          // Named for the session-health verdict (AGL-1063) — `hostIndex`
+          // is readable by any signed-in member of the owning org, so a
+          // denial here is about the session rather than about this host.
+          const snapshot = await firestoreOneShotRetry(
+            () => getDoc(doc(firestore, 'hostIndex', id)),
+            'hostIndex',
+          )
           const subdomain = snapshot.get('subdomain') as string | undefined
           return subdomain ? ([id, subdomain] as const) : null
         } catch {

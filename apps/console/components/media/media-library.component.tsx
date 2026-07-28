@@ -524,13 +524,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
   const fetchPage = useCallback(
     async (cursor: QueryDocumentSnapshot | null) => {
-      const snapshot = await firestoreOneShotRetry(() =>
-        getDocs(
-          query(
-            collection(firestore, scopeCollection, scopeId, 'media'),
-            ...buildConstraints(cursor),
+      const snapshot = await firestoreOneShotRetry(
+        () =>
+          getDocs(
+            query(
+              collection(firestore, scopeCollection, scopeId, 'media'),
+              ...buildConstraints(cursor),
+            ),
           ),
-        ),
+        // Named for the session-health verdict (AGL-1063).
+        `${scopeCollection}/media`,
       )
       return {
         docs: snapshot.docs.map((docSnap) => ({
@@ -702,23 +705,29 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     if (!scopeReady) return undefined
     void Promise.all(
       folderList.map((folder) =>
-        firestoreOneShotRetry(() =>
-          getCountFromServer(
-            query(
-              collection(firestore, scopeCollection, scopeId, 'media'),
-              where('folderId', '==', folder.$id),
-              // Without this the count is an UNFILTERED list, which the
-              // AGL-1042 rules deny per document for a scoped collaborator
-              // — the `.catch` below then reports every folder as "0 files"
-              // while the grid beside it shows the assets. Found by driving
-              // the console as `scope-collab` (AGL-1047); needs the
-              // folderId+visibleTo composite index, which the emulator does
-              // NOT require and production does.
-              ...(needsScope
-                ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-                : []),
+        firestoreOneShotRetry(
+          () =>
+            getCountFromServer(
+              query(
+                collection(firestore, scopeCollection, scopeId, 'media'),
+                where('folderId', '==', folder.$id),
+                // Without this the count is an UNFILTERED list, which the
+                // AGL-1042 rules deny per document for a scoped collaborator
+                // — the `.catch` below then reports every folder as "0 files"
+                // while the grid beside it shows the assets. Found by driving
+                // the console as `scope-collab` (AGL-1047); needs the
+                // folderId+visibleTo composite index, which the emulator does
+                // NOT require and production does.
+                ...(needsScope
+                  ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+                  : []),
+              ),
             ),
-          ),
+          // The SAME key as the grid's read above, deliberately: this is the
+          // same collection under a second query shape, and counting it
+          // twice would let one denied collection reach the two-collection
+          // threshold on its own — the false prompt AGL-1063 must not fire.
+          `${scopeCollection}/media`,
         )
           .then((snapshot) => [folder.$id, snapshot.data().count] as const)
           .catch(() => [folder.$id, 0] as const),
