@@ -45,11 +45,16 @@ export function orgNavTabItems(orgSlug: string) {
       label: 'Data',
       href: buildRoute(Route.ORG_DATA, { orgSlug }),
     },
-    // The one marketplace destination (AGL-772/797/798/799): a single section
-    // with Browse / Installed / Publish. The former standalone 'Plugins' hub
-    // (switchboard + installs) and 'Community' seller area were folded in and
-    // now redirect here, so this is the sole nav entry for everything
-    // pluggable and everything sellable.
+    // Plugins is its own section again (AGL-1011). It was folded into
+    // Marketplace by AGL-797, which conflated shopping for code with
+    // administering the code you already run — and left the installation
+    // detail page under `/plugins/…` with no tab owning it, so the whole
+    // nav went unhighlighted there. Marketplace is now purely the market.
+    {
+      id: 'nav-tab-org-plugins',
+      label: 'Plugins',
+      href: buildRoute(Route.ORG_PLUGINS, { orgSlug }),
+    },
     {
       id: 'nav-tab-org-marketplace',
       label: 'Marketplace',

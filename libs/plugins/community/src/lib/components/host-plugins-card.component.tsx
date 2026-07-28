@@ -320,7 +320,12 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
             moved out (AGL-802) now that the switchboard sits directly above
             this card in Marketplace › Installed. This card is only the
             marketplace install pins. */}
-        {installs.length === 0 ? (
+        {/* "Nothing installed" has to mean nothing at either scope. This
+            asked only about HOST pins, so an org-wide install printed the
+            empty-state sentence directly above the row it was denying
+            (AGL-1011) — most visible at org scope, which is where installs
+            usually land org-wide. */}
+        {installs.length === 0 && orgInstalls.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'No community plugins installed. Install one from the ' +
               'community, then add a Plugin element to a screen and set ' +
