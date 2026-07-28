@@ -16,10 +16,22 @@
  */
 'use client'
 
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { mdiDotsVertical } from '@aglyn/shared-data-mdi'
+import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { Button, Stack, TextField, Typography } from '@mui/material'
+import {
+  Button,
+  Chip,
+  Divider,
+  IconButton,
+  Menu,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
+import { useRouter } from 'next/navigation'
 import { collection, doc, query, updateDoc, where } from 'firebase/firestore'
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -52,6 +64,7 @@ export interface OrgSellerPanelProps {
 export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const { orgId, section } = props
   const orgSlug = useOrgSlug()
+  const router = useRouter()
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -189,6 +202,67 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
 
   // The listing open in the full editor (AGL-862), or null when closed.
   const [editListing, setEditListing] = useState<any | null>(null)
+  // Per-row overflow menu (AGL-999): the anchor plus the row it belongs to,
+  // so one <Menu> serves every row instead of one per listing.
+  const [rowMenu, setRowMenu] = useState<{
+    anchor: HTMLElement
+    listing: any
+  } | null>(null)
+  const closeRowMenu = () => setRowMenu(null)
+  const listingHref = (listing: any) =>
+    buildRoute(Route.ORG_MARKETPLACE_LISTING, {
+      orgSlug,
+      listingId: listing.$id,
+    })
+
+  // Private ⇄ public (AGL-968/994). Goes through the API rather than a client
+  // write: making a listing public is gated on it actually carrying the docs
+  // a stranger needs, and that check has to live somewhere a client can't
+  // skip. No re-review either way — the bytes are unchanged.
+  const [visibilityBusy, setVisibilityBusy] = useState('')
+  const handleVisibility = useCallback(
+    (listing: any) => async () => {
+      const next = listing.visibility === 'private' ? 'public' : 'private'
+      setVisibilityBusy(listing.$id)
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/community/publish-plugin', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            action: 'set-visibility',
+            listingId: listing.$id,
+            visibility: next,
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          return void enqueueSnackbar(
+            payload?.error ?? 'Visibility change failed',
+            { variant: 'error', allowDuplicate: true },
+          )
+        }
+        enqueueSnackbar(
+          next === 'private'
+            ? 'Now private — only your sites can install it'
+            : 'Published to the marketplace',
+          { variant: 'success', persist: false },
+        )
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('An error has occurred', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        setVisibilityBusy('')
+      }
+    },
+    [user, enqueueSnackbar],
+  )
   const handleUnpublish = useCallback(
     (listing: any) => async () => {
       try {
@@ -284,17 +358,58 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           </Typography>
         ) : (
           <Stack spacing={1}>
+            {/* Private plugins are invisible in Browse by design (AGL-993),
+                which makes this the only door to them — say so, or a
+                publisher looking for the one they just uploaded will hunt
+                for it in the marketplace grid. */}
+            {(listings ?? []).some(
+              (listing: any) => listing.visibility === 'private',
+            ) ? (
+              <Typography variant="caption" color="text.secondary">
+                {'Private plugins never appear in the marketplace — open one ' +
+                  'with View to install it on your sites.'}
+              </Typography>
+            ) : null}
             {(listings ?? []).map((listing: any) => (
               <Stack
                 key={listing.$id}
                 direction="row"
                 spacing={1}
-                sx={{ alignItems: 'center' }}
+                sx={{
+                  alignItems: 'center',
+                  // The whole row is the way in (AGL-999) — the name and its
+                  // metadata are what you aim at, so they should behave like
+                  // the link they read as.
+                  borderRadius: 1,
+                  mx: -1,
+                  px: 1,
+                  '&:hover': { bgcolor: 'action.hover' },
+                }}
               >
-                <Stack sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" noWrap>
-                    {listing.displayName}
-                  </Typography>
+                <Stack
+                  onClick={() => router.push(listingHref(listing))}
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    py: 0.75,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center', minWidth: 0 }}
+                  >
+                    <Typography variant="body2" noWrap>
+                      {listing.displayName}
+                    </Typography>
+                    {/* This tab is the ONLY place a private listing appears
+                        (AGL-993 keeps it out of browse), so the row has to
+                        say which of the two things it is. */}
+                    {listing.visibility === 'private' ? (
+                      <Chip size="small" variant="outlined" label="Private" />
+                    ) : null}
+                  </Stack>
                   <Typography variant="caption" color="text.secondary">
                     {`v${listing.latestVersion}` +
                       (Number(listing.priceUsd ?? 0) > 0
@@ -304,38 +419,81 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                       (listing.deletedAt ? ' · unpublished' : '')}
                   </Typography>
                 </Stack>
-                <Button
-                  size="small"
-                  color="secondary"
-                  onClick={() => setEditListing(listing)}
-                >
-                  {'Edit'}
-                </Button>
-                {/* View what a buyer sees (AGL-988). The preview image is
-                    edited inside Edit, beside everything else about the
-                    listing, so this row no longer offers a second door to
-                    that one field. */}
-                <AppLink
-                  href={buildRoute(Route.ORG_MARKETPLACE_LISTING, {
-                    orgSlug,
-                    listingId: listing.$id,
-                  })}
-                >
+                {/* View what a buyer sees (AGL-988). The one action that
+                    stays visible (AGL-999): every other row action is either
+                    rare or destructive, and flattening them all out made the
+                    columns jump between rows — the action count varies by
+                    artifact type — while putting Unpublish at the end of the
+                    row, the easiest place to hit by mistake. */}
+                <AppLink href={listingHref(listing)}>
                   <Button size="small" color="secondary" component="span">
                     {'View'}
                   </Button>
                 </AppLink>
-                <Button
+                <IconButton
                   size="small"
-                  color={listing.deletedAt ? 'secondary' : 'error'}
-                  onClick={handleUnpublish(listing)}
+                  aria-label={`More actions for ${listing.displayName}`}
+                  onClick={(event) =>
+                    setRowMenu({
+                      anchor: event.currentTarget,
+                      listing,
+                    })
+                  }
                 >
-                  {listing.deletedAt ? 'Republish' : 'Unpublish'}
-                </Button>
+                  <MdiIcon path={mdiDotsVertical.path} fontSize="small" />
+                </IconButton>
               </Stack>
             ))}
           </Stack>
         )}
+        {/* One menu for every row (AGL-999) — the open row is state, not a
+            mounted <Menu> per listing. */}
+        <Menu
+          anchorEl={rowMenu?.anchor ?? null}
+          open={Boolean(rowMenu)}
+          onClose={closeRowMenu}
+        >
+          <MenuItem
+            onClick={() => {
+              setEditListing(rowMenu?.listing ?? null)
+              closeRowMenu()
+            }}
+          >
+            {'Edit listing'}
+          </MenuItem>
+          {/* Plugins only (AGL-994). `visibility` is enforced in
+              `install-plugin`; the component/layout/template install routes
+              have no such check, so offering the switch there would promise
+              a boundary that does not exist. */}
+          {(rowMenu?.listing?.artifactType ?? rowMenu?.listing?.type) ===
+          'plugin' ? (
+            <MenuItem
+              disabled={visibilityBusy === rowMenu?.listing?.$id}
+              onClick={() => {
+                const listing = rowMenu?.listing
+                closeRowMenu()
+                if (listing) void handleVisibility(listing)()
+              }}
+            >
+              {rowMenu?.listing?.visibility === 'private'
+                ? 'Make public…'
+                : 'Make private'}
+            </MenuItem>
+          ) : null}
+          <Divider />
+          <MenuItem
+            sx={{
+              color: rowMenu?.listing?.deletedAt ? undefined : 'error.main',
+            }}
+            onClick={() => {
+              const listing = rowMenu?.listing
+              closeRowMenu()
+              if (listing) void handleUnpublish(listing)()
+            }}
+          >
+            {rowMenu?.listing?.deletedAt ? 'Republish' : 'Unpublish'}
+          </MenuItem>
+        </Menu>
         <EditListingDialog
           orgId={orgId}
           listing={editListing}
