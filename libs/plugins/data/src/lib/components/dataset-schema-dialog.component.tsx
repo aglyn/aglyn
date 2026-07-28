@@ -30,6 +30,7 @@ import {
   effectiveDatasetModel,
   hostScopeToken,
   narrowsScope,
+  scopeCovers,
   normalizeVisibleTo,
   ORG_SCOPE_TOKEN,
   visibleToHost,
@@ -39,6 +40,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
   Checkbox,
+  Alert,
   Chip,
   Dialog,
   DialogActions,
@@ -742,12 +744,51 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
               >
                 {(datasets ?? [])
                   .filter((target) => target.$id !== dataset?.$id)
+                  // Only targets this dataset's sites can actually resolve
+                  // (AGL-1044). A reference to a dataset a site cannot see
+                  // renders blank with nothing to say why, so an
+                  // unresolvable target is not offered. The currently
+                  // selected one always stays listed — otherwise changing
+                  // scope would silently blank an existing field.
+                  .filter(
+                    (target) =>
+                      target.$id ===
+                        editorDefinition?.reference?.datasetId ||
+                      scopeCovers(
+                        (target as { visibleTo?: string[] }).visibleTo,
+                        visibleTo,
+                      ),
+                  )
                   .map((target) => (
                     <MenuItem key={target.$id} value={target.$id}>
                       {target.displayName ?? target.$id}
                     </MenuItem>
                   ))}
               </TextField>
+              {(() => {
+                // Flag an EXISTING reference that this dataset's scope has
+                // outgrown — the field was valid when created and quietly
+                // is not any more.
+                const targetId = editorDefinition?.reference?.datasetId
+                const target = (datasets ?? []).find((d) => d.$id === targetId)
+                if (
+                  !target ||
+                  scopeCovers(
+                    (target as { visibleTo?: string[] }).visibleTo,
+                    visibleTo,
+                  )
+                ) {
+                  return null
+                }
+                return (
+                  <Alert severity="warning">
+                    {`"${target.displayName ?? target.$id}" is not shared with ` +
+                      'every site this collection is. Those sites will show ' +
+                      'this field blank. Widen its sharing, or narrow this ' +
+                      "collection's."}
+                  </Alert>
+                )
+              })()}
               <TextField
                 select
                 size="small"

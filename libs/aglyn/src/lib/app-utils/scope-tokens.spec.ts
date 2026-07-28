@@ -18,6 +18,7 @@
 import {
   describeScope,
   hostQualifiedCdnPath,
+  scopeCovers,
   hostIdsFromScope,
   hostScopeToken,
   isOrgWideScope,
@@ -238,5 +239,29 @@ describe('hostQualifiedCdnPath (AGL-1043/1045)', () => {
   it('does not double-qualify an already-scoped path', () => {
     const already = '/api/media/cdn/org:acme:site-a/med123'
     expect(hostQualifiedCdnPath(already, ['host:site-a'], 'site-b')).toBe(already)
+  })
+})
+
+describe('scopeCovers (AGL-1044)', () => {
+  it('org-wide covers everything', () => {
+    expect(scopeCovers(['org'], ['host:a'])).toBe(true)
+    expect(scopeCovers(['org'], ['org'])).toBe(true)
+    expect(scopeCovers(undefined, ['host:a'])).toBe(true)
+  })
+
+  it('a restricted target cannot cover an org-wide source', () => {
+    // A page on ANY site can bind the source; most cannot resolve the
+    // target, so the reference renders blank with no explanation.
+    expect(scopeCovers(['host:a'], ['org'])).toBe(false)
+    expect(scopeCovers(['host:a'], undefined)).toBe(false)
+  })
+
+  it('covers when the target reaches every site the source does', () => {
+    expect(scopeCovers(['host:a', 'host:b'], ['host:a'])).toBe(true)
+    expect(scopeCovers(['host:a'], ['host:a'])).toBe(true)
+  })
+
+  it('does not cover when the source reaches further', () => {
+    expect(scopeCovers(['host:a'], ['host:a', 'host:b'])).toBe(false)
   })
 })
