@@ -75,6 +75,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     useAnalytics: () => null,
     useAuth: () => auth,
     useFirestore: () => firestore,
+    // The real one reaches for `useAuth`/`useFirestore` through module-
+    // internal imports, not the overrides above, so leaving it to
+    // `requireActual` throws "must be used within a
+    // FirebaseServicesProvider" the moment anything renders the quota
+    // banner (AGL-1068). Org-wide so this stays a render smoke test.
+    useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
     useSigninCheck: () => signinCheck,
     useUser: () => user,
     useUserPhoto: () => undefined,
