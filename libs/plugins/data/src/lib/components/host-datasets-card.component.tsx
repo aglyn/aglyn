@@ -54,7 +54,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostActivityLogger,
-  useHostOrgId,
+  useOrgDataScope,
   useScopeTokens,
   useUser,
 } from '@aglyn/tenant-feature-instance'
@@ -87,11 +87,14 @@ export interface HostDatasetsCardProps {
  */
 export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const { hostId } = props
-  const hostOrgId = useHostOrgId(props.orgId ? undefined : hostId)
-  const orgId = props.orgId ?? hostOrgId
-  const dataScope = orgId
-    ? (['orgs', orgId] as const)
-    : (['hosts', hostId ?? '-none-'] as const)
+  // `dataScope` is only trustworthy once `scopeReady` (AGL-1061): the org
+  // lookup is async, and acting on the host fallback before it settles
+  // writes to a path nothing has read since AGL-1050.
+  const {
+    scope: dataScope,
+    orgId,
+    ready: scopeResolved,
+  } = useOrgDataScope({ hostId, orgId: props.orgId })
   // Scoped sharing (AGL-1044). Required, not cosmetic: under the AGL-1041
   // rules a scoped member's UNFILTERED list is rejected outright —
   // Firestore fails the whole query if any candidate would fail — so
@@ -109,7 +112,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // first render sends an UNFILTERED list that the AGL-1041 rules deny per
   // document. It recovers on the next render, which is exactly what makes
   // it easy to miss: the page looks right and logs a denial every mount.
-  const scopeReady = !orgId || scopeLoaded
+  const scopeReady = scopeResolved && (!orgId || scopeLoaded)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -1105,7 +1108,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           <Button
             variant="contained"
             color="secondary"
-            disabled={!creator?.name.trim() || creatorFields.length === 0}
+            disabled={
+              !scopeReady ||
+              !creator?.name.trim() ||
+              creatorFields.length === 0
+            }
             onClick={handleCreate}
           >
             {'Create'}
@@ -1396,7 +1403,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           <Button
             variant="contained"
             color="secondary"
-            disabled={!joiner?.a || !joiner?.b || joiner.a === joiner.b}
+            disabled={
+              !scopeReady || !joiner?.a || !joiner?.b || joiner.a === joiner.b
+            }
             onClick={handleCreateJoin}
           >
             {'Create'}

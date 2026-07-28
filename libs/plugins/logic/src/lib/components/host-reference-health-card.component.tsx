@@ -25,7 +25,7 @@ import { useMemo } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
-  useHostOrgId,
+  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 
 export interface HostReferenceHealthCardProps {
@@ -42,10 +42,14 @@ export interface HostReferenceHealthCardProps {
 export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
-  const hostOrgId = useHostOrgId(hostId)
-  const dataScope = hostOrgId
-    ? (['orgs', hostOrgId] as const)
-    : (['hosts', hostId] as const)
+  // The org lookup is async (AGL-1061). `scopeReady` stays false until
+  // it settles, so nothing acts on the host fallback during the window —
+  // a path nothing has read since AGL-1050.
+  const {
+    scope: dataScope,
+    orgId: hostOrgId,
+    ready: scopeReady,
+  } = useOrgDataScope({ hostId })
 
   const useHostCollection = (name: string) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -73,27 +77,33 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   // render time. Filtering by the host's tokens also satisfies the
   // AGL-1041 rules, since they are a subset of any viewer's who can reach
   // this host at all.
-  const scopeTokens = scopeTokensForHost(hostId)
+  // Memoised: this is a listener DEPENDENCY, and a fresh array each
+  // render tears the subscription down and clears its data every time.
+  const scopeTokens = useMemo(() => scopeTokensForHost(hostId), [hostId])
   const needsScope = Boolean(hostOrgId)
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, dataScope[0], dataScope[1], 'datasets'),
-        ...(needsScope
-          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-          : []),
-        limit(100),
-      ),
-    [firestore, hostId, hostOrgId, needsScope, scopeTokens],
+      scopeReady
+        ? query(
+            collection(firestore, dataScope[0], dataScope[1], 'datasets'),
+            ...(needsScope
+              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+              : []),
+            limit(100),
+          )
+        : null,
+    [firestore, hostId, hostOrgId, scopeReady, needsScope, scopeTokens],
     { idField: '$id' },
   )
   const { data: listDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, dataScope[0], dataScope[1], 'lists'),
-        limit(100),
-      ),
-    [firestore, hostId, hostOrgId],
+      scopeReady
+        ? query(
+            collection(firestore, dataScope[0], dataScope[1], 'lists'),
+            limit(100),
+          )
+        : null,
+    [firestore, hostId, hostOrgId, scopeReady],
     { idField: '$id' },
   )
 

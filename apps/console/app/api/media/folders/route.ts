@@ -32,6 +32,8 @@ import {
   mediaObjectPath,
   resolveMediaScope,
   sanitizeCustomMetadata,
+  mediaCdnPathUpdate,
+  scopeCascadeSlice,
 } from '../../../../utils/server/media-scope'
 
 /** Bounded per request — console-triggered admin op, not a batch job. */
@@ -52,6 +54,9 @@ const FIRESTORE_BATCH_LIMIT = 500
  * - `move-assets` {mediaIds, folderId|null} — the grid's move/drag
  * - `custom-metadata` {mediaId, customMetadata} — user key/value pairs,
  *   written to the Storage object (token preserved) and the doc (AGL-822)
+ * - `set-scope` {folderId, visibleTo, cascade?, preview?, chunkStart?,
+ *   chunkSize?} — the folder sharing cascade (AGL-1045); `preview` counts
+ *   the subtree without writing, the cursor pair makes it resumable
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -289,21 +294,55 @@ async function handler(request: Request): Promise<Response> {
       }
       const cascade = body?.cascade !== false
       const assets = cascade ? await subtreeAssets(folderId) : []
-      // Chunked: a folder can hold hundreds of assets and a Firestore batch
-      // caps at 500 writes.
+      // The prompt has to name the number BEFORE anything is written —
+      // "also apply to the 47 files in this folder and its subfolders?" is
+      // a different question from "also apply to the 3 files" (AGL-1045).
+      // Counting is the same subtree walk, so it is the same action with
+      // the writes skipped rather than a second endpoint that could drift.
+      if (body?.preview === true) {
+        return Response.json(
+          { ok: true, preview: true, folders: 1, assets: assets.length },
+          { status: 200 },
+        )
+      }
       const targets: FirebaseFirestore.DocumentReference[] = [
         foldersRef.doc(folderId),
         ...assets.map((asset) => asset.ref),
       ]
-      for (let i = 0; i < targets.length; i += FIRESTORE_BATCH_LIMIT) {
+      // Resumable by cursor: the client may walk the subtree in slices to
+      // show progress, and picks up where it stopped after an error or a
+      // reload. The cursor is an INDEX into a re-derived list, not stored
+      // server state — safe because the walk is deterministic (folder ids
+      // then doc ids) and because the write is idempotent, so a re-run over
+      // an already-scoped slice costs writes and changes nothing. An asset
+      // uploaded mid-run can shift the tail; re-running the action is the
+      // fix, which is why it stays idempotent.
+      const { start, next, done } = scopeCascadeSlice({
+        total: targets.length,
+        chunkStart: body?.chunkStart,
+        chunkSize: body?.chunkSize,
+        batchLimit: FIRESTORE_BATCH_LIMIT,
+      })
+      const slice = targets.slice(start, next)
+      for (let i = 0; i < slice.length; i += FIRESTORE_BATCH_LIMIT) {
         const batch = firebaseAdmin.app().firestore().batch()
-        for (const ref of targets.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
+        for (const ref of slice.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
           batch.set(ref, { visibleTo }, { merge: true })
         }
         await batch.commit()
       }
       return Response.json(
-        { ok: true, folders: 1, assets: assets.length },
+        {
+          ok: true,
+          // `folders`/`assets` describe the whole operation, not the slice,
+          // so a caller that ignores the cursor reads what it always did.
+          folders: 1,
+          assets: assets.length,
+          total: targets.length,
+          written: slice.length,
+          next,
+          done,
+        },
         { status: 200 },
       )
     }
@@ -343,11 +382,14 @@ async function handler(request: Request): Promise<Response> {
       await snapshot.ref.set(
         {
           private: makePrivate,
-          ...(makePrivate
-            ? { cdnPath: firebaseAdmin.firestore.FieldValue.delete() }
-            : {
-                cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}`,
-              }),
+          // Shared with upload and replace — publishing must not hand out a
+          // CDN path the plan doesn't include, which this branch used to do.
+          cdnPath: mediaCdnPathUpdate({
+            billing: scope.billing,
+            cdnScope: scope.cdnScope,
+            mediaId,
+            isPrivate: makePrivate,
+          }),
           updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true },

@@ -17,39 +17,145 @@
 'use client'
 
 import { doc, getDoc } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useFirestore } from './firebase/firebase-services'
 
+export interface HostOrgIdState {
+  /** The owning org, or null once we know there isn't one. */
+  orgId: string | null
+  /** False until the `hostIndex` lookup has settled. */
+  loaded: boolean
+}
+
 /**
- * The org a host belongs to, resolved from the `hostIndex` mirror
- * (AGL-237). Host-scoped pages use this — NOT the workspace context — so
- * org-shared data stays correct when a multi-org user deep-links into a
- * host outside their selected workspace. Null while loading or for
- * pre-org hosts (callers fall back to host-scoped paths).
+ * The org a host belongs to, plus whether we know yet (AGL-1061).
+ *
+ * `useHostOrgId` below returns `null` for THREE different situations —
+ * still loading, no owning org, and lookup failed — and callers that
+ * branch on truthiness take the no-org branch during the first render or
+ * two of every mount, while the `hostIndex` `getDoc` is in flight.
+ *
+ * For a read that is a harmless flash of an empty list. For a WRITE it is
+ * not: a `setDoc` resolving inside that window lands under
+ * `hosts/{hostId}/…`, which AGL-1050 left with no readers — so the save
+ * appears to succeed and the row is unreachable from anywhere afterwards.
+ *
+ * Anything that can write must therefore gate on `loaded` and hold rather
+ * than guess.
  */
-export function useHostOrgId(hostId: string | undefined): string | null {
+export function useHostOrgIdState(
+  hostId: string | undefined,
+): HostOrgIdState {
   const firestore = useFirestore()
-  const [orgId, setOrgId] = useState<string | null>(null)
+  const [state, setState] = useState<HostOrgIdState>({
+    orgId: null,
+    loaded: false,
+  })
 
   useEffect(() => {
+    // No host to resolve is a SETTLED answer, not a pending one — the org
+    // Data and Media pages pass no host and must not wait forever.
     if (!hostId) {
-      setOrgId(null)
+      setState({ orgId: null, loaded: true })
       return undefined
     }
     let active = true
+    setState({ orgId: null, loaded: false })
     void getDoc(doc(firestore, 'hostIndex', hostId))
       .then((snapshot) => {
-        if (active) setOrgId((snapshot.data()?.['orgId'] as string) ?? null)
+        if (active) {
+          setState({
+            orgId: (snapshot.data()?.['orgId'] as string) ?? null,
+            loaded: true,
+          })
+        }
       })
       .catch(() => {
-        if (active) setOrgId(null)
+        // A failed lookup is also settled. Retrying forever would leave
+        // the page permanently disabled; the host branch is the correct
+        // (and, per AGL-1050, empty) fallback.
+        if (active) setState({ orgId: null, loaded: true })
       })
     return () => {
       active = false
     }
   }, [firestore, hostId])
 
-  return orgId
+  return state
+}
+
+/**
+ * The org a host belongs to, resolved from the `hostIndex` mirror
+ * (AGL-237). Host-scoped pages use this — NOT the workspace context — so
+ * org-shared data stays correct when a multi-org user deep-links into a
+ * host outside their selected workspace.
+ *
+ * Null while loading AND for pre-org hosts, which callers cannot tell
+ * apart. Fine for the many callers that only ever build an org path from
+ * it and render nothing until it arrives; anything that FALLS BACK to a
+ * host path — and especially anything that writes — wants
+ * {@link useHostOrgIdState} instead (AGL-1061).
+ */
+export function useHostOrgId(hostId: string | undefined): string | null {
+  return useHostOrgIdState(hostId).orgId
+}
+
+export interface OrgDataScope {
+  /** Firestore parent: `['orgs', orgId]`, or the legacy host fallback. */
+  scope: readonly ['orgs' | 'hosts', string]
+  /** The owning org once known, else null. */
+  orgId: string | null
+  /**
+   * Whether `scope` is trustworthy. FALSE means the answer is still in
+   * flight — suppress queries and disable saves rather than acting on the
+   * fallback, which during that window is a path nothing reads.
+   */
+  ready: boolean
+}
+
+/**
+ * The `['orgs', orgId]` / `['hosts', hostId]` pair every host-scoped card
+ * builds, with an honest `ready` flag (AGL-1061).
+ *
+ * This existed as a copy-pasted ternary in nine components:
+ *
+ * ```ts
+ * const orgId = props.orgId ?? useHostOrgId(hostId)
+ * const scope = orgId ? ['orgs', orgId] : ['hosts', hostId]
+ * ```
+ *
+ * which silently resolves to the HOST branch for the first render or two
+ * of every mount, because `useHostOrgId` cannot say "not yet". Centralising
+ * it means the window is handled once, correctly, instead of nine times
+ * from memory.
+ */
+export function useOrgDataScope(options: {
+  hostId?: string | undefined
+  /** An explicit org skips the lookup entirely and is ready immediately. */
+  orgId?: string | undefined
+}): OrgDataScope {
+  const { hostId, orgId: explicitOrgId } = options
+  const state = useHostOrgIdState(explicitOrgId ? undefined : hostId)
+  const orgId = explicitOrgId ?? state.orgId
+  const loaded = Boolean(explicitOrgId) || state.loaded
+  // Memoised because `scope` is a QUERY DEPENDENCY. A fresh tuple every
+  // render, passed to `useFirestoreCollection`, tears down and reopens the
+  // listener (and clears its data) on every render — so hand out a stable
+  // reference rather than trusting every caller to destructure primitives.
+  return useMemo(
+    () => ({
+      orgId,
+      // With neither an org nor a host there is no path to be ready FOR.
+      // Reporting ready here would hand callers `['hosts','-none-']` as a
+      // trustworthy scope, which is the one state this flag exists to
+      // prevent — a confidently wrong path rather than a pending one.
+      ready: loaded && Boolean(orgId || hostId),
+      scope: orgId
+        ? (['orgs', orgId] as const)
+        : (['hosts', hostId ?? '-none-'] as const),
+    }),
+    [orgId, hostId, loaded],
+  )
 }
 
 export default useHostOrgId

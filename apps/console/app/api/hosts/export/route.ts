@@ -22,7 +22,7 @@ import {
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
-  orgDataQueryForHost,
+  scopedToHost,
 } from '@aglyn/tenant-data-admin'
 // Shared bundle contract lives in _lib: route.ts may only export handlers.
 import {
@@ -154,16 +154,18 @@ async function handler(request: Request): Promise<Response> {
       name: 'datasets' | 'media',
       cap: number,
     ) => {
-      try {
-        const { query } = await orgDataQueryForHost(hostId, name)
-        const snapshot = await query.limit(cap).get()
-        return snapshot.docs.filter((doc) => !doc.get('deletedAt')).map(scopeless)
-      } catch (error) {
-        // A host with no owning org has no org data to export. That is not
-        // an export failure — the rest of the bundle is still valid.
-        console.error(error)
-        return []
-      }
+      // A host with no owning org genuinely has no org data — that is a
+      // known-empty answer, not a failure, and `orgId` already tells us.
+      //
+      // Everything else THROWS. A catch-all here would rebuild the exact
+      // bug this route was fixing one level down: a missing index or a
+      // transient read would produce a silently empty, still-200 "backup"
+      // that nobody discovers until they try to restore it. An export that
+      // fails loudly is recoverable; one that lies is not.
+      if (!orgId) return []
+      const ref = firestore.collection('orgs').doc(orgId).collection(name)
+      const snapshot = await scopedToHost(ref, hostId).limit(cap).get()
+      return snapshot.docs.filter((doc) => !doc.get('deletedAt')).map(scopeless)
     }
 
     const withRecords = async () => {

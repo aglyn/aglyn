@@ -34,7 +34,11 @@ import {
   isBlockedSubdomain,
   SUBDOMAIN_PATTERN,
 } from './host-naming'
-import { hostScopeToken, ORG_SCOPE_TOKEN } from './scope-tokens'
+import {
+  hostScopeToken,
+  ORG_SCOPE_TOKEN,
+  visibleToTokens,
+} from './scope-tokens'
 
 /** Same lexical policy as host subdomains: 3–30 lowercase/digits/dashes. */
 export const ORG_SLUG_PATTERN = SUBDOMAIN_PATTERN
@@ -168,6 +172,57 @@ export function projectMemberScopeTokens(
   if (isOrgWideMember(member)) return [ORG_SCOPE_TOKEN]
   const hostIds = Object.keys(member?.hostAccess ?? {})
   return [ORG_SCOPE_TOKEN, ...hostIds.map(hostScopeToken)]
+}
+
+/**
+ * A member's effective read set: the stored `scopeTokens` projection when it
+ * is there, recomputed from the membership when it is not.
+ *
+ * The fallback is the security-relevant half and it was written out by hand
+ * in four places (`use-scope-tokens`, `erase-scope`, the media sign route,
+ * and by omission in `resolveMediaScope`, which only ever recomputed). Four
+ * copies of "what may this member see" is the shape that eventually
+ * disagrees, and a copy that reads `member.scopeTokens` WITHOUT the
+ * `.length` guard silently grants nothing to a member the AGL-1040 backfill
+ * has not reached — or, written the other way round, grants everything.
+ *
+ * Recomputing is the safe fallback rather than a convenience: it produces
+ * exactly what `grantHostAccess` would have stamped, so an unstamped member
+ * doc behaves as its `hostAccess` says, never as "no access" and never as
+ * org-wide.
+ */
+export function memberScopeTokens(
+  member: Partial<AglynOrgMember> | null | undefined,
+): ScopeToken[] {
+  const stored = member?.scopeTokens
+  return stored?.length ? stored : projectMemberScopeTokens(member)
+}
+
+/**
+ * May this member see a resource carrying `visibleTo`? (AGL-1037/1038)
+ *
+ * The whole client-side/server-side authorization question in one place:
+ * org-wide members read everything they own; everyone else needs their read
+ * set to intersect the resource's scope. Absent/empty `visibleTo` is
+ * org-wide by the same rule the Firestore rules use, so an unbackfilled
+ * resource does not vanish.
+ *
+ * Every Admin-SDK path must call this (or `scopeAllows`, which wraps an
+ * already-resolved scope) — the Admin SDK bypasses rules entirely, so this
+ * IS the enforcement there, not a second opinion about it.
+ *
+ * NOT a membership check, and never a substitute for one: a `null` member
+ * "can see" an org-wide resource here, because the question this answers is
+ * "is this resource in scope for that reach", not "is this person in the
+ * org". Resolve membership first and refuse the caller if there is none —
+ * conflating the two is exactly how AGL-1026 exposed a whole org.
+ */
+export function memberCanSee(
+  member: Partial<AglynOrgMember> | null | undefined,
+  visibleTo: readonly string[] | null | undefined,
+): boolean {
+  if (isOrgWideMember(member)) return true
+  return visibleToTokens(visibleTo ?? undefined, memberScopeTokens(member))
 }
 
 /**

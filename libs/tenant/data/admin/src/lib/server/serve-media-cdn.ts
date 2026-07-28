@@ -166,19 +166,29 @@ export async function serveMediaCdn(
      * SITE may use the asset, this one asks whether the public may fetch
      * it at all.
      *
-     * `no-store`, not a short max-age. Every other 404 here is safe to
+     * `no-store`, not a short max-age. Every other response here is safe to
      * cache because it is the same answer for everyone, but a signed
      * request is per-caller and time-boxed: letting a shared cache keep
      * either the denial OR the bytes would outlive the signature and hand
      * the asset to the next requester on the same URL.
+     *
+     * Which is why the header goes through `setCacheControl` from here on
+     * rather than `res.setHeader` — the private case has to win at EVERY
+     * exit, and remembering that at each of six call sites is precisely
+     * the kind of thing that gets missed when a seventh is added. It
+     * already was: the stale-hash 404 below used to overwrite `no-store`
+     * with `public, max-age=60`.
      */
     const isPrivate = snapshot.get('private') === true
+    const setCacheControl = (value: string) => {
+      res.setHeader('Cache-Control', isPrivate ? 'private, no-store' : value)
+    }
     if (isPrivate) {
       const signed = verifyMediaAccess(scopeSegment, mediaId, {
         exp: Number(req.query['exp'] ?? 0),
         sig: String(req.query['sig'] ?? ''),
       })
-      res.setHeader('Cache-Control', 'private, no-store')
+      setCacheControl('private, no-store')
       if (!signed) {
         res.status(404).json({ error: 'Not found' })
         return
@@ -187,7 +197,7 @@ export async function serveMediaCdn(
     // The immutable form must pin the current content; a stale hash 404s so
     // the edge never keeps serving replaced bytes under that URL.
     if (hashed && currentHash !== hash) {
-      res.setHeader('Cache-Control', 'public, max-age=60')
+      setCacheControl('public, max-age=60')
       res.status(404).json({ error: 'Not found' })
       return
     }
@@ -202,16 +212,7 @@ export async function serveMediaCdn(
       ? `"${currentHash}${useVariant ? `-w${width}` : ''}"`
       : null
     if (!hashed) {
-      // A private asset keeps the `private, no-store` set above — making a
-      // signed response shared-cacheable would leave the bytes reachable
-      // on that URL after the signature expired, which is the whole thing
-      // the signature is for (AGL-1051).
-      if (!isPrivate) {
-        res.setHeader(
-          'Cache-Control',
-          'public, max-age=3600, stale-while-revalidate=86400',
-        )
-      }
+      setCacheControl('public, max-age=3600, stale-while-revalidate=86400')
       if (etag) res.setHeader('ETag', etag)
       if (etag && req.headers['if-none-match'] === etag) {
         res.status(304).end()
@@ -259,9 +260,10 @@ export async function serveMediaCdn(
     }
     // `immutable` for a year is the strongest possible caching, and on a
     // private asset it would be a permanent public copy of a file whose
-    // whole point is that it expires (AGL-1051).
-    if (hashed && !isPrivate) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    // whole point is that it expires (AGL-1051) — `setCacheControl` holds
+    // that line.
+    if (hashed) {
+      setCacheControl('public, max-age=31536000, immutable')
     }
 
     // Delivery volume (AGL-176): per-asset serves/bytes on the AGL-82

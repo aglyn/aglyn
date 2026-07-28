@@ -59,7 +59,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
-  useHostOrgId,
+  useOrgDataScope,
   useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
 
@@ -111,12 +111,14 @@ export interface DatasetSchemaDialogProps {
 export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   const { hostId, dataset, datasets, recordCount, onClose } = props
   // Org-shared data root (AGL-237/239); the host path is the pre-migration
-  // fallback for hosts not yet org-wired.
-  const hostOrgId = useHostOrgId(props.orgId ? undefined : hostId)
-  const orgId = props.orgId ?? hostOrgId
-  const dataScope = orgId
-    ? (['orgs', orgId] as const)
-    : (['hosts', hostId ?? '-none-'] as const)
+  // fallback for hosts not yet org-wired. `scopeReady` is false until the
+  // async org lookup settles (AGL-1061) — saving before then would write
+  // the schema to a path nothing has read since AGL-1050.
+  const {
+    scope: dataScope,
+    orgId,
+    ready: scopeReady,
+  } = useOrgDataScope({ hostId, orgId: props.orgId })
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -579,7 +581,14 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>{'Cancel'}</Button>
-          <Button variant="contained" color="secondary" onClick={handleSave}>
+          {/* Held until the data scope resolves (AGL-1061) — a save in that
+              window writes the schema to the legacy host path. */}
+          <Button
+            variant="contained"
+            color="secondary"
+            disabled={!scopeReady}
+            onClick={handleSave}
+          >
             {'Save schema'}
           </Button>
         </DialogActions>

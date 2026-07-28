@@ -28,6 +28,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import useOrgScope from './use-org-scope'
+import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 
 export type { OrgPermissions }
 
@@ -112,8 +113,15 @@ export function useOrgPermissions(): {
     let active = true
     void (async () => {
       try {
-        const snapshot = await getDoc(
-          doc(firestore, 'orgs', orgId, 'members', uid),
+        // Retried, and named for the session-health verdict (AGL-1063): a
+        // member reading their OWN member doc is always allowed, so a
+        // denial that survives the retries is about the session, not about
+        // authorization. This read happens on every console page, which is
+        // what makes it a useful second collection alongside whatever the
+        // page itself reads.
+        const snapshot = await firestoreOneShotRetry(
+          () => getDoc(doc(firestore, 'orgs', orgId, 'members', uid)),
+          'orgs/members',
         )
         const member = (snapshot.data() ?? {}) as Partial<AglynOrgMember>
         const role = (member.role ?? 'viewer') as OrgRole

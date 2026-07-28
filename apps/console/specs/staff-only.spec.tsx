@@ -33,6 +33,9 @@ import React from 'react'
 jest.mock('@aglyn/tenant-feature-instance', () => {
   const state = { claims: {} as Record<string, unknown>, tokenRejects: false }
   const user = {
+    // `uid` matters: `reconcileStaffClaim` keys its shared refresh by it, so
+    // a mock without one lands every case on the same `''` cache entry.
+    uid: 'staff-spec-user',
     getIdTokenResult: () =>
       state.tokenRejects
         ? Promise.reject(new Error('token unavailable'))
@@ -65,6 +68,7 @@ jest.mock('next/navigation', () => {
 import * as nextNavigation from 'next/navigation'
 import * as tenantInstance from '@aglyn/tenant-feature-instance'
 import StaffOnly from '../components/staff-only.component'
+import { resetStaffClaimReconciliation } from '../hooks/use-is-staff'
 
 /** The factory's state, reached through the namespace — `__state` exists on
  *  the mock only, so it is not on the real module's type. */
@@ -112,6 +116,13 @@ describe('StaffOnly (AGL-760/847)', () => {
     state.claims = {}
     state.tokenRejects = false
     notFound.count = 0
+    // MANDATORY, and the reason these tests were failing. `useIsStaff`
+    // memoises one forced token refresh per uid at MODULE scope (AGL-955),
+    // so without this the first case's `staff: true` is handed to every
+    // case after it — the gate then renders `internal` for a viewer with no
+    // claim at all, which reads exactly like a broken security control
+    // rather than a leaked fixture.
+    resetStaffClaimReconciliation()
     // React logs every error it routes to a boundary; the throw here is the
     // expected path, so the noise would drown real failures.
     jest.spyOn(console, 'error').mockImplementation(() => undefined)

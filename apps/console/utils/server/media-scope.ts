@@ -16,10 +16,11 @@
  */
 
 import {
+  checkEntitlement,
   hostScopeToken,
   isOrgWideMember,
+  memberScopeTokens,
   ORG_SCOPE_TOKEN,
-  projectMemberScopeTokens,
   visibleToTokens,
 } from '@aglyn/aglyn/server'
 import {
@@ -106,7 +107,12 @@ export async function resolveMediaScope(
         scopeRef: firestore.collection('orgs').doc(orgId),
         billing: org as Record<string, unknown>,
         cdnScope: `org:${orgId}`,
-        viewerTokens: projectMemberScopeTokens(membership?.member),
+        // The stored projection when there is one — this used to always
+        // recompute, which is the same answer for every member the
+        // AGL-1040 backfill reached and a DIFFERENT one for anybody whose
+        // `scopeTokens` were later narrowed by `revokeHostAccess` without
+        // `hostAccess` being rewritten. One rule, one helper.
+        viewerTokens: memberScopeTokens(membership?.member),
         viewerOrgWide: isOrgWideMember(membership?.member),
       },
     }
@@ -219,4 +225,69 @@ export function mediaObjectPath(
   return typeof stored === 'string' && stored
     ? stored
     : `${base}/media/${mediaSnapshot.id}`
+}
+
+/**
+ * The `cdnPath` field value for a media doc — a path, or the sentinel that
+ * removes it (AGL-1051).
+ *
+ * One helper because three writers decide this — upload, replace, and the
+ * `set-private` toggle — and three copies of a rule is how the third drifts.
+ * It already had: `set-private` minted a path on un-privating with no
+ * entitlement check, so an org without `mediaCdn` could obtain a CDN URL
+ * that upload and replace would both have withheld.
+ *
+ * Two independent reasons to have no path, and both must hold to get one:
+ * the plan does not include CDN delivery, or the asset is PRIVATE — and a
+ * private asset's missing `cdnPath` is not a detail, it is the mechanism
+ * that keeps it out of pickers and page nodes.
+ */
+/**
+ * The slice of a folder's scope cascade one request writes (AGL-1045).
+ *
+ * Split out of the route because it is the only arithmetic in that action
+ * and it is where a resumable cursor goes wrong: an off-by-one leaves the
+ * last asset unscoped — a file the caller was told is restricted and is
+ * not — and a cursor past the end must report `done` rather than loop.
+ * Hostile input is normal here: `chunkStart` comes from the client.
+ */
+export function scopeCascadeSlice(options: {
+  /** Docs in the whole operation — the folder plus its subtree assets. */
+  total: number
+  /** Client cursor. Anything not a sane index starts from the beginning. */
+  chunkStart?: unknown
+  /** Client slice size. Absent/unusable means "the rest of it". */
+  chunkSize?: unknown
+  /** Hard ceiling — Firestore's cap on one batched commit. */
+  batchLimit: number
+}): { start: number; size: number; next: number; done: boolean } {
+  const total = Math.max(0, Math.trunc(options.total) || 0)
+  const rawStart = Math.trunc(Number(options.chunkStart ?? 0))
+  const start = Math.min(
+    total,
+    Number.isFinite(rawStart) && rawStart > 0 ? rawStart : 0,
+  )
+  const rawSize = Math.trunc(Number(options.chunkSize ?? 0))
+  const requested =
+    Number.isFinite(rawSize) && rawSize > 0
+      ? Math.min(rawSize, options.batchLimit)
+      : total - start
+  const size = Math.max(0, Math.min(requested, total - start))
+  const next = start + size
+  return { start, size, next, done: next >= total }
+}
+
+export function mediaCdnPathUpdate(options: {
+  /** Org billing doc — `MediaScope.billing`. */
+  billing: Record<string, unknown> | undefined
+  /** `MediaScope.cdnScope` — `{hostId}` or `org:{orgId}`. */
+  cdnScope: string
+  mediaId: string
+  isPrivate: boolean
+}): string | FirebaseFirestore.FieldValue {
+  const allowed =
+    checkEntitlement(options.billing as never, 'mediaCdn') && !options.isPrivate
+  return allowed
+    ? `/api/media/cdn/${options.cdnScope}/${options.mediaId}`
+    : firebaseAdmin.firestore.FieldValue.delete()
 }

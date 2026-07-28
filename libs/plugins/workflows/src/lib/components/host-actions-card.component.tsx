@@ -61,11 +61,11 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useMemo } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
-  useHostOrgId,
+  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 import HostActivityCard from './host-activity-card.component'
 
@@ -159,14 +159,17 @@ export function HostActionsCard(props: {
   const { hostId, org } = props
   // Org-shared data root (AGL-237); the host path is the pre-migration
   // fallback for hosts not yet org-wired.
-  const hostOrgId = useHostOrgId(hostId)
-  const dataScope = hostOrgId
-    ? (['orgs', hostOrgId] as const)
-    : (['hosts', hostId] as const)
+  // The org lookup is async (AGL-1061). `scopeReady` stays false until
+  // it settles, so nothing acts on the host fallback during the window —
+  // a path nothing has read since AGL-1050.
+  const {
+    scope: dataScope,
+    orgId: hostOrgId,
+    ready: scopeReady,
+  } = useOrgDataScope({ hostId })
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-
 
   const { data: actionDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'actions'), limit(100)),
@@ -174,7 +177,8 @@ export function HostActionsCard(props: {
     { idField: '$id' },
   )
   const { data: workflowDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
     [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
@@ -186,18 +190,22 @@ export function HostActionsCard(props: {
   // render time. Filtering by the host's tokens also satisfies the
   // AGL-1041 rules, since they are a subset of any viewer's who can reach
   // this host at all.
-  const scopeTokens = scopeTokensForHost(hostId)
+  // Memoised: this is a listener DEPENDENCY, and a fresh array each
+  // render tears the subscription down and clears its data every time.
+  const scopeTokens = useMemo(() => scopeTokensForHost(hostId), [hostId])
   const needsScope = Boolean(hostOrgId)
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, dataScope[0], dataScope[1], 'datasets'),
-        ...(needsScope
-          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-          : []),
-        limit(100),
-      ),
-    [firestore, hostId, hostOrgId, needsScope, scopeTokens],
+      scopeReady
+        ? query(
+            collection(firestore, dataScope[0], dataScope[1], 'datasets'),
+            ...(needsScope
+              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+              : []),
+            limit(100),
+          )
+        : null,
+    [firestore, hostId, hostOrgId, scopeReady, needsScope, scopeTokens],
     { idField: '$id' },
   )
   const { data: overlayDocs } = useFirestoreCollection<any>(
@@ -208,16 +216,17 @@ export function HostActionsCard(props: {
   // Lists live on the org (AGL-254); campaigns on the host.
   const { data: listDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, dataScope[0], dataScope[1], 'lists'),
-        limit(50),
-      ),
-    [firestore, hostId, hostOrgId],
+      scopeReady
+        ? query(
+            collection(firestore, dataScope[0], dataScope[1], 'lists'),
+            limit(50),
+          )
+        : null,
+    [firestore, hostId, hostOrgId, scopeReady],
     { idField: '$id' },
   )
   const { data: campaignDocs } = useFirestoreCollection<any>(
-    () =>
-      query(collection(firestore, 'hosts', hostId, 'campaigns'), limit(50)),
+    () => query(collection(firestore, 'hosts', hostId, 'campaigns'), limit(50)),
     [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
@@ -387,9 +396,7 @@ export function HostActionsCard(props: {
                 .map((row) => ({
                   field: row.field.trim(),
                   op: row.op as TriggerConditionOp,
-                  ...(row.op !== 'notEmpty'
-                    ? { value: row.value.trim() }
-                    : {}),
+                  ...(row.op !== 'notEmpty' ? { value: row.value.trim() } : {}),
                 })),
               combinator: draft.conditionCombinator,
             }
@@ -547,9 +554,7 @@ export function HostActionsCard(props: {
                   // Structured conditions (AGL-557; chained AGL-565):
                   // legacy single-condition docs normalize to one row.
                   conditionRows: (() => {
-                    const rows = normalizeTriggerConditions(
-                      action.trigger,
-                    ).map(
+                    const rows = normalizeTriggerConditions(action.trigger).map(
                       (condition): ConditionRowDraft => ({
                         op: condition.op ?? '',
                         field: condition.field ?? '',
@@ -694,8 +699,7 @@ export function HostActionsCard(props: {
                         index2 === index
                           ? {
                               ...previousRow,
-                              op: event.target
-                                .value as ConditionRowDraft['op'],
+                              op: event.target.value as ConditionRowDraft['op'],
                             }
                           : previousRow,
                     ),
@@ -760,11 +764,12 @@ export function HostActionsCard(props: {
                   onClick={() =>
                     patch((previous) => ({
                       ...previous,
-                      conditionRows: previous.conditionRows.length > 1
-                        ? previous.conditionRows.filter(
-                            (_, index2) => index2 !== index,
-                          )
-                        : [EMPTY_CONDITION_ROW],
+                      conditionRows:
+                        previous.conditionRows.length > 1
+                          ? previous.conditionRows.filter(
+                              (_, index2) => index2 !== index,
+                            )
+                          : [EMPTY_CONDITION_ROW],
                     }))
                   }
                 >
@@ -813,9 +818,7 @@ export function HostActionsCard(props: {
                   <MenuItem value="and">
                     {'All conditions match (AND)'}
                   </MenuItem>
-                  <MenuItem value="or">
-                    {'Any condition matches (OR)'}
-                  </MenuItem>
+                  <MenuItem value="or">{'Any condition matches (OR)'}</MenuItem>
                 </TextField>
               ) : null}
             </Stack>
@@ -1010,8 +1013,7 @@ export function HostActionsCard(props: {
                               workflowId: event.target.value,
                               workflowName:
                                 workflowOptions.find(
-                                  (option) =>
-                                    option.id === event.target.value,
+                                  (option) => option.id === event.target.value,
                                 )?.name ?? (s as any).workflowName,
                             }
                           : s,
@@ -1107,8 +1109,7 @@ export function HostActionsCard(props: {
                               webhookId: event.target.value,
                               webhookName:
                                 webhookOptions.find(
-                                  (option) =>
-                                    option.id === event.target.value,
+                                  (option) => option.id === event.target.value,
                                 )?.name ?? (s as any).webhookName,
                             }
                           : s,
@@ -1146,8 +1147,7 @@ export function HostActionsCard(props: {
                               datasetId: event.target.value,
                               datasetName:
                                 datasetOptions.find(
-                                  (option) =>
-                                    option.id === event.target.value,
+                                  (option) => option.id === event.target.value,
                                 )?.name ?? (s as any).datasetName,
                             }
                           : s,
@@ -1178,8 +1178,7 @@ export function HostActionsCard(props: {
                               overlayId: event.target.value,
                               overlayName:
                                 overlayOptions.find(
-                                  (option) =>
-                                    option.id === event.target.value,
+                                  (option) => option.id === event.target.value,
                                 )?.name ?? '',
                             }
                           : s,
@@ -1284,8 +1283,7 @@ export function HostActionsCard(props: {
                         index2 === index
                           ? {
                               ...s,
-                              drawerNodeId:
-                                event.target.value || undefined,
+                              drawerNodeId: event.target.value || undefined,
                             }
                           : s,
                       ),
@@ -1311,8 +1309,7 @@ export function HostActionsCard(props: {
                         index2 === index
                           ? {
                               ...s,
-                              menuNodeId:
-                                event.target.value || undefined,
+                              menuNodeId: event.target.value || undefined,
                             }
                           : s,
                       ),
@@ -1449,8 +1446,7 @@ export function HostActionsCard(props: {
                               listId: event.target.value,
                               listName:
                                 listOptions.find(
-                                  (option) =>
-                                    option.id === event.target.value,
+                                  (option) => option.id === event.target.value,
                                 )?.name ?? '',
                             }
                           : s,
@@ -1486,8 +1482,7 @@ export function HostActionsCard(props: {
                               campaignId: event.target.value,
                               campaignName:
                                 campaignOptions.find(
-                                  (option) =>
-                                    option.id === event.target.value,
+                                  (option) => option.id === event.target.value,
                                 )?.name ?? '',
                             }
                           : s,

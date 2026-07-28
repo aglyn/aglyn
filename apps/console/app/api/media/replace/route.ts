@@ -31,6 +31,7 @@ import {
   mediaObjectPath,
   resolveMediaScope,
   scopeAllows,
+  mediaCdnPathUpdate,
 } from '../../../../utils/server/media-scope'
 import { createHash, randomUUID } from 'crypto'
 
@@ -224,11 +225,16 @@ async function handler(request: Request): Promise<Response> {
           dimensions?.height ?? firebaseAdmin.firestore.FieldValue.delete(),
         contentHash,
         variants,
-        ...(cdnAllowed
-          ? // Stable, mediaId-keyed CDN URL (AGL-829): unchanged by replace,
-            // so the entry keeps resolving to the new bytes automatically.
-            { cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}` }
-          : { cdnPath: firebaseAdmin.firestore.FieldValue.delete() }),
+        // Stable, mediaId-keyed CDN URL (AGL-829): unchanged by replace, so
+        // the entry keeps resolving to the new bytes automatically — unless
+        // the plan or the private flag says there should be no path at all,
+        // which is the one rule shared with upload and set-private.
+        cdnPath: mediaCdnPathUpdate({
+          billing: org,
+          cdnScope: scope.cdnScope,
+          mediaId,
+          isPrivate: mediaSnapshot.get('private') === true,
+        }),
         replacedBy: decoded.uid,
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       },

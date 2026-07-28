@@ -23,6 +23,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { useSigninCheck } from '@aglyn/tenant-feature-instance'
 import useIdleLogout from '../../hooks/use-idle-logout'
 import ImpersonationBanner from '../impersonation-banner.component'
+import SessionHealthBanner from '../session-health-banner.component'
 
 export interface AuthenticatedLayoutProps {
   children?: JSX.Children
@@ -105,6 +106,9 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
         <Fragment>
           {/* Impersonation warning (AGL-246). */}
           <ImpersonationBanner />
+          {/* "Your session needs refreshing" (AGL-1063). Renders nothing
+              until server reads fail across two distinct collections. */}
+          <SessionHealthBanner />
           {children}
         </Fragment>
       ) : (
