@@ -54,8 +54,8 @@ export function DataConsolePage(props: ConsolePluginPageProps) {
           ) : undefined
         }
       >
-        {'Datasets belong to your organization and are shared across every ' +
-          'site — changes here apply to all of them.'}
+        {'Datasets belong to your organization. Each one is shared with ' +
+          'every site by default — use Schema to narrow that.'}
       </Alert>
       <HostDatasetsCard hostId={hostId} org={org} />
     </Stack>
