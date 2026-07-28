@@ -157,29 +157,24 @@ export function HostActionsCard(props: {
   org?: Partial<AglynOrgBilling>
 }) {
   const { hostId, org } = props
-  // Org-shared data root (AGL-237); the host path is the pre-migration
-  // fallback for hosts not yet org-wired.
-  // The org lookup is async (AGL-1061). `scopeReady` stays false until
-  // it settles, so nothing acts on the host fallback during the window —
-  // a path nothing has read since AGL-1050.
-  const {
-    scope: dataScope,
-    orgId: hostOrgId,
-    ready: scopeReady,
-  } = useOrgDataScope({ hostId })
+  // Org-shared data root (AGL-237). Null until the org lookup settles
+  // (AGL-1061), and for a host with no owning org — the pre-migration host
+  // path is gone (AGL-1050), so the dataset and list pickers stay empty
+  // instead of offering rows from a path nothing else reads.
+  const { scope: dataScope } = useOrgDataScope({ hostId })
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
   const { data: actionDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'actions'), limit(100)),
-    [firestore, hostId, hostOrgId],
+    [firestore, hostId],
     { idField: '$id' },
   )
   const { data: workflowDocs } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
-    [firestore, hostId, hostOrgId],
+    [firestore, hostId],
     { idField: '$id' },
   )
   // Scoped (AGL-1044): the AGL-1041 rules reject a scoped member's
@@ -193,46 +188,46 @@ export function HostActionsCard(props: {
   // Memoised: this is a listener DEPENDENCY, and a fresh array each
   // render tears the subscription down and clears its data every time.
   const scopeTokens = useMemo(() => scopeTokensForHost(hostId), [hostId])
-  const needsScope = Boolean(hostOrgId)
+  // Unconditional now: the only scope this hook yields is an org one, and
+  // every org dataset carries `visibleTo` (AGL-1041). The filter used to be
+  // conditional for the host fallback's sake, whose rows had no scope.
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
-      scopeReady
+      dataScope
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'datasets'),
-            ...(needsScope
-              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-              : []),
+            where('visibleTo', 'array-contains-any', scopeTokens),
             limit(100),
           )
         : null,
-    [firestore, hostId, hostOrgId, scopeReady, needsScope, scopeTokens],
+    [firestore, dataScope, scopeTokens],
     { idField: '$id' },
   )
   const { data: overlayDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'overlays'), limit(50)),
-    [firestore, hostId, hostOrgId],
+    [firestore, hostId],
     { idField: '$id' },
   )
   // Lists live on the org (AGL-254); campaigns on the host.
   const { data: listDocs } = useFirestoreCollection<any>(
     () =>
-      scopeReady
+      dataScope
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'lists'),
             limit(50),
           )
         : null,
-    [firestore, hostId, hostOrgId, scopeReady],
+    [firestore, dataScope],
     { idField: '$id' },
   )
   const { data: campaignDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'campaigns'), limit(50)),
-    [firestore, hostId, hostOrgId],
+    [firestore, hostId],
     { idField: '$id' },
   )
   const { data: webhookDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'webhooks'), limit(20)),
-    [firestore, hostId, hostOrgId],
+    [firestore, hostId],
     { idField: '$id' },
   )
   const actions = [...(actionDocs ?? [])]
@@ -476,7 +471,7 @@ export function HostActionsCard(props: {
         enabled: event.target.checked,
       })
     },
-    [firestore, hostId, hostOrgId],
+    [firestore, hostId],
   )
 
   return (

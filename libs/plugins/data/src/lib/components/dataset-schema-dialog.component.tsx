@@ -110,22 +110,29 @@ export interface DatasetSchemaDialogProps {
  */
 export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   const { hostId, dataset, datasets, recordCount, onClose } = props
-  // Org-shared data root (AGL-237/239); the host path is the pre-migration
-  // fallback for hosts not yet org-wired. `scopeReady` is false until the
-  // async org lookup settles (AGL-1061) — saving before then would write
-  // the schema to a path nothing has read since AGL-1050.
-  const {
-    scope: dataScope,
-    orgId,
-    ready: scopeReady,
-  } = useOrgDataScope({ hostId, orgId: props.orgId })
+  // Org-shared data root (AGL-237/239). Null until the async org lookup
+  // settles (AGL-1061), and for a host with no owning org. Saving is held
+  // on it rather than redirected: the host path this used to fall back to
+  // is now denied by the rules outright (AGL-1050), so a save there would
+  // fail loudly instead of quietly — but it should not be attempted at all.
+  const { scope: dataScope, orgId } = useOrgDataScope({
+    hostId,
+    orgId: props.orgId,
+  })
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
   // Sharing scope (AGL-1044) — org datasets only; the legacy host path is
   // site-private by construction.
-  const { orgWide: viewerOrgWide } = useScopeTokens(orgId ?? undefined)
+  // `orgWide` reads TRUE while the member doc loads (AGL-1047), which would
+  // offer a scoped collaborator the scope Select for a beat before replacing
+  // it with the read-only summary — and offering a control the AGL-1041
+  // rules will reject is the thing the branch below exists to avoid. Hold
+  // the whole block until `loaded` rather than flash the wrong one.
+  const { orgWide: viewerOrgWide, loaded: scopeLoaded } = useScopeTokens(
+    orgId ?? undefined,
+  )
   // Sites in this org, for naming what a narrowing would cost. Queried
   // here rather than via the console's useOrgHosts — this component lives
   // in a lib and cannot import from an app.
@@ -298,7 +305,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   )
 
   const handleSave = useCallback(async () => {
-    if (!dataset) return
+    if (!dataset || !dataScope) return
     const previousScope: string[] = Array.isArray(
       (dataset as { visibleTo?: string[] }).visibleTo,
     )
@@ -365,7 +372,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     orgHostList,
     confirm,
     firestore,
-    hostId,
+    dataScope,
     orgId,
     enqueueSnackbar,
     onClose,
@@ -425,7 +432,11 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
               <Typography variant="caption" color="text.secondary">
                 {'Shared with'}
               </Typography>
-              {viewerOrgWide ? (
+              {!scopeLoaded ? (
+                <Typography variant="body2" color="text.secondary">
+                  {'Checking your access…'}
+                </Typography>
+              ) : viewerOrgWide ? (
                 <>
                   <Select
                     size="small"
@@ -586,7 +597,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
           <Button
             variant="contained"
             color="secondary"
-            disabled={!scopeReady}
+            disabled={!dataScope}
             onClick={handleSave}
           >
             {'Save schema'}

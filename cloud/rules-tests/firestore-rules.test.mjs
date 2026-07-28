@@ -326,6 +326,95 @@ describe('hosts', () => {
   })
 
   /**
+   * AGL-1050. Datasets moved to the org in AGL-237, and the ORG block has
+   * enforced API-only create/delete since AGL-473/945 so the per-plan
+   * `datasets` quota has somewhere to be checked. The host catch-all never
+   * learned the name, so `hosts/{hostId}/datasets/*` stayed a fully
+   * client-writable path for the same resource — an editor could create
+   * datasets and records there all day and no quota was ever consulted.
+   *
+   * Production holds nothing under these paths (AGL-1061 counted 0 for
+   * every host) and the client fallback that addressed them is gone, so the
+   * whole subtree is denied: `records` too, since the exclusion is by name
+   * and `{document=**}` spans them. Nothing re-grants underneath, which is
+   * the difference between this and `collections`/`entries` (AGL-947).
+   *
+   * The `variables` assertions at the end are the control: they prove the
+   * catch-all still GRANTS what it is supposed to, so a passing test here
+   * cannot be a rules file that denies everything.
+   */
+  it('host datasets are denied outright — the org path is the only one (AGL-1050)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'datasets', 'ds-host'),
+        { name: 'Smuggled' },
+      )
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'datasets', 'ds-host', 'records', 'r1'),
+        { a: 1 },
+      )
+      // The org-path counterpart, for the control at the end. Seeded here
+      // rather than leaned on from the AGL-237 describe, whose beforeEach
+      // does not run for this block — and an absent doc would make the
+      // control pass for the wrong reason.
+      await setDoc(
+        doc(context.firestore(), 'orgs', ORG, 'datasets', 'ds1'),
+        { name: 'Team', visibleTo: ['org'] },
+      )
+    })
+    // Create: the quota bypass this issue is about.
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'datasets', 'ds-new'), {
+        name: 'Free dataset',
+      }),
+    )
+    await assertFails(
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'datasets', 'ds-host', 'records', 'r2'),
+        { a: 2 },
+      ),
+    )
+    // Update and delete, on docs that already exist — otherwise a create
+    // denial is all this proves.
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'datasets', 'ds-host'), {
+        name: 'Renamed',
+      }),
+    )
+    await assertFails(
+      updateDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'datasets', 'ds-host', 'records', 'r1'),
+        { a: 3 },
+      ),
+    )
+    await assertFails(
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'datasets', 'ds-host', 'records', 'r1')),
+    )
+    await assertFails(
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'datasets', 'ds-host')),
+    )
+    // A site ADMIN is no different — this is a path question, not a role one.
+    await assertFails(
+      setDoc(doc(authed(OWNER), 'hosts', HOST, 'datasets', 'ds-owner'), {
+        name: 'Still no',
+      }),
+    )
+    // Control: the same editor, through the same catch-all, on a collection
+    // that is only create-excluded. If these fail, the test above is
+    // measuring a broken rules file rather than the exclusion.
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'variables', 'var-1'), {
+        value: 'still-writable',
+      }),
+    )
+    // And the org path — the one datasets are supposed to live on — still
+    // reads for a member, so "denied" here means the host path only.
+    await assertSucceeds(
+      getDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1')),
+    )
+  })
+
+  /**
    * AGL-679. Component versions live under a collection whose NAME is in
    * the catch-all's create-exclusion list, and `{document=**}` matches
    * nested paths — so without a dedicated block, creating

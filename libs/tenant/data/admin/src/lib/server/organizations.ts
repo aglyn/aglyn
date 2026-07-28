@@ -384,10 +384,12 @@ export async function orgDataCollectionForHost(
  * client's data. Use this instead of the bare collection ref anywhere a
  * request is being served in the context of a single host.
  *
- * Only the ORG path is filtered. The legacy `hosts/{hostId}/…` fallback is
- * site-private by construction and its docs carry no `visibleTo`, so
- * filtering it would match nothing and blank the site (production has zero
- * such datasets — see AGL-1050 — but the branch still exists).
+ * Only the ORG path is filtered — but no longer because of the legacy
+ * `hosts/{hostId}/…` fallback, which AGL-1050 removed on both the server
+ * (above) and the client. What survives it is the reason stated at the
+ * check itself: callers may hand this helper a ref they built themselves,
+ * and a host-library ref must never be filtered, since its docs carry no
+ * `visibleTo` and the filter would match nothing and blank the site.
  */
 export function scopedToHost(
   ref: FirebaseFirestore.CollectionReference,

@@ -447,20 +447,32 @@ export function CommunityListingContent({
   // reading the whole collection, since the detail page only speaks for one.
   // Scoped (AGL-1044): the AGL-1041 rules reject an unfiltered list for a
   // scoped member, so this would error rather than show fewer installs.
-  const { tokens: scopeTokens, orgWide: viewerOrgWide } =
-    useScopeTokens(orgId ?? undefined)
+  //
+  // Wait for the member doc before listing (AGL-1047). `useScopeTokens`
+  // reports `orgWide: true` while loading, so without `scopeLoaded` a scoped
+  // collaborator's first render computes `needsScope: false` and sends an
+  // UNFILTERED list that the AGL-1041 rules deny per document. It recovers
+  // on the next render, which is what makes it easy to miss: the page looks
+  // right and logs a denial every mount.
+  const {
+    tokens: scopeTokens,
+    orgWide: viewerOrgWide,
+    loaded: scopeLoaded,
+  } = useScopeTokens(orgId ?? undefined)
   const needsScope = Boolean(orgId) && !viewerOrgWide
   const { data: datasetInstalls } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'orgs', orgId ?? '-pending-', 'datasets'),
-        where('source.listingId', '==', listingId || '-missing-'),
-        ...(needsScope
-          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-          : []),
-        limit(20),
-      ),
-    [firestore, orgId, listingId, needsScope, scopeTokens],
+      orgId && scopeLoaded
+        ? query(
+            collection(firestore, 'orgs', orgId, 'datasets'),
+            where('source.listingId', '==', listingId || '-missing-'),
+            ...(needsScope
+              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+              : []),
+            limit(20),
+          )
+        : null,
+    [firestore, orgId, scopeLoaded, listingId, needsScope, scopeTokens],
     { idField: '$id' },
   )
   const { data: emailInstalls } = useFirestoreCollection<any>(

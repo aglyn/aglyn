@@ -30,19 +30,38 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 
 const orgPlan = { org: undefined as unknown, ready: false }
+
+/**
+ * Collection name → docs. Keyed rather than positional because the five
+ * cards under test open different collections in different orders, and the
+ * stubbed `collection` below returns its own name so each query says which
+ * one it is. `registers` and `locations` keep their own consts: the
+ * original two cards mutate them by reference in `beforeEach`.
+ */
 const registerDocs: Array<Record<string, unknown>> = []
 const locationDocs: Array<Record<string, unknown>> = []
+const productDocs: Array<Record<string, unknown>> = []
+const collections: Record<string, Array<Record<string, unknown>>> = {
+  registers: registerDocs,
+  locations: locationDocs,
+  products: productDocs,
+}
+
+const profile = { data: undefined as unknown }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useOrgPlan: () => orgPlan,
   useHostResourceApi: () => jest.fn(),
+  useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
+  useFirestoreDoc: () => profile,
   useFirestoreCollection: (build: () => unknown) => {
-    // Each card opens more than one collection; the stubbed `collection`
-    // below returns its own name, so the built query says which is which
-    // rather than this depending on call order.
-    const name = build()
-    return { data: name === 'locations' ? locationDocs : registerDocs }
+    const name = build() as string
+    // An unlisted collection is empty rather than a crash — these specs are
+    // about the plan gate, not about every collection a card happens to
+    // open, and defaulting to `registerDocs` (as this did when only two
+    // cards used it) would feed registers to whoever asked last.
+    return { data: collections[name] ?? [] }
   },
 }))
 
@@ -70,8 +89,17 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: jest.fn() }),
 }))
 
+jest.mock(
+  '@aglyn/shared-ui-next/contexts/next-page-title-provider',
+  () => ({ NextPageTitle: () => null }),
+  { virtual: true },
+)
+
 import RegistersCard from './registers-card.component'
 import LocationsCard from './locations-card.component'
+import PosConsolePage from './pos-page.component'
+import PaymentsSettingsCard from './payments-settings-card.component'
+import ProductsHubCard from './products-hub-card.component'
 
 // `toBeDisabled` needs jest-dom, which this project's preset does not
 // load; the DOM attribute is the same assertion without the setup.
@@ -93,9 +121,17 @@ const NEW_LOCATION = /new location/i
 beforeEach(() => {
   orgPlan.org = undefined
   orgPlan.ready = false
+  profile.data = undefined
   registerDocs.length = 0
   locationDocs.length = 0
+  productDocs.length = 0
 })
+
+/** The plan has landed and it is a paying one. */
+function planLands() {
+  orgPlan.org = { plan: 'business', ownerUid: 'uid-owner' }
+  orgPlan.ready = true
+}
 
 describe('registers card, plan not yet known', () => {
   it('disables Add rather than refusing it as a free-tier org', () => {
@@ -143,5 +179,93 @@ describe('locations card, plan not yet known', () => {
     typeName(NEW_LOCATION, 'Overflow shed')
     expect(addButton().disabled).toBe(false)
     expect(screen.getByText(/locations on your plan/i)).toBeTruthy()
+  })
+})
+
+/**
+ * The POS page has no Add button to disable, so the gate shows up as WHICH
+ * message the register panel renders. That distinction is the whole test:
+ * "no usable registers" is true either way during the window, because the
+ * free tier's `posRegisters: 0` empties the list exactly as the gate does.
+ * Asserting an empty list would therefore pass with the gate deleted. What
+ * changes is whether the seller is told their registers exceed a plan
+ * nobody has read yet.
+ */
+describe('POS page, plan not yet known', () => {
+  it('says it is checking rather than that the registers exceed the plan', () => {
+    registerDocs.push({ $id: 'r1', name: 'Front counter' })
+    render(<PosConsolePage hostId="host-1" entitled />)
+    expect(screen.getByText(/checking your plan/i)).toBeTruthy()
+    // The free-tier read of one register against `posRegisters: 0`.
+    expect(screen.queryByText(/registers exceed your plan/i)).toBeNull()
+  })
+
+  it('offers the register once the plan lands', () => {
+    planLands()
+    registerDocs.push({ $id: 'r1', name: 'Front counter' })
+    render(<PosConsolePage hostId="host-1" entitled />)
+    expect(screen.queryByText(/checking your plan/i)).toBeNull()
+    expect(screen.queryByText(/registers exceed your plan/i)).toBeNull()
+    expect(screen.getByText('Front counter')).toBeTruthy()
+  })
+})
+
+/**
+ * Payments settings reads the plan on every line — the entitlement AND the
+ * two fee percentages. An org still in flight resolves to the free tier,
+ * which flashes "Selling requires a paid plan" and the wrong fees at a
+ * paying seller before correcting itself.
+ */
+describe('payments settings, plan not yet known', () => {
+  it('withholds the entitlement verdict instead of failing it', () => {
+    render(<PaymentsSettingsCard hostId="host-1" />)
+    expect(screen.getByText(/checking your plan/i)).toBeTruthy()
+    expect(screen.queryByText(/requires a paid plan/i)).toBeNull()
+  })
+
+  it('withholds the fee percentages too', () => {
+    render(<PaymentsSettingsCard hostId="host-1" />)
+    // The free-tier fees are a real number the card has not earned yet —
+    // quoting them and then changing them is worse than quoting nothing.
+    expect(screen.queryByText(/Physical products:/i)).toBeNull()
+  })
+
+  it('shows the entitlement and the fees once the plan lands', () => {
+    planLands()
+    render(<PaymentsSettingsCard hostId="host-1" />)
+    expect(screen.queryByText(/checking your plan/i)).toBeNull()
+    expect(screen.queryByText(/requires a paid plan/i)).toBeNull()
+    expect(screen.getByText(/Physical products:/i)).toBeTruthy()
+  })
+})
+
+/**
+ * The products hub gates on a NULL quota rather than a boolean (AGL-1064):
+ * `disabled={!productQuota}`. Deleting the gate does not disable the button
+ * — it hands back the free tier's `productsPerHost: 0`, which leaves Add
+ * ENABLED and turns the click into "your plan includes 0 products". So the
+ * disabled assertion below genuinely distinguishes the two.
+ */
+describe('products hub, plan not yet known', () => {
+  const addProduct = () =>
+    screen.getByRole('button', { name: 'Add product' }) as HTMLButtonElement
+
+  it('disables Add product rather than allowing a click that refuses it', () => {
+    render(<ProductsHubCard hostId="host-1" />)
+    expect(addProduct().disabled).toBe(true)
+  })
+
+  it('disables Import for the same reason', () => {
+    render(<ProductsHubCard hostId="host-1" />)
+    expect(
+      (screen.getByRole('button', { name: 'Import' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true)
+  })
+
+  it('enables Add product once the plan lands', () => {
+    planLands()
+    render(<ProductsHubCard hostId="host-1" />)
+    expect(addProduct().disabled).toBe(false)
   })
 })

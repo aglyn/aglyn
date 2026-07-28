@@ -53,6 +53,15 @@
  * Distinct collections that must exhaust their retries before the console
  * says the session is the problem. Two is the smallest number that cannot
  * be produced by a single deliberately-hidden collection (AGL-1041).
+ *
+ * Reviewed and kept at 2 on 2026-07-28. Raising it to 3 buys margin against
+ * a page that legitimately reads two scoped collections back to back, but
+ * costs nothing only for sessions that are genuinely dead — those deny
+ * every collection and reach any threshold at the same speed. What it does
+ * cost is real: a page issuing only two distinct reads could then never
+ * prompt at all. Two plus {@link reportSuccessfulRead} clearing the
+ * evidence outright is a tight enough gate — a false prompt needs two
+ * unrelated scoped denials with no successful server read between them.
  */
 export const SESSION_STALE_MIN_COLLECTIONS = 2
 
@@ -60,6 +69,12 @@ export const SESSION_STALE_MIN_COLLECTIONS = 2
  * How long a denial counts toward the verdict. Long enough to span a page
  * whose reads are staggered, short enough that two unrelated genuine
  * denials minutes apart never add up to a false prompt.
+ *
+ * Reviewed and kept at 60s on 2026-07-28. Widening it to 300s would catch
+ * sessions whose reads straggle across a slow page or a navigation, at the
+ * price of letting two genuine scoped denials five minutes apart accumulate
+ * into a prompt. A false prompt that interrupts an edit is the outcome this
+ * whole mechanism is tuned against, so the shorter window wins.
  */
 export const SESSION_STALE_WINDOW_MS = 60_000
 

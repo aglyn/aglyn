@@ -21,6 +21,10 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import {
+  describeStripePaymentMethod,
+  selectSubscriptionPaymentMethod,
+} from '../../_lib/stripe-payment-method'
 
 /**
  * Staff org billing detail (AGL-245): the org's Stripe invoice history
@@ -126,27 +130,59 @@ async function handler(request: Request): Promise<Response> {
           hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
         }))
       : []
-    // AGL-940: this read `default_payment_method.card` and nothing else, so a
-    // non-card method rendered as "No payment method" even when one was on
-    // file. Checkout offers Link, Amazon Pay, Cash App and Klarna, and the
-    // reference org (Test Org) pays by Link — `.card` is undefined there.
-    // Describe whatever type is attached.
-    const pm = customerPayload?.invoice_settings?.default_payment_method ?? null
-    const card = pm?.card ?? null
-    const paymentMethod = !pm
-      ? null
-      : {
-          type: pm.type ?? (card ? 'card' : null),
-          brand: card?.brand ?? null,
-          last4: card?.last4 ?? pm[pm.type]?.last4 ?? null,
-          expMonth: card?.exp_month ?? null,
-          expYear: card?.exp_year ?? null,
-          // Link and the wallet methods identify by email, not a PAN.
-          email: pm[pm.type]?.email ?? pm.billing_details?.email ?? null,
+    // AGL-940, second pass. The first fix made the DESCRIPTION type-agnostic
+    // (Link and the wallets have no `.card`), which was a real bug — but it
+    // left the LOOKUP reading only the customer, and Test Org still showed
+    // "No payment method" beside a paid invoice.
+    //
+    // Stripe stores the effective default in more than one place, and
+    // Checkout commonly sets it on the SUBSCRIPTION while leaving
+    // `customer.invoice_settings` untouched. The dashboard shows the
+    // resolved value, which is why it disagreed with this endpoint. Walk the
+    // same order Stripe bills in, and stop at the first hit.
+    let paymentMethod = describeStripePaymentMethod(
+      customerPayload?.invoice_settings?.default_payment_method,
+    )
+    let paymentMethodSource: 'customer' | 'subscription' | null = paymentMethod
+      ? 'customer'
+      : null
+    if (!paymentMethod) {
+      // Only when the customer has none — this is the uncommon path and does
+      // not need to cost every staff page view a third round trip.
+      const subscriptionsResponse = await fetch(
+        `https://api.stripe.com/v1/subscriptions?customer=${encodeURIComponent(
+          String(customerId),
+        )}&limit=10&expand[]=data.default_payment_method`,
+        { headers },
+      )
+      const subscriptionsPayload = await subscriptionsResponse.json()
+      if (!subscriptionsResponse.ok) {
+        // Soft-fail: the invoices above are the primary data and they
+        // arrived. Degrading to "no payment method" is wrong but survivable;
+        // throwing away a good invoice list to report it is worse.
+        console.error('Stripe subscription lookup failed', {
+          orgId,
+          customerId,
+          status: subscriptionsResponse.status,
+          detail: subscriptionsPayload?.error?.message ?? null,
+        })
+      } else {
+        const described = selectSubscriptionPaymentMethod(
+          subscriptionsPayload?.data,
+        )
+        if (described) {
+          paymentMethod = described
+          paymentMethodSource = 'subscription'
         }
+      }
+    }
     return Response.json({
       invoices,
       paymentMethod,
+      // Which record answered. Staff-visible debugging: "no payment method"
+      // and "we only asked the customer record" are different claims, and
+      // the first fix could not tell them apart.
+      paymentMethodSource,
       hasCustomer: true,
       delinquent: customerPayload?.delinquent === true,
     }, { status: 200 })

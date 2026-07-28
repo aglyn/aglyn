@@ -29,6 +29,17 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useHostOrgId: () => undefined,
+  // The dialog takes an explicit `orgId` prop, which `useOrgDataScope`
+  // resolves without any lookup — so the mock mirrors that directly. It
+  // was missing when the hook replaced the inline ternary (AGL-1061),
+  // which took these three specs down with a "not a function" long before
+  // they could assert anything; a scope of null here would leave the Save
+  // button disabled and fail them just as silently (AGL-1050).
+  useOrgDataScope: ({ orgId }: { orgId?: string }) => ({
+    scope: orgId ? (['orgs', orgId] as const) : null,
+    orgId: orgId ?? null,
+    ready: true,
+  }),
   // Scoped sharing (AGL-1044). Org-wide by default so these specs exercise
   // the editable path; the read-only branch is covered by the rules tests.
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),

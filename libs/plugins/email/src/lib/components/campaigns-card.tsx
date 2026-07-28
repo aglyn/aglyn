@@ -60,16 +60,11 @@ const besignerHref = (
 export function HostCampaignsCard(props: { hostId: string }) {
   const { hostId } = props
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
-  // Org-shared data root (AGL-237); the host path is the pre-migration
-  // fallback for hosts not yet org-wired.
-  // The org lookup is async (AGL-1061). `scopeReady` stays false until
-  // it settles, so nothing acts on the host fallback during the window —
-  // a path nothing has read since AGL-1050.
-  const {
-    scope: dataScope,
-    orgId: hostOrgId,
-    ready: scopeReady,
-  } = useOrgDataScope({ hostId })
+  // Org-shared data root (AGL-237). Null until the org lookup settles
+  // (AGL-1061), and for a host with no owning org — the pre-migration host
+  // path is gone (AGL-1050), so the audience picker offers the built-ins
+  // alone rather than segments and lists from a dead path.
+  const { scope: dataScope } = useOrgDataScope({ hostId })
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const { data: user } = useUser()
@@ -80,7 +75,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
   // orderBy on a missing field would drop them from the history.
   const { data: campaignDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'campaigns'), limit(30)),
-    [firestore, hostId, hostOrgId],
+    [firestore, hostId],
     { idField: '$id' },
   )
   const campaigns = [...(campaignDocs ?? [])].sort(
@@ -92,7 +87,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
   // Contact segments (AGL-199) join the built-in audiences.
   const { data: segmentDocs } = useFirestoreCollection<any>(
     () =>
-      scopeReady
+      dataScope
         ? query(
             collection(
               firestore,
@@ -103,7 +98,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
             limit(50),
           )
         : null,
-    [firestore, hostId, hostOrgId, scopeReady],
+    [firestore, dataScope],
     { idField: '$id' },
   )
   const segments = [...(segmentDocs ?? [])].sort((a, b) =>
@@ -112,13 +107,13 @@ export function HostCampaignsCard(props: { hostId: string }) {
   // Org email lists (AGL-254) join the audiences.
   const { data: listDocs } = useFirestoreCollection<any>(
     () =>
-      scopeReady
+      dataScope
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'lists'),
             limit(50),
           )
         : null,
-    [firestore, hostId, hostOrgId, scopeReady],
+    [firestore, dataScope],
     { idField: '$id' },
   )
   const lists = [...(listDocs ?? [])].sort((a, b) =>

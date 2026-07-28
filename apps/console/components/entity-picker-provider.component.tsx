@@ -52,16 +52,12 @@ const toOptions = (
 export function EntityPickerProvider(props: EntityPickerProviderProps) {
   const { hostId, children } = props
   const firestore = useFirestore()
-  // Datasets are org-scoped (AGL-240); resolve the owning org and fall
-  // back to the host path only for pre-migration hosts. Read-only, so the
-  // AGL-1061 window costs a flash of an empty picker rather than a lost
-  // write — but `scopeReady` still suppresses the query, since listing the
-  // host path is a request that can only ever return nothing.
-  const {
-    scope: dataScope,
-    orgId,
-    ready: scopeReady,
-  } = useOrgDataScope({ hostId })
+  // Datasets are org-scoped (AGL-240). `dataScope` is null until the org
+  // lookup settles (AGL-1061) and for any host without one, so the picker
+  // shows an empty dataset list for a beat rather than listing a host path
+  // that no longer exists (AGL-1050). Read-only, so that flash is the
+  // entire cost.
+  const { scope: dataScope } = useOrgDataScope({ hostId })
   const { data: productDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'products'), limit(300)),
     [firestore, hostId],
@@ -84,13 +80,13 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
   )
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
-      scopeReady
+      dataScope
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'datasets'),
             limit(200),
           )
         : null,
-    [firestore, dataScope[0], dataScope[1], scopeReady],
+    [firestore, dataScope],
     { idField: '$id' },
   )
 

@@ -200,22 +200,34 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   )
   // Scoped (AGL-1044): an unfiltered list is REJECTED for a scoped member,
   // not filtered, so this would error without the constraint.
-  const { tokens: scopeTokens, orgWide: viewerOrgWide } =
-    useScopeTokens(orgId ?? undefined)
+  //
+  // Wait for the member doc before listing (AGL-1047). `useScopeTokens`
+  // reports `orgWide: true` while loading, so without `scopeLoaded` a scoped
+  // collaborator's first render computes `needsScope: false` and sends an
+  // UNFILTERED list that the AGL-1041 rules deny per document. It recovers
+  // on the next render, which is what makes it easy to miss: the page looks
+  // right and logs a denial every mount.
+  const {
+    tokens: scopeTokens,
+    orgWide: viewerOrgWide,
+    loaded: scopeLoaded,
+  } = useScopeTokens(orgId ?? undefined)
   const needsScope = Boolean(orgId) && !viewerOrgWide
   // The AGL-657 types land in neither the components collection nor a pin
   // (AGL-789): a dataset schema becomes an org dataset, an email template a
   // draft version. Both installers stamp the source listing, so read those.
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'orgs', orgId ?? '-pending-', 'datasets'),
-        ...(needsScope
-          ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-          : []),
-        limit(200),
-      ),
-    [firestore, orgId, needsScope, scopeTokens],
+      orgId && scopeLoaded
+        ? query(
+            collection(firestore, 'orgs', orgId, 'datasets'),
+            ...(needsScope
+              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+              : []),
+            limit(200),
+          )
+        : null,
+    [firestore, orgId, scopeLoaded, needsScope, scopeTokens],
     { idField: '$id' },
   )
   const { data: emailDocs } = useFirestoreCollection<any>(

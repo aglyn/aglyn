@@ -63,19 +63,18 @@ export function OrgListsCard(props: OrgListsCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { data: user } = useUser()
-  // The org lookup is async (AGL-1061). `scopeReady` stays false until
-  // it settles, so nothing acts on the host fallback during the window —
-  // a path nothing has read since AGL-1050.
-  const { scope, orgId: hostOrgId, ready: scopeReady } = useOrgDataScope({
-    hostId,
-  })
+  // The org lookup is async (AGL-1061): `scope` is null until it settles,
+  // and stays null for a host with no owning org. Lists have always been
+  // org-shared (AGL-254) — there is no host path to fall back to any more
+  // (AGL-1050), so creating one is held rather than misdirected.
+  const { scope } = useOrgDataScope({ hostId })
 
   const { data: listDocs } = useFirestoreCollection<any>(
     () =>
-      scopeReady
+      scope
         ? query(collection(firestore, scope[0], scope[1], 'lists'), limit(50))
         : null,
-    [firestore, hostId, hostOrgId, scopeReady],
+    [firestore, scope],
     { idField: '$id' },
   )
   const lists = [...(listDocs ?? [])].sort((a, b) =>
@@ -83,6 +82,9 @@ export function OrgListsCard(props: OrgListsCardProps) {
   )
   const [counts, setCounts] = useState<Record<string, number>>({})
   useEffect(() => {
+    // `listDocs` can only be non-empty when `scope` resolved, but the
+    // effect must say so for itself — it reads `scope` outside the query.
+    if (!scope) return undefined
     let active = true
     void Promise.all(
       (listDocs ?? []).map(async (list: any) => {
@@ -111,14 +113,17 @@ export function OrgListsCard(props: OrgListsCardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     firestore,
-    hostOrgId,
+    scope,
     JSON.stringify((listDocs ?? []).map((l: any) => l.$id)),
   ])
 
   const [name, setName] = useState('')
 
   const handleCreate = async () => {
-    if (!name.trim()) return
+    // Without an org there is nowhere org-shared to put the list, and the
+    // host path that used to absorb it is gone (AGL-1050). The button is
+    // disabled here; this is the same answer for a stale closure.
+    if (!name.trim() || !scope) return
     const id = createResourceUid()
     try {
       await setDoc(doc(firestore, scope[0], scope[1], 'lists', id), {
@@ -137,6 +142,7 @@ export function OrgListsCard(props: OrgListsCardProps) {
   }
 
   const handleDelete = async (list: any) => {
+    if (!scope) return
     const accepted = await confirm({
       title: 'Delete list?',
       description: `"${list.name}" and its enrollments stop being targetable; automations enrolling into it start reporting errors.`,
@@ -203,7 +209,7 @@ export function OrgListsCard(props: OrgListsCardProps) {
             size="small"
             variant="contained"
             color="secondary"
-            disabled={!name.trim()}
+            disabled={!name.trim() || !scope}
             onClick={() => void handleCreate()}
           >
             {'Create'}

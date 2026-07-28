@@ -42,14 +42,11 @@ export interface HostReferenceHealthCardProps {
 export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
-  // The org lookup is async (AGL-1061). `scopeReady` stays false until
-  // it settles, so nothing acts on the host fallback during the window —
-  // a path nothing has read since AGL-1050.
-  const {
-    scope: dataScope,
-    orgId: hostOrgId,
-    ready: scopeReady,
-  } = useOrgDataScope({ hostId })
+  // The org lookup is async (AGL-1061). `dataScope` is null until it
+  // settles — and stays null for a host with no owning org — so the two
+  // org-data queries below simply are not issued rather than falling back
+  // to a host path (AGL-1050).
+  const { scope: dataScope } = useOrgDataScope({ hostId })
 
   const useHostCollection = (name: string) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -80,30 +77,32 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   // Memoised: this is a listener DEPENDENCY, and a fresh array each
   // render tears the subscription down and clears its data every time.
   const scopeTokens = useMemo(() => scopeTokensForHost(hostId), [hostId])
-  const needsScope = Boolean(hostOrgId)
+  // The `visibleTo` filter is now unconditional: the only scope this hook
+  // hands out is an org one, and org datasets are all scoped (AGL-1041).
+  // It used to be conditional on having an org, for the host fallback's
+  // sake — those rows carried no `visibleTo` and the filter would have
+  // matched nothing.
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
-      scopeReady
+      dataScope
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'datasets'),
-            ...(needsScope
-              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-              : []),
+            where('visibleTo', 'array-contains-any', scopeTokens),
             limit(100),
           )
         : null,
-    [firestore, hostId, hostOrgId, scopeReady, needsScope, scopeTokens],
+    [firestore, dataScope, scopeTokens],
     { idField: '$id' },
   )
   const { data: listDocs } = useFirestoreCollection<any>(
     () =>
-      scopeReady
+      dataScope
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'lists'),
             limit(100),
           )
         : null,
-    [firestore, hostId, hostOrgId, scopeReady],
+    [firestore, dataScope],
     { idField: '$id' },
   )
 

@@ -101,21 +101,28 @@ export function useHostOrgId(hostId: string | undefined): string | null {
 }
 
 export interface OrgDataScope {
-  /** Firestore parent: `['orgs', orgId]`, or the legacy host fallback. */
-  scope: readonly ['orgs' | 'hosts', string]
+  /**
+   * Firestore parent for org-shared data: `['orgs', orgId]`, or NULL when
+   * there is no such path to build — the lookup is still in flight, or the
+   * host has no owning org. Callers pass `null` straight through to their
+   * query factory, which issues nothing.
+   *
+   * There is deliberately no `['hosts', hostId]` alternative (AGL-1050).
+   */
+  scope: readonly ['orgs', string] | null
   /** The owning org once known, else null. */
   orgId: string | null
   /**
-   * Whether `scope` is trustworthy. FALSE means the answer is still in
-   * flight — suppress queries and disable saves rather than acting on the
-   * fallback, which during that window is a path nothing reads.
+   * Whether the lookup has SETTLED. Distinguishes the two reasons `scope`
+   * is null: false means "not yet, keep the spinner", true means "there is
+   * no org and none is coming" — render the empty state, leave saves off.
    */
   ready: boolean
 }
 
 /**
- * The `['orgs', orgId]` / `['hosts', hostId]` pair every host-scoped card
- * builds, with an honest `ready` flag (AGL-1061).
+ * The `['orgs', orgId]` parent every host-scoped card builds, with an
+ * honest `ready` flag (AGL-1061).
  *
  * This existed as a copy-pasted ternary in nine components:
  *
@@ -128,6 +135,25 @@ export interface OrgDataScope {
  * of every mount, because `useHostOrgId` cannot say "not yet". Centralising
  * it means the window is handled once, correctly, instead of nine times
  * from memory.
+ *
+ * ## Why there is no host fallback any more (AGL-1050)
+ *
+ * That `: ['hosts', hostId]` branch was the pre-AGL-237 storage location,
+ * kept as a migration path. AGL-1061 counted what actually lives there in
+ * production — `datasets`, `lists`, `contacts`, `contactSegments`, exact
+ * count() per host, no truncation — and the answer was 0 across every
+ * host. So it was not a migration path; it was a second address for
+ * org-shared data that nothing had ever written and nothing read back.
+ *
+ * Keeping it ready-gated would have been enough to close the live defect.
+ * It was removed instead because the branch could only ever be reached by
+ * a bug — most sharply through the `hostIndex` lookup's `.catch()`, where
+ * a transient failure used to hand back a confident host path and let the
+ * card save a row nobody could reach afterwards. A null scope cannot do
+ * that: the query is never issued and the save is never enabled.
+ *
+ * The rules now deny `hosts/{hostId}/datasets/**` outright, so the path is
+ * closed on both sides rather than merely unused on one.
  */
 export function useOrgDataScope(options: {
   hostId?: string | undefined
@@ -145,16 +171,10 @@ export function useOrgDataScope(options: {
   return useMemo(
     () => ({
       orgId,
-      // With neither an org nor a host there is no path to be ready FOR.
-      // Reporting ready here would hand callers `['hosts','-none-']` as a
-      // trustworthy scope, which is the one state this flag exists to
-      // prevent — a confidently wrong path rather than a pending one.
-      ready: loaded && Boolean(orgId || hostId),
-      scope: orgId
-        ? (['orgs', orgId] as const)
-        : (['hosts', hostId ?? '-none-'] as const),
+      ready: loaded,
+      scope: orgId ? (['orgs', orgId] as const) : null,
     }),
-    [orgId, hostId, loaded],
+    [orgId, loaded],
   )
 }
 
