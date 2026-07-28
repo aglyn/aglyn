@@ -63,15 +63,16 @@ describe('htmlToRows: code blocks and tables (AGL-981)', () => {
     )
   })
 
-  it('does not steal a nested table’s rows', () => {
+  it('flattens a nested table into its containing cell', () => {
     const rows = htmlToRows(
       '<table><tr><th>A</th></tr><tr><td>' +
         '<table><tr><td>inner</td></tr></table>' +
         '</td></tr></table>',
     )
     const outer = rows[0] as any
-    // Two tables come back, and the outer one owns exactly its own rows.
-    expect(rows.map((row) => row.kind)).toEqual(['table', 'table'])
+    // ONE table: the inner one is not a row of the outer, and the dialect
+    // cannot nest, so its text lands in the cell that held it.
+    expect(rows.map((row) => row.kind)).toEqual(['table'])
     expect(outer.rows).toHaveLength(1)
     expect(outer.rows[0][0]).toEqual([{ type: 'text', text: 'inner' }])
   })
