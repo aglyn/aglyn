@@ -34,10 +34,39 @@ service cloud.firestore {
       function canManageOrg() {
         return isOrgMember() && orgMember().role in ['owner', 'admin'];
       }
+      /**
+       * A member whose reach is the WHOLE org, not a named set of sites
+       * (AGL-1026).
+       *
+       * Adding a site collaborator writes a real org membership — that is
+       * what projects into `memberRoles` and lets them into the console —
+       * scoped with `allHosts: false` and a `hostAccess` map naming their
+       * sites. `isOrgMember()` is a bare exists() and never looked at that
+       * scoping, so a contractor invited to one microsite could read the
+       * whole org's CRM, every shared dataset row, the billing state and the
+       * full team roster with everyone's email. The console never showed
+       * them any of it; the rules are the boundary, and they were open.
+       *
+       * Owners and admins span the org by definition. Everyone else needs
+       * `allHosts` — the same predicate `hostRoleFor` applies in code.
+       */
+      function isOrgWideMember() {
+        return isOrgMember() &&
+          (orgMember().role in ['owner', 'admin'] ||
+           orgMember().get('allHosts', false) == true);
+      }
       function orgNotSuspended() {
         return orgMember().get('orgSuspended', false) != true;
       }
 
+      // Deliberately still ANY member, including a scoped collaborator
+      // (AGL-1026): this doc carries `plan` and `entitlements`, which every
+      // console surface gates features on, so denying it would lock a
+      // collaborator out of the site they were invited to. It also carries
+      // `stripeCustomerId` and `subscription` — Firestore has no field-level
+      // reads, so narrowing that means moving the billing keys to their own
+      // manager-gated document. Tracked separately rather than pretended
+      // about here.
       allow read: if isStaff() || isOrgMember();
       // Org creation/deletion and the slug/owner/billing keys are
       // Admin-SDK-only (org APIs, Stripe webhook, staff tooling), with
@@ -62,12 +91,19 @@ service cloud.firestore {
              'enabledPlugins', 'seatAddons', 'stripeCustomerId', 'subscription',
              'suspendedAt', 'suspendedReason', 'erasureRequestedAt']));
 
-      // The roster is visible to the whole org (names/emails are
-      // denormalized for the team page); mutations go through the
-      // membership API so the reverse index and host projections stay
-      // consistent.
+      // The roster carries names and emails, denormalized for the team page,
+      // so it is visible to the org — not to a site collaborator, who has no
+      // business knowing who else the workspace employs (AGL-1026). Reading
+      // your OWN membership stays open to everyone: it is how the console
+      // resolves the reader's role and site access, and refusing it would
+      // lock scoped collaborators out of their own sites.
+      //
+      // Mutations go through the membership API so the reverse index and host
+      // projections stay consistent.
       match /members/{memberUid} {
-        allow read: if isStaff() || isOrgMember();
+        allow read: if isStaff() ||
+          (isSignedIn() && memberUid == request.auth.uid) ||
+          isOrgWideMember();
         allow write: if false;
       }
 
@@ -86,15 +122,17 @@ service cloud.firestore {
       }
 
       // Monthly usage rollups (AGL-41) + the live API-request meter
-      // (AGL-635): member-readable so the Billing page usage meters show real
-      // numbers. Written only by the server — the report-usage cron and the
+      // (AGL-635): readable by the org so the Billing page usage meters show
+      // real numbers — and org-wide only (AGL-1026), because how much the
+      // workspace spends is not a fact about the one site a collaborator was
+      // invited to. Written only by the server — the report-usage cron and the
       // customer-API auth chokepoint via the Admin SDK, which bypasses rules.
       match /usage/{month} {
-        allow read: if isStaff() || isOrgMember();
+        allow read: if isStaff() || isOrgWideMember();
         allow write: if false;
       }
       match /apiUsage/{month} {
-        allow read: if isStaff() || isOrgMember();
+        allow read: if isStaff() || isOrgWideMember();
         allow write: if false;
       }
 
@@ -111,6 +149,15 @@ service cloud.firestore {
       // and segments are shared across every host in the org. Any member
       // reads; editors and up write; viewers stay read-only. Suspension
       // rides the member doc like org renames.
+      //
+      // AGL-1026 split this block. Contacts, segments and lists moved to
+      // org-wide readers (they are people, see below). Datasets, media and
+      // media folders deliberately did NOT: a site's pages bind org datasets
+      // and place org media, so a collaborator building that site has to read
+      // them, and there is no per-site association to filter on — a dataset
+      // belongs to the org and nothing records which sites use it. Scoping
+      // these needs that association to exist first, which is a schema change,
+      // not a rules edit.
       function canWriteOrgData() {
         return isOrgMember() &&
           orgMember().role in ['owner', 'admin', 'editor'] &&
@@ -136,12 +183,20 @@ service cloud.firestore {
           allow update, delete: if isStaff() || canWriteOrgData();
         }
       }
+      // The CRM is org-wide-only (AGL-1026). Contacts and segments are people
+      // — names, emails, everything a form ever collected, across every site
+      // — and there is no per-site slice of them to hand a collaborator: a
+      // contact belongs to the org, not to the site whose form created it.
+      // Given the choice between showing a one-site contractor the whole
+      // customer list and showing them none of it, none is the only defensible
+      // one. A collaborator who genuinely needs their site's leads should get
+      // them through a server route that filters, not a widened rule.
       match /contacts/{contactId} {
-        allow read: if isStaff() || isOrgMember();
+        allow read: if isStaff() || isOrgWideMember();
         allow write: if isStaff() || canWriteOrgData();
       }
       match /contactSegments/{segmentId} {
-        allow read: if isStaff() || isOrgMember();
+        allow read: if isStaff() || isOrgWideMember();
         allow write: if isStaff() || canWriteOrgData();
       }
 
@@ -153,11 +208,13 @@ service cloud.firestore {
       // with no list to reach them from. /api/resources/erase walks the
       // whole subtree; enrollments below stay individually deletable.
       match /lists/{listId} {
-        allow read: if isStaff() || isOrgMember();
+        // Enrolled members are contacts, so the list follows the CRM
+        // (AGL-1026): org-wide readers only.
+        allow read: if isStaff() || isOrgWideMember();
         allow create, update: if isStaff() || canWriteOrgData();
         allow delete: if isStaff();
         match /members/{memberId} {
-          allow read: if isStaff() || isOrgMember();
+          allow read: if isStaff() || isOrgWideMember();
           allow write: if isStaff() || canWriteOrgData();
         }
       }
@@ -188,10 +245,13 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      // Org activity log: mirrors hosts/{hostId}/activity, visible to any
-      // member; written only by the org API routes (Admin SDK).
+      // Org activity log: mirrors hosts/{hostId}/activity. Org-wide readers
+      // only (AGL-1026) — it names who did what across every site, which is
+      // both a roster leak and a map of work on sites the reader cannot see.
+      // A collaborator still gets their own sites' log at
+      // `hosts/{hostId}/activity`.
       match /activity/{entryId} {
-        allow read: if isStaff() || isOrgMember();
+        allow read: if isStaff() || isOrgWideMember();
         allow write: if false;
       }
     }
