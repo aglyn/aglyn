@@ -129,6 +129,29 @@ async function main() {
     { merge: true },
   )
 
+  // The reverse index the Workspaces page lists from. Without it every one
+  // of these accounts signs in successfully and lands on "Create your first
+  // site" — a member doc alone does not make the org REACHABLE, and the org
+  // has to be reachable before anyone can drive the console as a scoped
+  // collaborator (AGL-1047). This is why the fixture existed for a UI pass
+  // that had never actually been run.
+  for (const { uid, role } of USERS) {
+    await db
+      .collection('users')
+      .doc(uid)
+      .collection('orgs')
+      .doc(ORG_ID)
+      .set(
+        {
+          orgName: 'Scope Agency',
+          slug: ORG_ID,
+          role,
+          createdAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+  }
+
   for (const hostId of ALL_HOSTS) {
     await db.collection('hostIndex').doc(hostId).set({ orgId: ORG_ID })
     await db.collection('hosts').doc(hostId).set(

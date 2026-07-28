@@ -285,7 +285,11 @@ await put(firestore.collection('hosts').doc(hostId), {
   displayName: 'Demo Bakery',
   orgId,
   memberRoles: { [E2E_UID]: 'admin' },
-  screens: { 'seed-home': 'home', 'seed-guide-survey-screen': 'survey' },
+  screens: {
+    'seed-home': 'home',
+    'seed-guide-survey-screen': 'survey',
+    'seed-scoped': 'scoped',
+  },
   createdAt: now,
 })
 const hostRef = firestore.collection('hosts').doc(hostId)
@@ -473,6 +477,29 @@ for (const [index, [name, role, photo]] of teamRows.entries()) {
     createdAt: now,
   })
 }
+
+// The scoped-sharing fixture (AGL-1047). Restricted to a host this org
+// does NOT serve, so the seeded `demo` site must never see it — and given
+// a `displayName` the /scoped screen binds by NAME, which is the exact
+// shape of the original leak: `getDatasets` keyed its map by displayName
+// across the whole org, so a client site could bind a repeatable to the
+// agency's internal dataset and render it publicly.
+//
+// The row text is deliberately distinctive: the tenant production smoke
+// asserts it is ABSENT from the rendered HTML. Do not reuse it anywhere.
+const ratesDataset = orgRef.collection('datasets').doc('seed-internal-rates')
+await put(ratesDataset, {
+  name: 'Internal rates',
+  displayName: 'Internal rates',
+  fields: ['name'],
+  visibleTo: ['host:seed-internal-only'],
+  createdAt: now,
+})
+await put(ratesDataset.collection('records').doc('seed-rate-1'), {
+  values: { name: 'INTERNAL-RATE-CARD-SECRET' },
+  order: 0,
+  createdAt: now,
+})
 
 // Target of the /survey screen's Form (matched by `displayName`), so the
 // seeded form can actually submit rather than pointing at nothing. Same
@@ -662,6 +689,67 @@ await put(homeScreen.collection('versions').doc('seed-home-v1'), {
       componentId: 'muiButton',
       parentId: 'stack',
       props: { children: 'Order now', variant: 'contained' },
+    },
+  },
+  createdAt: now,
+})
+
+// The scoped-sharing render proof (AGL-1047), published at /scoped. Two
+// repeatables side by side, so one page asserts both directions at once:
+//
+// - `seed-team` by ID — visible to this site, must render its rows. Without
+//   it a boundary bug that hides EVERYTHING would still look like a pass.
+// - `Internal rates` by NAME — restricted to another host, must render
+//   nothing. Binding by name rather than id is the point: the name is the
+//   attack surface, since an editor can type any dataset name they can
+//   guess and the runtime used to resolve it org-wide.
+//
+// The container renders its template untouched when a dataset resolves to
+// nothing, which is the documented fail-open behavior — so the assertion
+// is on the row TEXT ('INTERNAL-RATE-CARD-SECRET'), never on the markup.
+const scopedScreen = hostRef.collection('screens').doc('seed-scoped')
+await put(scopedScreen, {
+  displayName: 'Scoped',
+  slug: 'scoped',
+  versionId: 'seed-scoped-v1',
+  createdAt: now,
+})
+await put(scopedScreen.collection('versions').doc('seed-scoped-v1'), {
+  screenId: 'seed-scoped',
+  nodes: {
+    '_@_': { $id: '_@_', componentId: 'root', nodes: ['wrap'] },
+    wrap: {
+      $id: 'wrap',
+      componentId: 'muiContainer',
+      parentId: '_@_',
+      nodes: ['visible', 'restricted'],
+      props: { maxWidth: 'md' },
+    },
+    visible: {
+      $id: 'visible',
+      componentId: 'muiStack',
+      parentId: 'wrap',
+      nodes: ['visibleRow'],
+      props: { spacing: 1, repeatDataset: 'seed-team' },
+    },
+    visibleRow: {
+      $id: 'visibleRow',
+      componentId: 'muiTypography',
+      parentId: 'visible',
+      props: { children: '{{item.name}}', variant: 'body1' },
+    },
+    restricted: {
+      $id: 'restricted',
+      componentId: 'muiStack',
+      parentId: 'wrap',
+      nodes: ['restrictedRow'],
+      props: { spacing: 1, repeatDataset: 'Internal rates' },
+    },
+    restrictedRow: {
+      $id: 'restrictedRow',
+      componentId: 'muiTypography',
+      parentId: 'restricted',
+      props: { children: '{{item.name}}', variant: 'body1' },
     },
   },
   createdAt: now,
