@@ -162,8 +162,10 @@ function HostsContent() {
                   contentBordered="bottom"
                   HeaderProps={{
                     // The site's own favicon when it has one (AGL-647),
-                    // falling back to the generic glyph — same treatment as
-                    // the site switcher.
+                    // falling back to the generic glyph. This list reads real
+                    // host docs; the switcher reads the hostMemberships
+                    // projection, which had to learn the field separately
+                    // before the two actually matched (AGL-1071).
                     avatar: (
                       <HostIcon
                         host={host}

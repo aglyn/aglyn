@@ -54,6 +54,7 @@ const CHUNK = 400
 interface HostMeta {
   displayName?: string
   subdomain?: string
+  favicon?: string
 }
 
 const orgHostIds = async (
@@ -77,7 +78,13 @@ const readHostMeta = async (
   return new Map(
     snaps.map((snap) => [
       snap.id,
-      { displayName: snap.get('displayName'), subdomain: snap.get('subdomain') },
+      {
+        displayName: snap.get('displayName'),
+        subdomain: snap.get('subdomain'),
+        // The switcher renders from the projection, not the host doc, so the
+        // favicon has to travel with it (AGL-1071).
+        favicon: snap.get('seo')?.favicon,
+      },
     ]),
   )
 }
@@ -100,13 +107,28 @@ const membershipRef = (
   hostId: string,
 ) => db.collection('users').doc(uid).collection('hostMemberships').doc(hostId)
 
-const membershipRow = (orgId: string, meta: HostMeta | undefined, role: string) => {
+/**
+ * Shape one projection row. Exported for tests: the favicon rule below is a
+ * delete-vs-omit decision that is invisible in review and silent in
+ * production when wrong (AGL-1071).
+ */
+export const membershipRow = (
+  orgId: string,
+  meta: HostMeta | undefined,
+  role: string,
+) => {
   const displayName = meta?.displayName ?? ''
   return {
     orgId,
     ...(meta?.subdomain ? { subdomain: meta.subdomain } : {}),
     displayName,
     nameLower: nameSearchKey(displayName),
+    // DELETE rather than omit when the site has no favicon (AGL-1071). These
+    // rows are written with `{ merge: true }`, so omitting the key leaves
+    // whatever was there — clearing a favicon would keep showing the old one
+    // in the switcher until something unrelated rewrote the row. The clear
+    // path writes `seo.favicon: ''`, so test truthiness, not nullishness.
+    favicon: meta?.favicon ? meta.favicon : FieldValue.delete(),
     role,
     updatedAt: FieldValue.serverTimestamp(),
   }

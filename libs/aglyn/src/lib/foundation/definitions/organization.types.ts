@@ -181,6 +181,15 @@ export interface UserHostMembership extends AglynDocument {
   subdomain?: string
   displayName?: string
   nameLower?: string
+  /**
+   * Mirror of the host's `seo.favicon` (AGL-1071). The site switcher renders
+   * from this projection rather than the host doc, so without the mirror it
+   * showed the generic glyph for every site — the favicon feature worked in
+   * the sites list and nowhere else. Absent when the site has none; writers
+   * must DELETE it on clear rather than omit it, since the rows are written
+   * with `{ merge: true }` and an omitted field would keep the old icon.
+   */
+  favicon?: string
   role?: HostAccessRole
   updatedAt?: ITimestamp
 }
