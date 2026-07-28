@@ -437,6 +437,15 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                     <MenuItem value="org">{'All sites'}</MenuItem>
                     <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
                   </Select>
+                  {/* Says what sharing does NOT do, which is the part
+                      people get wrong (AGL-1046). It controls which sites
+                      may use the data; it is not a permission on the rows
+                      a published page already renders. */}
+                  <Typography variant="caption" color="text.secondary">
+                    {
+                      'Sites you exclude cannot see or use this dataset — in the console or on their pages.'
+                    }
+                  </Typography>
                   {!visibleTo.includes(ORG_SCOPE_TOKEN) ? (
                     <Stack
                       direction="row"

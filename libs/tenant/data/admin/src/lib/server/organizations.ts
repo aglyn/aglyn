@@ -350,9 +350,23 @@ export async function getOrgForUser(
  * collection nothing reads. Every host has an org; `hostIndex` is written
  * by `registerOrgHost` at creation.
  */
+/**
+ * The org-owned collections a host reads in its own context. Every one of
+ * these carries `visibleTo` (AGL-1037) and so must go through
+ * `scopedToHost` on any Admin-SDK path — `media` and `mediaFolders` were
+ * added for the export route (AGL-1046), which had been reading the
+ * legacy host path and exporting nothing at all.
+ */
+export type OrgDataCollection =
+  | 'datasets'
+  | 'contacts'
+  | 'contactSegments'
+  | 'media'
+  | 'mediaFolders'
+
 export async function orgDataCollectionForHost(
   hostId: string,
-  name: 'datasets' | 'contacts' | 'contactSegments',
+  name: OrgDataCollection,
 ): Promise<FirebaseFirestore.CollectionReference> {
   const orgId = await resolveOrgIdForHost(hostId)
   if (!orgId) {
@@ -399,7 +413,7 @@ export function scopedToHost(
  */
 export async function orgDataQueryForHost(
   hostId: string,
-  name: 'datasets' | 'contacts' | 'contactSegments',
+  name: OrgDataCollection,
 ): Promise<{
   ref: FirebaseFirestore.CollectionReference
   query: FirebaseFirestore.Query

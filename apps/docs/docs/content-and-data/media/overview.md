@@ -74,6 +74,27 @@ Links copied before this behavior shipped keep working too.
 When a visitor saves a delivered file, it keeps the asset's **original filename and
 extension**, even though the URL itself doesn't carry one.
 
+## Who an asset is shared with
+
+Workspace media is shared across every site by default. The **Sharing** control on each
+asset and folder narrows that, with the same three choices as datasets — **All sites**,
+**This site only**, or **Selected sites…**. A folder's sharing applies to what it holds,
+so scoping a "Client A" folder scopes the assets inside it.
+
+In the media picker's **Organization (shared)** tab, a site sees only the assets it may
+use. An agency's internal artwork stays out of the client sites' pickers entirely.
+
+:::warning Sharing controls discovery, not secrecy
+Sharing decides which sites may **find and use** an asset, and stops the CDN serving a
+restricted asset to a site it isn't shared with. It does **not** make the bytes secret:
+anyone holding a delivered media URL can still fetch it, because that URL is public and
+cacheable by design — that is what makes the CDN fast.
+
+Treat a media URL as a shareable link. If an asset must never be fetchable by someone who
+has its URL — signed contracts, unreleased artwork, anything with personal data — the
+media library is the wrong place for it today.
+:::
+
 ## Components
 
 - **Image** — place and bind images from the library.

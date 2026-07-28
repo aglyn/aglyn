@@ -363,6 +363,10 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           scopeId: dataScope[1],
           kind: 'datasets',
           id: selected.$id,
+          // Names the site this delete was issued from, so the route can
+          // refuse to destroy a dataset shared beyond it (AGL-1046). The
+          // org Data page passes no host and keeps the org-wide delete.
+          hostId,
         }),
       })
       const result = await response.json().catch(() => ({}))
@@ -386,6 +390,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     confirm,
     dataScope[0],
     dataScope[1],
+    hostId,
     user,
     enqueueSnackbar,
     logActivity,
