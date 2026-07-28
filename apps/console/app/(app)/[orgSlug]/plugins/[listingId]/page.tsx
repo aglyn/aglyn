@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { FIRST_PARTY_PLUGINS } from '@aglyn/aglyn'
 import { mdiPuzzleOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
@@ -43,9 +44,16 @@ import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
  * but neither scope nor settings. Nothing in the UI stood for "this plugin,
  * as installed here" — which is the thing an admin actually reasons about.
  *
- * Keyed by LISTING id, because that is what an install pin is keyed by. The
- * plugin id (which its settings are stored under) comes off the pin's own
- * manifest rather than the URL, so the two identifiers cannot disagree.
+ * The segment accepts EITHER identifier (AGL-1010), because the console has
+ * two kinds of plugin and an admin does not think of them as different
+ * things: a marketplace install is keyed by listing id (what its pin is
+ * keyed by), a first-party plugin by its registry id. Marketplace installs
+ * take their plugin id off the pin's own manifest rather than the URL, so
+ * the two identifiers cannot disagree.
+ *
+ * The folder is still named `[listingId]`; renaming a dynamic segment costs
+ * a dev-server restart for everyone (see AGL-1001), so it is left for a
+ * moment when that is not disruptive.
  */
 const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
@@ -53,8 +61,15 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const firestore = useFirestore()
   const params = useParams<{ listingId: string }>()
-  const listingId = String(params.listingId ?? '')
+  const pluginRef = String(params.listingId ?? '')
   const orgId = currentOrg?.$id ?? ''
+  // First-party plugins are a registry entry, not an install pin: they have
+  // no listing, no version and no per-site scope — they are on or off for
+  // the whole workspace.
+  const firstParty = FIRST_PARTY_PLUGINS.find(
+    (plugin) => plugin.id === pluginRef,
+  )
+  const listingId = firstParty ? '' : pluginRef
 
   const { hosts } = useOrgHosts(
     firestore,
@@ -121,8 +136,12 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
     () => orgPin ?? Object.values(sitePins).find(Boolean) ?? null,
     [orgPin, sitePins],
   )
-  const pluginId = String(pin?.pluginId ?? pin?.manifest?.id ?? '')
-  const displayName = String(pin?.displayName ?? listingId)
+  const pluginId = firstParty
+    ? firstParty.id
+    : String(pin?.pluginId ?? pin?.manifest?.id ?? '')
+  const displayName = firstParty
+    ? firstParty.label
+    : String(pin?.displayName ?? pluginRef)
   const capabilities: string[] = Array.isArray(pin?.manifest?.capabilities)
     ? pin.manifest.capabilities
     : []
@@ -145,14 +164,14 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
       <DashboardLayout
         breadcrumbItems={[
           {
-            children: 'Marketplace',
-            href: buildRoute(Route.ORG_MARKETPLACE, { orgSlug }),
+            children: 'Plugins',
+            href: buildRoute(Route.ORG_PLUGINS, { orgSlug }),
           },
           {
             children: displayName,
             href: buildRoute(Route.ORG_PLUGIN_INSTALLATION, {
               orgSlug,
-              listingId,
+              listingId: pluginRef,
             }),
           },
         ]}
@@ -160,41 +179,64 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
           children: displayName,
           icon: { path: mdiPuzzleOutline.path },
         }}
+        // A first-party plugin has no marketplace listing to go back to.
         headerRight={
-          <AppLink
-            href={buildRoute(Route.ORG_MARKETPLACE_LISTING, {
-              orgSlug,
-              listingId,
-            })}
-          >
-            <Button variant="outlined" color="secondary" component="span">
-              {'View listing'}
-            </Button>
-          </AppLink>
+          firstParty ? undefined : (
+            <AppLink
+              href={buildRoute(Route.ORG_MARKETPLACE_LISTING, {
+                orgSlug,
+                listingId,
+              })}
+            >
+              <Button variant="outlined" color="secondary" component="span">
+                {'View listing'}
+              </Button>
+            </AppLink>
+          )
         }
         help="plugins"
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <Stack spacing={3}>
-            {!installedAnywhere ? (
+            {!firstParty && !installedAnywhere ? (
               <Alert severity="info">
                 {'This plugin is not installed in this organization. Install ' +
                   'it from its marketplace listing.'}
               </Alert>
             ) : null}
 
-            {/* Where it runs — the same control the listing page uses
-                (AGL-997), not a second implementation of it. */}
+            {/* Where it runs. A marketplace install is a set of pins, so it
+                gets the AGL-997 control; a first-party plugin has no pins at
+                all — it is on or off for the workspace — and pretending
+                otherwise would invent a scope it does not have. */}
             <CardDisplay header={'Where it runs'} contentGutterX contentGutterY>
-              <PluginWidgetSlot
-                slot="pluginSiteSet"
-                hostId={hostList[0]?.id ?? ''}
-                listingId={listingId}
-                orgScoped
-                orgSlug={orgSlug}
-                hosts={hostList}
-                onChanged={onChanged}
-              />
+              {firstParty ? (
+                <Stack spacing={1}>
+                  <Typography variant="body2">
+                    {firstParty.alwaysOn
+                      ? 'Always on, for every site in this organization — it ' +
+                        'is what sites are built out of, so it cannot be ' +
+                        'turned off.'
+                      : 'Every site in this organization. Turn it on or off ' +
+                        'for the whole workspace from Plugins.'}
+                  </Typography>
+                  {firstParty.description ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {firstParty.description}
+                    </Typography>
+                  ) : null}
+                </Stack>
+              ) : (
+                <PluginWidgetSlot
+                  slot="pluginSiteSet"
+                  hostId={hostList[0]?.id ?? ''}
+                  listingId={listingId}
+                  orgScoped
+                  orgSlug={orgSlug}
+                  hosts={hostList}
+                  onChanged={onChanged}
+                />
+              )}
             </CardDisplay>
 
             {/* Settings — the reason this page exists. Bookings settings
@@ -205,9 +247,13 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
               <PluginConfigCards orgId={orgId} pluginId={pluginId} />
             ) : null}
 
-            {/* Permissions & data. The listing page shows this BEFORE you
-                install, which is backwards — it matters more once the thing
-                is running in your workspace. */}
+            {/* Permissions & data, for third-party code only: a
+                first-party plugin ships with the platform and declares no
+                sandbox manifest, so this card would be four empty fields
+                implying a boundary that is not how it runs. The listing page
+                shows this BEFORE you install, which is backwards — it
+                matters more once the thing is running in your workspace. */}
+            {firstParty ? null : (
             <CardDisplay
               header={'Permissions & data'}
               contentGutterX
@@ -260,6 +306,7 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
                 </Stack>
               </Stack>
             </CardDisplay>
+            )}
           </Stack>
         </Container>
       </DashboardLayout>
