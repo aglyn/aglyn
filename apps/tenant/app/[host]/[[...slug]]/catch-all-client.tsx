@@ -462,6 +462,68 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                   </ul>
                 )
               }
+              // Code blocks and tables (AGL-974) — both scroll instead of
+              // wrapping, so a wide one never widens the article itself.
+              if (block.type === 'code') {
+                return (
+                  <pre
+                    key={index}
+                    style={{
+                      overflowX: 'auto',
+                      padding: 16,
+                      borderRadius: 8,
+                      background: 'rgba(127, 127, 127, 0.12)',
+                    }}
+                  >
+                    <code>{block.text}</code>
+                  </pre>
+                )
+              }
+              if (block.type === 'table') {
+                return (
+                  <div key={index} style={{ overflowX: 'auto' }}>
+                    <table
+                      style={{ borderCollapse: 'collapse', width: '100%' }}
+                    >
+                      <thead>
+                        <tr>
+                          {block.header.map((cell, i) => (
+                            <th
+                              key={i}
+                              style={{
+                                border: '1px solid rgba(127, 127, 127, 0.4)',
+                                padding: '8px 12px',
+                                textAlign: block.align[i] ?? 'left',
+                                background: 'rgba(127, 127, 127, 0.12)',
+                              }}
+                            >
+                              {inline(cell)}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {block.rows.map((row, rowIndex) => (
+                          <tr key={rowIndex}>
+                            {row.map((cell, i) => (
+                              <td
+                                key={i}
+                                style={{
+                                  border: '1px solid rgba(127, 127, 127, 0.4)',
+                                  padding: '8px 12px',
+                                  textAlign: block.align[i] ?? 'left',
+                                }}
+                              >
+                                {inline(cell)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              }
               return (
                 <p key={index} style={{ lineHeight: 1.7 }}>
                   {inline(block.inlines)}

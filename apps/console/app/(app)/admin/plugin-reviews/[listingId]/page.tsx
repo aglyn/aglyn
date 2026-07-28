@@ -24,8 +24,12 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
+  Checkbox,
   Chip,
   Divider,
+  FormControlLabel,
+  Link as MuiLink,
+  MenuItem,
   Skeleton,
   Stack,
   TextField,
@@ -37,6 +41,8 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
 import { docsHelp } from '../../../../../constants/docs-links'
+import { PLUGIN_REVIEW_CHECKLIST } from '../../../../../constants/plugin-review-checklist'
+import { reviewStatusMeaning } from '../../../../../constants/plugin-review-status'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 
@@ -48,6 +54,8 @@ interface VersionEntry {
   capabilities: { network?: string[]; events?: string[] }
   publishedAt: string | null
   signed: boolean
+  reviewState: string
+  grandfathered: boolean
 }
 
 interface ListingDetail {
@@ -78,6 +86,14 @@ interface ListingDetail {
     problems?: Array<{ level: string; message: string }>
     error?: string
   } | null
+  /** The verdict came from the version doc rather than a fresh download. */
+  verifierCached: boolean
+  /** Ticked items, keyed by id, for THIS version's bytes (AGL-963). */
+  checklist: Record<string, { by: string | null }>
+  checklistOutstanding: string[]
+  /** The version the checklist and verifier verdict above refer to. */
+  reviewVersion: string
+  private: boolean
 }
 
 /** Verifier findings read as a wall of text otherwise; group by severity. */
@@ -101,6 +117,9 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
   const [busy, setBusy] = useState(false)
   const [reason, setReason] = useState('')
   const [takedownReason, setTakedownReason] = useState('')
+  // Which version is being reviewed. Empty = let the server pick the oldest
+  // one still awaiting a verdict, which is the work queue for this listing.
+  const [selectedVersion, setSelectedVersion] = useState('')
 
   const token = useCallback(
     async () =>
@@ -112,12 +131,15 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
     const idToken = await token()
     if (!idToken || !listingId) return
     const response = await fetch(
-      `/api/admin/plugin-reviews?listingId=${encodeURIComponent(listingId)}`,
+      `/api/admin/plugin-reviews?listingId=${encodeURIComponent(listingId)}` +
+        (selectedVersion
+          ? `&version=${encodeURIComponent(selectedVersion)}`
+          : ''),
       { headers: { Authorization: `Bearer ${idToken}` } },
     )
     if (response.ok) setDetail(await response.json())
     setLoaded(true)
-  }, [token, listingId])
+  }, [token, listingId, selectedVersion])
 
   useEffect(() => {
     if (user) void refresh()
@@ -212,6 +234,95 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
     setTakedownReason('')
   }, [detail, takedownReason, post, enqueueSnackbar])
 
+  const status = reviewStatusMeaning(detail?.reviewStatus ?? '')
+  const blocked = (detail?.checklistOutstanding.length ?? 0) > 0
+
+  /**
+   * Where a reviewer actually goes to check each item (AGL-973).
+   *
+   * Without these, the checklist asks people to "read the bundle source"
+   * with no way to reach it — the bundle lives in a private bucket behind
+   * the plugin origin, and its URL is content-addressed, so nobody could
+   * construct it by hand. An unactionable checklist gets ticked without
+   * being done, which is worse than no checklist.
+   */
+  const artifactUrl = (version: string) => {
+    const entry = detail?.versions.find((item) => item.version === version)
+    if (!entry?.sha256) return null
+    const path = `/artifacts/${detail?.listingId}/${version}/${entry.sha256}.bundle`
+    const origin = process.env.NEXT_PUBLIC_PLUGIN_ORIGIN ?? ''
+    // The plugin origin just edge-rewrites to the console's own artifact
+    // route, so fall back to that directly when the origin is unset — as it
+    // is on every dev machine. Without the fallback the "read the bundle
+    // source" link silently vanished exactly where it matters most, and a
+    // reviewer had no way to reach the code they are certifying.
+    return origin
+      ? `${origin.replace(/\/+$/, '')}${path}`
+      : `/api/plugin-artifacts/${detail?.listingId}/${version}/${entry.sha256}.bundle`
+  }
+
+  const checklistLink = (
+    itemId: string,
+  ): { href: string; label: string; external?: boolean } | null => {
+    if (!detail) return null
+    // The version approved before this one — what a diff should be against.
+    const previousApproved = detail.versions
+      .filter(
+        (entry) =>
+          entry.version !== detail.reviewVersion &&
+          entry.reviewState === 'approved',
+      )
+      .at(0)
+    switch (itemId) {
+      case 'provenance':
+        return detail.repositoryUrl
+          ? { href: detail.repositoryUrl, label: 'Open repository', external: true }
+          : null
+      case 'publisher':
+        return {
+          href: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: detail.publisherId }),
+          label: 'Publisher workspace',
+        }
+      case 'source-read': {
+        const href = artifactUrl(detail.reviewVersion)
+        return href
+          ? { href, label: `Read v${detail.reviewVersion} bundle`, external: true }
+          : null
+      }
+      case 'diff': {
+        const href = previousApproved
+          ? artifactUrl(previousApproved.version)
+          : null
+        return href
+          ? {
+              href,
+              label: `Previous approved: v${previousApproved?.version}`,
+              external: true,
+            }
+          : null
+      }
+      case 'behaviour':
+        return detail.publisherSlug
+          ? {
+              href: buildRoute(Route.ORG_MARKETPLACE_LISTING, {
+                orgSlug: detail.publisherSlug,
+                listingId: detail.listingId,
+              }),
+              label: 'Marketplace listing',
+            }
+          : null
+      case 'license':
+      case 'support':
+        return detail.homepageUrl
+          ? { href: detail.homepageUrl, label: 'Homepage', external: true }
+          : detail.repositoryUrl
+            ? { href: detail.repositoryUrl, label: 'Repository', external: true }
+            : null
+      default:
+        return null
+    }
+  }
+
   const findings = (detail?.verifier?.problems ?? [])
     .slice()
     .sort(
@@ -261,7 +372,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                     >
-                      <Chip size="small" label={detail.reviewStatus} />
+                      <Chip size="small" color={status.color} label={status.label} />
                       <Chip
                         size="small"
                         variant="outlined"
@@ -296,6 +407,9 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         />
                       ) : null}
                     </Stack>
+                    <Typography variant="caption" color="text.secondary">
+                      {status.meaning}
+                    </Typography>
                     <Typography variant="body2" color="text.secondary">
                       {'Publisher: '}
                       {detail.publisherSlug ? (
@@ -312,6 +426,17 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       )}
                       {` · ${detail.listingId}`}
                     </Typography>
+                    {/* Grandfathering (AGL-965): plugins listed before the
+                        checklist existed are still listed — retroactively
+                        emptying the marketplace would be worse than the gap
+                        — but staff should be able to see which ones carry
+                        no recorded review for the bytes running today. */}
+                    {['listed', 'verified'].includes(detail.reviewStatus) &&
+                    detail.checklistOutstanding.length ? (
+                      <Alert severity="warning">
+                        {`Live in the marketplace with no recorded review for these bytes (${detail.checklistOutstanding.length} required item(s) outstanding). Work through the checklist, or delist while you do.`}
+                      </Alert>
+                    ) : null}
                     {detail.rejectionReason ? (
                       <Alert severity="error">
                         {`Rejected: ${detail.rejectionReason}`}
@@ -398,7 +523,18 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         detail.versions[0]?.hostAbi ?? 'none (legacy)'
                       }, platform runs ${detail.platformHostAbi}`}
                     </Typography>
-                    {detail.verifier?.error ? (
+                    {/* "No findings" and "never checked" must not look the
+                        same. A null verdict means the artifacts bucket is
+                        unreachable or unconfigured, and rendering that as a
+                        clean bill of health would invite a reviewer to
+                        approve a bundle nobody has inspected. */}
+                    {!detail.verifier ? (
+                      <Alert severity="warning">
+                        {'The static verifier has not run for this version — ' +
+                          'no artifact was reachable. Treat this as unchecked, ' +
+                          'not as clean.'}
+                      </Alert>
+                    ) : detail.verifier.error ? (
                       <Alert severity="warning">
                         {`Verifier could not run: ${detail.verifier.error}`}
                       </Alert>
@@ -418,11 +554,130 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                     ) : (
                       <Alert severity="success">
                         {'Static verifier found nothing.'}
+                        {/* Says WHICH bytes, because that is what makes a
+                            stored verdict trustworthy — not when it ran. */}
+                        {detail.verifierCached
+                          ? ' Stored verdict for these exact bytes.'
+                          : ''}
                       </Alert>
                     )}
                   </Stack>
                 </CardDisplay>
 
+                {/* The checklist is the actual review (AGL-963). The static
+                    verifier matches source TEXT, so computed access like
+                    g['ev'+'al'] walks straight past it — these items are the
+                    things a machine structurally cannot judge. */}
+                <CardDisplay
+                  header={`Review checklist — v${detail.reviewVersion} (${
+                    PLUGIN_REVIEW_CHECKLIST.filter(
+                      (item) => detail.checklist?.[item.id],
+                    ).length
+                  }/${PLUGIN_REVIEW_CHECKLIST.length})`}
+                  contentGutterX
+                  contentGutterY
+                >
+                  <Stack spacing={1}>
+                    <Typography variant="body2" color="text.secondary">
+                      {'The static verifier is a lint, not a boundary — it ' +
+                        'cannot see computed property access, tell code from ' +
+                        'comments, or judge intent. These are the checks only ' +
+                        'a person can make. Ticks are recorded against this ' +
+                        "version's exact bytes and reset if it is republished."}
+                    </Typography>
+                    {detail.checklistOutstanding.length ? (
+                      <Alert severity="info">
+                        {`${detail.checklistOutstanding.length} required item(s) outstanding — List and Verify stay blocked until they are done. Rejecting never needs the checklist.`}
+                      </Alert>
+                    ) : (
+                      <Alert severity="success">
+                        {'Every required item is recorded for these bytes.'}
+                      </Alert>
+                    )}
+                    {PLUGIN_REVIEW_CHECKLIST.map((item) => (
+                      <Stack key={item.id} spacing={0.25} sx={{ pl: 0.5 }}>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              size="small"
+                              checked={Boolean(detail.checklist?.[item.id])}
+                              disabled={busy}
+                              onChange={(event) =>
+                                void post(
+                                  {
+                                    action: 'checklist',
+                                    version: detail.reviewVersion,
+                                    itemId: item.id,
+                                    checked: event.target.checked,
+                                  },
+                                  event.target.checked
+                                    ? 'Recorded'
+                                    : 'Cleared',
+                                )
+                              }
+                            />
+                          }
+                          label={
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                            >
+                              <Typography variant="body2">
+                                {item.label}
+                              </Typography>
+                              {item.required ? (
+                                <Chip size="small" label="Required" />
+                              ) : null}
+                              {item.realmOnly ? (
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  label="Realm trust"
+                                />
+                              ) : null}
+                            </Stack>
+                          }
+                        />
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ pl: 4 }}
+                        >
+                          {item.detail}
+                        </Typography>
+                        {(() => {
+                          const link = checklistLink(item.id)
+                          if (!link) return null
+                          // External targets (the raw bundle, the publisher's
+                          // repo) are plain anchors on purpose; internal ones
+                          // go through AppLink so the SPA does not full-reload.
+                          return (
+                            <Typography variant="caption" sx={{ pl: 4 }}>
+                              {link.external ? (
+                                <MuiLink
+                                  href={link.href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {`${link.label} ↗`}
+                                </MuiLink>
+                              ) : (
+                                <AppLink href={link.href}>{link.label}</AppLink>
+                              )}
+                            </Typography>
+                          )
+                        })()}
+                      </Stack>
+                    ))}
+                  </Stack>
+                </CardDisplay>
+
+                {/* Verdicts, ordered by consequence rather than by the
+                    order they were built (AGL-966). The old card was a flat
+                    row of same-weight text buttons where "List" — the click
+                    that makes a plugin installable by every workspace — sat
+                    between "Start review" and a rejection box. */}
                 <CardDisplay
                   header="Review verdict"
                   contentGutterX
@@ -433,53 +688,203 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       'Move this submission through the review lifecycle — list, verify, or reject with a reason.',
                   })}
                 >
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                  >
-                    <Button
-                      size="small"
-                      disabled={busy}
-                      onClick={() =>
-                        void post({ action: 'start-review' }, 'Now in review')
-                      }
-                    >
-                      {'Start review'}
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      disabled={busy}
-                      onClick={() => void post({ action: 'list' }, 'Listed')}
-                    >
-                      {'List'}
-                    </Button>
-                    <Button
-                      size="small"
-                      color="success"
-                      disabled={busy}
-                      onClick={() => void post({ action: 'verify' }, 'Verified')}
-                    >
-                      {'Verify ✓'}
-                    </Button>
-                    <TextField
-                      size="small"
-                      placeholder="Rejection reason"
-                      value={reason}
-                      onChange={(event) => setReason(event.target.value)}
-                      sx={{ minWidth: 240 }}
-                    />
-                    <Button
-                      size="small"
-                      color="error"
-                      disabled={busy}
-                      onClick={() =>
-                        void post({ action: 'reject', reason }, 'Rejected')
-                      }
-                    >
-                      {'Reject'}
-                    </Button>
+                  <Stack spacing={2}>
+                    <Stack spacing={0.5}>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <Typography variant="body2">{'Currently:'}</Typography>
+                        <Chip
+                          size="small"
+                          color={status.color}
+                          label={status.label}
+                        />
+                        {status.live ? (
+                          <Chip size="small" color="warning" label="Live to customers" />
+                        ) : (
+                          <Chip size="small" variant="outlined" label="Not installable" />
+                        )}
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {status.meaning}
+                      </Typography>
+                    </Stack>
+
+                    <Divider />
+
+                    {/* The verdict that matters is per VERSION (AGL-966).
+                        Approving these bytes is what makes them installable;
+                        listing-level state only says whether the plugin is
+                        in the marketplace at all. */}
+                    <Stack spacing={0.5}>
+                      <Typography variant="subtitle2">
+                        {`Verdict on v${detail.reviewVersion}`}
+                      </Typography>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <TextField
+                          size="small"
+                          select
+                          value={detail.reviewVersion}
+                          onChange={(event) =>
+                            setSelectedVersion(event.target.value)
+                          }
+                          sx={{ minWidth: 160 }}
+                        >
+                          {detail.versions.map((entry) => (
+                            <MenuItem key={entry.version} value={entry.version}>
+                              {`v${entry.version} · ${entry.reviewState}`}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="success"
+                          disabled={busy || blocked}
+                          onClick={() =>
+                            void post(
+                              {
+                                action: 'approve-version',
+                                version: detail.reviewVersion,
+                              },
+                              `v${detail.reviewVersion} approved`,
+                            )
+                          }
+                        >
+                          {'Approve version'}
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          disabled={busy}
+                          onClick={() =>
+                            void post(
+                              {
+                                action: 'reject-version',
+                                version: detail.reviewVersion,
+                                reason,
+                              },
+                              `v${detail.reviewVersion} rejected`,
+                            )
+                          }
+                        >
+                          {'Reject version'}
+                        </Button>
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {'Approving makes these bytes the version new ' +
+                          'installs receive. Existing installs are pinned and ' +
+                          'do not move. A pending version is never installed ' +
+                          'by anyone but its publisher, so an update cannot ' +
+                          'ship past review.'}
+                      </Typography>
+                      {blocked ? (
+                        <Alert severity="info" sx={{ mt: 0.5 }}>
+                          {`Blocked: ${detail.checklistOutstanding.length} required checklist item(s) outstanding for these bytes.`}
+                        </Alert>
+                      ) : null}
+                    </Stack>
+
+                    <Divider />
+
+                    {/* Listing-level distribution, unchanged. */}
+                    <Stack spacing={0.5}>
+                      <Typography variant="subtitle2">
+                        {'Marketplace listing'}
+                      </Typography>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        {detail.reviewStatus !== 'verified' ? (
+                          <Button
+                            size="small"
+                            color="success"
+                            variant="outlined"
+                            disabled={busy || blocked}
+                            onClick={() => void post({ action: 'verify' }, 'Verified')}
+                          >
+                            {'Verify ✓ (badge)'}
+                          </Button>
+                        ) : null}
+                        {detail.private ? (
+                          <Chip size="small" label="Private — never listed" />
+                        ) : null}
+                      </Stack>
+                    </Stack>
+
+                    <Divider />
+
+                    {/* Back down the ladder. Never checklist-gated — a
+                        retreat must always be available — and deliberately
+                        quieter than the danger zone below, which is the only
+                        control that reaches code already running. */}
+                    <Stack spacing={0.5}>
+                      <Typography variant="subtitle2">{'Step back'}</Typography>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <TextField
+                          size="small"
+                          placeholder="Reason (required to reject)"
+                          value={reason}
+                          onChange={(event) => setReason(event.target.value)}
+                          sx={{ minWidth: 260 }}
+                        />
+                        {status.live ? (
+                          <Button
+                            size="small"
+                            color="warning"
+                            disabled={busy}
+                            onClick={() =>
+                              void post(
+                                { action: 'delist', reason },
+                                'Delisted — back in review',
+                              )
+                            }
+                          >
+                            {'Delist'}
+                          </Button>
+                        ) : null}
+                        {detail.reviewStatus === 'verified' ? (
+                          <Button
+                            size="small"
+                            disabled={busy}
+                            onClick={() =>
+                              void post({ action: 'unverify' }, 'Badge removed')
+                            }
+                          >
+                            {'Unverify'}
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="small"
+                          color="error"
+                          disabled={busy}
+                          onClick={() =>
+                            void post({ action: 'reject', reason }, 'Rejected')
+                          }
+                        >
+                          {'Reject'}
+                        </Button>
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {'Delist pulls it from the marketplace and blocks new ' +
+                          'installs; existing installs keep working. Unverify ' +
+                          'only drops the badge. Reject notifies the publisher. ' +
+                          'None of these stop code already running — that is ' +
+                          'the danger zone.'}
+                      </Typography>
+                    </Stack>
                   </Stack>
                 </CardDisplay>
 
@@ -490,6 +895,24 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         'the app realm instead of the sandbox iframe. ' +
                         'Super-staff only, audited.'}
                     </Typography>
+                    {/* The two axes get conflated constantly (AGL-966):
+                        review status is per LISTING and controls who can
+                        install; trust is per VERSION and controls what the
+                        code can reach once installed. Verified is not realm
+                        trust, and realm trust is the far more dangerous of
+                        the two. */}
+                    <Alert severity="info">
+                      {'This is a different axis from the review verdict above. ' +
+                        'Listing and verifying apply to the whole listing and ' +
+                        'decide who may install it. Trust applies to ONE ' +
+                        'version and decides where its code runs: sandboxed in ' +
+                        'a cross-origin iframe capped by the manifest CSP, or ' +
+                        'inside the app realm with neither of those between it ' +
+                        'and user data. A verified plugin can be sandboxed, and ' +
+                        'a sandboxed version of a verified plugin is the normal ' +
+                        'case — realm trust is the exception that needs a ' +
+                        'reason.'}
+                    </Alert>
                     {detail.versions.map((entry) => (
                       <Stack
                         key={entry.version}
@@ -503,6 +926,22 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         {entry.version === detail.latestVersion ? (
                           <Chip size="small" label="Latest" />
                         ) : null}
+                        <Chip
+                          size="small"
+                          color={
+                            entry.reviewState === 'approved'
+                              ? 'success'
+                              : entry.reviewState === 'rejected'
+                                ? 'error'
+                                : 'warning'
+                          }
+                          variant="outlined"
+                          label={
+                            entry.grandfathered
+                              ? 'approved (grandfathered)'
+                              : entry.reviewState
+                          }
+                        />
                         <Chip
                           size="small"
                           color={entry.trust === 'realm' ? 'success' : 'default'}

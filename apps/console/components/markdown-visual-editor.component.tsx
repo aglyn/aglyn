@@ -96,7 +96,25 @@ type TextRow = {
   inlines: Aglyn.MarkdownInline[]
 }
 type ImageRow = { key: string; kind: 'image'; src: string; alt: string }
-export type EditorRow = TextRow | ImageRow
+type CodeRow = { key: string; kind: 'code'; lang: string; text: string }
+type TableRow = {
+  key: string
+  kind: 'table'
+  align: Aglyn.MarkdownTableAlign[]
+  header: Aglyn.MarkdownTableCell[]
+  rows: Aglyn.MarkdownTableCell[][]
+}
+/**
+ * Rows the caret cannot enter: they render read-only with a Remove button
+ * and are carried through the model untouched. Code blocks and tables join
+ * images here (AGL-974) — this editor also writes marketplace READMEs, and
+ * a block it could not represent was silently DELETED on the next save.
+ */
+type BlockRow = ImageRow | CodeRow | TableRow
+export type EditorRow = TextRow | BlockRow
+
+const isTextRow = (row: EditorRow): row is TextRow =>
+  row.kind !== 'image' && row.kind !== 'code' && row.kind !== 'table'
 
 let rowKeySeq = 0
 const nextRowKey = () => `md-row-${++rowKeySeq}`
@@ -121,6 +139,16 @@ export function markdownToRows(markdown: string): EditorRow[] {
       rows.push({ key: nextRowKey(), kind: 'paragraph', inlines: block.inlines })
     } else if (block.type === 'image') {
       rows.push({ key: nextRowKey(), kind: 'image', src: block.src, alt: block.alt })
+    } else if (block.type === 'code') {
+      rows.push({ key: nextRowKey(), kind: 'code', lang: block.lang, text: block.text })
+    } else if (block.type === 'table') {
+      rows.push({
+        key: nextRowKey(),
+        kind: 'table',
+        align: block.align,
+        header: block.header,
+        rows: block.rows,
+      })
     } else {
       for (const item of block.items) {
         rows.push({ key: nextRowKey(), kind: 'listItem', inlines: item })
@@ -137,6 +165,15 @@ export function rowsToMarkdown(rows: EditorRow[]): string {
   for (const row of rows) {
     if (row.kind === 'image') {
       blocks.push({ type: 'image', src: row.src, alt: row.alt })
+    } else if (row.kind === 'code') {
+      blocks.push({ type: 'code', lang: row.lang, text: row.text })
+    } else if (row.kind === 'table') {
+      blocks.push({
+        type: 'table',
+        align: row.align,
+        header: row.header,
+        rows: row.rows,
+      })
     } else if (row.kind === 'listItem') {
       const last = blocks[blocks.length - 1]
       if (last?.type === 'list') last.items.push(row.inlines)
@@ -393,24 +430,93 @@ const TextRowView = memo(function TextRowView(props: TextRowViewProps) {
   )
 })
 
-interface ImageRowViewProps {
-  row: ImageRow
+interface BlockRowViewProps {
+  row: BlockRow
   onRemove: () => void
 }
 
-const ImageRowView = memo(function ImageRowView({
+/**
+ * A non-editable row: an image, a code block or a table (AGL-974). The
+ * caret never enters one — it renders from the model and travels through
+ * the document unchanged, with a hover Remove button as its only edit.
+ */
+const BlockRowView = memo(function BlockRowView({
   row,
   onRemove,
-}: ImageRowViewProps) {
+}: BlockRowViewProps) {
   return (
     <Box
       contentEditable={false}
       data-row-key={row.key}
-      data-row-kind="image"
+      data-row-kind={row.kind}
       sx={{ my: 1, position: 'relative', '&:hover [data-md-image-remove]': { opacity: 1 } }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={row.src} alt={row.alt} />
+      {row.kind === 'image' ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={row.src} alt={row.alt} />
+      ) : row.kind === 'code' ? (
+        <Box
+          component="pre"
+          sx={{
+            m: 0,
+            p: 1.5,
+            overflowX: 'auto',
+            borderRadius: 1,
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'action.hover',
+            fontFamily: 'monospace',
+            fontSize: 13,
+          }}
+        >
+          <code>{row.text}</code>
+        </Box>
+      ) : (
+        <Box sx={{ overflowX: 'auto' }}>
+          <Box
+            component="table"
+            sx={{
+              borderCollapse: 'collapse',
+              width: '100%',
+              fontSize: 14,
+              '& th, & td': {
+                border: '1px solid',
+                borderColor: 'divider',
+                px: 1,
+                py: 0.5,
+              },
+              '& th': { bgcolor: 'action.hover' },
+            }}
+          >
+            <thead>
+              <tr>
+                {row.header.map((cell, index) => (
+                  <th
+                    key={index}
+                    style={{ textAlign: row.align[index] ?? 'left' }}
+                  >
+                    {renderRowInlines(cell)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {row.rows.map((cells, rowIndex) => (
+                <tr key={rowIndex}>
+                  {cells.map((cell, index) => (
+                    <td
+                      key={index}
+                      style={{ textAlign: row.align[index] ?? 'left' }}
+                    >
+                      {renderRowInlines(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </Box>
+        </Box>
+      )}
       <Button
         size="small"
         color="error"
@@ -431,9 +537,11 @@ type HistoryEntry = { rows: EditorRow[]; selection: SelectionSnapshot | null }
 
 const cloneRows = (rows: EditorRow[]): EditorRow[] =>
   rows.map((row) =>
-    row.kind === 'image'
-      ? { ...row }
-      : { ...row, inlines: row.inlines.map((inline) => ({ ...inline })) },
+    isTextRow(row)
+      ? { ...row, inlines: row.inlines.map((inline) => ({ ...inline })) }
+      : // Block rows are never edited in place, so a shallow copy is a
+        // faithful history snapshot.
+        { ...row },
   )
 
 const HISTORY_LIMIT = 100
@@ -542,7 +650,8 @@ const MarkdownVisualEditor = forwardRef<
     const rowEl = rootRef.current?.querySelector<HTMLElement>(
       `[data-row-key="${pending.key}"]`,
     )
-    if (!rowEl || rowEl.dataset['rowKind'] === 'image') return
+    // Block rows (image / code / table) have no caret to restore.
+    if (!rowEl || !rowEl.isContentEditable) return
     rowEl.focus()
     setSelectionIn(rowEl, pending.start, pending.end)
   }, [version])
@@ -626,13 +735,13 @@ const MarkdownVisualEditor = forwardRef<
     if (selection) {
       const index = current.findIndex((row) => row.key === selection.key)
       const row = current[index]
-      if (index >= 0 && row && row.kind !== 'image') {
+      if (index >= 0 && row && isTextRow(row)) {
         return { index, start: selection.start, end: selection.end }
       }
     }
     for (let index = current.length - 1; index >= 0; index--) {
       const row = current[index]
-      if (row && row.kind !== 'image') {
+      if (row && isTextRow(row)) {
         const length = rowPlainText(row.inlines).length
         return { index, start: length, end: length }
       }
@@ -655,7 +764,7 @@ const MarkdownVisualEditor = forwardRef<
       // Keep a caret landing spot after a trailing image.
       if (index === current.length - 1) current.push(emptyParagraph())
       const next = current[index + 1]
-      commit(next && next.kind !== 'image' ? { key: next.key, start: 0, end: 0 } : null)
+      commit(next && isTextRow(next) ? { key: next.key, start: 0, end: 0 } : null)
     },
     [commit, pushHistory],
   )
@@ -743,7 +852,7 @@ const MarkdownVisualEditor = forwardRef<
       const current = rowsRef.current ?? []
       const index = findRowIndex(key)
       const row = current[index]
-      if (!row || row.kind === 'image') return
+      if (!row || !isTextRow(row)) return
       const rowEl = event.currentTarget
       // Snapshot the pre-typing model once per typing burst so undo jumps
       // back over the whole burst, not one character at a time.
@@ -797,7 +906,7 @@ const MarkdownVisualEditor = forwardRef<
         index += direction
       ) {
         const row = current[index]
-        if (!row || row.kind === 'image') continue
+        if (!row || !isTextRow(row)) continue
         const rowEl = rootRef.current?.querySelector<HTMLElement>(
           `[data-row-key="${row.key}"]`,
         )
@@ -819,7 +928,7 @@ const MarkdownVisualEditor = forwardRef<
       const current = rowsRef.current ?? []
       const index = findRowIndex(key)
       const row = current[index]
-      if (!row || row.kind === 'image') return
+      if (!row || !isTextRow(row)) return
       const rowEl = event.currentTarget
 
       if (event.key === 'Enter') {
@@ -871,7 +980,7 @@ const MarkdownVisualEditor = forwardRef<
         const previous = current[index - 1]
         if (!previous) return
         pushHistory()
-        if (previous.kind === 'image') {
+        if (!isTextRow(previous)) {
           current.splice(index - 1, 1)
           commit({ key: row.key, start: 0, end: 0 })
           return
@@ -926,7 +1035,7 @@ const MarkdownVisualEditor = forwardRef<
       const current = rowsRef.current ?? []
       const index = findRowIndex(key)
       const row = current[index]
-      if (!row || row.kind === 'image') return
+      if (!row || !isTextRow(row)) return
       const rowEl = event.currentTarget
       const inlines = readInlinesFromElement(rowEl)
       const length = rowPlainText(inlines).length
@@ -944,7 +1053,7 @@ const MarkdownVisualEditor = forwardRef<
           (pasted) => ({ ...pasted, key: nextRowKey() }) as EditorRow,
         )
         const only = converted.length === 1 ? converted[0] : undefined
-        if (only && only.kind !== 'image') {
+        if (only && isTextRow(only)) {
           // One text row: merge its inlines into this row at the caret,
           // exactly like a plain-text paste but keeping the marks.
           current[index] = { ...row, inlines } as EditorRow
@@ -968,10 +1077,10 @@ const MarkdownVisualEditor = forwardRef<
           current[index] = { ...row, inlines } as EditorRow
           pushHistory()
           const tail = converted[converted.length - 1]
-          if (tail && tail.kind === 'image') converted.push(emptyParagraph())
+          if (tail && !isTextRow(tail)) converted.push(emptyParagraph())
           current.splice(index + 1, 0, ...converted)
           const focus = converted[converted.length - 1]
-          if (focus && focus.kind !== 'image') {
+          if (focus && isTextRow(focus)) {
             const end = rowPlainText(focus.inlines).length
             commit({ key: focus.key, start: end, end })
           } else {
@@ -1024,7 +1133,7 @@ const MarkdownVisualEditor = forwardRef<
     (rowKey: string, linkIndex: number) => {
       const index = findRowIndex(rowKey)
       const row = (rowsRef.current ?? [])[index]
-      if (!row || row.kind === 'image') return null
+      if (!row || !isTextRow(row)) return null
       let seen = -1
       for (let i = 0; i < row.inlines.length; i++) {
         const inline = row.inlines[i]
@@ -1096,7 +1205,7 @@ const MarkdownVisualEditor = forwardRef<
     setUrlDialog(null)
     if (!target) return
     const row = current[target.index]
-    if (!row || row.kind === 'image') return
+    if (!row || !isTextRow(row)) return
     pushHistory()
     const text = urlDialog.text.trim() || url
     current[target.index] = {
@@ -1112,7 +1221,7 @@ const MarkdownVisualEditor = forwardRef<
     })
   }, [commit, findLinkInline, insertImageRow, pushHistory, urlDialog])
 
-  const handleImageRemove = useCallback(
+  const handleBlockRemove = useCallback(
     (key: string) => () => {
       const current = rowsRef.current ?? []
       const index = findRowIndex(key)
@@ -1166,7 +1275,7 @@ const MarkdownVisualEditor = forwardRef<
       const current = rowsRef.current ?? []
       for (let index = current.length - 1; index >= 0; index--) {
         const row = current[index]
-        if (!row || row.kind === 'image') continue
+        if (!row || !isTextRow(row)) continue
         const rowEl = rootRef.current?.querySelector<HTMLElement>(
           `[data-row-key="${row.key}"]`,
         )
@@ -1256,11 +1365,11 @@ const MarkdownVisualEditor = forwardRef<
           </Typography>
         ) : null}
         {rows.map((row) =>
-          row.kind === 'image' ? (
-            <ImageRowView
+          !isTextRow(row) ? (
+            <BlockRowView
               key={row.key}
               row={row}
-              onRemove={handleImageRemove(row.key)}
+              onRemove={handleBlockRemove(row.key)}
             />
           ) : (
             <TextRowView

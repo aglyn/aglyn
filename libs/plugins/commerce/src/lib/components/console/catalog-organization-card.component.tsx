@@ -247,20 +247,41 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
 
   const handleCollectionSave = useCallback(async () => {
     if (!collectionDraft?.name.trim() || collectionError) return
-    const id = collectionDraft.id ?? Aglyn.createResourceUid()
-    const { id: _draftId, ...data } = collectionDraft
-    await setDoc(doc(firestore, 'hosts', hostId, 'collections', id), {
-      ...data,
-      name: collectionDraft.name.trim().slice(0, 80),
-      slug: collectionDraft.slug || CommerceModel.commerceSlug(collectionDraft.name),
-      // Disambiguates this doc from the Content page's collections, which
-      // live in the same Firestore collection (AGL-954).
-      kind: 'catalog',
-      updatedAt: Timestamp.now(),
-    })
+    const { id: draftId, ...data } = collectionDraft
+    // Both create and rename go through the route (AGL-978): this save writes
+    // the whole document including `slug`, which is the collection's public
+    // address and is claimed transactionally there. Rules deny a client
+    // create, and freeze `slug`/`kind` on update.
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/hosts/collections', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          hostId,
+          action: draftId ? 'update' : 'create',
+          kind: 'catalog',
+          ...(draftId ? { id: draftId } : {}),
+          data: {
+            ...data,
+            name: collectionDraft.name.trim().slice(0, 80),
+            slug: draftSlug,
+          },
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result?.error ?? 'Collection save failed')
+    } catch (error: any) {
+      return void enqueueSnackbar(error?.message ?? 'Collection save failed', {
+        variant: 'error',
+      })
+    }
     setCollectionDraft(null)
     enqueueSnackbar('Collection saved', { variant: 'success', persist: false })
-  }, [collectionDraft, collectionError, firestore, hostId, enqueueSnackbar])
+  }, [collectionDraft, collectionError, draftSlug, user, hostId, enqueueSnackbar])
 
   const handleCollectionDelete = useCallback(
     (row: CollectionRow) => async () => {

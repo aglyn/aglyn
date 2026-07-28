@@ -25,8 +25,10 @@
  *
  * Nothing on the documents said which was which, so every surface listed the
  * other's rows and a public slug lookup could resolve to the wrong kind.
- * New documents carry `kind`; the classifier below falls back to shape so the
- * live documents that predate it need no backfill to be read correctly.
+ * Every document now carries `kind` — both console surfaces stamp it, site
+ * import stamps it, and the pre-existing documents were backfilled (AGL-979),
+ * so reads no longer infer anything from shape. `legacyCollectionKind` below
+ * is the one remaining inference, confined to the import adapter.
  */
 export type HostCollectionKind = 'content' | 'catalog'
 
@@ -43,12 +45,10 @@ function isKind(value: unknown): value is HostCollectionKind {
 /**
  * Which feature owns this `collections` doc.
  *
- * Trusts an explicit `kind` when present. Otherwise infers from shape: only
- * catalog collections carry the membership keys (`mode`, `rules`,
- * `productIds`), so their presence is decisive, and everything else — including
- * a bare `{ displayName, slug }` — is content. Defaulting the ambiguous case to
- * content is the safe direction: content is the kind that owns `entries`, and
- * mistaking it for catalog is what puts those entries in reach of a delete.
+ * Reads `kind` and nothing else. A document that does not say what it is is
+ * treated as content — the safe direction, because content is the kind that
+ * owns `entries`, and mistaking it for catalog is what puts those entries in
+ * reach of a delete.
  */
 export function hostCollectionKind(
   data: object | null | undefined,
@@ -56,16 +56,30 @@ export function hostCollectionKind(
   if (!data) return 'content'
   // Accepts any object shape — callers pass typed rows (HostCollection) as
   // readily as raw Firestore data.
+  const fields = (data as Record<string, unknown>)['kind']
+  return isKind(fields) ? fields : 'content'
+}
+
+/**
+ * Classify a collection that predates the `kind` field, from its shape.
+ *
+ * ONLY for the site-import adapter: a bundle exported before AGL-954 has no
+ * `kind`, and that is the one path where an old catalog collection can still
+ * arrive. Every other reader uses {@link hostCollectionKind}, which does not
+ * guess. Only catalog collections carry the membership keys, so their presence
+ * is decisive; everything else is content.
+ */
+export function legacyCollectionKind(
+  data: object | null | undefined,
+): HostCollectionKind {
+  if (!data) return 'content'
   const fields = data as Record<string, unknown>
   if (isKind(fields['kind'])) return fields['kind']
-  if (
-    fields['mode'] !== undefined ||
+  return fields['mode'] !== undefined ||
     fields['rules'] !== undefined ||
     fields['productIds'] !== undefined
-  ) {
-    return 'catalog'
-  }
-  return 'content'
+    ? 'catalog'
+    : 'content'
 }
 
 /** Filter helper: `docs.filter(isHostCollectionKind('catalog'))`. */

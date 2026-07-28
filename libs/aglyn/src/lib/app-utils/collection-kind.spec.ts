@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { hostCollectionKind, isHostCollectionKind } from './collection-kind'
+import {
+  hostCollectionKind,
+  isHostCollectionKind,
+  legacyCollectionKind,
+} from './collection-kind'
 
 describe('hostCollectionKind', () => {
   it('trusts an explicit kind', () => {
@@ -28,25 +32,24 @@ describe('hostCollectionKind', () => {
   })
 
   it('ignores a kind that is not one of the two', () => {
+    // Strict since AGL-979 — an unrecognized kind falls to the content
+    // default, not to whatever the shape suggests.
     expect(hostCollectionKind({ kind: 'nonsense', mode: 'smart' })).toBe(
-      'catalog',
+      'content',
     )
     expect(hostCollectionKind({ kind: 42 })).toBe('content')
   })
 
-  // Legacy documents (pre-AGL-954) carry no `kind`, so shape decides.
-  it('reads legacy catalog collections from their membership keys', () => {
+  // Strict since AGL-979: reads never infer from shape. Every live document
+  // was backfilled, and a catalog-shaped doc with no `kind` is now content.
+  it('does not infer from shape', () => {
     expect(hostCollectionKind({ name: 'Sale', slug: 's', mode: 'manual' })).toBe(
-      'catalog',
+      'content',
     )
-    expect(hostCollectionKind({ name: 'New', rules: [] })).toBe('catalog')
-    expect(hostCollectionKind({ name: 'Picks', productIds: [] })).toBe('catalog')
-  })
-
-  it('reads legacy content collections, including bare ones', () => {
-    expect(
-      hostCollectionKind({ displayName: 'Blog', slug: 'blog' }),
-    ).toBe('content')
+    expect(hostCollectionKind({ name: 'New', rules: [] })).toBe('content')
+    expect(hostCollectionKind({ displayName: 'Blog', slug: 'blog' })).toBe(
+      'content',
+    )
     expect(hostCollectionKind({})).toBe('content')
   })
 
@@ -59,13 +62,36 @@ describe('hostCollectionKind', () => {
 
   it('filters a mixed list', () => {
     const docs = [
-      { displayName: 'Blog' },
-      { name: 'Sale', mode: 'manual' },
+      { kind: 'content', displayName: 'Blog' },
+      { kind: 'catalog', name: 'Sale', mode: 'manual' },
       { kind: 'catalog', name: 'Featured' },
     ]
     expect(docs.filter(isHostCollectionKind('content'))).toEqual([
-      { displayName: 'Blog' },
+      { kind: 'content', displayName: 'Blog' },
     ])
     expect(docs.filter(isHostCollectionKind('catalog'))).toHaveLength(2)
+  })
+})
+
+// The one place shape inference survives: bundles exported before AGL-954.
+describe('legacyCollectionKind', () => {
+  it('infers catalog from the membership keys', () => {
+    expect(legacyCollectionKind({ name: 'Sale', mode: 'manual' })).toBe('catalog')
+    expect(legacyCollectionKind({ name: 'New', rules: [] })).toBe('catalog')
+    expect(legacyCollectionKind({ name: 'Picks', productIds: [] })).toBe('catalog')
+  })
+
+  it('infers content for everything else', () => {
+    expect(legacyCollectionKind({ displayName: 'Blog', slug: 'blog' })).toBe(
+      'content',
+    )
+    expect(legacyCollectionKind({})).toBe('content')
+    expect(legacyCollectionKind(null)).toBe('content')
+  })
+
+  it('still prefers an explicit kind in the bundle', () => {
+    expect(legacyCollectionKind({ kind: 'content', mode: 'manual' })).toBe(
+      'content',
+    )
   })
 })

@@ -356,6 +356,63 @@ export type ListingReviewStatus =
   | 'verified'
   | 'rejected'
 
+/**
+ * Per-VERSION review state (AGL-966).
+ *
+ * Approval is a statement about specific bytes, so it lives on the version
+ * doc beside the verifier verdict and the review checklist — both already
+ * keyed to sha256. It used to live on the listing, which meant a publisher
+ * could get v1.0.0 verified and then ship v1.0.1 containing anything: the
+ * listing kept its status, the queue never surfaced the update, and
+ * installs resolved `latestVersion`.
+ */
+export type PluginVersionReviewState = 'pending' | 'approved' | 'rejected'
+
+export interface ReviewableVersion {
+  version?: string
+  reviewState?: string
+  publishedAt?: { toMillis?: () => number } | null
+}
+
+/** Only approved bytes may be installed. Absent state is NOT approval. */
+export function isVersionApproved(
+  version: { reviewState?: string } | null | undefined,
+): boolean {
+  return version?.reviewState === 'approved'
+}
+
+/**
+ * The version a fresh install should pin: newest APPROVED, never
+ * `latestVersion`. A pending update is simply not offered, so publishing
+ * cannot ship code past review, and the previously approved version keeps
+ * installing while the new one waits.
+ */
+export function newestApprovedVersion<T extends ReviewableVersion>(
+  versions: readonly T[],
+): T | null {
+  const approved = versions.filter((entry) => isVersionApproved(entry))
+  if (!approved.length) return null
+  return approved.reduce((best, entry) =>
+    (entry.publishedAt?.toMillis?.() ?? 0) >
+    (best.publishedAt?.toMillis?.() ?? 0)
+      ? entry
+      : best,
+  )
+}
+
+/**
+ * Private plugins (AGL-968): an org builds for its own sites without
+ * publishing to anyone. Never browsable — not even for the owner, who
+ * reaches it through their own plugins area — and installable only by the
+ * owning org (enforced in `install-plugin`, not in the UI). The review bar
+ * is identical: private code still runs on our infrastructure.
+ */
+export function isPrivateListing(listing: {
+  visibility?: string
+}): boolean {
+  return listing.visibility === 'private'
+}
+
 /** Whether a plugin listing is publicly browsable (AGL-432). */
 export function isListingBrowsable(listing: {
   artifactType?: string
@@ -363,6 +420,7 @@ export function isListingBrowsable(listing: {
   kind?: string
   reviewStatus?: string
   hiddenAt?: unknown
+  visibility?: string
 }): boolean {
   // Staff takedown applies to EVERY artifact type (AGL-658). Pre-publication
   // review is plugin-only — plugins execute code, so they earn the wait —
@@ -370,6 +428,8 @@ export function isListingBrowsable(listing: {
   // removable too, and before this it simply was not: the early return
   // below meant anything non-plugin was permanently browsable.
   if (listing.hiddenAt) return false
+  // Private listings never reach the marketplace (AGL-968).
+  if (isPrivateListing(listing)) return false
   if (listingArtifactType(listing) !== 'plugin') return true
   return (
     listing.reviewStatus === undefined ||

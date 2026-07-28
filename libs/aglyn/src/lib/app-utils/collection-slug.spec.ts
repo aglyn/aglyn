@@ -20,10 +20,12 @@ import {
   isCollectionSlugTaken,
 } from './collection-slug'
 
+// Every live document carries an explicit `kind` since AGL-979; the
+// classifier no longer infers one from shape.
 const existing = [
-  { $id: 'c1', displayName: 'Blog', slug: 'blog' },
-  { $id: 'c2', displayName: 'News', slug: 'news' },
-  { $id: 'k1', name: 'Sale', slug: 'sale', mode: 'manual' },
+  { $id: 'c1', kind: 'content', displayName: 'Blog', slug: 'blog' },
+  { $id: 'c2', kind: 'content', displayName: 'News', slug: 'news' },
+  { $id: 'k1', kind: 'catalog', name: 'Sale', slug: 'sale', mode: 'manual' },
 ]
 
 describe('findCollectionSlugOwner', () => {

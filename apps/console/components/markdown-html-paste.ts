@@ -20,7 +20,8 @@
  * (AGL-596). Pure functions with no editor state: `htmlToRows` parses a
  * `text/html` clipboard payload and maps it onto the editor's row model,
  * keeping only what the markdown-lite dialect can express — bold, italic,
- * links, h2/h3 headings, flat lists and images. Everything else flattens
+ * links, h2/h3 headings, flat lists, images, and (AGL-981) code blocks and
+ * tables, the two blocks a pasted README is made of. Everything else flattens
  * to plain text; nested marks flatten to the OUTERMOST mark. Row keys are
  * module-local placeholders — the editor re-keys converted rows with its
  * own key sequence on ingest.
@@ -199,6 +200,64 @@ export function htmlToRows(html: string): EditorRow[] {
     }
     if (tag === 'li') {
       pushTextRow('listItem', htmlToInlines(el))
+      return
+    }
+    // A GitHub README's two workhorse blocks (AGL-981). `<pre>` keeps its
+    // line breaks verbatim — the whole point of a snippet — and the
+    // language comes off the `language-x` class GitHub puts on the inner
+    // `<code>`.
+    if (tag === 'pre') {
+      const text = (el.textContent ?? '')
+        .replace(/^(?:[ \t]*\n)+/, '')
+        .replace(/\s+$/, '')
+      if (text.trim()) {
+        const code = el.querySelector('code')
+        const lang = /(?:^|\s)(?:language|lang)-([\w+#.-]+)/.exec(
+          code?.getAttribute('class') ?? '',
+        )
+        rows.push({
+          key: nextHtmlRowKey(),
+          kind: 'code',
+          lang: lang?.[1] ?? '',
+          text,
+        })
+      }
+      return
+    }
+    if (tag === 'table') {
+      const cellsOf = (tr: Element): Element[] =>
+        Array.from(tr.children).filter((cell) =>
+          /^t[hd]$/.test(cell.tagName.toLowerCase()),
+        )
+      const cellRows = Array.from(el.querySelectorAll('tr'))
+        // A nested table's rows belong to IT, not to this one; its cells
+        // still flatten into the containing cell's inlines, since the
+        // dialect has no nesting.
+        .filter((tr) => tr.closest('table') === el)
+        .map(cellsOf)
+        .filter((cells) => cells.length > 0)
+      const [header, ...body] = cellRows
+      if (header) {
+        rows.push({
+          key: nextHtmlRowKey(),
+          kind: 'table',
+          // GitHub writes a column's alignment onto every cell of it.
+          align: header.map((cell) => {
+            const align =
+              cell.getAttribute('align') ??
+              (cell as HTMLElement).style?.textAlign
+            return align === 'center' || align === 'right' ? align : 'left'
+          }),
+          header: header.map((cell) => htmlToInlines(cell)),
+          // Squared off to the header, the shape the parser guarantees.
+          rows: body.map((cells) =>
+            header.map((_, index) => {
+              const cell = cells[index]
+              return cell ? htmlToInlines(cell) : []
+            }),
+          ),
+        })
+      }
       return
     }
     if (tag === 'img') {

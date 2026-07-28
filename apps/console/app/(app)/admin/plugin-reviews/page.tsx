@@ -34,6 +34,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
+import { reviewStatusMeaning } from '../../../../constants/plugin-review-status'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
@@ -244,6 +245,13 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                     contentGutterX
                     contentGutterY
                   >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mb: 1 }}
+                    >
+                      {'Submitted and In review are not installable by anyone.'}
+                    </Typography>
                     {visibleQueue.length ? (
                       <Stack>
                         {visibleQueue.map((entry) =>
@@ -253,7 +261,11 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                             entry.displayName,
                             entry.profileId,
                             <>
-                              <Chip size="small" label={entry.reviewStatus} />
+                              <Chip
+                                size="small"
+                                color={reviewStatusMeaning(entry.reviewStatus).color}
+                                label={reviewStatusMeaning(entry.reviewStatus).label}
+                              />
                               <Chip
                                 size="small"
                                 variant="outlined"
@@ -285,6 +297,18 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                     contentGutterX
                     contentGutterY
                   >
+                    {/* Listed vs Verified is the distinction reviewers get
+                        wrong (AGL-966): both are LIVE. Verified only adds a
+                        badge — it does not change who can install. */}
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mb: 1 }}
+                    >
+                      {'Both states are live — installable by every workspace. ' +
+                        'Verified additionally carries the reviewed badge on ' +
+                        'its listing page; it does not change installability.'}
+                    </Typography>
                     {visibleListed.length ? (
                       <Stack>
                         {visibleListed.map((entry) =>
@@ -294,7 +318,11 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                             entry.displayName,
                             entry.profileId,
                             <>
-                              <Chip size="small" label={entry.reviewStatus} />
+                              <Chip
+                                size="small"
+                                color={reviewStatusMeaning(entry.reviewStatus).color}
+                                label={reviewStatusMeaning(entry.reviewStatus).label}
+                              />
                               <Chip
                                 size="small"
                                 variant="outlined"

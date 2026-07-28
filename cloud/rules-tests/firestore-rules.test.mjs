@@ -244,13 +244,46 @@ describe('hosts', () => {
     // which Firestore won't cascade into. Single entries stay deletable —
     // the dedicated entries block re-grants what the name-based exclusion
     // in the catch-all would otherwise take with it.
-    await assertSucceeds(
-      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog'), { name: 'Blog' }),
+    // Collection CREATE is API-only (AGL-978): the slug is the public address
+    // and is claimed transactionally by /api/hosts/collections.
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog2'), {
+        name: 'Blog 2', slug: 'blog-2', kind: 'content',
+      }),
     )
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'hosts', HOST, 'collections', 'blog'), {
+        displayName: 'Blog', slug: 'blog', kind: 'content',
+      })
+    })
+    // Editors still manage the rest of the doc client-side...
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog'), {
+        listScreenId: 'screen-1',
+      }),
+    )
+    // ...but not the two identity keys.
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog'), {
+        slug: 'stolen',
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog'), {
+        kind: 'catalog',
+      }),
+    )
+    // Entries are a separate resource underneath and stay fully writable.
     await assertSucceeds(
       setDoc(
         doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog', 'entries', 'e1'),
         { title: 'Hello' },
+      ),
+    )
+    await assertSucceeds(
+      updateDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog', 'entries', 'e1'),
+        { title: 'Hello again' },
       ),
     )
     await assertFails(
