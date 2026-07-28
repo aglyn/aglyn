@@ -365,6 +365,32 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             ],
           }
         }
+        if (field.component === Aglyn.FieldComponentType.PLUGIN_SELECT) {
+          // Installed plugins (AGL-1030), from the set the console publishes
+          // for the drawer — host and org pins both, host winning where it
+          // shadows. No extra read: the pins already carry the display name.
+          const installs = Aglyn.getKnownPluginInstalls()
+          return {
+            ...field,
+            component: Aglyn.FieldComponentType.SELECT,
+            options: [
+              {
+                value: '',
+                label: installs.length
+                  ? 'None'
+                  : 'No plugins installed for this site',
+              },
+              ...installs.map((install) => ({
+                value: install.listingId,
+                label:
+                  install.displayName ??
+                  /* An install with no name is still choosable — better a raw
+                     id in one option than a plugin that cannot be placed. */
+                  install.listingId,
+              })),
+            ],
+          }
+        }
         if (field.component === Aglyn.FieldComponentType.NODE_SELECT) {
           // Canvas-element picker (AGL-557), resolved above.
           return {

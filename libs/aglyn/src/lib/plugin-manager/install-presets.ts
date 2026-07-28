@@ -86,3 +86,15 @@ export function getKnownPluginInstall(
 ): KnownPluginInstall | undefined {
   return listingId ? knownInstalls?.get(listingId) : undefined
 }
+
+/**
+ * The installed set, for the element panel's plugin picker (AGL-1030).
+ *
+ * Sorted by name so the options do not reshuffle when an install document
+ * happens to come back in a different order.
+ */
+export function getKnownPluginInstalls(): readonly KnownPluginInstall[] {
+  return [...(knownInstalls?.values() ?? [])].sort((a, b) =>
+    (a.displayName ?? a.listingId).localeCompare(b.displayName ?? b.listingId),
+  )
+}

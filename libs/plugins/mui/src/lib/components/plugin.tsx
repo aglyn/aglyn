@@ -180,14 +180,15 @@ export const schema: Aglyn.ComponentSchema<CommunityPluginProps> = {
   attributes: [
     {
       name: 'listingId',
-      // The old helper text pointed at "Manage → Plugins", a path AGL-1011
-      // removed when Plugins became its own section (AGL-1029).
+      // A picker over what is actually installed (AGL-1030), not a typed
+      // document id: a mistyped character used to produce an element that
+      // looked broken with no clue why. The old helper text also pointed at
+      // "Manage → Plugins", a path AGL-1011 removed (AGL-1029).
       description:
-        'Installed plugin to place here. Drag the plugin from the Community ' +
-        'category of the element drawer to fill this in without typing an id. ' +
-        'The sandboxed plugin renders in an isolated iframe region.',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
-      label: 'Plugin listing id',
+        'Which installed plugin to place here. The sandboxed plugin renders ' +
+        'in an isolated iframe region on the published site.',
+      component: Aglyn.FieldComponentType.PLUGIN_SELECT,
+      label: 'Plugin',
     },
     {
       name: 'pluginPropsJson',
