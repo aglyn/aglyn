@@ -88,7 +88,9 @@ describe('plan entitlements', () => {
       starter: [1, 25, 3],
       pro: [3, 100, UNLIMITED],
       business: [10, UNLIMITED, UNLIMITED],
+      scale: [15, UNLIMITED, UNLIMITED],
       advanced: [25, UNLIMITED, UNLIMITED],
+      agency: [100, UNLIMITED, UNLIMITED],
     })
     // Media storage exceeds the published-site cap by design (AGL-67).
     for (const plan of Object.values(PLAN_ENTITLEMENTS)) {
@@ -178,6 +180,17 @@ describe('plan entitlements', () => {
         extraApiRequestsUsdPer1k: 0.5,
         extraContactsUsdPer1k: 0.5,
       },
+      scale: {
+        basePriceMonthlyUsd: 249,
+        basePriceAnnualMonthlyUsd: 179,
+        extraHostMonthlyUsd: 5,
+        extraSeatMonthlyUsd: 2,
+        extraCollaboratorMonthlyUsd: 1,
+        extraDatasetMonthlyUsd: 1,
+        extraDataGbMonthlyUsd: 0.25,
+        extraApiRequestsUsdPer1k: 0.35,
+        extraContactsUsdPer1k: 0.4,
+      },
       advanced: {
         basePriceMonthlyUsd: 399,
         basePriceAnnualMonthlyUsd: 299,
@@ -188,6 +201,17 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.2,
         extraContactsUsdPer1k: 0.25,
+      },
+      agency: {
+        basePriceMonthlyUsd: 799,
+        basePriceAnnualMonthlyUsd: 649,
+        extraHostMonthlyUsd: 3,
+        extraSeatMonthlyUsd: 2,
+        extraCollaboratorMonthlyUsd: 1,
+        extraDatasetMonthlyUsd: 1,
+        extraDataGbMonthlyUsd: 0.25,
+        extraApiRequestsUsdPer1k: 0.15,
+        extraContactsUsdPer1k: 0.2,
       },
     })
   })
@@ -211,6 +235,8 @@ describe('plan entitlements', () => {
       pro: [5, 20, 10, 25],
       advanced: [50, 250, 100, 250],
       business: [15, 100, 50, 100],
+      scale: [25, 150, 75, 150],
+      agency: [100, 500, 250, 1000],
     })
   })
 
@@ -536,13 +562,20 @@ describe('plan entitlements', () => {
     expect(resolveTransactionFeePct({ plan: 'starter' } as any, 'physical'))
       .toBe(2)
     expect(resolveTransactionFeePct({ plan: 'starter' } as any, 'digital'))
-      .toBe(7)
+      .toBe(5)
     expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical'))
       .toBe(0)
     expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'service'))
-      .toBe(5)
+      .toBe(3)
     expect(resolveTransactionFeePct({ plan: 'business' } as any, 'digital'))
       .toBe(2)
+    // Pricing v3 (2026-07) digital fee ladder: 5 → 3 → 2 → 1 → 0 → 0.
+    expect(resolveTransactionFeePct({ plan: 'scale' } as any, 'digital'))
+      .toBe(1)
+    expect(resolveTransactionFeePct({ plan: 'advanced' } as any, 'digital'))
+      .toBe(0)
+    expect(resolveTransactionFeePct({ plan: 'agency' } as any, 'digital'))
+      .toBe(0)
     // Canceled subscriptions resolve to free — which cannot sell at all.
     expect(
       resolveTransactionFeePct(
@@ -604,6 +637,17 @@ describe('plan entitlements', () => {
           seatAddons: { managers: 2, members: 3, datasets: 1 },
         } as any),
       ).toBe(25 + 2 * 5 + 3 * 3 + 1 * 2)
+    })
+
+    it('counts host, POS-register, and Event-Calendar add-ons (v3 leak fix)', () => {
+      // Previously omitted — understated MRR for every org carrying them.
+      expect(
+        orgMonthlyRevenueUsd({
+          plan: 'business',
+          subscription: { status: 'active' },
+          seatAddons: { hosts: 2, posRegisters: 1, eventCalendar: 1 },
+        } as any),
+      ).toBe(139 + 2 * 5 + 89 + 9)
     })
   })
 

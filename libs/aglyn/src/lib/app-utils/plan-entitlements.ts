@@ -143,7 +143,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     inventoryLocations: 1,
     posRegisters: 0,
     transactionFeePhysicalPct: 2,
-    transactionFeeDigitalPct: 7,
+    // Pricing v3 (2026-07): softened 7→5 — a 7% digital fee stacked on the
+    // ~2.9%+30¢ processor was ~10% all-in, far above the website-builder
+    // norm (Wix/BigCommerce/Squarespace-Core = 0% platform fee). See the
+    // Pricing Decision Log + Competitive Benchmark.
+    transactionFeeDigitalPct: 5,
     features: {
       abTesting: false,
       versioning: false,
@@ -210,7 +214,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     inventoryLocations: 2,
     posRegisters: 1,
     transactionFeePhysicalPct: 0,
-    transactionFeeDigitalPct: 5,
+    // Pricing v3 (2026-07): softened 5→3 to smooth the digital fee ladder
+    // (Starter 5 → Pro 3 → Business 2 → Scale 1 → Advanced/Agency 0).
+    transactionFeeDigitalPct: 3,
     features: {
       abTesting: false,
       versioning: true,
@@ -313,6 +319,76 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       commerceAnalytics: true,
     },
   },
+  // Scale (Pricing v3, 2026-07): fills the $139→$399 gap. Feature set equals
+  // Business/Advanced (all commerce features); limits interpolate between
+  // Business and Advanced; digital platform fee drops to 1%.
+  scale: {
+    hostLimit: 15,
+    screensPerHost: UNLIMITED,
+    sharedLayoutsPerHost: UNLIMITED,
+    templatesPerHost: UNLIMITED,
+    storagePerHostMb: 76800,
+    totalSiteSizeMb: 38400,
+    membersPerHost: 75,
+    managersPerOrg: 25,
+    maxManagersPerOrg: 150,
+    maxMembersPerHost: 150,
+    bandwidthGb: 2500,
+    formSubmissionsPerMonth: 50000,
+    variablesPerHost: 5000,
+    functionsPerHost: 500,
+    workflowsPerHost: 250,
+    workflowRunsPerMonth: 150000,
+    servicesPerHost: UNLIMITED,
+    redirectsPerHost: UNLIMITED,
+    contactsPerHost: 500000,
+    emailSendsPerMonth: 100000,
+    actionRunsPerMonth: 100000,
+    apiRequestsPerMonth: 300000,
+    datasetsPerOrg: 250,
+    maxDatasetsPerOrg: 500,
+    recordsPerDataset: 500000,
+    dataStorageMbPerOrg: 51200,
+    productsPerHost: 25000,
+    inventoryLocations: 6,
+    posRegisters: 3,
+    transactionFeePhysicalPct: 0,
+    transactionFeeDigitalPct: 1,
+    features: {
+      abTesting: true,
+      versioning: true,
+      reusableComponents: true,
+      customDomain: true,
+      removeBranding: true,
+      scheduledPublishing: true,
+      marketplaceSelling: true,
+      aiAssist: true,
+      workflows: true,
+      dataStore: true,
+      videoMedia: true,
+      bookings: true,
+      interactions: true,
+      actions: true,
+      webhooks: true,
+      apiAccess: true,
+      siteExport: true,
+      multilingual: true,
+      eventCalendar: false,
+      redirects: true,
+      screenAnalytics: true,
+      mediaCdn: true,
+      marketingOverlays: true,
+      commerce: true,
+      pos: true,
+      storefrontSubscriptions: true,
+      contentGating: true,
+      giftCards: true,
+      productReviews: true,
+      abandonedCart: true,
+      dropshipRouting: true,
+      commerceAnalytics: true,
+    },
+  },
   advanced: {
     hostLimit: 25,
     screensPerHost: UNLIMITED,
@@ -343,6 +419,77 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     productsPerHost: UNLIMITED,
     inventoryLocations: 10,
     posRegisters: 5,
+    transactionFeePhysicalPct: 0,
+    transactionFeeDigitalPct: 0,
+    features: {
+      abTesting: true,
+      versioning: true,
+      reusableComponents: true,
+      customDomain: true,
+      removeBranding: true,
+      scheduledPublishing: true,
+      marketplaceSelling: true,
+      aiAssist: true,
+      workflows: true,
+      dataStore: true,
+      videoMedia: true,
+      bookings: true,
+      interactions: true,
+      actions: true,
+      webhooks: true,
+      apiAccess: true,
+      siteExport: true,
+      multilingual: true,
+      eventCalendar: false,
+      redirects: true,
+      screenAnalytics: true,
+      mediaCdn: true,
+      marketingOverlays: true,
+      commerce: true,
+      pos: true,
+      storefrontSubscriptions: true,
+      contentGating: true,
+      giftCards: true,
+      productReviews: true,
+      abandonedCart: true,
+      dropshipRouting: true,
+      commerceAnalytics: true,
+    },
+  },
+  // Agency (Pricing v3, 2026-07): high-volume multi-site tier above Advanced.
+  // 100 sites, 0% fees, top-of-ladder capacity. Positioned for agencies /
+  // resellers — white-label, SSO, and an SLA are the follow-on product work
+  // that will further differentiate it (see the Pricing Decision Log).
+  agency: {
+    hostLimit: 100,
+    screensPerHost: UNLIMITED,
+    sharedLayoutsPerHost: UNLIMITED,
+    templatesPerHost: UNLIMITED,
+    storagePerHostMb: 204800,
+    totalSiteSizeMb: 102400,
+    membersPerHost: 250,
+    managersPerOrg: 100,
+    maxManagersPerOrg: 500,
+    maxMembersPerHost: 1000,
+    bandwidthGb: 20000,
+    formSubmissionsPerMonth: UNLIMITED,
+    variablesPerHost: UNLIMITED,
+    functionsPerHost: UNLIMITED,
+    workflowsPerHost: UNLIMITED,
+    workflowRunsPerMonth: 2000000,
+    servicesPerHost: UNLIMITED,
+    redirectsPerHost: UNLIMITED,
+    contactsPerHost: UNLIMITED,
+    emailSendsPerMonth: 1000000,
+    actionRunsPerMonth: 1000000,
+    apiRequestsPerMonth: 5000000,
+    datasetsPerOrg: 2000,
+    maxDatasetsPerOrg: 5000,
+    recordsPerDataset: UNLIMITED,
+    dataStorageMbPerOrg: 512000,
+    productsPerHost: UNLIMITED,
+    inventoryLocations: 50,
+    posRegisters: 20,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 0,
     features: {
@@ -500,6 +647,17 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraApiRequestsUsdPer1k: 0.5,
     extraContactsUsdPer1k: 0.5,
   },
+  scale: {
+    basePriceMonthlyUsd: 249,
+    basePriceAnnualMonthlyUsd: 179,
+    extraHostMonthlyUsd: 5,
+    extraSeatMonthlyUsd: 2,
+    extraCollaboratorMonthlyUsd: 1,
+    extraDatasetMonthlyUsd: 1,
+    extraDataGbMonthlyUsd: 0.25,
+    extraApiRequestsUsdPer1k: 0.35,
+    extraContactsUsdPer1k: 0.4,
+  },
   advanced: {
     basePriceMonthlyUsd: 399,
     basePriceAnnualMonthlyUsd: 299,
@@ -510,6 +668,17 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.2,
     extraContactsUsdPer1k: 0.25,
+  },
+  agency: {
+    basePriceMonthlyUsd: 799,
+    basePriceAnnualMonthlyUsd: 649,
+    extraHostMonthlyUsd: 3,
+    extraSeatMonthlyUsd: 2,
+    extraCollaboratorMonthlyUsd: 1,
+    extraDatasetMonthlyUsd: 1,
+    extraDataGbMonthlyUsd: 0.25,
+    extraApiRequestsUsdPer1k: 0.15,
+    extraContactsUsdPer1k: 0.2,
   },
 }
 
@@ -542,12 +711,18 @@ export function isBillingSubscription(
 }
 
 /**
- * The org's monthly recurring revenue in USD — plan base plus purchased
- * seat/dataset add-ons, and 0 for anyone who is not actually billing.
+ * The org's monthly recurring revenue in USD — plan base plus every
+ * purchased add-on (manager/collaborator seats, datasets, extra hosts, POS
+ * registers, Event Calendar), and 0 for anyone who is not actually billing.
  *
  * Annual subscriptions contribute their per-month equivalent
  * (`basePriceAnnualMonthlyUsd`), not the month-to-month price, so a mixed
- * book does not read high by the size of the annual discount.
+ * book does not read high by the size of the annual discount. Add-ons bill
+ * per-month (annual variants are ×12 with no discount), so each contributes
+ * its monthly price on either interval.
+ *
+ * Pricing-v3 fix (2026-07): previously omitted the host, POS-register, and
+ * Event-Calendar add-ons, understating MRR for every org carrying them.
  */
 export function orgMonthlyRevenueUsd(
   org: Partial<AglynOrgBilling> | null | undefined,
@@ -563,7 +738,10 @@ export function orgMonthlyRevenueUsd(
     (annual ? pricing.basePriceAnnualMonthlyUsd : pricing.basePriceMonthlyUsd) +
     seats(addons.managers, pricing.extraSeatMonthlyUsd) +
     seats(addons.members, pricing.extraCollaboratorMonthlyUsd) +
-    seats(addons.datasets, pricing.extraDatasetMonthlyUsd)
+    seats(addons.datasets, pricing.extraDatasetMonthlyUsd) +
+    seats(addons.hosts, pricing.extraHostMonthlyUsd) +
+    seats(addons.posRegisters, POS_REGISTER_ADDON_MONTHLY_USD) +
+    seats(addons.eventCalendar, EVENT_CALENDAR_ADDON_MONTHLY_USD)
   )
 }
 

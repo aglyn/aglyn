@@ -43,7 +43,9 @@ export const PLAN_ORDER: OrgPlan[] = [
   'starter',
   'pro',
   'business',
+  'scale',
   'advanced',
+  'agency',
 ]
 
 export const PLAN_LABELS: Record<OrgPlan, string> = {
@@ -51,15 +53,19 @@ export const PLAN_LABELS: Record<OrgPlan, string> = {
   starter: 'Starter',
   pro: 'Pro',
   business: 'Business',
+  scale: 'Scale',
   advanced: 'Advanced',
+  agency: 'Agency',
 }
 
 const PLAN_TAGLINES: Record<OrgPlan, string> = {
   free: 'Try Aglyn and publish your first site.',
   starter: 'Everything a single production site needs.',
   pro: 'For growing teams shipping several sites.',
-  business: 'Scale, scheduling, and priority limits.',
+  business: 'Subscriptions, scheduling, and priority limits.',
+  scale: 'Room to grow — 15 sites and a 1% platform fee.',
   advanced: 'High-volume commerce with zero platform fees.',
+  agency: 'Run many sites under one org at agency scale.',
 }
 
 const quotaLabel = (value: number, unit?: string) =>

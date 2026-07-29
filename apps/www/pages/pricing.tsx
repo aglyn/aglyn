@@ -41,7 +41,9 @@ const PLAN_ORDER: OrgPlan[] = [
   'starter',
   'pro',
   'business',
+  'scale',
   'advanced',
+  'agency',
 ]
 
 const PLAN_LABELS: Record<OrgPlan, string> = {
@@ -49,7 +51,9 @@ const PLAN_LABELS: Record<OrgPlan, string> = {
   starter: 'Starter',
   pro: 'Pro',
   business: 'Business',
+  scale: 'Scale',
   advanced: 'Advanced',
+  agency: 'Agency',
 }
 
 const PLAN_TAGLINES: Record<OrgPlan, string> = {
@@ -57,7 +61,9 @@ const PLAN_TAGLINES: Record<OrgPlan, string> = {
   starter: 'Start selling with one production site.',
   pro: 'Full commerce with POS and 0% physical fees.',
   business: 'Subscriptions, paywalls, and gift cards.',
+  scale: 'More sites and volume at a 1% digital fee.',
   advanced: 'High-volume commerce, zero platform fees.',
+  agency: 'Many sites under one org at agency scale.',
 }
 
 const quota = (value: number, unit: string) =>
