@@ -115,8 +115,32 @@ Run the local verifier first — the publish API enforces the same checks
 and rejects with the exact problem list:
 
 ```bash
-node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs
+node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs manifest.json
 ```
+
+The verifier parses your bundle rather than reading it as text, so it sees
+what a source scan could not: property access computed at runtime on
+`globalThis`/`window`/`document`, the `Function` constructor reached through
+`.constructor()`, and `import()` with a specifier it cannot resolve. All of
+those are refused.
+
+**Declare every origin you call.** The verifier collects your `fetch`,
+`XMLHttpRequest`, `WebSocket` and `sendBeacon` calls and diffs them against
+`capabilities.network` in your manifest; an origin you call but do not
+declare fails the publish. This is the same list your plugin's CSP is built
+from, so an undeclared call would have been blocked at runtime anyway —
+failing here means you find out at publish time instead of in production.
+A URL your code only knows at runtime cannot be checked, so it is reported
+as a warning and a reviewer will ask about it.
+
+Pass the manifest (as above, or leave it beside your bundle or one level up)
+or the network checks can only warn locally while the publish API still
+rejects.
+
+It also warns — without failing — about things a reviewer will want
+explained: machine-obfuscated `_0x…` identifiers, large embedded base64
+blobs, and a bundle that is one unreadably long line. Minified code is fine;
+these are the shapes minifiers do not produce.
 
 Then publish it from the console: **Marketplace → Publish**, choose
 **"A plugin (upload a bundle)"**, and follow **Publish a plugin…** to

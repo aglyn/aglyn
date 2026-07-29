@@ -272,7 +272,14 @@ Firebase, just Cloud Storage SKUs rather than the Firebase Storage line.
    dist/plugin.bundle.mjs` (AGL-426) — entry exports, self-containment,
    forbidden APIs, size. The publish API runs the SAME checks
    (`checkPluginBundle`) and 422s with the problem list, so local and
-   server verdicts never drift.
+   server verdicts never drift. The checks PARSE the bundle since
+   AGL-964: computed access on a global (`g['ev'+'al']`), any
+   `.constructor()` call, `import()` with a runtime specifier, and every
+   network call diffed against the manifest's `capabilities.network` —
+   so pass the manifest (second argument, or leave it beside/above the
+   bundle) or the network findings downgrade to warnings locally while
+   the publish API still rejects. Bump `PLUGIN_VERIFIER_VERSION` when a
+   rule changes; stored verdicts (AGL-962) then recompute.
 3. Publish through the community pipeline (`community/publish-plugin`) —
    content-addressed upload + version doc with sha256.
 4. Workspace installs (pin) the listing; org enables it.

