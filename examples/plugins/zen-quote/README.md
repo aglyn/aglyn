@@ -35,14 +35,16 @@ That one line does two separate jobs:
 | Publish time | The verifier collects the bundle's `fetch`/XHR/WebSocket/`sendBeacon` calls and diffs them against this list. An origin called but not declared **fails the publish** (AGL-964). |
 | Run time | The plugin origin serves this list as the frame's `connect-src`, so this fetch is permitted and a call to any other origin is refused by the browser — measured: fetch, XHR, WebSocket, EventSource and `sendBeacon` all raise `connect-src` violations at `disposition: enforce` (AGL-1092). |
 
-Two consequences worth knowing before you copy this plugin:
+One consequence worth knowing before you copy this plugin: **declare only what
+you call.** Over-declaring is the single most common reason a submission comes
+back — the allowlist is your blast radius if the bundle is ever compromised.
 
-- **Declare only what you call.** Over-declaring is the single most common
-  reason a submission comes back — the allowlist is your blast radius if the
-  bundle is ever compromised.
-- **Write the URL inline at the call site.** The checker cannot yet follow a
-  URL held in a `const` (AGL-1093); such a call earns a *question* row instead
-  of a checked pass, and a reviewer will ask about it.
+The URL lives in a `const` here, which the checker resolves (AGL-1093), as it
+does a template or a concatenation built from constants. What it deliberately
+will not guess is a name that is reassigned, shadowed by a parameter, or
+declared twice — those calls report as *"a URL only known at runtime"* and a
+reviewer will ask about them. A URL built from a prop or from `location` is
+always in that group.
 
 ## Verify
 

@@ -1,7 +1,7 @@
 {
   "id": "zen-quote",
   "name": "Zen Quote",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "entry": "plugin.bundle.mjs",
   "hostAbi": 1,
   "description": "Shows one line of public text fetched from api.github.com. The worked example of a plugin that declares a network origin — it sends nothing and stores nothing.",

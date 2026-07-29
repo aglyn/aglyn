@@ -131,8 +131,9 @@ export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
  * 2 — AST analysis replaces the regex scan (AGL-964).
  * 3 — per-check summary added to the verdict (AGL-1087).
  * 4 — calls through an alias are resolved (AGL-1090).
+ * 5 — URLs held in a constant are resolved (AGL-1093).
  */
-export const PLUGIN_VERIFIER_VERSION = 4
+export const PLUGIN_VERIFIER_VERSION = 5
 
 /** A verdict as stored on a `pluginVersions` doc (AGL-962). */
 export interface StoredBundleVerdict {
@@ -299,37 +300,66 @@ function walk(root: AnyNode, visit: (node: AnyNode) => void): void {
  * string literal, a template with no interpolation, and literals added
  * together (`'ev' + 'al'`).
  */
-function staticString(node: AnyNode | null | undefined): string | null {
+function staticString(
+  node: AnyNode | null | undefined,
+  constants?: ReadonlyMap<string, string>,
+): string | null {
   if (!node) return null
   if (node.type === 'Literal')
     return typeof node['value'] === 'string' ? (node['value'] as string) : null
+  // A name bound once to a constant string (AGL-1093). `const ENDPOINT =
+  // 'https://…'; fetch(ENDPOINT)` is the idiomatic way to write a request,
+  // and refusing to read it meant the network diff quietly did not run for
+  // the bundles most likely to be honest.
+  if (node.type === 'Identifier' && constants)
+    return constants.get(node['name'] as string) ?? null
   if (node.type === 'TemplateLiteral') {
-    const expressions = node['expressions'] as unknown[]
-    const quasis = node['quasis'] as Array<{ value: { cooked?: string } }>
-    if (expressions.length || quasis.length !== 1) return null
-    return quasis[0]?.value?.cooked ?? null
+    const expressions = (node['expressions'] ?? []) as AnyNode[]
+    const quasis = (node['quasis'] ?? []) as Array<{
+      value: { cooked?: string }
+    }>
+    if (!expressions.length) {
+      return quasis.length === 1 ? quasis[0]?.value?.cooked ?? null : null
+    }
+    // `${BASE}/zen` — resolvable exactly when every hole is.
+    let out = ''
+    for (let index = 0; index < quasis.length; index += 1) {
+      out += quasis[index]?.value?.cooked ?? ''
+      if (index < expressions.length) {
+        const filled = staticString(expressions[index], constants)
+        if (filled === null) return null
+        out += filled
+      }
+    }
+    return out
   }
   if (node.type === 'BinaryExpression' && node['operator'] === '+') {
-    const left = staticString(node['left'] as AnyNode)
-    const right = staticString(node['right'] as AnyNode)
+    const left = staticString(node['left'] as AnyNode, constants)
+    const right = staticString(node['right'] as AnyNode, constants)
     return left !== null && right !== null ? left + right : null
   }
   return null
 }
 
 /** The property name a member expression reads, computed or not. */
-function propertyName(node: AnyNode): string | null {
+function propertyName(
+  node: AnyNode,
+  constants?: ReadonlyMap<string, string>,
+): string | null {
   const property = node['property'] as AnyNode
   if (!node['computed'])
     return property?.type === 'Identifier'
       ? (property['name'] as string)
       : null
-  return staticString(property)
+  return staticString(property, constants)
 }
 
 /** The origin of a URL argument, when it is a knowable absolute URL. */
-function literalOrigin(node: AnyNode | undefined): string | null {
-  const value = staticString(node)
+function literalOrigin(
+  node: AnyNode | undefined,
+  constants?: ReadonlyMap<string, string>,
+): string | null {
+  const value = staticString(node, constants)
   if (!value) return null
   try {
     return new URL(value).origin
@@ -471,6 +501,83 @@ export function checkPluginBundle(
       }
     }
   }
+  // Local name -> the constant string it holds (AGL-1093).
+  //
+  // A binding is only usable when the whole tree agrees on it: declared once,
+  // never assigned again, and never a parameter or another binder anywhere.
+  // Any of those means the value at a given call site is a GUESS, and a guess
+  // is how a checker starts making claims about code it did not read.
+  const constants = new Map<string, string>()
+  {
+    const bound = new Map<string, AnyNode>()
+    const poisoned = new Set<string>()
+    const declared = new Set<string>()
+    const poison = (name: unknown) => {
+      if (typeof name === 'string') poisoned.add(name)
+    }
+    /** Every name a pattern binds — a parameter shadowing a constant is a
+     * different variable, and resolving it to the outer value would be a
+     * fabrication. */
+    const poisonPattern = (node: AnyNode | null | undefined) => {
+      if (!node) return
+      if (node.type === 'Identifier') return poison(node['name'])
+      for (const key of [
+        'left',
+        'argument',
+        'properties',
+        'elements',
+        'value',
+      ]) {
+        const value = node[key]
+        if (Array.isArray(value))
+          value.forEach((item) => poisonPattern(item as AnyNode))
+        else if (value) poisonPattern(value as AnyNode)
+      }
+    }
+    walk(program, (node) => {
+      if (node.type === 'VariableDeclarator') {
+        const id = node['id'] as AnyNode
+        if (id?.type === 'Identifier') {
+          const name = id['name'] as string
+          if (declared.has(name)) poison(name)
+          declared.add(name)
+          bound.set(name, node['init'] as AnyNode)
+        } else {
+          poisonPattern(id)
+        }
+      } else if (node.type === 'AssignmentExpression') {
+        poisonPattern(node['left'] as AnyNode)
+      } else if (node.type === 'UpdateExpression') {
+        poisonPattern(node['argument'] as AnyNode)
+      } else if (
+        node.type === 'FunctionDeclaration' ||
+        node.type === 'FunctionExpression' ||
+        node.type === 'ArrowFunctionExpression'
+      ) {
+        ;((node['params'] ?? []) as AnyNode[]).forEach(poisonPattern)
+        if ((node['id'] as AnyNode)?.type === 'Identifier')
+          poison((node['id'] as AnyNode)['name'])
+      } else if (node.type === 'CatchClause') {
+        poisonPattern(node['param'] as AnyNode)
+      } else if (
+        node.type === 'ClassDeclaration' ||
+        node.type === 'ClassExpression'
+      ) {
+        if ((node['id'] as AnyNode)?.type === 'Identifier')
+          poison((node['id'] as AnyNode)['name'])
+      }
+    })
+    // Two passes, so `const BASE = 'https://x'` then `BASE + '/y'` resolves.
+    // A third buys almost nothing and each is a full re-read of the bindings.
+    for (let pass = 0; pass < 2; pass += 1) {
+      for (const [name, init] of bound) {
+        if (poisoned.has(name) || constants.has(name)) continue
+        const value = staticString(init, constants)
+        if (value !== null) constants.set(name, value)
+      }
+    }
+  }
+
   // Local name -> the callable it stands for (AGL-1090). `const f = fetch`,
   // `const d = globalThis.fetch`, `const {fetch: h} = globalThis`.
   const callableAliases = new Map<string, string>()
@@ -590,7 +697,7 @@ export function checkPluginBundle(
   /** Origins handed to a callee the checker could not resolve (AGL-1090). */
   const unresolvedOrigins = new Set<string>()
   const noteNetwork = (api: string, urlArg: AnyNode | undefined) => {
-    const origin = literalOrigin(urlArg)
+    const origin = literalOrigin(urlArg, constants)
     networkApis.add(api)
     if (origin) networkOrigins.add(origin)
     else runtimeUrls += 1
@@ -647,7 +754,7 @@ export function checkPluginBundle(
     urlArg: AnyNode | undefined,
   ) => {
     if (name && URL_TAKING_NON_CALLS.has(name)) return
-    const origin = literalOrigin(urlArg)
+    const origin = literalOrigin(urlArg, constants)
     if (!origin || !/^https?:$/.test(new URL(origin).protocol)) return
     // A declared origin is consistent with the manifest and permitted by the
     // CSP, so there is no question to raise about it.
@@ -716,7 +823,7 @@ export function checkPluginBundle(
 
       // ---- dynamic import ----
       case 'ImportExpression': {
-        const specifier = staticString(node['source'] as AnyNode)
+        const specifier = staticString(node['source'] as AnyNode, constants)
         if (specifier === null) {
           add(
             'error',
@@ -743,7 +850,7 @@ export function checkPluginBundle(
           callee?.type === 'Identifier'
             ? (callee['name'] as string)
             : callee?.type === 'MemberExpression'
-              ? propertyName(callee)
+              ? propertyName(callee, constants)
               : null
         // An alias resolves to what it stands for (AGL-1090), so `f(url)`
         // after `const f = fetch` is a fetch call.
@@ -781,7 +888,7 @@ export function checkPluginBundle(
       // ---- member access ----
       case 'MemberExpression': {
         const object = node['object'] as AnyNode
-        const name = propertyName(node)
+        const name = propertyName(node, constants)
         if (isGlobalRef(object) && name === null) {
           add(
             'error',

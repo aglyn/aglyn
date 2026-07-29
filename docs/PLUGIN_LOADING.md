@@ -280,7 +280,10 @@ Firebase, just Cloud Storage SKUs rather than the Firebase Storage line.
    `const f = fetch; f(url)`, `const d = globalThis.fetch` and
    `const {fetch: h} = globalThis` are all network calls; a URL literal
    handed to a callee the checker cannot resolve raises a question rather
-   than passing in silence. Reassignment, `arr[0]`, an object property
+   than passing in silence. A URL held in a CONSTANT resolves too
+   (AGL-1093) — a plain string, a template, or a concatenation of them —
+   but never one whose name is reassigned, shadowed by a parameter or
+   declared twice, because the value at the call site would be a guess. Reassignment, `arr[0]`, an object property
    and passing a function as an argument stay out of reach — the bar is
    that the cheap indirection is not free —
    so pass the manifest (second argument, or leave it beside/above the

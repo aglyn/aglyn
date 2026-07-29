@@ -17,10 +17,9 @@
  *     becomes this plugin's `connect-src` on the plugin origin, so this fetch
  *     succeeds and a fetch to anything else is refused by the browser.
  *   - The publish-time verifier reads the same list: an origin called but not
- *     declared fails the publish (AGL-964). The URL is written INLINE at the
- *     call site on purpose — the checker cannot yet follow a URL held in a
- *     `const` (AGL-1093), and a bundle whose origin it cannot read only earns
- *     a question rather than a checked pass.
+ *     declared fails the publish (AGL-964). It resolves the URL through the
+ *     constant below (AGL-1093), so writing the request the idiomatic way
+ *     still earns a checked pass rather than a "could not follow it" question.
  *
  * Data handling: it sends nothing. No props, page content, member data or
  * identifiers leave the frame; the request has no body, no credentials and no
@@ -31,6 +30,8 @@
  * no cookie access — this file IS its own bundle, copied to
  * dist/plugin.bundle.mjs unchanged.
  */
+
+const ENDPOINT = 'https://api.github.com/zen'
 
 const DEFAULTS = {
   title: 'Thought for the day',
@@ -76,7 +77,7 @@ export default function render({ mount, props, scheme, emit }) {
 
   // The declared origin. Blocked by this plugin's own CSP if the manifest
   // ever stops declaring it — which is the point of the example.
-  fetch('https://api.github.com/zen', { cache: 'no-store' })
+  fetch(ENDPOINT, { cache: 'no-store' })
     .then((response) => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.text()
@@ -89,7 +90,7 @@ export default function render({ mount, props, scheme, emit }) {
     })
     .catch((error) => {
       if (!live) return
-      quote.textContent = `Could not reach api.github.com — ${error.message}`
+      quote.textContent = `Could not reach ${ENDPOINT} — ${error.message}`
       quote.style.color = dark ? '#f8a' : '#b00'
       if (typeof emit === 'function') emit('failed', { message: error.message })
     })
