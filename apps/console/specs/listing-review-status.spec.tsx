@@ -155,6 +155,62 @@ describe('ListingReviewStatus (AGL-1079)', () => {
     )
   })
 
+  /**
+   * The publisher-testing carve-out, said out loud.
+   *
+   * `install-plugin` deliberately lets the publisher install their own
+   * unapproved version — you cannot test a version you cannot install. The
+   * first cut of this card said "Nothing installs it yet" on a page only
+   * the publisher reads, over a version that was installed on one of their
+   * sites at that moment. Stating a buyer-side fact to the one person it
+   * is false for is worse than saying nothing.
+   */
+  it('does not claim nothing installs when the publisher has installed it', async () => {
+    respondWith({
+      latestVersion: '1.0.0',
+      latestApprovedVersion: '',
+      versions: [
+        {
+          ...VERSION,
+          version: '1.0.0',
+          reviewState: 'pending',
+          activeInstalls: 1,
+        },
+      ],
+    })
+    open()
+    await waitFor(() =>
+      expect(screen.getByText(/nobody else can install this/)).toBeTruthy(),
+    )
+    // The claim that was false: it must not survive anywhere on the card.
+    expect(screen.queryByText(/Nothing installs it yet/)).toBeNull()
+    expect(screen.queryByText(/so nothing installs/)).toBeNull()
+    // And the live unreviewed install is named rather than left implied.
+    expect(
+      screen.getByText(
+        /1 of your sites is running this version, which no reviewer has approved/,
+      ),
+    ).toBeTruthy()
+  })
+
+  it('does not warn about live installs on an approved version', async () => {
+    respondWith({
+      latestVersion: '1.0.0',
+      latestApprovedVersion: '1.0.0',
+      versions: [
+        {
+          ...VERSION,
+          version: '1.0.0',
+          reviewState: 'approved',
+          activeInstalls: 3,
+        },
+      ],
+    })
+    open()
+    await waitFor(() => expect(screen.getByText('Approved')).toBeTruthy())
+    expect(screen.queryByText(/no reviewer has approved/)).toBeNull()
+  })
+
   it('renders nothing for a non-plugin listing', () => {
     respondWith({ versions: [], latestVersion: '', latestApprovedVersion: '' })
     const { container } = render(

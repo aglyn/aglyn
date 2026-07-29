@@ -94,7 +94,10 @@ function reviewLabel(entry: PublisherVersion): {
       return {
         label: 'In review',
         color: 'warning',
-        detail: 'Waiting for a reviewer. Nothing installs it yet.',
+        detail:
+          'Waiting for a reviewer. Nobody else can install it — but you ' +
+          'can, on your own sites, which is how you test a version before ' +
+          'it is approved.',
       }
     default:
       return {
@@ -210,8 +213,10 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
           </Alert>
         ) : (
           <Alert severity="info">
-            {'Nothing is approved yet, so nothing installs. A reviewer sees ' +
-              'your submission in the queue.'}
+            {'Nothing is approved yet, so nobody else can install this. A ' +
+              'reviewer sees your submission in the queue. You can still ' +
+              'install it on your own sites to test it — that is the only ' +
+              'way these bytes run today.'}
           </Alert>
         )}
 
@@ -264,6 +269,9 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
                     <Chip
                       size="small"
                       variant="outlined"
+                      color={
+                        state.label === 'Approved' ? undefined : 'warning'
+                      }
                       label={`${entry.activeInstalls} on this version`}
                     />
                   ) : null}
@@ -276,6 +284,24 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
                       ).toLocaleDateString()}.`
                     : ''}
                 </Typography>
+                {/* An unreviewed version that is nonetheless RUNNING
+                    somewhere. The publisher-testing carve-out in
+                    `install-plugin` is deliberate — you cannot test a
+                    version you cannot install — but it is invisible, and a
+                    card that said "nothing installs it yet" over a live
+                    install was worse than saying nothing. */}
+                {entry.activeInstalls &&
+                entry.reviewState !== 'approved' &&
+                !entry.grandfathered ? (
+                  <Alert severity="warning" sx={{ mt: 0.5 }}>
+                    {`${entry.activeInstalls} of your sites ${
+                      entry.activeInstalls === 1 ? 'is' : 'are'
+                    } running this version, which no reviewer has approved. ` +
+                      'Only your own organization can install it — but if ' +
+                      'one of those is a live site, unreviewed code is ' +
+                      'serving real visitors.'}
+                  </Alert>
+                ) : null}
                 {/* In place, on the version it belongs to — it only ever
                     reached an email before. */}
                 {entry.rejectionReason ? (
