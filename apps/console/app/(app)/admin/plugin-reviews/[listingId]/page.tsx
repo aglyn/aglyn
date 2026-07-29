@@ -1059,8 +1059,10 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         {reviewEntry?.revoked
                           ? `v${detail.reviewVersion} is stopped. The ` +
                             `${liveOnReviewVersion} site${
-                              liveOnReviewVersion === 1 ? '' : 's'
-                            } pinned to it render a placeholder instead.`
+                              liveOnReviewVersion === 1
+                                ? ' pinned to it renders'
+                                : 's pinned to it render'
+                            } a placeholder instead.`
                           : `${liveOnReviewVersion} site${
                               liveOnReviewVersion === 1
                                 ? ' is'
