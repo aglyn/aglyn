@@ -20,12 +20,13 @@
  * verified badge (AGL-963).
  *
  * These exist because the static verifier cannot carry review on its own.
- * It matches source TEXT with regexes, so `g['ev'+'al'](…)`,
- * `(()=>{}).constructor('return 1')()` and `import(someVariable)` all pass
- * it, and a plain `fetch()` exfiltrating page data was never checked at
- * all. What contains a hostile plugin is the sandbox iframe, the
- * per-manifest CSP, sha pinning and the kill switch — plus a human, for the
- * realm tier where the first two no longer apply.
+ * It parses the bundle (AGL-964), so the shapes that used to walk past it —
+ * `g['ev'+'al'](…)`, `(()=>{}).constructor('return 1')()`,
+ * `import(someVariable)`, an undeclared `fetch()` — are caught now. What it
+ * still cannot do is read a plugin and say what it is FOR. What contains a
+ * hostile plugin is the sandbox iframe, the per-manifest CSP, sha pinning
+ * and the kill switch — plus a human, for the realm tier where the first
+ * two no longer apply.
  *
  * Every item here is therefore something static analysis STRUCTURALLY
  * cannot do: judge intent, compare code against its stated purpose, or

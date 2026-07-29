@@ -41,8 +41,9 @@ Run the same static checks the publish API enforces:
 node tools/scripts/verify-plugin-bundle.mjs examples/plugins/promo-countdown/dist/plugin.bundle.mjs
 ```
 
-Expected: `Bundle OK.` plus the sha256 (the content pin every install
-verifies).
+Expected: a `✓` for every area it checks — including `Network calls match
+the manifest`, read from `manifest.json` beside the bundle — then
+`Bundle OK.` and the sha256 (the content pin every install verifies).
 
 ## Publish
 

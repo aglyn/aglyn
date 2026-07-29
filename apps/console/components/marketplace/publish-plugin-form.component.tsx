@@ -602,8 +602,9 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
               color={fieldErrors['bundle'] ? 'error.main' : 'text.secondary'}
             >
               {fieldErrors['bundle'] ??
-                'One self-contained bundle. It’s statically checked for ' +
-                  'forbidden APIs and size before publishing.'}
+                'One self-contained bundle. It’s parsed and checked before ' +
+                  'publishing — forbidden APIs, size, and every network ' +
+                  'call against the origins your manifest declares.'}
             </Typography>
           </Stack>
 

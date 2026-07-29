@@ -78,11 +78,15 @@ inlined env values live in it.
 ## 4. Verify
 
 ```bash
-node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs
+node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs manifest.json
 ```
 
-The same checks the publish API enforces: entry exports, no leftover
-static imports, no forbidden APIs, size. It prints the bundle's sha256 —
+The same checks the publish API enforces, run over the bundle's parse tree:
+entry exports, no leftover static imports, no `eval`/`Function`/computed
+access on a global, no `import()` it cannot resolve, size — and every
+network call diffed against your manifest's `capabilities.network`, which
+is why the manifest goes in too. It lists every area it checked, so you can
+tell a pass from a check that never ran, and prints the bundle's sha256 —
 the content pin every install verifies.
 
 ## 5. Publish

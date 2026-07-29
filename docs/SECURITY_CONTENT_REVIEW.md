@@ -44,10 +44,19 @@ for full app-realm access on STAFF-SIGNED bundles. What keeps that honest:
   adminAudit event (`plugins.remoteServer.load`) with the sha and app.
 - **Publisher-side friction**: static verification (entry exports,
   self-containment, forbidden APIs, size) enforced by the publish API and
-  re-run in the staff review queue; 20 publishes/publisher/day.
+  re-run in the staff review queue; 20 publishes/publisher/day. The
+  verifier PARSES the bundle since AGL-964 — computed access on a global,
+  the `Function` constructor through `.constructor()`, `import()` with a
+  runtime specifier, and every network call diffed against the manifest's
+  declared origins, which is the check that fails a publish the CSP would
+  otherwise have blocked silently in production. Verdicts are pinned to
+  {sha256, verifier version} and swept weekly (AGL-1086), so a rule added
+  today reaches versions published last year.
 - **Residual risk**: a signed bundle IS first-party-grade code — review
   before signing is the real control. The static verifier reduces
-  reviewer load; it is not a sandbox. Rotation:
+  reviewer load; it is a lint, not a sandbox, and it reports which of its
+  checks could not run (AGL-1087) rather than letting silence read as a
+  pass. Rotation:
   `tools/scripts/generate-plugin-trust-key.mjs` →
   `tools/scripts/resign-realm-plugins.mjs` → swap public keys
   (docs/PLUGIN_LOADING.md has the order-of-operations).
