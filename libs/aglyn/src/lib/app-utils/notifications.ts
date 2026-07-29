@@ -37,15 +37,22 @@ export type AglynNotificationType =
   | 'content.lowStock'
   // Marketplace review verdicts (AGL-432/653).
   | 'community.review'
-  // A live plugin version stopped passing the static verifier (AGL-1086).
-  // Staff audience: it means bytes we told workspaces were checked now fail
-  // checks that did not exist when they were approved.
-  | 'community.verifierRegression'
   // Support desk, staff audience (AGL-850): a subscriber opened or replied to
   // a ticket. Fanned out to staff-claim holders, not org members.
   | 'support.ticketOpened'
   | 'support.ticketReply'
   | 'system.announcement'
+  // A live plugin version stopped passing the static verifier (AGL-1086).
+  // Staff audience: bytes we told workspaces were checked now fail checks
+  // that did not exist when they were approved.
+  //
+  // Deliberately NOT under `community.` (AGL-1088). Category is the prefix,
+  // categories are mutable per user, and Marketplace is the category a staff
+  // member mutes to stop routine listing-review chatter — which would drop
+  // this alert as collateral. `system` is the bucket nobody mutes to reduce
+  // noise. The adminAudit record survives a mute either way; the timeliness
+  // does not, and timeliness is the whole point of the alert.
+  | 'system.pluginVerifierRegression'
 
 export interface AglynNotification {
   $id?: string
@@ -74,10 +81,11 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'content.order': 'New order',
     'content.lowStock': 'Low stock',
     'community.review': 'Listing review',
-    'community.verifierRegression': 'Plugin verifier regression',
+
     'support.ticketOpened': 'New support ticket',
     'support.ticketReply': 'Support ticket reply',
     'system.announcement': 'Announcement',
+    'system.pluginVerifierRegression': 'Plugin verifier regression',
   }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */
