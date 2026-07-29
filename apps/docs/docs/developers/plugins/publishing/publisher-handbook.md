@@ -141,6 +141,11 @@ when you are pasting a README you wrote elsewhere. It is the document
 reviewers read first and buyers read before running third-party code, so
 it is worth the room.
 
+Paste a repository README as-is. The editor renders **two heading sizes**
+and clamps every `#` run onto them, so the `# Project Name` a README opens
+with becomes the larger heading and `####` or deeper become the smaller
+one — you do not have to re-level anything by hand.
+
 The **changelog** has two audiences, and it is worth writing for both: the
 reviewer, who compares this version against the last approved one, and
 every installer who reads it on your listing's changelog tab before
