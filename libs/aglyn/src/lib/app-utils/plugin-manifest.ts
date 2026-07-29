@@ -271,30 +271,20 @@ export function pluginArtifactPath(
 }
 
 /**
- * Builds the plugin-origin `Content-Security-Policy` from a manifest:
- * `default-src 'none'` plus only what the manifest declares. `connect-src`
- * is the network allowlist (or 'none'); `frame-ancestors` is the caller-
- * supplied aglyn origin allowlist so only our apps may frame it.
+ * The sandbox CSP is NOT built here (AGL-1092).
+ *
+ * A `pluginContentSecurityPolicy` used to live at this spot: exported,
+ * unit-tested, and called by nothing. The policy that actually reaches a
+ * browser is `csp()` in `tools/plugin-loader/origin/api/load.mjs`, on the
+ * plugin-origin deployment, and the two disagreed — this one emitted
+ * `connect-src 'none'` for a manifest with no network, which would have
+ * broken every sandboxed load, since the frame fetches its own bundle from
+ * its own origin. Deleted rather than reconciled: a tested policy nobody
+ * serves is worse than none, because it answers a reader's question wrongly.
+ * `capabilities.network` still decides the allowlist — the loader reads it
+ * from the public listing-versions endpoint and appends it to `connect-src`,
+ * with tests beside it (`npm run test:plugin-loader`).
  */
-export function pluginContentSecurityPolicy(
-  manifest: PluginManifest,
-  frameAncestors: string[],
-): string {
-  const connect = manifest.capabilities?.network?.length
-    ? manifest.capabilities.network.join(' ')
-    : "'none'"
-  const ancestors = frameAncestors.length ? frameAncestors.join(' ') : "'none'"
-  return [
-    "default-src 'none'",
-    "script-src 'self'",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https:",
-    `connect-src ${connect}`,
-    `frame-ancestors ${ancestors}`,
-    "base-uri 'none'",
-    "form-action 'none'",
-  ].join('; ')
-}
 
 /**
  * True when a pinned version is killed — the whole listing (`'all'`) or the

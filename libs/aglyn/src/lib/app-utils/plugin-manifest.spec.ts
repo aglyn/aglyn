@@ -24,7 +24,6 @@ import {
   type PluginManifest,
   type PluginRevocation,
   pluginArtifactPath,
-  pluginContentSecurityPolicy,
   validatePluginManifest,
 } from './plugin-manifest'
 
@@ -107,28 +106,6 @@ describe('pluginArtifactPath', () => {
     expect(pluginArtifactPath('l1', '1.0.0', 'abc123')).toBe(
       'artifacts/l1/1.0.0/abc123.bundle',
     )
-  })
-})
-
-describe('pluginContentSecurityPolicy', () => {
-  it("uses 'none' for connect-src without network capability", () => {
-    const csp = pluginContentSecurityPolicy(base as PluginManifest, [
-      'https://app.aglyn.com',
-    ])
-    expect(csp).toContain("default-src 'none'")
-    expect(csp).toContain("connect-src 'none'")
-    expect(csp).toContain('frame-ancestors https://app.aglyn.com')
-  })
-
-  it('allowlists declared network origins in connect-src', () => {
-    const manifest = validatePluginManifest({
-      ...base,
-      capabilities: { network: ['https://api.example.com'] },
-    })
-    if (!manifest.ok) throw new Error('expected valid')
-    const csp = pluginContentSecurityPolicy(manifest.manifest, [])
-    expect(csp).toContain('connect-src https://api.example.com')
-    expect(csp).toContain("frame-ancestors 'none'")
   })
 })
 

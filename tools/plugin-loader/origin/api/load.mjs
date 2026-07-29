@@ -47,7 +47,21 @@ function loadHtml() {
   throw new Error('load.html not found in bundle')
 }
 
-function csp(connectExtra, ancestorExtra) {
+/**
+ * The policy this deployment actually serves (AGL-1092).
+ *
+ * Exported for `load.csp.test.mjs`, because for a long time the only TESTED
+ * plugin CSP was a helper in libs/aglyn that nothing called and that
+ * disagreed with this one — including on `connect-src`, where its `'none'`
+ * would have broken every load. This is the policy; it is the one that needs
+ * the coverage.
+ *
+ * `'self'` in connect-src is load-bearing: the frame fetches its own bundle
+ * from this origin. `base-uri`/`form-action` are `'none'` so a plugin can
+ * neither re-point relative URLs with a `<base>` tag nor exfiltrate through
+ * a form submission — neither is reachable through connect-src.
+ */
+export function csp(connectExtra, ancestorExtra) {
   const connect = ["'self'", ...connectExtra].join(' ')
   const ancestors = [BASE_FRAME_ANCESTORS, ...ancestorExtra].join(' ')
   return (
@@ -56,8 +70,36 @@ function csp(connectExtra, ancestorExtra) {
     `connect-src ${connect}; ` +
     "style-src 'unsafe-inline'; " +
     'img-src data: blob: https:; ' +
+    "base-uri 'none'; " +
+    "form-action 'none'; " +
     ancestors
   )
+}
+
+/**
+ * Declared origins that may enter `connect-src`.
+ *
+ * The values arrive from a public HTTP endpoint, so shape is validated here
+ * rather than trusted: anything but a bare `https://host` is dropped, which
+ * is what keeps a rogue value from injecting a second directive. Capped so a
+ * long list cannot bloat the header.
+ */
+export function sanitizeNetwork(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((origin) => String(origin))
+    .filter((origin) => NETWORK_ORIGIN.test(origin))
+    .slice(0, 20)
+}
+
+/**
+ * Extra `frame-ancestors` — a site's VERIFIED custom domain (AGL-884).
+ * Lower-cased and shape-checked for the same reason, and capped at four.
+ */
+export function sanitizeAncestors(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((origin) => String(origin).toLowerCase())
+    .filter((origin) => ANCESTOR_ORIGIN.test(origin))
+    .slice(0, 4)
 }
 
 async function fetchJson(url) {
@@ -86,10 +128,7 @@ export default async function handler(req, res) {
       const entry = (payload?.versions ?? []).find(
         (candidate) => String(candidate?.version) === version,
       )
-      network = (Array.isArray(entry?.network) ? entry.network : [])
-        .map((origin) => String(origin))
-        .filter((origin) => NETWORK_ORIGIN.test(origin))
-        .slice(0, 20)
+      network = sanitizeNetwork(entry?.network)
     } catch {
       // Strict fallback — the plugin still runs, just without direct
       // network; hostFetch remains available.
@@ -107,10 +146,7 @@ export default async function handler(req, res) {
         'https://app.aglyn.com/api/plugin-host-origins/' +
           encodeURIComponent(hostId),
       )
-      ancestors = (Array.isArray(payload?.origins) ? payload.origins : [])
-        .map((origin) => String(origin).toLowerCase())
-        .filter((origin) => ANCESTOR_ORIGIN.test(origin))
-        .slice(0, 4)
+      ancestors = sanitizeAncestors(payload?.origins)
     } catch {
       ancestors = []
     }

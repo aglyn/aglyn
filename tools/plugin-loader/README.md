@@ -26,10 +26,16 @@ versioned postMessage bridge from `@aglyn/aglyn` (`plugin-bridge.ts`).
    module, and drives the bridge.
 2. **The bundle**, streamed from `artifacts/{listingId}/{version}/{sha256}.bundle`
    in the isolated bucket, under a per-request **`Content-Security-Policy`
-   built from the plugin's manifest** (`pluginContentSecurityPolicy`):
-   `default-src 'none'`, `connect-src` = the manifest's declared network
-   allowlist, `frame-ancestors` = the aglyn app origins. The serving layer
-   (a Cloud Function or Hosting rewrite on the plugin project) stamps this.
+   built from the plugin's manifest** by `csp()` in
+   [`origin/api/load.mjs`](./origin/api/load.mjs) — the only builder of this
+   policy (AGL-1092), tested by `npm run test:plugin-loader`:
+   `default-src 'none'`; `connect-src 'self'` plus the manifest's declared
+   network allowlist (`'self'` is load-bearing — the frame fetches its own
+   bundle from this origin); `base-uri`/`form-action` `'none'`;
+   `frame-ancestors` = the aglyn app origins plus the framing site's verified
+   custom domain. Measured live, with every egress API refused from inside
+   the frame: fetch, XHR, WebSocket, EventSource and sendBeacon all raise
+   `connect-src` violations at `disposition: enforce`.
 
 ## Plugin authoring contract (v1)
 
