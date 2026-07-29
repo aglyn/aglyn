@@ -247,5 +247,26 @@ describe('the plugin-verdict sweep (AGL-1086)', () => {
     const { payload } = await post()
     expect(payload.unverifiable).toBe(1)
     expect(mockVersionSet).not.toHaveBeenCalled()
+    // In WORDS, and naming storage (AGL-1094): "unverifiable" with an empty
+    // problem list read as a missing artifact even when the checker was the
+    // thing that broke, and sent an investigation at the wrong subsystem.
+    expect(payload.notable[0].problems[0]).toContain('could not be downloaded')
+  })
+
+  it('a checker failure is a verdict, not a missing artifact (AGL-1094)', async () => {
+    // checkPluginBundle cannot throw any more, so a bundle it chokes on comes
+    // back as a real verdict carrying the reason — never as `unverifiable`,
+    // which belongs to storage alone.
+    mockSeed = { storedOk: true, storedVerifierVersion: 1 }
+    mockDownload.mockResolvedValue([
+      Buffer.from(
+        `const ICON = 'data:image/svg+xml,<svg/>'\n` +
+          `export function register(host) { host.setIcon(ICON) }\n`,
+        'utf8',
+      ),
+    ])
+    const { payload } = await post()
+    expect(payload.unverifiable).toBe(0)
+    expect(payload.unchanged).toBe(1)
   })
 })

@@ -296,6 +296,47 @@ describe('calls through an alias (AGL-1090)', () => {
   })
 })
 
+describe('opaque-origin URLs (AGL-1094)', () => {
+  // `new URL('data:…').origin` is the STRING "null", and re-parsing that threw
+  // Invalid URL — which 500'd the publish route and made the review sweep
+  // report a perfectly readable artifact as unverifiable.
+  const opaque = [
+    `const ICON = 'data:image/svg+xml,<svg/>'\nhost.setIcon(ICON)`,
+    `host.setIcon('data:image/png;base64,AAAA')`,
+    `const B = 'blob:https://x/y'\nhost.load(B)`,
+    `host.go('javascript:void 0')`,
+  ]
+
+  for (const body of opaque) {
+    it(`does not throw on ${body.split('\n')[0].slice(0, 34)}…`, () => {
+      const result = checkPluginBundle(
+        `export function register(host) { ${body} }\n`,
+        { declaredNetwork: [] },
+      )
+      // It also must not invent a network finding out of a data URI.
+      expect(result.problems.some((p) => p.check === 'network')).toBe(false)
+      expect(
+        result.checks.find((c) => c.id === 'network')?.status,
+      ).toBe('pass')
+    })
+  }
+
+  it('answers in the verdict when the checker itself fails', () => {
+    // A checker that throws into the publish route is a 500 with no
+    // explanation; a checker that reports its own failure is reviewable.
+    const result = checkPluginBundle(
+      'export function register() {}\n',
+      // A poisoned option that makes the network diff blow up internally.
+      { declaredNetwork: { length: 1 } as unknown as string[] },
+    )
+    expect(result.ok).toBe(false)
+    expect(
+      result.problems.some((p) => p.message.includes('verifier failed')),
+    ).toBe(true)
+    expect(result.checks.find((c) => c.id === 'parse')?.status).toBe('fail')
+  })
+})
+
 describe('a URL held in a constant (AGL-1093)', () => {
   const statusOf = (result: ReturnType<typeof checkPluginBundle>) =>
     result.checks.find((check) => check.id === 'network')?.status
