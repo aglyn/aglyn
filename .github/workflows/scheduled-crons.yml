@@ -54,6 +54,17 @@ on:
           - /api/billing/usage-email
           - /api/admin/reap-plugin-artifacts
           - /api/admin/reverify-plugin-versions
+      force:
+        # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
+        # stored verdict is skipped while it is current, which is what makes
+        # the weekly run nearly free — so re-checking bytes whose verdict is
+        # already current needs saying out loud. After a
+        # PLUGIN_VERIFIER_VERSION bump every verdict is stale anyway and this
+        # changes nothing.
+        description: 'reverify only: re-check versions whose verdict is already current'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -91,15 +102,25 @@ jobs:
           BASE_URL: ${{ vars.CONSOLE_BASE_URL || 'https://app.aglyn.com' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           ROUTE: ${{ steps.route.outputs.path }}
+          FORCE: ${{ github.event.inputs.force }}
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "CRON_SECRET secret is not set on this repo" >&2
             exit 1
           fi
           url="${BASE_URL}${ROUTE}"
-          echo "POST $url"
-          code=$(curl -sS --max-time 300 -o /tmp/cron-body -w '%{http_code}' \
-            -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}")
+          echo "POST $url${FORCE:+ (force=$FORCE)}"
+          # A body only when something asked for one: the scheduled runs send
+          # none, and every route here treats a bodyless POST as its normal
+          # invocation.
+          if [ "$FORCE" = "true" ]; then
+            code=$(curl -sS --max-time 300 -o /tmp/cron-body -w '%{http_code}' \
+              -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}" \
+              -H 'content-type: application/json' -d '{"force":true}')
+          else
+            code=$(curl -sS --max-time 300 -o /tmp/cron-body -w '%{http_code}' \
+              -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}")
+          fi
           echo "HTTP $code"
           echo "--- response ---"
           cat /tmp/cron-body || true
