@@ -100,6 +100,18 @@ interface PublishDraft {
   attested: string[]
 }
 
+/**
+ * One verifier finding as the publish API returns it (AGL-1091). Declared
+ * locally rather than imported: the shared type lives in the server barrel,
+ * which carries the parser this form must never ship to a browser.
+ */
+interface PublishProblem {
+  level?: string
+  message: string
+  /** Which check produced it (AGL-1087) — absent on older responses. */
+  check?: string
+}
+
 const EMPTY_DRAFT: PublishDraft = {
   manifestText: '',
   displayName: '',
@@ -294,7 +306,13 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
   // Server-side problems, held against the field that caused them (AGL-1078)
   // instead of thrown at a snackbar that is gone before it is read. Cleared
   // on every submit so a fixed problem stops being shown as one.
-  const [problems, setProblems] = useState<string[]>([])
+  //
+  // Objects, not strings (AGL-1091): the verifier has always answered with
+  // `{level, message, check}` and this held `string[]`, so rendering a
+  // rejection threw "objects are not valid as a React child" and the error
+  // boundary ate the very card that was supposed to explain the rejection.
+  // Normalized on arrival so a plain string from anywhere else still reads.
+  const [problems, setProblems] = useState<PublishProblem[]>([])
   const [missingAttestations, setMissingAttestations] = useState<string[]>([])
   const [agreementProblem, setAgreementProblem] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -457,7 +475,23 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
-        if (Array.isArray(payload?.problems)) setProblems(payload.problems)
+        if (Array.isArray(payload?.problems)) {
+          setProblems(
+            payload.problems.map((problem: unknown) =>
+              typeof problem === 'string'
+                ? { message: problem }
+                : {
+                    level: String(
+                      (problem as PublishProblem)?.level ?? 'error',
+                    ),
+                    message: String((problem as PublishProblem)?.message ?? ''),
+                    check: (problem as PublishProblem)?.check
+                      ? String((problem as PublishProblem).check)
+                      : undefined,
+                  },
+            ),
+          )
+        }
         if (Array.isArray(payload?.missingAttestations)) {
           setMissingAttestations(payload.missingAttestations)
         }
@@ -643,14 +677,25 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
           </Stack>
 
           {problems.length ? (
-            <Alert severity="error">
+            <Alert
+              severity={
+                problems.some((problem) => problem.level !== 'warning')
+                  ? 'error'
+                  : 'warning'
+              }
+            >
               <Typography variant="subtitle2">
-                {'Bundle failed verification'}
+                {problems.some((problem) => problem.level !== 'warning')
+                  ? 'Bundle failed verification'
+                  : 'Bundle verified, with things to check'}
               </Typography>
               <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
-                {problems.map((problem) => (
-                  <li key={problem}>
-                    <Typography variant="caption">{problem}</Typography>
+                {problems.map((problem, index) => (
+                  <li key={`${problem.check ?? 'problem'}-${index}`}>
+                    <Typography variant="caption">
+                      {problem.check ? `${problem.check}: ` : ''}
+                      {problem.message}
+                    </Typography>
                   </li>
                 ))}
               </ul>
