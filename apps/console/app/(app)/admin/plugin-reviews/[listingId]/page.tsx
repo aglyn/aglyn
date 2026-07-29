@@ -95,7 +95,14 @@ interface ListingDetail {
   versions: VersionEntry[]
   verifier: {
     ok?: boolean
-    problems?: Array<{ level: string; message: string }>
+    problems?: Array<{ level: string; message: string; check?: string }>
+    /** What was checked, including what passed and what never ran (AGL-1087). */
+    checks?: Array<{
+      id: string
+      label: string
+      status: 'pass' | 'fail' | 'question' | 'unknown'
+      detail?: string
+    }>
     error?: string
   } | null
   /** The verdict came from the version doc rather than a fresh download. */
@@ -414,6 +421,25 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
         SEVERITY_ORDER.indexOf(a.level) - SEVERITY_ORDER.indexOf(b.level),
     )
 
+  // The per-check summary (AGL-1087). Findings hang off the check that
+  // produced them, so a reviewer reads "why" beside "what", and the counts
+  // below say in one line whether this verdict is mostly green or mostly
+  // questions. Findings from a checker that did not tag them fall through to
+  // their own list rather than disappearing.
+  const checks = detail?.verifier?.checks ?? []
+  const findingsByCheck = new Map<string, typeof findings>()
+  const untaggedFindings: typeof findings = []
+  for (const finding of findings) {
+    const id = finding.check
+    if (!id || !checks.some((check) => check.id === id)) {
+      untaggedFindings.push(finding)
+      continue
+    }
+    findingsByCheck.set(id, [...(findingsByCheck.get(id) ?? []), finding])
+  }
+  const countBy = (status: string) =>
+    checks.filter((check) => check.status === status).length
+
   return (
     <DashboardLayout
       breadcrumbItems={[
@@ -676,11 +702,104 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                     <Alert severity="warning">
                       {`Verifier could not run: ${detail.verifier.error}`}
                     </Alert>
-                  ) : findings.length ? (
-                    <Stack spacing={0.75}>
-                      {findings.map((problem, index) => (
+                  ) : (
+                    <Stack spacing={1}>
+                      {/* One line for the whole verdict, then the areas
+                          themselves (AGL-1087). "Found nothing" alone could
+                          not tell a reviewer whether ten checks passed or
+                          the interesting one never ran. */}
+                      <Typography variant="body2" color="text.secondary">
+                        {checks.length
+                          ? [
+                              `${countBy('pass')} passed`,
+                              countBy('fail')
+                                ? `${countBy('fail')} failed`
+                                : '',
+                              countBy('question')
+                                ? `${countBy('question')} to question`
+                                : '',
+                              countBy('unknown')
+                                ? `${countBy('unknown')} could not run`
+                                : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')
+                          : detail.verifier.ok
+                            ? 'Static verifier found nothing.'
+                            : 'Static verifier found problems.'}
+                        {/* Says WHICH bytes, because that is what makes a
+                            stored verdict trustworthy — not when it ran. */}
+                        {detail.verifierCached
+                          ? ' · stored verdict for these exact bytes'
+                          : ''}
+                      </Typography>
+                      {checks.map((check) => {
+                        const marker =
+                          check.status === 'pass'
+                            ? { glyph: '✓', color: 'success.main' }
+                            : check.status === 'fail'
+                              ? { glyph: '✕', color: 'error.main' }
+                              : check.status === 'question'
+                                ? { glyph: '?', color: 'warning.main' }
+                                : { glyph: '—', color: 'text.disabled' }
+                        return (
+                          <Stack key={check.id} spacing={0.5}>
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              sx={{ alignItems: 'baseline' }}
+                            >
+                              <Typography
+                                variant="body2"
+                                sx={{ color: marker.color, width: 16 }}
+                              >
+                                {marker.glyph}
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                color={
+                                  check.status === 'unknown'
+                                    ? 'text.secondary'
+                                    : undefined
+                                }
+                              >
+                                {check.label}
+                                {check.status === 'unknown'
+                                  ? ' — not checked'
+                                  : ''}
+                              </Typography>
+                              {check.detail ? (
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  {check.detail}
+                                </Typography>
+                              ) : null}
+                            </Stack>
+                            {(findingsByCheck.get(check.id) ?? []).map(
+                              (problem, index) => (
+                                <Alert
+                                  key={`${check.id}-${index}`}
+                                  severity={
+                                    problem.level === 'error'
+                                      ? 'error'
+                                      : 'warning'
+                                  }
+                                  sx={{ ml: 3 }}
+                                >
+                                  {problem.message}
+                                </Alert>
+                              ),
+                            )}
+                          </Stack>
+                        )
+                      })}
+                      {/* A verdict stored before findings carried their check
+                          (AGL-1087) still has to be readable. */}
+                      {untaggedFindings.map((problem, index) => (
                         <Alert
-                          key={`${problem.level}-${index}`}
+                          key={`untagged-${index}`}
                           severity={
                             problem.level === 'error' ? 'error' : 'warning'
                           }
@@ -688,16 +807,15 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                           {problem.message}
                         </Alert>
                       ))}
+                      {checks.length ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {'A full column of ticks means these shapes were ' +
+                            'not found in code the parser could read. It is ' +
+                            'not a statement that the plugin is safe — that ' +
+                            'is the checklist below.'}
+                        </Typography>
+                      ) : null}
                     </Stack>
-                  ) : (
-                    <Alert severity="success">
-                      {'Static verifier found nothing.'}
-                      {/* Says WHICH bytes, because that is what makes a
-                          stored verdict trustworthy — not when it ran. */}
-                      {detail.verifierCached
-                        ? ' Stored verdict for these exact bytes.'
-                        : ''}
-                    </Alert>
                   )}
                 </Stack>
               </CardDisplay>
