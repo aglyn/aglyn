@@ -17,10 +17,45 @@ the marketplace side.
 1. **Publisher profile** (Marketplace → Profile) — your handle and
    display name appear on every listing. Publishing is **organization-owned**:
    the listing belongs to your organization, not your personal account.
-2. **Plan**: publishing requires a Pro plan.
-3. **Payouts** (paid listings only): complete Stripe Connect onboarding
+2. **Publisher agreement** (Marketplace → Profile) — accept it once, on
+   behalf of the organization. See
+   [The publisher agreement](#the-publisher-agreement).
+3. **Plan**: publishing requires a Pro plan.
+4. **Payouts** (paid listings only): complete Stripe Connect onboarding
    from **Marketplace → Payouts**. The platform fee is 20% (30% on free
    plans).
+
+## The publisher agreement
+
+Your **organization** — not you personally — is the publishing party, so
+the organization accepts the **Marketplace Publisher Agreement** once,
+from **Marketplace → Profile**. Only an owner or admin can accept it,
+because only they can bind the organization, and we record who accepted
+it and when.
+
+It is a different thing from the
+[pre-publish checklist](#before-you-publish), and they are not
+interchangeable:
+
+| | Publisher agreement | Pre-publish checklist |
+| --- | --- | --- |
+| About | The relationship | The bytes in this bundle |
+| Scope | Your organization | One version |
+| Asked | Once, and again when the terms change | Every publish, including a republish of the same version number |
+
+The summary shown above the accept button is the part that tends to
+surprise people later — the license you grant us to host, verify and
+distribute; what you warrant about each version; that you cannot recall
+code already installed; that we can disable a version everywhere without
+notice if it looks dangerous; that review is a safety screen and not an
+endorsement; and that on paid listings you are the seller. Read the full
+agreement before accepting.
+
+**If we change the agreement, publishing stops** until someone who can
+bind your organization reads and accepts the new version. An older
+acceptance is never carried forward — that is the whole reason the
+agreement is versioned. Nothing already published is affected, and
+reviewers can see which version each publisher is under.
 
 ## Where to publish from
 
@@ -83,17 +118,40 @@ and rejects with the exact problem list:
 node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs
 ```
 
-Then upload it from the console: **Marketplace → Publish**, choose
-**"A plugin (upload a bundle)"**, and pick your built
-`plugin.bundle.mjs` plus its `manifest.json` (choose the file or paste
-the JSON). Set the listing name, description, changelog, category, and
-price, and publish. Uploads always publish **sandboxed** — a reviewer
+Then publish it from the console: **Marketplace → Publish**, choose
+**"A plugin (upload a bundle)"**, and follow **Publish a plugin…** to
+`/<your-org>/marketplace/publish/plugin`. It is a page, not a dialog, so
+you can link it, reload it, and leave it half-finished — what you have
+typed is kept as a **local draft** until you publish or discard it.
+
+The one thing the draft cannot keep is your **bundle and manifest
+files**: a browser will not let a page hold a file across a reload, so
+you re-choose them, and the page says so rather than pretending it is
+ready to publish.
+
+The sections are: **bundle and manifest** (choose the file or paste the
+JSON), **listing** (name, description, category, README, changelog,
+repository URL, license), **who can install it and for how much**, and
+the pre-publish checklist. Publishing always publishes **sandboxed** — a reviewer
 verifies and signs a version before it can run trusted.
+
+The **README** here is the same rich-text editor you get when you edit the
+listing later — toolbar, media picker, and a **Markdown source** toggle for
+when you are pasting a README you wrote elsewhere. It is the document
+reviewers read first and buyers read before running third-party code, so
+it is worth the room.
+
+The **changelog** has two audiences, and it is worth writing for both: the
+reviewer, who compares this version against the last approved one, and
+every installer who reads it on your listing's changelog tab before
+deciding to update. On a **first** version there is nothing to compare
+against — say what the plugin does instead, or leave it empty.
 
 ### Before you publish
 
-The dialog asks you to confirm a short checklist, and **publishing is
-blocked until you do**:
+The last section of the page asks you to confirm a short checklist, in
+full view of the publish button, and **publishing is blocked until you
+do**:
 
 - The repository URL is public and contains the source for this bundle
 - A license is included and you have the right to publish this code
@@ -104,6 +162,13 @@ blocked until you do**:
 - You have tested **this version** on a site you control
 - The changelog describes what changed since the last version — asked
   only when you're updating an existing listing
+
+The first item has a field to go with it: **Repository URL** is asked
+for on the publish form itself, and publishing is refused if you confirm
+the item without filling it in — an attestation about a repository we
+never collected is a statement about nothing. It's recorded on the
+version too, so a reviewer opening v1.0.2 gets the repo you declared for
+*those* bytes, even if you move the code later.
 
 These aren't paperwork. They're the questions that send most submissions
 back, so answering them up front is the fastest route through the queue.
@@ -116,8 +181,8 @@ Each publish uploads your bundle (content-addressed by sha256 —
 **immutable**; a new build is a new object), writes a version document
 with your manifest and changelog, and bumps the listing's
 `latestVersion`. To ship an update, bump `version` in the manifest and
-upload again through the same dialog. There's a daily publish cap per
-publisher.
+upload again — see [Shipping a new version](#shipping-a-new-version).
+There's a daily publish cap per publisher.
 
 ## Review: what happens after you publish
 
@@ -138,6 +203,49 @@ Speed the review up: a real README, a license, sane `capabilities`
 exactly what the pre-publish checklist above asks you to confirm. A
 confirmation that turns out to be false is a dated statement by a named
 publisher, and it's grounds for removal.
+
+### Testing a version before it is approved
+
+You can install **your own** unapproved version, on your own sites. That is
+deliberate — the checklist asks you to confirm you tested *these exact
+bytes*, and you cannot test a version you cannot install. Nobody else can
+install it until a reviewer approves it, and a private listing is invisible
+to everyone else regardless.
+
+The install says so when that is what it is: the button reads **Install
+unreviewed vX for testing**, and the confirmation spells out the part worth
+pausing on — **every site you can install to is publicly reachable**. There
+is no staging site here, so an unreviewed bundle installed to a real site
+serves real visitors until you uninstall it. Prefer a site with no traffic,
+and uninstall when you are done.
+
+Your listing's **Review status** card warns you when an unapproved version
+still has live installs, so a test install cannot quietly become permanent.
+
+### Watching your own submission
+
+Open your own listing and the **Review status** card — visible only to
+you — answers what an email cannot:
+
+- **Which version installs today**, from the newest *approved* version
+  rather than the newest one you published. When they differ it says so:
+  *"v1.0.3 is in review. New installs get v1.0.2 until it is approved,
+  and anyone already running it stays where they are."*
+- **Every version's state** in words — *In review*, *Approved*,
+  *Rejected*, or *Published before review* for versions that predate
+  per-version review and so carry no verdict at all.
+- **Why a version was rejected**, on the version it belongs to.
+- **What you confirmed** on the pre-publish checklist for those exact
+  bytes, so you can see the claims you already made before making them
+  again.
+
+Two things it states that you would otherwise have to infer:
+
+- **Editing your listing while a version is in review changes nothing
+  about the review.** Name, description, README, screenshots and links go
+  through a different path, because approval is about the bundle's bytes.
+- **The bytes are never edited.** Changing them means publishing a new
+  version — there is no "resubmit" for a rejected one.
 
 ## Private plugins
 
@@ -181,7 +289,7 @@ whole page becomes the editor), or use the **Edit** action on
 | Screenshots | Up to 6, from the media library or https URLs; the detail page shows a gallery with click-to-zoom. |
 | Categories | Up to 3 from the fixed taxonomy. |
 | License | Short label (e.g. `MIT`) — listings without one get flagged in review. |
-| Homepage / repository | Public links build trust; reviewers check them. |
+| Homepage / repository | Public links build trust; reviewers check them. The repository is asked for at publish and required — editing it here changes the listing, not what past versions declared. |
 
 Be explicit about **data & permissions** in the README: what your plugin
 reads/writes and every host in your manifest's network allowlist —
@@ -189,6 +297,33 @@ unverified sandbox listings show buyers a risk disclaimer, and good docs
 are what overcomes it.
 
 ## Versioning & updates
+
+### Shipping a new version
+
+**Publish new version** on your listing — the button on the listing's own
+detail page, or the action in the row menu on **Marketplace → Listings**.
+It opens the same publish page bound to that listing, so you upload the
+new bundle and manifest and write a changelog rather than describing a
+listing you already own; name, description, README, license, repository
+and price arrive filled in from the listing and are yours to edit.
+
+What the page tells you, because it is the part worth knowing: **the
+version that installs today keeps installing** until a reviewer approves
+the new one. Nobody is upgraded onto unreviewed code, and nothing you
+publish can change a version somebody already has.
+
+Two things it will stop you on:
+
+- **A mismatched manifest `id`.** An update is recognised by your
+  publisher organization plus the manifest `id` — so a bundle carrying a
+  different `id` would create a *separate listing*, not a new version.
+  The page says so and refuses rather than letting you find out from a
+  duplicate listing you cannot un-publish the bytes of.
+- **The changelog confirmation.** On an update the pre-publish checklist
+  asks for it up front, because here we know it applies.
+
+**Who can install it** is fixed when the listing is created and a new
+version never changes it — change that from the listing itself.
 
 - Artifacts are immutable and installs pin `{version, sha256}` — you can
   never change the code a consumer runs; ship a new version instead.

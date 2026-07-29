@@ -1,0 +1,25 @@
+{
+  "id": "office-hours",
+  "name": "Office Hours",
+  "version": "1.0.0",
+  "entry": "plugin.bundle.mjs",
+  "hostAbi": 1,
+  "description": "Shows whether you are open right now and when you next open or close, from a weekly schedule. No network access.",
+  "capabilities": {
+    "props": [
+      "title",
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "openLabel",
+      "closedLabel",
+      "accent"
+    ],
+    "events": ["opened", "closed"],
+    "size": { "height": 260 }
+  }
+}

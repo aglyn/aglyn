@@ -106,6 +106,13 @@ interface ListingDetail {
   /** Who signed the attestation, and when. */
   attestedBy: string | null
   attestedAt: string | null
+  /** The org-level agreement this publisher is under (AGL-1077). */
+  publisherAgreement: {
+    version: string | null
+    acceptedAt: string | null
+    required: string
+    state: 'none' | 'outdated' | 'current'
+  }
   /** The version the checklist and verifier verdict above refer to. */
   reviewVersion: string
   private: boolean
@@ -708,6 +715,32 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       </Stack>
                     )
                   })}
+                  {/* Which terms this publisher is under (AGL-1077). Sits
+                      with the attestation because both answer "what has this
+                      publisher committed to" — but they answer it at
+                      different scopes. The attestation is about these bytes;
+                      this is about the relationship, and it is the one that
+                      decides what we are entitled to do if the bytes turn
+                      out to be a problem. */}
+                  <Divider sx={{ my: 1 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    {detail.publisherAgreement?.state === 'current'
+                      ? `Publisher agreement v${detail.publisherAgreement.version} accepted` +
+                        (detail.publisherAgreement.acceptedAt
+                          ? ` on ${new Date(
+                              detail.publisherAgreement.acceptedAt,
+                            ).toLocaleDateString()}`
+                          : '') +
+                        '.'
+                      : detail.publisherAgreement?.state === 'outdated'
+                        ? `Publisher agreement: on v${detail.publisherAgreement.version}, ` +
+                          `current is v${detail.publisherAgreement.required}. This ` +
+                          'version was published under the older terms.'
+                        : 'No publisher agreement on record — this org ' +
+                          'published before one existed. Weigh a takedown ' +
+                          'against the Terms of Service, not against terms ' +
+                          'nobody accepted.'}
+                  </Typography>
                 </Stack>
               </CardDisplay>
 

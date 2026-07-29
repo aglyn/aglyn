@@ -17,6 +17,7 @@
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { PUBLISHER_AGREEMENT_VERSION } from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { isValidPublisherHandle } from '../model/community'
 import {
   canActAsPublisher,
@@ -24,6 +25,72 @@ import {
   PublisherHandleTakenError,
   PUBLISHER_PROFILES,
 } from './publisher-profile'
+
+/**
+ * Record an org's acceptance of the marketplace publisher agreement
+ * (AGL-1077).
+ *
+ * Server-owned, like the handle and the payout keys: an acceptance a client
+ * could write is not evidence of anything. The rules block the field, and
+ * this is the only path that sets it.
+ *
+ * The submitted version must be the one currently in force. A client that
+ * echoes back some other string is refused rather than recorded — otherwise
+ * "accepted v1 forever" becomes a way to never see a changed agreement, and
+ * the whole point of versioning it is that a change re-asks.
+ */
+const acceptPublisherAgreement: PluginApiHandler = async (req, res) => {
+  const orgId = String(req.body?.orgId ?? '')
+  const version = String(req.body?.version ?? '')
+  if (!orgId) return res.status(400).json({ error: 'Missing orgId' })
+  if (version !== PUBLISHER_AGREEMENT_VERSION) {
+    return res.status(409).json({
+      error:
+        'The agreement changed while you were reading it. Reload and read ' +
+        'the current version before accepting.',
+      currentVersion: PUBLISHER_AGREEMENT_VERSION,
+    })
+  }
+  const authorization = String(req.headers.authorization ?? '')
+  const idToken = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined
+  if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
+  try {
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    const firestore = firebaseAdmin.app().firestore()
+    // The ORG is the party (AGL-652), and only someone who can bind it may
+    // say so — the same gate that owns the profile's public identity.
+    if (!(await canActAsPublisher(firestore, decoded.uid, orgId))) {
+      return res.status(403).json({
+        error:
+          'Only an organization owner or admin can accept the publisher ' +
+          'agreement on its behalf',
+      })
+    }
+    await firestore
+      .collection(PUBLISHER_PROFILES)
+      .doc(orgId)
+      .set(
+        {
+          publisherAgreement: {
+            version: PUBLISHER_AGREEMENT_VERSION,
+            // A uid, not the org: "this organization agreed" is not a fact
+            // anybody can be held to. A named person on a date is.
+            acceptedBy: decoded.uid,
+            acceptedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          },
+        },
+        { merge: true },
+      )
+    return res
+      .status(200)
+      .json({ ok: true, version: PUBLISHER_AGREEMENT_VERSION })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ error: 'Could not record the acceptance' })
+  }
+}
 
 /**
  * Save an org's publisher profile (AGL-652).
@@ -40,6 +107,12 @@ import {
 export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
+  }
+  // Accepting the agreement (AGL-1077) is not a profile edit — it writes a
+  // field the profile save must never touch, so it takes its own branch
+  // rather than riding along with a name change.
+  if (req.body?.action === 'accept-agreement') {
+    return acceptPublisherAgreement(req, res)
   }
   const orgId = String(req.body?.orgId ?? '')
   const handle = String(req.body?.handle ?? '').trim().toLowerCase()

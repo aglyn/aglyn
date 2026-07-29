@@ -59,6 +59,10 @@ export enum Route {
   ORG_MARKETPLACE = '/[orgSlug]/marketplace',
   ORG_MARKETPLACE_LISTING = '/[orgSlug]/marketplace/[listingId]',
   ORG_MARKETPLACE_PUBLISHER = '/[orgSlug]/marketplace/publisher/[handle]',
+  // Publishing a plugin is a page, not a modal (AGL-1078): the most
+  // consequential thing a publisher does now has a URL, so it can be linked,
+  // reloaded, and reached from a listing to ship an update.
+  ORG_MARKETPLACE_PUBLISH_PLUGIN = '/[orgSlug]/marketplace/publish/plugin',
   ORG_SETTINGS = '/[orgSlug]/settings',
   MANAGE_BILLING = '/[orgSlug]/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
@@ -175,6 +179,7 @@ export interface RoutePayload {
   [Route.ORG_MARKETPLACE]: { orgSlug: string }
   [Route.ORG_MARKETPLACE_LISTING]: { orgSlug: string; listingId: string }
   [Route.ORG_MARKETPLACE_PUBLISHER]: { orgSlug: string; handle: string }
+  [Route.ORG_MARKETPLACE_PUBLISH_PLUGIN]: { orgSlug: string }
   [Route.MANAGE_USER_SETTINGS]: undefined
   [Route.MANAGE_NOTIFICATIONS]: undefined
   [Route.MANAGE_MY_COMMUNITY]: undefined

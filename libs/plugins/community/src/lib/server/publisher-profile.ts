@@ -16,6 +16,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { type PublisherAgreementAcceptance } from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { isValidPublisherHandle } from '../model/community'
 
 /** `publisherProfiles/{orgId}` — the org's marketplace identity (AGL-652). */
@@ -29,6 +30,12 @@ export interface ResolvedPublisher {
   displayName?: string
   stripeAccountId?: string
   stripeChargesEnabled?: boolean
+  /**
+   * Which marketplace publisher agreement this ORG has accepted (AGL-1077).
+   * Absent on every profile created before the agreement existed, which is
+   * why publishing refuses rather than assuming consent.
+   */
+  agreement?: PublisherAgreementAcceptance
 }
 
 /**
@@ -55,6 +62,9 @@ export async function resolvePublisherProfile(
     displayName: snapshot.get('displayName') as string | undefined,
     stripeAccountId: snapshot.get('stripeAccountId') as string | undefined,
     stripeChargesEnabled: snapshot.get('stripeChargesEnabled') === true,
+    agreement: snapshot.get('publisherAgreement') as
+      | PublisherAgreementAcceptance
+      | undefined,
   }
 }
 

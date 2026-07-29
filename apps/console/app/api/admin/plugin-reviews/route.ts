@@ -39,6 +39,10 @@ import {
   PLUGIN_REVIEW_CHECKLIST,
 } from '../../../../constants/plugin-review-checklist'
 import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import {
+  PUBLISHER_AGREEMENT_VERSION,
+  publisherAgreementState,
+} from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { FieldValue } from 'firebase-admin/firestore'
 import { listOrgMembers, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 import { sendEmail } from '@aglyn/shared-util-email'
@@ -153,6 +157,9 @@ async function listingDetail(
       installCount: Number(doc.get('installCount') ?? 0),
       activeInstalls: Number(doc.get('activeInstalls') ?? 0),
       signed: Boolean(doc.get('signature')),
+      // The repo as declared for THESE bytes (AGL-1076); absent on versions
+      // published before it was collected.
+      repositoryUrl: String(doc.get('repositoryUrl') ?? ''),
       reviewState: String(doc.get('reviewState') ?? 'pending'),
       grandfathered: Boolean(doc.get('grandfathered')),
       // Server-side only — used to decide whether the verdict below needs
@@ -168,6 +175,17 @@ async function listingDetail(
   const publisher = publisherId
     ? await firestore.collection('orgs').doc(publisherId).get()
     : null
+
+  // Which terms this publisher is actually under (AGL-1077). A reviewer
+  // weighing a takedown, a delist, or a revocation is deciding what we are
+  // entitled to do — and that is answered by the agreement the ORG accepted,
+  // not by the per-version attestation beside it.
+  const publisherProfile = publisherId
+    ? await firestore.collection('publisherProfiles').doc(publisherId).get()
+    : null
+  const acceptance = publisherProfile?.get('publisherAgreement') as
+    | { version?: string; acceptedBy?: string; acceptedAt?: { toDate?: () => Date } }
+    | undefined
 
   // Kill switch, so the page can say whether the plugin is actually stopped
   // rather than only de-listed (AGL-948).
@@ -275,7 +293,12 @@ async function listingDetail(
       license: listing.license ?? '',
       categories: listing.categories ?? [],
       homepageUrl: listing.homepageUrl ?? '',
-      repositoryUrl: listing.repositoryUrl ?? '',
+      // Prefer what the version under review declared (AGL-1076). The
+      // listing carries whatever the most recent publish said, and a repo
+      // can move between versions — the link a reviewer opens should be the
+      // one attested against the bytes in front of them. Falls back to the
+      // listing for versions published before this was collected.
+      repositoryUrl: reviewEntry?.repositoryUrl || listing.repositoryUrl || '',
       publisherId,
       publisherName: publisher?.get('name') ?? publisherId,
       publisherSlug: publisher?.get('slug') ?? null,
@@ -333,6 +356,16 @@ async function listingDetail(
       ),
       attestedBy,
       attestedAt,
+      // The publisher agreement this ORG is under (AGL-1077). `current` is
+      // computed here rather than shipped as a boolean so the page can say
+      // "on an older version" — which is a different thing from never
+      // having accepted, and matters differently to a takedown decision.
+      publisherAgreement: {
+        version: acceptance?.version ?? null,
+        acceptedAt: acceptance?.acceptedAt?.toDate?.()?.toISOString() ?? null,
+        required: PUBLISHER_AGREEMENT_VERSION,
+        state: publisherAgreementState(acceptance),
+      },
       verifier,
       verifierCached,
       verifierVersion: PLUGIN_VERIFIER_VERSION,

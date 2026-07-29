@@ -1272,6 +1272,19 @@ describe('pre-release hardening guards', () => {
         handle: 'stolen-handle',
       }),
     )
+    // The publisher agreement is server-owned too (AGL-1077). An acceptance
+    // the accepting party can write itself is not evidence of anything —
+    // and this is the field `publish-plugin` refuses on, so a forgeable one
+    // would make the whole gate decorative.
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
+        publisherAgreement: {
+          version: '2026-07-28.1',
+          acceptedBy: OWNER,
+          acceptedAt: new Date(),
+        },
+      }),
+    )
     // Malformed handles are rejected.
     await assertFails(
       setDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {

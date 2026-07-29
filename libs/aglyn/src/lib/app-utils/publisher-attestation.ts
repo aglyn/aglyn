@@ -50,6 +50,26 @@ export interface PublisherAttestationItem {
    * some of these boxes are noise.
    */
   updateOnly?: boolean
+  /**
+   * The submitted field this item is a claim ABOUT (AGL-1076).
+   *
+   * An attestation whose subject is absent is a statement about nothing:
+   * `repository` shipped for a while confirming that a repository URL is
+   * public and matches, in a form with nowhere to name a repository, on
+   * listings whose `repositoryUrl` was empty. A reviewer opened it first and
+   * found nothing to open.
+   *
+   * So a subject makes the tick enforceable: the publish route refuses with
+   * the same 428 as a missing tick when the value is not in the request that
+   * stores it. Declared here rather than in the route so the form knows to
+   * ask for it and the route knows to require it from one place.
+   */
+  subject?: {
+    /** Key in the publish body, and on the listing/version doc. */
+    field: string
+    /** How the field is labelled to the publisher, for the error. */
+    label: string
+  }
 }
 
 export const PUBLISHER_ATTESTATION: readonly PublisherAttestationItem[] = [
@@ -58,6 +78,7 @@ export const PUBLISHER_ATTESTATION: readonly PublisherAttestationItem[] = [
     label: 'The repository URL is public and contains the source for this bundle',
     detail:
       'A reviewer opens it first. A repo that 404s, is private, or holds something unrelated is the cheapest reason a submission gets sent back.',
+    subject: { field: 'repositoryUrl', label: 'Repository URL' },
   },
   {
     id: 'license',
@@ -124,6 +145,36 @@ export function missingAttestations(
 ): string[] {
   const given = new Set(ticked ?? [])
   return requiredAttestationIds(isUpdate).filter((id) => !given.has(id))
+}
+
+/** The fields a submission must carry alongside its ticks (AGL-1076). */
+export function attestationSubjects(
+  isUpdate: boolean,
+): Array<{ id: string; field: string; label: string }> {
+  return PUBLISHER_ATTESTATION.filter(
+    (item) => item.subject && (isUpdate || !item.updateOnly),
+  ).map((item) => ({
+    id: item.id,
+    field: item.subject?.field ?? '',
+    label: item.subject?.label ?? '',
+  }))
+}
+
+/**
+ * Which required attestations have nothing to be about (AGL-1076).
+ *
+ * `values` is the submission being stored, never the listing doc: on a first
+ * publish there is no listing, and on an update the tick is a statement about
+ * what this publish declares, not about whatever the listing said last year.
+ */
+export function missingAttestationSubjects(
+  values: Record<string, unknown> | null | undefined,
+  isUpdate: boolean,
+): Array<{ id: string; field: string; label: string }> {
+  return attestationSubjects(isUpdate).filter((subject) => {
+    const value = (values ?? {})[subject.field]
+    return typeof value !== 'string' || !value.trim()
+  })
 }
 
 /** Human labels for a set of ids, for an error a publisher can act on. */

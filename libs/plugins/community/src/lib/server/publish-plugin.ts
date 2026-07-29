@@ -38,8 +38,14 @@ import {
 import {
   attestationLabels,
   missingAttestations,
+  missingAttestationSubjects,
   PUBLISHER_ATTESTATION,
 } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import {
+  PUBLISHER_AGREEMENT_VERSION,
+  publisherAgreementRefusal,
+  publisherAgreementState,
+} from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { createHash } from 'crypto'
 import {
   COMMUNITY_MAX_PRICE_USD,
@@ -301,6 +307,28 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
       })
     }
 
+    // The publisher agreement (AGL-1077). A precondition on the ORG, checked
+    // here beside the profile and payout preconditions it belongs with —
+    // deliberately NOT the 428 the attestation uses. "You did not confirm
+    // the checklist for this bundle" and "your organization has never agreed
+    // to our terms" are different problems, fixed in different places, and a
+    // shared status code would send a publisher back to the checklist to
+    // tick something that is already ticked.
+    //
+    // An acceptance of an older version does not count: whoever publishes
+    // next reads the changed agreement and accepts it, or does not publish.
+    const agreementState = publisherAgreementState(publisher.agreement)
+    if (agreementState !== 'current') {
+      return res.status(412).json({
+        error: publisherAgreementRefusal(agreementState),
+        agreement: {
+          required: PUBLISHER_AGREEMENT_VERSION,
+          accepted: publisher.agreement?.version ?? null,
+          state: agreementState,
+        },
+      })
+    }
+
     const bundle = Buffer.from(bundleBase64, 'base64')
     if (!bundle.length || bundle.length > MAX_BUNDLE_BYTES) {
       return res.status(413).json({ error: 'Bundle is empty or too large' })
@@ -357,13 +385,38 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     ).filter((id: string) =>
       PUBLISHER_ATTESTATION.some((item) => item.id === id),
     )
-    const missing = missingAttestations(ticked, !existing.empty)
+    const isUpdate = !existing.empty
+    const missing = missingAttestations(ticked, isUpdate)
     if (missing.length) {
       return res.status(428).json({
         error:
           'Confirm the pre-submission checklist before publishing: ' +
           attestationLabels(missing).join('; '),
         missingAttestations: missing,
+      })
+    }
+
+    // An attestation needs something to be about (AGL-1076). `repository`
+    // was confirmable in a form with no repository field, so listings
+    // reached review carrying a signed claim that a URL we never collected
+    // was public and matched — and the reviewer's first link went nowhere.
+    //
+    // Checked against the SUBMISSION, not the listing doc: a first publish
+    // has no listing, and on an update the tick is a statement about what
+    // this publish declares. `contentVerdict.content` is the normalized
+    // value about to be stored, so the gate and the write cannot disagree.
+    const missingSubjects = missingAttestationSubjects(
+      contentVerdict.content as Record<string, unknown>,
+      isUpdate,
+    )
+    if (missingSubjects.length) {
+      return res.status(428).json({
+        error:
+          'These are confirmed above but not filled in: ' +
+          missingSubjects.map((subject) => subject.label).join('; '),
+        missingAttestationSubjects: missingSubjects.map(
+          (subject) => subject.field,
+        ),
       })
     }
 
@@ -427,6 +480,14 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         objectPath,
         manifest,
         ...(changelog.trim() && { changelog: changelog.trim() }),
+        // The repository as declared FOR THESE BYTES (AGL-1076). The listing
+        // carries whatever the latest publish said, and a publisher may move
+        // or rename a repo between versions — a reviewer looking at v1.0.2
+        // needs the link that was attested against v1.0.2's sha256, which is
+        // the same reasoning that pins the attestation itself.
+        ...(contentVerdict.content?.repositoryUrl && {
+          repositoryUrl: contentVerdict.content.repositoryUrl,
+        }),
         publishedAt: now,
         // What the publisher stated about these bytes (AGL-969). Same shape
         // as the staff `reviewChecklist` and pinned to the same sha256, so

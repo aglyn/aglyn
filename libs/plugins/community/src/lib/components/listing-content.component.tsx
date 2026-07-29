@@ -19,6 +19,7 @@
 import {
   LISTING_README_MAX_CHARS,
   listingArtifactType,
+  installsUnreviewedFallback,
   listingArtifactLabel,
   installTargetsFor,
   isPrivateListing,
@@ -510,6 +511,27 @@ export function CommunityListingContent({
   const offeredVersion = isPlugin
     ? listing?.latestApprovedVersion
     : listing?.latestVersion
+
+  /**
+   * The publisher installing their OWN unreviewed bytes (AGL-1083).
+   *
+   * `install-plugin` deliberately allows it — you cannot test a version you
+   * cannot install, and the AGL-969 checklist asks a publisher to confirm
+   * they tested these exact bytes on a site they control. But the affordance
+   * said nothing, so it read exactly like installing reviewed, signed code.
+   *
+   * The condition mirrors the route's fallback rather than approximating it:
+   * there, `newest ?? fallback` hands over `latestVersion` ONLY when the
+   * owner asks and no approved version exists at all. With an approved
+   * version present the server serves that one, and this is not an
+   * unreviewed install however new the pending one is.
+   */
+  const unreviewedInstall =
+    isPlugin && installsUnreviewedFallback(listing, viewerOrgId)
+  /** What would actually land — the route's fallback, named. */
+  const installingVersion = unreviewedInstall
+    ? listing?.latestVersion
+    : offeredVersion
 
   const pluginState = useMemo(
     () =>
@@ -1077,6 +1099,23 @@ export function CommunityListingContent({
                             v2 while the workspace quietly ran v1 and no page
                             said so — this is the same `resolveUpdateState` the
                             Plugins index and installation page ask. */}
+                        {/* Say what this actually is, at the moment of
+                            doing it (AGL-1083). The Review status card says
+                            it too, but that describes a decision already
+                            made — this is the one that can still change it. */}
+                        {unreviewedInstall ? (
+                          <Alert severity="warning" variant="outlined">
+                            <Typography variant="body2">
+                              {`No reviewer has approved v${listing?.latestVersion} yet.`}
+                            </Typography>
+                            <Typography variant="caption" component="div">
+                              {'You can install it because you publish it — ' +
+                                'that is how you test a version before ' +
+                                'submitting it. Nobody else can install it ' +
+                                'until it is approved.'}
+                            </Typography>
+                          </Alert>
+                        ) : null}
                         {installed &&
                         updateStatus.state !== 'current' &&
                         updateStatus.installedVersion ? (
@@ -1336,6 +1375,8 @@ export function CommunityListingContent({
                                   ? `Update to v${offeredVersion}`
                                   : mustBuy
                                     ? `Buy for $${priceUsd}`
+                                    : unreviewedInstall
+                                      ? `Install unreviewed v${listing?.latestVersion} for testing`
                                     : orgTargeting || installTargets.length > 1
                                       ? 'Install'
                                       : 'Add to this site'}
@@ -1592,7 +1633,11 @@ export function CommunityListingContent({
             fullWidth
           >
             <DialogTitle>
-              {installed ? 'Update this listing?' : 'Install this listing?'}
+              {unreviewedInstall
+                ? 'Install an unreviewed version?'
+                : installed
+                  ? 'Update this listing?'
+                  : 'Install this listing?'}
             </DialogTitle>
             <DialogContent dividers>
               <Stack spacing={1}>
@@ -1611,6 +1656,19 @@ export function CommunityListingContent({
                   <strong>{installTargetSummary()}</strong>
                   {'.'}
                 </Typography>
+                {/* Every site in this picker is publicly reachable — there
+                    is no staging site to prefer (AGL-1083). Saying "we will
+                    mark the live ones" would invent a distinction the
+                    platform does not have; saying they are all live is the
+                    part that should give someone pause. */}
+                {unreviewedInstall ? (
+                  <Alert severity="warning">
+                    {`v${listing?.latestVersion} has not passed review. ` +
+                      'Every site you install it to is publicly reachable — ' +
+                      'there is no staging site here — so unreviewed code ' +
+                      'will serve real visitors until you uninstall it.'}
+                  </Alert>
+                ) : null}
               </Stack>
             </DialogContent>
             <DialogActions>
@@ -1620,7 +1678,11 @@ export function CommunityListingContent({
                 color="secondary"
                 onClick={runInstall}
               >
-                {installed ? 'Update' : 'Install'}
+                {unreviewedInstall
+                  ? 'Install for testing'
+                  : installed
+                    ? 'Update'
+                    : 'Install'}
               </Button>
             </DialogActions>
           </Dialog>

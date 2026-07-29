@@ -27,9 +27,10 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { doc } from 'firebase/firestore'
-import { Container } from '@aglyn/shared-ui-jsx'
+import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import ListingDetailEditor from '../../../../../components/marketplace/listing-detail-editor.component'
+import ListingReviewStatus from '../../../../../components/marketplace/listing-review-status.component'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { buildRoute, Route } from '../../../../../constants/route-links'
@@ -74,8 +75,13 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
   )
   const hostList = useMemo(
     () =>
-      ((hosts as Array<{ $id: string; subdomain?: string; displayName?: string }>) ??
-        []).map((host) => ({
+      (
+        (hosts as Array<{
+          $id: string
+          subdomain?: string
+          displayName?: string
+        }>) ?? []
+      ).map((host) => ({
         id: host.$id,
         label: host.displayName || host.subdomain || host.$id,
       })),
@@ -118,13 +124,31 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
       // the org had a site yet.
       headerRight={
         isOwner && !editing ? (
-          <Button
-            variant="outlined"
-            color="secondary"
-            onClick={() => setEditing(true)}
-          >
-            {'Edit listing'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {/* Shipping a new version had no door on the listing itself
+                (AGL-1008) — Edit changes metadata and View changes nothing,
+                so the only reading left was "make a second listing". Same
+                publish form, pre-bound to this listing. Plugins only: a
+                bundle is the thing a new version ships. */}
+            {(listing?.artifactType ?? listing?.type) === 'plugin' ? (
+              <AppLink
+                href={`${buildRoute(Route.ORG_MARKETPLACE_PUBLISH_PLUGIN, {
+                  orgSlug,
+                })}?listing=${encodeURIComponent(listingId)}`}
+              >
+                <Button variant="contained" color="secondary" component="span">
+                  {'Publish new version'}
+                </Button>
+              </AppLink>
+            ) : null}
+            <Button
+              variant="outlined"
+              color="secondary"
+              onClick={() => setEditing(true)}
+            >
+              {'Edit listing'}
+            </Button>
+          </Stack>
         ) : undefined
       }
       help="plugins"
@@ -139,33 +163,49 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
             onDone={() => setEditing(false)}
           />
         </Container>
-      ) : !actingHost ? (
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {/* Owners can still edit their listing with no site of their own —
-              through the hero's Edit listing action (AGL-1005). */}
-          {isOwner ? (
-            <Alert severity="info">
-              {'Add a site to your organization to install marketplace ' +
-                'items. You can still edit this listing above.'}
-            </Alert>
-          ) : (
-            <Alert severity="info">
-              {'Add a site to your organization to view and install ' +
-                'marketplace items.'}
-            </Alert>
-          )}
-        </Container>
       ) : (
         <>
-          <PluginWidgetSlot
-            slot="communityListing"
-            hostId={actingHost}
-            listingId={listingId}
-            permissions={permissions}
-            orgScoped
-            orgSlug={orgSlug}
-            hosts={hostList}
-          />
+          {/* The publisher's own view of the queue (AGL-1079). Owner-only:
+              review state, rejection reasons and what was attested are the
+              publisher's business, and a buyer is never offered a version
+              this card exists to explain. Above the buyer-facing body,
+              because "what is happening to my submission" is why an owner
+              opened their own listing. */}
+          {isOwner ? (
+            <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+              <ListingReviewStatus
+                listingId={listingId}
+                isPlugin={(listing?.artifactType ?? listing?.type) === 'plugin'}
+              />
+            </Container>
+          ) : null}
+          {!actingHost ? (
+            <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+              {/* Owners can still edit their listing with no site of their own —
+              through the hero's Edit listing action (AGL-1005). */}
+              {isOwner ? (
+                <Alert severity="info">
+                  {'Add a site to your organization to install marketplace ' +
+                    'items. You can still edit this listing above.'}
+                </Alert>
+              ) : (
+                <Alert severity="info">
+                  {'Add a site to your organization to view and install ' +
+                    'marketplace items.'}
+                </Alert>
+              )}
+            </Container>
+          ) : (
+            <PluginWidgetSlot
+              slot="communityListing"
+              hostId={actingHost}
+              listingId={listingId}
+              permissions={permissions}
+              orgScoped
+              orgSlug={orgSlug}
+              hosts={hostList}
+            />
+          )}
         </>
       )}
     </DashboardLayout>
