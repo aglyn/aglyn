@@ -143,6 +143,7 @@ async function handler(request: Request): Promise<Response> {
       const listing = listings.get(listingId)
       const declaredNetwork = doc.get('manifest.capabilities.network')
       let result: ReturnType<typeof checkPluginBundle> | null = null
+      let downloadFailure = ''
       try {
         const [bytes] = await bucket
           .file(pluginArtifactPath(listingId, version, sha256))
@@ -153,9 +154,16 @@ async function handler(request: Request): Promise<Response> {
             ? declaredNetwork.map((origin: unknown) => String(origin))
             : [],
         })
-      } catch {
-        // An artifact we cannot read is reported, never assumed clean.
+        downloadFailure = ''
+      } catch (error) {
+        // An artifact we cannot read is reported, never assumed clean — and
+        // said in words (AGL-1094). `checkPluginBundle` cannot throw any
+        // more, so reaching here means STORAGE, not the checker; conflating
+        // the two sent a two-hour investigation at the wrong subsystem.
         result = null
+        downloadFailure =
+          'artifact could not be downloaded: ' +
+          (error instanceof Error ? error.message : String(error))
       }
 
       entries.push({
@@ -168,7 +176,8 @@ async function handler(request: Request): Promise<Response> {
         problems:
           result?.problems
             .filter((problem) => problem.level === 'error')
-            .map((problem) => problem.message) ?? [],
+            .map((problem) => problem.message) ??
+          (downloadFailure ? [downloadFailure] : []),
       })
 
       if (result && !dryRun) {

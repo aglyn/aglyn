@@ -354,7 +354,15 @@ function propertyName(
   return staticString(property, constants)
 }
 
-/** The origin of a URL argument, when it is a knowable absolute URL. */
+/**
+ * The origin of a URL argument, when it is a knowable http(s) URL.
+ *
+ * Scheme-checked HERE, once (AGL-1094). An opaque origin — every `data:`,
+ * `blob:` and `javascript:` URL — makes `new URL(x).origin` the STRING
+ * `"null"`, and a caller that then re-parsed that string threw `Invalid URL`
+ * and took the whole checker down with it. Nothing downstream should have to
+ * know that, so nothing downstream gets the chance.
+ */
 function literalOrigin(
   node: AnyNode | undefined,
   constants?: ReadonlyMap<string, string>,
@@ -362,7 +370,8 @@ function literalOrigin(
   const value = staticString(node, constants)
   if (!value) return null
   try {
-    return new URL(value).origin
+    const url = new URL(value)
+    return /^https?:$/.test(url.protocol) ? url.origin : null
   } catch {
     return null
   }
@@ -383,7 +392,7 @@ interface CheckOptions {
   declaredNetwork?: string[]
 }
 
-export function checkPluginBundle(
+function analyseBundle(
   source: string,
   options?: CheckOptions,
 ): BundleCheckResult {
@@ -755,7 +764,7 @@ export function checkPluginBundle(
   ) => {
     if (name && URL_TAKING_NON_CALLS.has(name)) return
     const origin = literalOrigin(urlArg, constants)
-    if (!origin || !/^https?:$/.test(new URL(origin).protocol)) return
+    if (!origin) return
     // A declared origin is consistent with the manifest and permitted by the
     // CSP, so there is no question to raise about it.
     if (allowlist.has(origin)) return
@@ -1038,5 +1047,44 @@ export function checkPluginBundle(
     problems,
     checks: summarise(),
     exports: { register: exportsRegister, registerApi: exportsRegisterApi },
+  }
+}
+
+/**
+ * Run the checks over a bundle. NEVER throws (AGL-1094).
+ *
+ * The publish route calls this directly, so an unexpected failure in here
+ * used to mean a 500 and no explanation for the publisher — and in the review
+ * sweep it looked exactly like a missing artifact, which sent the
+ * investigation to the storage bucket instead of to this file. A checker that
+ * cannot analyse a bundle has an answer: say so, in the verdict, as an error.
+ */
+export function checkPluginBundle(
+  source: string,
+  options?: CheckOptions,
+): BundleCheckResult {
+  try {
+    return analyseBundle(source, options)
+  } catch (error) {
+    return {
+      ok: false,
+      problems: [
+        {
+          level: 'error',
+          check: 'parse',
+          message:
+            'the verifier failed on this bundle — treat it as unchecked and ' +
+            `report it: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        },
+      ],
+      checks: CHECK_ORDER.map((id) => ({
+        id,
+        label: CHECK_LABELS[id],
+        status: id === 'parse' ? 'fail' : 'unknown',
+      })),
+      exports: { register: false, registerApi: false },
+    }
   }
 }
