@@ -197,7 +197,7 @@ async function handler(request: Request): Promise<Response> {
     if (!dryRun && summary.needsStaff.length) {
       const first = summary.needsStaff[0]
       await notifyStaff({
-        type: 'community.verifierRegression',
+        type: 'system.pluginVerifierRegression',
         title: `${summary.needsStaff.length} live plugin version(s) now fail the verifier`,
         body:
           `${first.listingName} v${first.version} — ${first.problems[0] ?? 'see the review page'}` +
