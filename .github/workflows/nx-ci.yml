@@ -35,6 +35,9 @@ jobs:
       # Self-test the local ESLint guard rules (not part of the nx graph, so
       # run explicitly on every CI run — never affected-scoped).
       - run: npm run test:eslint-rules
+      # The sandbox CSP the plugin origin actually serves (AGL-1092). Its
+      # deployment is not an nx project, so nx affected never covers it.
+      - run: npm run test:plugin-loader
 
       # apps/*/tsconfig.next.json are GENERATED from tsconfig.base.json, and
       # the typecheck above skips them by name — correctly, since they exist
