@@ -5,9 +5,10 @@
  *   node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs
  *   node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs manifest.json
  *
- * Runs the same static checks the publish API enforces (entry exports,
- * self-containment, forbidden APIs, size), then prints the sha256 and a
- * manifest snippet. Exit 1 on any error-level problem.
+ * Runs the same static checks the publish API enforces, over the bundle's
+ * parse tree (entry exports, self-containment, forbidden APIs, size,
+ * network calls vs the manifest), lists every area it checked, then prints
+ * the sha256 and a manifest snippet. Exit 1 on any error-level problem.
  *
  * The manifest is read too — from the second argument, or `manifest.json`
  * beside the bundle — because the checker diffs the bundle's network calls
