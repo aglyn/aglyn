@@ -224,7 +224,14 @@ async function listingDetail(
   const storedIsCurrent = isStoredVerdictCurrent(stored, reviewSha ?? '')
 
   let verifier: unknown = storedIsCurrent
-    ? { ok: stored?.ok, problems: stored?.problems ?? [] }
+    ? {
+        ok: stored?.ok,
+        problems: stored?.problems ?? [],
+        // The per-check summary rides along in the stored verdict (AGL-1087)
+        // so the page can show what was checked without re-downloading a
+        // megabyte of artifact on every view.
+        checks: stored?.checks ?? [],
+      }
     : null
   let verifierCached = storedIsCurrent
   if (!storedIsCurrent && artifactsBucket && reviewSha) {
@@ -259,6 +266,7 @@ async function listingDetail(
             verification: {
               ok: result.ok,
               problems: result.problems,
+              checks: result.checks,
               sha256: reviewSha,
               verifierVersion: PLUGIN_VERIFIER_VERSION,
               checkedAt: FieldValue.serverTimestamp(),

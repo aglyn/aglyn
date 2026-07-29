@@ -142,6 +142,20 @@ explained: machine-obfuscated `_0x…` identifiers, large embedded base64
 blobs, and a bundle that is one unreadably long line. Minified code is fine;
 these are the shapes minifiers do not produce.
 
+The output lists **every area it checked**, not only the ones with findings,
+with the same four states a reviewer sees on your submission:
+
+| | Meaning |
+| -- | -- |
+| `✓` | The check ran and found nothing |
+| `✕` | A refusal — the publish will fail |
+| `?` | Worth explaining, but not a refusal |
+| `—` | **Not checked.** Something stopped the check from running — a bundle that would not parse, or a network diff with no manifest |
+
+A `—` is not a pass. If you see one, fix what stopped the check before you
+submit, or a reviewer will ask you the same question with days of queue in
+between.
+
 Then publish it from the console: **Marketplace → Publish**, choose
 **"A plugin (upload a bundle)"**, and follow **Publish a plugin…** to
 `/<your-org>/marketplace/publish/plugin`. It is a page, not a dialog, so

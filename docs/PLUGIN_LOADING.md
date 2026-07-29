@@ -278,8 +278,26 @@ Firebase, just Cloud Storage SKUs rather than the Firebase Storage line.
    network call diffed against the manifest's `capabilities.network` —
    so pass the manifest (second argument, or leave it beside/above the
    bundle) or the network findings downgrade to warnings locally while
-   the publish API still rejects. Bump `PLUGIN_VERIFIER_VERSION` when a
-   rule changes; stored verdicts (AGL-962) then recompute.
+   the publish API still rejects. The output lists EVERY area it checked
+   in four states — pass, fail, question, and not checked (AGL-1087);
+   a not-checked row is not a pass.
+
+   Bump `PLUGIN_VERIFIER_VERSION` when a rule changes. Stored verdicts
+   (AGL-962) then recompute — but only for a version somebody OPENS, so
+   after a bump, sweep them (AGL-1086):
+
+   ```bash
+   CRON_SECRET=… node tools/scripts/reverify-plugin-versions.mjs --apply
+   ```
+
+   That re-checks every stored version, writes the new verdicts back,
+   and reports REGRESSIONS — bytes that passed the old checker and fail
+   the new one. A regression on a live version with installs notifies
+   staff and lands in `adminAudit`; nothing is delisted or revoked,
+   because a lint that can stop a plugin in every workspace is a kill
+   switch with no human in it. It also runs weekly (Mondays 06:00 UTC),
+   where it skips every already-current verdict without downloading
+   anything.
 3. Publish through the community pipeline (`community/publish-plugin`) —
    content-addressed upload + version doc with sha256.
 4. Workspace installs (pin) the listing; org enables it.

@@ -77,7 +77,19 @@ if (!declaredNetwork) {
 const source = readFileSync(bundlePath, 'utf8')
 const result = checkPluginBundle(source, { declaredNetwork })
 
-for (const problem of result.problems) {
+// Every area, not only the ones with findings (AGL-1087) — the same summary
+// a reviewer sees, so a publisher can tell "checked and clean" from "never
+// checked" before submitting.
+const MARK = { pass: '✓', fail: '✕', question: '?', unknown: '—' }
+for (const check of result.checks ?? []) {
+  const detail = check.detail ? `  (${check.detail})` : ''
+  const note = check.status === 'unknown' ? '  — not checked' : ''
+  console.log(`${MARK[check.status] ?? '?'} ${check.label}${note}${detail}`)
+  for (const problem of result.problems.filter((p) => p.check === check.id)) {
+    console.log(`    ${problem.level.toUpperCase()}: ${problem.message}`)
+  }
+}
+for (const problem of result.problems.filter((p) => !p.check)) {
   console.log(`${problem.level.toUpperCase()}: ${problem.message}`)
 }
 if (!result.ok) {

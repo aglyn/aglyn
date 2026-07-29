@@ -38,17 +38,82 @@
 
 import { parse, type Node, type Options } from 'acorn'
 
+/** The areas the verifier reports on, in the order a reviewer reads them. */
+export type BundleCheckId =
+  | 'parse'
+  | 'entry'
+  | 'self-contained'
+  | 'size'
+  | 'code-execution'
+  | 'globals'
+  | 'storage'
+  | 'dynamic-import'
+  | 'network'
+  | 'obfuscation'
+
 export interface BundleCheckProblem {
   level: 'error' | 'warning'
   message: string
+  /**
+   * Which check produced this. Optional so a verdict stored by an older
+   * checker still reads — those findings render on their own rather than
+   * under a check row.
+   */
+  check?: BundleCheckId
+}
+
+/**
+ * `unknown` is the one that earns its keep (AGL-1087). A check that could
+ * not run — the network diff with no manifest supplied, everything at all
+ * when the parse failed — must not render as green, or the page tells a
+ * reviewer something was verified when nothing looked at it.
+ */
+export type BundleCheckStatus = 'pass' | 'fail' | 'question' | 'unknown'
+
+export interface BundleCheckSummary {
+  id: BundleCheckId
+  /** Reviewer-facing name of the area. */
+  label: string
+  status: BundleCheckStatus
+  /** What the check actually saw, when that is worth stating on its own. */
+  detail?: string
 }
 
 export interface BundleCheckResult {
   ok: boolean
   problems: BundleCheckProblem[]
+  /** Every area, including the ones that found nothing (AGL-1087). */
+  checks: BundleCheckSummary[]
   /** Which entry exports the source declares. */
   exports: { register: boolean; registerApi: boolean }
 }
+
+const CHECK_LABELS: Record<BundleCheckId, string> = {
+  parse: 'Parses as an ES module',
+  entry: 'Exports an entry point',
+  'self-contained': 'Self-contained (no static imports)',
+  size: 'Within the size limit',
+  'code-execution': 'No eval / Function constructor',
+  globals: 'No computed access on a global',
+  storage: 'No direct storage or cookie access',
+  'dynamic-import': 'No dynamic import of unknown code',
+  network: 'Network calls match the manifest',
+  obfuscation: 'No obfuscation shapes',
+}
+
+/** Check order as displayed — findings first would reorder on every bundle. */
+const CHECK_ORDER: BundleCheckId[] = [
+  'parse',
+  'entry',
+  'self-contained',
+  'size',
+  'code-execution',
+  'globals',
+  'storage',
+  'dynamic-import',
+  'network',
+  'obfuscation',
+]
 
 export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
 
@@ -64,13 +129,16 @@ export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
  * which is the failure mode re-running the verifier was meant to prevent.
  *
  * 2 — AST analysis replaces the regex scan (AGL-964).
+ * 3 — per-check summary added to the verdict (AGL-1087).
  */
-export const PLUGIN_VERIFIER_VERSION = 2
+export const PLUGIN_VERIFIER_VERSION = 3
 
 /** A verdict as stored on a `pluginVersions` doc (AGL-962). */
 export interface StoredBundleVerdict {
   ok?: boolean
   problems?: BundleCheckProblem[]
+  /** Present from verifier 3 on (AGL-1087). */
+  checks?: BundleCheckSummary[]
   sha256?: string
   verifierVersion?: number
 }
@@ -255,24 +323,60 @@ export function checkPluginBundle(
 ): BundleCheckResult {
   const problems: BundleCheckProblem[] = []
   const seen = new Set<string>()
-  const add = (level: BundleCheckProblem['level'], message: string) => {
+  // Every area starts as "ran, found nothing" and is downgraded by its own
+  // findings, so the summary cannot drift from the problem list (AGL-1087).
+  const status = new Map<BundleCheckId, BundleCheckStatus>(
+    CHECK_ORDER.map((id) => [id, 'pass']),
+  )
+  const details = new Map<BundleCheckId, string>()
+  const add = (
+    level: BundleCheckProblem['level'],
+    check: BundleCheckId,
+    message: string,
+  ) => {
+    if (level === 'error') status.set(check, 'fail')
+    else if (status.get(check) === 'pass') status.set(check, 'question')
     if (seen.has(message) || seen.size >= MAX_PROBLEMS) return
     seen.add(message)
-    problems.push({ level, message })
+    problems.push({ level, message, check })
   }
+  /** Mark the areas that never ran, so they cannot read as clean. */
+  const unknownFrom = (...ids: BundleCheckId[]) => {
+    for (const id of ids) status.set(id, 'unknown')
+  }
+  const summarise = (): BundleCheckSummary[] =>
+    CHECK_ORDER.map((id) => ({
+      id,
+      label: CHECK_LABELS[id],
+      status: status.get(id) ?? 'unknown',
+      ...(details.has(id) ? { detail: details.get(id) } : {}),
+    }))
 
   const maxBytes = options?.maxBytes ?? MAX_PLUGIN_BUNDLE_BYTES
   const bytes = new TextEncoder().encode(source).byteLength
+  details.set('size', `${bytes.toLocaleString('en-US')} bytes of ${maxBytes.toLocaleString('en-US')}`)
   if (bytes === 0) {
-    problems.push({ level: 'error', message: 'bundle is empty' })
+    add('error', 'size', 'bundle is empty')
+    unknownFrom(
+      'parse',
+      'entry',
+      'self-contained',
+      'code-execution',
+      'globals',
+      'storage',
+      'dynamic-import',
+      'network',
+      'obfuscation',
+    )
     return {
       ok: false,
       problems,
+      checks: summarise(),
       exports: { register: false, registerApi: false },
     }
   }
   if (bytes > maxBytes) {
-    add('error', `bundle is ${bytes} bytes (limit ${maxBytes})`)
+    add('error', 'size', `bundle is ${bytes} bytes (limit ${maxBytes})`)
   }
 
   const parseOptions: Options = {
@@ -286,15 +390,29 @@ export function checkPluginBundle(
     program = parse(source, parseOptions) as unknown as AnyNode
   } catch (error) {
     // Unparseable means unanalysable, and the loader would fail on it too.
+    // Nothing else ran, and saying so is the whole point of `unknown`: a
+    // bundle nobody could read must not show nine green rows.
     add(
       'error',
+      'parse',
       `bundle does not parse as an ES module: ${
         error instanceof Error ? error.message : String(error)
       }`,
     )
+    unknownFrom(
+      'entry',
+      'self-contained',
+      'code-execution',
+      'globals',
+      'storage',
+      'dynamic-import',
+      'network',
+      'obfuscation',
+    )
     return {
       ok: false,
       problems,
+      checks: summarise(),
       exports: { register: false, registerApi: false },
     }
   }
@@ -352,11 +470,21 @@ export function checkPluginBundle(
   const networkLevel: BundleCheckProblem['level'] = declared
     ? 'error'
     : 'warning'
+  // What the bundle reaches for, so the summary row can SAY it (AGL-1087) —
+  // "calls https://api.stripe.com, declared" is the line a reviewer would
+  // otherwise open the bundle to get.
+  const networkApis = new Set<string>()
+  const networkOrigins = new Set<string>()
+  let runtimeUrls = 0
   const noteNetwork = (api: string, urlArg: AnyNode | undefined) => {
     const origin = literalOrigin(urlArg)
+    networkApis.add(api)
+    if (origin) networkOrigins.add(origin)
+    else runtimeUrls += 1
     if (!declared) {
       add(
         'warning',
+        'network',
         `bundle makes network calls (${api}) — check them against the ` +
           "manifest's declared network capability",
       )
@@ -365,6 +493,7 @@ export function checkPluginBundle(
     if (!allowlist.size) {
       add(
         networkLevel,
+        'network',
         `bundle calls ${api} but the manifest declares no network ` +
           'capability — declare every origin under capabilities.network ' +
           '(the CSP blocks the rest at runtime)',
@@ -374,6 +503,7 @@ export function checkPluginBundle(
     if (!origin) {
       add(
         'warning',
+        'network',
         `${api} is called with a URL that is only known at runtime — it ` +
           'cannot be checked against the declared origins',
       )
@@ -382,6 +512,7 @@ export function checkPluginBundle(
     if (!allowlist.has(origin)) {
       add(
         networkLevel,
+        'network',
         `${api} calls ${origin}, which the manifest does not declare ` +
           `(declared: ${[...allowlist].join(', ')})`,
       )
@@ -403,6 +534,7 @@ export function checkPluginBundle(
       case 'ImportDeclaration':
         add(
           'error',
+          'self-contained',
           'bundle has static imports — realm bundles must be self-contained ' +
             '(react/@aglyn/aglyn come from the host ABI; see the realm rollup ' +
             'template)',
@@ -413,6 +545,7 @@ export function checkPluginBundle(
         if (node['source']) {
           add(
             'error',
+            'self-contained',
             'bundle re-exports from another module — realm bundles must be ' +
               'self-contained (see the realm rollup template)',
           )
@@ -444,11 +577,16 @@ export function checkPluginBundle(
         if (specifier === null) {
           add(
             'error',
+            'dynamic-import',
             'dynamic import with a specifier computed at runtime is not ' +
               'allowed — the loader cannot know what would be fetched',
           )
         } else if (/^https?:/i.test(specifier)) {
-          add('error', 'dynamic import of remote URLs is not allowed')
+          add(
+            'error',
+            'dynamic-import',
+            'dynamic import of remote URLs is not allowed',
+          )
         }
         break
       }
@@ -465,15 +603,21 @@ export function checkPluginBundle(
               ? propertyName(callee)
               : null
 
-        if (name === 'eval') add('error', 'eval() is not allowed')
+        if (name === 'eval')
+          add('error', 'code-execution', 'eval() is not allowed')
         if (name === 'Function')
-          add('error', 'the Function constructor is not allowed')
+          add(
+            'error',
+            'code-execution',
+            'the Function constructor is not allowed',
+          )
         // `(()=>{}).constructor('return 1')()` — the Function constructor
         // reached through any function value, which is why the CALL is the
         // finding rather than the name `Function`.
         if (name === 'constructor' && callee?.type === 'MemberExpression')
           add(
             'error',
+            'code-execution',
             'calling .constructor() is not allowed — it reaches the ' +
               'Function constructor from any function value',
           )
@@ -490,6 +634,7 @@ export function checkPluginBundle(
         if (isGlobalRef(object) && name === null) {
           add(
             'error',
+            'globals',
             `computed property access on ${
               (object['name'] as string) || 'a global'
             } is not allowed — a property chosen at runtime cannot be ` +
@@ -500,14 +645,15 @@ export function checkPluginBundle(
         // Property names only mean anything on a global: `response.cookie`
         // and `state.localStorage` are somebody else's object.
         if (name === 'cookie' && isGlobalRef(object))
-          add('error', 'document.cookie access is not allowed')
+          add('error', 'storage', 'document.cookie access is not allowed')
         if (name && STORAGE_NAMES.has(name) && isGlobalRef(object))
           add(
             'error',
+            'storage',
             'browser storage access is not allowed (use host-mediated data)',
           )
         if (name === 'eval' && isGlobalRef(object))
-          add('error', 'eval() is not allowed')
+          add('error', 'code-execution', 'eval() is not allowed')
         break
       }
 
@@ -517,6 +663,7 @@ export function checkPluginBundle(
         if (STORAGE_NAMES.has(name))
           add(
             'error',
+            'storage',
             'browser storage access is not allowed (use host-mediated data)',
           )
         if (OBFUSCATED_NAME.test(name)) obfuscatedNames += 1
@@ -533,6 +680,7 @@ export function checkPluginBundle(
         ) {
           add(
             'warning',
+            'obfuscation',
             `bundle embeds a ${value.length}-character base64 literal — ` +
               'decode it before approving',
           )
@@ -547,6 +695,7 @@ export function checkPluginBundle(
   if (!exportsRegister && !exportsRegisterApi) {
     add(
       'error',
+      'entry',
       'bundle exports neither register(host) nor registerApi() — ' +
         'nothing for the loader to call',
     )
@@ -555,6 +704,7 @@ export function checkPluginBundle(
   if (obfuscatedNames >= MIN_OBFUSCATED_NAMES) {
     add(
       'warning',
+      'obfuscation',
       `bundle uses ${obfuscatedNames} machine-obfuscated identifiers ` +
         '(_0x… naming) — minifiers do not produce these',
     )
@@ -565,14 +715,64 @@ export function checkPluginBundle(
   if (longestLine > MAX_READABLE_LINE) {
     add(
       'warning',
+      'obfuscation',
       `bundle has a single ${longestLine}-character line — nothing on it ` +
         'can be read in review; ask for a readable build or a source map',
+    )
+  }
+
+  details.set(
+    'entry',
+    [
+      exportsRegister ? 'register(host)' : null,
+      exportsRegisterApi ? 'registerApi()' : null,
+    ]
+      .filter(Boolean)
+      .join(', ') || 'none',
+  )
+
+  // What the network check actually saw. Without the manifest it saw the
+  // calls but could not judge them, and that is `unknown`, not a pass — the
+  // row a reviewer must not read as "checked and fine".
+  if (!declared) {
+    if (networkApis.size) {
+      status.set('network', 'unknown')
+      details.set(
+        'network',
+        `calls ${[...networkApis].join(', ')} — no declared origins were ` +
+          'supplied, so nothing was compared',
+      )
+    } else {
+      details.set('network', 'no network calls')
+    }
+  } else if (!networkApis.size) {
+    details.set('network', 'no network calls')
+  } else {
+    const origins = networkOrigins.size
+      ? [...networkOrigins]
+          .map((origin) =>
+            allowlist.has(origin) ? `${origin} (declared)` : `${origin} (NOT declared)`,
+          )
+          .join(', ')
+      : ''
+    details.set(
+      'network',
+      [
+        `calls ${[...networkApis].join(', ')}`,
+        origins,
+        runtimeUrls
+          ? `${runtimeUrls} call(s) with a URL only known at runtime`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' · '),
     )
   }
 
   return {
     ok: !problems.some((problem) => problem.level === 'error'),
     problems,
+    checks: summarise(),
     exports: { register: exportsRegister, registerApi: exportsRegisterApi },
   }
 }

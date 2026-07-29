@@ -234,6 +234,76 @@ describe('checkPluginBundle (AGL-426)', () => {
   })
 })
 
+describe('per-check summary (AGL-1087)', () => {
+  const statusOf = (result: ReturnType<typeof checkPluginBundle>, id: string) =>
+    result.checks.find((check) => check.id === id)?.status
+
+  it('reports every area, not only the ones that found something', () => {
+    const result = checkPluginBundle(GOOD_BUNDLE, { declaredNetwork: [] })
+    expect(result.checks).toHaveLength(10)
+    expect(result.checks.every((check) => check.status === 'pass')).toBe(true)
+  })
+
+  it('marks only the offending area, and leaves the rest passing', () => {
+    const result = checkPluginBundle(
+      `export function register() { document.cookie }\n`,
+      { declaredNetwork: [] },
+    )
+    expect(statusOf(result, 'storage')).toBe('fail')
+    expect(statusOf(result, 'code-execution')).toBe('pass')
+    expect(statusOf(result, 'network')).toBe('pass')
+  })
+
+  it('separates a warning from a refusal', () => {
+    const result = checkPluginBundle(
+      `export function register() { fetch(url) }\n`,
+      { declaredNetwork: ['https://api.example.com'] },
+    )
+    expect(result.ok).toBe(true)
+    expect(statusOf(result, 'network')).toBe('question')
+  })
+
+  it('calls the network check UNKNOWN when nobody supplied the manifest', () => {
+    // The failure this whole summary exists to prevent: a check that never
+    // ran must not render beside the ones that did.
+    const result = checkPluginBundle(
+      `export function register() { fetch('https://api.example.com') }\n`,
+    )
+    expect(statusOf(result, 'network')).toBe('unknown')
+    expect(
+      result.checks.find((check) => check.id === 'network')?.detail,
+    ).toContain('nothing was compared')
+  })
+
+  it('says which origins the bundle calls and whether they are declared', () => {
+    const result = checkPluginBundle(
+      `export function register() { fetch('https://api.example.com/v1') }\n`,
+      { declaredNetwork: ['https://api.example.com'] },
+    )
+    const network = result.checks.find((check) => check.id === 'network')
+    expect(network?.status).toBe('pass')
+    expect(network?.detail).toContain('https://api.example.com (declared)')
+  })
+
+  it('marks everything unknown when the bundle could not be parsed', () => {
+    const result = checkPluginBundle('export function register() { <<< }\n')
+    expect(statusOf(result, 'parse')).toBe('fail')
+    expect(
+      result.checks
+        .filter((check) => check.id !== 'parse' && check.id !== 'size')
+        .every((check) => check.status === 'unknown'),
+    ).toBe(true)
+  })
+
+  it('tags each finding with the check it came from', () => {
+    const result = checkPluginBundle(
+      `export function register() { eval('x') }\n`,
+      { declaredNetwork: [] },
+    )
+    expect(result.problems[0].check).toBe('code-execution')
+  })
+})
+
 describe('isStoredVerdictCurrent (AGL-962)', () => {
   const SHA = 'a'.repeat(64)
   const OTHER = 'b'.repeat(64)
