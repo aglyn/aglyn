@@ -235,7 +235,16 @@ async function listingDetail(
         .bucket(artifactsBucket)
         .file(pluginArtifactPath(listingId, reviewVersion, reviewSha))
         .download()
-      const result = checkPluginBundle(bytes.toString('utf8'))
+      // The manifest for THESE bytes, so an undeclared network call is a
+      // finding rather than a warning (AGL-964). Read from the version doc,
+      // never from the listing — capabilities change between versions.
+      const result = checkPluginBundle(bytes.toString('utf8'), {
+        declaredNetwork: Array.isArray(reviewEntry?.capabilities?.network)
+          ? reviewEntry.capabilities.network.map((origin: unknown) =>
+              String(origin),
+            )
+          : [],
+      })
       verifier = result
       // Write it back so this sha is verified at most once platform-wide —
       // covers every listing published before the verdict was persisted at

@@ -69,7 +69,7 @@ export const PLUGIN_REVIEW_CHECKLIST: readonly ReviewChecklistItem[] = [
     id: 'source-read',
     label: 'Bundle source read, not just the verifier verdict',
     detail:
-      'Skim the actual code for computed property access, string-built identifiers, base64 blobs and anything that reaches for globalThis. These are exactly the shapes the regex verifier cannot see.',
+      'The verifier flags computed access on a global, string-built identifiers, base64 blobs and undeclared network calls — read the code for what it cannot flag: what the plugin is actually FOR, and whether the data it touches is any of its business.',
     required: true,
   },
   {

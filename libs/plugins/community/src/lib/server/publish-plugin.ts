@@ -336,8 +336,15 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     // Static verification (AGL-426): the same checks as the local
     // `verify-plugin-bundle.mjs`, so a bundle that passes there publishes
     // here. Entry exports, self-containment, forbidden APIs, size.
+    //
+    // The manifest goes in too (AGL-964): the checker diffs the bundle's
+    // network calls against the origins declared here, and a call to an
+    // origin the manifest omits is refused at publish rather than silently
+    // blocked by the CSP at runtime, where the publisher would meet it as a
+    // mystery in production.
     const verification = checkPluginBundle(bundle.toString('utf8'), {
       maxBytes: MAX_PLUGIN_BUNDLE_BYTES,
+      declaredNetwork: manifest.capabilities?.network ?? [],
     })
     if (!verification.ok) {
       return res.status(422).json({
