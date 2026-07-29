@@ -464,6 +464,42 @@ export function isVersionApproved(
 }
 
 /**
+ * Whether an install would hand the viewer UNREVIEWED bytes (AGL-1083).
+ *
+ * `install-plugin` deliberately lets a publisher install their own
+ * unapproved version — you cannot test a version you cannot install, and
+ * the AGL-969 checklist asks them to confirm they tested these exact bytes
+ * on a site they control. The route reaches that case through
+ * `newestApprovedVersion(...) ?? fallback`, where the fallback is
+ * `latestVersion` and applies ONLY when the caller owns the listing and no
+ * approved version exists at all.
+ *
+ * Lives here rather than in the listing component because the UI has to
+ * describe exactly what the route will do. Two independent readings of
+ * "would this be unreviewed?" is how the affordance ends up warning about
+ * the wrong installs, or staying silent on the right ones.
+ */
+export function installsUnreviewedFallback(
+  listing:
+    | {
+        profileId?: string
+        latestVersion?: string | number
+        latestApprovedVersion?: string | number
+      }
+    | null
+    | undefined,
+  viewerOrgId: string | null | undefined,
+): boolean {
+  if (!listing?.profileId || !viewerOrgId) return false
+  // Only the publishing org gets the fallback; everyone else is refused.
+  if (listing.profileId !== viewerOrgId) return false
+  // An approved version exists → the route serves THAT, however much newer
+  // the pending one is. Not an unreviewed install.
+  if (String(listing.latestApprovedVersion ?? '')) return false
+  return Boolean(String(listing.latestVersion ?? ''))
+}
+
+/**
  * The version a fresh install should pin: newest APPROVED, never
  * `latestVersion`. A pending update is simply not offered, so publishing
  * cannot ship code past review, and the previously approved version keeps

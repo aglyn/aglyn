@@ -20,6 +20,7 @@ import {
   COMMUNITY_COMPONENT_ID_ALLOWLIST,
   COMMUNITY_DATASET_FIELD_TYPES,
   COMMUNITY_EMAIL_COMPONENT_ID_ALLOWLIST,
+  installsUnreviewedFallback,
   installTargetsFor,
   isListingBrowsable,
   isPrivateListing,
@@ -813,5 +814,66 @@ describe('COMMUNITY_EMAIL_COMPONENT_ID_ALLOWLIST (AGL-657)', () => {
     expect(
       sanitizeCommunityDefinition({ rootId: '_at_', nodes: emailNodes }).ok,
     ).toBe(true)
+  })
+})
+
+/**
+ * The unreviewed-install predicate (AGL-1083).
+ *
+ * It exists to let the install affordance describe what `install-plugin`
+ * will actually do, so the cases below are written as the ROUTE's
+ * behaviour: `newestApprovedVersion(candidates) ?? fallback`, where the
+ * fallback is `latestVersion` and is offered only to the publishing org and
+ * only when nothing is approved. If the route's rule changes, these are the
+ * assertions that should fail.
+ */
+describe('installsUnreviewedFallback (AGL-1083)', () => {
+  const OWNER_ORG = 'org-1'
+
+  it('is true only for the publishing org, with nothing approved', () => {
+    expect(
+      installsUnreviewedFallback(
+        { profileId: OWNER_ORG, latestVersion: '1.0.0' },
+        OWNER_ORG,
+      ),
+    ).toBe(true)
+  })
+
+  it('is false for anyone else — the route refuses them outright', () => {
+    expect(
+      installsUnreviewedFallback(
+        { profileId: OWNER_ORG, latestVersion: '1.0.0' },
+        'org-2',
+      ),
+    ).toBe(false)
+    expect(
+      installsUnreviewedFallback(
+        { profileId: OWNER_ORG, latestVersion: '1.0.0' },
+        null,
+      ),
+    ).toBe(false)
+  })
+
+  it('is false once ANY version is approved, however new the pending one', () => {
+    // The route serves the newest approved version, so this install is not
+    // unreviewed — warning about it would train publishers to ignore the
+    // warning on the install that IS.
+    expect(
+      installsUnreviewedFallback(
+        {
+          profileId: OWNER_ORG,
+          latestVersion: '2.0.0',
+          latestApprovedVersion: '1.0.0',
+        },
+        OWNER_ORG,
+      ),
+    ).toBe(false)
+  })
+
+  it('is false with nothing published at all', () => {
+    expect(
+      installsUnreviewedFallback({ profileId: OWNER_ORG }, OWNER_ORG),
+    ).toBe(false)
+    expect(installsUnreviewedFallback(null, OWNER_ORG)).toBe(false)
   })
 })

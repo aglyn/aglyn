@@ -204,6 +204,24 @@ exactly what the pre-publish checklist above asks you to confirm. A
 confirmation that turns out to be false is a dated statement by a named
 publisher, and it's grounds for removal.
 
+### Testing a version before it is approved
+
+You can install **your own** unapproved version, on your own sites. That is
+deliberate — the checklist asks you to confirm you tested *these exact
+bytes*, and you cannot test a version you cannot install. Nobody else can
+install it until a reviewer approves it, and a private listing is invisible
+to everyone else regardless.
+
+The install says so when that is what it is: the button reads **Install
+unreviewed vX for testing**, and the confirmation spells out the part worth
+pausing on — **every site you can install to is publicly reachable**. There
+is no staging site here, so an unreviewed bundle installed to a real site
+serves real visitors until you uninstall it. Prefer a site with no traffic,
+and uninstall when you are done.
+
+Your listing's **Review status** card warns you when an unapproved version
+still has live installs, so a test install cannot quietly become permanent.
+
 ### Watching your own submission
 
 Open your own listing and the **Review status** card — visible only to
