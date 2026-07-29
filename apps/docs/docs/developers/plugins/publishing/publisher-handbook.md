@@ -252,6 +252,14 @@ Two things it states that you would otherwise have to infer:
 - **The bytes are never edited.** Changing them means publishing a new
   version — there is no "resubmit" for a rejected one.
 
+**A rejection does not uninstall anything.** If you installed the version
+to test it — which you are encouraged to do, and which only your own
+organization can do before review — that install keeps running the
+rejected bytes on your site. The rejection notice tells you when this
+applies to you; uninstall it or roll back to an approved version. Review
+can also stop a version outright, and then every site pinned to it renders
+a placeholder instead of the plugin.
+
 ## Private plugins
 
 Choose **Only this organization** under *Who can install this* when you

@@ -20,8 +20,10 @@ import {
 import {
   isCompatibleHostAbi,
   isFirstPartyPlugin,
+  isPluginRevoked,
   PLUGIN_HOST_ABI_VERSION,
   type PluginApiHandler,
+  type PluginRevocation,
 } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
@@ -300,15 +302,12 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     }
 
     // Kill switch (AGL-43 §3.5): a revoked version can't be installed.
+    // Shares the predicate with the loaders (AGL-1085) so "installable" and
+    // "runnable" cannot drift apart.
     const revocation = (
       await firestore.collection('revocations').doc(listingId).get()
-    ).data() as any
-    if (
-      revocation &&
-      (revocation.versions === 'all' ||
-        (Array.isArray(revocation.versions) &&
-          revocation.versions.includes(version)))
-    ) {
+    ).data() as PluginRevocation | undefined
+    if (isPluginRevoked(revocation, version)) {
       return res
         .status(409)
         .json({ error: 'This plugin version has been revoked' })

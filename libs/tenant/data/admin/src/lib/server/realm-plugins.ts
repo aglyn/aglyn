@@ -17,7 +17,9 @@
 
 import {
   getPluginConfigSchema,
+  isPluginRevoked,
   mergePluginConfig,
+  type PluginRevocation,
   type RealmPluginInstall,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from './firebase-admin'
@@ -188,13 +190,11 @@ export async function getRealmPluginInstalls(options: {
       if (!pinned || pinned.trust !== 'realm' || !pinned.signature) return null
       const revocation = (
         await firestore.collection('revocations').doc(pin.listingId).get()
-      ).data()
-      if (
-        revocation &&
-        (revocation.versions === 'all' ||
-          (Array.isArray(revocation.versions) &&
-            revocation.versions.includes(pin.version)))
-      ) {
+      ).data() as PluginRevocation | undefined
+      // Through the shared predicate (AGL-1085) rather than a fourth inline
+      // copy: a reader that disagreed with the others about this doc's shape
+      // is how a kill switch stops killing in exactly one place.
+      if (isPluginRevoked(revocation, pin.version)) {
         return null
       }
       return {

@@ -64,6 +64,8 @@ interface VersionEntry {
   installCount: number
   /** Installs pinned to it right now — the blast radius of a revoke. */
   activeInstalls: number
+  /** Kill switch is on for these bytes (AGL-1085). */
+  revoked: boolean
 }
 
 interface ListingDetail {
@@ -241,6 +243,26 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
     [token, listingId, enqueueSnackbar, refresh],
   )
 
+  /**
+   * Per-version kill switch (AGL-1085). Distinct from `takedown`, which
+   * revokes EVERY version and hides the listing: stopping one version's
+   * bytes must not also stop the approved version customers are running.
+   */
+  const setVersionRevoked = useCallback(
+    async (version: string, revoke: boolean) => {
+      await post(
+        {
+          action: revoke ? 'revoke-version' : 'unrevoke-version',
+          version,
+        },
+        revoke
+          ? `v${version} stopped — running installs render a placeholder on next load`
+          : `v${version} allowed to run again`,
+      )
+    },
+    [post],
+  )
+
   const takedown = useCallback(async () => {
     if (!detail) return
     if (!detail.hidden && !takedownReason.trim()) {
@@ -263,6 +285,18 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
 
   const status = reviewStatusMeaning(detail?.reviewStatus ?? '')
   const blocked = (detail?.checklistOutstanding.length ?? 0) > 0
+
+  /**
+   * The version the approve/reject buttons act on (AGL-1085). Rejecting does
+   * not stop bytes that are already pinned — the runtime resolves a pin by
+   * {version, sha256} and only asks whether it is revoked — so the reviewer
+   * needs this version's live-install count at the moment they decide, not
+   * on some other page.
+   */
+  const reviewEntry = detail?.versions.find(
+    (entry) => entry.version === detail?.reviewVersion,
+  )
+  const liveOnReviewVersion = reviewEntry?.activeInstalls ?? 0
 
   /**
    * Where a reviewer actually goes to check each item (AGL-973).
@@ -996,6 +1030,47 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         {`Blocked: ${detail.checklistOutstanding.length} required checklist item(s) outstanding for these bytes.`}
                       </Alert>
                     ) : null}
+                    {/* AGL-1085: a rejection is a verdict, not a kill. These
+                        bytes are live somewhere, so say so HERE — the number
+                        is what decides whether the kill switch is warranted,
+                        and a reviewer who has to go and find it will not. */}
+                    {liveOnReviewVersion > 0 ? (
+                      <Alert
+                        severity={reviewEntry?.revoked ? 'success' : 'warning'}
+                        sx={{ mt: 0.5 }}
+                        action={
+                          <Button
+                            size="small"
+                            color="inherit"
+                            disabled={busy}
+                            onClick={() =>
+                              void setVersionRevoked(
+                                detail.reviewVersion,
+                                !reviewEntry?.revoked,
+                              )
+                            }
+                          >
+                            {reviewEntry?.revoked
+                              ? 'Allow again'
+                              : 'Stop these bytes'}
+                          </Button>
+                        }
+                      >
+                        {reviewEntry?.revoked
+                          ? `v${detail.reviewVersion} is stopped. The ` +
+                            `${liveOnReviewVersion} site${
+                              liveOnReviewVersion === 1 ? '' : 's'
+                            } pinned to it render a placeholder instead.`
+                          : `${liveOnReviewVersion} site${
+                              liveOnReviewVersion === 1
+                                ? ' is'
+                                : 's are'
+                            } running v${detail.reviewVersion} right now. ` +
+                            'Rejecting it stops new installs but leaves ' +
+                            'those running — stop the bytes if they should ' +
+                            'not be executing.'}
+                      </Alert>
+                    ) : null}
                   </Stack>
 
                   <Divider />
@@ -1157,6 +1232,21 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                           entry.trust === 'realm' ? 'Realm-trusted' : 'Sandboxed'
                         }
                       />
+                      {/* AGL-1085. Two states worth distinguishing at a
+                          glance: bytes a reviewer turned off, and rejected
+                          bytes still executing somewhere — which a rejection
+                          alone never changes. */}
+                      {entry.revoked ? (
+                        <Chip size="small" color="error" label="Stopped" />
+                      ) : entry.reviewState === 'rejected' &&
+                        entry.activeInstalls > 0 ? (
+                        <Chip
+                          size="small"
+                          color="error"
+                          variant="outlined"
+                          label="Rejected but still running"
+                        />
+                      ) : null}
                       <Typography variant="caption" color="text.secondary">
                         {entry.publishedAt
                           ? new Date(entry.publishedAt).toLocaleDateString()
@@ -1183,6 +1273,20 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         {entry.trust === 'realm'
                           ? 'Revoke realm trust'
                           : 'Grant realm trust'}
+                      </Button>
+                      {/* The kill switch for THESE bytes (AGL-1085) —
+                          narrower than the takedown below, which stops every
+                          version including the one customers are happily
+                          running. */}
+                      <Button
+                        size="small"
+                        color={entry.revoked ? 'success' : 'error'}
+                        disabled={busy}
+                        onClick={() =>
+                          void setVersionRevoked(entry.version, !entry.revoked)
+                        }
+                      >
+                        {entry.revoked ? 'Allow again' : 'Stop this version'}
                       </Button>
                     </Stack>
                   ))}

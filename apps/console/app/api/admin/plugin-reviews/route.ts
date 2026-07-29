@@ -17,11 +17,14 @@
 
 import {
   checkPluginBundle,
+  isPluginRevoked,
   isStoredVerdictCurrent,
+  nextRevocationState,
   PLUGIN_HOST_ABI_VERSION,
   PLUGIN_VERIFIER_VERSION,
   pluginArtifactPath,
   pluginRequestFromWeb,
+  type PluginRevocation,
   type StoredBundleVerdict,
 } from '@aglyn/aglyn/server'
 import {
@@ -326,8 +329,16 @@ async function listingDetail(
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       versions: versions.map(
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        ({ verification, reviewChecklist, publisherAttestation, ...entry }) =>
-          entry,
+        ({ verification, reviewChecklist, publisherAttestation, ...entry }) => ({
+          ...entry,
+          // Per-version kill-switch state (AGL-1085), read through the same
+          // helper the loaders use so the page cannot disagree with the
+          // runtime about whether these bytes are stopped.
+          revoked: isPluginRevoked(
+            revocation as PluginRevocation | undefined,
+            entry.version,
+          ),
+        }),
       ),
       // Review checklist for the version under review (AGL-963). Ticks made
       // against different bytes do not count, so a republish starts clean.
@@ -574,21 +585,31 @@ async function handler(request: Request): Promise<Response> {
           targetSnapshot.get('type') === 'plugin')
       if (isPlugin) {
         const revocationRef = firestore.collection('revocations').doc(listingId)
-        if (action === 'hide') {
+        const current = (await revocationRef.get()).data() as
+          | PluginRevocation
+          | undefined
+        // Both transitions go through the shared helper (AGL-1085) so a
+        // takedown and a per-version review revocation can coexist. Restoring
+        // used to DELETE the doc whenever it was takedown-owned, which also
+        // un-revoked any version a reviewer had stopped for an unrelated
+        // reason — `reviewVersions` is what survives the round trip.
+        const next = nextRevocationState(current, {
+          type: action === 'hide' ? 'takedown' : 'restore',
+        })
+        if (next) {
           await revocationRef.set(
             {
-              versions: 'all',
-              reason: hideReason,
+              ...next,
+              ...(action === 'hide' ? { reason: hideReason } : {}),
               revokedBy: decoded.uid,
               revokedAt: FieldValue.serverTimestamp(),
-              // Marks this revocation as takedown-owned, so un-hiding can
-              // clear it without also clearing a revocation staff wrote by
-              // hand for a different reason.
-              source: 'takedown',
+              // A restore drops takedown ownership; the field has to go, not
+              // merely be overwritten, or the next restore re-deletes.
+              ...(action === 'hide' ? {} : { source: FieldValue.delete() }),
             },
             { merge: true },
           )
-        } else if ((await revocationRef.get()).get('source') === 'takedown') {
+        } else if (current) {
           await revocationRef.delete()
         }
       }
@@ -760,6 +781,14 @@ async function handler(request: Request): Promise<Response> {
         at: FieldValue.serverTimestamp(),
       })
 
+      // Pins sitting on these exact bytes right now (AGL-1085). Rejecting a
+      // version does NOT stop it — the runtime resolves a pin by
+      // {version, sha256} and only asks whether it is revoked — so both
+      // sides have to be told, and the reviewer needs the number before
+      // deciding whether to reach for the kill switch.
+      const liveInstalls = Number(versionSnapshot.get('activeInstalls') ?? 0)
+      const stranded = !approving && liveInstalls > 0
+
       if (listing.profileId) {
         await notifyOrgAdmins(String(listing.profileId), {
           type: 'community.review',
@@ -768,7 +797,11 @@ async function handler(request: Request): Promise<Response> {
             : `"${listing.displayName}" v${version} was not approved`,
           body: approving
             ? 'It is now the version new installs receive.'
-            : reason,
+            : stranded
+              ? `${reason}\n\nThis version is still installed on ` +
+                `${liveInstalls} site${liveInstalls === 1 ? '' : 's'}. ` +
+                'Rejecting it does not remove it — uninstall or roll back.'
+              : reason,
           orgId: String(listing.profileId),
           link: '/',
         }).catch(() => undefined)
@@ -784,12 +817,95 @@ async function handler(request: Request): Promise<Response> {
             : `Your plugin version ${version} was not approved.\n\n` +
               `Reason: ${reason}\n\nPublishing a new version puts it back ` +
               'in the review queue. The previously approved version, if any, ' +
-              'keeps installing in the meantime.',
+              'keeps installing in the meantime.' +
+              (stranded
+                ? `\n\nNote: v${version} is still installed on ` +
+                  `${liveInstalls} site${liveInstalls === 1 ? '' : 's'}. ` +
+                  'A rejection stops new installs, it does not remove an ' +
+                  'existing one — uninstall it or roll back to an approved ' +
+                  'version.'
+                : ''),
         )
       }
 
       return Response.json(
-        { ok: true, version, reviewState: approving ? 'approved' : 'rejected' },
+        {
+          ok: true,
+          version,
+          reviewState: approving ? 'approved' : 'rejected',
+          // Lets the reviewer's confirmation say what it actually did, and
+          // offer the kill switch when the bytes are live somewhere.
+          liveInstalls,
+          stranded,
+        },
+        { status: 200 },
+      )
+    }
+
+    // Per-version kill switch (AGL-1085). Until now a reviewer's only way to
+    // stop live bytes was a listing-wide takedown, which also revokes the
+    // approved version customers are happily running and hides the listing.
+    // Rejection deliberately stays a verdict rather than a kill: most
+    // rejections are a thin README, and an unannounced site outage is worse
+    // than the gap. This is the deliberate, adjacent action.
+    if (action === 'revoke-version' || action === 'unrevoke-version') {
+      const version = String(body?.version ?? '')
+      if (!listingId || !version) {
+        return Response.json(
+          { error: 'Listing and version required' },
+          { status: 400 },
+        )
+      }
+      const listingRef = firestore.collection('communityListings').doc(listingId)
+      const listing = (await listingRef.get()).data() ?? {}
+      const revocationRef = firestore.collection('revocations').doc(listingId)
+      const current = (await revocationRef.get()).data() as
+        | PluginRevocation
+        | undefined
+      const revoking = action === 'revoke-version'
+      const next = nextRevocationState(current, {
+        type: revoking ? 'revoke-version' : 'unrevoke-version',
+        version,
+      })
+      if (next) {
+        await revocationRef.set(
+          {
+            ...next,
+            reason: String(body?.reason ?? current?.reason ?? '').slice(0, 500),
+            revokedBy: decoded.uid,
+            revokedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+      } else {
+        await revocationRef.delete()
+      }
+
+      await firestore.collection('adminAudit').add({
+        actorUid: decoded.uid,
+        action: `plugins.revocation.${revoking ? 'revoke' : 'restore'}`,
+        target: `communityListings/${listingId}/pluginVersions/${version}`,
+        after: { versions: next?.versions ?? null },
+        at: FieldValue.serverTimestamp(),
+      })
+
+      if (listing.profileId) {
+        await notifyOrgAdmins(String(listing.profileId), {
+          type: 'community.review',
+          title: revoking
+            ? `"${listing.displayName}" v${version} was stopped`
+            : `"${listing.displayName}" v${version} was allowed to run again`,
+          body: revoking
+            ? 'It has been disabled on every site running it. Sites showing ' +
+              'this plugin now render a placeholder.'
+            : 'Sites running it are no longer blocked.',
+          orgId: String(listing.profileId),
+          link: '/',
+        }).catch(() => undefined)
+      }
+
+      return Response.json(
+        { ok: true, version, revoked: revoking },
         { status: 200 },
       )
     }
