@@ -734,14 +734,27 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                           : ''}
                       </Typography>
                       {checks.map((check) => {
+                        // The state has to survive being read aloud and being
+                        // read by someone who cannot separate the red from the
+                        // green (AGL-1089), so it is named in text as well as
+                        // drawn — this is a page people skim to decide whether
+                        // code runs in other people's workspaces.
                         const marker =
                           check.status === 'pass'
-                            ? { glyph: '✓', color: 'success.main' }
+                            ? { glyph: '✓', color: 'success.main', name: 'Passed' }
                             : check.status === 'fail'
-                              ? { glyph: '✕', color: 'error.main' }
+                              ? { glyph: '✕', color: 'error.main', name: 'Failed' }
                               : check.status === 'question'
-                                ? { glyph: '?', color: 'warning.main' }
-                                : { glyph: '—', color: 'text.disabled' }
+                                ? {
+                                    glyph: '?',
+                                    color: 'warning.main',
+                                    name: 'Worth questioning',
+                                  }
+                                : {
+                                    glyph: '—',
+                                    color: 'text.disabled',
+                                    name: 'Not checked',
+                                  }
                         return (
                           <Stack key={check.id} spacing={0.5}>
                             <Stack
@@ -751,6 +764,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                             >
                               <Typography
                                 variant="body2"
+                                aria-label={`${marker.name}:`}
                                 sx={{ color: marker.color, width: 16 }}
                               >
                                 {marker.glyph}
