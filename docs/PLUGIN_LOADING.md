@@ -275,7 +275,14 @@ Firebase, just Cloud Storage SKUs rather than the Firebase Storage line.
    server verdicts never drift. The checks PARSE the bundle since
    AGL-964: computed access on a global (`g['ev'+'al']`), any
    `.constructor()` call, `import()` with a runtime specifier, and every
-   network call diffed against the manifest's `capabilities.network` —
+   network call diffed against the manifest's `capabilities.network`.
+   A call through an ALIAS resolves to what it stands for (AGL-1090), so
+   `const f = fetch; f(url)`, `const d = globalThis.fetch` and
+   `const {fetch: h} = globalThis` are all network calls; a URL literal
+   handed to a callee the checker cannot resolve raises a question rather
+   than passing in silence. Reassignment, `arr[0]`, an object property
+   and passing a function as an argument stay out of reach — the bar is
+   that the cheap indirection is not free —
    so pass the manifest (second argument, or leave it beside/above the
    bundle) or the network findings downgrade to warnings locally while
    the publish API still rejects. The output lists EVERY area it checked
