@@ -141,6 +141,11 @@ when you are pasting a README you wrote elsewhere. It is the document
 reviewers read first and buyers read before running third-party code, so
 it is worth the room.
 
+Paste a repository README as-is. The editor renders **two heading sizes**
+and clamps every `#` run onto them, so the `# Project Name` a README opens
+with becomes the larger heading and `####` or deeper become the smaller
+one — you do not have to re-level anything by hand.
+
 The **changelog** has two audiences, and it is worth writing for both: the
 reviewer, who compares this version against the last approved one, and
 every installer who reads it on your listing's changelog tab before
@@ -246,6 +251,14 @@ Two things it states that you would otherwise have to infer:
   through a different path, because approval is about the bundle's bytes.
 - **The bytes are never edited.** Changing them means publishing a new
   version — there is no "resubmit" for a rejected one.
+
+**A rejection does not uninstall anything.** If you installed the version
+to test it — which you are encouraged to do, and which only your own
+organization can do before review — that install keeps running the
+rejected bytes on your site. The rejection notice tells you when this
+applies to you; uninstall it or roll back to an approved version. Review
+can also stop a version outright, and then every site pinned to it renders
+a placeholder instead of the plugin.
 
 ## Private plugins
 

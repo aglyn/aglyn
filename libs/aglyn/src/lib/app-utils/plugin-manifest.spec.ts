@@ -19,8 +19,10 @@ import {
   attachPluginInstalls,
   isPluginNetworkAllowed,
   isPluginRevoked,
+  nextRevocationState,
   PLUGIN_COMPONENT_ID,
   type PluginManifest,
+  type PluginRevocation,
   pluginArtifactPath,
   pluginContentSecurityPolicy,
   validatePluginManifest,
@@ -186,5 +188,113 @@ describe('isPluginRevoked', () => {
     expect(isPluginRevoked({ versions: ['1.0.0'] }, '1.0.0')).toBe(true)
     expect(isPluginRevoked({ versions: ['1.0.0'] }, '1.1.0')).toBe(false)
     expect(isPluginRevoked(null, '1.0.0')).toBe(false)
+  })
+})
+
+describe('nextRevocationState (AGL-1085)', () => {
+  // Every assertion goes through isPluginRevoked rather than reading fields:
+  // what matters is whether the loaders stop the bytes, and a writer that
+  // agreed with itself but not the reader is the failure being guarded.
+  const revoked = (state: PluginRevocation | null, version: string) =>
+    isPluginRevoked(state, version)
+
+  it('revokes one version without touching the others', () => {
+    const state = nextRevocationState(null, {
+      type: 'revoke-version',
+      version: '1.0.0',
+    })
+    expect(revoked(state, '1.0.0')).toBe(true)
+    expect(revoked(state, '1.1.0')).toBe(false)
+  })
+
+  it('accumulates versions and is idempotent', () => {
+    let state = nextRevocationState(null, {
+      type: 'revoke-version',
+      version: '1.0.0',
+    })
+    state = nextRevocationState(state, {
+      type: 'revoke-version',
+      version: '2.0.0',
+    })
+    state = nextRevocationState(state, {
+      type: 'revoke-version',
+      version: '1.0.0',
+    })
+    expect(state?.versions).toEqual(['1.0.0', '2.0.0'])
+    expect(revoked(state, '1.0.0')).toBe(true)
+    expect(revoked(state, '2.0.0')).toBe(true)
+  })
+
+  it('deletes the doc once the last version is un-revoked', () => {
+    const state = nextRevocationState(
+      nextRevocationState(null, { type: 'revoke-version', version: '1.0.0' }),
+      { type: 'unrevoke-version', version: '1.0.0' },
+    )
+    // null means "delete" — an empty `versions: []` would read as revoking
+    // nothing while leaving a doc behind for the next reader to interpret.
+    expect(state).toBeNull()
+    expect(revoked(state, '1.0.0')).toBe(false)
+  })
+
+  it('un-revoking one version leaves the rest revoked', () => {
+    let state = nextRevocationState(null, {
+      type: 'revoke-version',
+      version: '1.0.0',
+    })
+    state = nextRevocationState(state, {
+      type: 'revoke-version',
+      version: '2.0.0',
+    })
+    state = nextRevocationState(state, {
+      type: 'unrevoke-version',
+      version: '1.0.0',
+    })
+    expect(revoked(state, '1.0.0')).toBe(false)
+    expect(revoked(state, '2.0.0')).toBe(true)
+  })
+
+  it('a takedown kills everything, including un-revoked versions', () => {
+    const state = nextRevocationState(
+      nextRevocationState(null, { type: 'revoke-version', version: '1.0.0' }),
+      { type: 'takedown' },
+    )
+    expect(state?.versions).toBe('all')
+    expect(revoked(state, '9.9.9')).toBe(true)
+  })
+
+  it('RESTORING after a takedown keeps the review-revoked version dead', () => {
+    // The bug this whole field exists to prevent: un-hiding a listing used to
+    // delete the doc outright, which would silently un-revoke a version a
+    // reviewer stopped for an entirely unrelated reason.
+    let state = nextRevocationState(null, {
+      type: 'revoke-version',
+      version: '1.0.0',
+    })
+    state = nextRevocationState(state, { type: 'takedown' })
+    state = nextRevocationState(state, { type: 'restore' })
+    expect(revoked(state, '1.0.0')).toBe(true)
+    expect(revoked(state, '2.0.0')).toBe(false)
+    expect(state?.source).toBeUndefined()
+  })
+
+  it('restoring a pure takedown deletes the doc', () => {
+    const state = nextRevocationState(
+      nextRevocationState(null, { type: 'takedown' }),
+      { type: 'restore' },
+    )
+    expect(state).toBeNull()
+  })
+
+  it('a version revoked DURING a takedown survives the restore', () => {
+    let state = nextRevocationState(null, { type: 'takedown' })
+    state = nextRevocationState(state, {
+      type: 'revoke-version',
+      version: '1.0.0',
+    })
+    // Still 'all' while hidden — the takedown is the stronger statement.
+    expect(state?.versions).toBe('all')
+    state = nextRevocationState(state, { type: 'restore' })
+    expect(revoked(state, '1.0.0')).toBe(true)
+    expect(revoked(state, '2.0.0')).toBe(false)
   })
 })

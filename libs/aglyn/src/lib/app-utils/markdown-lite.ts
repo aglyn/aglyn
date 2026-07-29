@@ -114,6 +114,29 @@ export function parseMarkdownInlines(text: string): MarkdownInline[] {
   return inlines
 }
 
+/**
+ * An ATX heading at ANY of markdown's six levels (AGL-1082). The dialect only
+ * RENDERS two, but it must not mistake the other four for prose: matching just
+ * `#{2,3}` made `# Title` — how essentially every repo README opens — fall
+ * through to a paragraph carrying a literal `#`, silently, in every renderer.
+ */
+const HEADING_PATTERN = /^(#{1,6})\s+(.*)$/
+
+/**
+ * Clamps an ATX level onto the two the block union carries. `#` promotes to
+ * the top rendered level and `####`+ demote to the bottom one, so an out-of-
+ * range heading degrades to the NEAREST heading rather than to prose — the
+ * same lossy-but-visible degradation the dialect already applies to a `*`
+ * inside a bold run. Deliberately NOT widening `level` to `1 | 2 | 3`: every
+ * renderer reads it as `level === 2 ? h2 : h3`, so a third value would type-
+ * check clean and silently render an h1 as an h3 in five places. This also
+ * makes the markdown path agree with the HTML-paste path, which has always
+ * mapped `<h1>` to a level-2 heading.
+ */
+function clampHeadingLevel(hashes: number): 2 | 3 {
+  return hashes <= 2 ? 2 : 3
+}
+
 /** ```` ``` ```` or longer, optionally naming a language. */
 const FENCE_PATTERN = /^`{3,}\s*([^\s`]*)\s*$/
 /** A delimiter cell of a GFM table's second row: `---`, `:--`, `:-:`, `--:`. */
@@ -171,11 +194,11 @@ function parseChunk(chunk: string): MarkdownBlock | null {
     const src = safeUrl(image[2])
     return src ? { type: 'image', src, alt: image[1] } : null
   }
-  const heading = /^(#{2,3})\s+(.*)$/.exec(trimmed)
+  const heading = HEADING_PATTERN.exec(trimmed)
   if (heading) {
     return {
       type: 'heading',
-      level: heading[1].length as 2 | 3,
+      level: clampHeadingLevel(heading[1].length),
       inlines: parseMarkdownInlines(heading[2]),
     }
   }

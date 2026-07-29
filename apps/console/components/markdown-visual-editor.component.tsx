@@ -1315,15 +1315,19 @@ const MarkdownVisualEditor = forwardRef<
       const inlines = readInlinesFromElement(rowEl)
       const text = rowPlainText(inlines)
       // Markdown shortcuts (AGL-582): "## " / "### " / "- " at the start
-      // of a paragraph convert it to a heading or list item.
+      // of a paragraph convert it to a heading or list item. "# " joins them
+      // (AGL-1082) so typing a heading agrees with pasting one — the parser
+      // clamps a single `#` to the top rendered level too.
       if (row.kind === 'paragraph') {
         const shortcut = text.startsWith('### ')
           ? { kind: 'heading3' as const, trim: 4 }
           : text.startsWith('## ')
             ? { kind: 'heading2' as const, trim: 3 }
-            : text.startsWith('- ')
-              ? { kind: 'listItem' as const, trim: 2 }
-              : null
+            : text.startsWith('# ')
+              ? { kind: 'heading2' as const, trim: 2 }
+              : text.startsWith('- ')
+                ? { kind: 'listItem' as const, trim: 2 }
+                : null
         if (shortcut) {
           const caret =
             selectionOffsetsWithin(rowEl)?.start ?? text.length

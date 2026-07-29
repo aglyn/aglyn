@@ -96,10 +96,26 @@ export interface PluginInstall {
 
 /** `revocations/{listingId}` — platform kill switch checked at load. */
 export interface PluginRevocation {
-  /** Specific versions revoked, or `'all'` to kill the whole listing. */
+  /**
+   * Specific versions revoked, or `'all'` to kill the whole listing. This is
+   * the ONLY field any reader consults — everything else on the doc records
+   * who owns the entry so the two writers can coexist.
+   */
   versions: string[] | 'all'
   reason?: string
   atMs?: number
+  /**
+   * `'takedown'` when the listing-level hide wrote it (AGL-948). Un-hiding
+   * clears a takedown-owned entry, so it must not be the only record.
+   */
+  source?: string
+  /**
+   * Versions revoked by a REVIEW decision (AGL-1085), kept separately from
+   * `versions` because a takedown flattens that to `'all'`. Without this,
+   * un-hiding a listing would silently un-revoke versions a reviewer stopped
+   * for an unrelated reason.
+   */
+  reviewVersions?: string[]
 }
 
 export const PLUGIN_ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/
@@ -294,6 +310,68 @@ export function isPluginRevoked(
   return (
     Array.isArray(revocation.versions) && revocation.versions.includes(version)
   )
+}
+
+/**
+ * The next `revocations/{listingId}` state after one write (AGL-1085).
+ *
+ * Two writers share this doc and neither may erase the other:
+ *
+ * * a **takedown** kills the listing, flattening `versions` to `'all'`, and
+ *   un-hiding removes what it wrote (AGL-948);
+ * * a **review** decision stops one version's bytes — the reviewer's only
+ *   alternative used to be a full takedown, which also revokes the version
+ *   customers are happily running.
+ *
+ * `versions` stays the single field every reader consults, so `isPluginRevoked`
+ * and the loaders are untouched. `reviewVersions` is the durable record of the
+ * review-owned half, which is what lets un-hiding restore rather than clear it.
+ * Returns `null` when nothing is revoked any more and the doc should be
+ * deleted — an empty `versions: []` would read as "revoked nothing" but keep a
+ * doc around that a later reader has to interpret.
+ *
+ * Pure so both transitions are testable without Firestore, and colocated with
+ * `isPluginRevoked` on purpose: a writer that disagreed with the reader about
+ * this doc's shape is exactly how a kill switch silently stops killing.
+ */
+export function nextRevocationState(
+  current: PluginRevocation | null | undefined,
+  change:
+    | { type: 'revoke-version'; version: string }
+    | { type: 'unrevoke-version'; version: string }
+    | { type: 'takedown' }
+    | { type: 'restore' },
+): PluginRevocation | null {
+  const reviewVersions = [...(current?.reviewVersions ?? [])]
+  const takenDown = current?.source === 'takedown'
+  const withReview = (versions: string[], stillTakenDown: boolean) => {
+    if (stillTakenDown) {
+      return { ...current, versions: 'all' as const, reviewVersions: versions }
+    }
+    if (!versions.length) return null
+    const { source: _source, ...rest } = current ?? {}
+    return { ...rest, versions, reviewVersions: versions }
+  }
+  switch (change.type) {
+    case 'revoke-version': {
+      const next = reviewVersions.includes(change.version)
+        ? reviewVersions
+        : [...reviewVersions, change.version]
+      return withReview(next, takenDown)
+    }
+    case 'unrevoke-version': {
+      return withReview(
+        reviewVersions.filter((entry) => entry !== change.version),
+        takenDown,
+      )
+    }
+    case 'takedown':
+      return { ...current, versions: 'all', source: 'takedown', reviewVersions }
+    case 'restore':
+      // Only the takedown's own contribution goes away. A version a reviewer
+      // stopped stays stopped — un-hiding is not a review decision.
+      return withReview(reviewVersions, false)
+  }
 }
 
 /** Methods a host-mediated plugin fetch may use (AGL-191). */

@@ -312,6 +312,18 @@ describe('MarkdownVisualEditor', () => {
     expect(lastEmitted(listChange)).toBe('- item')
   })
 
+  it('converts a "# " prefix to a heading too (AGL-1082)', () => {
+    // Typing must agree with pasting: the parser clamps `#` to the top
+    // rendered level, so the shortcut has to reach the same row kind rather
+    // than leaving a literal hash behind.
+    const { handleChange } = renderEditor('')
+    const row = rowEls()[0] as HTMLElement
+    row.textContent = '# Office Hours'
+    fireEvent.input(row)
+    expect(rowEls()[0]?.dataset['rowKind']).toBe('heading2')
+    expect(lastEmitted(handleChange)).toBe('## Office Hours')
+  })
+
   it('pastes clipboard text as plain text at the caret', () => {
     const { handleChange } = renderEditor('ab')
     const row = rowEls()[0] as HTMLElement

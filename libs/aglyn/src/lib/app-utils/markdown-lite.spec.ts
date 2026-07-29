@@ -137,6 +137,41 @@ describe('markdown-lite', () => {
     ).toEqual(['paragraph'])
   })
 
+  it('reads a `#` heading as a heading, not literal text (AGL-1082)', () => {
+    // The exact document that shipped wrong: listing ChiOYRKDeI rendered its
+    // first row as the literal `# Office Hours`.
+    const blocks = parseMarkdownLite('# Office Hours\n\n## What it does')
+    const heading = (text: string) => ({
+      type: 'heading',
+      level: 2,
+      inlines: [{ type: 'text', text }],
+    })
+    expect(blocks).toEqual([heading('Office Hours'), heading('What it does')])
+    // No block anywhere still carries the hash as prose.
+    expect(JSON.stringify(blocks)).not.toContain('#')
+  })
+
+  it('clamps every ATX level onto the two the union carries (AGL-1082)', () => {
+    // The renderers read `level === 2 ? h2 : h3`, so a value outside 2|3 would
+    // typecheck clean and render silently wrong in five places.
+    for (const hashes of [1, 2, 3, 4, 5, 6]) {
+      const [block] = parseMarkdownLite(`${'#'.repeat(hashes)} Title`)
+      expect(block.type).toBe('heading')
+      expect((block as any).level).toBe(hashes <= 2 ? 2 : 3)
+      expect((block as any).inlines).toEqual([{ type: 'text', text: 'Title' }])
+    }
+  })
+
+  it('still needs a hash run and a space to be a heading (AGL-1082)', () => {
+    // Seven hashes is not an ATX heading in CommonMark either, and `#tag`
+    // without a space is prose — widening the run must not eat those.
+    for (const text of ['####### Too deep', '#NoSpace', '# ']) {
+      expect(parseMarkdownLite(text).map((block) => block.type)).toEqual([
+        'paragraph',
+      ])
+    }
+  })
+
   it('classifies internal hrefs for AppLink rendering (AGL-582)', () => {
     expect(isInternalMarkdownHref('/blog/post')).toBe(true)
     expect(isInternalMarkdownHref('//evil.example')).toBe(false)
@@ -173,7 +208,8 @@ describe('serializeMarkdownLite (AGL-582)', () => {
     'asterisk bullets normalize to dashes': '* one\n* two\n* three',
     'many blank lines between blocks': '## A\n\n\n\n\nB\n\n\n\nC',
     'multi-line paragraph joins with a space': 'line one\nline two',
-    'h1 and h4 are not headings': '# not a heading\n\n#### also not',
+    'h1 and h4 clamp onto the two rendered levels (AGL-1082)':
+      '# top level\n\n#### deep level',
     'unsafe link degrades to text': 'x [y](javascript:alert(1)) z',
     'protocol-relative link degrades to text': 'x [y](//evil.example) z',
     'unsafe image block is dropped': 'before\n\n![x](/relative.png)\n\nafter',

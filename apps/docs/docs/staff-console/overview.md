@@ -35,6 +35,14 @@ set password](/img/staff-console/admin-user-password.png)
   **Listed plugins — realm trust** table for granting or revoking
   [realm trust](../developers/plugins/guides/realm-bundles.md#granting-trust-staff)
   per version.
+  Rejecting a version is a **verdict, not a kill**: it stops new installs, but a
+  site already pinned to those bytes keeps running them. Where that has happened
+  the review panel says so and offers **Stop this version**, the per-version kill
+  switch — every site pinned to it renders a placeholder on the next load, and
+  the rest of the listing's versions are untouched. **Taking the listing down**
+  is the wider hammer: it stops *every* version, including the approved one
+  customers are using. Restoring a listing clears only what the takedown did, so
+  a version stopped separately stays stopped.
 - **Organization management** — audited plan and entitlement overrides, suspension,
   and GDPR-erasure flags, per organization. The directory is listed server-side with
   the Admin SDK (so it shows *every* org, not the subset client rules would return),
