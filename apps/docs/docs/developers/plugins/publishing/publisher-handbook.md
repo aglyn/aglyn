@@ -135,9 +135,15 @@ as a warning and a reviewer will ask about it.
 
 Calling through a local name does not change the answer: `const f = fetch`,
 `const d = globalThis.fetch` and `const {fetch: h} = globalThis` are all
-resolved back to `fetch`. And if you hand a URL to a helper the checker cannot
-follow, it says so rather than reporting no network calls — so declare the
-origins your plugin talks to and the row goes quiet on its own.
+resolved back to `fetch`, and a URL kept in a constant — a plain string, a
+template, or a concatenation of them — is read rather than shrugged at. What
+is not read is a name that gets reassigned, shadowed by a parameter or
+declared twice; there the value at the call site would be a guess, so the
+call is reported as a URL known only at runtime.
+
+If you hand a URL to a helper the checker cannot follow, it says so rather
+than reporting no network calls — so declare the origins your plugin talks to
+and the row goes quiet on its own.
 
 Pass the manifest (as above, or leave it beside your bundle or one level up)
 or the network checks can only warn locally while the publish API still

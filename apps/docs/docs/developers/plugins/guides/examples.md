@@ -28,3 +28,4 @@ equivalent to read.
 | Community realm bundle | `tools/plugin-loader/realm/demo` (+ `EXPLAINED.md`) | The standalone track, narrated line by line |
 | Community starter | `tools/plugin-loader/realm/template` | What you actually copy to begin |
 | Sandbox community plugin | `examples/plugins/promo-countdown` | A complete, publishable sandbox plugin with no build step — `register()`, render, props, config scheme, emitted events, and cleanup. Passes the bundle verifier as-is, so it doubles as the worked example for [uploading a plugin](../publishing/publisher-handbook.md) |
+| Declared network origin | `examples/plugins/zen-quote` | The only example that DECLARES an origin and calls it (`capabilities.network`). Shows both jobs that one line does: the publish-time diff refuses an undeclared origin, and the frame's `connect-src` refuses one at runtime. Write the URL inline — a URL in a `const` is not yet followed (AGL-1093) |

