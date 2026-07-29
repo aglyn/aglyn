@@ -133,6 +133,12 @@ failing here means you find out at publish time instead of in production.
 A URL your code only knows at runtime cannot be checked, so it is reported
 as a warning and a reviewer will ask about it.
 
+Calling through a local name does not change the answer: `const f = fetch`,
+`const d = globalThis.fetch` and `const {fetch: h} = globalThis` are all
+resolved back to `fetch`. And if you hand a URL to a helper the checker cannot
+follow, it says so rather than reporting no network calls — so declare the
+origins your plugin talks to and the row goes quiet on its own.
+
 Pass the manifest (as above, or leave it beside your bundle or one level up)
 or the network checks can only warn locally while the publish API still
 rejects.

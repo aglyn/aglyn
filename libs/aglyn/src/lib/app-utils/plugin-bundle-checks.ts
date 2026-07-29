@@ -130,8 +130,9 @@ export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
  *
  * 2 — AST analysis replaces the regex scan (AGL-964).
  * 3 — per-check summary added to the verdict (AGL-1087).
+ * 4 — calls through an alias are resolved (AGL-1090).
  */
-export const PLUGIN_VERIFIER_VERSION = 3
+export const PLUGIN_VERIFIER_VERSION = 4
 
 /** A verdict as stored on a `pluginVersions` doc (AGL-962). */
 export interface StoredBundleVerdict {
@@ -188,6 +189,41 @@ const NETWORK_CONSTRUCTORS = new Set([
   'XMLHttpRequest',
   'WebSocket',
   'EventSource',
+])
+
+/**
+ * Names worth following through an alias (AGL-1090).
+ *
+ * `const f = fetch; f(url)` used to pass every check, and the network row
+ * rendered a green "no network calls" rather than going quiet — a two-line
+ * indirection defeating the signal this whole verifier exists to produce.
+ * Aliasing a VALUE was the exact gap the project was created to close, and
+ * resolving global objects (`const g = globalThis`) never covered it.
+ *
+ * Reassignment, `arr[0]`, an object property and passing the function as an
+ * argument all stay out of reach. The bar is that the cheap form is not free.
+ */
+const ALIASABLE_CALLABLES = new Set([
+  'eval',
+  'Function',
+  'fetch',
+  'sendBeacon',
+  'XMLHttpRequest',
+  'WebSocket',
+  'EventSource',
+])
+
+/**
+ * Callees that legitimately take an absolute URL and reach nothing — so a URL
+ * literal passed to them is not a call the network check failed to follow.
+ * `createElementNS` matters most: an SVG namespace argument appears in a large
+ * share of real bundles.
+ */
+const URL_TAKING_NON_CALLS = new Set([
+  'URL',
+  'URLSearchParams',
+  'createElementNS',
+  'createDocument',
 ])
 
 /** Beyond this, a single line is not source a reviewer can read. */
@@ -435,6 +471,71 @@ export function checkPluginBundle(
       }
     }
   }
+  // Local name -> the callable it stands for (AGL-1090). `const f = fetch`,
+  // `const d = globalThis.fetch`, `const {fetch: h} = globalThis`.
+  const callableAliases = new Map<string, string>()
+  /** The aliasable callable an initializer denotes, if any. */
+  const callableFrom = (init: AnyNode | null | undefined): string | null => {
+    if (!init) return null
+    if (
+      init.type === 'Identifier' &&
+      ALIASABLE_CALLABLES.has(init['name'] as string)
+    ) {
+      return init['name'] as string
+    }
+    // `globalThis.fetch` / `window['fe' + 'tch']` — the property is what the
+    // name will stand for, and only when the object is a global (an unknown
+    // object's `.fetch` is somebody else's method).
+    if (init.type === 'MemberExpression') {
+      const property = propertyName(init)
+      const object = init['object'] as AnyNode
+      if (
+        property &&
+        ALIASABLE_CALLABLES.has(property) &&
+        object?.type === 'Identifier' &&
+        (GLOBAL_ROOTS.has(object['name'] as string) ||
+          aliases.has(object['name'] as string))
+      ) {
+        return property
+      }
+    }
+    return null
+  }
+  const noteCallableAlias = (
+    id: AnyNode | null | undefined,
+    init: AnyNode | null | undefined,
+  ) => {
+    if (!id) return
+    if (id.type === 'Identifier') {
+      const callable = callableFrom(init)
+      if (callable) callableAliases.set(id['name'] as string, callable)
+      return
+    }
+    // `const { fetch } = globalThis` and `const { fetch: h } = globalThis`.
+    if (id.type === 'ObjectPattern' && init) {
+      const fromGlobal =
+        init.type === 'Identifier' &&
+        (GLOBAL_ROOTS.has(init['name'] as string) ||
+          aliases.has(init['name'] as string))
+      if (!fromGlobal) return
+      for (const property of (id['properties'] ?? []) as AnyNode[]) {
+        const key = property['key'] as AnyNode
+        const value = property['value'] as AnyNode
+        const name =
+          key?.type === 'Identifier' ? (key['name'] as string) : staticString(key)
+        if (
+          name &&
+          ALIASABLE_CALLABLES.has(name) &&
+          value?.type === 'Identifier'
+        ) {
+          callableAliases.set(value['name'] as string, name)
+        }
+      }
+    }
+  }
+
+  // Global-object aliases first, as a complete pass: the callable pass below
+  // resolves `g.fetch` against them, and walk order is not source order.
   walk(program, (node) => {
     if (node.type === 'VariableDeclarator') {
       const id = node['id'] as AnyNode
@@ -447,6 +548,16 @@ export function checkPluginBundle(
       const left = node['left'] as AnyNode
       if (left?.type === 'Identifier')
         noteAlias(left['name'], node['right'] as AnyNode)
+    }
+  })
+  walk(program, (node) => {
+    if (node.type === 'VariableDeclarator') {
+      noteCallableAlias(node['id'] as AnyNode, node['init'] as AnyNode)
+    } else if (
+      node.type === 'AssignmentExpression' &&
+      node['operator'] === '='
+    ) {
+      noteCallableAlias(node['left'] as AnyNode, node['right'] as AnyNode)
     }
   })
 
@@ -476,6 +587,8 @@ export function checkPluginBundle(
   const networkApis = new Set<string>()
   const networkOrigins = new Set<string>()
   let runtimeUrls = 0
+  /** Origins handed to a callee the checker could not resolve (AGL-1090). */
+  const unresolvedOrigins = new Set<string>()
   const noteNetwork = (api: string, urlArg: AnyNode | undefined) => {
     const origin = literalOrigin(urlArg)
     networkApis.add(api)
@@ -517,6 +630,36 @@ export function checkPluginBundle(
           `(declared: ${[...allowlist].join(', ')})`,
       )
     }
+  }
+
+  /**
+   * A call the checker could not resolve, given an absolute URL.
+   *
+   * Reported as a QUESTION, never a refusal: most of these are helpers, and
+   * refusing every unrecognised call that mentions a URL would make the
+   * verifier useless. But leaving them silent is what let the network row
+   * claim "no network calls" over a bundle whose calls it simply could not
+   * follow — and a URL to an origin the manifest never declared is exactly
+   * what a reviewer should be pointed at.
+   */
+  const noteUnresolvedUrl = (
+    name: string | null,
+    urlArg: AnyNode | undefined,
+  ) => {
+    if (name && URL_TAKING_NON_CALLS.has(name)) return
+    const origin = literalOrigin(urlArg)
+    if (!origin || !/^https?:$/.test(new URL(origin).protocol)) return
+    // A declared origin is consistent with the manifest and permitted by the
+    // CSP, so there is no question to raise about it.
+    if (allowlist.has(origin)) return
+    unresolvedOrigins.add(origin)
+    add(
+      'warning',
+      'network',
+      `${name ? `${name}()` : 'a call'} is passed ${origin}, which the ` +
+        'manifest does not declare — the checker could not tell whether it ' +
+        'reaches the network, so read this call',
+    )
   }
 
   let exportsRegister = false
@@ -596,12 +739,16 @@ export function checkPluginBundle(
       case 'NewExpression': {
         const callee = node['callee'] as AnyNode
         const args = (node['arguments'] ?? []) as AnyNode[]
-        const name =
+        const written =
           callee?.type === 'Identifier'
             ? (callee['name'] as string)
             : callee?.type === 'MemberExpression'
               ? propertyName(callee)
               : null
+        // An alias resolves to what it stands for (AGL-1090), so `f(url)`
+        // after `const f = fetch` is a fetch call.
+        const name =
+          (written && callableAliases.get(written)) ?? written ?? null
 
         if (name === 'eval')
           add('error', 'code-execution', 'eval() is not allowed')
@@ -622,8 +769,12 @@ export function checkPluginBundle(
               'Function constructor from any function value',
           )
         if (name && NETWORK_CALLS.has(name)) noteNetwork(name, args[0])
-        if (name && NETWORK_CONSTRUCTORS.has(name))
+        else if (name && NETWORK_CONSTRUCTORS.has(name))
           noteNetwork(name, node.type === 'NewExpression' ? args[0] : args[1])
+        // Something we could not follow, handed an absolute URL (AGL-1090).
+        // Not a refusal — it may be a helper, a logger, or a link — but the
+        // network row must stop rendering "no network calls" over it.
+        else noteUnresolvedUrl(name, args[0])
         break
       }
 
@@ -746,7 +897,13 @@ export function checkPluginBundle(
       details.set('network', 'no network calls')
     }
   } else if (!networkApis.size) {
-    details.set('network', 'no network calls')
+    details.set(
+      'network',
+      unresolvedOrigins.size
+        ? `no resolved network calls, but ${[...unresolvedOrigins].join(', ')} ` +
+            'is passed to a call the checker could not follow'
+        : 'no network calls',
+    )
   } else {
     const origins = networkOrigins.size
       ? [...networkOrigins]
