@@ -243,8 +243,11 @@ export function HostMembersCard(props: HostMembersCardProps) {
         role: event.target.value,
       })
       if (!payload) return
-      enqueueSnackbar('Role updated', { variant: 'success', persist: false })
-      logActivity('Changed member role', {
+      enqueueSnackbar('Site access updated', {
+        variant: 'success',
+        persist: false,
+      })
+      logActivity('Changed member site access', {
         type: 'member',
         name: member.email,
       })
@@ -303,10 +306,10 @@ export function HostMembersCard(props: HostMembersCardProps) {
           <TextField
             select
             size="small"
-            label="Role"
+            label="Site access"
             value={role}
             onChange={(event) => setRole(event.target.value)}
-            sx={{ minWidth: 110 }}
+            sx={{ minWidth: 130 }}
           >
             {ROLE_OPTIONS.map((option) => (
               <MenuItem key={option.value} value={option.value}>
@@ -345,7 +348,12 @@ export function HostMembersCard(props: HostMembersCardProps) {
           <TableHead>
             <TableRow>
               <TableCell>{'Member'}</TableCell>
-              <TableCell>{'Role'}</TableCell>
+              {/* "Site access", not "Role" (AGL-1125). The org Team table's
+                  Role column is the ORG role; this one is access to THIS
+                  site. Two tables using one word for two different answers
+                  was the same confusion AGL-1125 fixed within the Team
+                  table, one page over. */}
+              <TableCell>{'Site access'}</TableCell>
               <TableCell align="right">{'Actions'}</TableCell>
             </TableRow>
           </TableHead>
