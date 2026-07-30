@@ -17,8 +17,10 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  authForPool,
   consumePasswordResetSend,
   emailUnverifiedResponse,
+  findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
   passwordResetThrottleMessage,
@@ -92,7 +94,17 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'You cannot lock yourself out' }, { status: 400 })
     }
 
-    const target = await auth.getUser(uid)
+    // Resolve which pool the TARGET lives in (AGL-1122) and mutate there.
+    // Custom claims and profile edits are per-pool: `setCustomUserClaims` on
+    // the project pool cannot grant staff to — or disable — an SSO account,
+    // whose uid only exists inside its org's GCIP tenant. `auth` above stays
+    // the project pool, which is correct for verifying the CALLER's token.
+    const found = await findUserByUidAcrossPools(uid)
+    if (!found) {
+      return Response.json({ error: 'No such account' }, { status: 404 })
+    }
+    const target = found.record
+    const targetAuth = authForPool(found.tenantId)
     const before = {
       staff: Boolean(target.customClaims?.['staff']),
       staffRole: target.customClaims?.['staffRole'] ?? null,
@@ -111,7 +123,7 @@ async function handler(request: Request): Promise<Response> {
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return Response.json({ error: 'Enter a valid email' }, { status: 400 })
       }
-      await auth.updateUser(uid, {
+      await targetAuth.updateUser(uid, {
         displayName: displayName || undefined,
         photoURL: photoUrl || undefined,
         ...(email && email !== target.email
@@ -206,7 +218,7 @@ async function handler(request: Request): Promise<Response> {
       if (validated.error) {
         return Response.json({ error: validated.error }, { status: 400 })
       }
-      await auth.updateUser(uid, { password: validated.password })
+      await targetAuth.updateUser(uid, { password: validated.password })
       // Sessions outlive the credential otherwise: an id token stays valid
       // for up to an hour and a refresh token indefinitely, so whoever was
       // signed in with the OLD password keeps working. Revoking is the
@@ -238,20 +250,20 @@ async function handler(request: Request): Promise<Response> {
       if (decoded.uid === uid && requestedRole !== 'super') {
         return Response.json({ error: 'You cannot demote yourself' }, { status: 400 })
       }
-      await auth.setCustomUserClaims(uid, {
+      await targetAuth.setCustomUserClaims(uid, {
         ...(target.customClaims ?? {}),
         staff: true,
         staffRole: requestedRole,
       })
     } else if (action === 'grantStaff' || action === 'revokeStaff') {
-      await auth.setCustomUserClaims(uid, {
+      await targetAuth.setCustomUserClaims(uid, {
         ...(target.customClaims ?? {}),
         staff: action === 'grantStaff',
         // Grants default to the least-privileged role (AGL-206).
         ...(action === 'grantStaff' ? { staffRole: 'support' } : {}),
       })
     } else {
-      await auth.updateUser(uid, { disabled: action === 'disable' })
+      await targetAuth.updateUser(uid, { disabled: action === 'disable' })
     }
 
     await firebaseAdmin

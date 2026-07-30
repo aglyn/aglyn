@@ -26,6 +26,7 @@ import {
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
   Button,
   Chip,
   MenuItem,
@@ -59,6 +60,13 @@ interface AdminUser {
   createdAt: string | null
   lastSignInAt: string | null
   providers: string[]
+  /**
+   * GCIP tenant id when the account lives in an enterprise SSO pool, else
+   * null for the project-level pool (AGL-1122). Worth showing: a tenant user
+   * is a different kind of account — its custom claims are per-pool, so staff
+   * actions on it are not the same operation as on a project user.
+   */
+  tenantId?: string | null
 }
 
 /**
@@ -74,6 +82,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   const isStaff = useIsStaff()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [nextPageToken, setNextPageToken] = useState<string | null>(null)
+  const [truncatedTenants, setTruncatedTenants] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
 
   const loadPage = useCallback(
@@ -94,6 +103,9 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         pageToken ? [...previous, ...payload.users] : payload.users,
       )
       setNextPageToken(payload.nextPageToken ?? null)
+      // A tenant pool bigger than one page is reported, never dropped
+      // silently (AGL-1122) — invisible users are the bug this fixed.
+      setTruncatedTenants(payload.tenantTruncated ?? [])
     },
     [user],
   )
@@ -305,6 +317,19 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                               .catch(() => undefined)
                           }
                         />
+                        {/* An SSO account lives in its org's GCIP tenant pool
+                            (AGL-1122). Say so: a uid is only unique WITHIN a
+                            pool, and claims set on the project pool do not
+                            reach it — so "which pool" is not cosmetic. */}
+                        {record.tenantId ? (
+                          <Chip
+                            size="small"
+                            color="secondary"
+                            variant="outlined"
+                            label={`SSO · ${record.tenantId}`}
+                            sx={{ ml: 1 }}
+                          />
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         {record.staff ? (
@@ -396,6 +421,15 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                 >
                   {'Load more'}
                 </Button>
+              ) : null}
+              {/* Never let a pool go quietly missing again (AGL-1122). */}
+              {truncatedTenants.length ? (
+                <Alert severity="warning">
+                  {`Only the first users are shown for SSO ${
+                    truncatedTenants.length === 1 ? 'tenant' : 'tenants'
+                  } ${truncatedTenants.join(', ')} — search by exact email to ` +
+                    'reach an account that is not listed.'}
+                </Alert>
               ) : null}
             </Stack>
           </CardDisplay>

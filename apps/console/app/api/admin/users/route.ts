@@ -18,8 +18,11 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
+  findUserByEmailAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
+  listUsersAcrossPools,
+  type PooledUserRecord,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -48,52 +51,47 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded['staff']) {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
-    const auth = firebaseAdmin.app().auth()
+    // Both paths go through the cross-pool helpers (AGL-1122). An SSO user
+    // lives in their org's GCIP tenant pool, which project-level `listUsers`
+    // and `getUserByEmail` do not see — so the owner of an enterprise org was
+    // absent from this page AND unfindable by exact email, leaving staff no
+    // way to reach the account at all. `tenantId` rides each row so the UI can
+    // say which pool a user is in; it is also what a mutation needs, since
+    // custom claims are per-pool.
+    const serialize = ({ record, tenantId }: PooledUserRecord) => ({
+      uid: record.uid,
+      email: record.email ?? null,
+      displayName: record.displayName ?? null,
+      disabled: record.disabled,
+      staff: Boolean(record.customClaims?.['staff']),
+      staffRole: record.customClaims?.['staffRole'] ?? null,
+      createdAt: record.metadata.creationTime ?? null,
+      lastSignInAt: record.metadata.lastSignInTime ?? null,
+      providers: record.providerData.map((provider) => provider.providerId),
+      /** GCIP tenant id, or null for a project-pool (non-SSO) account. */
+      tenantId,
+    })
     // Exact-email lookup (AGL-270): listUsers can't search, this can.
     const email = typeof query.email === 'string' ? query.email : ''
     if (email) {
-      try {
-        const record = await auth.getUserByEmail(email.trim().toLowerCase())
-        return Response.json({
-          users: [
-            {
-              uid: record.uid,
-              email: record.email ?? null,
-              displayName: record.displayName ?? null,
-              disabled: record.disabled,
-              staff: Boolean(record.customClaims?.['staff']),
-              staffRole: record.customClaims?.['staffRole'] ?? null,
-              createdAt: record.metadata.creationTime ?? null,
-              lastSignInAt: record.metadata.lastSignInTime ?? null,
-              providers: record.providerData.map(
-                (provider) => provider.providerId,
-              ),
-            },
-          ],
-          nextPageToken: null,
-        }, { status: 200 })
-      } catch {
-        return Response.json({ users: [], nextPageToken: null }, { status: 200 })
-      }
+      const found = await findUserByEmailAcrossPools(email)
+      return Response.json({
+        users: found ? [serialize(found)] : [],
+        nextPageToken: null,
+      }, { status: 200 })
     }
     const pageToken =
       typeof query.nextPageToken === 'string'
         ? query.nextPageToken
         : undefined
-    const page = await auth.listUsers(200, pageToken)
+    const page = await listUsersAcrossPools(200, pageToken)
     return Response.json({
-      users: page.users.map((record) => ({
-        uid: record.uid,
-        email: record.email ?? null,
-        displayName: record.displayName ?? null,
-        disabled: record.disabled,
-        staff: Boolean(record.customClaims?.['staff']),
-        staffRole: record.customClaims?.['staffRole'] ?? null,
-        createdAt: record.metadata.creationTime ?? null,
-        lastSignInAt: record.metadata.lastSignInTime ?? null,
-        providers: record.providerData.map((provider) => provider.providerId),
-      })),
-      nextPageToken: page.pageToken ?? null,
+      users: page.users.map(serialize),
+      nextPageToken: page.nextPageToken,
+      tenantsIncluded: page.tenantsIncluded,
+      // Never silently truncate: a tenant whose pool outgrew the cap is named
+      // so the page can say so rather than quietly dropping the tail.
+      tenantTruncated: page.tenantTruncated,
     }, { status: 200 })
   } catch (error) {
     console.error(error)

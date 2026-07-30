@@ -29,6 +29,8 @@ import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
   emailUnverifiedResponse,
+  findUserByEmailAcrossPools,
+  findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
   listOrgMembers,
@@ -120,16 +122,26 @@ async function handler(request: Request): Promise<Response> {
       let targetUid = String(body?.uid ?? '')
       let email: string | null = null
       let displayName: string | null = null
-      const auth = firebaseAdmin.app().auth()
       try {
-        const record = targetUid
-          ? await auth.getUser(targetUid)
-          : await auth.getUserByEmail(
-              String(body?.email ?? '').toLowerCase(),
-            )
-        targetUid = record.uid
-        email = record.email ?? null
-        displayName = record.displayName ?? null
+        // Across ALL auth pools (AGL-1122). An SSO user lives in their org's
+        // GCIP tenant pool, so the project-level lookup returned
+        // `auth/user-not-found` for them — and this route reads that as "no
+        // Aglyn account", so the client offered to send an INVITE to someone
+        // who already has one. An enterprise user could never be added to a
+        // second org by email.
+        const found = targetUid
+          ? await findUserByUidAcrossPools(targetUid)
+          : await findUserByEmailAcrossPools(String(body?.email ?? ''))
+        if (!found) {
+          const missing = new Error('No such account') as Error & {
+            code?: string
+          }
+          missing.code = 'auth/user-not-found'
+          throw missing
+        }
+        targetUid = found.record.uid
+        email = found.record.email ?? null
+        displayName = found.record.displayName ?? null
       } catch (lookupError) {
         // Only a genuinely-missing account is the "invite them instead" 404.
         // Anything else (transient Admin SDK failure, misconfig) must NOT be

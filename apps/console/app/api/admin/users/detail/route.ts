@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
+  findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
@@ -53,7 +54,17 @@ async function handler(request: Request): Promise<Response> {
     }
     const firestore = firebaseAdmin.app().firestore()
 
-    const record = await auth.getUser(uid)
+    // Across ALL auth pools (AGL-1122). A uid is only unique within a pool,
+    // so a project-level `getUser` throws for an SSO account and this page
+    // rendered "User detail failed" — which is exactly what surfaced the
+    // moment the listing started including tenant users, since the rows
+    // became clickable and led straight here.
+    const found = await findUserByUidAcrossPools(uid)
+    if (!found) {
+      return Response.json({ error: 'No such account' }, { status: 404 })
+    }
+    const record = found.record
+    const tenantId = found.tenantId
 
     // Org memberships from the reverse index + the authoritative member
     // docs (role, custom role, host access).
@@ -131,6 +142,8 @@ async function handler(request: Request): Promise<Response> {
         providers: record.providerData.map((provider) => provider.providerId),
         createdAt: record.metadata.creationTime ?? null,
         lastSignInAt: record.metadata.lastSignInTime ?? null,
+        /** GCIP tenant id, or null for a project-pool account (AGL-1122). */
+        tenantId,
       },
       memberships,
       audit,

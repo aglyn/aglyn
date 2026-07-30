@@ -17,6 +17,7 @@
 
 import { notificationMuted, type AglynNotification } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
+import { listStaffUidsAcrossPools } from './auth-pools'
 import firebaseAdmin from './firebase-admin'
 import { listOrgMembers } from './organizations'
 
@@ -79,16 +80,12 @@ async function listStaffUids(): Promise<string[]> {
   if (staffUidCache && now - staffUidCache.at < STAFF_CACHE_MS) {
     return staffUidCache.uids
   }
-  const auth = firebaseAdmin.app().auth()
-  const uids: string[] = []
-  let pageToken: string | undefined
-  do {
-    const page = await auth.listUsers(1000, pageToken)
-    for (const record of page.users) {
-      if (record.customClaims?.['staff']) uids.push(record.uid)
-    }
-    pageToken = page.pageToken
-  } while (pageToken && uids.length < 400)
+  // Across ALL auth pools (AGL-1122). This scanned only the project pool, so
+  // a staff member who signs in through enterprise SSO — whose account lives
+  // in a GCIP tenant pool — was never in the fan-out. Nothing errored; the
+  // notification simply never arrived, which is the worst shape a miss can
+  // take on an alerting path.
+  const uids = await listStaffUidsAcrossPools()
   staffUidCache = { uids, at: now }
   return uids
 }
