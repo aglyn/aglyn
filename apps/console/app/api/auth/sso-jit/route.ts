@@ -156,6 +156,10 @@ async function handler(request: Request): Promise<Response> {
       hostAccess: invite ? (invite.get('hostAccess') ?? {}) : {},
       email,
       displayName: (decoded['name'] as string | undefined) ?? null,
+      // Measured 2026-07-30: this tenant's SAML app releases no picture
+      // attribute, so this is null today. Read anyway, so mapping one on the
+      // IdP (AGL-1131) starts working without a code change.
+      photoURL: (decoded['picture'] as string | undefined) ?? null,
       invitedBy: invite ? (invite.get('invitedBy') ?? null) : 'sso',
     })
     if (invite) {

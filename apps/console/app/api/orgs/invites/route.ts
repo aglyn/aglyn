@@ -414,6 +414,7 @@ async function handler(request: Request): Promise<Response> {
         hostAccess: invite['hostAccess'] ?? {},
         email,
         displayName: (decoded['name'] as string | undefined) ?? null,
+        photoURL: (decoded['picture'] as string | undefined) ?? null,
         invitedBy: invite['invitedBy'] ?? null,
       })
       await invitesRef.doc(inviteId).set(

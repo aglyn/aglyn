@@ -36,6 +36,7 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Box,
   Button,
   Checkbox,
   Chip,
@@ -63,6 +64,7 @@ import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
+import MemberAvatar from './member-avatar.component'
 
 const ASSIGNABLE_ROLES: OrgRole[] = ['admin', 'editor', 'viewer']
 const HOST_ROLE_OPTIONS: Array<HostAccessRole | 'none'> = [
@@ -367,25 +369,40 @@ export function OrgMembersCard() {
             {members.map((member) => (
               <TableRow key={member.$id}>
                 <TableCell>
-                  {/* Member detail page (AGL-364). */}
-                  <AppLink
-                    href={buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug,
-                      uid: member.$id,
-                    })}
-                    color="inherit"
-                    underline="hover"
+                  {/* The roster row had no avatar at all (AGL-1126) — a
+                      table of people with no faces in it. */}
+                  <Stack
+                    direction="row"
+                    spacing={1.25}
+                    sx={{ alignItems: 'center' }}
                   >
-                    {member.displayName || member.email || member.$id}
-                  </AppLink>
-                  {member.title ? (
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      component="div"
-                    >
-                      {member.title}
-                    </Typography>
-                  ) : null}
+                    <MemberAvatar
+                      photoURL={member.photoURL}
+                      email={member.email}
+                      displayName={member.displayName}
+                    />
+                    <Box sx={{ minWidth: 0 }}>
+                      {/* Member detail page (AGL-364). */}
+                      <AppLink
+                        href={buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug,
+                          uid: member.$id,
+                        })}
+                        color="inherit"
+                        underline="hover"
+                      >
+                        {member.displayName || member.email || member.$id}
+                      </AppLink>
+                      {member.title ? (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          component="div"
+                        >
+                          {member.title}
+                        </Typography>
+                      ) : null}
+                    </Box>
+                  </Stack>
                 </TableCell>
                 <TableCell>
                   {(() => {
