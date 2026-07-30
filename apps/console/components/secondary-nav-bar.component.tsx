@@ -61,7 +61,7 @@ const tabBarTitle = (
  * move the remount to org↔site navigations.
  */
 export function SecondaryNavBarComponent() {
-  const { navTabItems, activeTab } = useSecondaryNav()
+  const { navTabItems, activeTab, section } = useSecondaryNav()
   const { flags, isStaff } = useReleaseFlags()
 
   // Release-flag gating (AGL-229): flagged-off tabs disappear for
@@ -93,7 +93,11 @@ export function SecondaryNavBarComponent() {
 
   return (
     <SecondaryAppBarComponent
-      tabBarTitle={tabBarTitle}
+      // No site scope exists in the staff console (AGL-1119), so the site
+      // switcher is omitted there rather than falling back to its off-a-site
+      // label — "All sites" beside a staff page read as though staff were
+      // scoped to every site of their own workspace.
+      tabBarTitle={section.kind === 'admin' ? undefined : tabBarTitle}
       activeTab={activeTab}
       navTabItems={gatedNavTabItems}
     />
