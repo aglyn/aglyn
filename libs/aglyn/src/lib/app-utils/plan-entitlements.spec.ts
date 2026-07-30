@@ -24,6 +24,7 @@ import {
   checkDiscountMargin,
   checkEntitlement,
   isBillingSubscription,
+  isEnterpriseOrg,
   applyDiscountUsd,
   orgListPriceMonthlyUsd,
   orgMonthlyRevenueUsd,
@@ -849,6 +850,32 @@ describe('plan entitlements', () => {
         netOfProcessorFee(2730, true),
         2,
       )
+    })
+
+    it('isEnterpriseOrg is true only for a custom-priced billing org', () => {
+      const custom = {
+        plan: 'agency',
+        subscription: {
+          status: 'active',
+          interval: 'month',
+          customMonthlyUsd: 2730,
+        },
+      } as any
+      expect(isEnterpriseOrg(custom)).toBe(true)
+      // A list-priced agency org is NOT enterprise.
+      expect(
+        isEnterpriseOrg({
+          plan: 'agency',
+          subscription: { status: 'active', interval: 'month' },
+        } as any),
+      ).toBe(false)
+      // A canceled sub with a stale custom amount is not enterprise.
+      expect(
+        isEnterpriseOrg({
+          plan: 'agency',
+          subscription: { status: 'canceled', customMonthlyUsd: 2730 },
+        } as any),
+      ).toBe(false)
     })
 
     it('a custom amount on a non-billing org is ignored (0)', () => {
