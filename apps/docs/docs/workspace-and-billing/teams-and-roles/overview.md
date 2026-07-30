@@ -34,6 +34,21 @@ Slack-style workspace address (`your-org.aglyn.com`).
 Every account operates inside an organization — solo accounts simply get a personal
 workspace automatically. The team features above keep working unchanged.
 
+### Three kinds of user
+
+The Team table labels every row with its **type**, because the type — not the role —
+decides which seat it uses. The same `editor` role is one or the other depending on
+whether their reach is the whole organization or a list of sites:
+
+| Type | Reach | Seat |
+|---|---|---|
+| **Team manager** | The whole organization | One of your **team seats** (`managersPerOrg`) |
+| **Site collaborator** | Only the site(s) they're granted | A **collaborator seat** on each site they can reach — never a team seat |
+| **Site member** | A published site, as a visitor with an account | **None.** Free and unlimited on every plan |
+
+Pending invites carry the same label, so you can tell a pending manager from a pending
+collaborator before it's accepted.
+
 ### What a site collaborator sees
 
 Someone invited to a **specific site** rather than the whole organization gets a console

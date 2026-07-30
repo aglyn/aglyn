@@ -16,6 +16,10 @@
  */
 'use client'
 
+import {
+  CONSOLE_USER_TYPE_LABELS,
+  consoleUserType,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
   AppLink,
@@ -399,6 +403,12 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                         <TableHead>
                           <TableRow>
                             <TableCell>{'Organization'}</TableCell>
+                            {/* AGL-1114: which seat this membership consumes.
+                                Per-membership, not per-account — the same
+                                person is routinely a manager in one org and a
+                                collaborator in another, so there is no single
+                                type for a user. */}
+                            <TableCell>{'Type'}</TableCell>
                             <TableCell>{'Role'}</TableCell>
                             <TableCell>{'Sites'}</TableCell>
                           </TableRow>
@@ -416,6 +426,23 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 >
                                   {membership.orgName ?? membership.orgId}
                                 </AppLink>
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  color={
+                                    consoleUserType(membership as never) ===
+                                    'manager'
+                                      ? 'secondary'
+                                      : 'default'
+                                  }
+                                  label={
+                                    CONSOLE_USER_TYPE_LABELS[
+                                      consoleUserType(membership as never)
+                                    ]
+                                  }
+                                />
                               </TableCell>
                               <TableCell>
                                 {membership.role ?? '—'}
