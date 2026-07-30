@@ -16,7 +16,8 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { canManageOrg, isValidOrgSlug } from '@aglyn/aglyn/server'
+import type { AglynOrgBilling } from '@aglyn/aglyn/server'
+import { canManageOrg, checkEntitlement, isValidOrgSlug } from '@aglyn/aglyn/server'
 import {
   changeOrgSlug,
   emailUnverifiedResponse,
@@ -199,6 +200,103 @@ async function handler(request: Request): Promise<Response> {
         orgId,
         { uid: decoded.uid, email: decoded.email },
         'Updated organization profile',
+        { type: 'org', id: orgId },
+      )
+      return Response.json({ ok: true }, { status: 200 })
+    }
+
+    // White-label brand (White-Label Phase 2): the org's `brandingProfile`,
+    // admin-writable but gated on the `whiteLabel` entitlement (Agency tier /
+    // Enterprise override) — the same gate `resolveBrandingProfile` reads, so
+    // the server never stores a profile it would ignore anyway, and a
+    // non-entitled org can't stage a brand it isn't paying for. Image/support
+    // URLs must be https; the color must be a CSS hex. The whole
+    // `brandingProfile` map is replaced (merge is top-level), so a cleared
+    // field drops out and falls back to the Aglyn default at resolve time.
+    if (body?.action === 'update-branding') {
+      const firestore = firebaseAdmin.app().firestore()
+      const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
+      if (
+        !checkEntitlement(
+          orgSnapshot.data() as Partial<AglynOrgBilling>,
+          'whiteLabel',
+        )
+      ) {
+        return Response.json(
+          { error: 'White-label branding requires the Agency plan' },
+          { status: 403 },
+        )
+      }
+      const input = (body?.brandingProfile ?? {}) as Record<string, unknown>
+      const clean = (value: unknown, max: number) =>
+        String(value ?? '')
+          .trim()
+          .slice(0, max)
+      const productName = clean(input.productName, 80)
+      const fromName = clean(input.fromName, 80)
+      const supportUrl = clean(input.supportUrl, 500)
+      const logoUrl = clean(input.logoUrl, 500)
+      const faviconUrl = clean(input.faviconUrl, 500)
+      const emailLogoUrl = clean(input.emailLogoUrl, 500)
+      const primaryColor = clean(input.primaryColor, 32)
+      const customConsoleDomain = clean(input.customConsoleDomain, 253).toLowerCase()
+      const urlFields: Array<[string, string]> = [
+        ['Support URL', supportUrl],
+        ['Logo URL', logoUrl],
+        ['Favicon URL', faviconUrl],
+        ['Email logo URL', emailLogoUrl],
+      ]
+      for (const [label, url] of urlFields) {
+        if (url && !/^https:\/\//i.test(url)) {
+          return Response.json(
+            { error: `${label} must be an https:// URL` },
+            { status: 400 },
+          )
+        }
+      }
+      if (primaryColor && !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(primaryColor)) {
+        return Response.json(
+          { error: 'Primary color must be a hex color like #1a73e8' },
+          { status: 400 },
+        )
+      }
+      if (
+        customConsoleDomain &&
+        !/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(customConsoleDomain)
+      ) {
+        return Response.json(
+          { error: 'Enter a valid custom console domain' },
+          { status: 400 },
+        )
+      }
+      // Keep only the fields that were actually set — a blank drops out and
+      // the resolver fills that gap with the Aglyn default at read time.
+      const profile: Record<string, string> = Object.fromEntries(
+        Object.entries({
+          productName,
+          fromName,
+          supportUrl,
+          logoUrl,
+          faviconUrl,
+          emailLogoUrl,
+          primaryColor,
+          customConsoleDomain,
+        }).filter(([, value]) => value.length > 0),
+      )
+      await firestore
+        .collection('orgs')
+        .doc(orgId)
+        .set(
+          {
+            brandingProfile: profile,
+            updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+      void logOrgActivity(
+        orgId,
+        { uid: decoded.uid, email: decoded.email },
+        'Updated white-label brand settings',
         { type: 'org', id: orgId },
       )
       return Response.json({ ok: true }, { status: 200 })

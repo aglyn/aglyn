@@ -17,6 +17,7 @@
 
 import type {
   AglynOrgBilling,
+  OrgBrandingProfile,
   OrgEntitlements,
   OrgFeatureFlags,
   OrgPlan,
@@ -110,6 +111,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       abandonedCart: false,
       dropshipRouting: false,
       commerceAnalytics: false,
+      whiteLabel: false,
     },
   },
   starter: {
@@ -181,6 +183,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       abandonedCart: false,
       dropshipRouting: false,
       commerceAnalytics: false,
+      whiteLabel: false,
     },
   },
   pro: {
@@ -250,6 +253,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       abandonedCart: true,
       dropshipRouting: true,
       commerceAnalytics: true,
+      whiteLabel: false,
     },
   },
   business: {
@@ -317,6 +321,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       abandonedCart: true,
       dropshipRouting: true,
       commerceAnalytics: true,
+      whiteLabel: false,
     },
   },
   // Scale (Pricing v3, 2026-07): fills the $139→$399 gap. Feature set equals
@@ -387,6 +392,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       abandonedCart: true,
       dropshipRouting: true,
       commerceAnalytics: true,
+      whiteLabel: false,
     },
   },
   advanced: {
@@ -454,6 +460,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       abandonedCart: true,
       dropshipRouting: true,
       commerceAnalytics: true,
+      whiteLabel: false,
     },
   },
   // Agency (Pricing v3, 2026-07): high-volume multi-site tier above Advanced.
@@ -525,6 +532,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       abandonedCart: true,
       dropshipRouting: true,
       commerceAnalytics: true,
+      // White-Label Phase 1: the Agency-tier ($799) differentiator. Only
+      // this tier ships white-label by default; Enterprise inherits via a
+      // per-org `entitlements` override.
+      whiteLabel: true,
     },
   },
 }
@@ -864,6 +875,88 @@ export function checkEntitlement(
   feature: keyof OrgFeatureFlags,
 ): boolean {
   return Boolean(resolveOrgEntitlements(org).features[feature])
+}
+
+/**
+ * A branding profile with every field present — what a branded surface
+ * renders. Image/color/domain fields are nullable (Aglyn's own surfaces
+ * bake those in rather than carry a URL); the text fields always have a
+ * value so callers never string-concatenate `undefined`.
+ */
+export interface ResolvedBrandingProfile {
+  productName: string
+  logoUrl: string | null
+  faviconUrl: string | null
+  primaryColor: string | null
+  supportUrl: string
+  fromName: string
+  emailLogoUrl: string | null
+  customConsoleDomain: string | null
+}
+
+/**
+ * The Aglyn (non-white-label) brand — the fallback every surface gets when
+ * an org lacks the `whiteLabel` entitlement, and the gap-filler for a
+ * partial agency profile. Kept here beside the entitlement so brand and
+ * gate stay reviewed together.
+ */
+export const AGLYN_BRANDING_PROFILE: ResolvedBrandingProfile = {
+  productName: 'Aglyn',
+  logoUrl: null,
+  faviconUrl: null,
+  primaryColor: null,
+  supportUrl: 'https://aglyn.com/support',
+  fromName: 'Aglyn',
+  emailLogoUrl: null,
+  customConsoleDomain: null,
+}
+
+/** A non-empty trimmed string, else undefined — blanks never override a default. */
+function cleanBrandString(value: string | undefined): string | undefined {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  return trimmed.length ? trimmed : undefined
+}
+
+/**
+ * The effective brand for an org (White-Label Phase 1). EVERY branded
+ * surface — published-site branding, transactional email, console chrome —
+ * MUST read the brand through this one resolver so a white-label org can
+ * never partly-render as Aglyn (the multi-surface drift that dogged
+ * `removeBranding`, which each surface re-derived on its own).
+ *
+ * When the org carries the `whiteLabel` entitlement (Agency tier, or an
+ * Enterprise per-org override), the org's `brandingProfile` values win and
+ * any field it leaves blank falls back to the Aglyn default. Without the
+ * entitlement the stored profile is ignored entirely and the full Aglyn
+ * brand is returned — so an org that white-labeled and then downgraded
+ * reverts cleanly.
+ */
+export function resolveBrandingProfile(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): ResolvedBrandingProfile {
+  if (!checkEntitlement(org, 'whiteLabel')) return AGLYN_BRANDING_PROFILE
+  const profile = (org?.brandingProfile ?? {}) as OrgBrandingProfile
+  return {
+    productName:
+      cleanBrandString(profile.productName) ??
+      AGLYN_BRANDING_PROFILE.productName,
+    logoUrl: cleanBrandString(profile.logoUrl) ?? AGLYN_BRANDING_PROFILE.logoUrl,
+    faviconUrl:
+      cleanBrandString(profile.faviconUrl) ?? AGLYN_BRANDING_PROFILE.faviconUrl,
+    primaryColor:
+      cleanBrandString(profile.primaryColor) ??
+      AGLYN_BRANDING_PROFILE.primaryColor,
+    supportUrl:
+      cleanBrandString(profile.supportUrl) ?? AGLYN_BRANDING_PROFILE.supportUrl,
+    fromName:
+      cleanBrandString(profile.fromName) ?? AGLYN_BRANDING_PROFILE.fromName,
+    emailLogoUrl:
+      cleanBrandString(profile.emailLogoUrl) ??
+      AGLYN_BRANDING_PROFILE.emailLogoUrl,
+    customConsoleDomain:
+      cleanBrandString(profile.customConsoleDomain) ??
+      AGLYN_BRANDING_PROFILE.customConsoleDomain,
+  }
 }
 
 /**

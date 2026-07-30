@@ -16,12 +16,14 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   canManageOrg,
   checkSeatQuota,
   createResourceUid,
   type HostAccessRole,
   isOrgRole,
+  resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
@@ -123,9 +125,14 @@ async function handler(request: Request): Promise<Response> {
         )
         return false
       }
-      const orgName =
-        (await firestore.collection('orgs').doc(orgId).get()).get('name') ??
-        'an organization'
+      const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
+      const orgName = orgSnapshot.get('name') ?? 'an organization'
+      // White-label brand (White-Label Phase 3): a white-label org's invite
+      // reads as its brand — sender display-name and product name — resolved
+      // through the one shared resolver so it matches every other surface.
+      const branding = resolveBrandingProfile(
+        orgSnapshot.data() as Partial<AglynOrgBilling>,
+      )
       const origin = headers.origin ?? `https://${headers.host}`
       const fallbackText =
         `You've been invited to join ${orgName} as ${role}.\n\n` +
@@ -141,9 +148,11 @@ async function handler(request: Request): Promise<Response> {
       const result = await sendEmail({
         to: email,
         subject:
-          designed?.subject ?? `You've been invited to ${orgName} on Aglyn`,
+          designed?.subject ??
+          `You've been invited to ${orgName} on ${branding.productName}`,
         text: designed?.text || fallbackText,
         ...(designed?.html ? { html: designed.html } : {}),
+        fromName: branding.fromName,
         context: 'invite',
       })
       return result.sent

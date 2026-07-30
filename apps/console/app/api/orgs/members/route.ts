@@ -16,10 +16,12 @@
  */
 
 import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
+import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   checkSeatQuota,
   type HostAccessRole,
   isOrgRole,
+  resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
@@ -243,6 +245,11 @@ async function handler(request: Request): Promise<Response> {
       if (!existedAlready && email && isEmailConfigured()) {
         try {
           const orgName = orgSnapshot.get('name') ?? 'an organization'
+          // White-label sender identity (White-Label Phase 3) off the org's
+          // resolved brand, via the one shared resolver.
+          const branding = resolveBrandingProfile(
+            orgSnapshot.data() as Partial<AglynOrgBilling>,
+          )
           const origin = headers.origin ?? `https://${headers.host}`
           const fallbackText =
             `You were added to ${orgName} as ${role}.\n\n` +
@@ -257,6 +264,7 @@ async function handler(request: Request): Promise<Response> {
             subject: designed?.subject ?? `You've been added to ${orgName}`,
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
+            fromName: branding.fromName,
             context: 'member-added',
           })
         } catch (memberEmailError) {

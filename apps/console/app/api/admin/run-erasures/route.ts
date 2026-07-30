@@ -16,6 +16,8 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import type { AglynOrgBilling } from '@aglyn/aglyn/server'
+import { resolveBrandingProfile } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
@@ -64,6 +66,12 @@ async function handler(request: Request): Promise<Response> {
       // Capture before erasing — eraseOrg deletes the org document, but the
       // owner's auth account survives it, so the address stays reachable.
       const orgName = org.get('name') ?? 'your organization'
+      // White-label brand (White-Label Phase 3): resolved BEFORE eraseOrg
+      // deletes the doc, so the completion notice still reads as the org's
+      // brand. One shared resolver, same as every other surface.
+      const branding = resolveBrandingProfile(
+        org.data() as Partial<AglynOrgBilling>,
+      )
       const ownerUid = String(org.get('ownerUid') ?? '')
       const ownerEmail =
         emailConfigured && ownerUid
@@ -86,7 +94,8 @@ async function handler(request: Request): Promise<Response> {
         try {
           const fallbackText =
             `${orgName} and all of its data have been permanently erased ` +
-            'from Aglyn, as requested. This is complete and cannot be undone.'
+            `from ${branding.productName}, as requested. This is complete and ` +
+            'cannot be undone.'
           const designed = await renderSystemEmail('erasure-confirmation', {
             'org.name': String(orgName),
           })
@@ -95,6 +104,7 @@ async function handler(request: Request): Promise<Response> {
             subject: designed?.subject ?? 'Your Aglyn data has been erased',
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
+            fromName: branding.fromName,
             context: 'erasure-confirmation',
           })
         } catch (confirmError) {

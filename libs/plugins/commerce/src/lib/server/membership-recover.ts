@@ -16,7 +16,8 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { resolveBrandingProfile } from '@aglyn/aglyn/server'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { mintPasswordResetToken } from './membership'
 
@@ -103,6 +104,11 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
     const siteName = String(
       hostSnapshot.get('displayName') ?? subdomain ?? 'your site',
     )
+    // White-label sender identity (White-Label Phase 3): the store's brand via
+    // the one shared resolver (the copy already uses the site name).
+    const branding = resolveBrandingProfile(
+      (await getOrgForHost(hostId).catch(() => null))?.org as never,
+    )
     await sendEmail({
       to: email,
       subject: `Reset your ${siteName} password`,
@@ -113,6 +119,7 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
         'The link works once and expires in 1 hour. If you did not ' +
         'ask for this, you can safely ignore this email — your ' +
         'password is unchanged.',
+      fromName: branding.fromName,
       context: 'membership recovery',
     })
     return res.status(200).json({ ok: true })

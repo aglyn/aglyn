@@ -495,6 +495,12 @@ export const loadPageData = cache(
     const showBranding = !Aglyn.resolveOrgEntitlements(orgRes.org)
       .features.removeBranding
 
+    // White-label brand (White-Label Phase 1): the org's agency brand when
+    // the `whiteLabel` entitlement is present, else the Aglyn defaults. The
+    // client reads this to render the agency brand where it currently shows
+    // Aglyn; resolved through the one shared resolver so it can't drift.
+    const branding = Aglyn.resolveBrandingProfile(orgRes.org)
+
     // Multilingual (AGL-471): locale variants are a Business+ entitlement.
     // Strip them at serve time — the console gate alone doesn't stop
     // variants written directly to Firestore from serving (hreflang
@@ -564,6 +570,7 @@ export const loadPageData = cache(
       enabledPlugins,
       ...(realmPlugins.length ? { realmPlugins } : {}),
       showBranding,
+      branding,
       ...enriched,
     }
 

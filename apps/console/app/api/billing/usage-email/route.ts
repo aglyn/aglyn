@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import type { AglynOrgBilling } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb, resolveBrandingProfile } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
@@ -129,7 +130,16 @@ async function handler(request: Request): Promise<Response> {
         '',
         'Full meters and plan limits: your console → Manage → Billing.',
       ].join('\n')
-      const fallbackText = `Here is your Aglyn usage summary for ${month}.\n\n${usageSummary}`
+      // White-label brand (White-Label Phase 1): a white-label org's usage
+      // mail reads as their brand — from-name, product name, support footer —
+      // resolved through the one shared resolver so it can't drift from the
+      // site/console. Non-white-label orgs get the Aglyn defaults unchanged.
+      const branding = resolveBrandingProfile(
+        orgDoc.data() as Partial<AglynOrgBilling>,
+      )
+      const fallbackText =
+        `Here is your ${branding.productName} usage summary for ${month}.\n\n` +
+        `${usageSummary}\n\nNeed help? ${branding.supportUrl}`
       const orgName = orgDoc.get('name') ?? 'your organization'
       // Render the batch-resolved template for this org's values (AGL-768);
       // null falls back to the built-in copy above.
@@ -142,9 +152,14 @@ async function handler(request: Request): Promise<Response> {
         : null
       const result = await sendEmail({
         to: email,
-        subject: designed?.subject ?? `Your Aglyn usage summary for ${month}`,
+        subject:
+          designed?.subject ??
+          `Your ${branding.productName} usage summary for ${month}`,
         text: designed?.text || fallbackText,
         ...(designed?.html ? { html: designed.html } : {}),
+        // White-label the sender display name off the org's brand profile
+        // (keeps the verified address; White-Label Phase 1).
+        fromName: branding.fromName,
         context: `usage summary (${orgId})`,
       })
       if (!result.sent) {

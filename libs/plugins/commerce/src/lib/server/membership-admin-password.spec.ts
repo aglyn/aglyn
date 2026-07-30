@@ -41,6 +41,9 @@ let mockDecodedToken: Record<string, unknown> = {}
 let mockThrottleAllows = true
 jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: () => false,
+  // White-Label Phase 3: the handler resolves the owning org's brand for the
+  // sender from-name; a bare stub keeps it on the Aglyn defaults here.
+  getOrgForHost: async () => ({ org: {} }),
   consumePasswordResetSend: async () =>
     mockThrottleAllows
       ? { allowed: true, retryAfterSeconds: 0, limited: null, degraded: false }

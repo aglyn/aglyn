@@ -50,6 +50,14 @@ export interface Props {
   /** Free-tier "Made with Aglyn" badge (AGL-69, removeBranding gate). */
   showBranding?: boolean
   /**
+   * Resolved white-label brand for the org (White-Label Phase 1): product
+   * name, logo, colors, support URL. The tenant runtime renders the agency
+   * brand from this instead of the Aglyn defaults where it currently shows
+   * Aglyn. Always the Aglyn defaults for non-white-label orgs, so the client
+   * can read it unconditionally. Resolved via `resolveBrandingProfile`.
+   */
+  branding?: Aglyn.ResolvedBrandingProfile
+  /**
    * Site-wide announcement bar (AGL-195): text already binding-resolved
    * server-side; `contentHash` keys the visitor's dismissal so edits
    * re-show the bar. Null when disabled or not entitled.

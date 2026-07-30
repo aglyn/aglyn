@@ -16,7 +16,8 @@
  */
 
 import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { resolveBrandingProfile } from '@aglyn/aglyn/server'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { renderHostEmail, sendEmail } from '@aglyn/shared-util-email'
 
 /**
@@ -80,6 +81,11 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
               'booking.ref': String(bookingId),
             },
           )
+          // White-label sender identity (White-Label Phase 3), matching the
+          // free-booking path — the store's brand via the one shared resolver.
+          const branding = resolveBrandingProfile(
+            (await getOrgForHost(String(hostId)).catch(() => null))?.org as never,
+          )
           await sendEmail({
             to: String(booking['email']),
             subject:
@@ -87,6 +93,7 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
               `Booking confirmed: ${booking['serviceName'] ?? ''}`,
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
+            fromName: branding.fromName,
             context: 'paid booking confirmation',
           })
         }

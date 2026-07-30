@@ -128,6 +128,45 @@ export interface OrgFeatureFlags {
   dropshipRouting?: boolean
   /** Commerce analytics dashboard (AGL-327). */
   commerceAnalytics?: boolean
+  /**
+   * White-label the platform (White-Label Phase 1): replace the Aglyn brand
+   * — product name, logo, colors, support URL, transactional email from-name
+   * — with the org's own `brandingProfile` across every branded surface.
+   * Agency tier only ($799); Enterprise inherits via a per-org `entitlements`
+   * override. Strictly broader than `removeBranding`, which only drops the
+   * "Made with Aglyn" badge on published sites; white-label REPLACES the
+   * brand rather than merely hiding it. Every branded surface resolves the
+   * effective brand through `resolveBrandingProfile` so it can never drift.
+   */
+  whiteLabel?: boolean
+}
+
+/**
+ * An org's white-label brand identity (White-Label Phase 1). Populated on
+ * the org doc (`orgs/{orgId}.brandingProfile`) and applied ONLY when the org
+ * carries the `whiteLabel` entitlement (Agency tier / Enterprise override);
+ * otherwise every surface falls back to the Aglyn defaults baked into
+ * `resolveBrandingProfile`. Every field is optional — a partial profile
+ * still resolves, with the Aglyn default filling each gap — so an agency can
+ * set just a product name and from-name without supplying logos.
+ */
+export interface OrgBrandingProfile {
+  /** Brand name shown in place of "Aglyn" (console chrome, emails, badges). */
+  productName?: string
+  /** Primary/full-color logo URL (light backgrounds, console chrome). */
+  logoUrl?: string
+  /** Favicon URL for branded surfaces. */
+  faviconUrl?: string
+  /** Brand primary color as a CSS color (hex), e.g. `#1a73e8`. */
+  primaryColor?: string
+  /** Support/help destination linked from branded surfaces and emails. */
+  supportUrl?: string
+  /** Transactional email from-name (the display name before the address). */
+  fromName?: string
+  /** Logo URL specifically for the email header (often a hosted PNG). */
+  emailLogoUrl?: string
+  /** Custom console domain the agency serves the app on (Phase 4 wiring). */
+  customConsoleDomain?: string
 }
 
 /**
@@ -277,6 +316,12 @@ export interface AglynOrgBilling extends AglynDocument {
   plan?: OrgPlan
   /** Per-org entitlement overrides (admin console); win over plan defaults. */
   entitlements?: OrgEntitlements
+  /**
+   * White-label brand identity (White-Label Phase 1). Applied only when the
+   * org carries the `whiteLabel` entitlement; read exclusively through
+   * `resolveBrandingProfile`, never directly, so no surface diverges.
+   */
+  brandingProfile?: OrgBrandingProfile
   /** Per-org plugin switchboard (AGL-416); see plugin-manager/enabled-plugins. */
   enabledPlugins?: string[]
   /** Purchased addon seats (AGL-112); billed monthly per seat. */

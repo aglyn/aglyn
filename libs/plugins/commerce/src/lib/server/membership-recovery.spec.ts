@@ -84,6 +84,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
     firestore: { FieldValue: { serverTimestamp: () => 'server-time' } },
   },
+  // White-Label Phase 3: the recover handler resolves the owning org's brand
+  // for the sender from-name; a bare stub keeps it on the Aglyn defaults here.
+  getOrgForHost: async () => ({ org: {} }),
 }))
 
 const PASSWORD = 'correct horse battery'
