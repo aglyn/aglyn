@@ -35,7 +35,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  documentId,
+  limit,
+  query,
+  where,
+} from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
@@ -138,6 +145,49 @@ export function HostMembersCard(props: HostMembersCardProps) {
     (ownerMember?.displayName as string | undefined) ??
     'Account owner'
 
+  // A member's photo lives on their ORG member doc, not here (AGL-1126).
+  //
+  // These rows come from `hosts/{hostId}/members`, a different collection
+  // whose only writer sets an explicit field list with no `photoURL` on it —
+  // so `member.photoURL` was `undefined` for every row and MemberAvatar fell
+  // through to Gravatar. That went unnoticed because the OWNER row reads its
+  // org member doc directly (just above) and therefore did render a stored
+  // photo: the one row that worked was the one being looked at.
+  //
+  // Joining rather than copying the field onto the host doc keeps one source
+  // of truth for a member's face, which is what AGL-1126 was for. One `in`
+  // query covers a whole page — Firestore allows 30 and the page is 25.
+  const memberUids = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          members
+            .map((member) => member.uid as string | undefined)
+            .filter((uid): uid is string => Boolean(uid)),
+        ),
+      ).slice(0, 30),
+    [members],
+  )
+  const { data: orgMemberDocs } = useFirestoreCollection<any>(
+    () =>
+      orgId && memberUids.length
+        ? query(
+            collection(firestore, 'orgs', orgId, 'members'),
+            where(documentId(), 'in', memberUids),
+          )
+        : null,
+    [firestore, orgId, memberUids.join(',')],
+    { idField: '$id' },
+  )
+  const photoByUid = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const doc of orgMemberDocs ?? []) {
+      const photo = doc?.photoURL as string | undefined
+      if (photo) map.set(doc.$id as string, photo)
+    }
+    return map
+  }, [orgMemberDocs])
+
   const request = useCallback(
     async (method: string, body: Record<string, unknown>) => {
       setBusy(true)
@@ -193,8 +243,11 @@ export function HostMembersCard(props: HostMembersCardProps) {
         role: event.target.value,
       })
       if (!payload) return
-      enqueueSnackbar('Role updated', { variant: 'success', persist: false })
-      logActivity('Changed member role', {
+      enqueueSnackbar('Site access updated', {
+        variant: 'success',
+        persist: false,
+      })
+      logActivity('Changed member site access', {
         type: 'member',
         name: member.email,
       })
@@ -253,10 +306,10 @@ export function HostMembersCard(props: HostMembersCardProps) {
           <TextField
             select
             size="small"
-            label="Role"
+            label="Site access"
             value={role}
             onChange={(event) => setRole(event.target.value)}
-            sx={{ minWidth: 110 }}
+            sx={{ minWidth: 130 }}
           >
             {ROLE_OPTIONS.map((option) => (
               <MenuItem key={option.value} value={option.value}>
@@ -295,7 +348,12 @@ export function HostMembersCard(props: HostMembersCardProps) {
           <TableHead>
             <TableRow>
               <TableCell>{'Member'}</TableCell>
-              <TableCell>{'Role'}</TableCell>
+              {/* "Site access", not "Role" (AGL-1125). The org Team table's
+                  Role column is the ORG role; this one is access to THIS
+                  site. Two tables using one word for two different answers
+                  was the same confusion AGL-1125 fixed within the Team
+                  table, one page over. */}
+              <TableCell>{'Site access'}</TableCell>
               <TableCell align="right">{'Actions'}</TableCell>
             </TableRow>
           </TableHead>
@@ -340,7 +398,9 @@ export function HostMembersCard(props: HostMembersCardProps) {
                         still gets one — Gravatar works off the email alone,
                         which is all an invite has. */}
                     <MemberAvatar
-                      photoURL={member.photoURL}
+                      photoURL={
+                        member.uid ? photoByUid.get(member.uid) : undefined
+                      }
                       email={member.email}
                       displayName={member.displayName}
                       size={28}
