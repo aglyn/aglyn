@@ -41,6 +41,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import { checkOrgSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
+import MemberAvatar from './member-avatar.component'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -306,6 +307,17 @@ export function HostMembersCard(props: HostMembersCardProps) {
                   spacing={1}
                   sx={{ alignItems: 'center' }}
                 >
+                  {/* The owner is a member row like any other, so it gets a
+                      face too — otherwise the top row reads as broken beside
+                      the ones that have one. Photo and email come from the
+                      owner's org-member doc (AGL-1123), never from the
+                      viewer. */}
+                  <MemberAvatar
+                    photoURL={ownerMember?.photoURL}
+                    email={ownerMember?.email}
+                    displayName={ownerLabel}
+                    size={28}
+                  />
                   <span>{ownerLabel}</span>
                   <Chip label="Owner" color="secondary" size="small" />
                   {ownerUid && ownerUid === user?.uid ? (
@@ -324,6 +336,15 @@ export function HostMembersCard(props: HostMembersCardProps) {
                     spacing={1}
                     sx={{ alignItems: 'center' }}
                   >
+                    {/* No avatar here at all before AGL-1126. An invited row
+                        still gets one — Gravatar works off the email alone,
+                        which is all an invite has. */}
+                    <MemberAvatar
+                      photoURL={member.photoURL}
+                      email={member.email}
+                      displayName={member.displayName}
+                      size={28}
+                    />
                     {/* Into the member's detail page, like the org Team
                         table (AGL-1124) — this list was a dead end, with no
                         way through to the person it names. An INVITED row

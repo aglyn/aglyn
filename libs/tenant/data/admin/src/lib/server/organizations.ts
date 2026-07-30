@@ -579,6 +579,16 @@ export interface UpsertOrgMemberOptions {
   roleId?: string | null
   email?: string | null
   displayName?: string | null
+  /**
+   * The member's provider photo, mirrored onto the roster (AGL-1126).
+   *
+   * Every member surface reads the roster; none of them can read Firebase
+   * Auth for an SSO member, whose record lives in a per-org tenant pool
+   * (AGL-1122). Without this the console falls back to Gravatar for
+   * everyone — fine, but it means a member who HAS a picture still never
+   * shows it. Display data only: never an identity or authorization source.
+   */
+  photoURL?: string | null
   /** Job title shown on the roster/member page (AGL-364). */
   title?: string | null
   invitedBy?: string | null
@@ -601,6 +611,7 @@ export async function upsertOrgMember(
     roleId,
     email,
     displayName,
+    photoURL,
     title,
     invitedBy,
   } = options
@@ -624,6 +635,10 @@ export async function upsertOrgMember(
         ...(roleId !== undefined ? { roleId } : {}),
         ...(email !== undefined ? { email } : {}),
         ...(displayName !== undefined ? { displayName } : {}),
+        // Absent leaves the stored photo alone; an explicit null clears it.
+        // A provider that stops sending a picture must not silently wipe one
+        // the member is still using.
+        ...(photoURL !== undefined ? { photoURL } : {}),
         ...(title !== undefined ? { title } : {}),
         ...(invitedBy ? { invitedBy } : {}),
         ...(existing.exists

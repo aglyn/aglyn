@@ -18,7 +18,6 @@
 
 import { canManageOrg } from '@aglyn/aglyn'
 import { mdiAccountOutline } from '@aglyn/shared-data-mdi'
-import { gravatarUrlFromEmail } from '@aglyn/shared-util-tools'
 import {
   CardDisplay,
   Container,
@@ -28,7 +27,6 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
-  Avatar,
   Button,
   Chip,
   FormControlLabel,
@@ -45,6 +43,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
+import MemberAvatar from '../../../../../components/member-avatar.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
@@ -284,28 +283,17 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                 >
                   {/* AGL-1126: this Avatar had no `src` at all, so every
                       member rendered as a grey initial regardless of whether
-                      they had a picture. The roster stores no photoURL, so
-                      Gravatar-by-email is the only source available without
-                      new data — and it works for SSO members too, whose auth
-                      record lives in a tenant pool we cannot read from here
-                      (AGL-1122). `d=404` is deliberate: with no Gravatar on
-                      file the image 404s and MUI falls back to the initial,
-                      rather than serving a generated identicon to everyone. */}
-                  <Avatar
-                    sx={{ width: 48, height: 48 }}
-                    src={
-                      member?.email
-                        ? gravatarUrlFromEmail(String(member.email), {
-                            size: '96',
-                            default: '404',
-                            protocol: 'https',
-                          })
-                        : undefined
-                    }
-                    alt={String(displayName)}
-                  >
-                    {String(displayName).slice(0, 1).toUpperCase()}
-                  </Avatar>
+                      they had a picture. Resolution now lives in one place
+                      (MemberAvatar) so the roster rows and this page cannot
+                      disagree about the same person's face — the same class
+                      of split-brain the app bar and the Profile-image card
+                      had in AGL-1127. */}
+                  <MemberAvatar
+                    photoURL={member?.photoURL}
+                    email={member?.email}
+                    displayName={String(displayName)}
+                    size={48}
+                  />
                   <Stack sx={{ minWidth: 0 }}>
                     <Typography variant="subtitle1" noWrap>
                       {displayName}

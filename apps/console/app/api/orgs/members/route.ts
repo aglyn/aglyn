@@ -122,6 +122,9 @@ async function handler(request: Request): Promise<Response> {
       let targetUid = String(body?.uid ?? '')
       let email: string | null = null
       let displayName: string | null = null
+      // Mirrored onto the roster so member surfaces can show a face
+      // (AGL-1126) — they cannot read a tenant-pool auth record themselves.
+      let photoURL: string | null = null
       try {
         // Across ALL auth pools (AGL-1122). An SSO user lives in their org's
         // GCIP tenant pool, so the project-level lookup returned
@@ -142,6 +145,7 @@ async function handler(request: Request): Promise<Response> {
         targetUid = found.record.uid
         email = found.record.email ?? null
         displayName = found.record.displayName ?? null
+        photoURL = found.record.photoURL ?? null
       } catch (lookupError) {
         // Only a genuinely-missing account is the "invite them instead" 404.
         // Anything else (transient Admin SDK failure, misconfig) must NOT be
@@ -215,6 +219,7 @@ async function handler(request: Request): Promise<Response> {
               : undefined,
         email,
         displayName,
+        photoURL,
         // Job title (AGL-364): string sets, null clears, absent unchanged.
         title:
           typeof body?.title === 'string'
