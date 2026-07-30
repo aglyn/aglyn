@@ -48,6 +48,9 @@ import useFirestoreDoc from '../hooks/use-firestore-doc'
 import useHostActivityLogger from '../hooks/use-host-activity-logger'
 import useOrgPermissions from '../hooks/use-org-permissions'
 
+/** Site collaborators shown per page before "Load more" (AGL-1124). */
+const MEMBER_PAGE_SIZE = 25
+
 const ROLE_OPTIONS = [
   { value: 'viewer', label: 'Viewer' },
   { value: 'editor', label: 'Editor' },
@@ -85,17 +88,32 @@ export function HostMembersCard(props: HostMembersCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  // Paging (AGL-1124). This used to be a bare `limit(100)` with nothing
+  // saying so, which is the worst of both: a site with 120 collaborators
+  // showed 100 and looked complete. The window grows a page at a time and
+  // over-fetches by one, so "there are more" is a fact rather than a guess
+  // from `length === limit` (which is wrong exactly when the count is a
+  // multiple of the page size).
+  const [pageSize, setPageSize] = useState(MEMBER_PAGE_SIZE)
   const { data: memberDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'members'), limit(100)),
-    [firestore, hostId],
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'members'),
+        limit(pageSize + 1),
+      ),
+    [firestore, hostId, pageSize],
     { idField: '$id' },
   )
+  const hasMore = (memberDocs?.length ?? 0) > pageSize
   const members = useMemo(
     () =>
-      [...(memberDocs ?? [])].sort((a, b) =>
-        String(a.email ?? '').localeCompare(String(b.email ?? '')),
-      ),
-    [memberDocs],
+      [...(memberDocs ?? [])]
+        // Drop the over-fetched probe row before rendering.
+        .slice(0, pageSize)
+        .sort((a, b) =>
+          String(a.email ?? '').localeCompare(String(b.email ?? '')),
+        ),
+    [memberDocs, pageSize],
   )
   const seatQuota = checkOrgSeatQuota(org, 'members', members.length)
 
@@ -306,7 +324,26 @@ export function HostMembersCard(props: HostMembersCardProps) {
                     spacing={1}
                     sx={{ alignItems: 'center' }}
                   >
-                    <span>{member.email}</span>
+                    {/* Into the member's detail page, like the org Team
+                        table (AGL-1124) — this list was a dead end, with no
+                        way through to the person it names. An INVITED row
+                        has no account behind it yet, so it stays plain text
+                        rather than linking to a member page that cannot
+                        exist. */}
+                    {member.status === 'invited' ? (
+                      <span>{member.email}</span>
+                    ) : (
+                      <AppLink
+                        href={buildRoute(Route.MANAGE_TEAM_MEMBER, {
+                          orgSlug,
+                          uid: member.$id,
+                        })}
+                        color="inherit"
+                        underline="hover"
+                      >
+                        {member.email || member.$id}
+                      </AppLink>
+                    )}
                     {member.status === 'invited' ? (
                       <Chip label="Invited" size="small" variant="outlined" />
                     ) : null}
@@ -342,6 +379,15 @@ export function HostMembersCard(props: HostMembersCardProps) {
             ))}
           </TableBody>
         </Table>
+        {hasMore ? (
+          <Button
+            size="small"
+            sx={{ alignSelf: 'flex-start' }}
+            onClick={() => setPageSize((size) => size + MEMBER_PAGE_SIZE)}
+          >
+            {'Load more'}
+          </Button>
+        ) : null}
         <Typography variant="caption" color="text.secondary">
           {'Admins get full console access to this host today; per-role ' +
             'restrictions for editors and viewers are recorded and roll ' +
