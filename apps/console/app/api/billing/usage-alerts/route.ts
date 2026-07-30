@@ -18,6 +18,7 @@
 import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { resolveOrgEntitlements, UNLIMITED } from '@aglyn/aglyn/server'
+import { ESTIMATED_PAGE_TRANSFER_BYTES } from '../../../../utils/usage-metering'
 import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 
 /**
@@ -25,9 +26,11 @@ import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
  * quota banner only helps people who are looking — this cron pushes a
  * `billing.usage` notification to org admins when a quota crosses 80%
  * or 100%. One alert per quota per threshold per month, guarded by
- * `orgs/{orgId}.usageAlerts`. Covers the org-scoped quotas that are
- * cheap to compute server-side: monthly email sends, dataset count, and
- * dataset storage. Scheduler-invoked (x-cron-secret, like report-usage).
+ * `orgs/{orgId}.usageAlerts`. Covers sites, media storage, monthly email
+ * sends, dataset count + storage, workflow/automation runs, and — added
+ * AGL-1106/1107 — monthly bandwidth and published-site size (previously
+ * displayed but never alerted). Scheduler-invoked (x-cron-secret, like
+ * report-usage).
  */
 async function handler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -71,21 +74,50 @@ async function handler(request: Request): Promise<Response> {
       // Media storage (AGL-484): total bytes stored across the org's hosts,
       // to warn when a downgrade leaves an org over its media allowance.
       let mediaBytes = 0
+      // Bandwidth (AGL-1106): this month's page views × the average page
+      // transfer — same estimate the billing meter uses; it was displayed
+      // but never alerted. Computed fresh (bandwidth accrues within the
+      // month, so last month's rollup would be stale).
+      let pageViews = 0
       for (const host of hosts.docs) {
-        const [emailCounter, workflowCounter, actionCounter, mediaCounter] =
-          await Promise.all([
-            host.ref.collection('counters').doc('emailSends').get(),
-            host.ref.collection('counters').doc('workflowRuns').get(),
-            host.ref.collection('counters').doc('actionRuns').get(),
-            host.ref.collection('counters').doc('media').get(),
-          ])
+        const [
+          emailCounter,
+          workflowCounter,
+          actionCounter,
+          mediaCounter,
+          analytics,
+        ] = await Promise.all([
+          host.ref.collection('counters').doc('emailSends').get(),
+          host.ref.collection('counters').doc('workflowRuns').get(),
+          host.ref.collection('counters').doc('actionRuns').get(),
+          host.ref.collection('counters').doc('media').get(),
+          host.ref
+            .collection('analytics')
+            .where(
+              firebaseAdmin.firestore.FieldPath.documentId(),
+              '>=',
+              `${month}-01`,
+            )
+            .where(
+              firebaseAdmin.firestore.FieldPath.documentId(),
+              '<=',
+              `${month}-31`,
+            )
+            .get(),
+        ])
         emailSends += Number(emailCounter.get(month) ?? 0)
         workflowRuns += Number(workflowCounter.get(month) ?? 0)
         actionRuns += Number(actionCounter.get(month) ?? 0)
         mediaBytes += Number(mediaCounter.get('bytes') ?? 0)
+        pageViews += analytics.docs.reduce(
+          (sum, day) => sum + Number(day.get('total') ?? 0),
+          0,
+        )
       }
       const hostCount = hosts.size
       const mediaMb = mediaBytes / (1024 * 1024)
+      const bandwidthGb =
+        (pageViews * ESTIMATED_PAGE_TRANSFER_BYTES) / (1024 * 1024 * 1024)
 
       // Org datasets: count + approximate storage from the rollup the
       // monthly report writes (fresh enough for an alert).
@@ -101,6 +133,10 @@ async function handler(request: Request): Promise<Response> {
       const dataStorageMb = Number(
         latestUsage.docs[0]?.get('dataStorageMb') ?? 0,
       )
+      // Published-site size (AGL-1107): read from the monthly rollup (site
+      // size changes slowly, so last month's figure is fine for an alert —
+      // and recomputing every version payload here would be too costly).
+      const siteSizeMb = Number(latestUsage.docs[0]?.get('siteSizeMb') ?? 0)
 
       const checks: Array<{ key: string; label: string; used: number; limit: number }> = [
         {
@@ -147,6 +183,21 @@ async function handler(request: Request): Promise<Response> {
           label: 'monthly automation runs',
           used: actionRuns,
           limit: entitlements.actionRunsPerMonth,
+        },
+        {
+          // AGL-1106: bandwidth was displayed but never alerted/enforced.
+          key: 'bandwidth',
+          label: 'monthly bandwidth',
+          used: bandwidthGb,
+          limit: entitlements.bandwidthGb,
+        },
+        {
+          // AGL-1107: published-site size was measured + shown but never
+          // enforced; alert on it like the other soft caps.
+          key: 'siteSize',
+          label: 'published site size',
+          used: siteSizeMb,
+          limit: entitlements.totalSiteSizeMb,
         },
       ]
 
