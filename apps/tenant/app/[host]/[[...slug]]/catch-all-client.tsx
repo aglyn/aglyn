@@ -656,26 +656,50 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       ))}
       <AglynNodeRenderer node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)} />
       {props.showBranding ? (
-        <a
-          href="https://aglyn.com"
-          target="_blank"
-          rel="noreferrer"
-          style={{
-            position: 'fixed',
-            bottom: 12,
-            right: 12,
-            zIndex: 2147483000,
-            padding: '4px 10px',
-            borderRadius: 6,
-            fontSize: 12,
-            fontFamily: 'system-ui, sans-serif',
-            color: '#fff',
-            backgroundColor: 'rgba(0, 0, 0, 0.72)',
-            textDecoration: 'none',
-          }}
-        >
-          {'Made with Aglyn'}
-        </a>
+        // White-label badge (White-Label Phase 2): the "Made with …" credit
+        // reads the org's resolved brand — product name, support URL, logo,
+        // primary color — instead of the hard-coded Aglyn brand. `branding`
+        // rides in from load-page-data via `resolveBrandingProfile`, the one
+        // shared resolver, and falls back to the Aglyn defaults when absent
+        // (non-white-label orgs, or surfaces that don't carry it), so this
+        // can never drift or partly-render as Aglyn. `showBranding` still
+        // decides whether the badge shows at all.
+        (() => {
+          const brand = props.branding ?? Aglyn.AGLYN_BRANDING_PROFILE
+          return (
+            <a
+              href={brand.supportUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                position: 'fixed',
+                bottom: 12,
+                right: 12,
+                zIndex: 2147483000,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 10px',
+                borderRadius: 6,
+                fontSize: 12,
+                fontFamily: 'system-ui, sans-serif',
+                color: '#fff',
+                backgroundColor: brand.primaryColor ?? 'rgba(0, 0, 0, 0.72)',
+                textDecoration: 'none',
+              }}
+            >
+              {brand.logoUrl ? (
+                <img
+                  src={brand.logoUrl}
+                  alt=""
+                  aria-hidden
+                  style={{ height: 14, width: 'auto', display: 'block' }}
+                />
+              ) : null}
+              {`Made with ${brand.productName}`}
+            </a>
+          )
+        })()
       ) : null}
     </Aglyn.ScreenLinkContext.Provider>
     </Aglyn.SiteContext.Provider>

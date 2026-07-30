@@ -47,8 +47,14 @@ function buildMetadata(props: Props): Metadata {
   const screen = props.data?.screen?.data as any
   const siteTitle: string | undefined = host?.seo?.title ?? host?.displayName
   const separator: string = host?.seo?.separator ?? ' – '
+  // White-label (White-Label Phase 2): the generic title fallback reads the
+  // org's resolved brand name rather than a hard-coded "Aglyn", so a
+  // white-label site with no SEO/display title never leaks the Aglyn brand
+  // into its <title>/OG. `branding` is Aglyn defaults for non-white-label
+  // orgs and absent surfaces, resolved through the one shared resolver.
+  const brandName = props.branding?.productName ?? 'Aglyn'
   const withSite = (title?: string) =>
-    [title, siteTitle].filter(Boolean).join(separator) || 'Aglyn site'
+    [title, siteTitle].filter(Boolean).join(separator) || `${brandName} site`
 
   // Gated / fixed surfaces stay out of search (AGL-87/109/131).
   if (props.membershipPage) {

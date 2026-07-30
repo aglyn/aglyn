@@ -96,6 +96,23 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   object,
   requestHost,
 }) => {
+  // White-label brand per host (White-Label Phase 3): every storefront email
+  // this webhook sends — receipts, gift cards, reservation and sale notices,
+  // supplier notices — reads as the store's brand. Resolved once per host from
+  // the org doc through the one shared resolver, memoized for the event.
+  const brandCache = new Map<string, Aglyn.ResolvedBrandingProfile>()
+  const brandFor = async (
+    hostId: string | number,
+  ): Promise<Aglyn.ResolvedBrandingProfile> => {
+    const key = String(hostId)
+    const cached = brandCache.get(key)
+    if (cached) return cached
+    const org = await getOrgForHost(key).catch(() => null)
+    const brand = Aglyn.resolveBrandingProfile(org?.org as never)
+    brandCache.set(key, brand)
+    return brand
+  }
+
   if (
     type === 'customer.subscription.created' ||
     type === 'customer.subscription.updated' ||
@@ -247,6 +264,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               subject: designed?.subject ?? 'Reservation confirmed',
               text: designed?.text || fallbackText,
               ...(designed?.html ? { html: designed.html } : {}),
+              fromName: (await brandFor(hostId)).fromName,
               context: 'reservation confirmation',
             })
           }
@@ -471,6 +489,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             subject: designed?.subject ?? `Receipt for your order`,
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
+            fromName: (await brandFor(hostId)).fromName,
             context: 'cart receipt',
           })
         }
@@ -613,6 +632,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 subject: designed?.subject ?? 'Your gift card',
                 text: designed?.text || fallbackText,
                 ...(designed?.html ? { html: designed.html } : {}),
+                fromName: (await brandFor(hostId)).fromName,
                 context: 'gift card',
               })
             }
@@ -874,6 +894,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   `${payload.quantity}× ${payload.productName}\n` +
                   `Ship to: ${payload.shippingName ?? payload.customerEmail ?? 'see order'}\n\n` +
                   `Add tracking: ${payload.updateUrl}&trackingNumber=TRACKING&carrier=CARRIER`,
+                fromName: (await brandFor(hostId)).fromName,
                 context: 'dropship supplier notice',
               })
             }
@@ -996,6 +1017,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               subject: designed?.subject ?? `Receipt: ${productName}`,
               text: designed?.text || fallbackText,
               ...(designed?.html ? { html: designed.html } : {}),
+              fromName: (await brandFor(hostId)).fromName,
               context: 'receipt',
             })
           }
@@ -1034,6 +1056,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 subject: designed?.subject ?? `New order: ${productName}`,
                 text: designed?.text || fallbackText,
                 ...(designed?.html ? { html: designed.html } : {}),
+                fromName: (await brandFor(hostId)).fromName,
                 context: 'seller order notice',
               })
             }

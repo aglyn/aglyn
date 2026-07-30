@@ -51,6 +51,7 @@ import {
 } from '@mui/material'
 import { Fragment } from 'react'
 import { buildRoute, Route } from '../../constants/route-links'
+import useBranding from '../../hooks/use-branding'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { TOP_BAR_HEIGHT } from '../../constants/shared'
 import NotificationPrompt from '../notification-prompt.component'
@@ -165,6 +166,9 @@ const TopAppBar = (props: TopAppBarProps) => {
   // org has resolved yet.
   const orgSlug = useOrgSlug()
   const orgHome = orgSlug ? buildRoute(Route.ORG_HOME, { orgSlug }) : '/'
+  // White-label chrome (White-Label Phase 2): swap the Aglyn wordmark for the
+  // current org's brand when it is white-label entitled.
+  const { branding, whiteLabel } = useBranding()
 
   return (
     <ScrollReaction>
@@ -261,7 +265,35 @@ const TopAppBar = (props: TopAppBarProps) => {
                       md: theme.typography.pxToRem(20),
                     })
                   }}>
-                  {besigner ? (
+                  {/* White-label console chrome (White-Label Phase 2): a
+                      white-label-entitled org shows its own logo (or product
+                      name when it set a name but no logo) in place of the
+                      Aglyn wordmark, resolved through the one shared
+                      `resolveBrandingProfile` (via useBranding). Non-white-label
+                      orgs — and every surface until the org doc is confirmed —
+                      keep the Aglyn console/besigner logos exactly as before. */}
+                  {whiteLabel && branding.logoUrl ? (
+                    <Box
+                      component="img"
+                      src={branding.logoUrl}
+                      alt={branding.productName}
+                      sx={{ height: 24, width: 'auto', display: 'block' }}
+                    />
+                  ) : whiteLabel ? (
+                    <Typography
+                      component="span"
+                      color="textPrimary"
+                      sx={{
+                        fontWeight: 'inherit',
+                        fontSize: 'inherit',
+                        lineHeight: 'inherit',
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      {branding.productName}
+                    </Typography>
+                  ) : besigner ? (
                     <AglynBesignerLogoFull sx={{ height: 24, width: 'auto' }} />
                   ) : (
                     <AglynConsoleLogoFull sx={{ height: 24, width: 'auto' }} />

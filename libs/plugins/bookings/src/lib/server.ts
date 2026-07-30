@@ -18,6 +18,7 @@
 import { checkEntitlement,
   registerPluginConfigSchema,
   registerPluginJob,
+  resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
 import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, computeOpenSlots, type HostBookingService, isSlotOpen } from './model'
 import {
@@ -426,11 +427,17 @@ const bookHandler: PluginApiHandler = async (req, res) => {
           'booking.ref': String(bookingId),
         },
       )
+      // White-label sender identity (White-Label Phase 3): the store's brand
+      // via the one shared resolver, from the owning org doc.
+      const branding = resolveBrandingProfile(
+        (await getOrgForHost(hostId).catch(() => null))?.org as never,
+      )
       await sendEmail({
         to: email,
         subject: designed?.subject ?? `Booking confirmed: ${service.name}`,
         text: designed?.text || fallbackText,
         ...(designed?.html ? { html: designed.html } : {}),
+        fromName: branding.fromName,
         context: 'booking confirmation',
       })
     }
@@ -490,6 +497,13 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
     // Resolve each host's designed reminder template once per run (AGL-770),
     // not once per booking — a busy site has many bookings in the window.
     const templateCache = new Map<string, LoadedHostEmail | null>()
+    // White-label brand per host (White-Label Phase 3): resolved once per host
+    // from the owning org doc through the one shared resolver, so a reminder
+    // reads as the store's brand.
+    const brandingByHost = new Map<
+      string,
+      ReturnType<typeof resolveBrandingProfile>
+    >()
     for (const doc of upcoming.docs) {
       const data = doc.data()
       if (
@@ -513,6 +527,15 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
           ? await loadHostEmail(firestore, hostId, 'booking-reminder')
           : null
         templateCache.set(hostId, loaded)
+        brandingByHost.set(
+          hostId,
+          resolveBrandingProfile(
+            (hostId
+              ? await getOrgForHost(hostId).catch(() => null)
+              : null
+            )?.org as never,
+          ),
+        )
       }
       const serviceName = String(data['serviceName'] ?? 'your booking')
       const designed = loaded
@@ -530,6 +553,7 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
           `Hi ${data['name'] ?? ''},\n\nA reminder that "${serviceName}" is ` +
             `scheduled for ${when}.\n\nReference: ${doc.id}`,
         ...(designed?.html ? { html: designed.html } : {}),
+        fromName: brandingByHost.get(hostId)?.fromName,
         context: 'booking reminder',
       })
       if (result.sent) {
