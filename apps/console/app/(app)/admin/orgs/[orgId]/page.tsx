@@ -18,7 +18,11 @@
 
 import {
   checkDiscountMargin,
+  INFRA_COGS_PER_SITE_USD,
+  netOfProcessorFee,
+  orgSiteCount,
   PLAN_ENTITLEMENTS,
+  PLAN_PRICING,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
@@ -526,6 +530,78 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       enqueueSnackbar('Removing the discount failed', { variant: 'error' })
     } finally {
       setDiscountBusy(false)
+    }
+  }
+
+  // Enterprise custom billing (AGL-1110): staff sets a negotiated monthly
+  // amount + base plan and provisions a Stripe subscription (net-30 invoice)
+  // or a Checkout link — entirely in Aglyn, no Stripe dashboard. The webhook
+  // mirrors the price onto `subscription.customMonthlyUsd` so MRR is truthful.
+  const paidPlans = useMemo(
+    () =>
+      (['starter', 'pro', 'business', 'scale', 'advanced', 'agency'] as const).filter(
+        (plan) => PLAN_PRICING[plan],
+      ),
+    [],
+  )
+  const [entAmount, setEntAmount] = useState('')
+  const [entInterval, setEntInterval] = useState<'month' | 'year'>('month')
+  const [entPlan, setEntPlan] = useState<string>('agency')
+  const [entMode, setEntMode] = useState<'invoice' | 'checkout'>('invoice')
+  const [entBusy, setEntBusy] = useState(false)
+  const [entResult, setEntResult] = useState<{
+    checkoutUrl?: string | null
+    hostedInvoiceUrl?: string | null
+    subscriptionId?: string | null
+  } | null>(null)
+  const entMargin = useMemo(() => {
+    const amount = Number(entAmount)
+    if (!(amount > 0) || !org) return null
+    const net = netOfProcessorFee(amount, entInterval === 'year')
+    const infra = INFRA_COGS_PER_SITE_USD * orgSiteCount(org)
+    const marginPct = net > 0 ? (net - infra) / net : -1
+    return { amount, net, infra, marginPct }
+  }, [entAmount, entInterval, org])
+
+  const handleProvisionEnterprise = async () => {
+    const amount = Number(entAmount)
+    if (!(amount > 0) || entBusy) return
+    setEntBusy(true)
+    setEntResult(null)
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/admin/enterprise-billing', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          orgId,
+          amountMonthlyUsd: amount,
+          interval: entInterval,
+          plan: entPlan,
+          mode: entMode,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        return void enqueueSnackbar(payload?.error ?? 'Provisioning failed', {
+          variant: 'warning',
+        })
+      }
+      setEntResult(payload)
+      enqueueSnackbar(
+        entMode === 'checkout'
+          ? 'Checkout link ready to send'
+          : 'Enterprise subscription provisioned',
+        { variant: 'success' },
+      )
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('Provisioning failed', { variant: 'error' })
+    } finally {
+      setEntBusy(false)
     }
   }
 
@@ -1228,6 +1304,151 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           sx={{ alignSelf: 'flex-start' }}
                         >
                           {discountBusy ? 'Applying…' : 'Apply to subscription'}
+                        </Button>
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    // Enterprise custom billing (AGL-1110).
+                    <CardDisplay
+                      header={'Enterprise custom billing'}
+                      help={docsHelp('billing', {
+                        anchor: '#tiers--entitlements',
+                        excerpt:
+                          'Provision a negotiated custom price for this organization — a Stripe subscription (net-30 invoice) or a Checkout link — without leaving Aglyn. Audited.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <Stack spacing={1.5}>
+                        {org?.subscription?.customMonthlyUsd ? (
+                          <Alert severity="info">
+                            {`Custom price: $${org.subscription.customMonthlyUsd}/mo` +
+                              ` · billed ${
+                                org.subscription.interval === 'year'
+                                  ? 'annually'
+                                  : 'monthly'
+                              } · plan ${org.plan ?? '—'}`}
+                          </Alert>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            {'No custom price — this org bills at plan rates.'}
+                          </Typography>
+                        )}
+                        <TextField
+                          size="small"
+                          type="number"
+                          label="Custom price (USD / month)"
+                          value={entAmount}
+                          onChange={(event) => setEntAmount(event.target.value)}
+                        />
+                        <Stack direction="row" spacing={1.5}>
+                          <TextField
+                            select
+                            size="small"
+                            label="Billed"
+                            value={entInterval}
+                            onChange={(event) =>
+                              setEntInterval(
+                                event.target.value as 'month' | 'year',
+                              )
+                            }
+                            sx={{ flex: 1 }}
+                          >
+                            <MenuItem value="month">{'Monthly'}</MenuItem>
+                            <MenuItem value="year">{'Annually (×12)'}</MenuItem>
+                          </TextField>
+                          <TextField
+                            select
+                            size="small"
+                            label="Base plan"
+                            value={entPlan}
+                            onChange={(event) => setEntPlan(event.target.value)}
+                            sx={{ flex: 1 }}
+                          >
+                            {paidPlans.map((plan) => (
+                              <MenuItem key={plan} value={plan}>
+                                {plan}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        </Stack>
+                        <TextField
+                          select
+                          size="small"
+                          label="Provision via"
+                          value={entMode}
+                          onChange={(event) =>
+                            setEntMode(
+                              event.target.value as 'invoice' | 'checkout',
+                            )
+                          }
+                        >
+                          <MenuItem value="invoice">
+                            {'Invoice now (net-30, no card)'}
+                          </MenuItem>
+                          <MenuItem value="checkout">
+                            {'Send a Checkout link'}
+                          </MenuItem>
+                        </TextField>
+                        {entMargin ? (
+                          <Alert
+                            severity={
+                              entMargin.marginPct >= 0.75
+                                ? 'success'
+                                : entMargin.marginPct >= 0.65
+                                  ? 'warning'
+                                  : 'error'
+                            }
+                          >
+                            {`Net margin ${(entMargin.marginPct * 100).toFixed(1)}% — ` +
+                              `$${entMargin.amount}/mo` +
+                              `${
+                                entInterval === 'year'
+                                  ? ` ($${entMargin.amount * 12}/yr)`
+                                  : ''
+                              } keeps $${entMargin.net} net of processor fees, ` +
+                              `less $${entMargin.infra} infra.`}
+                          </Alert>
+                        ) : null}
+                        {entResult?.checkoutUrl ? (
+                          <Alert severity="success">
+                            <MuiLink
+                              href={entResult.checkoutUrl}
+                              target="_blank"
+                              rel="noopener"
+                            >
+                              {'Checkout link — send to the customer'}
+                            </MuiLink>
+                          </Alert>
+                        ) : null}
+                        {entResult?.hostedInvoiceUrl ? (
+                          <Alert severity="success">
+                            <MuiLink
+                              href={entResult.hostedInvoiceUrl}
+                              target="_blank"
+                              rel="noopener"
+                            >
+                              {'View the first invoice'}
+                            </MuiLink>
+                          </Alert>
+                        ) : null}
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="secondary"
+                          disabled={entBusy || !(Number(entAmount) > 0)}
+                          onClick={() => void handleProvisionEnterprise()}
+                          sx={{ alignSelf: 'flex-start' }}
+                        >
+                          {entBusy
+                            ? 'Provisioning…'
+                            : entMode === 'checkout'
+                              ? 'Create Checkout link'
+                              : 'Provision subscription'}
                         </Button>
                       </Stack>
                     </CardDisplay>
