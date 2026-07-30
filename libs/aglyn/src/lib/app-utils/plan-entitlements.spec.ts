@@ -21,9 +21,16 @@ import {
   checkContactQuota,
   checkDataStorageQuota,
   checkDatasetQuota,
+  checkDiscountMargin,
   checkEntitlement,
   isBillingSubscription,
+  applyDiscountUsd,
+  orgListPriceMonthlyUsd,
   orgMonthlyRevenueUsd,
+  orgNetMonthlyRevenueUsd,
+  netOfProcessorFee,
+  INFRA_COGS_PER_SITE_USD,
+  NET_MARGIN_FLOOR_PCT,
   resolveBrandingProfile,
   resolveEffectivePlan,
   checkQuota,
@@ -658,6 +665,182 @@ describe('plan entitlements', () => {
           seatAddons: { hosts: 2, posRegisters: 1, eventCalendar: 1 },
         } as any),
       ).toBe(139 + 2 * 5 + 89 + 9)
+    })
+  })
+
+  describe('net revenue / processor fee (AGL-1108)', () => {
+    it('subtracts Stripe 2.9% + 30¢ from a monthly-billed org', () => {
+      expect(
+        orgNetMonthlyRevenueUsd({
+          plan: 'pro',
+          subscription: { status: 'active', interval: 'month' },
+        } as any),
+      ).toBeCloseTo(56 * (1 - 0.029) - 0.3, 2)
+    })
+
+    it('amortizes the fixed 30¢ over 12 months for annual billing', () => {
+      expect(
+        orgNetMonthlyRevenueUsd({
+          plan: 'business',
+          subscription: { status: 'active', interval: 'year' },
+        } as any),
+      ).toBeCloseTo(99 * (1 - 0.029) - 0.3 / 12, 2)
+    })
+
+    it('is 0 for a non-billing org', () => {
+      expect(orgNetMonthlyRevenueUsd({ plan: 'free' } as any)).toBe(0)
+      expect(
+        orgNetMonthlyRevenueUsd({
+          plan: 'pro',
+          subscription: { status: 'canceled' },
+        } as any),
+      ).toBe(0)
+    })
+
+    it('netOfProcessorFee never returns below 0', () => {
+      expect(netOfProcessorFee(0.1)).toBe(0)
+      expect(netOfProcessorFee(-5)).toBe(0)
+    })
+  })
+
+  describe('per-org discount / net-of-discount MRR (AGL-1105)', () => {
+    const proMonthly = {
+      plan: 'pro',
+      subscription: { status: 'active', interval: 'month' },
+    } as any
+
+    it('orgListPriceMonthlyUsd stays the pre-discount sticker', () => {
+      expect(orgListPriceMonthlyUsd(proMonthly)).toBe(56)
+      expect(
+        orgListPriceMonthlyUsd({ ...proMonthly, discount: { percentOff: 25 } }),
+      ).toBe(56)
+    })
+
+    it('applyDiscountUsd handles percent, fixed, clamps and floors', () => {
+      expect(applyDiscountUsd(100, { percentOff: 20 })).toBe(80)
+      expect(applyDiscountUsd(100, { amountOffUsd: 15 })).toBe(85)
+      // A fixed amount larger than the bill never goes negative.
+      expect(applyDiscountUsd(10, { amountOffUsd: 25 })).toBe(0)
+      // Percent clamps to 0–100.
+      expect(applyDiscountUsd(100, { percentOff: 150 })).toBe(0)
+      expect(applyDiscountUsd(100, null)).toBe(100)
+    })
+
+    it('orgMonthlyRevenueUsd subtracts an applied percent discount', () => {
+      expect(
+        orgMonthlyRevenueUsd({
+          ...proMonthly,
+          discount: { couponId: 'co_1', percentOff: 20, appliedBy: 'u' },
+        }),
+      ).toBe(44.8)
+    })
+
+    it('orgMonthlyRevenueUsd subtracts an applied fixed discount', () => {
+      expect(
+        orgMonthlyRevenueUsd({
+          plan: 'business',
+          subscription: { status: 'active', interval: 'month' },
+          discount: { couponId: 'co_2', amountOffUsd: 10, appliedBy: 'u' },
+        } as any),
+      ).toBe(129)
+    })
+
+    it('an undiscounted org still reads its full list price', () => {
+      expect(orgMonthlyRevenueUsd(proMonthly)).toBe(56)
+      expect(orgMonthlyRevenueUsd(proMonthly)).toBe(
+        orgListPriceMonthlyUsd(proMonthly),
+      )
+    })
+
+    it('a discount on a non-billing org changes nothing (0)', () => {
+      expect(
+        orgMonthlyRevenueUsd({
+          plan: 'free',
+          discount: { couponId: 'co_3', percentOff: 50, appliedBy: 'u' },
+        } as any),
+      ).toBe(0)
+    })
+
+    it('net revenue is net of BOTH the discount and the processor fee', () => {
+      const org = {
+        ...proMonthly,
+        discount: { couponId: 'co_4', percentOff: 20, appliedBy: 'u' },
+      }
+      // 56 → 44.80 after the discount, then less Stripe 2.9% + 30¢.
+      expect(orgNetMonthlyRevenueUsd(org)).toBeCloseTo(
+        netOfProcessorFee(44.8, false),
+        2,
+      )
+    })
+  })
+
+  describe('discount margin guardrail (AGL-1105)', () => {
+    const businessMonthly = {
+      plan: 'business',
+      subscription: { status: 'active', interval: 'month' },
+    } as any
+
+    it('rates a modest discount ok and reports the list price as gross', () => {
+      const result = checkDiscountMargin(businessMonthly, { percentOff: 10 })
+      expect(result.grossUsd).toBe(139)
+      expect(result.discountedUsd).toBe(applyDiscountUsd(139, { percentOff: 10 }))
+      expect(result.netUsd).toBe(netOfProcessorFee(125.1, false))
+      expect(result.floorPct).toBe(NET_MARGIN_FLOOR_PCT)
+      expect(result.marginPct).toBeGreaterThanOrEqual(NET_MARGIN_FLOOR_PCT)
+      expect(result.rating).toBe('ok')
+    })
+
+    it('warns when the margin dips into the band below the floor', () => {
+      // 94% off a $139 sub nets ~$7.80 against ~$2 infra → ~74% margin.
+      const result = checkDiscountMargin(businessMonthly, { percentOff: 94 })
+      expect(result.rating).toBe('warn')
+      expect(result.marginPct).toBeLessThan(NET_MARGIN_FLOOR_PCT)
+      expect(result.marginPct).toBeGreaterThanOrEqual(
+        NET_MARGIN_FLOOR_PCT - 0.1,
+      )
+    })
+
+    it('blocks a discount that pushes the margin well below the floor', () => {
+      const result = checkDiscountMargin(businessMonthly, { percentOff: 97 })
+      expect(result.rating).toBe('block')
+      expect(result.marginPct).toBeLessThan(NET_MARGIN_FLOOR_PCT - 0.1)
+    })
+
+    it('blocks a 100%-off discount (net ≤ 0) with a clamped margin', () => {
+      const result = checkDiscountMargin(businessMonthly, { percentOff: 100 })
+      expect(result.discountedUsd).toBe(0)
+      expect(result.netUsd).toBe(0)
+      expect(result.marginPct).toBe(-1)
+      expect(result.rating).toBe('block')
+    })
+
+    it('scales infra COGS by the number of sites the org runs', () => {
+      const oneSite = checkDiscountMargin(businessMonthly, { percentOff: 10 })
+      expect(oneSite.infraCogsUsd).toBe(INFRA_COGS_PER_SITE_USD)
+      const manySites = checkDiscountMargin(
+        { ...businessMonthly, hosts: { a: true, b: true, c: true } },
+        { percentOff: 10 },
+      )
+      expect(manySites.infraCogsUsd).toBe(INFRA_COGS_PER_SITE_USD * 3)
+      // More infra against the same revenue can only lower the margin.
+      expect(manySites.marginPct).toBeLessThan(oneSite.marginPct)
+    })
+
+    it('rates a non-billing org ok — no revenue to protect', () => {
+      const result = checkDiscountMargin({ plan: 'free' } as any, {
+        percentOff: 50,
+      })
+      expect(result.grossUsd).toBe(0)
+      expect(result.rating).toBe('ok')
+    })
+
+    it('does not double-count a discount already on the org', () => {
+      // grossUsd is always the list price, regardless of org.discount.
+      const withExisting = checkDiscountMargin(
+        { ...businessMonthly, discount: { couponId: 'co', percentOff: 50 } },
+        { percentOff: 10 },
+      )
+      expect(withExisting.grossUsd).toBe(139)
     })
   })
 

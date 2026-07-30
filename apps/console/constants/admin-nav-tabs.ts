@@ -45,6 +45,11 @@ export function adminNavTabItems() {
       href: buildRoute(Route.ADMIN_FLAGS),
     },
     {
+      id: 'nav-tab-admin-coupons',
+      label: 'Coupons',
+      href: buildRoute(Route.ADMIN_COUPONS),
+    },
+    {
       id: 'nav-tab-admin-plugin-reviews',
       label: 'Plugin reviews',
       href: buildRoute(Route.ADMIN_PLUGIN_REVIEWS),

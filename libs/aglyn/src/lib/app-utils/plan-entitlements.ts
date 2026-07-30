@@ -18,6 +18,7 @@
 import type {
   AglynOrgBilling,
   OrgBrandingProfile,
+  OrgDiscount,
   OrgEntitlements,
   OrgFeatureFlags,
   OrgPlan,
@@ -722,9 +723,10 @@ export function isBillingSubscription(
 }
 
 /**
- * The org's monthly recurring revenue in USD — plan base plus every
- * purchased add-on (manager/collaborator seats, datasets, extra hosts, POS
- * registers, Event Calendar), and 0 for anyone who is not actually billing.
+ * The org's monthly LIST price in USD — plan base plus every purchased add-on
+ * (manager/collaborator seats, datasets, extra hosts, POS registers, Event
+ * Calendar), BEFORE any applied discount, and 0 for anyone not actually
+ * billing. This is the sticker price the plan + add-ons would bill at.
  *
  * Annual subscriptions contribute their per-month equivalent
  * (`basePriceAnnualMonthlyUsd`), not the month-to-month price, so a mixed
@@ -733,9 +735,14 @@ export function isBillingSubscription(
  * its monthly price on either interval.
  *
  * Pricing-v3 fix (2026-07): previously omitted the host, POS-register, and
- * Event-Calendar add-ons, understating MRR for every org carrying them.
+ * Event-Calendar add-ons, understating the total for every org carrying them.
+ *
+ * AGL-1105: split out of `orgMonthlyRevenueUsd`, which now subtracts an
+ * applied per-org discount on top of this. Callers wanting the pre-discount
+ * sticker (the margin guardrail, a "what would this bill at" quote) use this;
+ * callers wanting the actual money collected use `orgMonthlyRevenueUsd`.
  */
-export function orgMonthlyRevenueUsd(
+export function orgListPriceMonthlyUsd(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): number {
   if (!isBillingSubscription(org)) return 0
@@ -754,6 +761,212 @@ export function orgMonthlyRevenueUsd(
     seats(addons.posRegisters, POS_REGISTER_ADDON_MONTHLY_USD) +
     seats(addons.eventCalendar, EVENT_CALENDAR_ADDON_MONTHLY_USD)
   )
+}
+
+/**
+ * A list price net of a discount (AGL-1105). Percentage discounts scale the
+ * whole bill; fixed discounts subtract a flat USD amount. Never below 0, and
+ * a percentage is clamped to 0–100. Prefers `percentOff` when both are
+ * somehow set (Stripe coupons carry only one). Rounds to whole cents.
+ */
+export function applyDiscountUsd(
+  listPriceUsd: number,
+  discount:
+    | Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'>
+    | null
+    | undefined,
+): number {
+  if (!(listPriceUsd > 0) || !discount) return Math.max(0, listPriceUsd)
+  if (typeof discount.percentOff === 'number') {
+    const pct = Math.min(100, Math.max(0, discount.percentOff))
+    return Math.round(listPriceUsd * (1 - pct / 100) * 100) / 100
+  }
+  if (typeof discount.amountOffUsd === 'number') {
+    return Math.max(0, Math.round((listPriceUsd - discount.amountOffUsd) * 100) / 100)
+  }
+  return listPriceUsd
+}
+
+/**
+ * The org's monthly recurring revenue in USD — its LIST price
+ * (`orgListPriceMonthlyUsd`) net of any applied per-org discount
+ * (`org.discount`, AGL-1105), and 0 for anyone who is not actually billing. A
+ * comped enterprise deal genuinely collects less, so the discount belongs in
+ * MRR; the pre-discount sticker stays available as `orgListPriceMonthlyUsd`.
+ */
+export function orgMonthlyRevenueUsd(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  const listPrice = orgListPriceMonthlyUsd(org)
+  if (listPrice <= 0) return 0
+  return applyDiscountUsd(listPrice, org?.discount)
+}
+
+/**
+ * Stripe's standard processing fee on Aglyn's OWN subscription charges
+ * (AGL-1108) — 2.9% + $0.30 per charge. This is the fee Aglyn pays Stripe to
+ * collect a subscription; it is DISTINCT from the storefront platform fee
+ * (`transactionFee*Pct`, the Connect `application_fee`) that a seller's own
+ * Stripe pays on their storefront sales. Revenue/margin should be reasoned on
+ * the NET figure, not gross.
+ */
+export const STRIPE_PROCESSOR_FEE_PCT = 0.029
+export const STRIPE_PROCESSOR_FEE_FIXED_USD = 0.3
+
+/**
+ * A gross monthly USD amount net of Stripe's processing fee. Annual
+ * subscriptions are charged once per year, so the fixed 30¢ amortizes to
+ * $0.30/12 per month; monthly subscriptions pay it every month. Never
+ * returns below 0.
+ */
+export function netOfProcessorFee(
+  grossMonthlyUsd: number,
+  annual = false,
+): number {
+  if (!(grossMonthlyUsd > 0)) return 0
+  const fixedPerMonth = annual
+    ? STRIPE_PROCESSOR_FEE_FIXED_USD / 12
+    : STRIPE_PROCESSOR_FEE_FIXED_USD
+  const net = grossMonthlyUsd * (1 - STRIPE_PROCESSOR_FEE_PCT) - fixedPerMonth
+  return Math.max(0, Math.round(net * 100) / 100)
+}
+
+/**
+ * The org's monthly recurring revenue NET of Stripe's processing fee
+ * (AGL-1108) — what Aglyn actually keeps before infra COGS, and the correct
+ * base for margin/discount reasoning. Gross is `orgMonthlyRevenueUsd`; this
+ * subtracts ~2.9%+30¢, interval-aware. 0 for anyone not actually billing.
+ */
+export function orgNetMonthlyRevenueUsd(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  const gross = orgMonthlyRevenueUsd(org)
+  if (gross <= 0) return 0
+  return netOfProcessorFee(gross, org?.subscription?.interval === 'year')
+}
+
+/**
+ * Net-margin floor for discount underwriting (AGL-1105). Mirrors the
+ * Enterprise-Pricing-Calculator's ~75% gross-margin target: a discounted
+ * subscription should still keep ≥75% of its net (post-processor-fee) revenue
+ * after infrastructure COGS. Below the floor a discount is warned; well below
+ * it is blocked without explicit sign-off.
+ */
+export const NET_MARGIN_FLOOR_PCT = 0.75
+
+/**
+ * How far under the floor a discount may sit and still only WARN (AGL-1105).
+ * Within `[floor − band, floor)` staff see a caution; below `floor − band`
+ * the guardrail blocks unless overridden. 10 points, matching the
+ * calculator's soft/hard split.
+ */
+export const NET_MARGIN_WARN_BAND_PCT = 0.1
+
+/**
+ * Per-site monthly infrastructure COGS in USD (AGL-1105). The
+ * Enterprise-Pricing-Calculator's ~$2/site figure — Firebase + Vercel at
+ * cost — charged against every host the org runs. The margin guardrail
+ * subtracts this from net revenue before rating a discount.
+ */
+export const INFRA_COGS_PER_SITE_USD = 2
+
+/**
+ * Percent-off at or above which creating a coupon needs explicit staff
+ * sign-off (AGL-1105). A ≥40%-off coupon is a real revenue commitment, so the
+ * creation route rejects it unless the caller passes a confirm flag; the UI
+ * surfaces a checkbox at this threshold.
+ */
+export const DISCOUNT_APPROVAL_THRESHOLD_PCT = 40
+
+/** How many sites (hosts) the org runs — at least 1 for a billing org. */
+export function orgSiteCount(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  return Math.max(1, Object.keys(org?.hosts ?? {}).length)
+}
+
+/** The margin-guardrail verdict for a proposed or applied discount. */
+export type DiscountMarginRating = 'ok' | 'warn' | 'block'
+
+export interface DiscountMarginResult {
+  /** Pre-discount list price (`orgListPriceMonthlyUsd`). */
+  grossUsd: number
+  /** List price net of the proposed discount. */
+  discountedUsd: number
+  /** Discounted price net of Stripe's processing fee — what Aglyn keeps. */
+  netUsd: number
+  /** Monthly infra COGS charged against this org ($/site × sites). */
+  infraCogsUsd: number
+  /**
+   * Contribution margin = (net − infra) / net, as a fraction. 1 = infra-free;
+   * -1 is the clamp for a fully-underwater discount (net ≤ 0), which always
+   * blocks.
+   */
+  marginPct: number
+  /** `ok` ≥ floor, `warn` within the band below it, `block` further below. */
+  rating: DiscountMarginRating
+  /** The floor this was rated against (`NET_MARGIN_FLOOR_PCT`). */
+  floorPct: number
+}
+
+/**
+ * Rate a discount against the net-margin floor (AGL-1105) — the guardrail
+ * behind staff coupon creation and per-org application. Computes what the
+ * subscription would net after the discount and Stripe's processing fee, less
+ * the org's infra COGS, and compares the resulting contribution margin to
+ * `NET_MARGIN_FLOOR_PCT`:
+ *
+ *   - `ok`    — margin ≥ floor: the deal clears the target.
+ *   - `warn`  — margin in `[floor − band, floor)`: thin, needs a second look.
+ *   - `block` — margin < floor − band (or the discount drives net ≤ 0):
+ *               underwater, blocked without an explicit override.
+ *
+ * `discount` is the PROPOSED change, independent of any discount already on
+ * the org — `grossUsd` is always the list price (`orgListPriceMonthlyUsd`),
+ * so this never double-counts an existing `org.discount`. A non-billing org
+ * (list price 0) has no revenue to protect and rates `ok`.
+ */
+export function checkDiscountMargin(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  discount: Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'>,
+): DiscountMarginResult {
+  const floorPct = NET_MARGIN_FLOOR_PCT
+  const grossUsd = orgListPriceMonthlyUsd(org)
+  const infraCogsUsd =
+    Math.round(INFRA_COGS_PER_SITE_USD * orgSiteCount(org) * 100) / 100
+  if (grossUsd <= 0) {
+    return {
+      grossUsd: 0,
+      discountedUsd: 0,
+      netUsd: 0,
+      infraCogsUsd,
+      marginPct: 1,
+      rating: 'ok',
+      floorPct,
+    }
+  }
+  const discountedUsd = applyDiscountUsd(grossUsd, discount)
+  const annual = org?.subscription?.interval === 'year'
+  const netUsd = netOfProcessorFee(discountedUsd, annual)
+  const marginPct =
+    netUsd > 0
+      ? Math.round(((netUsd - infraCogsUsd) / netUsd) * 10000) / 10000
+      : -1
+  const rating: DiscountMarginRating =
+    marginPct >= floorPct
+      ? 'ok'
+      : marginPct >= floorPct - NET_MARGIN_WARN_BAND_PCT
+        ? 'warn'
+        : 'block'
+  return {
+    grossUsd,
+    discountedUsd,
+    netUsd,
+    infraCogsUsd,
+    marginPct,
+    rating,
+    floorPct,
+  }
 }
 
 /**

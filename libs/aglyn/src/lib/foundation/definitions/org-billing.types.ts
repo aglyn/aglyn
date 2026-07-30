@@ -281,6 +281,32 @@ export interface OrgSeatAddons {
   eventCalendar?: number
 }
 
+/**
+ * A discount applied to the org's OWN Aglyn subscription (AGL-1105) — a
+ * comped enterprise deal or a redeemed coupon, mirrored from a Stripe coupon
+ * so `orgMonthlyRevenueUsd` can report net-of-discount MRR without a Stripe
+ * round-trip. Exactly one of `percentOff` / `amountOffUsd` is set, matching
+ * the Stripe coupon it points at (Stripe coupons are one or the other).
+ * DISTINCT from a storefront/customer discount — this is Aglyn's own bill.
+ */
+export interface OrgDiscount {
+  /** The Stripe coupon id (`co_…`) applied to the subscription. */
+  couponId: string
+  /** The Stripe promotion code id (`promo_…`), when the coupon has a code. */
+  promotionCodeId?: string
+  /** The human redemption code (e.g. `LAUNCH25`), when one exists. */
+  code?: string
+  /** Percentage off, 0–100 (mutually exclusive with `amountOffUsd`). */
+  percentOff?: number
+  /** Fixed USD off per invoice (mutually exclusive with `percentOff`). */
+  amountOffUsd?: number
+  /** The staff uid that applied it (audit trail; self-serve reads `system`). */
+  appliedBy: UserUid
+  /** Free-text why (the enterprise deal, the promotion) — staff-only. */
+  reason?: string
+  appliedAt: ITimestamp
+}
+
 export interface OrgSubscription {
   status?:
     | 'active'
@@ -328,6 +354,12 @@ export interface AglynOrgBilling extends AglynDocument {
   seatAddons?: OrgSeatAddons
   stripeCustomerId?: string
   subscription?: OrgSubscription
+  /**
+   * Discount on the org's own Aglyn subscription (AGL-1105) — staff-applied
+   * enterprise deal or a redeemed coupon. `orgMonthlyRevenueUsd` subtracts it
+   * for net-of-discount MRR; `orgListPriceMonthlyUsd` ignores it (list price).
+   */
+  discount?: OrgDiscount
   /** Staff suspension (AGL-202): set = all the org's sites serve 503. */
   suspendedAt?: ITimestamp | null
   suspendedReason?: string
