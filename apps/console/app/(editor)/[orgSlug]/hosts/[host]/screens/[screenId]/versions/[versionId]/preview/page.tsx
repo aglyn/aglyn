@@ -26,7 +26,6 @@ import {
 } from '@aglyn/shared-ui-theme'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { CssBaseline, Stack, Typography } from '@mui/material'
-import Head from 'next/head'
 import { observer } from 'mobx-react-lite'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -143,7 +142,7 @@ function ScreenPreviewPage() {
   return (
     <ThemeProvider theme={siteTheme}>
       {fontsHref ? (
-        <Head>
+        <>
           <link
             key="host-fonts-preconnect"
             rel="preconnect"
@@ -151,7 +150,7 @@ function ScreenPreviewPage() {
             crossOrigin="anonymous"
           />
           <link key="host-fonts" rel="stylesheet" href={fontsHref} />
-        </Head>
+        </>
       ) : null}
       <CssBaseline enableColorScheme />
       {/* Shared hidden-class rule (AGL-562/830): the tenant page ships this in
