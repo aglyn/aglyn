@@ -53,6 +53,12 @@ export type AglynNotificationType =
   // noise. The adminAudit record survives a mute either way; the timeliness
   // does not, and timeliness is the whole point of the alert.
   | 'system.pluginVerifierRegression'
+  // A sign-in method was removed from the user's own account because their
+  // organization turned on SSO enforcement (AGL-1129). `system.`, not
+  // `team.`, for the AGL-1088 reason above: `team` is the category someone
+  // mutes to stop routine roster chatter, and "the way you sign in just
+  // changed" is not chatter — the next sign-in fails without it.
+  | 'system.signInMethodRemoved'
 
 export interface AglynNotification {
   $id?: string
@@ -86,6 +92,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'support.ticketReply': 'Support ticket reply',
     'system.announcement': 'Announcement',
     'system.pluginVerifierRegression': 'Plugin verifier regression',
+    'system.signInMethodRemoved': 'Sign-in method removed',
   }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */

@@ -45,6 +45,28 @@ To start a conversation, use the **Contact sales** button on the Enterprise card
 bottom of your Billing page. Once your organization is on Enterprise, plan changes go
 through us rather than the self-serve upgrade and downgrade buttons.
 
+#### Single sign-on and enforcement
+
+Your people sign in through your identity provider. While SSO is on but **not enforced**,
+any sign-in method someone already had — a password, a linked Google account — keeps
+working, so nobody is locked out during rollout. New ones cannot be added: an account
+governed by your IdP is not offered "Continue with Google".
+
+**Turning on enforcement removes those other methods.** For every account in your
+organization's identity tenant, we unlink every sign-in method that is not your IdP and
+end that person's existing sessions, so access flows through your IdP from that moment —
+including when you revoke it there. Affected people are notified in the console that their
+sign-in methods changed.
+
+Two things worth knowing before you ask us to switch it on:
+
+- It applies to everyone in the tenant at once, and to anyone who joins afterwards.
+- An account whose *only* sign-in method is not your IdP is left alone rather than
+  stripped, because removing it would leave an account nobody could reach. Those are
+  reported to us so they can be fixed rather than silently skipped.
+
+Enforcement is switched on by us, at your request.
+
 :::note Pricing is provisional (pre-release)
 Aglyn is in pre-release: prices, plans, tiers, quotas, and the features included in each
 tier are provisional and may change at any time — including for existing subscribers.

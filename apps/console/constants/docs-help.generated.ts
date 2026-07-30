@@ -514,7 +514,7 @@ export const DOCS_HELP_ANCHORS = {
   analytics: ['#pageview-tracking', '#insights', '#per-screen-traffic', '#google-analytics', '#related'],
   architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#billing--cost-attribution', '#related'],
   besigner: ['#preview-vs-canvas', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#inline-and-rich-text', '#reusable-components', '#ai-in-the-canvas', '#related'],
-  billing: ['#tiers--entitlements', '#enterprise', '#usage-meters', '#seats', '#audience-contacts', '#organization-data', '#api-access', '#payments', '#platform-fees', '#related'],
+  billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#seats', '#audience-contacts', '#organization-data', '#api-access', '#payments', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#taking-bookings', '#manage', '#related'],
   buildABlog: ['#1-create-a-collection', '#2-write-entries', '#categories', '#visual-editor', '#3-design-the-pages-with-template-screens', '#blog-blocks', '#entry-tokens', '#no-template-still-designed', '#paginated-page-sets', '#4-publish--syndicate', '#tips', '#related'],
