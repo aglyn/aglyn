@@ -1212,6 +1212,24 @@ export function resolveBrandingProfile(
 }
 
 /**
+ * Whether the org has actually **configured** a white-label brand (AGL-1110) —
+ * a non-empty product name or logo. White-label chrome should activate only
+ * when this is true, not merely because the plan grants the `whiteLabel`
+ * entitlement: an Agency org (or a comped Enterprise org) that never set up a
+ * brand keeps the plain Aglyn wordmark — no product-name-text render, no
+ * flash — until it opts in on the branding page.
+ */
+export function hasBrandingProfile(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  const profile = org?.brandingProfile
+  if (!profile) return false
+  return !!(
+    cleanBrandString(profile.productName) || cleanBrandString(profile.logoUrl)
+  )
+}
+
+/**
  * Quota check: `allowed` is false once `currentUsage` meets the limit —
  * call before creating the next resource (e.g. usage=hostCount before
  * creating another host). `remaining` never goes negative.
