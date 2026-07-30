@@ -65,6 +65,50 @@ async function orgDatasetBytes(
   return total
 }
 
+/** Approximate persisted size of one version doc's node payload. */
+function nodesBytes(nodes: unknown): number {
+  if (nodes == null) return 0
+  if (ArrayBuffer.isView(nodes)) return (nodes as Uint8Array).byteLength
+  try {
+    return JSON.stringify(nodes).length
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Aggregate published-site-size bytes for an org (AGL-1107): the published
+ * screen/layout version node payloads across the org's hosts — the same
+ * measure the per-host billing meter (`host-usage`) shows, summed here so
+ * the `totalSiteSizeMb` cap can be alerted on (it was measured + displayed
+ * but never enforced). O(hosts × published docs) reads; the monthly rollup
+ * is the right place to pay for it.
+ */
+async function orgSiteSizeBytes(
+  firestore: FirebaseFirestore.Firestore,
+  hostRefs: FirebaseFirestore.DocumentReference[],
+): Promise<number> {
+  let total = 0
+  for (const hostRef of hostRefs) {
+    const [screens, layouts] = await Promise.all([
+      hostRef.collection('screens').limit(200).get(),
+      hostRef.collection('layouts').limit(50).get(),
+    ])
+    const versionRefs: FirebaseFirestore.DocumentReference[] = []
+    for (const doc of [...screens.docs, ...layouts.docs]) {
+      const versionId = doc.get('versionId')
+      if (versionId) {
+        versionRefs.push(doc.ref.collection('versions').doc(String(versionId)))
+      }
+    }
+    if (versionRefs.length) {
+      const versions = await firestore.getAll(...versionRefs)
+      for (const version of versions) total += nodesBytes(version.get('nodes'))
+    }
+  }
+  return total
+}
+
 async function hostUsage(
   hostRef: FirebaseFirestore.DocumentReference,
   month: string,
@@ -164,6 +208,11 @@ async function handler(request: Request): Promise<Response> {
       const datasetBytes = await orgDatasetBytes(orgRef)
       const dataStorageMb =
         Math.round((datasetBytes / (1024 * 1024)) * 10) / 10
+      // Published-site size (AGL-1107): stored on the rollup so the daily
+      // usage-alerts cron can warn on the `totalSiteSizeMb` cap cheaply,
+      // without re-reading every version payload itself.
+      const siteSizeBytes = await orgSiteSizeBytes(firestore, hostRefs)
+      const siteSizeMb = Math.round((siteSizeBytes / (1024 * 1024)) * 10) / 10
       const dataQuota = checkDataStorageQuota(
         orgSnapshot.data() as any,
         dataStorageMb,
@@ -229,6 +278,7 @@ async function handler(request: Request): Promise<Response> {
           pageViews: estimate.pageViews,
           formSubmissions: estimate.formSubmissions,
           costUsd: estimate.costUsd,
+          siteSizeMb,
           dataStorageMb,
           dataOverageUsd: dataQuota.overageMonthlyUsd,
           apiRequests,
