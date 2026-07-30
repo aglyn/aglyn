@@ -29,6 +29,17 @@ Invites that haven't been accepted are listed with **Resend** (send the email ag
 for the address that lost it in a spam folder) and **Revoke**. A revoked invite's link
 stops working immediately.
 
+### Who gets told
+
+- The person you invited gets the **invite email**. The confirmation you see says
+  whether one actually went out — "email sent" versus "they'll see it when they sign
+  in" — so a workspace with email delivery unavailable never leaves you assuming a
+  message was delivered.
+- Your workspace's **owner and admins** get an in-app notification when an invite is
+  created and again when it is **accepted**, so whoever sent it finds out it was taken
+  up without re-checking the Team page. Both appear under **Team & access** in the
+  notification bell, and can be muted there like any other category.
+
 ## Accepting an invite
 
 If you're the one being invited, sign up or sign in with **the address the invite was
