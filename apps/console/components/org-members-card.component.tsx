@@ -354,13 +354,23 @@ export function OrgMembersCard() {
           <TableHead>
             <TableRow>
               <TableCell>{'Member'}</TableCell>
-              {/* Type before Role on purpose (AGL-1114): the kind of user is
-                  what decides which seat they consume, and role alone does
-                  not say — an `editor` is a manager org-wide and a
-                  collaborator when scoped to two sites. */}
-              <TableCell>{'Type'}</TableCell>
-              <TableCell>{'Role'}</TableCell>
-              <TableCell>{'Custom role'}</TableCell>
+              {/* One column per QUESTION (AGL-1125). Role and Custom role
+                  used to sit side by side as two dropdowns, which reads as
+                  "which of these two is in effect?" — they are not
+                  alternatives; a custom role LAYERS on the base role
+                  (AGL-243). They are one cell now.
+
+                  Type (AGL-1114) is gone as a column because it was never an
+                  independent fact: `consoleUserType` is
+                  `isOrgWideMember(member) ? manager : collaborator`, derived
+                  from exactly the access this next column shows. It moves
+                  INTO Access, which is what decides it — and which is what
+                  decides the seat it consumes. */}
+              <TableCell>
+                <Tooltip title="A custom role adds permissions on top of the base role — it does not replace it.">
+                  <span>{'Role'}</span>
+                </Tooltip>
+              </TableCell>
               <TableCell>{'Access'}</TableCell>
               <TableCell align="right" />
             </TableRow>
@@ -404,115 +414,157 @@ export function OrgMembersCard() {
                     </Box>
                   </Stack>
                 </TableCell>
+                {/* Base role and the custom layer, in one cell (AGL-1125). */}
                 <TableCell>
-                  {(() => {
-                    const kind = consoleUserType(member)
-                    return (
-                      <Tooltip title={CONSOLE_USER_TYPE_HINTS[kind]}>
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          color={kind === 'manager' ? 'secondary' : 'default'}
-                          label={CONSOLE_USER_TYPE_LABELS[kind]}
-                        />
-                      </Tooltip>
-                    )
-                  })()}
+                  <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+                    {canManage && member.role !== 'owner' ? (
+                      <TextField
+                        size="small"
+                        select
+                        value={member.role ?? 'viewer'}
+                        onChange={(event) =>
+                          void request('/api/orgs/members', 'POST', {
+                            orgId,
+                            action: 'upsert',
+                            uid: member.$id,
+                            role: event.target.value,
+                            allHosts: member.allHosts === true,
+                            hostAccess: member.hostAccess ?? {},
+                          }).then((ok) => ok && refresh())
+                        }
+                        sx={{ width: 110 }}
+                      >
+                        {ASSIGNABLE_ROLES.map((value) => (
+                          <MenuItem key={value} value={value}>
+                            {value}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    ) : (
+                      <Chip label={member.role ?? 'viewer'} size="small" />
+                    )}
+                    {/* Only when the org HAS custom roles, or this member is
+                        on one. An always-rendered select whose only option
+                        was "—" is what made an ordinary member look
+                        misconfigured: a blank box beside a filled one reads
+                        as unset, not as "nothing extra". */}
+                    {roles.length || (member as any).roleId
+                      ? (canManage && member.role !== 'owner' ? (
+                          <TextField
+                            size="small"
+                            select
+                            variant="standard"
+                            value={(member as any).roleId ?? ''}
+                            onChange={(event) =>
+                              void request('/api/orgs/members', 'POST', {
+                                orgId,
+                                action: 'upsert',
+                                uid: member.$id,
+                                role: member.role ?? 'viewer',
+                                allHosts: member.allHosts === true,
+                                hostAccess: member.hostAccess ?? {},
+                                roleId: event.target.value || null,
+                              }).then((ok) => ok && refresh())
+                            }
+                            // A Typography child inside the value slot
+                            // collapses to nothing — the label has to be a
+                            // plain string for the Select to render it.
+                            sx={{
+                              width: 170,
+                              '& .MuiSelect-select': {
+                                fontSize: 12,
+                                color: (member as any).roleId
+                                  ? 'text.primary'
+                                  : 'text.secondary',
+                              },
+                            }}
+                            slotProps={{
+                              // Without displayEmpty a Select renders NOTHING
+                              // for an empty value — no placeholder, no
+                              // label, just the arrow. That is half of why
+                              // the old custom-role column read as a broken
+                              // blank box: its "—" option was there and
+                              // simply never drawn.
+                              select: { displayEmpty: true },
+                              input: { disableUnderline: true },
+                              htmlInput: { 'aria-label': 'Extra permissions' },
+                            }}
+                          >
+                            <MenuItem value="">
+                              {'No extra permissions'}
+                            </MenuItem>
+                            {roles.map((customRole) => (
+                              <MenuItem key={customRole.$id} value={customRole.$id}>
+                                {`+ ${customRole.name ?? customRole.$id}`}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        ) : (member as any).roleId ? (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={`+ ${
+                              roles.find(
+                                (customRole) =>
+                                  customRole.$id === (member as any).roleId,
+                              )?.name ?? 'custom'
+                            }`}
+                          />
+                        ) : null)
+                      : null}
+                  </Stack>
                 </TableCell>
                 <TableCell>
-                  {canManage && member.role !== 'owner' ? (
-                    <TextField
-                      size="small"
-                      select
-                      value={member.role ?? 'viewer'}
-                      onChange={(event) =>
-                        void request('/api/orgs/members', 'POST', {
-                          orgId,
-                          action: 'upsert',
-                          uid: member.$id,
-                          role: event.target.value,
-                          allHosts: member.allHosts === true,
-                          hostAccess: member.hostAccess ?? {},
-                        }).then((ok) => ok && refresh())
-                      }
-                      sx={{ width: 110 }}
-                    >
-                      {ASSIGNABLE_ROLES.map((value) => (
-                        <MenuItem key={value} value={value}>
-                          {value}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  ) : (
-                    <Chip label={member.role ?? 'viewer'} size="small" />
-                  )}
-                </TableCell>
-                <TableCell>
-                  {canManage && member.role !== 'owner' ? (
-                    <TextField
-                      size="small"
-                      select
-                      value={(member as any).roleId ?? ''}
-                      onChange={(event) =>
-                        void request('/api/orgs/members', 'POST', {
-                          orgId,
-                          action: 'upsert',
-                          uid: member.$id,
-                          role: member.role ?? 'viewer',
-                          allHosts: member.allHosts === true,
-                          hostAccess: member.hostAccess ?? {},
-                          roleId: event.target.value || null,
-                        }).then((ok) => ok && refresh())
-                      }
-                      sx={{ width: 150 }}
-                    >
-                      <MenuItem value="">{'—'}</MenuItem>
-                      {roles.map((customRole) => (
-                        <MenuItem key={customRole.$id} value={customRole.$id}>
-                          {customRole.name ?? customRole.$id}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  ) : (member as any).roleId ? (
-                    <Chip
-                      size="small"
-                      label={
-                        roles.find(
-                          (customRole) =>
-                            customRole.$id === (member as any).roleId,
-                        )?.name ?? 'custom'
-                      }
-                    />
-                  ) : (
-                    '—'
-                  )}
-                </TableCell>
-                <TableCell>
-                  {member.role === 'owner' || member.role === 'admin' ? (
-                    'All sites'
-                  ) : canManage ? (
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        setAccessDraft({
-                          uid: member.$id,
-                          label:
-                            member.displayName || member.email || member.$id,
-                          role: (member.role ?? 'viewer') as OrgRole,
-                          allHosts: member.allHosts === true,
-                          hostAccess: { ...(member.hostAccess ?? {}) },
-                        })
-                      }
-                    >
-                      {member.allHosts
-                        ? 'All sites'
-                        : `${Object.keys(member.hostAccess ?? {}).length} site(s)`}
-                    </Button>
-                  ) : member.allHosts ? (
-                    'All sites'
-                  ) : (
-                    `${Object.keys(member.hostAccess ?? {}).length} site(s)`
-                  )}
+                  {/* Access, with the kind of user it MAKES them underneath
+                      (AGL-1114 lives here now, AGL-1125). The seat a member
+                      consumes follows from their reach, so the two belong in
+                      one cell: change the access and the type changes with
+                      it, which two separate columns never showed. */}
+                  <Stack spacing={0.25} sx={{ alignItems: 'flex-start' }}>
+                    {member.role === 'owner' || member.role === 'admin' ? (
+                      <Typography variant="body2">{'All sites'}</Typography>
+                    ) : canManage ? (
+                      <Button
+                        size="small"
+                        sx={{ minWidth: 0, px: 0.5 }}
+                        onClick={() =>
+                          setAccessDraft({
+                            uid: member.$id,
+                            label:
+                              member.displayName || member.email || member.$id,
+                            role: (member.role ?? 'viewer') as OrgRole,
+                            allHosts: member.allHosts === true,
+                            hostAccess: { ...(member.hostAccess ?? {}) },
+                          })
+                        }
+                      >
+                        {member.allHosts
+                          ? 'All sites'
+                          : `${Object.keys(member.hostAccess ?? {}).length} site(s)`}
+                      </Button>
+                    ) : (
+                      <Typography variant="body2">
+                        {member.allHosts
+                          ? 'All sites'
+                          : `${Object.keys(member.hostAccess ?? {}).length} site(s)`}
+                      </Typography>
+                    )}
+                    {(() => {
+                      const kind = consoleUserType(member)
+                      return (
+                        <Tooltip title={CONSOLE_USER_TYPE_HINTS[kind]}>
+                          <Typography
+                            variant="caption"
+                            color={
+                              kind === 'manager' ? 'secondary.main' : 'text.secondary'
+                            }
+                          >
+                            {CONSOLE_USER_TYPE_LABELS[kind]}
+                          </Typography>
+                        </Tooltip>
+                      )
+                    })()}
+                  </Stack>
                 </TableCell>
                 <TableCell align="right">
                   <Button
