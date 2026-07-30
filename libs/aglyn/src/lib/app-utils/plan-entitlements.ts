@@ -746,6 +746,14 @@ export function orgListPriceMonthlyUsd(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): number {
   if (!isBillingSubscription(org)) return 0
+  // Custom enterprise price (AGL-1110): a negotiated amount is the list price
+  // outright — it already reflects the whole deal, so it overrides the plan
+  // default AND the seat/host add-on math (those are folded into the quote).
+  // Stored monthly-normalized, so it is used as-is.
+  const custom = org?.subscription?.customMonthlyUsd
+  if (typeof custom === 'number' && custom > 0) {
+    return Math.round(custom * 100) / 100
+  }
   const pricing = PLAN_PRICING[org?.plan as OrgPlan]
   if (!pricing) return 0
   const annual = org?.subscription?.interval === 'year'

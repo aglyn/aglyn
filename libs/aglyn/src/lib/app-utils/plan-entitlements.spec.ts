@@ -774,6 +774,91 @@ describe('plan entitlements', () => {
     })
   })
 
+  describe('custom enterprise price / MRR truth (AGL-1110)', () => {
+    it('a custom monthly price is the list price, not the plan default', () => {
+      // The bug: an agency-capability org on a negotiated $2,730/mo used to
+      // report the $799 agency default. It must now report the real figure.
+      const enterprise = {
+        plan: 'agency',
+        subscription: {
+          status: 'active',
+          interval: 'month',
+          customMonthlyUsd: 2730,
+        },
+      } as any
+      expect(orgListPriceMonthlyUsd(enterprise)).toBe(2730)
+      expect(orgMonthlyRevenueUsd(enterprise)).toBe(2730)
+    })
+
+    it('the custom price overrides seat/host add-ons too (folded into the quote)', () => {
+      const org = {
+        plan: 'agency',
+        subscription: {
+          status: 'active',
+          interval: 'month',
+          customMonthlyUsd: 2730,
+        },
+        seatAddons: { members: 50, hosts: 20 },
+      } as any
+      // Add-ons that would otherwise stack are absorbed by the negotiated price.
+      expect(orgListPriceMonthlyUsd(org)).toBe(2730)
+    })
+
+    it('a per-org discount still applies on top of the custom price', () => {
+      const org = {
+        plan: 'agency',
+        subscription: {
+          status: 'active',
+          interval: 'month',
+          customMonthlyUsd: 2000,
+        },
+        discount: { couponId: 'co_ent', percentOff: 10, appliedBy: 'u' },
+      } as any
+      expect(orgListPriceMonthlyUsd(org)).toBe(2000)
+      expect(orgMonthlyRevenueUsd(org)).toBe(1800)
+    })
+
+    it('an annual custom deal is stored monthly-normalized and read as-is', () => {
+      // A $32,760/yr deal is persisted as 2730/mo; readers never re-divide.
+      const org = {
+        plan: 'agency',
+        subscription: {
+          status: 'active',
+          interval: 'year',
+          customMonthlyUsd: 2730,
+        },
+      } as any
+      expect(orgListPriceMonthlyUsd(org)).toBe(2730)
+      // Net of the processor fee, the annual 30¢ amortizes across 12 months.
+      expect(orgNetMonthlyRevenueUsd(org)).toBeCloseTo(
+        netOfProcessorFee(2730, true),
+        2,
+      )
+    })
+
+    it('a custom amount on a non-billing org is ignored (0)', () => {
+      expect(
+        orgMonthlyRevenueUsd({
+          plan: 'agency',
+          subscription: { status: 'canceled', customMonthlyUsd: 2730 },
+        } as any),
+      ).toBe(0)
+    })
+
+    it('zero/negative custom amounts fall back to the plan price', () => {
+      const base = {
+        plan: 'agency',
+        subscription: { status: 'active', interval: 'month' },
+      } as any
+      expect(
+        orgListPriceMonthlyUsd({
+          ...base,
+          subscription: { ...base.subscription, customMonthlyUsd: 0 },
+        }),
+      ).toBe(799)
+    })
+  })
+
   describe('discount margin guardrail (AGL-1105)', () => {
     const businessMonthly = {
       plan: 'business',
