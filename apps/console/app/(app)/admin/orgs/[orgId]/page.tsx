@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  checkDiscountMargin,
   PLAN_ENTITLEMENTS,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -28,7 +29,9 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Alert,
   Button,
+  Checkbox,
   Chip,
+  FormControlLabel,
   Link as MuiLink,
   MenuItem,
   Stack,
@@ -410,6 +413,119 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     } catch (error) {
       console.error(error)
       enqueueSnackbar('Impersonation failed', { variant: 'error' })
+    }
+  }
+
+  // Per-org discount (AGL-1105): staff attaches a Stripe coupon to this org's
+  // subscription. Coupons come from the audited /api/admin/coupons list; the
+  // net-margin rating runs for THIS org before applying.
+  const [coupons, setCoupons] = useState<
+    Array<{
+      id: string
+      name: string | null
+      percentOff: number | null
+      amountOffUsd: number | null
+    }>
+  >([])
+  const [selectedCoupon, setSelectedCoupon] = useState('')
+  const [discountReason, setDiscountReason] = useState('')
+  const [confirmBelowFloor, setConfirmBelowFloor] = useState(false)
+  const [discountBusy, setDiscountBusy] = useState(false)
+  useEffect(() => {
+    if (!isStaff || !user) return
+    let active = true
+    void (async () => {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/admin/coupons', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        })
+        if (!response.ok) return
+        const payload = await response.json().catch(() => ({}))
+        if (active) setCoupons(payload.coupons ?? [])
+      } catch {
+        /* non-fatal — the card degrades to "no coupons" */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [isStaff, user])
+
+  const selectedCouponObj = useMemo(
+    () => coupons.find((coupon) => coupon.id === selectedCoupon) ?? null,
+    [coupons, selectedCoupon],
+  )
+  const discountRating = useMemo(() => {
+    if (!org || !selectedCouponObj) return null
+    return checkDiscountMargin(org, {
+      percentOff: selectedCouponObj.percentOff ?? undefined,
+      amountOffUsd: selectedCouponObj.amountOffUsd ?? undefined,
+    })
+  }, [org, selectedCouponObj])
+
+  const handleApplyDiscount = async () => {
+    if (!selectedCoupon || discountBusy) return
+    setDiscountBusy(true)
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/admin/org-discount', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          orgId,
+          action: 'apply',
+          couponId: selectedCoupon,
+          reason: discountReason.trim() || undefined,
+          confirmBelowFloor,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        return void enqueueSnackbar(payload?.error ?? 'Applying the discount failed', {
+          variant: 'warning',
+        })
+      }
+      enqueueSnackbar('Discount applied', { variant: 'success' })
+      setSelectedCoupon('')
+      setDiscountReason('')
+      setConfirmBelowFloor(false)
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('Applying the discount failed', { variant: 'error' })
+    } finally {
+      setDiscountBusy(false)
+    }
+  }
+
+  const handleRemoveDiscount = async () => {
+    if (discountBusy) return
+    setDiscountBusy(true)
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/admin/org-discount', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ orgId, action: 'remove' }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        return void enqueueSnackbar(payload?.error ?? 'Removing the discount failed', {
+          variant: 'warning',
+        })
+      }
+      enqueueSnackbar('Discount removed', { variant: 'success' })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('Removing the discount failed', { variant: 'error' })
+    } finally {
+      setDiscountBusy(false)
     }
   }
 
@@ -981,6 +1097,139 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           )}
                         </Stack>
                       )}
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    // Per-org discount (AGL-1105).
+                    <CardDisplay
+                      header={'Subscription discount'}
+                      help={docsHelp('billing', {
+                        anchor: '#tiers--entitlements',
+                        excerpt:
+                          "Apply a Stripe coupon to this organization's subscription — the net-margin rating warns before a deal drops below the floor. Audited.",
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <Stack spacing={1.5}>
+                        {org?.discount ? (
+                          <Alert
+                            severity="success"
+                            action={
+                              <Button
+                                size="small"
+                                color="inherit"
+                                disabled={discountBusy}
+                                onClick={() => void handleRemoveDiscount()}
+                              >
+                                {'Remove'}
+                              </Button>
+                            }
+                          >
+                            <Stack spacing={0.25}>
+                              <Typography variant="body2">
+                                {org.discount.percentOff != null
+                                  ? `${org.discount.percentOff}% off`
+                                  : org.discount.amountOffUsd != null
+                                    ? `$${org.discount.amountOffUsd} off`
+                                    : 'Discount applied'}
+                                {org.discount.code
+                                  ? ` · ${org.discount.code}`
+                                  : ''}
+                              </Typography>
+                              {org.discount.reason ? (
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  {org.discount.reason}
+                                </Typography>
+                              ) : null}
+                            </Stack>
+                          </Alert>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            {'No discount on this subscription.'}
+                          </Typography>
+                        )}
+                        <TextField
+                          select
+                          size="small"
+                          label="Coupon"
+                          value={selectedCoupon}
+                          onChange={(event) =>
+                            setSelectedCoupon(event.target.value)
+                          }
+                        >
+                          <MenuItem value="">{'Select a coupon…'}</MenuItem>
+                          {coupons.map((coupon) => (
+                            <MenuItem key={coupon.id} value={coupon.id}>
+                              {`${coupon.name ?? coupon.id} · ${
+                                coupon.percentOff != null
+                                  ? `${coupon.percentOff}%`
+                                  : `$${coupon.amountOffUsd}`
+                              }`}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                        <TextField
+                          size="small"
+                          label="Reason (e.g. the enterprise deal)"
+                          value={discountReason}
+                          onChange={(event) =>
+                            setDiscountReason(event.target.value)
+                          }
+                        />
+                        {discountRating ? (
+                          <Alert
+                            severity={
+                              discountRating.rating === 'ok'
+                                ? 'success'
+                                : discountRating.rating === 'warn'
+                                  ? 'warning'
+                                  : 'error'
+                            }
+                          >
+                            {`Rating ${discountRating.rating.toUpperCase()} — net margin ` +
+                              `${(discountRating.marginPct * 100).toFixed(1)}% vs a ` +
+                              `${(discountRating.floorPct * 100).toFixed(0)}% floor. ` +
+                              `$${discountRating.grossUsd}/mo list → keeps ` +
+                              `$${discountRating.netUsd} net, less ` +
+                              `$${discountRating.infraCogsUsd} infra.`}
+                          </Alert>
+                        ) : null}
+                        {discountRating?.rating === 'block' ? (
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={confirmBelowFloor}
+                                onChange={(event) =>
+                                  setConfirmBelowFloor(event.target.checked)
+                                }
+                              />
+                            }
+                            label="Override the margin floor for this org"
+                          />
+                        ) : null}
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="secondary"
+                          disabled={
+                            discountBusy ||
+                            !selectedCoupon ||
+                            (discountRating?.rating === 'block' &&
+                              !confirmBelowFloor)
+                          }
+                          onClick={() => void handleApplyDiscount()}
+                          sx={{ alignSelf: 'flex-start' }}
+                        >
+                          {discountBusy ? 'Applying…' : 'Apply to subscription'}
+                        </Button>
+                      </Stack>
                     </CardDisplay>
                   ),
                 },

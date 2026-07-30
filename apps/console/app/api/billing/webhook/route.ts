@@ -80,6 +80,33 @@ function planFromPriceId(priceId: string | undefined): string | undefined {
 }
 
 /**
+ * The coupon riding a subscription, from either the legacy single `discount`
+ * or the newer `discounts[]` array (AGL-1105). Returns the coupon object and
+ * the promotion-code id, or null when the subscription carries no discount —
+ * which is also how a removed coupon converges (the mirror is cleared).
+ */
+function subscriptionCoupon(object: any): {
+  coupon: any
+  promotionCodeId: string | null
+} | null {
+  const discount =
+    object?.discount ??
+    (Array.isArray(object?.discounts)
+      ? object.discounts.find(
+          (entry: any) => entry && typeof entry === 'object' && entry.coupon,
+        )
+      : null)
+  const coupon = discount?.coupon
+  if (!coupon || typeof coupon !== 'object' || !coupon.id) return null
+  const promo = discount?.promotion_code
+  return {
+    coupon,
+    promotionCodeId:
+      typeof promo === 'string' ? promo : (promo?.id ?? null),
+  }
+}
+
+/**
  * Stripe webhook: syncs subscription lifecycle onto the org doc
  * (`orgs/{orgId}.plan/subscription/stripeCustomerId`). The org id travels
  * in the subscription metadata set at checkout (`metadata[orgId]`,
@@ -166,6 +193,40 @@ async function handler(request: Request): Promise<Response> {
         const plan = canceled
           ? 'free'
           : (object?.metadata?.plan ?? planFromPriceId(priceId) ?? 'free')
+        const orgRef = firebaseAdmin
+          .app()
+          .firestore()
+          .collection('orgs')
+          .doc(String(orgId))
+        // Discount mirror (AGL-1105): reflect the coupon on the subscription
+        // onto org.discount so the net-of-discount billing figure is right
+        // whether the discount was staff-applied or self-serve-redeemed at
+        // checkout (`orgMonthlyRevenueUsd` reads org.discount). A
+        // canceled or coupon-less subscription clears it (like the add-on
+        // zeros). Staff-set `appliedBy`/`reason` survive a resync — Stripe
+        // does not carry them — so the audit context is not overwritten by
+        // the periodic subscription.updated events.
+        const del = firebaseAdmin.firestore.FieldValue.delete()
+        let discountField: unknown = del
+        const found = canceled ? null : subscriptionCoupon(object)
+        if (found) {
+          const existing = (await orgRef.get()).get('discount') ?? {}
+          const { coupon, promotionCodeId } = found
+          discountField = {
+            couponId: String(coupon.id),
+            percentOff:
+              coupon.percent_off != null ? Number(coupon.percent_off) : del,
+            amountOffUsd:
+              coupon.amount_off != null ? Number(coupon.amount_off) / 100 : del,
+            code: coupon.name ? String(coupon.name) : del,
+            promotionCodeId: promotionCodeId ?? del,
+            appliedBy: existing.appliedBy ?? 'system',
+            appliedAt:
+              existing.appliedAt ??
+              firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+            ...(existing.reason ? { reason: existing.reason } : {}),
+          }
+        }
         const billing = {
           plan,
           stripeCustomerId: object?.customer ?? null,
@@ -173,6 +234,7 @@ async function handler(request: Request): Promise<Response> {
           // the source of truth; explicit zeros make removals, dashboard
           // edits, and full cancellations all converge.
           seatAddons: addonQuantitiesFromItems(canceled ? [] : items),
+          discount: discountField,
           subscription: {
             status: canceled ? 'canceled' : (object?.status ?? 'active'),
             priceId: priceId ?? null,
@@ -187,12 +249,7 @@ async function handler(request: Request): Promise<Response> {
               : null,
           },
         }
-        await firebaseAdmin
-          .app()
-          .firestore()
-          .collection('orgs')
-          .doc(String(orgId))
-          .set(billing, { merge: true })
+        await orgRef.set(billing, { merge: true })
       }
     }
 
