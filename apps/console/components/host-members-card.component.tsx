@@ -35,7 +35,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  documentId,
+  limit,
+  query,
+  where,
+} from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
@@ -137,6 +144,49 @@ export function HostMembersCard(props: HostMembersCardProps) {
     (ownerMember?.email as string | undefined) ??
     (ownerMember?.displayName as string | undefined) ??
     'Account owner'
+
+  // A member's photo lives on their ORG member doc, not here (AGL-1126).
+  //
+  // These rows come from `hosts/{hostId}/members`, a different collection
+  // whose only writer sets an explicit field list with no `photoURL` on it —
+  // so `member.photoURL` was `undefined` for every row and MemberAvatar fell
+  // through to Gravatar. That went unnoticed because the OWNER row reads its
+  // org member doc directly (just above) and therefore did render a stored
+  // photo: the one row that worked was the one being looked at.
+  //
+  // Joining rather than copying the field onto the host doc keeps one source
+  // of truth for a member's face, which is what AGL-1126 was for. One `in`
+  // query covers a whole page — Firestore allows 30 and the page is 25.
+  const memberUids = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          members
+            .map((member) => member.uid as string | undefined)
+            .filter((uid): uid is string => Boolean(uid)),
+        ),
+      ).slice(0, 30),
+    [members],
+  )
+  const { data: orgMemberDocs } = useFirestoreCollection<any>(
+    () =>
+      orgId && memberUids.length
+        ? query(
+            collection(firestore, 'orgs', orgId, 'members'),
+            where(documentId(), 'in', memberUids),
+          )
+        : null,
+    [firestore, orgId, memberUids.join(',')],
+    { idField: '$id' },
+  )
+  const photoByUid = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const doc of orgMemberDocs ?? []) {
+      const photo = doc?.photoURL as string | undefined
+      if (photo) map.set(doc.$id as string, photo)
+    }
+    return map
+  }, [orgMemberDocs])
 
   const request = useCallback(
     async (method: string, body: Record<string, unknown>) => {
@@ -340,7 +390,9 @@ export function HostMembersCard(props: HostMembersCardProps) {
                         still gets one — Gravatar works off the email alone,
                         which is all an invite has. */}
                     <MemberAvatar
-                      photoURL={member.photoURL}
+                      photoURL={
+                        member.uid ? photoByUid.get(member.uid) : undefined
+                      }
                       email={member.email}
                       displayName={member.displayName}
                       size={28}
