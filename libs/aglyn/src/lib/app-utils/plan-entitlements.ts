@@ -803,6 +803,26 @@ export function applyDiscountUsd(
 }
 
 /**
+ * Whether an org should read as **"Enterprise"** everywhere the plan is shown
+ * (AGL-1110). An enterprise deal runs on a standard base plan — usually
+ * `agency` — for entitlements, but bills a negotiated custom price; the custom
+ * amount (set by the enterprise-billing flow) is the signal. The base plan
+ * still drives capability; this is display-only. Non-billing / list-priced
+ * orgs are not enterprise.
+ */
+export function isEnterpriseOrg(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return (
+    isBillingSubscription(org) &&
+    (org?.subscription?.customMonthlyUsd ?? 0) > 0
+  )
+}
+
+/** Human label shown for `enterprise` in plan badges. */
+export const ENTERPRISE_PLAN_LABEL = 'Enterprise'
+
+/**
  * The org's monthly recurring revenue in USD — its LIST price
  * (`orgListPriceMonthlyUsd`) net of any applied per-org discount
  * (`org.discount`, AGL-1105), and 0 for anyone who is not actually billing. A

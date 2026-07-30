@@ -38,6 +38,7 @@ import {
 } from '@mui/material'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
+import { ENTERPRISE_PLAN_LABEL, isEnterpriseOrg } from '@aglyn/aglyn'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgPlans } from '../hooks/use-org-plans'
@@ -111,7 +112,13 @@ export function OrgSwitcherNav() {
   // masquerading as a plan (AGL-646). No plan means free — but only once the
   // doc has actually resolved (AGL-887): a loading or failed read rendered a
   // Business org as "Free". No answer yet = no badge.
-  const currentBadge = orgReady ? titleCase(plan ?? 'free') : undefined
+  // A custom-priced enterprise deal reads as "Enterprise" even though its base
+  // plan (usually agency) is what drives entitlements (AGL-1110).
+  const currentBadge = orgReady
+    ? isEnterpriseOrg(org as never)
+      ? ENTERPRISE_PLAN_LABEL
+      : titleCase(plan ?? 'free')
+    : undefined
 
   const orgAvatar = (url?: string) =>
     url ? (

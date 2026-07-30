@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { isEnterpriseOrg } from '@aglyn/aglyn'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
@@ -44,6 +45,11 @@ export function useOrgPlans(
       orgIds.map(async (id) => {
         try {
           const snap = await getDoc(doc(firestore, 'orgs', id))
+          // A custom-priced enterprise deal reads as "enterprise" regardless of
+          // its base plan (AGL-1110).
+          if (isEnterpriseOrg(snap.data() as never)) {
+            return [id, 'enterprise'] as const
+          }
           // An org on the free tier has no `plan` field at all — the webhook
           // only writes one for a paid subscription. A successful read with
           // no plan therefore MEANS free, and must be reported as such;
