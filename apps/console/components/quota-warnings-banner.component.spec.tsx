@@ -27,12 +27,18 @@
  * the state this issue describes: every page load denied, silently caught,
  * and the row missing anyway.
  *
- * So each case counts calls to `getCountFromServer` and checks which paths
- * they addressed.
+ * So each case records calls to `getCountFromServer` AND `getDocs` and checks
+ * which paths they addressed. Both belong here: the team-seat row switched
+ * from an aggregate to a document read (AGL-1113, so site collaborators stop
+ * counting as managers), and a `getDocs` over an org collection is denied to a
+ * scoped collaborator exactly like the `count()` was. Recording only the
+ * aggregate would have quietly dropped the members path from this file's
+ * coverage the moment it changed shape.
  */
 
 import { render, screen, waitFor } from '@testing-library/react'
 
+/** Every org/host path the banner ASKED for, by count() or getDocs(). */
 const countedPaths: string[] = []
 const scope = { orgWide: true, loaded: false }
 const currentOrg: { org: Record<string, unknown>; orgId: string } = {
@@ -48,6 +54,17 @@ jest.mock('firebase/firestore', () => ({
   getCountFromServer: jest.fn((path: string) => {
     countedPaths.push(path)
     return Promise.resolve({ data: () => ({ count: 3 }) })
+  }),
+  // Three org-wide members, matching the count the aggregate used to return,
+  // so the seat row still reads 3 used and every quota assertion below is
+  // unchanged by the AGL-1113 switch.
+  getDocs: jest.fn((path: string) => {
+    countedPaths.push(path)
+    return Promise.resolve({
+      docs: [1, 2, 3].map(() => ({
+        data: () => ({ role: 'admin', allHosts: true, hostAccess: {} }),
+      })),
+    })
   }),
 }))
 

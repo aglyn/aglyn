@@ -20,6 +20,7 @@ import {
   canWriteHost,
   generateOrgSlug,
   hostRoleFor,
+  countManagerSeats,
   isOrgWideMember,
   isOrgWideMembership,
   isValidOrgSlug,
@@ -136,6 +137,51 @@ describe('isOrgWideMember (AGL-1038)', () => {
   it('denies a missing member', () => {
     expect(isOrgWideMember(null)).toBe(false)
     expect(isOrgWideMember(undefined)).toBe(false)
+  })
+})
+
+describe('countManagerSeats (AGL-1113)', () => {
+  // The roster that caused the bug: three managers and four site-scoped
+  // collaborators in one `orgs/{id}/members` collection. A raw count billed
+  // seven manager seats and tripped the gate on plans allowing five.
+  const roster = [
+    { role: 'owner' as const, allHosts: true, hostAccess: {} },
+    { role: 'admin' as const, allHosts: true, hostAccess: {} },
+    { role: 'editor' as const, allHosts: true, hostAccess: {} },
+    { role: 'editor' as const, allHosts: false, hostAccess: { h1: 'editor' as const } },
+    { role: 'editor' as const, allHosts: false, hostAccess: { h2: 'editor' as const } },
+    { role: 'viewer' as const, allHosts: false, hostAccess: { h1: 'viewer' as const } },
+    { role: 'viewer' as const, allHosts: false, hostAccess: {} },
+  ]
+
+  it('counts managers and never site collaborators', () => {
+    expect(roster).toHaveLength(7)
+    expect(countManagerSeats(roster)).toBe(3)
+  })
+
+  it('counts an admin as a manager even when scoped to one site', () => {
+    // Matches isOrgWideMember: role wins over the flag, which is exactly why
+    // a Firestore `where('allHosts','==',true)` count cannot replace this.
+    expect(
+      countManagerSeats([
+        { role: 'admin', allHosts: false, hostAccess: { h1: 'editor' } },
+      ]),
+    ).toBe(1)
+  })
+
+  it('counts a legacy pre-allHosts membership as a manager', () => {
+    expect(countManagerSeats([{ role: 'editor' }])).toBe(1)
+  })
+
+  it('is zero for an all-collaborator roster and tolerates gaps', () => {
+    expect(
+      countManagerSeats([
+        { role: 'viewer', allHosts: false, hostAccess: { h1: 'viewer' } },
+        null,
+        undefined,
+      ]),
+    ).toBe(0)
+    expect(countManagerSeats([])).toBe(0)
   })
 })
 
