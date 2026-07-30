@@ -40,6 +40,7 @@ export {
 export type {
   AglynOrgBilling,
   OrgBrandingProfile,
+  OrgDiscount,
   OrgEntitlements,
   OrgFeatureFlags,
   OrgPlan,

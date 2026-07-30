@@ -27,6 +27,9 @@ export enum Route {
   ADMIN_ORG_DETAIL = '/admin/orgs/[orgId]',
   ADMIN_ORG_HOST_DETAIL = '/admin/orgs/[orgId]/host/[hostId]',
   ADMIN_OVERVIEW = '/admin/overview',
+  // Staff coupon management (AGL-1105): create discount coupons + promotion
+  // codes and read the live net-margin rating before committing to one.
+  ADMIN_COUPONS = '/admin/coupons',
   ADMIN_AUDIT = '/admin/audit',
   ADMIN_USERS = '/admin/users',
   ADMIN_USER_DETAIL = '/admin/users/[uid]',
@@ -157,6 +160,7 @@ export interface RoutePayload {
   [Route.ADMIN_ORG_DETAIL]: { orgId: string }
   [Route.ADMIN_ORG_HOST_DETAIL]: { orgId: string; hostId: string }
   [Route.ADMIN_OVERVIEW]: undefined
+  [Route.ADMIN_COUPONS]: undefined
   [Route.ADMIN_AUDIT]: undefined
   [Route.ADMIN_USERS]: undefined
   [Route.ADMIN_USER_DETAIL]: { uid: string }

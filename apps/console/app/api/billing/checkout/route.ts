@@ -123,6 +123,11 @@ async function handler(request: Request): Promise<Response> {
       client_reference_id: orgId,
       'subscription_data[metadata][orgId]': orgId,
       'subscription_data[metadata][plan]': plan,
+      // Self-serve promo codes (AGL-1105): show the "Add promotion code" field
+      // so a customer can redeem a staff-created code (Coupons page) at
+      // checkout. Stripe validates the code and the discount rides the
+      // resulting subscription; the webhook mirrors it onto org.discount.
+      allow_promotion_codes: 'true',
       ...(decoded.email ? { customer_email: decoded.email } : {}),
     })
 
