@@ -21,8 +21,9 @@ import {
   ICON_VARIANT_MODIFY_ADD,
   ICON_VARIANT_ORGANIZATION,
   ICON_VARIANT_SYMBOL_CONFIRMED,
+  ICON_VARIANT_SYMBOL_SECURE,
 } from '@aglyn/shared-data-enums'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Avatar,
   Box,
@@ -36,13 +37,14 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { ENTERPRISE_PLAN_LABEL, isEnterpriseOrg } from '@aglyn/aglyn'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgPlans } from '../hooks/use-org-plans'
 import { useOrgScope } from '../hooks/use-org-scope'
+import { resolveNavSection } from '../hooks/use-secondary-nav'
 import CreateOrgDialog from './create-org-dialog.component'
 import SwitcherSearchField from './switcher-search-field.component'
 
@@ -62,6 +64,7 @@ const titleCase = (value?: string) =>
  */
 export function OrgSwitcherNav() {
   const { orgs, currentOrg, orgSlug } = useOrgScope()
+  const pathname = usePathname()
   // The full current-org doc carries the logo (AGL-363) and plan for the badge.
   const { org, ready: orgReady } = useCurrentOrg()
   const logoUrl = (org as any)?.logoUrl as string | undefined
@@ -104,6 +107,28 @@ export function OrgSwitcherNav() {
       return
     }
     router.push(href)
+  }
+
+  // Staff console (AGL-1119): there is no org scope here, and with no
+  // `orgSlug` in the URL the scope silently fell back to the staff member's
+  // OWN org — so a staff page was chromed "Aglyn LLC · Enterprise", claiming
+  // a workspace context the page does not have. Show what this actually is
+  // instead, linked to the real org picker (the staff Organizations list).
+  // A specific org's staff detail page is fine to label with that org, but
+  // it reaches this component with no orgSlug either, so the label stays
+  // put — the org's name is already the page's own heading.
+  if (resolveNavSection(pathname).kind === 'admin') {
+    return (
+      <Button
+        component={AppLink}
+        href={buildRoute(Route.ADMIN_ORGS)}
+        color="inherit"
+        startIcon={<MdiIcon path={ICON_VARIANT_SYMBOL_SECURE.path} />}
+        sx={{ textTransform: 'none', fontWeight: 600 }}
+      >
+        {'Staff Console'}
+      </Button>
+    )
   }
 
   if (!currentOrg) return null

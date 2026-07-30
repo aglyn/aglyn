@@ -63,6 +63,44 @@ describe('resolveNavSection', () => {
   it('treats a null pathname as no section', () => {
     expect(resolveNavSection(null)).toEqual({ kind: 'none', base: '' })
   })
+
+  /**
+   * AGL-1119: the org switcher and the site switcher are chosen off this
+   * predicate. Both used to render unconditionally, so a staff page was
+   * chromed with the staff member's OWN workspace ("Aglyn LLC · Enterprise")
+   * and "All sites" — a workspace context the page does not have.
+   *
+   * Asserting the predicate rather than the components on purpose: the bug
+   * was that neither component ASKED the question, so what needs pinning is
+   * that every staff path answers `admin` and no customer path does. A staff
+   * route that stopped classifying as `admin` would silently restore the
+   * personal-org chrome.
+   */
+  it.each([
+    '/admin',
+    '/admin/orgs',
+    '/admin/orgs/jWmGooWE3L',
+    '/admin/users/abc123',
+    '/admin/plugin-reviews/xyz',
+  ])('routes %s to the staff chrome', (pathname) => {
+    expect(resolveNavSection(pathname).kind).toBe('admin')
+  })
+
+  it.each([
+    `/${ORG}/team`,
+    `/${ORG}/billing`,
+    `/${ORG}/hosts/${HOST}/screens/list`,
+    '/manage/notifications',
+  ])('leaves %s on the workspace chrome', (pathname) => {
+    expect(resolveNavSection(pathname).kind).not.toBe('admin')
+  })
+
+  it('does not mistake an org slug that merely starts with "admin"', () => {
+    // Segment equality, not a prefix test — an org could legitimately be
+    // slugged `administration`, and matching on a prefix would strip its
+    // workspace chrome and hand it the staff header.
+    expect(resolveNavSection('/administration/team').kind).toBe('org')
+  })
 })
 
 describe('resolveActiveTab', () => {
