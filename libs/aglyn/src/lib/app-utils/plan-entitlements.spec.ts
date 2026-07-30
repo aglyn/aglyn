@@ -24,8 +24,12 @@ import {
   checkDiscountMargin,
   checkEntitlement,
   isBillingSubscription,
+  isCustomPricedPlan,
   isEnterpriseOrg,
   applyDiscountUsd,
+  ENTERPRISE_PLAN_LABEL,
+  PLAN_LABELS,
+  SELF_SERVE_PLANS,
   orgListPriceMonthlyUsd,
   orgMonthlyRevenueUsd,
   orgNetMonthlyRevenueUsd,
@@ -101,26 +105,38 @@ describe('plan entitlements', () => {
       scale: [15, UNLIMITED, UNLIMITED],
       advanced: [25, UNLIMITED, UNLIMITED],
       agency: [100, UNLIMITED, UNLIMITED],
+      // Enterprise (AGL-1118): uncapped at the top of the ladder.
+      enterprise: [UNLIMITED, UNLIMITED, UNLIMITED],
     })
-    // Media storage exceeds the published-site cap by design (AGL-67).
-    for (const plan of Object.values(PLAN_ENTITLEMENTS)) {
+    // Media storage exceeds the published-site cap by design (AGL-67) —
+    // vacuous on Enterprise, where both are unbounded, so it is pinned as
+    // unbounded rather than skipped silently.
+    expect(PLAN_ENTITLEMENTS.enterprise.storagePerHostMb).toBe(UNLIMITED)
+    expect(PLAN_ENTITLEMENTS.enterprise.totalSiteSizeMb).toBe(UNLIMITED)
+    for (const [name, plan] of Object.entries(PLAN_ENTITLEMENTS)) {
+      if (name === 'enterprise') continue
       expect(plan.storagePerHostMb).toBeGreaterThan(plan.totalSiteSizeMb)
     }
     expect(PLAN_ENTITLEMENTS.starter.features.removeBranding).toBe(true)
-    // White-label (White-Label Phase 1): Agency tier only; every other tier
-    // — including Advanced — is off by default. Distinct from removeBranding,
-    // which paid tiers all carry.
+    // White-label (White-Label Phase 1): Agency and Enterprise only; every
+    // other tier — including Advanced — is off by default. Distinct from
+    // removeBranding, which paid tiers all carry.
     expect(PLAN_ENTITLEMENTS.agency.features.whiteLabel).toBe(true)
+    expect(PLAN_ENTITLEMENTS.enterprise.features.whiteLabel).toBe(true)
     for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
-      if (plan === 'agency') continue
+      if (plan === 'agency' || plan === 'enterprise') continue
       expect(PLAN_ENTITLEMENTS[plan].features.whiteLabel).toBe(false)
     }
-    // SSO (AGL-1101): Enterprise-only via a per-org override — off on EVERY
-    // base plan, including Agency (distinct from white-label by design).
+    // SSO (AGL-1101/1118): the Enterprise differentiator — on for the
+    // `enterprise` plan, off on EVERY other base plan including Agency
+    // (distinct from white-label by design).
+    expect(PLAN_ENTITLEMENTS.enterprise.features.ssoEnabled).toBe(true)
     for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
+      if (plan === 'enterprise') continue
       expect(PLAN_ENTITLEMENTS[plan].features.ssoEnabled).toBe(false)
     }
-    // But a per-org entitlement override grants it (the Enterprise path).
+    // A per-org entitlement override still grants it on a lower tier (the
+    // path an enterprise org provisioned before AGL-1118 came in on).
     expect(
       checkEntitlement(
         {
@@ -246,7 +262,108 @@ describe('plan entitlements', () => {
         extraApiRequestsUsdPer1k: 0.15,
         extraContactsUsdPer1k: 0.2,
       },
+      // Enterprise (AGL-1118) is quoted per deal — these zeros/nulls are the
+      // "no list price" sentinel, NOT a $0 offer. `isCustomPricedPlan` is how
+      // a surface tells the two apart; a free plan is priced 0 and sold.
+      enterprise: {
+        basePriceMonthlyUsd: 0,
+        basePriceAnnualMonthlyUsd: 0,
+        extraHostMonthlyUsd: null,
+        extraSeatMonthlyUsd: null,
+        extraCollaboratorMonthlyUsd: null,
+        extraDatasetMonthlyUsd: null,
+        extraDataGbMonthlyUsd: null,
+        extraApiRequestsUsdPer1k: null,
+        extraContactsUsdPer1k: null,
+      },
     })
+    expect(isCustomPricedPlan('enterprise')).toBe(true)
+    for (const plan of SELF_SERVE_PLANS) {
+      expect(isCustomPricedPlan(plan)).toBe(false)
+    }
+  })
+
+  it('excludes enterprise from the self-serve tiers (AGL-1118)', () => {
+    // The plan-cards grid and the marketing pricing table iterate
+    // SELF_SERVE_PLANS. If a new plan is added to PLAN_ENTITLEMENTS it must
+    // either be sellable (listed here) or custom-priced — never silently
+    // absent from both, which is how a tier goes missing from pricing.
+    expect(SELF_SERVE_PLANS).toEqual([
+      'free',
+      'starter',
+      'pro',
+      'business',
+      'scale',
+      'advanced',
+      'agency',
+    ])
+    const all = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
+    expect(SELF_SERVE_PLANS).not.toContain('enterprise')
+    for (const plan of all) {
+      expect(
+        SELF_SERVE_PLANS.includes(plan) || isCustomPricedPlan(plan),
+      ).toBe(true)
+    }
+    // Every plan has a label — the one source plan badges read.
+    for (const plan of all) {
+      expect(PLAN_LABELS[plan]).toBeTruthy()
+    }
+    expect(PLAN_LABELS.enterprise).toBe('Enterprise')
+    expect(ENTERPRISE_PLAN_LABEL).toBe(PLAN_LABELS.enterprise)
+  })
+
+  it('gives the enterprise plan uncapped entitlements + SSO (AGL-1118)', () => {
+    const org = { plan: 'enterprise' } as any
+    const resolved = resolveOrgEntitlements(org)
+    // Every numeric quota is unbounded — nothing hard-walls an enterprise deal.
+    for (const [key, value] of Object.entries(resolved)) {
+      if (key === 'features') continue
+      if (key === 'transactionFeePhysicalPct') continue
+      if (key === 'transactionFeeDigitalPct') continue
+      expect([key, value]).toEqual([key, UNLIMITED])
+    }
+    expect(resolved.transactionFeePhysicalPct).toBe(0)
+    expect(resolved.transactionFeeDigitalPct).toBe(0)
+    // The two Enterprise differentiators come from the PLAN now, with no
+    // per-org entitlement override needed.
+    expect(checkEntitlement(org, 'ssoEnabled')).toBe(true)
+    expect(checkEntitlement(org, 'whiteLabel')).toBe(true)
+    // Quota gates never trip.
+    expect(checkQuota(org, 'hostLimit', 10_000).allowed).toBe(true)
+    expect(checkSeatQuota(org, 'managers', 10_000).allowed).toBe(true)
+    expect(checkSeatQuota(org, 'members', 10_000).allowed).toBe(true)
+    expect(checkDatasetQuota(org, 10_000).allowed).toBe(true)
+    expect(checkDataStorageQuota(org, 10_000_000).allowed).toBe(true)
+    expect(checkApiRequestQuota(org, 10_000_000).allowed).toBe(true)
+    expect(checkContactQuota(org, 10_000_000).allowed).toBe(true)
+    // And it reads as Enterprise everywhere the plan is shown, with no
+    // custom price and no comped marker needed.
+    expect(isEnterpriseOrg(org)).toBe(true)
+  })
+
+  it('reports no list-price revenue for an enterprise org without a deal price', () => {
+    // The negotiated price is the truth (AGL-1110). A plan-only enterprise org
+    // must NOT inherit Agency's $799 — reporting a price nobody agreed to is
+    // worse than reporting none, and the enterprise-billing flow always writes
+    // `customMonthlyUsd` for a paying deal.
+    const noPrice = {
+      plan: 'enterprise',
+      subscription: { status: 'active', interval: 'month' },
+    } as any
+    expect(orgListPriceMonthlyUsd(noPrice)).toBe(0)
+    expect(orgMonthlyRevenueUsd(noPrice)).toBe(0)
+    // With a deal price it reports exactly that.
+    const priced = {
+      ...noPrice,
+      subscription: { ...noPrice.subscription, customMonthlyUsd: 4500 },
+    }
+    expect(orgListPriceMonthlyUsd(priced)).toBe(4500)
+    // Comped enterprise (Aglyn's own org): 100% off collects $0.
+    const comped = {
+      ...priced,
+      discount: { percentOff: 100, couponId: 'co_x', appliedBy: 'staff' },
+    }
+    expect(orgMonthlyRevenueUsd(comped)).toBe(0)
   })
 
   it('pins the AGL-112 seat table', () => {
@@ -270,6 +387,7 @@ describe('plan entitlements', () => {
       business: [15, 100, 50, 100],
       scale: [25, 150, 75, 150],
       agency: [100, 500, 250, 1000],
+      enterprise: [UNLIMITED, UNLIMITED, UNLIMITED, UNLIMITED],
     })
   })
 
@@ -852,7 +970,9 @@ describe('plan entitlements', () => {
       )
     })
 
-    it('isEnterpriseOrg is true only for a custom-priced billing org', () => {
+    it('isEnterpriseOrg covers the real plan, a custom price, and the comped flag', () => {
+      // The real plan (AGL-1118) qualifies on its own — no price, no marker.
+      expect(isEnterpriseOrg({ plan: 'enterprise' } as any)).toBe(true)
       const custom = {
         plan: 'agency',
         subscription: {

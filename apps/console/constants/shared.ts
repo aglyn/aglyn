@@ -40,6 +40,14 @@ export const LEGAL_URLS = {
   PRIVACY: 'https://aglyn.com/legal/privacy',
 }
 
+/**
+ * Where an Enterprise enquiry goes (AGL-1118). Enterprise is the one tier with
+ * no list price and no self-serve checkout — its card links here instead of an
+ * Upgrade button. Same posture as `LEGAL_URLS`: an absolute marketing-site URL
+ * opened in a new tab, a full navigation rather than in-SPA routing.
+ */
+export const ENTERPRISE_CONTACT_URL = 'https://aglyn.com/contact?plan=enterprise'
+
 export const mainNavigation = [
   // {
   //   children: 'Features',

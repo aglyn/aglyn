@@ -540,12 +540,133 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dropshipRouting: true,
       commerceAnalytics: true,
       // White-Label Phase 1: the Agency-tier ($799) differentiator. Only
-      // this tier ships white-label by default; Enterprise inherits via a
-      // per-org `entitlements` override.
+      // this tier and Enterprise ship white-label by default.
       whiteLabel: true,
       ssoEnabled: false,
     },
   },
+  // Enterprise (AGL-1118): the top of the ladder and the ONLY custom-priced
+  // tier — staff-provisioned per deal (AGL-1110), never sold self-serve, so it
+  // is excluded from `SELF_SERVE_PLANS` and carries no list price in
+  // `PLAN_PRICING`. Capacity is Agency's, uncapped: EVERY quota is UNLIMITED,
+  // byte-size ones included — infra cost is metered and priced into the deal,
+  // so a hard wall would only break a customer already paying for the usage.
+  // This is the one tier where the AGL-67 "media storage exceeds the
+  // published-site cap" invariant is vacuous: both are unbounded.
+  // White-label AND SSO ship on the plan itself rather than through the
+  // per-org `entitlements` override that Enterprise-as-a-label needed.
+  enterprise: {
+    hostLimit: UNLIMITED,
+    screensPerHost: UNLIMITED,
+    sharedLayoutsPerHost: UNLIMITED,
+    templatesPerHost: UNLIMITED,
+    storagePerHostMb: UNLIMITED,
+    totalSiteSizeMb: UNLIMITED,
+    membersPerHost: UNLIMITED,
+    managersPerOrg: UNLIMITED,
+    maxManagersPerOrg: UNLIMITED,
+    maxMembersPerHost: UNLIMITED,
+    bandwidthGb: UNLIMITED,
+    formSubmissionsPerMonth: UNLIMITED,
+    variablesPerHost: UNLIMITED,
+    functionsPerHost: UNLIMITED,
+    workflowsPerHost: UNLIMITED,
+    workflowRunsPerMonth: UNLIMITED,
+    servicesPerHost: UNLIMITED,
+    redirectsPerHost: UNLIMITED,
+    contactsPerHost: UNLIMITED,
+    emailSendsPerMonth: UNLIMITED,
+    actionRunsPerMonth: UNLIMITED,
+    apiRequestsPerMonth: UNLIMITED,
+    datasetsPerOrg: UNLIMITED,
+    maxDatasetsPerOrg: UNLIMITED,
+    recordsPerDataset: UNLIMITED,
+    dataStorageMbPerOrg: UNLIMITED,
+    productsPerHost: UNLIMITED,
+    inventoryLocations: UNLIMITED,
+    posRegisters: UNLIMITED,
+    transactionFeePhysicalPct: 0,
+    transactionFeeDigitalPct: 0,
+    features: {
+      abTesting: true,
+      versioning: true,
+      reusableComponents: true,
+      customDomain: true,
+      removeBranding: true,
+      scheduledPublishing: true,
+      marketplaceSelling: true,
+      aiAssist: true,
+      workflows: true,
+      dataStore: true,
+      videoMedia: true,
+      bookings: true,
+      interactions: true,
+      actions: true,
+      webhooks: true,
+      apiAccess: true,
+      siteExport: true,
+      multilingual: true,
+      // Event Calendar stays an add-on purchase, as on every other tier.
+      eventCalendar: false,
+      redirects: true,
+      screenAnalytics: true,
+      mediaCdn: true,
+      marketingOverlays: true,
+      commerce: true,
+      pos: true,
+      storefrontSubscriptions: true,
+      contentGating: true,
+      giftCards: true,
+      productReviews: true,
+      abandonedCart: true,
+      dropshipRouting: true,
+      commerceAnalytics: true,
+      whiteLabel: true,
+      // SSO (AGL-1101) is the Enterprise differentiator — the only plan that
+      // carries it by default. Lower tiers still need a per-org override.
+      ssoEnabled: true,
+    },
+  },
+}
+
+/**
+ * The tiers a customer can buy themselves — every plan EXCEPT `enterprise`
+ * (AGL-1118), which is priced per deal and provisioned by staff (AGL-1110).
+ * Any surface that offers plans for sale (the console plan-cards grid, the
+ * marketing pricing table, the plan-change dialog) MUST iterate this rather
+ * than `Object.keys(PLAN_ENTITLEMENTS)`, so a custom-priced tier can never
+ * show a self-serve Upgrade button or a $0 headline price.
+ */
+export const SELF_SERVE_PLANS: OrgPlan[] = [
+  'free',
+  'starter',
+  'pro',
+  'business',
+  'scale',
+  'advanced',
+  'agency',
+]
+
+/**
+ * Whether the plan has no list price and is quoted per deal (AGL-1118).
+ * `PLAN_PRICING` still carries a row for it — the record is exhaustive by
+ * type — but every figure there is 0/null and means "no list price", NOT
+ * "free". Revenue for such an org comes from `subscription.customMonthlyUsd`.
+ */
+export function isCustomPricedPlan(plan: OrgPlan | undefined | null): boolean {
+  return plan === 'enterprise'
+}
+
+/** Human plan names — the ONE source every plan badge/label reads. */
+export const PLAN_LABELS: Record<OrgPlan, string> = {
+  free: 'Free',
+  starter: 'Starter',
+  pro: 'Pro',
+  business: 'Business',
+  scale: 'Scale',
+  advanced: 'Advanced',
+  agency: 'Agency',
+  enterprise: 'Enterprise',
 }
 
 /**
@@ -699,6 +820,25 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraApiRequestsUsdPer1k: 0.15,
     extraContactsUsdPer1k: 0.2,
   },
+  // Enterprise (AGL-1118) has NO list price — every figure here is the
+  // "not for sale" sentinel, not a $0 offer (`isCustomPricedPlan`). The org's
+  // real price is the negotiated `subscription.customMonthlyUsd` the
+  // enterprise-billing flow writes (AGL-1110), which `orgListPriceMonthlyUsd`
+  // already prefers over the plan default; a comped enterprise org genuinely
+  // bills $0, and that is what this row then reports. Nulls also mean the
+  // plan sells no self-serve add-on seats — enterprise capacity is unlimited,
+  // so there is nothing to buy.
+  enterprise: {
+    basePriceMonthlyUsd: 0,
+    basePriceAnnualMonthlyUsd: 0,
+    extraHostMonthlyUsd: null,
+    extraSeatMonthlyUsd: null,
+    extraCollaboratorMonthlyUsd: null,
+    extraDatasetMonthlyUsd: null,
+    extraDataGbMonthlyUsd: null,
+    extraApiRequestsUsdPer1k: null,
+    extraContactsUsdPer1k: null,
+  },
 }
 
 /**
@@ -803,19 +943,27 @@ export function applyDiscountUsd(
 }
 
 /**
- * Whether an org should read as **"Enterprise"** everywhere the plan is shown
- * (AGL-1110). Two ways to qualify:
+ * Whether an org should read as **"Enterprise"** everywhere the plan is shown.
+ * Three ways to qualify:
+ *  - **`plan === 'enterprise'`** — the real plan (AGL-1118). This is the path
+ *    every new enterprise org takes, and the only one that also grants
+ *    Enterprise *entitlements*; the two below are display-only overlays on a
+ *    lower base plan;
  *  - a billing org on a **negotiated custom price** (`customMonthlyUsd > 0`) —
- *    the normal paying-enterprise case, set by the enterprise-billing flow; or
- *  - an explicit **`org.enterprise`** marker — for a *comped* enterprise
- *    account (e.g. Aglyn's own dogfood org: full Enterprise capability + SSO,
- *    100%-discounted so it collects $0, while infra cost is still metered).
- * Either way the base plan (usually `agency`) still drives entitlements; this
- * is display-only. List-priced orgs with neither are not enterprise.
+ *    a paying enterprise deal still parked on its pre-AGL-1118 base plan; or
+ *  - an explicit **`org.enterprise`** marker — a *comped* enterprise account
+ *    (full Enterprise capability + SSO, 100%-discounted so it collects $0,
+ *    while infra cost is still metered).
+ *
+ * The last two are kept for orgs provisioned before `enterprise` was a plan;
+ * migrating such an org to `plan: 'enterprise'` is the clean end state and
+ * changes nothing about how it reads here. List-priced orgs with none of the
+ * three are not enterprise.
  */
 export function isEnterpriseOrg(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
+  if (org?.plan === 'enterprise') return true
   if (org?.enterprise === true) return true
   return (
     isBillingSubscription(org) &&
@@ -823,8 +971,13 @@ export function isEnterpriseOrg(
   )
 }
 
-/** Human label shown for `enterprise` in plan badges. */
-export const ENTERPRISE_PLAN_LABEL = 'Enterprise'
+/**
+ * Human label shown for `enterprise` in plan badges. Kept as a named export
+ * for the surfaces that label a custom-priced org whose stored `plan` is still
+ * a lower tier; a real `plan: 'enterprise'` org gets the same string from
+ * `PLAN_LABELS`.
+ */
+export const ENTERPRISE_PLAN_LABEL = PLAN_LABELS.enterprise
 
 /**
  * The org's monthly recurring revenue in USD — its LIST price

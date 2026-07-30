@@ -31,6 +31,7 @@ import {
   mdiLifebuoy,
   mdiOpenInNew,
 } from '@aglyn/shared-data-mdi'
+import { isEnterpriseOrg, PLAN_LABELS, type OrgPlan } from '@aglyn/aglyn'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useUser, useUserPhoto } from '@aglyn/tenant-feature-instance'
 import {
@@ -56,8 +57,13 @@ import { useIsStaff } from '../hooks/use-is-staff'
 import { useOrgReach } from '../hooks/use-org-reach'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 
-// 'advanced' is the top plan (org-billing.types) — nothing to upgrade to.
-const TOP_PLAN = 'advanced'
+/**
+ * Plans with nothing above them to sell (org-billing.types): `agency` tops the
+ * self-serve ladder since pricing v3, and `enterprise` sits off it entirely
+ * (custom-priced, AGL-1118). Pitching either an upgrade is nonsense — this
+ * used to name only `advanced`, so both saw the CTA.
+ */
+const TOP_PLANS: ReadonlySet<string> = new Set(['agency', 'enterprise'])
 
 /**
  * The account menu in the top bar (AGL-858), redesigned after Vercel's:
@@ -92,13 +98,24 @@ export function UserMenu() {
   const name = user?.displayName || user?.email || 'Account'
   const email = user?.email ?? ''
   const plan = org?.plan
+  const planLabel = isEnterpriseOrg(org)
+    ? PLAN_LABELS.enterprise
+    : plan
+      ? (PLAN_LABELS[plan as OrgPlan] ?? '')
+      : ''
   // Only pitch an upgrade once the org doc has resolved (AGL-887) — while
   // it's loading (or the read failed) `plan` is undefined, which would show
   // the CTA to a top-plan workspace.
   // …and a collaborator cannot buy anything either — the CTA lands on the
   // Billing page they may not open (AGL-1032).
+  // …and an org already reading as Enterprise (custom-priced or comped off a
+  // lower base plan, AGL-1110) has nothing to buy either.
   const showUpgrade =
-    Boolean(orgSlug) && orgReady && plan !== TOP_PLAN && showOrgLinks
+    Boolean(orgSlug) &&
+    orgReady &&
+    !TOP_PLANS.has(String(plan)) &&
+    !isEnterpriseOrg(org) &&
+    showOrgLinks
 
   const themeValue = mode ?? 'system'
 
@@ -290,7 +307,10 @@ export function UserMenu() {
           >
             <Typography variant="caption" color="text.secondary" noWrap component="div">
               {currentOrg.orgName}
-              {plan ? ` · ${plan[0].toUpperCase()}${plan.slice(1)} plan` : ''}
+              {/* One label source (AGL-1118) — a `plan: 'enterprise'` org
+                  reads "Enterprise plan" here without a special case, and a
+                  legacy custom-priced org is relabelled the same way. */}
+              {planLabel ? ` · ${planLabel} plan` : ''}
             </Typography>
           </Box>
         ) : null}

@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   isBillingSubscription,
+  isEnterpriseOrg,
   orgMonthlyRevenueUsd,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
@@ -135,7 +136,12 @@ async function handler(request: Request): Promise<Response> {
           $id: doc.id,
           name: data['name'] ?? null,
           slug: data['slug'] ?? null,
-          plan: plan || null,
+          // Report the plan the org READS as (AGL-1118). `enterprise` is a
+          // real plan now, but an org provisioned before that carries a base
+          // plan plus a custom price / comped marker — listing it as "agency"
+          // is how the staff table kept contradicting the org's own Billing
+          // page.
+          plan: (isEnterpriseOrg(billing) ? 'enterprise' : plan) || null,
           createdAt: createdMs,
         })
       }

@@ -18,7 +18,9 @@
 
 import {
   PLAN_ENTITLEMENTS,
+  PLAN_LABELS,
   PLAN_PRICING,
+  SELF_SERVE_PLANS,
   type OrgPlan,
   UNLIMITED,
 } from '@aglyn/aglyn'
@@ -37,26 +39,16 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
+import { ENTERPRISE_CONTACT_URL } from '../../constants/shared'
 
-export const PLAN_ORDER: OrgPlan[] = [
-  'free',
-  'starter',
-  'pro',
-  'business',
-  'scale',
-  'advanced',
-  'agency',
-]
+/**
+ * The tiers this grid sells, in ladder order. Enterprise is deliberately NOT
+ * here (AGL-1118) — it has no list price and is provisioned by staff, so it
+ * gets its own contact-sales card below the grid instead of an Upgrade button.
+ */
+export const PLAN_ORDER: OrgPlan[] = SELF_SERVE_PLANS
 
-export const PLAN_LABELS: Record<OrgPlan, string> = {
-  free: 'Free',
-  starter: 'Starter',
-  pro: 'Pro',
-  business: 'Business',
-  scale: 'Scale',
-  advanced: 'Advanced',
-  agency: 'Agency',
-}
+export { PLAN_LABELS }
 
 const PLAN_TAGLINES: Record<OrgPlan, string> = {
   free: 'Try Aglyn and publish your first site.',
@@ -66,7 +58,17 @@ const PLAN_TAGLINES: Record<OrgPlan, string> = {
   scale: 'Room to grow — 15 sites and a 1% platform fee.',
   advanced: 'High-volume commerce with zero platform fees.',
   agency: 'Run many sites under one org at agency scale.',
+  enterprise: 'Unlimited everything, SSO, and a dedicated agreement.',
 }
+
+/** What the Enterprise card promises over Agency (the top self-serve tier). */
+const ENTERPRISE_HIGHLIGHTS = [
+  'Unlimited sites, screens, seats, and storage',
+  'SAML / OIDC single sign-on for your whole team',
+  'Full white-label — your brand, not ours',
+  '0% platform fees on every sale',
+  'Custom pricing, invoicing, and terms',
+]
 
 const quotaLabel = (value: number, unit?: string) =>
   value === UNLIMITED ? 'Unlimited' : unit ? `${value} ${unit}` : String(value)
@@ -107,6 +109,14 @@ export interface BillingPlanCardsProps {
    * 'year' shows the discounted annual headline price on every card.
    */
   interval?: 'month' | 'year'
+  /**
+   * True when the org reads as Enterprise (`isEnterpriseOrg`) — either on the
+   * real `enterprise` plan or on a legacy custom-priced/comped arrangement
+   * (AGL-1118). Marks the Enterprise card as the current plan and suppresses
+   * every self-serve CTA: an enterprise agreement is changed by talking to
+   * us, not by clicking Downgrade.
+   */
+  enterprise?: boolean
   onSelect: (plan: OrgPlan) => void
 }
 
@@ -115,12 +125,18 @@ export interface BillingPlanCardsProps {
  * tier, driven entirely from PLAN_ENTITLEMENTS/PLAN_PRICING. The current
  * plan is outlined and the next tier up is emphasized as the recommended
  * upgrade; lower tiers get a Downgrade CTA.
+ *
+ * Only the SELF-SERVE tiers appear in the grid (AGL-1118). Enterprise is
+ * custom-priced and staff-provisioned, so it gets a full-width contact-sales
+ * card after the grid — never a price and never a checkout button.
  */
 export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
-  const { plan, interval = 'month', onSelect } = props
-  const currentIndex = plan ? PLAN_ORDER.indexOf(plan) : -1
+  const { plan, interval = 'month', enterprise = false, onSelect } = props
+  // An enterprise org sits above the ladder: nothing in the grid is its
+  // "current" plan, and nothing there is an upgrade for it either.
+  const currentIndex = enterprise || !plan ? -1 : PLAN_ORDER.indexOf(plan)
   const recommendedIndex =
-    currentIndex >= 0 && currentIndex < PLAN_ORDER.length - 1
+    !enterprise && currentIndex >= 0 && currentIndex < PLAN_ORDER.length - 1
       ? currentIndex + 1
       : -1
 
@@ -129,7 +145,11 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
       {PLAN_ORDER.map((tier, index) => {
         const entitlements = PLAN_ENTITLEMENTS[tier]
         const pricing = PLAN_PRICING[tier]
-        const isCurrent = tier === plan
+        // An enterprise org's stored `plan` may still be the base tier it was
+        // provisioned on (AGL-1110) — marking that tier "Current plan" put a
+        // second green badge in the grid next to the Enterprise card's. The
+        // Enterprise card is the only current one for such an org.
+        const isCurrent = !enterprise && tier === plan
         const isRecommended = index === recommendedIndex
         return (
           <Grid key={tier} size={{ xs: 12, sm: 6, lg: 3 }}>
@@ -183,7 +203,14 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                 >
                   {PLAN_TAGLINES[tier]}
                 </Typography>
-                {!isCurrent ? (
+                {enterprise ? (
+                  // An enterprise agreement is not swapped for a list-price
+                  // tier from this grid (AGL-1118) — the change goes through
+                  // whoever owns the contract.
+                  <Button fullWidth size="small" disabled sx={{ mb: 1.5 }}>
+                    {'Contact us to change'}
+                  </Button>
+                ) : !isCurrent ? (
                   <Button
                     fullWidth
                     size="small"
@@ -329,6 +356,85 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
           </Grid>
         )
       })}
+      {/* Enterprise (AGL-1118): custom-priced, so it shows what it includes
+          and how to get it — never a headline price or a checkout button. */}
+      <Grid size={{ xs: 12 }}>
+        <Card
+          variant="outlined"
+          sx={{
+            borderColor: enterprise ? 'success.main' : 'divider',
+            borderWidth: enterprise ? 2 : 1,
+          }}
+        >
+          <CardContent>
+            <Stack
+              direction={{ xs: 'column', md: 'row' }}
+              spacing={2}
+              sx={{ justifyContent: 'space-between' }}
+            >
+              <Stack spacing={1} sx={{ flex: 1 }}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <Typography variant="h6">
+                    {PLAN_LABELS.enterprise}
+                  </Typography>
+                  {enterprise ? (
+                    <Chip label="Current plan" color="success" size="small" />
+                  ) : null}
+                </Stack>
+                <Typography variant="h5" component="p">
+                  {'Custom pricing'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {PLAN_TAGLINES.enterprise}
+                </Typography>
+              </Stack>
+              <Stack spacing={0.5} sx={{ flex: 2 }}>
+                {ENTERPRISE_HIGHLIGHTS.map((label) => (
+                  <Stack
+                    key={label}
+                    direction="row"
+                    spacing={0.75}
+                    sx={{ alignItems: 'center' }}
+                  >
+                    <MdiIcon
+                      fontSize="inherit"
+                      sx={{ color: 'success.main' }}
+                      path={ICON_VARIANT_SYMBOL_CONFIRMED.path}
+                    />
+                    <Typography variant="body2">{label}</Typography>
+                  </Stack>
+                ))}
+              </Stack>
+              <Stack
+                spacing={1}
+                sx={{ flex: 1, justifyContent: 'center', minWidth: 200 }}
+              >
+                {enterprise ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {'Your organization is on an Enterprise agreement — ' +
+                      'reach out for any change to it.'}
+                  </Typography>
+                ) : (
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    color="secondary"
+                    href={ENTERPRISE_CONTACT_URL}
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    {'Contact sales'}
+                  </Button>
+                )}
+              </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
+      </Grid>
     </Grid>
   )
 }

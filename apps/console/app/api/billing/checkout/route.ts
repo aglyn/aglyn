@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
+import {
+  buildRoute,
+  isCustomPricedPlan,
+  pluginRequestFromWeb,
+  Route,
+  type OrgPlan,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -58,6 +64,17 @@ async function handler(request: Request): Promise<Response> {
   }
   const secretKey = process.env.STRIPE_SECRET_KEY
   const plan = String(body?.plan ?? '')
+  // Enterprise is quoted per deal and provisioned by staff (AGL-1110/1118) —
+  // it is never sold through checkout. Rejected EXPLICITLY rather than left to
+  // fall through the missing-price branch below, which would answer "billing
+  // is not configured" (a 501 that reads as our bug) and would start selling
+  // the plan the moment someone added a STRIPE_PRICE_ENTERPRISE env.
+  if (isCustomPricedPlan(plan as OrgPlan)) {
+    return Response.json(
+      { error: 'Enterprise is custom-priced — contact sales.' },
+      { status: 400 },
+    )
+  }
   // Billing interval (AGL-269): 'year' maps to the *_YEARLY price ids.
   const interval = body?.interval === 'year' ? 'year' : 'month'
   const priceId =
