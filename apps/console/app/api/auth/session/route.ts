@@ -25,6 +25,11 @@ import { parseSignedOut, signedOutTombstone } from './session-tombstone'
 export const dynamic = 'force-dynamic'
 
 const SESSION_COOKIE = '__session'
+// Enterprise SSO (AGL-1101): a session minted from a GCIP-tenant ID token must
+// be verified + exchanged against THAT tenant, but the `__session` cookie is
+// opaque. This sidecar records the tenant so the GET exchange picks the right
+// `authForTenant`. Absent → default-tenant session (the unchanged path).
+const SESSION_TENANT_COOKIE = '__session_tenant'
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 
@@ -55,10 +60,14 @@ function cookieAttributes(request: Request, maxAgeSeconds: number) {
 function jsonWithCookie(
   body: unknown,
   status: number,
-  cookie?: string,
+  cookie?: string | string[],
 ): Response {
   const response = Response.json(body, { status })
-  if (cookie) response.headers.set('Set-Cookie', cookie)
+  // Multiple Set-Cookie headers (AGL-1101: session + tenant sidecar) must each
+  // be appended — `set` would collapse them into one.
+  for (const value of cookie == null ? [] : [cookie].flat()) {
+    response.headers.append('Set-Cookie', value)
+  }
   return response
 }
 
@@ -95,17 +104,26 @@ async function handler(request: Request): Promise<Response> {
       // Exception (AGL-480): staff impersonation sessions (impersonatedBy
       // claim) are exempt, so an impersonated owner's unverified email
       // doesn't strand the support session — including across workspaces.
+      // SSO (AGL-1101): read the tenant off the token so the cookie is minted
+      // by the matching tenant auth. The default `verifyIdToken` validates a
+      // tenant token fine and exposes `firebase.tenant`; the mint below then
+      // re-validates against that tenant.
+      let tenantId: string | undefined
       try {
         const decoded = await auth.verifyIdToken(idToken)
         if (!decoded.email_verified && !isImpersonationSession(decoded)) {
           return emailUnverifiedResponse()
         }
+        tenantId = decoded.firebase?.tenant
       } catch {
         return Response.json({ error: 'Unauthenticated' }, { status: 401 })
       }
+      const signAuth = tenantId
+        ? auth.tenantManager().authForTenant(tenantId)
+        : auth
       let sessionCookie: string
       try {
-        sessionCookie = await auth.createSessionCookie(idToken, {
+        sessionCookie = await signAuth.createSessionCookie(idToken, {
           expiresIn: SESSION_TTL_MS,
         })
       } catch (error) {
@@ -123,11 +141,13 @@ async function handler(request: Request): Promise<Response> {
           { status: 401 },
         )
       }
-      return jsonWithCookie(
-        { ok: true },
-        200,
+      // Pair the session cookie with the tenant sidecar (set to the tenant, or
+      // cleared for a default-tenant session so a stale tenant cookie from a
+      // prior SSO login can't mis-route this one).
+      return jsonWithCookie({ ok: true }, 200, [
         `${SESSION_COOKIE}=${sessionCookie}; ${cookieAttributes(request, SESSION_TTL_MS / 1000)}`,
-      )
+        `${SESSION_TENANT_COOKIE}=${tenantId ?? ''}; ${cookieAttributes(request, tenantId ? SESSION_TTL_MS / 1000 : 0)}`,
+      ])
     }
 
     if (request.method === 'GET') {
@@ -154,8 +174,16 @@ async function handler(request: Request): Promise<Response> {
           { status: 401 },
         )
       }
+      // SSO (AGL-1101): an SSO session cookie was minted by a GCIP tenant, so
+      // verify + re-mint against that tenant. The client sets `auth.tenantId`
+      // from the same sidecar before `signInWithCustomToken`, keeping the
+      // silent cross-subdomain sign-in in-tenant.
+      const sessionTenantId = readCookie(request, SESSION_TENANT_COOKIE) || undefined
+      const sessionAuth = sessionTenantId
+        ? auth.tenantManager().authForTenant(sessionTenantId)
+        : auth
       try {
-        const decoded = await auth.verifySessionCookie(cookie, true)
+        const decoded = await sessionAuth.verifySessionCookie(cookie, true)
         // Carry the impersonation claim through the cross-subdomain exchange
         // (AGL-480). The session cookie preserves it, but the re-minted custom
         // token would drop it — losing the banner and re-tripping the
@@ -166,8 +194,11 @@ async function handler(request: Request): Promise<Response> {
               impersonatedByEmail: decoded['impersonatedByEmail'] ?? null,
             }
           : undefined
-        const token = await auth.createCustomToken(decoded.uid, developerClaims)
-        return Response.json({ token }, { status: 200 })
+        const token = await sessionAuth.createCustomToken(
+          decoded.uid,
+          developerClaims,
+        )
+        return Response.json({ token, tenantId: sessionTenantId ?? null }, { status: 200 })
       } catch (error) {
         const code = (error as { code?: string })?.code ?? ''
         // AGL-467: surface WHY the exchange failed. A `createCustomToken`
@@ -187,11 +218,10 @@ async function handler(request: Request): Promise<Response> {
             : code === 'auth/session-cookie-expired'
               ? 'expired'
               : 'invalid'
-        return jsonWithCookie(
-          { error: 'Session invalid', reason },
-          401,
+        return jsonWithCookie({ error: 'Session invalid', reason }, 401, [
           `${SESSION_COOKIE}=; ${cookieAttributes(request, 0)}`,
-        )
+          `${SESSION_TENANT_COOKIE}=; ${cookieAttributes(request, 0)}`,
+        ])
       }
     }
 
@@ -200,11 +230,10 @@ async function handler(request: Request): Promise<Response> {
       // subdomains read this as "signed out elsewhere" — but only if the
       // sign-out is newer than their last sign-in — while a truly absent
       // cookie no longer signs anyone out.
-      return jsonWithCookie(
-        { ok: true },
-        200,
+      return jsonWithCookie({ ok: true }, 200, [
         `${SESSION_COOKIE}=${signedOutTombstone(Date.now())}; ${cookieAttributes(request, SESSION_TTL_MS / 1000)}`,
-      )
+        `${SESSION_TENANT_COOKIE}=; ${cookieAttributes(request, 0)}`,
+      ])
     }
 
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
