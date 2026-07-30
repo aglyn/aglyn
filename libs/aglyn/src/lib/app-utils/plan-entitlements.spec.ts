@@ -24,6 +24,8 @@ import {
   checkEntitlement,
   isBillingSubscription,
   orgMonthlyRevenueUsd,
+  orgNetMonthlyRevenueUsd,
+  netOfProcessorFee,
   resolveBrandingProfile,
   resolveEffectivePlan,
   checkQuota,
@@ -658,6 +660,41 @@ describe('plan entitlements', () => {
           seatAddons: { hosts: 2, posRegisters: 1, eventCalendar: 1 },
         } as any),
       ).toBe(139 + 2 * 5 + 89 + 9)
+    })
+  })
+
+  describe('net revenue / processor fee (AGL-1108)', () => {
+    it('subtracts Stripe 2.9% + 30¢ from a monthly-billed org', () => {
+      expect(
+        orgNetMonthlyRevenueUsd({
+          plan: 'pro',
+          subscription: { status: 'active', interval: 'month' },
+        } as any),
+      ).toBeCloseTo(56 * (1 - 0.029) - 0.3, 2)
+    })
+
+    it('amortizes the fixed 30¢ over 12 months for annual billing', () => {
+      expect(
+        orgNetMonthlyRevenueUsd({
+          plan: 'business',
+          subscription: { status: 'active', interval: 'year' },
+        } as any),
+      ).toBeCloseTo(99 * (1 - 0.029) - 0.3 / 12, 2)
+    })
+
+    it('is 0 for a non-billing org', () => {
+      expect(orgNetMonthlyRevenueUsd({ plan: 'free' } as any)).toBe(0)
+      expect(
+        orgNetMonthlyRevenueUsd({
+          plan: 'pro',
+          subscription: { status: 'canceled' },
+        } as any),
+      ).toBe(0)
+    })
+
+    it('netOfProcessorFee never returns below 0', () => {
+      expect(netOfProcessorFee(0.1)).toBe(0)
+      expect(netOfProcessorFee(-5)).toBe(0)
     })
   })
 

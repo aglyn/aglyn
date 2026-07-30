@@ -757,6 +757,49 @@ export function orgMonthlyRevenueUsd(
 }
 
 /**
+ * Stripe's standard processing fee on Aglyn's OWN subscription charges
+ * (AGL-1108) — 2.9% + $0.30 per charge. This is the fee Aglyn pays Stripe to
+ * collect a subscription; it is DISTINCT from the storefront platform fee
+ * (`transactionFee*Pct`, the Connect `application_fee`) that a seller's own
+ * Stripe pays on their storefront sales. Revenue/margin should be reasoned on
+ * the NET figure, not gross.
+ */
+export const STRIPE_PROCESSOR_FEE_PCT = 0.029
+export const STRIPE_PROCESSOR_FEE_FIXED_USD = 0.3
+
+/**
+ * A gross monthly USD amount net of Stripe's processing fee. Annual
+ * subscriptions are charged once per year, so the fixed 30¢ amortizes to
+ * $0.30/12 per month; monthly subscriptions pay it every month. Never
+ * returns below 0.
+ */
+export function netOfProcessorFee(
+  grossMonthlyUsd: number,
+  annual = false,
+): number {
+  if (!(grossMonthlyUsd > 0)) return 0
+  const fixedPerMonth = annual
+    ? STRIPE_PROCESSOR_FEE_FIXED_USD / 12
+    : STRIPE_PROCESSOR_FEE_FIXED_USD
+  const net = grossMonthlyUsd * (1 - STRIPE_PROCESSOR_FEE_PCT) - fixedPerMonth
+  return Math.max(0, Math.round(net * 100) / 100)
+}
+
+/**
+ * The org's monthly recurring revenue NET of Stripe's processing fee
+ * (AGL-1108) — what Aglyn actually keeps before infra COGS, and the correct
+ * base for margin/discount reasoning. Gross is `orgMonthlyRevenueUsd`; this
+ * subtracts ~2.9%+30¢, interval-aware. 0 for anyone not actually billing.
+ */
+export function orgNetMonthlyRevenueUsd(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  const gross = orgMonthlyRevenueUsd(org)
+  if (gross <= 0) return 0
+  return netOfProcessorFee(gross, org?.subscription?.interval === 'year')
+}
+
+/**
  * The plan the org actually gets (AGL-247): missing/unknown plans resolve
  * as `free`, and a paid plan whose subscription is canceled/unpaid/
  * incomplete downgrades to `free` until the webhook restores it — plan
