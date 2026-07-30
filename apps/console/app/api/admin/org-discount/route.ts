@@ -32,11 +32,41 @@ import {
  *   POST { orgId, action: 'apply', couponId, reason?, confirmBelowFloor? }
  *   POST { orgId, action: 'remove' }
  *
- * Apply runs `checkDiscountMargin` for THAT org first: a `block` rating
- * (margin well below the net-margin floor) is refused unless the caller
- * passes `confirmBelowFloor`. StaffGuard-gated; audited to `adminAudit`; 501
- * without Stripe env. Uses Stripe's REST API directly (no SDK).
+ * Apply runs `checkDiscountMargin` for THAT org first: a `block` rating —
+ * too deep a discount, or a margin well below the net-margin floor — is
+ * refused unless the caller passes `confirmBelowFloor`. StaffGuard-gated;
+ * audited to `adminAudit`; 501 without Stripe env. Uses Stripe's REST API
+ * directly (no SDK).
  */
+
+/**
+ * The org's most recent measured monthly cost (AGL-1120), from the usage
+ * rollup at `orgs/{id}/usage/{month}.costUsd` that the metering job writes.
+ *
+ * Returns null when there is no rollup yet, which is the honest answer —
+ * `checkDiscountMargin` then falls back to the flat per-site estimate rather
+ * than treating "not measured" as "costs nothing". Best-effort: a missing
+ * index or a read failure must not block a staff action, and the flat floor
+ * still applies.
+ */
+async function latestMeasuredCogsUsd(orgId: string): Promise<number | null> {
+  try {
+    const snapshot = await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('orgs')
+      .doc(orgId)
+      .collection('usage')
+      .orderBy('month', 'desc')
+      .limit(1)
+      .get()
+    const cost = snapshot.docs[0]?.get('costUsd')
+    return typeof cost === 'number' && Number.isFinite(cost) ? cost : null
+  } catch (error) {
+    console.error('[admin/org-discount] usage rollup read failed', error)
+    return null
+  }
+}
 async function stripe(
   secretKey: string,
   path: string,
@@ -170,13 +200,27 @@ async function handler(request: Request): Promise<Response> {
 
     // Margin guardrail for THIS org (AGL-1105): a blocked discount needs an
     // explicit override.
-    const rating = checkDiscountMargin(orgData, { percentOff, amountOffUsd })
+    //
+    // This is the moment the money is actually committed, and the only one
+    // that knows the org — so it rates against that org's MEASURED cost
+    // (AGL-1120) rather than the flat per-site placeholder. Coupon creation
+    // cannot do this: no org has been chosen yet.
+    const measuredCogsUsd = await latestMeasuredCogsUsd(orgId)
+    const rating = checkDiscountMargin(
+      orgData,
+      { percentOff, amountOffUsd },
+      { measuredCogsUsd },
+    )
     if (rating.rating === 'block' && body?.confirmBelowFloor !== true) {
       return Response.json(
         {
           error:
-            'This discount pushes net margin below the floor. Re-submit with ' +
-            'confirmBelowFloor to override.',
+            rating.reason === 'depth'
+              ? 'This discount gives away more of list price than the ' +
+                'guardrail allows. Re-submit with confirmBelowFloor to ' +
+                'override.'
+              : 'This discount pushes net margin below the floor. Re-submit ' +
+                'with confirmBelowFloor to override.',
           rating,
           requiresConfirmation: true,
         },

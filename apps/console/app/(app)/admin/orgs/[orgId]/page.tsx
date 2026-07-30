@@ -1281,9 +1281,19 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   : 'error'
                             }
                           >
-                            {`Rating ${discountRating.rating.toUpperCase()} — net margin ` +
-                              `${(discountRating.marginPct * 100).toFixed(1)}% vs a ` +
-                              `${(discountRating.floorPct * 100).toFixed(0)}% floor. ` +
+                            {/* Lead with the test that bound (AGL-1120) —
+                                a deep discount used to be reported purely as
+                                a healthy net margin, which is true and beside
+                                the point. The apply route re-rates this
+                                against the org's MEASURED cost, so it can
+                                still refuse a discount this preview liked. */}
+                            {`Rating ${discountRating.rating.toUpperCase()} — ` +
+                              (discountRating.reason === 'depth'
+                                ? `${(discountRating.depthPct * 100).toFixed(0)}% off list price. `
+                                : discountRating.reason === 'underwater'
+                                  ? 'nothing left after fees. '
+                                  : `net margin ${(discountRating.marginPct * 100).toFixed(1)}% vs a ` +
+                                    `${(discountRating.floorPct * 100).toFixed(0)}% floor. `) +
                               `$${discountRating.grossUsd}/mo list → keeps ` +
                               `$${discountRating.netUsd} net, less ` +
                               `$${discountRating.infraCogsUsd} infra.`}
