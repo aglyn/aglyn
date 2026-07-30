@@ -21,11 +21,18 @@ import {
   checkContactQuota,
   checkDatasetQuota,
   checkSeatQuota,
+  countManagerSeats,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { Link, LinearProgress, Stack, Typography } from '@mui/material'
-import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getCountFromServer,
+  getDoc,
+  getDocs,
+} from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 
@@ -292,9 +299,19 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   useEffect(() => {
     if (!orgId) return
     let active = true
-    void getCountFromServer(collection(firestore, 'orgs', orgId, 'members'))
+    // Team seats meter MANAGERS only (AGL-1113). The roster also holds
+    // site-scoped collaborators, whose seats meter per host against
+    // membersPerHost — an aggregate count of the collection billed them here
+    // too. `countManagerSeats` needs the docs (owner/admin are managers
+    // whatever `allHosts` says), so this reads them rather than aggregating;
+    // the roster is bounded by the plan's hard seat cap.
+    void getDocs(collection(firestore, 'orgs', orgId, 'members'))
       .then((snapshot) => {
-        if (active) setTeamSeats(snapshot.data().count)
+        if (active) {
+          setTeamSeats(
+            countManagerSeats(snapshot.docs.map((doc) => doc.data() as never)),
+          )
+        }
       })
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.

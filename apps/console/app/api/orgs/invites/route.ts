@@ -20,9 +20,11 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   canManageOrg,
   checkSeatQuota,
+  countManagerSeats,
   createResourceUid,
   type HostAccessRole,
   isOrgRole,
+  isOrgWideMember,
   resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
@@ -212,15 +214,23 @@ async function handler(request: Request): Promise<Response> {
       // Manager-seat quota (AGL-471): only a genuinely NEW invite consumes a
       // seat — reusing an already-pending row does not, so skip the gate then
       // (it already counts toward `used`). Accept re-checks authoritatively.
-      if (!reusing) {
+      // A site-scoped invite becomes a COLLABORATOR, not a manager (AGL-1113):
+      // it is metered per host against `membersPerHost`, so it must not be
+      // gated on — or counted toward — the manager quota.
+      if (!reusing && isOrgWideMember({ role, allHosts: body?.allHosts === true, hostAccess })) {
         const orgRef = firestore.collection('orgs').doc(orgId)
-        const [orgSnapshot, memberCount, pendingInvites] = await Promise.all([
+        const [orgSnapshot, members, pendingInvites] = await Promise.all([
           orgRef.get(),
-          orgRef.collection('members').count().get(),
-          invitesRef.where('acceptedAt', '==', null).count().get(),
+          orgRef.collection('members').get(),
+          invitesRef.where('acceptedAt', '==', null).get(),
         ])
+        // Managers only, on both sides: the roster mixes managers and
+        // collaborators, and so does the pending-invite list.
         const used =
-          memberCount.data().count + pendingInvites.data().count
+          countManagerSeats(members.docs.map((doc) => doc.data() as never)) +
+          countManagerSeats(
+            pendingInvites.docs.map((doc) => doc.data() as never),
+          )
         const quota = checkSeatQuota(orgSnapshot.data() as any, 'managers', used)
         if (!quota.allowed) {
           return Response.json({
@@ -333,20 +343,27 @@ async function handler(request: Request): Promise<Response> {
         .collection('members')
         .doc(decoded.uid)
         .get()
-      if (!existingMember.exists) {
-        const [orgSnapshot, memberCount] = await Promise.all([
+      // Accepting a SITE-SCOPED invite makes the user a collaborator, metered
+      // per host — never a manager seat (AGL-1113). Only an org-wide invite
+      // re-checks the manager gate here.
+      const acceptingAsManager = isOrgWideMember({
+        role: invite['role'],
+        allHosts: invite['allHosts'] === true,
+        hostAccess: invite['hostAccess'] ?? {},
+      })
+      if (!existingMember.exists && acceptingAsManager) {
+        const [orgSnapshot, members] = await Promise.all([
           firestore.collection('orgs').doc(orgId).get(),
           firestore
             .collection('orgs')
             .doc(orgId)
             .collection('members')
-            .count()
             .get(),
         ])
         const quota = checkSeatQuota(
           orgSnapshot.data() as any,
           'managers',
-          memberCount.data().count,
+          countManagerSeats(members.docs.map((doc) => doc.data() as never)),
         )
         if (!quota.allowed) {
           return Response.json({

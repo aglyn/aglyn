@@ -19,8 +19,10 @@ import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   checkSeatQuota,
+  countManagerSeats,
   type HostAccessRole,
   isOrgRole,
+  isOrgWideMember,
   resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
@@ -155,19 +157,25 @@ async function handler(request: Request): Promise<Response> {
       // Manager-seat quota (AGL-471): adding a NEW org member consumes a
       // seat; role changes don't. A plan-less org resolves as `free`
       // (1 seat — the owner), not unmetered.
-      if (!existedAlready) {
-        const memberCount = (
-          await firestore
-            .collection('orgs')
-            .doc(orgId)
-            .collection('members')
-            .count()
-            .get()
-        ).data().count
+      // …and only a MANAGER consumes one (AGL-1113). Adding a site-scoped
+      // collaborator writes an org member doc too, but that seat is metered
+      // per host against `membersPerHost` at hosts/{id}/members — gating it
+      // here billed and blocked it twice.
+      const addingManager = isOrgWideMember({
+        role,
+        allHosts: body?.allHosts === true,
+        hostAccess: sanitizeHostAccess(body?.hostAccess),
+      })
+      if (!existedAlready && addingManager) {
+        const members = await firestore
+          .collection('orgs')
+          .doc(orgId)
+          .collection('members')
+          .get()
         const quota = checkSeatQuota(
           orgSnapshot.data() as any,
           'managers',
-          memberCount,
+          countManagerSeats(members.docs.map((doc) => doc.data() as never)),
         )
         if (!quota.allowed) {
           return Response.json({

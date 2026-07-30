@@ -151,6 +151,33 @@ export function isOrgWideMember(
 }
 
 /**
+ * How many of these roster entries consume a **manager** seat (AGL-1113).
+ *
+ * `orgs/{orgId}/members` holds BOTH org managers and site-scoped
+ * collaborators — adding a collaborator to one site writes an org member doc
+ * with `allHosts:false` + `hostAccess`, so a raw `.count()` of the collection
+ * billed every collaborator as a manager. Collaborators are metered
+ * separately, per host, against `membersPerHost` at
+ * `hosts/{hostId}/members` — counting them here charged them twice and
+ * tripped the manager gate for orgs nowhere near their manager limit.
+ *
+ * Reuses `isOrgWideMember` rather than filtering on `allHosts` directly:
+ * owner/admin are managers whatever the flag says, and a pre-`allHosts` doc
+ * is a manager too. A Firestore `where('allHosts','==',true)` count gets both
+ * of those wrong, which is why callers pass entries in and count here.
+ *
+ * Accepts pending INVITES as well as members — an invite carries the same
+ * `role`/`allHosts`/`hostAccess` shape and reserves the seat it will become.
+ */
+export function countManagerSeats(
+  entries: ReadonlyArray<Partial<AglynOrgMember> | null | undefined>,
+): number {
+  let count = 0
+  for (const entry of entries) if (isOrgWideMember(entry)) count += 1
+  return count
+}
+
+/**
  * The same question as `isOrgWideMember`, asked of the `users/{uid}/orgs`
  * reverse-index row instead of the member doc (AGL-1032).
  *

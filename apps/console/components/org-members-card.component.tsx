@@ -18,6 +18,7 @@
 
 import {
   canManageOrg,
+  countManagerSeats,
   ORG_PERMISSIONS,
   resolveOrgPermissions,
   type AglynOrgCustomRole,
@@ -106,8 +107,13 @@ export function OrgMembersCard() {
   const canManage = canManageOrg(currentOrg?.role)
   // Manager-seat quota hint (AGL-530): the roster counts against
   // managersPerOrg; extra seats sell on the Billing add-ons card.
+  // Only MANAGERS count (AGL-1113) — this list also shows site-scoped
+  // collaborators, whose seats meter per host against membersPerHost. Using
+  // `members.length` read "8 of 5 manager seats used" to an org with three
+  // managers and five collaborators.
   const { org } = useCurrentOrg()
-  const seatQuota = checkOrgSeatQuota(org, 'managers', members.length)
+  const managerSeatsUsed = useMemo(() => countManagerSeats(members), [members])
+  const seatQuota = checkOrgSeatQuota(org, 'managers', managerSeatsUsed)
   // An org admin sees every org host via the memberRoles projection, so
   // this doubles as the org host directory for the access editor.
   const { hosts } = useOrgHosts(firestore, user?.uid, orgId)
@@ -257,7 +263,12 @@ export function OrgMembersCard() {
         </Typography>
         {Number.isFinite(seatQuota.limit) ? (
           <Typography variant="caption" color="text.secondary">
-            {`${members.length} of ${seatQuota.limit} manager seats used`}
+            {`${managerSeatsUsed} of ${seatQuota.limit} manager seats used`}
+            {members.length > managerSeatsUsed
+              ? ` · ${members.length - managerSeatsUsed} site collaborator${
+                  members.length - managerSeatsUsed === 1 ? '' : 's'
+                } (metered per site)`
+              : ''}
             {seatQuota.upgradeRequired ? (
               ' — upgrade for more'
             ) : seatQuota.addonPriceUsd != null ? (

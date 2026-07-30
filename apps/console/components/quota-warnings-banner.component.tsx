@@ -18,12 +18,19 @@
 
 import {
   checkSeatQuota,
+  countManagerSeats,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Alert, Button } from '@mui/material'
-import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getCountFromServer,
+  getDoc,
+  getDocs,
+} from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useFirestore, useScopeTokens } from '@aglyn/tenant-feature-instance'
@@ -33,7 +40,13 @@ import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 
 const DISMISS_KEY = 'aglyn-quota-banner-dismissed'
-const SEATS_KEY = 'aglyn-quota-banner-team-seats'
+// Versioned AND org-scoped (AGL-1113), suffixed with the orgId at use.
+// The v1 key was a single global string holding a RAW member count: it both
+// counted site collaborators as managers and leaked one workspace's total to
+// the next workspace the user opened. Reusing the old key would keep serving
+// that number — and its false "out of team seats" banner — from every session
+// that already has it, making the fix look like it did not land.
+const SEATS_KEY = 'aglyn-quota-banner-manager-seats-v2'
 
 export interface QuotaWarningsBannerProps {
   /** Overrides the route param; the banner resolves `[hostId]` itself. */
@@ -177,15 +190,28 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         { label: 'team seats', used: seats, limit: seatQuota.limit },
       ])
     }
-    const cached = sessionStorage.getItem(SEATS_KEY)
+    // Per-ORG cache key (AGL-1113). The key used to be a single global
+    // string, so the seat count cached while viewing one workspace was
+    // served to the next — a 2-manager org's total rendered against a
+    // 2-seat Starter workspace's limit and put a false "you've reached your
+    // team seats limit" banner on a workspace with one manager.
+    const cacheKey = `${SEATS_KEY}:${orgId}`
+    const cached = sessionStorage.getItem(cacheKey)
     if (cached != null) {
       apply(Number(cached))
       return
     }
-    void getCountFromServer(collection(firestore, 'orgs', orgId, 'members'))
+    // MANAGERS only (AGL-1113) — the roster also holds site-scoped
+    // collaborators, metered per host against membersPerHost. Counting the
+    // whole collection is what put an "out of team seats" banner in front of
+    // orgs that had only spent collaborator seats. `countManagerSeats` needs
+    // the docs, so this reads them; the roster is capped by the plan.
+    void getDocs(collection(firestore, 'orgs', orgId, 'members'))
       .then((snapshot) => {
-        const seats = snapshot.data().count
-        sessionStorage.setItem(SEATS_KEY, String(seats))
+        const seats = countManagerSeats(
+          snapshot.docs.map((doc) => doc.data() as never),
+        )
+        sessionStorage.setItem(cacheKey, String(seats))
         apply(seats)
       })
       .catch(() => {
