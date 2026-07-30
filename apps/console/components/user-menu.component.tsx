@@ -56,6 +56,7 @@ import useCurrentOrg from '../hooks/use-current-org'
 import { useIsStaff } from '../hooks/use-is-staff'
 import { useOrgReach } from '../hooks/use-org-reach'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
+import { useUrlNamesOrg } from '../hooks/use-secondary-nav'
 
 /**
  * Plans with nothing above them to sell (org-billing.types): `agency` tops the
@@ -75,7 +76,17 @@ const TOP_PLANS: ReadonlySet<string> = new Set(['agency', 'enterprise'])
 export function UserMenu() {
   const { data: user } = useUser()
   const userPhotoUrl = useUserPhoto({ gravatar: { size: '64' } })
-  const orgSlug = useOrgSlug()
+  // Only a URL that names a workspace lets this menu name one (AGL-1130).
+  // `useOrgSlug()` falls back to the user's first org so that org-less pages
+  // still have somewhere to act; the footer and the Upgrade CTA are CLAIMS
+  // about the workspace you are in, and in the staff console or Manage
+  // Account they claimed one picked by a fallback. Blanked here, the org rows
+  // fall to the jump page on their own — the same path they already took
+  // before an org resolved — so they stay usable without asserting which
+  // workspace they mean.
+  const namesOrg = useUrlNamesOrg()
+  const resolvedOrgSlug = useOrgSlug()
+  const orgSlug = namesOrg ? resolvedOrgSlug : ''
   const { currentOrg } = useOrgScope()
   const { org, ready: orgReady } = useCurrentOrg()
   const isStaff = useIsStaff()
@@ -296,7 +307,7 @@ export function UserMenu() {
         <Divider />
         {row(Route.AUTH_SIGN_OUT, 'Sign out', ICON_VARIANT_SIGN_OUT.path)}
 
-        {currentOrg?.orgName ? (
+        {namesOrg && currentOrg?.orgName ? (
           <Box
             sx={{
               px: 2,

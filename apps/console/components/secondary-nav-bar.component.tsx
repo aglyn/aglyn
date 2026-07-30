@@ -21,7 +21,7 @@ import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { Stack } from '@mui/material'
 import { useMemo } from 'react'
 import { useReleaseFlags } from '../hooks/use-release-flags'
-import { useSecondaryNav } from '../hooks/use-secondary-nav'
+import { useSecondaryNav, useUrlNamesOrg } from '../hooks/use-secondary-nav'
 import HostSwitcherNavComponent from './host-switcher-nav.component'
 import SecondaryAppBarComponent from './secondary-app-bar.component'
 
@@ -61,7 +61,8 @@ const tabBarTitle = (
  * move the remount to org↔site navigations.
  */
 export function SecondaryNavBarComponent() {
-  const { navTabItems, activeTab, section } = useSecondaryNav()
+  const { navTabItems, activeTab } = useSecondaryNav()
+  const namesOrg = useUrlNamesOrg()
   const { flags, isStaff } = useReleaseFlags()
 
   // Release-flag gating (AGL-229): flagged-off tabs disappear for
@@ -93,11 +94,13 @@ export function SecondaryNavBarComponent() {
 
   return (
     <SecondaryAppBarComponent
-      // No site scope exists in the staff console (AGL-1119), so the site
-      // switcher is omitted there rather than falling back to its off-a-site
-      // label — "All sites" beside a staff page read as though staff were
-      // scoped to every site of their own workspace.
-      tabBarTitle={section.kind === 'admin' ? undefined : tabBarTitle}
+      // A site switcher needs an org to switch WITHIN, and the sites it
+      // offers come from whichever org the scope fell back to. On a route the
+      // URL doesn't scope to a workspace — the staff console (AGL-1119), the
+      // personal Manage area and the org jump page (AGL-1130) — that made
+      // "All sites" read as though the page were scoped to every site of an
+      // org it has nothing to do with. Omit it rather than label it wrong.
+      tabBarTitle={namesOrg ? tabBarTitle : undefined}
       activeTab={activeTab}
       navTabItems={gatedNavTabItems}
     />

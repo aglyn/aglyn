@@ -47,10 +47,20 @@ Your avatar, shown in the account menu, on the workspace team roster, and beside
 your activity. Pick an image from the organization's
 [media library](../content-and-data/media/overview.md) or paste an `https` image URL.
 
+Leave it empty and Aglyn falls back to the photo your sign-in provider gave us, and
+then to [Gravatar](https://gravatar.com) for your email address. The preview beside
+the field shows exactly what everyone else sees.
+
 ## Basic info
 
 Your first and last name. Saving also updates the display name your teammates see —
 the Team page, activity entries, and comments all pick it up.
+
+Both are prefilled from however you signed up: the name you typed on the sign-up
+form, or the one your Google account or company identity provider sent us. Editing
+them here wins permanently — signing in again never re-applies the provider's
+version over your own. If your company signs you in through its own identity
+provider and these are blank, that provider is not sending a name; type one here.
 
 ## Security
 

@@ -61,7 +61,13 @@ import {
 } from 'firebase/auth'
 import { doc, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { useAnalytics, useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useAnalytics,
+  useAuth,
+  useFirestore,
+  useUser,
+  useUserPhoto,
+} from '@aglyn/tenant-feature-instance'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import CardDisplayFormTemplate from '../../../../components/card-display-form-template'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
@@ -73,6 +79,9 @@ import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import MediaUrlField from '../../../../components/media-url-field.component'
 import { useOrgScope } from '../../../../hooks/use-org-scope'
 import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
+
+/** Hoisted so the photo resolver's memo isn't busted every render. */
+const PROFILE_CARD_GRAVATAR = { gravatar: { size: '144' } }
 
 const basicSchema: FormSchema = {
   id: 'basic',
@@ -228,6 +237,11 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
   // Profile image (AGL-365): mirrors to the auth photoURL (app bar,
   // comments) and the users doc (team lists, activity).
   const [photoUrl, setPhotoUrl] = useState('')
+  // The same resolver the app bar uses (AGL-1127). The card three inches
+  // below it rendered a bare initial with no `src`, so one page gave two
+  // answers for one user's avatar — a photo up top, a grey "Z" in the card
+  // that claims to be showing you your avatar.
+  const resolvedPhotoUrl = useUserPhoto(PROFILE_CARD_GRAVATAR)
   useEffect(() => {
     setPhotoUrl(String((data as any)?.photoUrl ?? user?.photoURL ?? ''))
   }, [(data as any)?.photoUrl, user?.photoURL])
@@ -534,7 +548,12 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
       <Stack spacing={2.5} sx={{ maxWidth: 560 }}>
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
           <Avatar
-            src={photoUrl || undefined}
+            // The edited field first, so the card previews what Save would
+            // do; the resolved photo (auth photoURL, then Gravatar) when it
+            // is empty, so clearing the field shows what the console will
+            // actually fall back to rather than a letter it never shows.
+            src={photoUrl.trim() || resolvedPhotoUrl || undefined}
+            slotProps={{ img: { referrerPolicy: 'no-referrer' } }}
             sx={{
               width: 72,
               height: 72,
