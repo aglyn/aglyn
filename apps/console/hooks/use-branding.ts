@@ -19,6 +19,7 @@
 import {
   AGLYN_BRANDING_PROFILE,
   checkEntitlement,
+  hasBrandingProfile,
   resolveBrandingProfile,
   type ResolvedBrandingProfile,
 } from '@aglyn/aglyn'
@@ -51,7 +52,12 @@ export function useBranding(): {
   }
   return {
     branding: resolveBrandingProfile(org),
-    whiteLabel: checkEntitlement(org, 'whiteLabel'),
+    // White-label chrome activates only when the org is BOTH entitled AND has
+    // set up a brand (AGL-1110) — an entitled-but-unconfigured org (e.g. an
+    // Agency/comped-Enterprise org that never opened the branding page) keeps
+    // the Aglyn wordmark, so the logo no longer flashes to product-name text.
+    whiteLabel:
+      checkEntitlement(org, 'whiteLabel') && hasBrandingProfile(org),
     ready,
   }
 }
