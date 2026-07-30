@@ -13,7 +13,8 @@ and shows **usage meters** so you always know where you stand.
 ![The Billing page in the Aglyn console: the current plan card with subscription status, cancel and payment-method actions, beside the plan comparison and usage meters](/img/billing-and-plans/billing-page.png)
 
 :::info Plan availability
-Every site has a plan. **Free**, **Starter**, **Pro**, **Business**, and **Advanced** unlock progressively more.
+Every site has a plan. **Free**, **Starter**, **Pro**, **Business**, **Scale**, **Advanced**,
+and **Agency** unlock progressively more, and **Enterprise** sits above them all.
 :::
 
 ## Tiers & entitlements
@@ -21,13 +22,28 @@ Every site has a plan. **Free**, **Starter**, **Pro**, **Business**, and **Advan
 | Plan | Billed annually | Month-to-month | Commerce |
 |---|---|---|---|
 | Free | $0 | $0 | Build & publish only — no selling |
-| Starter | $16/mo | $25/mo | Sell up to 100 products; 2% fee on physical, 7% on digital sales |
-| Pro | $39/mo | $56/mo | 2,500 products, 0% physical / 5% digital fees, POS, abandoned-cart recovery, reviews, dropshipping |
+| Starter | $16/mo | $25/mo | Sell up to 100 products; 2% fee on physical, 5% on digital sales |
+| Pro | $39/mo | $56/mo | 2,500 products, 0% physical / 3% digital fees, POS, abandoned-cart recovery, reviews, dropshipping |
 | Business | $99/mo | $139/mo | 10,000 products, 0% / 2% fees, subscriptions & paywalls, gift cards |
+| Scale | $179/mo | $249/mo | 25,000 products, 0% / 1% fees, 15 sites |
 | Advanced | $299/mo | $399/mo | Unlimited products, 0% / 0% fees, high-volume commerce & API |
+| Agency | $649/mo | $799/mo | 100 sites under one organization, white-label |
+| Enterprise | Custom | Custom | Unlimited everything, SSO, white-label, 0% fees |
 
 Transaction fees are Aglyn platform fees on storefront sales, separate from
 Stripe's payment-processing fees. Upgrading is the way to reduce them.
+
+### Enterprise
+
+**Enterprise** is the one tier you cannot buy from the Billing page. It has no list
+price — the plan, term, and invoicing are agreed with us, and we provision the
+organization directly. On top of everything in Agency it lifts every quota to
+unlimited and adds **SAML / OIDC single sign-on**, so your team signs in through your
+own identity provider.
+
+To start a conversation, use the **Contact sales** button on the Enterprise card at the
+bottom of your Billing page. Once your organization is on Enterprise, plan changes go
+through us rather than the self-serve upgrade and downgrade buttons.
 
 :::note Pricing is provisional (pre-release)
 Aglyn is in pre-release: prices, plans, tiers, quotas, and the features included in each
@@ -69,11 +85,11 @@ Your **contacts CRM** — form fills, member sign-ups, buyers, and bookings unif
 one people list — is priced as an **audience band**, not a hard cap:
 
 - Each tier includes a band: Free 100, Starter 1,000, Pro 10,000, Business 100,000,
-  Advanced 1,000,000 contacts.
+  Scale 500,000, Advanced 1,000,000 contacts. Agency and Enterprise are unlimited.
 - On **paid tiers**, growing past the band never blocks or drops anything — extra
   contacts are **metered overage** on your monthly invoice: $1.00 (Starter), $0.75
-  (Pro), $0.50 (Business), or $0.25 (Advanced) per extra 1,000 contacts per month.
-  Upgrading a tier is always cheaper than sustained overage.
+  (Pro), $0.50 (Business), $0.40 (Scale), or $0.25 (Advanced) per extra 1,000
+  contacts per month. Upgrading a tier is always cheaper than sustained overage.
 - On **Free**, the band is a hard limit: new visitors past 100 keep their member
   accounts and orders, but no CRM record is kept — the contacts page shows how many
   were missed so you can upgrade before it matters.
@@ -90,13 +106,17 @@ one people list — is priced as an **audience band**, not a hard cap:
 
 ## API access
 
-The **customer REST API** is a **Business & Advanced** feature — mint scoped API keys and
-call the versioned `/v1` endpoints from anywhere. Requests are **metered per organization**:
+The **customer REST API** is a **Business tier and above** feature — mint scoped API keys
+and call the versioned `/v1` endpoints from anywhere. Requests are **metered per
+organization**:
 
 | Plan | Included requests / month | Overage |
 |---|---|---|
 | Business | 100,000 | $0.50 per additional 1,000 |
+| Scale | 300,000 | $0.35 per additional 1,000 |
 | Advanced | 1,000,000 | $0.20 per additional 1,000 |
+| Agency | 5,000,000 | $0.15 per additional 1,000 |
+| Enterprise | Unlimited | — |
 
 - Requests past the included quota **keep working** and bill as metered overage on your
   monthly invoice — never a hard wall mid-integration.
@@ -117,10 +137,13 @@ higher tiers reduce it to 0%, which is the upgrade motion for sellers:
 
 | Plan | Physical goods | Digital goods & paid memberships |
 |---|---|---|
-| Starter | 2% | 7% |
-| Pro | 0% | 5% |
+| Starter | 2% | 5% |
+| Pro | 0% | 3% |
 | Business | 0% | 2% |
+| Scale | 0% | 1% |
 | Advanced | 0% | 0% |
+| Agency | 0% | 0% |
+| Enterprise | 0% | 0% |
 
 Paid **memberships and gated content** bill at the digital rate — the fee is applied at
 checkout as the Stripe Connect application fee, on one-time sales and recurring

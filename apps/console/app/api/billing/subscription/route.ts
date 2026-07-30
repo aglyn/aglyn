@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { buildRoute, pluginRequestFromWeb, Route, type OrgPlan } from '@aglyn/aglyn/server'
+import {
+  buildRoute,
+  isCustomPricedPlan,
+  pluginRequestFromWeb,
+  Route,
+  type OrgPlan,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -209,6 +215,15 @@ async function handler(request: Request): Promise<Response> {
 
     // Preview/switch share the target resolution.
     const targetPlan = String(body?.plan ?? '')
+    // Same rule as checkout (AGL-1110/1118): an enterprise agreement is never
+    // entered — or previewed — through the self-serve plan switcher. Staff
+    // provision it via /api/admin/enterprise-billing.
+    if (isCustomPricedPlan(targetPlan as OrgPlan)) {
+      return Response.json(
+        { error: 'Enterprise is custom-priced — contact sales.' },
+        { status: 400 },
+      )
+    }
     const items: any[] = subscription.items?.data ?? []
     // The base plan item is the one no add-on price claims (AGL-528) —
     // with add-on items on the subscription it need not be items[0].

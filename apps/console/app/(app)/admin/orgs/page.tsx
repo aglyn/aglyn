@@ -17,7 +17,9 @@
 'use client'
 
 import {
+  isEnterpriseOrg,
   PLAN_ENTITLEMENTS,
+  PLAN_LABELS,
   resolveOrgEntitlements,
   type OrgPlan,
 } from '@aglyn/aglyn'
@@ -65,12 +67,19 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
+/**
+ * Every plan staff can assign, derived from `PLAN_LABELS` so a new tier can
+ * never go missing here (this list was stuck at Business — Scale, Advanced and
+ * Agency shipped without it, and `enterprise` would have been the fourth).
+ * Enterprise is included on purpose: it is the ONE plan with no self-serve
+ * path, so a staff override is the only way an org gets onto it.
+ */
 const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: 'No plan (dark launch — everything on)' },
-  { value: 'free', label: 'Free' },
-  { value: 'starter', label: 'Starter' },
-  { value: 'pro', label: 'Pro' },
-  { value: 'business', label: 'Business' },
+  ...(Object.keys(PLAN_LABELS) as OrgPlan[]).map((plan) => ({
+    value: plan,
+    label: PLAN_LABELS[plan],
+  })),
 ]
 
 
@@ -520,8 +529,16 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                             </Stack>
                           </TableCell>
                           <TableCell>
+                            {/* Show the plan the org READS as (AGL-1118) — an
+                                org on a pre-AGL-1118 enterprise arrangement
+                                stores a lower base plan, and listing that here
+                                contradicted its own Billing page. */}
                             <Chip
-                              label={org.plan ?? 'no plan'}
+                              label={
+                                isEnterpriseOrg(org as never)
+                                  ? PLAN_LABELS.enterprise
+                                  : (org.plan ?? 'no plan')
+                              }
                               size="small"
                               color={org.plan ? 'secondary' : 'default'}
                             />
@@ -547,7 +564,15 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                             {org.subscription?.status ?? '--'}
                           </TableCell>
                           <TableCell>
-                            {org.plan ? resolved.hostLimit : '∞ (no plan)'}
+                            {/* An UNLIMITED quota is Number.POSITIVE_INFINITY,
+                                which renders as the literal "Infinity"
+                                (AGL-1118 — the enterprise plan is the first
+                                one whose hostLimit is uncapped). */}
+                            {!org.plan
+                              ? '∞ (no plan)'
+                              : Number.isFinite(resolved.hostLimit)
+                                ? resolved.hostLimit
+                                : '∞'}
                             {overrideCount(org) ? (
                               <Chip
                                 label={`${overrideCount(org)} override${

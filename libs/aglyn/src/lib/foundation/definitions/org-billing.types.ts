@@ -50,6 +50,13 @@ export type { OrgUid } from './platform.types'
  * Pricing v3 (2026-07) inserted `scale` between business and advanced to
  * fill the $139→$399 gap, and added `agency` above advanced for
  * high-volume multi-site orgs — see the Pricing Decision Log.
+ *
+ * `enterprise` (AGL-1118) is a REAL plan, not a display label: it tops the
+ * ladder with unlimited capacity plus white-label and SSO, and it is the ONE
+ * tier with no list price — it is staff-provisioned per deal (AGL-1110), never
+ * self-serve. Surfaces that offer plans for sale iterate `SELF_SERVE_PLANS`,
+ * which excludes it; surfaces that merely NAME the org's plan read
+ * `PLAN_LABELS` and get "Enterprise" for free.
  */
 export type OrgPlan =
   | 'free'
@@ -59,6 +66,7 @@ export type OrgPlan =
   | 'scale'
   | 'advanced'
   | 'agency'
+  | 'enterprise'
 
 /** Boolean feature gates per plan; quotas live beside them as numbers. */
 export interface OrgFeatureFlags {
@@ -132,8 +140,9 @@ export interface OrgFeatureFlags {
    * White-label the platform (White-Label Phase 1): replace the Aglyn brand
    * — product name, logo, colors, support URL, transactional email from-name
    * — with the org's own `brandingProfile` across every branded surface.
-   * Agency tier only ($799); Enterprise inherits via a per-org `entitlements`
-   * override. Strictly broader than `removeBranding`, which only drops the
+   * Agency ($799) and Enterprise carry it on the plan (AGL-1118); any other
+   * tier needs a per-org `entitlements` override. Strictly broader than
+   * `removeBranding`, which only drops the
    * "Made with Aglyn" badge on published sites; white-label REPLACES the
    * brand rather than merely hiding it. Every branded surface resolves the
    * effective brand through `resolveBrandingProfile` so it can never drift.
@@ -143,9 +152,11 @@ export interface OrgFeatureFlags {
    * Enterprise SSO (AGL-1101): the org's console users sign in through the
    * org's own SAML/OIDC IdP, wired as a per-org GCIP tenant (`org.sso`).
    * Distinct from `whiteLabel` — an Agency org can have one without the other.
-   * False on every base plan; granted to Enterprise via a per-org
-   * `entitlements` override. Gates the staff SSO-config card and the
-   * SSO sign-in path; a non-entitled org can neither configure nor use SSO.
+   * Carried by the `enterprise` plan (AGL-1118) and false on every other base
+   * plan; a lower tier needs a per-org `entitlements` override, which is how
+   * enterprise orgs provisioned before that plan existed still get it. Gates
+   * the staff SSO-config card and the SSO sign-in path; a non-entitled org can
+   * neither configure nor use SSO.
    */
   ssoEnabled?: boolean
 }
@@ -153,7 +164,8 @@ export interface OrgFeatureFlags {
 /**
  * An org's white-label brand identity (White-Label Phase 1). Populated on
  * the org doc (`orgs/{orgId}.brandingProfile`) and applied ONLY when the org
- * carries the `whiteLabel` entitlement (Agency tier / Enterprise override);
+ * carries the `whiteLabel` entitlement (Agency or Enterprise plan, or a
+ * per-org override);
  * otherwise every surface falls back to the Aglyn defaults baked into
  * `resolveBrandingProfile`. Every field is optional — a partial profile
  * still resolves, with the Aglyn default filling each gap — so an agency can

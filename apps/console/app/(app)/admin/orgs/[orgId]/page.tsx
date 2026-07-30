@@ -537,16 +537,28 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   // amount + base plan and provisions a Stripe subscription (net-30 invoice)
   // or a Checkout link — entirely in Aglyn, no Stripe dashboard. The webhook
   // mirrors the price onto `subscription.customMonthlyUsd` so MRR is truthful.
+  // `enterprise` leads the list and is the default (AGL-1118): a negotiated
+  // deal should land on the real Enterprise plan, not on Agency-plus-a-label.
+  // The lower tiers stay selectable for a custom-priced deal that is genuinely
+  // scoped to that tier's capability.
   const paidPlans = useMemo(
     () =>
-      (['starter', 'pro', 'business', 'scale', 'advanced', 'agency'] as const).filter(
-        (plan) => PLAN_PRICING[plan],
-      ),
+      (
+        [
+          'enterprise',
+          'agency',
+          'advanced',
+          'scale',
+          'business',
+          'pro',
+          'starter',
+        ] as const
+      ).filter((plan) => PLAN_PRICING[plan]),
     [],
   )
   const [entAmount, setEntAmount] = useState('')
   const [entInterval, setEntInterval] = useState<'month' | 'year'>('month')
-  const [entPlan, setEntPlan] = useState<string>('agency')
+  const [entPlan, setEntPlan] = useState<string>('enterprise')
   const [entMode, setEntMode] = useState<'invoice' | 'checkout'>('invoice')
   const [entBusy, setEntBusy] = useState(false)
   const [entResult, setEntResult] = useState<{

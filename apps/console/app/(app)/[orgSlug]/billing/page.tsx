@@ -101,9 +101,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // Workspace-scoped (AGL-236): meters cover the selected org's sites.
   const { hosts } = useOrgHosts(firestore, user?.uid, orgId)
   const plan = (org?.plan ?? 'free') as OrgPlan
-  // Enterprise deals ride a base plan (usually agency) but read as "Enterprise"
-  // and bill a negotiated custom price rather than the plan's list price
-  // (AGL-1110).
+  // Enterprise is a real plan (AGL-1118); orgs provisioned before that still
+  // read as Enterprise off a base plan + custom price / comped marker
+  // (AGL-1110). Either way it bills the negotiated amount, not a list price.
   const enterprise = isEnterpriseOrg(org)
   const customMonthlyUsd = org?.subscription?.customMonthlyUsd ?? 0
   // Effective entitlements (plan defaults + per-org overrides), so the summary
@@ -775,6 +775,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                 <BillingPlanCardsComponent
                   plan={org?.plan as OrgPlan | undefined}
                   interval={interval}
+                  enterprise={enterprise}
                   onSelect={(tier) =>
                     permissions.editBilling
                       ? void handleUpgrade(tier)()

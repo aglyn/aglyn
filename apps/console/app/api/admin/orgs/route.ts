@@ -83,8 +83,17 @@ async function handler(request: Request): Promise<Response> {
         slug: data['slug'] ?? null,
         plan: data['plan'] ?? null,
         entitlements: data['entitlements'] ?? null,
+        // The two fields that make an org read as Enterprise off a lower base
+        // plan (AGL-1110). They were projected away, so `isEnterpriseOrg` on
+        // the staff list could only ever see the base plan and the table said
+        // "agency" for an org whose own Billing page said "Enterprise".
+        enterprise: data['enterprise'] === true,
         subscription: data['subscription']
-          ? { status: data['subscription']?.status ?? null }
+          ? {
+              status: data['subscription']?.status ?? null,
+              customMonthlyUsd:
+                data['subscription']?.customMonthlyUsd ?? null,
+            }
           : null,
         createdAt: ts(data['createdAt']),
         suspendedAt: ts(data['suspendedAt']),

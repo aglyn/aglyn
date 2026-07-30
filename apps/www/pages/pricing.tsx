@@ -17,7 +17,9 @@
 
 import {
   PLAN_ENTITLEMENTS,
+  PLAN_LABELS,
   PLAN_PRICING,
+  SELF_SERVE_PLANS,
   UNLIMITED,
   type OrgPlan,
 } from '@aglyn/aglyn'
@@ -36,25 +38,9 @@ import { mainNavigation } from '../const'
 import MainLayout from '../layouts/MainLayout'
 import SiteFooterView from '../views/SiteFooterView'
 
-const PLAN_ORDER: OrgPlan[] = [
-  'free',
-  'starter',
-  'pro',
-  'business',
-  'scale',
-  'advanced',
-  'agency',
-]
-
-const PLAN_LABELS: Record<OrgPlan, string> = {
-  free: 'Free',
-  starter: 'Starter',
-  pro: 'Pro',
-  business: 'Business',
-  scale: 'Scale',
-  advanced: 'Advanced',
-  agency: 'Agency',
-}
+// Enterprise is excluded by construction (AGL-1118) — it has no list price,
+// so it cannot be rendered as a priced card here.
+const PLAN_ORDER: OrgPlan[] = SELF_SERVE_PLANS
 
 const PLAN_TAGLINES: Record<OrgPlan, string> = {
   free: 'Build and publish your first site.',
@@ -64,6 +50,7 @@ const PLAN_TAGLINES: Record<OrgPlan, string> = {
   scale: 'More sites and volume at a 1% digital fee.',
   advanced: 'High-volume commerce, zero platform fees.',
   agency: 'Many sites under one org at agency scale.',
+  enterprise: 'Unlimited everything, SSO, and custom terms.',
 }
 
 const quota = (value: number, unit: string) =>
