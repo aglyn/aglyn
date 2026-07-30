@@ -178,6 +178,55 @@ export function countManagerSeats(
 }
 
 /**
+ * What KIND of user a console row represents (AGL-1114) — the distinction
+ * that decides which seat they consume, and the one the Team table could not
+ * express because a manager and a collaborator differ only by fields the
+ * table never showed.
+ *
+ * Deliberately NOT the same axis as `role`. A `role: 'editor'` is a manager
+ * when their reach is the whole org and a collaborator when it is two sites;
+ * reading the role alone is the mistake that let a collaborator look like
+ * team staff (see the org-leak and role-gate work).
+ *
+ * `siteMember` is the third kind and never appears in `orgs/{id}/members` at
+ * all: it is an end-user account on a PUBLISHED site (`siteMembers`), not a
+ * console user. It is listed here so the vocabulary is complete and so a
+ * surface that does mix the two populations (the staff user directory) has a
+ * label for it — it is free and uncounted on every plan (AGL-889).
+ */
+export type ConsoleUserType = 'manager' | 'collaborator' | 'siteMember'
+
+export const CONSOLE_USER_TYPE_LABELS: Record<ConsoleUserType, string> = {
+  manager: 'Team manager',
+  collaborator: 'Site collaborator',
+  siteMember: 'Site member',
+}
+
+/** One line on what each kind is and what it costs — tooltip/legend copy. */
+export const CONSOLE_USER_TYPE_HINTS: Record<ConsoleUserType, string> = {
+  manager:
+    'Reaches the whole organization. Uses one of your team (manager) seats.',
+  collaborator:
+    'Scoped to specific sites. Uses a collaborator seat on each site they ' +
+    'can reach, not a team seat.',
+  siteMember:
+    'An end-user account on a published site, not a console user. Free and ' +
+    'unlimited on every plan.',
+}
+
+/**
+ * Classify an `orgs/{orgId}/members` entry (or a pending invite, same shape).
+ * Never returns `siteMember` — nothing in that collection is one; the value
+ * exists for surfaces that list published-site accounts alongside console
+ * users and must label them.
+ */
+export function consoleUserType(
+  member: Partial<AglynOrgMember> | null | undefined,
+): Exclude<ConsoleUserType, 'siteMember'> {
+  return isOrgWideMember(member) ? 'manager' : 'collaborator'
+}
+
+/**
  * The same question as `isOrgWideMember`, asked of the `users/{uid}/orgs`
  * reverse-index row instead of the member doc (AGL-1032).
  *

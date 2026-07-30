@@ -18,6 +18,9 @@
 
 import {
   canManageOrg,
+  CONSOLE_USER_TYPE_HINTS,
+  CONSOLE_USER_TYPE_LABELS,
+  consoleUserType,
   countManagerSeats,
   ORG_PERMISSIONS,
   resolveOrgPermissions,
@@ -49,6 +52,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -348,6 +352,11 @@ export function OrgMembersCard() {
           <TableHead>
             <TableRow>
               <TableCell>{'Member'}</TableCell>
+              {/* Type before Role on purpose (AGL-1114): the kind of user is
+                  what decides which seat they consume, and role alone does
+                  not say — an `editor` is a manager org-wide and a
+                  collaborator when scoped to two sites. */}
+              <TableCell>{'Type'}</TableCell>
               <TableCell>{'Role'}</TableCell>
               <TableCell>{'Custom role'}</TableCell>
               <TableCell>{'Access'}</TableCell>
@@ -377,6 +386,21 @@ export function OrgMembersCard() {
                       {member.title}
                     </Typography>
                   ) : null}
+                </TableCell>
+                <TableCell>
+                  {(() => {
+                    const kind = consoleUserType(member)
+                    return (
+                      <Tooltip title={CONSOLE_USER_TYPE_HINTS[kind]}>
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color={kind === 'manager' ? 'secondary' : 'default'}
+                          label={CONSOLE_USER_TYPE_LABELS[kind]}
+                        />
+                      </Tooltip>
+                    )
+                  })()}
                 </TableCell>
                 <TableCell>
                   {canManage && member.role !== 'owner' ? (
@@ -526,6 +550,26 @@ export function OrgMembersCard() {
                 spacing={1}
                 sx={{ alignItems: 'center' }}
               >
+                {/* An invite reserves the seat it will become (AGL-1114), so
+                    it is labelled with the same vocabulary as the roster —
+                    otherwise the only way to tell a pending manager from a
+                    pending collaborator was to revoke and re-send it. */}
+                <Tooltip
+                  title={CONSOLE_USER_TYPE_HINTS[consoleUserType(invite)]}
+                >
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    color={
+                      consoleUserType(invite) === 'manager'
+                        ? 'secondary'
+                        : 'default'
+                    }
+                    label={
+                      CONSOLE_USER_TYPE_LABELS[consoleUserType(invite)]
+                    }
+                  />
+                </Tooltip>
                 <Chip label={invite.role} size="small" />
                 <Typography variant="body2">{invite.email}</Typography>
                 <Button

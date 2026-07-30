@@ -20,6 +20,8 @@ import {
   canWriteHost,
   generateOrgSlug,
   hostRoleFor,
+  CONSOLE_USER_TYPE_LABELS,
+  consoleUserType,
   countManagerSeats,
   isOrgWideMember,
   isOrgWideMembership,
@@ -171,6 +173,30 @@ describe('countManagerSeats (AGL-1113)', () => {
 
   it('counts a legacy pre-allHosts membership as a manager', () => {
     expect(countManagerSeats([{ role: 'editor' }])).toBe(1)
+  })
+
+  it('classifies each entry the same way it counts it (AGL-1114)', () => {
+    // The Type column and the seat count must never disagree — they are the
+    // same question asked twice, so they share the predicate.
+    const managers = roster.filter((m) => consoleUserType(m) === 'manager')
+    expect(managers).toHaveLength(countManagerSeats(roster))
+    // Role alone is NOT the answer: the same `editor` role appears on both
+    // sides of the split, which is the whole reason this column exists.
+    expect(
+      consoleUserType({ role: 'editor', allHosts: true, hostAccess: {} }),
+    ).toBe('manager')
+    expect(
+      consoleUserType({
+        role: 'editor',
+        allHosts: false,
+        hostAccess: { h1: 'editor' },
+      }),
+    ).toBe('collaborator')
+    // Labels exist for every kind, including the published-site population
+    // that never appears in this collection.
+    expect(CONSOLE_USER_TYPE_LABELS.manager).toBe('Team manager')
+    expect(CONSOLE_USER_TYPE_LABELS.collaborator).toBe('Site collaborator')
+    expect(CONSOLE_USER_TYPE_LABELS.siteMember).toBeTruthy()
   })
 
   it('is zero for an all-collaborator roster and tolerates gaps', () => {
