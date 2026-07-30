@@ -21,6 +21,7 @@ import {
   firebaseAdmin,
   logOrgActivity,
   resolveOrgMembership,
+  seedUserProfile,
   upsertOrgMember,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -102,6 +103,30 @@ async function handler(request: Request): Promise<Response> {
         { error: 'This email domain is not verified for SSO on this organization' },
         { status: 403 },
       )
+    }
+
+    // Seed the personal profile doc (AGL-1127). NOTHING else creates it: not
+    // this route, and not sign-up either — `users/{uid}` was only ever born
+    // the first time someone saved Basic info, so the form rendered empty
+    // against a document that did not exist. An SSO account is the case where
+    // that hurts, because the assertion already carries the name the user
+    // would have typed.
+    //
+    // Runs BEFORE the already-a-member return on purpose: that early return
+    // is what an existing SSO account takes on every subsequent sign-in, so
+    // putting the seed after it would leave today's accounts blank forever.
+    // Here it doubles as the backfill.
+    //
+    // Only the absent fields are written, so a user who has since edited
+    // their name never has it overwritten by the IdP's copy on next sign-in.
+    // Best-effort: a cosmetic prefill must not cost anyone their access, and
+    // it self-heals on the next sign-in.
+    try {
+      await seedUserProfile(decoded.uid, {
+        displayName: (decoded['name'] as string | undefined) ?? null,
+      })
+    } catch (error) {
+      console.error('[auth/sso-jit] profile seed failed', error)
     }
 
     // Already a member? Idempotent success (a resync, not a re-grant).

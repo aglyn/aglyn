@@ -19,6 +19,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  seedUserProfile,
 } from '@aglyn/tenant-data-admin'
 import { parseSignedOut, signedOutTombstone } from './session-tombstone'
 
@@ -115,6 +116,31 @@ async function handler(request: Request): Promise<Response> {
           return emailUnverifiedResponse()
         }
         tenantId = decoded.firebase?.tenant
+        // Seed the personal profile doc (AGL-1127). No account-creation path
+        // wrote `users/{uid}` — it was born the first time someone saved
+        // Basic info — so Manage Account rendered its form against a document
+        // that did not exist, for every account that had never used it.
+        //
+        // Here because this is the one place EVERY interactive sign-in
+        // passes through with a verified token in hand, whichever provider
+        // it came from: the Google popup, the mobile redirect (which
+        // completes on a fresh page load and so has no handler of its own to
+        // hang this off), and SSO. It is also what backfills the accounts
+        // that predate this, on their next sign-in, without a migration.
+        //
+        // Deliberately NOT awaited: minting the session is what the user is
+        // waiting on, and a cosmetic prefill must neither delay it nor fail
+        // it. It re-runs on every mint, and the seed only ever fills fields
+        // that are absent, so a dropped one costs nothing.
+        //
+        // Email/password sign-up seeds itself from the form instead — the
+        // first/last name it collects are not on the token at this point,
+        // because the account was created seconds ago with no displayName.
+        void seedUserProfile(decoded.uid, {
+          displayName: decoded['name'] as string | undefined,
+        }).catch((error) => {
+          console.error('[auth/session] profile seed failed', error)
+        })
       } catch {
         return Response.json({ error: 'Unauthenticated' }, { status: 401 })
       }

@@ -33,6 +33,7 @@ export * from './lib/no-side-effects'
 export * from './lib/noop'
 export * from './lib/normalized'
 export * from './lib/numeronym'
+export * from './lib/split-display-name'
 export * from './lib/trim'
 export * from './lib/truthy'
 

@@ -47,11 +47,15 @@ import {
   setPersistence,
   signInWithPopup,
   signInWithRedirect,
+  updateProfile,
+  type UserCredential,
 } from 'firebase/auth'
+import { doc, setDoc, type Firestore } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import {
   useAnalytics,
   useAuth,
+  useFirestore,
   useSigninCheck,
 } from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
@@ -78,9 +82,50 @@ const formSchema: FormSchema = {
   ],
 }
 
+/**
+ * Keep the name this form REQUIRES (AGL-1127).
+ *
+ * Both fields are `isRequired`, so no one gets an account without typing
+ * them — and nothing was done with either. Sign-up created the auth user from
+ * the email and password and dropped the rest on the floor, leaving the
+ * account with no `displayName` and no `users/{uid}` profile doc at all. The
+ * user then opened Manage Account → Basic info, found the name they had just
+ * been made to enter blank, and had to type it a second time.
+ *
+ * Both destinations matter: rosters, comments and the app bar read the auth
+ * `displayName`, while the profile doc is what Basic info edits. Best-effort
+ * on purpose — the account exists and the user is signed in by this point, so
+ * a failed prefill must not surface as a failed sign-up. The session-cookie
+ * route re-seeds the profile from `displayName` on the next sign-in anyway.
+ */
+async function persistSignUpProfile(
+  firestore: Firestore,
+  credential: UserCredential,
+  values: Record<string, unknown>,
+): Promise<void> {
+  const firstName = String(values[FIELD_SCHEMA_FIRST_NAME.name] ?? '').trim()
+  const lastName = String(values[FIELD_SCHEMA_LAST_NAME.name] ?? '').trim()
+  if (!firstName && !lastName) return
+  try {
+    await Promise.all([
+      setDoc(
+        doc(firestore, 'users', credential.user.uid),
+        { firstName, lastName },
+        { merge: true },
+      ),
+      updateProfile(credential.user, {
+        displayName: [firstName, lastName].filter(Boolean).join(' '),
+      }),
+    ])
+  } catch (error) {
+    console.error('sign-up profile write failed', error)
+  }
+}
+
 function SignUp() {
   const { queueLoading, loading } = useLoading()
   const firebaseAuth = useAuth()
+  const firestore = useFirestore()
   const [error, setError] = useState<AuthResultError>(null)
   // Account creation is contract formation, so both sign-up flows (email and
   // Google) require affirmative agreement to the Terms and Privacy Policy.
@@ -133,10 +178,16 @@ function SignUp() {
             ? signInWithRedirect(firebaseAuth, googleOAuthProvider)
             : signInWithPopup(firebaseAuth, googleOAuthProvider)
         })
-        .then((user) => {
+        .then(async (credential) => {
           logEvent(analytics, 'sign_up', {
-            method: user.providerId,
+            method: credential.providerId,
           })
+          // Only the email/password branch has form values to keep; the
+          // Google branches carry their name on the token, and the session
+          // route seeds from that (AGL-1127).
+          if (values) {
+            await persistSignUpProfile(firestore, credential, values)
+          }
         })
         .catch((error) => {
           console.error(error)
@@ -150,7 +201,15 @@ function SignUp() {
           dequeueLoading()
         })
     },
-    [analytics, consented, error, firebaseAuth, loading, queueLoading],
+    [
+      analytics,
+      consented,
+      error,
+      firebaseAuth,
+      firestore,
+      loading,
+      queueLoading,
+    ],
   )
 
   const handleConsentChange = useCallback((next: boolean) => {
