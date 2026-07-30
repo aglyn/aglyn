@@ -49,6 +49,15 @@ export interface SendEmailOptions {
    */
   from?: string
   /**
+   * White-label display name for the sender (White-Label Phase 1). Replaces
+   * only the display name in front of the configured verified address — the
+   * address itself must stay on the verified domain, so this cannot forge a
+   * different sender. Ignored when `from` is set explicitly. Callers pass
+   * `resolveBrandingProfile(org).fromName` here so an agency's mail reads as
+   * their brand instead of "Aglyn".
+   */
+  fromName?: string
+  /**
    * Short label for logs, e.g. `'invite'` or `'usage-summary'`. Makes a
    * failure in the runtime logs traceable to the feature that caused it.
    */
@@ -107,6 +116,27 @@ export function isEmailConfigured(): boolean {
   return Boolean(apiKey && from)
 }
 
+/**
+ * Applies a white-label display name to a configured sender while keeping
+ * its verified address (White-Label Phase 1). Accepts either a bare address
+ * (`noreply@aglyn.com`) or an RFC-5322 `Name <addr>` header and returns
+ * `"<fromName>" <addr>`. A blank name, or a value with no extractable
+ * address, yields the original `from` untouched — the sender identity is
+ * never dropped on the floor.
+ */
+export function applyFromName(
+  from: string | undefined,
+  fromName: string | undefined,
+): string | undefined {
+  const name = (fromName ?? '').trim()
+  if (!from || !name) return from
+  const angle = from.match(/<([^>]+)>/)
+  const address = (angle ? angle[1] : from).trim()
+  if (!address.includes('@')) return from
+  // Quote the display name so commas/specials stay inside one mailbox.
+  return `"${name.replace(/"/g, '')}" <${address}>`
+}
+
 function normalizeRecipients(to: string | string[]): string[] {
   const list = Array.isArray(to) ? to : [to]
   return list
@@ -131,7 +161,10 @@ export async function sendEmail(
   options: SendEmailOptions,
 ): Promise<SendEmailResult> {
   const { apiKey, from: configuredFrom } = getEmailConfig()
-  const from = options.from ?? configuredFrom
+  // Explicit `from` wins; otherwise apply any white-label display name to the
+  // configured verified sender (White-Label Phase 1).
+  const from =
+    options.from ?? applyFromName(configuredFrom, options.fromName)
   const label = options.context ? `${options.context} email` : 'email'
 
   if (!apiKey || !from) {

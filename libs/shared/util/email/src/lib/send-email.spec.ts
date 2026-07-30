@@ -17,6 +17,7 @@
 
 import {
   RESEND_SEND_ENDPOINT,
+  applyFromName,
   isEmailConfigured,
   sendEmail,
 } from './send-email'
@@ -228,6 +229,59 @@ describe('sendEmail', () => {
 
       expect(result).toEqual({ sent: true, id: 'email_123' })
       expect(lastBody(fetchMock).from).toBe('Support <help@aglyn.com>')
+    })
+
+    it('applies a white-label fromName to the configured verified address', async () => {
+      const fetchMock = mockFetch({})
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Hi',
+        fromName: 'Acme Sites',
+      })
+      // Keeps the verified address, swaps only the display name.
+      expect(lastBody(fetchMock).from).toBe('"Acme Sites" <noreply@aglyn.com>')
+    })
+
+    it('lets an explicit from win over fromName', async () => {
+      const fetchMock = mockFetch({})
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Hi',
+        from: 'Support <help@aglyn.com>',
+        fromName: 'Acme Sites',
+      })
+      expect(lastBody(fetchMock).from).toBe('Support <help@aglyn.com>')
+    })
+  })
+
+  describe('applyFromName', () => {
+    it('swaps the display name on an RFC-5322 sender, keeping the address', () => {
+      expect(applyFromName('Aglyn <noreply@aglyn.com>', 'Acme')).toBe(
+        '"Acme" <noreply@aglyn.com>',
+      )
+    })
+
+    it('wraps a bare address with the display name', () => {
+      expect(applyFromName('noreply@aglyn.com', 'Acme')).toBe(
+        '"Acme" <noreply@aglyn.com>',
+      )
+    })
+
+    it('leaves the sender untouched for a blank name or missing address', () => {
+      expect(applyFromName('Aglyn <noreply@aglyn.com>', '')).toBe(
+        'Aglyn <noreply@aglyn.com>',
+      )
+      expect(applyFromName('Aglyn <noreply@aglyn.com>', '   ')).toBe(
+        'Aglyn <noreply@aglyn.com>',
+      )
+      expect(applyFromName(undefined, 'Acme')).toBeUndefined()
+      expect(applyFromName('not-an-address', 'Acme')).toBe('not-an-address')
+    })
+
+    it('strips embedded quotes so the mailbox stays well-formed', () => {
+      expect(applyFromName('noreply@aglyn.com', 'Ac"me')).toBe(
+        '"Acme" <noreply@aglyn.com>',
+      )
     })
   })
 
