@@ -22,6 +22,7 @@ import {
   ICON_VARIANT_ORGANIZATION,
   ICON_VARIANT_SYMBOL_CONFIRMED,
   ICON_VARIANT_SYMBOL_SECURE,
+  ICON_VARIANT_USER_SETTINGS,
 } from '@aglyn/shared-data-enums'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -44,7 +45,7 @@ import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgPlans } from '../hooks/use-org-plans'
 import { useOrgScope } from '../hooks/use-org-scope'
-import { resolveNavSection } from '../hooks/use-secondary-nav'
+import { resolveNavSection, urlNamesOrg } from '../hooks/use-secondary-nav'
 import CreateOrgDialog from './create-org-dialog.component'
 import SwitcherSearchField from './switcher-search-field.component'
 
@@ -109,34 +110,51 @@ export function OrgSwitcherNav() {
     router.push(href)
   }
 
-  // Staff console (AGL-1119): there is no org scope here, and with no
-  // `orgSlug` in the URL the scope silently fell back to the staff member's
-  // OWN org — so a staff page was chromed "Aglyn LLC · Enterprise", claiming
-  // a workspace context the page does not have. Show what this actually is
-  // instead.
+  // Org-less sections (AGL-1119 for staff, AGL-1130 for the personal Manage
+  // area): there is no org scope here, and with no `orgSlug` in the URL the
+  // scope silently fell back to the user's FIRST org — so the page was
+  // chromed "Aglyn LLC · Enterprise", claiming a workspace context it does
+  // not have, plan badge and all. Name what the section actually is instead.
   //
-  // Links to the staff OVERVIEW, not the Organizations list: this sits where
-  // the workspace chip sits, and that chip goes home. The wordmark-adjacent
-  // control is "back to the top of where I am", and the top of the staff
-  // console is its overview — Organizations is one section of it, reachable
-  // from the tab strip right below.
+  // Each links to its own TOP, not to a list: this sits where the workspace
+  // chip sits, and that chip goes home. The wordmark-adjacent control is
+  // "back to the top of where I am" — for the staff console that is its
+  // overview (Organizations is one section of it, reachable from the tab
+  // strip right below), and for Manage it is Manage Account.
   //
   // A specific org's staff detail page keeps this label too: it reaches this
   // component with no orgSlug, and the org's name is already the page's own
   // heading, breadcrumb and summary card.
-  if (resolveNavSection(pathname).kind === 'admin') {
+  const section = resolveNavSection(pathname)
+  if (section.kind === 'admin' || section.kind === 'manage') {
+    const admin = section.kind === 'admin'
     return (
       <Button
         component={AppLink}
-        href={buildRoute(Route.ADMIN_OVERVIEW)}
+        href={buildRoute(
+          admin ? Route.ADMIN_OVERVIEW : Route.MANAGE_USER_SETTINGS,
+        )}
         color="inherit"
-        startIcon={<MdiIcon path={ICON_VARIANT_SYMBOL_SECURE.path} />}
+        startIcon={
+          <MdiIcon
+            path={
+              admin
+                ? ICON_VARIANT_SYMBOL_SECURE.path
+                : ICON_VARIANT_USER_SETTINGS.path
+            }
+          />
+        }
         sx={{ textTransform: 'none', fontWeight: 600 }}
       >
-        {'Staff Console'}
+        {admin ? 'Staff Console' : 'Account'}
       </Button>
     )
   }
+
+  // Any other route the URL doesn't scope to a workspace — the org jump page
+  // at the apex, chiefly. Nothing to name, so name nothing; the page below is
+  // the workspace picker itself.
+  if (!urlNamesOrg(section, orgSlug)) return null
 
   if (!currentOrg) return null
   // The pill is the BILLING TIER. Falling back to the member's role meant a

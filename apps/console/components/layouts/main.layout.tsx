@@ -53,6 +53,7 @@ import { Fragment } from 'react'
 import { buildRoute, Route } from '../../constants/route-links'
 import useBranding from '../../hooks/use-branding'
 import { useOrgSlug } from '../../hooks/use-org-scope'
+import { useUrlNamesOrg } from '../../hooks/use-secondary-nav'
 import { TOP_BAR_HEIGHT } from '../../constants/shared'
 import NotificationPrompt from '../notification-prompt.component'
 import NotificationsMenu from '../notifications-menu.component'
@@ -163,8 +164,11 @@ const TopAppBar = (props: TopAppBarProps) => {
     backButton,
   } = props
   // The logo returns to the active org's home (AGL-631); the jump page when no
-  // org has resolved yet.
-  const orgSlug = useOrgSlug()
+  // org has resolved yet — or when the URL names no workspace at all
+  // (AGL-1130), where "the active org" is only whichever one the scope fell
+  // back to. From the staff console or Manage Account, home is the picker.
+  const resolvedOrgSlug = useOrgSlug()
+  const orgSlug = useUrlNamesOrg() ? resolvedOrgSlug : ''
   const orgHome = orgSlug ? buildRoute(Route.ORG_HOME, { orgSlug }) : '/'
   // White-label chrome (White-Label Phase 2): swap the Aglyn wordmark for the
   // current org's brand when it is white-label entitled.

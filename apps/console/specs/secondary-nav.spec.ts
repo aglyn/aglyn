@@ -24,6 +24,7 @@ import {
   isAddressableSection,
   resolveActiveTab,
   resolveNavSection,
+  urlNamesOrg,
 } from '../hooks/use-secondary-nav'
 
 /**
@@ -93,6 +94,49 @@ describe('resolveNavSection', () => {
     '/manage/notifications',
   ])('leaves %s on the workspace chrome', (pathname) => {
     expect(resolveNavSection(pathname).kind).not.toBe('admin')
+  })
+
+  /**
+   * AGL-1130: the same bug one section over. `/manage/*` is not an org route
+   * either, so the scope fell back to the user's first org and Manage Account
+   * was chromed "Zach Gover Personal · Starter" with a site switcher and an
+   * Upgrade CTA for a workspace the page has nothing to do with.
+   *
+   * Pinned as a URL-only predicate on purpose. Asking the RESOLVED org
+   * instead would make the answer wait on the membership read, and the
+   * switchers would blink out on every cold load — the regression AGL-745/755
+   * exist to prevent.
+   */
+  const namesOrg = (pathname: string, subdomain: string | null = null) =>
+    urlNamesOrg(resolveNavSection(pathname), subdomain)
+
+  it.each([
+    ['/manage/user', 'the personal Manage area'],
+    ['/manage/notifications', 'the personal Manage area'],
+    ['/admin/overview', 'the staff console'],
+    ['/', 'the org jump page'],
+  ])('%s (%s) names no workspace at the apex', (pathname) => {
+    expect(namesOrg(pathname)).toBe(false)
+  })
+
+  it.each([`/${ORG}`, `/${ORG}/team`, `/${ORG}/hosts/${HOST}`])(
+    'takes the workspace named by %s',
+    (pathname) => {
+      expect(namesOrg(pathname)).toBe(true)
+    },
+  )
+
+  it('takes the workspace from the subdomain off an org path', () => {
+    // On `business1.aglyn.com/manage/user` the hostname IS the workspace, so
+    // naming it is truthful — the negative control for the apex cases above.
+    expect(namesOrg('/manage/user', ORG)).toBe(true)
+    expect(namesOrg('/', ORG)).toBe(true)
+  })
+
+  it('keeps the staff console org-less even on a workspace subdomain', () => {
+    // The staff console is the platform's own view, not a workspace's. This
+    // is the one case where the subdomain must NOT win.
+    expect(namesOrg('/admin/overview', ORG)).toBe(false)
   })
 
   it('does not mistake an org slug that merely starts with "admin"', () => {

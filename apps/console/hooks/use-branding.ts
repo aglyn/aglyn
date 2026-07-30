@@ -24,6 +24,7 @@ import {
   type ResolvedBrandingProfile,
 } from '@aglyn/aglyn'
 import useCurrentOrg from './use-current-org'
+import { useUrlNamesOrg } from './use-secondary-nav'
 
 /**
  * The effective brand for the signed-in user's current org (White-Label
@@ -47,6 +48,22 @@ export function useBranding(): {
   ready: boolean
 } {
   const { org, ready } = useCurrentOrg()
+  // A route the URL doesn't scope to a workspace has no brand to wear
+  // (AGL-1130). `useCurrentOrg` falls back to the user's first org, so the
+  // staff console and Manage Account would have taken their wordmark, product
+  // name and primary color from whichever org that happened to be — the
+  // platform's own console rendered in a customer's brand. Latent rather than
+  // observed: it needs the fallback org to be white-label entitled AND
+  // branded, which today's is not.
+  //
+  // `ready` stays true in that case: the brand answer is settled, it just
+  // doesn't depend on an org doc. A consumer gating a spinner on it renders
+  // the Aglyn chrome immediately instead of waiting for a read that cannot
+  // change the outcome.
+  const namesOrg = useUrlNamesOrg()
+  if (!namesOrg) {
+    return { branding: AGLYN_BRANDING_PROFILE, whiteLabel: false, ready: true }
+  }
   if (!ready) {
     return { branding: AGLYN_BRANDING_PROFILE, whiteLabel: false, ready }
   }
