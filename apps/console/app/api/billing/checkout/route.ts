@@ -145,8 +145,36 @@ async function handler(request: Request): Promise<Response> {
       // checkout. Stripe validates the code and the discount rides the
       // resulting subscription; the webhook mirrors it onto org.discount.
       allow_promotion_codes: 'true',
+      // Billing identity on the customer (AGL-1133). An invoice that has to
+      // satisfy a tax authority needs an address on it, and a B2B one needs
+      // the buyer's tax id.
+      //
+      // The address was NOT simply absent, contrary to the issue: Stripe's
+      // default `billing_address_collection` is `auto`, so it collects one
+      // when the payment method requires it. The live customer for the one
+      // paying org does carry a full US address — measured, not assumed.
+      // `required` makes that a guarantee rather than a side effect of which
+      // card someone used, which is what an invoice needs.
+      //
+      // Phone and tax id were genuinely never collected: neither is ever
+      // required by a card, so `auto` never asks for them.
+      billing_address_collection: 'required',
+      'phone_number_collection[enabled]': 'true',
+      'tax_id_collection[enabled]': 'true',
       ...(decoded.email ? { customer_email: decoded.email } : {}),
     })
+    // NOT enabled here: `automatic_tax`. Not because it would fail —
+    // I assumed it would, since all 65 active live prices have
+    // `tax_behavior: unspecified`, and a live session created with
+    // `automatic_tax[enabled]=true` was ACCEPTED (status
+    // `requires_location_inputs`); the account's Tax default of
+    // `inferred_by_currency` covers unspecified prices. Stripe Tax is
+    // `active` with a head office set, so it is ready.
+    //
+    // It is off because turning it on changes what customers are charged,
+    // which is a pricing decision rather than a technical one. The collection
+    // above is its prerequisite and is safe on its own: an address and a tax
+    // id on the customer change no amount.
 
     // Attach the shared metered price (AGL-635) as a second subscription
     // item so usage overage — storage AND API requests, both reported to
