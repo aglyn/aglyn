@@ -40,15 +40,13 @@ import { Button, CircularProgress, Divider, Link, Stack, Typography } from '@mui
 import { logEvent } from 'firebase/analytics'
 import {
   browserLocalPersistence,
-  getRedirectResult,
   GoogleAuthProvider,
-  SAMLAuthProvider,
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
 } from 'firebase/auth'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
   useAnalytics,
   useAuth,
@@ -68,11 +66,6 @@ import guardPopupLoading from '../../../utils/popup-loading-guard'
 
 const googleOAuthProvider = new GoogleAuthProvider()
 
-// Enterprise SSO (AGL-1101): the SAML redirect leaves and returns to this
-// page, and `auth.tenantId` must be restored BEFORE `getRedirectResult` for
-// the tenant round-trip to resolve — so we stash the tenant across the hop.
-const SSO_PENDING_KEY = 'aglyn.sso.pending'
-
 const formSchema: FormSchema = {
   fields: [FIELD_SCHEMA_EMAIL, FIELD_SCHEMA_PASSWORD],
 }
@@ -85,15 +78,9 @@ function SignIn() {
   // Org workspace subdomains can't run OAuth — hand sign-in to the auth
   // host and skip the local form/redirect-result entirely (AGL-465).
   const delegation = useDelegateWorkspaceSignIn('signin')
-  // A pending SSO redirect owns `getRedirectResult` this load (it must set
-  // `auth.tenantId` first), so the Google handler stands down to avoid
-  // double-consuming the one-shot result.
-  const ssoPending =
-    typeof window !== 'undefined' &&
-    !!window.sessionStorage.getItem(SSO_PENDING_KEY)
   // Mobile browsers sign in via redirect (AGL-462); this completes the
   // round-trip when Google sends the user back here.
-  useGoogleRedirectResult('login', setError, delegation === 'off' && !ssoPending)
+  useGoogleRedirectResult('login', setError, delegation === 'off')
   // Once auth succeeds there's a short window before the layout redirects to
   // the dashboard/continue URL; show the loading splash instead of flashing
   // the sign-in form back at the user (AGL-476).
@@ -159,140 +146,6 @@ function SignIn() {
   const handleGoogleButtonClick = useCallback(async () => {
     await handleSignIn()
   }, [handleSignIn])
-
-  // Enterprise SSO (AGL-1101): look up the entered email's domain; if it is
-  // governed by an IdP, set the org's GCIP tenant on the client auth and hand
-  // off to the SAML redirect. Falls through to a clear error for a domain with
-  // no SSO, so password/Google stay usable (no lockout).
-  const handleSsoSignIn = useCallback(async () => {
-    if (loading) return
-    if (error) setError(null)
-    const emailInput =
-      typeof document !== 'undefined'
-        ? (document.querySelector(
-            `input[name="${FIELD_SCHEMA_EMAIL.name}"]`,
-          ) as HTMLInputElement | null)
-        : null
-    const email = (emailInput?.value ?? '').trim().toLowerCase()
-    if (!email) {
-      setError({ message: 'Enter your work email to use single sign-on.' } as any)
-      return
-    }
-    const dequeueLoading = queueLoading()
-    let navigatingAway = false
-    try {
-      const res = await fetch(
-        `/api/auth/sso-lookup?email=${encodeURIComponent(email)}`,
-      )
-      const payload = await res.json().catch(() => ({}))
-      if (!payload?.ssoEnabled || !payload.tenantId || !payload.providerId) {
-        setError({
-          message: 'No single sign-on is configured for that email domain.',
-        } as any)
-        return
-      }
-      markInteractiveSignIn()
-      await setPersistence(firebaseAuth, browserLocalPersistence)
-      firebaseAuth.tenantId = payload.tenantId
-      const provider = new SAMLAuthProvider(payload.providerId)
-      if (isMobileBrowser()) {
-        // Mobile popups become tabs (AGL-462) — redirect, and the completion
-        // effect finishes the round-trip on return. Requires the app origin to
-        // be same-site with the auth domain (true on the real deployment).
-        navigatingAway = true
-        window.sessionStorage.setItem(
-          SSO_PENDING_KEY,
-          JSON.stringify({ tenantId: payload.tenantId }),
-        )
-        await signInWithRedirect(firebaseAuth, provider)
-        return
-      }
-      // Desktop: popup (like the Google button). The result posts back via
-      // postMessage, so it works even when the app origin isn't same-site with
-      // the auth domain — and lets us JIT-map inline without a redirect hop.
-      const result = await signInWithPopup(firebaseAuth, provider)
-      const idToken = await result.user.getIdToken()
-      const jit = await fetch('/api/auth/sso-jit', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
-      if (!jit.ok) {
-        const jitPayload = await jit.json().catch(() => ({}))
-        setError({
-          message:
-            jitPayload?.error ??
-            'Signed in, but your account is not authorized for this organization.',
-        } as any)
-      }
-      // Success: useSessionCookie mints the tenant cookie and signInCheck flips
-      // to signedIn, which routes to the org — the loading splash covers it.
-    } catch (err) {
-      console.error(err)
-      setError(err as any)
-      window.sessionStorage.removeItem(SSO_PENDING_KEY)
-    } finally {
-      if (!navigatingAway) dequeueLoading()
-    }
-  }, [error, firebaseAuth, loading, queueLoading])
-
-  // Complete a returning SAML redirect (AGL-1101): restore the tenant, consume
-  // the result, and JIT-map the user into their org before the layout routes.
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const raw = window.sessionStorage.getItem(SSO_PENDING_KEY)
-    if (!raw) return
-    let pending: { tenantId?: string } = {}
-    try {
-      pending = JSON.parse(raw)
-    } catch {
-      /* corrupt — cleared below */
-    }
-    if (!pending.tenantId) {
-      window.sessionStorage.removeItem(SSO_PENDING_KEY)
-      return
-    }
-    let cancelled = false
-    const dequeueLoading = queueLoading()
-    void (async () => {
-      try {
-        firebaseAuth.tenantId = pending.tenantId ?? null
-        const result = await getRedirectResult(firebaseAuth)
-        if (!result?.user) {
-          window.sessionStorage.removeItem(SSO_PENDING_KEY)
-          return
-        }
-        const idToken = await result.user.getIdToken()
-        const jit = await fetch('/api/auth/sso-jit', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${idToken}` },
-        })
-        if (!jit.ok) {
-          const payload = await jit.json().catch(() => ({}))
-          if (!cancelled) {
-            setError({
-              message:
-                payload?.error ??
-                'Signed in, but your account is not authorized for this organization.',
-            } as any)
-          }
-        }
-        window.sessionStorage.removeItem(SSO_PENDING_KEY)
-        // useSessionCookie mints the tenant-aware cookie; signInCheck flips to
-        // signedIn and the layout routes to the org dashboard.
-      } catch (err) {
-        if (!cancelled) {
-          console.error(err)
-          setError(err as any)
-        }
-        window.sessionStorage.removeItem(SSO_PENDING_KEY)
-      } finally {
-        dequeueLoading()
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [firebaseAuth, queueLoading])
 
   if (delegation === 'redirecting') {
     // Bouncing to the auth host (AGL-465) — no local form or OAuth here.
@@ -388,8 +241,9 @@ function SignIn() {
         </Button>
         <Button
           variant="outlined"
+          component={AppLink}
+          href="/sso"
           startIcon={<MdiIcon path={mdiShieldKeyOutline.path} />}
-          onClick={handleSsoSignIn}
         >
           {'Single sign-on (SSO)'}
         </Button>
