@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
+  buildRoute,
   canManageOrg,
   checkSeatQuota,
   countManagerSeats,
@@ -26,6 +27,7 @@ import {
   isOrgRole,
   isOrgWideMember,
   resolveBrandingProfile,
+  Route,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
@@ -34,6 +36,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   logOrgActivity,
+  notifyOrgAdmins,
   resolveOrgMembership,
   upsertOrgMember,
 } from '@aglyn/tenant-data-admin'
@@ -111,6 +114,17 @@ async function handler(request: Request): Promise<Response> {
       .collection('invites')
 
     const actorManages = isStaff || canManageOrg(actor?.member.role)
+
+    /**
+     * The org's slug, for the deep link on admin notifications (AGL-1116).
+     * Links are frozen at write time, so a notification emitted for a
+     * slug-less org gets none rather than a route that would 404 later.
+     */
+    const orgSlugForLink = async (): Promise<string | undefined> => {
+      const snapshot = await firestore.collection('orgs').doc(orgId).get()
+      const slug = snapshot.get('slug')
+      return typeof slug === 'string' && slug ? slug : undefined
+    }
 
     // Shared invite-email send (AGL-853): both `create` and the new `resend`
     // deliver the same message. Best-effort — returns whether a message
@@ -266,6 +280,25 @@ async function handler(request: Request): Promise<Response> {
       // Best-effort delivery via Resend (AGL-708): the invite works without
       // it — the console banner surfaces it after sign-in either way.
       const emailed = await sendInviteEmail(email, role)
+      // Tell the org's admins (AGL-1116). Until now a pending invite left no
+      // trace outside the activity log, which nobody watches: the `team.invite`
+      // notification type has existed since AGL-259 with no emitter at all.
+      // The invitee cannot be notified in-app — they have no account yet — so
+      // the admins are the only audience there is, and whether the email
+      // actually went out is the part they cannot otherwise find out.
+      const inviteSlug = await orgSlugForLink()
+      void notifyOrgAdmins(orgId, {
+        type: 'team.invite',
+        title: `${reusing ? 'Invite updated for' : 'Invited'} ${email}`,
+        body:
+          `Role: ${role}. ` +
+          (emailed
+            ? 'Invite email sent.'
+            : 'No invite email was sent — they will see it when they sign in.'),
+        ...(inviteSlug
+          ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: inviteSlug }) }
+          : {}),
+      })
       return Response.json(
         { ok: true, inviteId, emailed, updated: reusing },
         { status: 200 },
@@ -396,6 +429,18 @@ async function handler(request: Request): Promise<Response> {
         `Joined the organization as ${invite['role']}`,
         { type: 'member', id: decoded.uid, name: email },
       )
+      // Close the loop for whoever invited them (AGL-1116): an admin who sent
+      // an invite had no way to learn it was taken up short of re-opening the
+      // Team page and noticing the pending row had gone.
+      const acceptSlug = await orgSlugForLink()
+      void notifyOrgAdmins(orgId, {
+        type: 'team.invite',
+        title: `${email} accepted their invitation`,
+        body: `They joined as ${invite['role']}.`,
+        ...(acceptSlug
+          ? { link: buildRoute(Route.MANAGE_TEAM, { orgSlug: acceptSlug }) }
+          : {}),
+      })
       return Response.json({ ok: true }, { status: 200 })
     }
 

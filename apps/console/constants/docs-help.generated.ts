@@ -551,7 +551,7 @@ export const DOCS_HELP_ANCHORS = {
   glossary: ['#the-hierarchy', '#organization-org', '#workspace', '#tenant', '#tenant-vs-host--not-the-same-thing', '#quick-reference'],
   importExport: ['#export', '#import', '#upsert-on-a-key-field', '#tips', '#related'],
   interactions: ['#fluent-interactions', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#custom-html-block', '#related'],
-  inviteTeammates: ['#invite-someone', '#pending-invites', '#accepting-an-invite', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#tips', '#related'],
+  inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#tips', '#related'],
   languageSwitcher: ['#steps', '#tips', '#related'],
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
   manageAccount: ['#account', '#sign-in-methods', '#profile-image', '#basic-info', '#security', '#related'],
