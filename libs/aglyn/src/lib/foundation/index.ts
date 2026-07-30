@@ -39,6 +39,7 @@ export {
 // glossary).
 export type {
   AglynOrgBilling,
+  OrgBrandingProfile,
   OrgEntitlements,
   OrgFeatureFlags,
   OrgPlan,

@@ -16,6 +16,7 @@
  */
 
 import {
+  AGLYN_BRANDING_PROFILE,
   checkApiRequestQuota,
   checkContactQuota,
   checkDataStorageQuota,
@@ -23,6 +24,7 @@ import {
   checkEntitlement,
   isBillingSubscription,
   orgMonthlyRevenueUsd,
+  resolveBrandingProfile,
   resolveEffectivePlan,
   checkQuota,
   checkSeatQuota,
@@ -97,6 +99,14 @@ describe('plan entitlements', () => {
       expect(plan.storagePerHostMb).toBeGreaterThan(plan.totalSiteSizeMb)
     }
     expect(PLAN_ENTITLEMENTS.starter.features.removeBranding).toBe(true)
+    // White-label (White-Label Phase 1): Agency tier only; every other tier
+    // — including Advanced — is off by default. Distinct from removeBranding,
+    // which paid tiers all carry.
+    expect(PLAN_ENTITLEMENTS.agency.features.whiteLabel).toBe(true)
+    for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
+      if (plan === 'agency') continue
+      expect(PLAN_ENTITLEMENTS[plan].features.whiteLabel).toBe(false)
+    }
     expect(PLAN_ENTITLEMENTS.pro.features.marketplaceSelling).toBe(true)
     expect(PLAN_ENTITLEMENTS.pro.features.scheduledPublishing).toBe(false)
     expect(PLAN_ENTITLEMENTS.business.features.scheduledPublishing).toBe(true)
@@ -648,6 +658,81 @@ describe('plan entitlements', () => {
           seatAddons: { hosts: 2, posRegisters: 1, eventCalendar: 1 },
         } as any),
       ).toBe(139 + 2 * 5 + 89 + 9)
+    })
+  })
+
+  describe('white-label (White-Label Phase 1)', () => {
+    it('gates the whiteLabel entitlement to Agency (and per-org overrides)', () => {
+      expect(checkEntitlement({ plan: 'agency' } as any, 'whiteLabel')).toBe(true)
+      // Every non-agency tier — including Advanced — is off by default.
+      for (const plan of ['free', 'starter', 'pro', 'business', 'scale', 'advanced'] as OrgPlan[]) {
+        expect(checkEntitlement({ plan } as any, 'whiteLabel')).toBe(false)
+      }
+      // Enterprise inherits via the per-org entitlements override mechanism.
+      const enterprise = {
+        plan: 'business',
+        entitlements: { features: { whiteLabel: true } },
+      } as any
+      expect(checkEntitlement(enterprise, 'whiteLabel')).toBe(true)
+      // A canceled agency subscription downgrades to free — and loses it.
+      const canceled = {
+        plan: 'agency',
+        subscription: { status: 'canceled' },
+      } as any
+      expect(checkEntitlement(canceled, 'whiteLabel')).toBe(false)
+    })
+
+    it('returns the Aglyn defaults when white-label is off, ignoring any stored profile', () => {
+      expect(resolveBrandingProfile(undefined)).toEqual(AGLYN_BRANDING_PROFILE)
+      expect(resolveBrandingProfile({ plan: 'business' } as any).productName).toBe(
+        'Aglyn',
+      )
+      // A profile stored without the entitlement is ignored entirely.
+      const notEntitled = {
+        plan: 'pro',
+        brandingProfile: { productName: 'Acme Sites', fromName: 'Acme' },
+      } as any
+      expect(resolveBrandingProfile(notEntitled)).toEqual(AGLYN_BRANDING_PROFILE)
+    })
+
+    it('applies the org profile when white-label is on, filling gaps with Aglyn defaults', () => {
+      const org = {
+        plan: 'agency',
+        brandingProfile: {
+          productName: 'Acme Sites',
+          fromName: 'Acme Team',
+          logoUrl: 'https://cdn.acme.com/logo.png',
+          primaryColor: '#ff5a00',
+          // supportUrl / faviconUrl / emailLogoUrl / customConsoleDomain omitted
+        },
+      } as any
+      const brand = resolveBrandingProfile(org)
+      expect(brand.productName).toBe('Acme Sites')
+      expect(brand.fromName).toBe('Acme Team')
+      expect(brand.logoUrl).toBe('https://cdn.acme.com/logo.png')
+      expect(brand.primaryColor).toBe('#ff5a00')
+      // Unset fields fall back to the Aglyn defaults, not undefined.
+      expect(brand.supportUrl).toBe(AGLYN_BRANDING_PROFILE.supportUrl)
+      expect(brand.faviconUrl).toBeNull()
+      expect(brand.customConsoleDomain).toBeNull()
+    })
+
+    it('is on by default for the Agency tier with no explicit override', () => {
+      const brand = resolveBrandingProfile({
+        plan: 'agency',
+        brandingProfile: { productName: 'Studio One' },
+      } as any)
+      expect(brand.productName).toBe('Studio One')
+    })
+
+    it('treats blank/whitespace profile fields as unset (Aglyn default wins)', () => {
+      const org = {
+        plan: 'agency',
+        brandingProfile: { productName: '   ', fromName: '' },
+      } as any
+      const brand = resolveBrandingProfile(org)
+      expect(brand.productName).toBe('Aglyn')
+      expect(brand.fromName).toBe('Aglyn')
     })
   })
 
