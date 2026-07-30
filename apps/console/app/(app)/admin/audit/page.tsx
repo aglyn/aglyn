@@ -109,7 +109,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
   return (
     <DashboardLayout
       breadcrumbItems={[
-        { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
+        { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Audit log', href: buildRoute(Route.ADMIN_AUDIT) },
       ]}
       help="staffConsole"

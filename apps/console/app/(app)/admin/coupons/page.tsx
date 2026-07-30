@@ -204,7 +204,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
   return (
     <DashboardLayout
       breadcrumbItems={[
-        { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
+        { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Coupons', href: buildRoute(Route.ADMIN_COUPONS) },
       ]}
       help="billing"

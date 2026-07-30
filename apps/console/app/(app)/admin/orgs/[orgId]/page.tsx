@@ -627,7 +627,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   return (
     <DashboardLayout
       breadcrumbItems={[
-        { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
+        { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Organizations', href: buildRoute(Route.ADMIN_ORGS) },
         { children: org?.name ?? orgId },
       ]}
