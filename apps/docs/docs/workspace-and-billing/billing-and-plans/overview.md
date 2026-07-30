@@ -182,6 +182,11 @@ member subscriptions alike. Selling requires a paid plan with commerce.
   invoice** (View), a **PDF download** of the invoice, and the payment **Receipt** once
   it's paid — everything you need for expense reports and bookkeeping. Older invoices
   load on demand.
+- **Billing details at checkout** — checkout asks for a **billing address**, a
+  **phone number**, and optionally a **business tax ID** (VAT, ABN, EIN and the like).
+  The address and tax ID appear on the invoice, which is what makes it usable for
+  reclaiming tax or filing it with an accountant. Previously an address was collected
+  only when the card happened to require one, and the phone and tax ID never were.
 - **Manage payment methods** opens the Stripe **Billing Portal** — update cards, view
   receipts, and set tax details there. It works even after a subscription lapses.
 - If a payment fails, the console shows a **past-due banner** during Stripe's retry
