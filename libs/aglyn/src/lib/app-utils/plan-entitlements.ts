@@ -113,6 +113,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dropshipRouting: false,
       commerceAnalytics: false,
       whiteLabel: false,
+      ssoEnabled: false,
     },
   },
   starter: {
@@ -185,6 +186,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dropshipRouting: false,
       commerceAnalytics: false,
       whiteLabel: false,
+      ssoEnabled: false,
     },
   },
   pro: {
@@ -255,6 +257,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dropshipRouting: true,
       commerceAnalytics: true,
       whiteLabel: false,
+      ssoEnabled: false,
     },
   },
   business: {
@@ -323,6 +326,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dropshipRouting: true,
       commerceAnalytics: true,
       whiteLabel: false,
+      ssoEnabled: false,
     },
   },
   // Scale (Pricing v3, 2026-07): fills the $139→$399 gap. Feature set equals
@@ -394,6 +398,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dropshipRouting: true,
       commerceAnalytics: true,
       whiteLabel: false,
+      ssoEnabled: false,
     },
   },
   advanced: {
@@ -462,6 +467,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dropshipRouting: true,
       commerceAnalytics: true,
       whiteLabel: false,
+      ssoEnabled: false,
     },
   },
   // Agency (Pricing v3, 2026-07): high-volume multi-site tier above Advanced.
@@ -537,6 +543,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       // this tier ships white-label by default; Enterprise inherits via a
       // per-org `entitlements` override.
       whiteLabel: true,
+      ssoEnabled: false,
     },
   },
 }

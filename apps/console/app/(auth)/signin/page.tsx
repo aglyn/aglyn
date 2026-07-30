@@ -30,6 +30,7 @@ import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import {
   mdiGoogle,
+  mdiShieldKeyOutline,
 } from '@aglyn/shared-data-mdi'
 import {
   MdiIcon,
@@ -237,6 +238,14 @@ function SignIn() {
           onClick={handleGoogleButtonClick}
         >
           {'Google'}
+        </Button>
+        <Button
+          variant="outlined"
+          component={AppLink}
+          href="/sso"
+          startIcon={<MdiIcon path={mdiShieldKeyOutline.path} />}
+        >
+          {'Single sign-on (SSO)'}
         </Button>
       </Stack>
       <AuthLegalNotice />

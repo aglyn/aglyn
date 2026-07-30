@@ -139,6 +139,15 @@ export interface OrgFeatureFlags {
    * effective brand through `resolveBrandingProfile` so it can never drift.
    */
   whiteLabel?: boolean
+  /**
+   * Enterprise SSO (AGL-1101): the org's console users sign in through the
+   * org's own SAML/OIDC IdP, wired as a per-org GCIP tenant (`org.sso`).
+   * Distinct from `whiteLabel` — an Agency org can have one without the other.
+   * False on every base plan; granted to Enterprise via a per-org
+   * `entitlements` override. Gates the staff SSO-config card and the
+   * SSO sign-in path; a non-entitled org can neither configure nor use SSO.
+   */
+  ssoEnabled?: boolean
 }
 
 /**
@@ -167,6 +176,45 @@ export interface OrgBrandingProfile {
   emailLogoUrl?: string
   /** Custom console domain the agency serves the app on (Phase 4 wiring). */
   customConsoleDomain?: string
+}
+
+/**
+ * An org's enterprise SSO configuration (AGL-1101, Phase 1). Applied ONLY when
+ * the org carries the `ssoEnabled` entitlement. The actual IdP lives in a
+ * per-org **GCIP tenant** (`tenantId`) with a SAML/OIDC **provider**
+ * (`providerId`); this block is the org-doc mirror the console reads to route
+ * sign-in and the staff card edits. A public `ssoDomains/{domain}` doc maps a
+ * verified email domain → `{ orgId, tenantId, providerId }` so the
+ * pre-auth sign-in page can resolve an SSO org without reading the org doc.
+ *
+ * Security: `domainVerified` must be true before SSO activates for a domain
+ * (Phase 1 = staff-attested; Phase 2 = DNS TXT). `enforced` (Phase 2) will
+ * block password/social login for the governed domains; Phase 1 leaves it
+ * false so password/Google stays as a fallback (no lockout).
+ */
+export interface OrgSsoConfig {
+  /** GCIP tenant id that carries this org's IdP provider. */
+  tenantId: string
+  /** GCIP provider id, e.g. `saml.aglyn-workspace` or `oidc.acme`. */
+  providerId: string
+  /** IdP protocol. Phase 1 ships SAML; OIDC is Phase 2. */
+  protocol: 'saml' | 'oidc'
+  /** Human label for the IdP (shown on the SSO button + staff card). */
+  displayName?: string
+  /** Email domains routed to this IdP (lowercased, no `@`). */
+  domains: string[]
+  /** Domain ownership confirmed before SSO activates (account-takeover guard). */
+  domainVerified: boolean
+  /**
+   * Require SSO for the governed domains — disables password/social login for
+   * them (Phase 2). Phase 1 keeps this false so users keep a fallback.
+   */
+  enforced: boolean
+  /** Lifecycle: `configuring` (not live), `active`, or `disabled`. */
+  status: 'configuring' | 'active' | 'disabled'
+  /** Staff uid + time of the last config change (mirrors adminAudit). */
+  configuredBy?: string
+  configuredAt?: ITimestamp
 }
 
 /**
@@ -359,6 +407,12 @@ export interface AglynOrgBilling extends AglynDocument {
    * `resolveBrandingProfile`, never directly, so no surface diverges.
    */
   brandingProfile?: OrgBrandingProfile
+  /**
+   * Enterprise SSO config (AGL-1101). Applied only when the org carries the
+   * `ssoEnabled` entitlement; the console routes sign-in through the org's
+   * GCIP tenant/provider named here. See `OrgSsoConfig`.
+   */
+  sso?: OrgSsoConfig
   /** Per-org plugin switchboard (AGL-416); see plugin-manager/enabled-plugins. */
   enabledPlugins?: string[]
   /** Purchased addon seats (AGL-112); billed monthly per seat. */
