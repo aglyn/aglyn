@@ -18,6 +18,7 @@
 
 import { canManageOrg } from '@aglyn/aglyn'
 import { mdiAccountOutline } from '@aglyn/shared-data-mdi'
+import { gravatarUrlFromEmail } from '@aglyn/shared-util-tools'
 import {
   CardDisplay,
   Container,
@@ -281,7 +282,28 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                   spacing={2}
                   sx={{ alignItems: 'center' }}
                 >
-                  <Avatar sx={{ width: 48, height: 48 }}>
+                  {/* AGL-1126: this Avatar had no `src` at all, so every
+                      member rendered as a grey initial regardless of whether
+                      they had a picture. The roster stores no photoURL, so
+                      Gravatar-by-email is the only source available without
+                      new data — and it works for SSO members too, whose auth
+                      record lives in a tenant pool we cannot read from here
+                      (AGL-1122). `d=404` is deliberate: with no Gravatar on
+                      file the image 404s and MUI falls back to the initial,
+                      rather than serving a generated identicon to everyone. */}
+                  <Avatar
+                    sx={{ width: 48, height: 48 }}
+                    src={
+                      member?.email
+                        ? gravatarUrlFromEmail(String(member.email), {
+                            size: '96',
+                            default: '404',
+                            protocol: 'https',
+                          })
+                        : undefined
+                    }
+                    alt={String(displayName)}
+                  >
                     {String(displayName).slice(0, 1).toUpperCase()}
                   </Avatar>
                   <Stack sx={{ minWidth: 0 }}>
