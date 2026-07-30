@@ -30,9 +30,11 @@ export interface NotificationAlertPrefs {
 export const NOTIFICATION_ALERT_PREFS_KEY = 'aglyn:notification-alerts'
 
 const DEFAULTS: NotificationAlertPrefs = {
-  // Off by default — a console that starts making noise unprompted is worse
-  // than one you have to switch on. The tab badge is silent, so it leads.
-  sound: false,
+  // On by default (2026-07): a soft two-note chime on arrival is expected of a
+  // notification system, and it was too easy to miss that it needed switching
+  // on. A device that already saved a preference keeps its own choice (`read`
+  // respects a stored `sound: false`); only fresh devices get the new default.
+  sound: true,
   desktop: false,
   tabBadge: true,
 }

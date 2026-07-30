@@ -862,6 +862,11 @@ describe('plan entitlements', () => {
         },
       } as any
       expect(isEnterpriseOrg(custom)).toBe(true)
+      // The explicit comped-enterprise marker qualifies without a price or sub
+      // (Aglyn's own dogfood org: Enterprise + SSO, 100%-discounted).
+      expect(isEnterpriseOrg({ plan: 'agency', enterprise: true } as any)).toBe(
+        true,
+      )
       // A list-priced agency org is NOT enterprise.
       expect(
         isEnterpriseOrg({

@@ -39,6 +39,11 @@ export function playNotificationChime(): void {
             .webkitAudioContext
     if (!Ctor) return
     const ctx = new Ctor()
+    // A notification arriving passively creates a SUSPENDED context (unlike the
+    // click-triggered "Test" button, which unlocks audio via the gesture). Ask
+    // it to resume — succeeds once the page has any prior user interaction
+    // (sticky activation), which an in-use console always has.
+    void ctx.resume?.().catch(() => undefined)
     const start = ctx.currentTime
     const gain = ctx.createGain()
     gain.connect(ctx.destination)

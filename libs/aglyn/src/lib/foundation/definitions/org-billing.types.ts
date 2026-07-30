@@ -425,6 +425,15 @@ export interface AglynOrgBilling extends AglynDocument {
    * for net-of-discount MRR; `orgListPriceMonthlyUsd` ignores it (list price).
    */
   discount?: OrgDiscount
+  /**
+   * Explicit **comped enterprise** marker (AGL-1110). Makes the org read as
+   * "Enterprise" (via `isEnterpriseOrg`) without a negotiated custom price —
+   * for internal/dogfood accounts (e.g. Aglyn's own org) that carry full
+   * Enterprise capability + SSO but are 100%-discounted, so they collect $0
+   * while infra cost is still metered. Staff-set; distinct from a paying
+   * custom-priced enterprise, which qualifies via `subscription.customMonthlyUsd`.
+   */
+  enterprise?: boolean
   /** Staff suspension (AGL-202): set = all the org's sites serve 503. */
   suspendedAt?: ITimestamp | null
   suspendedReason?: string
