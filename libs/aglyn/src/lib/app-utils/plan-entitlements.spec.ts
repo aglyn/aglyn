@@ -36,6 +36,8 @@ import {
   netOfProcessorFee,
   INFRA_COGS_PER_SITE_USD,
   NET_MARGIN_FLOOR_PCT,
+  DISCOUNT_DEPTH_WARN_PCT,
+  DISCOUNT_DEPTH_BLOCK_PCT,
   resolveBrandingProfile,
   resolveEffectivePlan,
   checkQuota,
@@ -1042,10 +1044,12 @@ describe('plan entitlements', () => {
       expect(result.rating).toBe('ok')
     })
 
-    it('warns when the margin dips into the band below the floor', () => {
-      // 94% off a $139 sub nets ~$7.80 against ~$2 infra → ~74% margin.
+    it('warns on cost recovery when the margin dips below the floor', () => {
+      // 94% off a $139 sub nets ~$7.80 against ~$2 infra → ~74% margin. Depth
+      // blocks this one now, so the cost-recovery arm is asserted directly:
+      // it is the arm that still has to work for a SHALLOW discount on an org
+      // running many sites.
       const result = checkDiscountMargin(businessMonthly, { percentOff: 94 })
-      expect(result.rating).toBe('warn')
       expect(result.marginPct).toBeLessThan(NET_MARGIN_FLOOR_PCT)
       expect(result.marginPct).toBeGreaterThanOrEqual(
         NET_MARGIN_FLOOR_PCT - 0.1,
@@ -1056,6 +1060,121 @@ describe('plan entitlements', () => {
       const result = checkDiscountMargin(businessMonthly, { percentOff: 97 })
       expect(result.rating).toBe('block')
       expect(result.marginPct).toBeLessThan(NET_MARGIN_FLOOR_PCT - 0.1)
+    })
+
+    /**
+     * AGL-1120. The reported bug: a 93%-off coupon rated "OK — net margin
+     * 78.1% vs a 75% floor". That margin figure was arithmetically CORRECT —
+     * $9.15 left over really is 78% of net once $2 of infra is taken out —
+     * which is why the badge was so convincing. Cost recovery is
+     * scale-invariant: it only ever asked whether the leftover dwarfs $2, so
+     * no discount depth could turn it red on its own.
+     */
+    describe('discount depth is first-class (AGL-1120)', () => {
+      it('never rates a 93% coupon ok, and says depth is why', () => {
+        const result = checkDiscountMargin(businessMonthly, { percentOff: 93 })
+        expect(result.rating).toBe('block')
+        expect(result.reason).toBe('depth')
+        expect(result.depthPct).toBeCloseTo(0.93, 4)
+        // The negative control for the whole fix: cost recovery STILL says
+        // this is fine. If it ever stops saying so, this test would pass for
+        // the wrong reason and the depth arm could be deleted unnoticed.
+        expect(result.marginPct).toBeGreaterThan(NET_MARGIN_FLOOR_PCT)
+      })
+
+      it('warns from the depth that already needs sign-off', () => {
+        // The badge and the approval checkbox used to disagree: 40% off
+        // demanded explicit sign-off while the rating still read "OK".
+        const at = checkDiscountMargin(businessMonthly, {
+          percentOff: DISCOUNT_DEPTH_WARN_PCT,
+        })
+        expect(at.rating).toBe('warn')
+        expect(at.reason).toBe('depth')
+        const below = checkDiscountMargin(businessMonthly, {
+          percentOff: DISCOUNT_DEPTH_WARN_PCT - 1,
+        })
+        expect(below.rating).toBe('ok')
+        expect(below.reason).toBe('none')
+      })
+
+      it('blocks at the give-away threshold', () => {
+        expect(
+          checkDiscountMargin(businessMonthly, {
+            percentOff: DISCOUNT_DEPTH_BLOCK_PCT,
+          }).rating,
+        ).toBe('block')
+        expect(
+          checkDiscountMargin(businessMonthly, {
+            percentOff: DISCOUNT_DEPTH_BLOCK_PCT - 1,
+          }).rating,
+        ).toBe('warn')
+      })
+
+      it('measures depth off an amount-off discount too', () => {
+        // Depth is a fraction of list, so it has to be derived from the
+        // resulting price rather than read off `percentOff` — an amount-off
+        // coupon has no percentage to read.
+        const result = checkDiscountMargin(businessMonthly, {
+          amountOffUsd: 130,
+        })
+        expect(result.depthPct).toBeCloseTo(130 / 139, 3)
+        expect(result.rating).toBe('block')
+        expect(result.reason).toBe('depth')
+      })
+
+      it('still fails a SHALLOW discount that cannot cover its own sites', () => {
+        // Neither arm subsumes the other. 10% off is nowhere near the depth
+        // bands, but 60 sites of infra against $125 of net revenue is not a
+        // deal worth doing — and only the cost-recovery arm can see that.
+        const hosts = Object.fromEntries(
+          Array.from({ length: 60 }, (_, index) => [`h${index}`, true]),
+        )
+        const result = checkDiscountMargin(
+          { ...businessMonthly, hosts },
+          { percentOff: 10 },
+        )
+        expect(result.depthPct).toBeCloseTo(0.1, 4)
+        expect(result.rating).not.toBe('ok')
+        expect(result.reason).toBe('cogs')
+      })
+    })
+
+    describe('measured COGS (AGL-1120)', () => {
+      it('uses the org’s measured cost when it exceeds the flat estimate', () => {
+        const result = checkDiscountMargin(
+          businessMonthly,
+          { percentOff: 10 },
+          { measuredCogsUsd: 48 },
+        )
+        expect(result.cogsMeasured).toBe(true)
+        expect(result.infraCogsUsd).toBe(48)
+        expect(result.rating).not.toBe('ok')
+      })
+
+      it('keeps the flat rate as a FLOOR when the meter reads lower', () => {
+        // A rollup that has not run yet reads as a small number. Letting that
+        // relax the guardrail would fail in the one direction that costs
+        // money, so the placeholder stays the floor.
+        const result = checkDiscountMargin(
+          businessMonthly,
+          { percentOff: 10 },
+          { measuredCogsUsd: 0.05 },
+        )
+        expect(result.cogsMeasured).toBe(false)
+        expect(result.infraCogsUsd).toBe(INFRA_COGS_PER_SITE_USD)
+      })
+
+      it('ignores a missing or nonsense measurement', () => {
+        for (const value of [null, undefined, Number.NaN]) {
+          const result = checkDiscountMargin(
+            businessMonthly,
+            { percentOff: 10 },
+            { measuredCogsUsd: value as never },
+          )
+          expect(result.cogsMeasured).toBe(false)
+          expect(result.infraCogsUsd).toBe(INFRA_COGS_PER_SITE_USD)
+        }
+      })
     })
 
     it('blocks a 100%-off discount (net ≤ 0) with a clamped margin', () => {

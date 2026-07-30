@@ -1070,6 +1070,24 @@ export const INFRA_COGS_PER_SITE_USD = 2
  */
 export const DISCOUNT_APPROVAL_THRESHOLD_PCT = 40
 
+/**
+ * Discount DEPTH bands (AGL-1120) — how much of list price is being given
+ * away, which is a different question from whether the remainder covers
+ * infrastructure.
+ *
+ * The original guardrail asked only the second question, so a **93% off**
+ * coupon rated "OK — net margin 78.1% vs a 75% floor": $9.15 left against $2
+ * of infra really is a 78% contribution margin. The ratio is scale-invariant,
+ * so as long as the leftover dwarfs $2 the verdict stays green no matter how
+ * little is left. Depth never entered the verdict at all.
+ *
+ * Warn at the threshold that already requires sign-off, so the badge and the
+ * approval checkbox stop disagreeing with each other; block at 70%, where a
+ * deal is being given away rather than discounted.
+ */
+export const DISCOUNT_DEPTH_WARN_PCT = DISCOUNT_APPROVAL_THRESHOLD_PCT
+export const DISCOUNT_DEPTH_BLOCK_PCT = 70
+
 /** How many sites (hosts) the org runs — at least 1 for a billing org. */
 export function orgSiteCount(
   org: Partial<AglynOrgBilling> | null | undefined,
@@ -1087,31 +1105,65 @@ export interface DiscountMarginResult {
   discountedUsd: number
   /** Discounted price net of Stripe's processing fee — what Aglyn keeps. */
   netUsd: number
-  /** Monthly infra COGS charged against this org ($/site × sites). */
-  infraCogsUsd: number
   /**
-   * Contribution margin = (net − infra) / net, as a fraction. 1 = infra-free;
-   * -1 is the clamp for a fully-underwater discount (net ≤ 0), which always
-   * blocks.
+   * Monthly COGS charged against this org: the org's MEASURED cost when the
+   * caller supplies one, else the flat `$/site × sites` estimate. The flat
+   * figure is a floor, never a ceiling — a measured cost below it is treated
+   * as the estimate, since a rollup that has not caught up must not make a
+   * deal look cheaper than the placeholder did.
+   */
+  infraCogsUsd: number
+  /** True when `infraCogsUsd` came from measured usage, not the flat rate. */
+  cogsMeasured: boolean
+  /**
+   * Cost recovery = (net − COGS) / net, as a fraction. 1 = COGS-free; -1 is
+   * the clamp for a fully-underwater discount (net ≤ 0), which always blocks.
+   *
+   * NOT a deal-quality number on its own — see `depthPct`. Kept under its
+   * original name because the staff UI reports it verbatim.
    */
   marginPct: number
-  /** `ok` ≥ floor, `warn` within the band below it, `block` further below. */
+  /** Share of list price given away, as a fraction (0.93 = 93% off). */
+  depthPct: number
+  /** The worse of the depth and cost-recovery verdicts. */
   rating: DiscountMarginRating
-  /** The floor this was rated against (`NET_MARGIN_FLOOR_PCT`). */
+  /**
+   * Which test produced `rating`, so the UI can say why rather than showing a
+   * margin number that looks fine next to a red badge.
+   */
+  reason: 'none' | 'depth' | 'cogs' | 'underwater'
+  /** The cost-recovery floor this was rated against (`NET_MARGIN_FLOOR_PCT`). */
   floorPct: number
 }
 
+export interface DiscountMarginOptions {
+  /**
+   * The org's measured monthly cost, when the caller has it — the `costUsd`
+   * rollup at `orgs/{id}/usage/{month}`. Server callers and the staff org
+   * page can supply it; coupon creation cannot, because no org is chosen yet.
+   */
+  measuredCogsUsd?: number | null
+}
+
 /**
- * Rate a discount against the net-margin floor (AGL-1105) — the guardrail
- * behind staff coupon creation and per-org application. Computes what the
- * subscription would net after the discount and Stripe's processing fee, less
- * the org's infra COGS, and compares the resulting contribution margin to
- * `NET_MARGIN_FLOOR_PCT`:
+ * Rate a proposed discount (AGL-1105, re-shaped in AGL-1120) — the guardrail
+ * behind staff coupon creation and per-org application.
  *
- *   - `ok`    — margin ≥ floor: the deal clears the target.
- *   - `warn`  — margin in `[floor − band, floor)`: thin, needs a second look.
- *   - `block` — margin < floor − band (or the discount drives net ≤ 0):
- *               underwater, blocked without an explicit override.
+ * Two independent questions, and the verdict is the WORSE of them:
+ *
+ *  1. **How deep is it?** `depthPct` against `DISCOUNT_DEPTH_WARN_PCT` /
+ *     `DISCOUNT_DEPTH_BLOCK_PCT`. This is the one that was missing. Cost
+ *     recovery alone is scale-invariant — 93% off $139 leaves $9.15 against
+ *     $2 of infra, a genuine 78% contribution margin — so the old verdict
+ *     rated a give-away "OK" and only warned at 94%.
+ *  2. **Does the remainder cover the cost of serving them?** `marginPct`
+ *     against `NET_MARGIN_FLOOR_PCT`, with `NET_MARGIN_WARN_BAND_PCT` below
+ *     it, and an automatic block once the discount drives net ≤ 0.
+ *
+ * Neither subsumes the other: a shallow discount on an org running twenty
+ * sites can still fail cost recovery, and a deep one on a cheap org can still
+ * clear it. `reason` reports which test bound, so the UI never shows a
+ * healthy-looking margin beside a red badge without explanation.
  *
  * `discount` is the PROPOSED change, independent of any discount already on
  * the org — `grossUsd` is always the list price (`orgListPriceMonthlyUsd`),
@@ -1121,42 +1173,80 @@ export interface DiscountMarginResult {
 export function checkDiscountMargin(
   org: Partial<AglynOrgBilling> | null | undefined,
   discount: Pick<OrgDiscount, 'percentOff' | 'amountOffUsd'>,
+  options: DiscountMarginOptions = {},
 ): DiscountMarginResult {
   const floorPct = NET_MARGIN_FLOOR_PCT
   const grossUsd = orgListPriceMonthlyUsd(org)
-  const infraCogsUsd =
+  const flatCogsUsd =
     Math.round(INFRA_COGS_PER_SITE_USD * orgSiteCount(org) * 100) / 100
+  // Measured cost wins only when it EXCEEDS the flat estimate. A rollup that
+  // has not run yet reads as a low number, and a guardrail that got looser
+  // because the meter was behind would fail in the one direction that costs
+  // money.
+  const measured = Number(options.measuredCogsUsd ?? 0)
+  const cogsMeasured = Number.isFinite(measured) && measured > flatCogsUsd
+  const infraCogsUsd = cogsMeasured
+    ? Math.round(measured * 100) / 100
+    : flatCogsUsd
   if (grossUsd <= 0) {
     return {
       grossUsd: 0,
       discountedUsd: 0,
       netUsd: 0,
       infraCogsUsd,
+      cogsMeasured,
       marginPct: 1,
+      depthPct: 0,
       rating: 'ok',
+      reason: 'none',
       floorPct,
     }
   }
   const discountedUsd = applyDiscountUsd(grossUsd, discount)
   const annual = org?.subscription?.interval === 'year'
   const netUsd = netOfProcessorFee(discountedUsd, annual)
+  const depthPct =
+    Math.round(((grossUsd - discountedUsd) / grossUsd) * 10000) / 10000
   const marginPct =
     netUsd > 0
       ? Math.round(((netUsd - infraCogsUsd) / netUsd) * 10000) / 10000
       : -1
-  const rating: DiscountMarginRating =
+
+  const depthRating: DiscountMarginRating =
+    depthPct * 100 >= DISCOUNT_DEPTH_BLOCK_PCT
+      ? 'block'
+      : depthPct * 100 >= DISCOUNT_DEPTH_WARN_PCT
+        ? 'warn'
+        : 'ok'
+  const cogsRating: DiscountMarginRating =
     marginPct >= floorPct
       ? 'ok'
       : marginPct >= floorPct - NET_MARGIN_WARN_BAND_PCT
         ? 'warn'
         : 'block'
+
+  const severity = { ok: 0, warn: 1, block: 2 } as const
+  const rating =
+    severity[depthRating] >= severity[cogsRating] ? depthRating : cogsRating
+  const reason: DiscountMarginResult['reason'] =
+    rating === 'ok'
+      ? 'none'
+      : netUsd <= 0
+        ? 'underwater'
+        : severity[depthRating] >= severity[cogsRating]
+          ? 'depth'
+          : 'cogs'
+
   return {
     grossUsd,
     discountedUsd,
     netUsd,
     infraCogsUsd,
+    cogsMeasured,
     marginPct,
+    depthPct,
     rating,
+    reason,
     floorPct,
   }
 }

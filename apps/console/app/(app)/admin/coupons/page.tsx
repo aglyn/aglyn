@@ -68,6 +68,13 @@ interface CouponRow {
  * typical Business customer on a single site. The rating on the creation page
  * is a "what would this do to a normal customer" preview; the real per-org
  * check runs when staff apply the coupon on an organization.
+ *
+ * Note what this cannot know (AGL-1120): the coupon has no org yet, so the
+ * cost side of the rating is a hypothetical, and a single site is the
+ * CHEAPEST case to serve — the most generous assumption available, which is
+ * backwards for a guardrail. The depth half of the verdict is exact, since
+ * percent-off list does not depend on which org redeems it; the readout says
+ * as much rather than presenting the whole rating as binding.
  */
 const REFERENCE_ORG = {
   plan: 'business',
@@ -347,7 +354,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                   sx={{ width: 220 }}
                 />
 
-                {/* Live net-margin rating readout (AGL-1105). */}
+                {/* Live rating readout (AGL-1105, re-shaped AGL-1120). */}
                 <Alert severity={RATING_COLOR[rating.rating] as any}>
                   <Stack spacing={0.5}>
                     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
@@ -357,15 +364,35 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                         label={`Rating: ${rating.rating.toUpperCase()}`}
                       />
                       <Typography variant="body2">
-                        {`Net margin ${(rating.marginPct * 100).toFixed(1)}% vs a ${(
-                          rating.floorPct * 100
-                        ).toFixed(0)}% floor`}
+                        {/* Lead with whatever actually bound. The old readout
+                            always led with net margin, which is why a 93%
+                            coupon could read "OK — net margin 78.1%": that
+                            number was right, and it was answering a question
+                            nobody was asking. */}
+                        {rating.reason === 'depth'
+                          ? `${(rating.depthPct * 100).toFixed(0)}% off list price`
+                          : rating.reason === 'underwater'
+                            ? 'This discount leaves nothing after fees'
+                            : `Net margin ${(rating.marginPct * 100).toFixed(1)}% vs a ${(
+                                rating.floorPct * 100
+                              ).toFixed(0)}% floor`}
                       </Typography>
                     </Stack>
                     <Typography variant="caption" color="text.secondary">
-                      {`On a typical Business subscription ($${rating.grossUsd}/mo, 1 site): ` +
-                        `discounted to $${rating.discountedUsd}, keeps $${rating.netUsd} ` +
-                        `net of processor fees, less $${rating.infraCogsUsd} infra.`}
+                      {`${(rating.depthPct * 100).toFixed(0)}% off list. ` +
+                        `Illustrated on a Business subscription ($${rating.grossUsd}/mo, ` +
+                        `1 site — the cheapest case to serve): discounted to ` +
+                        `$${rating.discountedUsd}, keeps $${rating.netUsd} net of ` +
+                        `processor fees, less $${rating.infraCogsUsd} infra.`}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {/* A coupon created here can be applied to ANY org on
+                          ANY plan with any number of sites, so this figure
+                          describes a scenario that may never happen — and
+                          1 site is the most generous one possible. */}
+                      {'Illustrative only. The binding check runs against the ' +
+                        'organization’s own plan, sites and measured usage when ' +
+                        'the coupon is applied.'}
                     </Typography>
                   </Stack>
                 </Alert>
