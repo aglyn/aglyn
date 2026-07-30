@@ -151,7 +151,7 @@ function AdminEmails() {
       <DashboardLayout
         help="staffConsole"
         breadcrumbItems={[
-          { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
+          { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
           { children: 'System emails', href: buildRoute(Route.ADMIN_EMAILS) },
         ]}
         header={{

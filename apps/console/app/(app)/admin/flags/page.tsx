@@ -166,7 +166,7 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
   return (
     <DashboardLayout
       breadcrumbItems={[
-        { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
+        { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Feature flags', href: buildRoute(Route.ADMIN_FLAGS) },
       ]}
       help="featureFlags"

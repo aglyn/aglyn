@@ -113,15 +113,22 @@ export function OrgSwitcherNav() {
   // `orgSlug` in the URL the scope silently fell back to the staff member's
   // OWN org — so a staff page was chromed "Aglyn LLC · Enterprise", claiming
   // a workspace context the page does not have. Show what this actually is
-  // instead, linked to the real org picker (the staff Organizations list).
-  // A specific org's staff detail page is fine to label with that org, but
-  // it reaches this component with no orgSlug either, so the label stays
-  // put — the org's name is already the page's own heading.
+  // instead.
+  //
+  // Links to the staff OVERVIEW, not the Organizations list: this sits where
+  // the workspace chip sits, and that chip goes home. The wordmark-adjacent
+  // control is "back to the top of where I am", and the top of the staff
+  // console is its overview — Organizations is one section of it, reachable
+  // from the tab strip right below.
+  //
+  // A specific org's staff detail page keeps this label too: it reaches this
+  // component with no orgSlug, and the org's name is already the page's own
+  // heading, breadcrumb and summary card.
   if (resolveNavSection(pathname).kind === 'admin') {
     return (
       <Button
         component={AppLink}
-        href={buildRoute(Route.ADMIN_ORGS)}
+        href={buildRoute(Route.ADMIN_OVERVIEW)}
         color="inherit"
         startIcon={<MdiIcon path={ICON_VARIANT_SYMBOL_SECURE.path} />}
         sx={{ textTransform: 'none', fontWeight: 600 }}

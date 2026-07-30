@@ -99,6 +99,26 @@ export function HostMembersCard(props: HostMembersCardProps) {
   )
   const seatQuota = checkOrgSeatQuota(org, 'members', members.length)
 
+  // The owner row is the ORG's owner (AGL-1123). It used to render the
+  // signed-in `user` whenever they happened to be an admin on this host, so
+  // the row badged "Owner" was really "whoever is looking at this page" — it
+  // never showed the owner, and an ownership transfer appeared not to have
+  // taken. The owner's address comes from their org-member doc; a failed or
+  // absent read falls back to the generic label rather than to the viewer.
+  const orgId = (org as any)?.$id as string | undefined
+  const ownerUid = (org as any)?.ownerUid as string | undefined
+  const { data: ownerMember } = useFirestoreDoc<any>(
+    () =>
+      orgId && ownerUid
+        ? doc(firestore, 'orgs', orgId, 'members', ownerUid)
+        : null,
+    [firestore, orgId, ownerUid],
+  )
+  const ownerLabel =
+    (ownerMember?.email as string | undefined) ??
+    (ownerMember?.displayName as string | undefined) ??
+    'Account owner'
+
   const request = useCallback(
     async (method: string, body: Record<string, unknown>) => {
       setBusy(true)
@@ -268,10 +288,11 @@ export function HostMembersCard(props: HostMembersCardProps) {
                   spacing={1}
                   sx={{ alignItems: 'center' }}
                 >
-                  <span>{host?.memberRoles?.[user?.uid ?? ''] === 'admin'
-                    ? (user?.email ?? 'Owner')
-                    : 'Account owner'}</span>
+                  <span>{ownerLabel}</span>
                   <Chip label="Owner" color="secondary" size="small" />
+                  {ownerUid && ownerUid === user?.uid ? (
+                    <Chip label="you" size="small" variant="outlined" />
+                  ) : null}
                 </Stack>
               </TableCell>
               <TableCell>{'Admin'}</TableCell>
