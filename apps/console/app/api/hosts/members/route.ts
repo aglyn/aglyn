@@ -19,6 +19,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { checkSeatQuota, createResourceUid } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
+  findUserByEmailAcrossPools,
   firebaseAdmin,
   getOrgForHost,
   grantHostAccess,
@@ -122,10 +123,12 @@ async function handler(request: Request): Promise<Response> {
       // Known account → org membership scoped to this host (projected
       // into memberRoles for console access); unknown → invited roster
       // record, linked through the org-invite acceptance flow.
-      const authUser = await app
-        .auth()
-        .getUserByEmail(email)
-        .catch(() => null)
+      // Across ALL auth pools (AGL-1122): an SSO user is in their org's GCIP
+      // tenant pool, invisible to the project-level lookup, so adding one as
+      // a site collaborator by email silently created an invited-roster stub
+      // instead of linking their real account.
+      const authUser =
+        (await findUserByEmailAcrossPools(email))?.record ?? null
       const memberId = authUser?.uid ?? createResourceUid()
       if (authUser) {
         await grantHostAccess({
