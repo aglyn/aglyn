@@ -28,7 +28,9 @@ const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
   pro: process.env.STRIPE_PRICE_PRO,
   business: process.env.STRIPE_PRICE_BUSINESS,
+  scale: process.env.STRIPE_PRICE_SCALE,
   advanced: process.env.STRIPE_PRICE_ADVANCED,
+  agency: process.env.STRIPE_PRICE_AGENCY,
 }
 
 /** Annual prices (AGL-269); absent envs make the toggle degrade to 501. */
@@ -36,7 +38,9 @@ const YEARLY_PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER_YEARLY,
   pro: process.env.STRIPE_PRICE_PRO_YEARLY,
   business: process.env.STRIPE_PRICE_BUSINESS_YEARLY,
+  scale: process.env.STRIPE_PRICE_SCALE_YEARLY,
   advanced: process.env.STRIPE_PRICE_ADVANCED_YEARLY,
+  agency: process.env.STRIPE_PRICE_AGENCY_YEARLY,
 }
 
 /**

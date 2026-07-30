@@ -45,13 +45,20 @@ export type { OrgUid } from './platform.types'
 
 
 /** Hosted in master catalog */
-/** SaaS subscription tiers (Tenant Billing & SaaS Plans, AGL-38..41). */
+/**
+ * SaaS subscription tiers (Tenant Billing & SaaS Plans, AGL-38..41).
+ * Pricing v3 (2026-07) inserted `scale` between business and advanced to
+ * fill the $139→$399 gap, and added `agency` above advanced for
+ * high-volume multi-site orgs — see the Pricing Decision Log.
+ */
 export type OrgPlan =
   | 'free'
   | 'starter'
   | 'pro'
   | 'business'
+  | 'scale'
   | 'advanced'
+  | 'agency'
 
 /** Boolean feature gates per plan; quotas live beside them as numbers. */
 export interface OrgFeatureFlags {

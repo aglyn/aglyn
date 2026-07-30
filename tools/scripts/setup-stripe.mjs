@@ -45,7 +45,11 @@ const PLANS = [
   { plan: 'starter', name: 'Aglyn Starter', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 10, extraSeatUsd: 5, extraMemberUsd: 3, extraDatasetUsd: 2 },
   { plan: 'pro', name: 'Aglyn Pro', usd: 56, yearlyUsd: 39 * 12, extraHostUsd: 8, extraSeatUsd: 4, extraMemberUsd: 2, extraDatasetUsd: 2 },
   { plan: 'business', name: 'Aglyn Business', usd: 139, yearlyUsd: 99 * 12, extraHostUsd: 5, extraSeatUsd: 3, extraMemberUsd: 1, extraDatasetUsd: 1 },
+  // Pricing v3 (2026-07): Scale fills the $139→$399 gap; Agency sits above
+  // Advanced for high-volume multi-site orgs. Keep in sync with PLAN_PRICING.
+  { plan: 'scale', name: 'Aglyn Scale', usd: 249, yearlyUsd: 179 * 12, extraHostUsd: 5, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
   { plan: 'advanced', name: 'Aglyn Advanced', usd: 399, yearlyUsd: 299 * 12, extraHostUsd: 4, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
+  { plan: 'agency', name: 'Aglyn Agency', usd: 799, yearlyUsd: 649 * 12, extraHostUsd: 3, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
 ]
 
 async function stripe(path, params) {

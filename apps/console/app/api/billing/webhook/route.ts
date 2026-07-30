@@ -67,7 +67,7 @@ function verifyStripeSignature(
  */
 function planFromPriceId(priceId: string | undefined): string | undefined {
   if (!priceId) return undefined
-  for (const plan of ['starter', 'pro', 'business', 'advanced']) {
+  for (const plan of ['starter', 'pro', 'business', 'scale', 'advanced', 'agency']) {
     const key = `STRIPE_PRICE_${plan.toUpperCase()}`
     if (
       priceId === process.env[key] ||
