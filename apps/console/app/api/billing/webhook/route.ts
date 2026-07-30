@@ -227,6 +227,22 @@ async function handler(request: Request): Promise<Response> {
             ...(existing.reason ? { reason: existing.reason } : {}),
           }
         }
+        // Custom enterprise price mirror (AGL-1110): an enterprise deal bills
+        // on an ad-hoc Stripe price, not a plan SKU, so PLAN_PRICING would
+        // under-report its MRR. The staff provisioning flow stamps
+        // `metadata.custom='true'`; when set, mirror the plan item's recurring
+        // amount as a monthly-normalized figure (annual ÷ 12) onto
+        // `subscription.customMonthlyUsd` so `orgMonthlyRevenueUsd` reads the
+        // real number. A standard plan or a cancellation clears it.
+        const isYearly = planItem?.price?.recurring?.interval === 'year'
+        const unitAmount = Number(planItem?.price?.unit_amount ?? 0)
+        const del2 = firebaseAdmin.firestore.FieldValue.delete()
+        const customMonthlyUsd =
+          !canceled &&
+          object?.metadata?.custom === 'true' &&
+          unitAmount > 0
+            ? Math.round((unitAmount / 100 / (isYearly ? 12 : 1)) * 100) / 100
+            : del2
         const billing = {
           plan,
           stripeCustomerId: object?.customer ?? null,
@@ -240,10 +256,8 @@ async function handler(request: Request): Promise<Response> {
             priceId: priceId ?? null,
             // Billing interval (AGL-532): the Billing page's monthly/
             // annual toggle initializes from this mirror.
-            interval:
-              planItem?.price?.recurring?.interval === 'year'
-                ? 'year'
-                : 'month',
+            interval: isYearly ? 'year' : 'month',
+            customMonthlyUsd,
             currentPeriodEnd: object?.current_period_end
               ? new Date(object.current_period_end * 1000)
               : null,

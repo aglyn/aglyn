@@ -73,6 +73,8 @@ const EXCEPTIONS: Record<string, string> = {
     'Home of isBillingSubscription/orgMonthlyRevenueUsd — it IS the rule.',
   'apps/console/app/(app)/admin/overview/page.tsx':
     'Renders metrics.mrrUsd straight from /api/admin/overview; its `plan` references are the broadcast-audience selector and a per-org label, not a computation.',
+  'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx':
+    'Enterprise custom-billing card (AGL-1110) provisions ONE org\'s custom price and shows its net margin from the entered amount; the "MRR" mention is a doc comment. It reads the truthful subscription.customMonthlyUsd, never sums PLAN_PRICING[plan] across orgs.',
 }
 
 function walk(dir: string, out: string[] = []): string[] {

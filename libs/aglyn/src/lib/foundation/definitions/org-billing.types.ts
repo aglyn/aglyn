@@ -323,6 +323,17 @@ export interface OrgSubscription {
    */
   interval?: 'month' | 'year'
   currentPeriodEnd?: ITimestamp
+  /**
+   * Negotiated custom price as a **monthly-normalized** USD figure (AGL-1110),
+   * set when an enterprise org bills at an ad-hoc amount rather than a plan's
+   * list price — e.g. `agency` capability at $2,730/mo. An annual custom deal
+   * is stored ÷12 here (the yearly total lives on the Stripe price), so every
+   * reader treats it as monthly and never re-divides. Webhook-mirrored from the
+   * Stripe subscription's recurring price. When present it is the truth for
+   * revenue — `orgListPriceMonthlyUsd`/`orgMonthlyRevenueUsd` use it instead of
+   * the plan default (fixes the custom-price MRR under-report, AGL-1110).
+   */
+  customMonthlyUsd?: number
 }
 
 /**
