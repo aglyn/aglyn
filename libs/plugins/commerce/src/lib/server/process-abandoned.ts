@@ -62,6 +62,10 @@ export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
       .get()
     let sent = 0
     const entitledHosts = new Map<string, boolean>()
+    // White-label brand per host (White-Label Phase 3): resolved once per host
+    // alongside the entitlement, from the same org doc, through the one shared
+    // resolver — so the recovery email's sender reads as the store's brand.
+    const brandingByHost = new Map<string, Aglyn.ResolvedBrandingProfile>()
     // Resolve each host's designed template once per run (AGL-770).
     const templateCache = new Map<string, LoadedHostEmail | null>()
     for (const docSnapshot of openCheckouts.docs) {
@@ -83,6 +87,7 @@ export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
           hostId,
           Aglyn.checkEntitlement(org?.org as any, 'abandonedCart'),
         )
+        brandingByHost.set(hostId, Aglyn.resolveBrandingProfile(org?.org as any))
       }
       if (!entitledHosts.get(hostId)) continue
       let loaded = templateCache.get(hostId)
@@ -104,6 +109,7 @@ export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
             `${data.resumeUrl ?? ''}\n\n` +
             'Your items are held but not reserved, so they may sell out.',
         ...(designed?.html ? { html: designed.html } : {}),
+        fromName: brandingByHost.get(hostId)?.fromName,
         context: 'abandoned cart',
       })
       await docSnapshot.ref

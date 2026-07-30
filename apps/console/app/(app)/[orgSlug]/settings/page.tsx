@@ -42,6 +42,7 @@ import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import MediaUrlField from '../../../../components/media-url-field.component'
 import OrgApiKeysCard from '../../../../components/org-api-keys-card.component'
+import OrgBrandingCard from '../../../../components/org-branding-card.component'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import HubTabs from '../../../../components/hub-tabs.component'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -583,6 +584,11 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                       id: 'api-keys',
                       label: 'API keys',
                       content: <OrgApiKeysCard />,
+                    },
+                    {
+                      id: 'branding',
+                      label: 'Branding',
+                      content: <OrgBrandingCard />,
                     },
                   ]
                 : []),

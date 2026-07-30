@@ -25,6 +25,7 @@ import {
   withThemeCssVarProvider,
 } from '@aglyn/shared-ui-theme'
 import type { ReactNode } from 'react'
+import ConsoleBrandingEffects from '../components/console-branding-effects.component'
 import HostIdProvider from '../components/host-id-provider'
 import FirebaseAppLayout from '../components/layouts/firebase-app.layout'
 import OsfaTooltip from '../components/osfa-tooltip'
@@ -43,6 +44,10 @@ import ConsolePluginsGate from '../components/console-plugins-gate.component'
 const ThemeStack = withThemeCssVarProvider(
   ({ children }: { children?: ReactNode }) => (
     <FirebaseAppLayout>
+      {/* White-label chrome effects (White-Label Phase 2): favicon + MUI
+          primary color for a white-label-entitled org. Inside FirebaseAppLayout
+          so the org scope + Firestore contexts it reads are available. */}
+      <ConsoleBrandingEffects />
       <LoadingLayoutAppComponent>
         <ConfirmationProviderComponent>
           <SnackbarProvider>

@@ -17,7 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import {
   isEmailConfigured,
   loadHostEmail,
@@ -54,6 +54,9 @@ export const processRestockHandler: PluginApiHandler = async (req, res) => {
     const productCache = new Map<string, CommerceModel.HostProduct | null>()
     // Resolve each host's designed template once per run (AGL-770).
     const templateCache = new Map<string, LoadedHostEmail | null>()
+    // White-label brand per host (White-Label Phase 3): resolved once per host
+    // from the owning org doc through the one shared resolver.
+    const brandingByHost = new Map<string, Aglyn.ResolvedBrandingProfile>()
     for (const docSnapshot of alerts.docs) {
       const hostRef = docSnapshot.ref.parent.parent
       if (!hostRef) continue
@@ -85,6 +88,12 @@ export const processRestockHandler: PluginApiHandler = async (req, res) => {
       if (loaded === undefined) {
         loaded = await loadHostEmail(firestore, hostRef.id, 'back-in-stock')
         templateCache.set(hostRef.id, loaded)
+        brandingByHost.set(
+          hostRef.id,
+          Aglyn.resolveBrandingProfile(
+            (await getOrgForHost(hostRef.id).catch(() => null))?.org as never,
+          ),
+        )
       }
       const designed = loaded
         ? renderLoadedHostEmail(loaded, {
@@ -100,6 +109,7 @@ export const processRestockHandler: PluginApiHandler = async (req, res) => {
           `${product.name} is available again — grab it before it sells ` +
             `out:\n\n${productUrl}`,
         ...(designed?.html ? { html: designed.html } : {}),
+        fromName: brandingByHost.get(hostRef.id)?.fromName,
         context: 'restock alert',
       })
       await docSnapshot.ref

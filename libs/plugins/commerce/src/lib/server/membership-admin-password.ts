@@ -16,11 +16,12 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { validateNewPassword } from '@aglyn/aglyn/server'
+import { resolveBrandingProfile, validateNewPassword } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
   consumePasswordResetSend,
   firebaseAdmin,
+  getOrgForHost,
   isImpersonationSession,
   passwordResetThrottleMessage,
 } from '@aglyn/tenant-data-admin'
@@ -113,6 +114,11 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
     const siteName = String(
       hostSnapshot.get('displayName') ?? subdomain ?? 'the site',
     )
+    // White-label sender identity (White-Label Phase 3): the store's brand via
+    // the one shared resolver; the copy already uses the site name.
+    const branding = resolveBrandingProfile(
+      (await getOrgForHost(hostId).catch(() => null))?.org as never,
+    )
 
     if (action === 'sendPasswordReset') {
       // Throttled per recipient and per actor (AGL-920). Same caps as the
@@ -151,6 +157,7 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
           `${resetUrl}\n\n` +
           'The link works once and expires in 1 hour. Your current ' +
           'password keeps working until you use it.',
+        fromName: branding.fromName,
         context: 'membership admin recovery',
       })
       if (!result.sent) {
@@ -186,6 +193,7 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
           'account. You have been signed out on every device and will need ' +
           `the new password to sign back in at ${siteBase}.\n\n` +
           'If you did not expect this, contact the site owner.',
+        fromName: branding.fromName,
         context: 'membership admin password change',
       })
       notified = result.sent

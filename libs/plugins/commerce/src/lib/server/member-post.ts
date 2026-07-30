@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { type PluginApiHandler, resolveBrandingProfile } from '@aglyn/aglyn/server'
 
 const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due'])
 
@@ -82,11 +82,17 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
             .map((docSnapshot) => String(docSnapshot.get('customerEmail'))),
         ),
       ].slice(0, 200)
+      // White-label sender identity (White-Label Phase 3): the store's brand
+      // via the one shared resolver, from the owning org doc.
+      const branding = resolveBrandingProfile(
+        (await getOrgForHost(hostId).catch(() => null))?.org as never,
+      )
       for (const to of recipients) {
         await sendEmail({
           to,
           subject: title,
           text: postBody || title,
+          fromName: branding.fromName,
           context: 'member post',
         })
         emailed += 1

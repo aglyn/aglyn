@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { checkQuota, contactMatchesSegment, createResourceUid, visibleToHost } from '@aglyn/aglyn/server'
+import { checkQuota, contactMatchesSegment, createResourceUid, resolveBrandingProfile, visibleToHost } from '@aglyn/aglyn/server'
 import { renderEmailHtml, resolveMergeTags, type EmailRenderProduct } from '@aglyn/plugins-email/model'
 import { assignExperimentVariant, type HostExperiment } from '../model'
 import { productPriceRange } from '@aglyn/plugins-commerce/model'
@@ -303,6 +303,13 @@ export async function performCampaignSend(
     ? `https://${hostSnapshot.get('cname')}`
     : `https://${subdomain}.aglyn.app`
 
+  // White-label sender identity (White-Label Phase 3): a campaign sent from a
+  // white-label store reads as that store's brand. Resolved once for the whole
+  // batch from the owning org doc through the one shared resolver.
+  const branding = resolveBrandingProfile(
+    (await getOrgForHost(hostId).catch(() => null))?.org as never,
+  )
+
   const campaignId = options.campaignId || createResourceUid()
 
   // Designed email template (AGL-349): loaded once; rendered per
@@ -392,6 +399,7 @@ export async function performCampaignSend(
         ? `${rendered.text}\n\n—\nUnsubscribe: ${unsubscribeUrl}`
         : `${recipientBody}\n\n—\nUnsubscribe: ${unsubscribeUrl}`,
       headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` },
+      fromName: branding.fromName,
       // Event attribution (AGL-268): the opens/clicks webhook maps
       // deliveries back to the campaign (and experiment) via tags.
       tags: [
