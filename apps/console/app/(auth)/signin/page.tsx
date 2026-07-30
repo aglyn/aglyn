@@ -179,6 +179,7 @@ function SignIn() {
       return
     }
     const dequeueLoading = queueLoading()
+    let navigatingAway = false
     try {
       const res = await fetch(
         `/api/auth/sso-lookup?email=${encodeURIComponent(email)}`,
@@ -188,27 +189,49 @@ function SignIn() {
         setError({
           message: 'No single sign-on is configured for that email domain.',
         } as any)
-        dequeueLoading()
         return
       }
       markInteractiveSignIn()
       await setPersistence(firebaseAuth, browserLocalPersistence)
-      window.sessionStorage.setItem(
-        SSO_PENDING_KEY,
-        JSON.stringify({ tenantId: payload.tenantId }),
-      )
       firebaseAuth.tenantId = payload.tenantId
-      // Navigates away; the loading overlay stays queued until then, and the
-      // completion effect below finishes the round-trip on return.
-      await signInWithRedirect(
-        firebaseAuth,
-        new SAMLAuthProvider(payload.providerId),
-      )
+      const provider = new SAMLAuthProvider(payload.providerId)
+      if (isMobileBrowser()) {
+        // Mobile popups become tabs (AGL-462) — redirect, and the completion
+        // effect finishes the round-trip on return. Requires the app origin to
+        // be same-site with the auth domain (true on the real deployment).
+        navigatingAway = true
+        window.sessionStorage.setItem(
+          SSO_PENDING_KEY,
+          JSON.stringify({ tenantId: payload.tenantId }),
+        )
+        await signInWithRedirect(firebaseAuth, provider)
+        return
+      }
+      // Desktop: popup (like the Google button). The result posts back via
+      // postMessage, so it works even when the app origin isn't same-site with
+      // the auth domain — and lets us JIT-map inline without a redirect hop.
+      const result = await signInWithPopup(firebaseAuth, provider)
+      const idToken = await result.user.getIdToken()
+      const jit = await fetch('/api/auth/sso-jit', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}` },
+      })
+      if (!jit.ok) {
+        const jitPayload = await jit.json().catch(() => ({}))
+        setError({
+          message:
+            jitPayload?.error ??
+            'Signed in, but your account is not authorized for this organization.',
+        } as any)
+      }
+      // Success: useSessionCookie mints the tenant cookie and signInCheck flips
+      // to signedIn, which routes to the org — the loading splash covers it.
     } catch (err) {
       console.error(err)
       setError(err as any)
       window.sessionStorage.removeItem(SSO_PENDING_KEY)
-      dequeueLoading()
+    } finally {
+      if (!navigatingAway) dequeueLoading()
     }
   }, [error, firebaseAuth, loading, queueLoading])
 
