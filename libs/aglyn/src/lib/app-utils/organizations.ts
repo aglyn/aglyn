@@ -227,6 +227,44 @@ export function consoleUserType(
 }
 
 /**
+ * Whether an account is governed by enterprise SSO (AGL-1128) — it lives in
+ * an org's GCIP tenant pool rather than the project pool, so its identity is
+ * owned by the customer's IdP.
+ *
+ * `tenantId` is the whole signal: Firebase sets it on the user whenever the
+ * account belongs to a tenant, and only SSO accounts do.
+ */
+export function isSsoGovernedAccount(
+  user: { tenantId?: string | null } | null | undefined,
+): boolean {
+  return Boolean(user?.tenantId)
+}
+
+/**
+ * Whether the account may connect an additional consumer sign-in provider.
+ *
+ * **No, for any SSO-governed account.** The customer's IdP is the single gate
+ * they bought: they revoke there, enforce MFA there, offboard there. A linked
+ * personal Google account is a way in their IdP can never see or revoke —
+ * exactly what SSO is purchased to prevent.
+ *
+ * Deliberately NOT gated on `sso.enforced`. That flag exists so we never
+ * LOCK OUT an existing sign-in method; it is not a licence to hand out new
+ * bypasses meanwhile. Nothing here removes a provider an account already has,
+ * so this can never lock anyone out.
+ *
+ * This is the intent, not the boundary — the boundary is upstream, since a
+ * GCIP tenant only accepts providers enabled on that tenant. Both matter: the
+ * boundary is remote config that could drift, and a UI that offers a
+ * security-regressing action is wrong even when the action would fail.
+ */
+export function canLinkSocialProvider(
+  user: { tenantId?: string | null } | null | undefined,
+): boolean {
+  return !isSsoGovernedAccount(user)
+}
+
+/**
  * The same question as `isOrgWideMember`, asked of the `users/{uid}/orgs`
  * reverse-index row instead of the member doc (AGL-1032).
  *
