@@ -21,6 +21,8 @@ import {
   isEnterpriseOrg,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  resolveOrgEntitlements,
+  UNLIMITED,
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
@@ -104,6 +106,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // (AGL-1110).
   const enterprise = isEnterpriseOrg(org)
   const customMonthlyUsd = org?.subscription?.customMonthlyUsd ?? 0
+  // Effective entitlements (plan defaults + per-org overrides), so the summary
+  // pills match the Usage meters beside them instead of showing base-plan
+  // numbers (AGL-1110 polish).
+  const resolved = resolveOrgEntitlements(org)
+  const fmtLimit = (n: number) =>
+    n === UNLIMITED ? 'Unlimited' : n.toLocaleString()
   const subscriptionStatus = org?.subscription?.status
   const subscriptionActive = ['active', 'trialing', 'past_due'].includes(
     String(subscriptionStatus ?? ''),
@@ -426,9 +434,14 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       {enterprise ? ENTERPRISE_PLAN_LABEL : PLAN_LABELS[plan]}
                     </Typography>
                     <Chip
-                      label={org?.subscription?.status ?? 'no subscription'}
+                      label={
+                        enterprise && customMonthlyUsd === 0
+                          ? 'comped'
+                          : (org?.subscription?.status ?? 'no subscription')
+                      }
                       size="small"
                       color={
+                        (enterprise && customMonthlyUsd === 0) ||
                         org?.subscription?.status === 'active'
                           ? 'success'
                           : org?.subscription?.status === 'past_due'
@@ -443,8 +456,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       price (AGL-1110). */}
                   {enterprise ? (
                     <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      {`$${customMonthlyUsd.toLocaleString()}/mo · custom` +
-                        `${org?.subscription?.interval === 'year' ? ' (billed yearly)' : ''}`}
+                      {customMonthlyUsd > 0
+                        ? `$${customMonthlyUsd.toLocaleString()}/mo · custom` +
+                          `${org?.subscription?.interval === 'year' ? ' (billed yearly)' : ''}`
+                        : 'Comped — internal use, no charge'}
                     </Typography>
                   ) : PLAN_PRICING[plan]?.basePriceMonthlyUsd ? (
                     <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -458,8 +473,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     sx={{ flexWrap: 'wrap', gap: 0.5, mb: 1 }}
                   >
                     {[
-                      `${PLAN_ENTITLEMENTS[plan]?.hostLimit ?? '—'} sites`,
-                      `${PLAN_ENTITLEMENTS[plan]?.emailSendsPerMonth ?? '—'} emails/mo`,
+                      `${fmtLimit(resolved.hostLimit)} sites`,
+                      `${fmtLimit(resolved.managersPerOrg)} team seats`,
+                      `${fmtLimit(resolved.emailSendsPerMonth)} emails/mo`,
                     ].map((label) => (
                       <Chip
                         key={label}

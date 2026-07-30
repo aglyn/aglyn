@@ -804,15 +804,19 @@ export function applyDiscountUsd(
 
 /**
  * Whether an org should read as **"Enterprise"** everywhere the plan is shown
- * (AGL-1110). An enterprise deal runs on a standard base plan — usually
- * `agency` — for entitlements, but bills a negotiated custom price; the custom
- * amount (set by the enterprise-billing flow) is the signal. The base plan
- * still drives capability; this is display-only. Non-billing / list-priced
- * orgs are not enterprise.
+ * (AGL-1110). Two ways to qualify:
+ *  - a billing org on a **negotiated custom price** (`customMonthlyUsd > 0`) —
+ *    the normal paying-enterprise case, set by the enterprise-billing flow; or
+ *  - an explicit **`org.enterprise`** marker — for a *comped* enterprise
+ *    account (e.g. Aglyn's own dogfood org: full Enterprise capability + SSO,
+ *    100%-discounted so it collects $0, while infra cost is still metered).
+ * Either way the base plan (usually `agency`) still drives entitlements; this
+ * is display-only. List-priced orgs with neither are not enterprise.
  */
 export function isEnterpriseOrg(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
+  if (org?.enterprise === true) return true
   return (
     isBillingSubscription(org) &&
     (org?.subscription?.customMonthlyUsd ?? 0) > 0
