@@ -20,9 +20,11 @@ import {
   canWriteHost,
   generateOrgSlug,
   hostRoleFor,
+  canLinkSocialProvider,
   CONSOLE_USER_TYPE_LABELS,
   consoleUserType,
   countManagerSeats,
+  isSsoGovernedAccount,
   isOrgWideMember,
   isOrgWideMembership,
   isValidOrgSlug,
@@ -208,6 +210,25 @@ describe('countManagerSeats (AGL-1113)', () => {
       ]),
     ).toBe(0)
     expect(countManagerSeats([])).toBe(0)
+  })
+})
+
+describe('SSO account governance (AGL-1128)', () => {
+  it('treats any account with a tenantId as SSO-governed', () => {
+    expect(isSsoGovernedAccount({ tenantId: 'aglyn-org-y5v14' })).toBe(true)
+    expect(isSsoGovernedAccount({ tenantId: null })).toBe(false)
+    expect(isSsoGovernedAccount({})).toBe(false)
+    expect(isSsoGovernedAccount(null)).toBe(false)
+  })
+
+  it('refuses social linking for an SSO account and allows it otherwise', () => {
+    // The security call: a linked consumer provider is a way in the
+    // customer's IdP cannot see or revoke. Not conditional on `enforced` —
+    // that flag exists to avoid LOCKING OUT an existing method, not to
+    // permit handing out new bypasses in the meantime.
+    expect(canLinkSocialProvider({ tenantId: 'aglyn-org-y5v14' })).toBe(false)
+    expect(canLinkSocialProvider({ tenantId: null })).toBe(true)
+    expect(canLinkSocialProvider(undefined)).toBe(true)
   })
 })
 

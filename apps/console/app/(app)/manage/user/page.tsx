@@ -17,6 +17,7 @@
 
 'use client'
 
+import { canLinkSocialProvider } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_FIRST_NAME,
@@ -36,14 +37,15 @@ import {
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
-import { Tab } from '@mui/material'
 import {
+  Alert,
   Avatar,
   Box,
   Button,
   Chip,
   Divider,
   Stack,
+  Tab,
   TextField,
   Typography,
 } from '@mui/material'
@@ -169,6 +171,29 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     .map((info) => info?.providerId)
     .filter((id): id is string => Boolean(id))
   const hasPassword = providerIds.includes('password')
+  /**
+   * Whether this account is governed by enterprise SSO (AGL-1128) — i.e. it
+   * lives in an org's GCIP tenant pool rather than the project pool.
+   *
+   * SSO-governed accounts may NOT link a consumer provider. The customer's
+   * IdP is the single gate they bought: they revoke there, enforce MFA there,
+   * offboard there. A linked personal Google account is a way in that their
+   * IdP cannot see or revoke — precisely what SSO is purchased to prevent.
+   *
+   * This is deliberately NOT gated on `sso.enforced`. That flag exists so we
+   * never LOCK OUT an existing sign-in method; it is not a licence to hand out
+   * new bypasses in the meantime. Nothing here removes an existing provider,
+   * so no one can be locked out by it.
+   *
+   * The hard boundary is upstream: a GCIP tenant only accepts providers
+   * enabled on that tenant, and the SSO tenants have none besides their SAML
+   * provider — so linking would fail server-side regardless. This keeps us
+   * from OFFERING an action that is both broken and, if it ever worked, a
+   * security regression.
+   */
+  const ssoGoverned = !canLinkSocialProvider(
+    user as { tenantId?: string | null },
+  )
 
   const handleBasicSave = useCallback(
     async (fields: any) => {
@@ -262,6 +287,19 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
   }, [user])
 
   const connectGoogle = useCallback(async () => {
+    // Refuse in the handler too, not just by hiding the button (AGL-1128).
+    // Hiding a control is a UI decision; this is the intent, and it survives
+    // a stale render. The real boundary is the tenant's provider config —
+    // GCIP will reject a provider the tenant does not enable — but an
+    // SSO bypass should never depend on a remote config staying right.
+    if (ssoGoverned) {
+      enqueueSnackbar(
+        'Your organization signs in through its own identity provider — ' +
+          'other sign-in methods cannot be connected.',
+        { variant: 'warning' },
+      )
+      return
+    }
     setLinkBusy(true)
     try {
       await linkWithPopup(user, new GoogleAuthProvider())
@@ -287,7 +325,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     } finally {
       setLinkBusy(false)
     }
-  }, [user, refreshProviders, enqueueSnackbar])
+  }, [user, refreshProviders, enqueueSnackbar, ssoGoverned])
 
   const disconnectProvider = useCallback(
     async (providerId: string, canRemove: boolean) => {
@@ -350,7 +388,9 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         <Box>
           <Typography variant="subtitle2">{'Sign-in methods'}</Typography>
           <Typography variant="caption" color="text.secondary">
-            {'How you sign in to Aglyn. Connect another for a backup way in.'}
+            {ssoGoverned
+              ? 'How you sign in to Aglyn, managed by your organization.'
+              : 'How you sign in to Aglyn. Connect another for a backup way in.'}
           </Typography>
         </Box>
         {providerIds.length === 0 ? (
@@ -440,7 +480,14 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
             })}
           </Box>
         )}
-        {!providerIds.includes('google.com') ? (
+        {ssoGoverned ? (
+          <Alert severity="info" sx={{ alignSelf: 'stretch' }}>
+            {'Your organization signs in through its own identity provider. ' +
+              'Other sign-in methods are disabled so that access stays ' +
+              'governed there — including when it is revoked.'}
+          </Alert>
+        ) : null}
+        {!ssoGoverned && !providerIds.includes('google.com') ? (
           <Button
             variant="outlined"
             startIcon={<GoogleGlyph />}
