@@ -114,6 +114,21 @@ describe('plan entitlements', () => {
       if (plan === 'agency') continue
       expect(PLAN_ENTITLEMENTS[plan].features.whiteLabel).toBe(false)
     }
+    // SSO (AGL-1101): Enterprise-only via a per-org override — off on EVERY
+    // base plan, including Agency (distinct from white-label by design).
+    for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
+      expect(PLAN_ENTITLEMENTS[plan].features.ssoEnabled).toBe(false)
+    }
+    // But a per-org entitlement override grants it (the Enterprise path).
+    expect(
+      checkEntitlement(
+        {
+          plan: 'agency',
+          entitlements: { features: { ssoEnabled: true } },
+        } as any,
+        'ssoEnabled',
+      ),
+    ).toBe(true)
     expect(PLAN_ENTITLEMENTS.pro.features.marketplaceSelling).toBe(true)
     expect(PLAN_ENTITLEMENTS.pro.features.scheduledPublishing).toBe(false)
     expect(PLAN_ENTITLEMENTS.business.features.scheduledPublishing).toBe(true)
