@@ -16,20 +16,27 @@
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
+import { APEX_LABELS, WORKSPACE_DOMAIN } from './constants/workspace-domain'
 
 /**
  * Workspace-subdomain gate (AGL-236): on `{slug}.<workspace domain>`
- * requests, verifies the slug against the public `orgSlugs` collection
- * (Firestore REST — rules allow unauthenticated reads there) and bounces
+ * requests, verifies the slug against the `orgSlugs` collection and bounces
  * unknown workspaces to the apex console. In-app org scoping stays
  * client-side (OrgScopeProvider); this only stops dead subdomains
  * from rendering a broken console.
  *
- * Inert until ops sets NEXT_PUBLIC_WORKSPACE_DOMAIN (e.g. "aglyn.com" — the console apex is app.aglyn.com)
- * on the console deployment alongside the wildcard domain — the tenant
- * sites' own subdomain space must not be claimed by accident.
+ * This gate spent its whole life switched off. `WORKSPACE_DOMAIN` was a local
+ * `process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN` with no fallback while seven
+ * other copies of the same constant defaulted to `'aglyn.com'`, and the var is
+ * unset in production — so the file that decided WHO MAY BE SERVED opted out
+ * while the file that mints `__session` did not. It now shares one constant
+ * with them (`constants/workspace-domain.ts`), which is the actual fix; the
+ * missing `??` was only how it surfaced.
+ *
+ * NOTE: `/api/*` is outside the matcher below, so this is not a boundary on
+ * its own — the Vercel domain allowlist is. This layer stops an unregistered
+ * host from rendering a console; it cannot stop one from calling an API route.
  */
-const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN
 
 /**
  * First path segments that are never org-scoped (AGL-627). These live at the
@@ -45,46 +52,58 @@ const APEX_PATH_SEGMENTS = new Set([
   'verify-email',
   'account-recovery',
 ])
-const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-const API_KEY = process.env.NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY
-
-// Reserved subdomain labels that are never org workspaces. `auth` hosts
-// the Firebase OAuth helper origin (auth.aglyn.com, AGL-462) — without
-// this it resolves as an unknown org slug and 307s the /__/auth/*
-// handshake away to the apex, breaking Google sign-in.
-const APEX_LABELS = new Set(['www', 'console', 'app', 'auth'])
 const CACHE_TTL_MS = 60_000
 type SlugVerdict = { known: boolean; movedTo: string | null; at: number }
 const slugCache = new Map<string, SlugVerdict>()
 
+/**
+ * Ask our own Admin-SDK route whether a workspace slug exists.
+ *
+ * The previous implementation read Firestore's REST API directly with the
+ * public web key. On this project that returns `403 PERMISSION_DENIED` for
+ * every slug — App Check is enforced, and an edge request carries no App
+ * Check token. Since only 200 and 404 were treated as authoritative, a 403
+ * fell through to `{ known: true }`, so ARMING THIS GATE WOULD HAVE MADE
+ * THINGS WORSE: every rogue subdomain would have been judged a real workspace
+ * and had its path rewritten into `/{slug}/…`.
+ *
+ * `/api/*` is excluded from the matcher, so calling our own origin here
+ * cannot recurse.
+ *
+ * The call goes to THIS request's own origin, not to a hardcoded apex. An
+ * earlier draft used `https://app.<domain>` for "robustness" and it was
+ * strictly worse: a preview deployment would have asked production for a
+ * verdict, and a build whose verdict route did not exist upstream yet failed
+ * open silently — which is how this was caught. The request has already
+ * reached this deployment, so its origin resolves here by construction.
+ */
 async function resolveOrgSlug(
   slug: string,
+  origin: string,
 ): Promise<Omit<SlugVerdict, 'at'>> {
   const cached = slugCache.get(slug)
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached
   try {
     const response = await fetch(
-      `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}` +
-        `/databases/(default)/documents/orgSlugs/${encodeURIComponent(slug)}` +
-        `?key=${API_KEY}`,
+      `${origin}/api/orgs/slug-verdict?slug=${encodeURIComponent(slug)}`,
+      { headers: { accept: 'application/json' } },
     )
-    // Only 200/404 are authoritative; other statuses (quota, outage)
-    // fail open without poisoning the cache.
-    if (response.ok) {
-      const payload = await response.json().catch(() => null)
-      // Renamed workspaces leave a tombstone (AGL-236) — redirect.
-      const movedTo =
-        payload?.fields?.movedTo?.stringValue ?? null
-      const verdict = { known: true, movedTo, at: Date.now() }
-      slugCache.set(slug, verdict)
-      return verdict
+    if (!response.ok) return { known: true, movedTo: null }
+    const payload = await response.json().catch(() => null)
+    if (payload == null || typeof payload.known !== 'boolean') {
+      return { known: true, movedTo: null }
     }
-    if (response.status === 404) {
-      const verdict = { known: false, movedTo: null, at: Date.now() }
-      slugCache.set(slug, verdict)
-      return verdict
+    // A degraded verdict is the route telling us it could not reach Firestore.
+    // Honour it for this request but never cache it, or one blip pins every
+    // slug open for the full TTL.
+    if (payload.degraded) return { known: true, movedTo: null }
+    const verdict = {
+      known: payload.known as boolean,
+      movedTo: (payload.movedTo as string | null) ?? null,
+      at: Date.now(),
     }
-    return { known: true, movedTo: null }
+    slugCache.set(slug, verdict)
+    return verdict
   } catch {
     return { known: true, movedTo: null }
   }
@@ -117,10 +136,7 @@ export async function middleware(request: NextRequest) {
     return res
   }
 
-  if (!WORKSPACE_DOMAIN || !PROJECT_ID || !API_KEY) {
-    return pass()
-  }
-  const hostname = (request.headers.get('host') ?? '').split(':')[0]
+  const hostname = (request.headers.get('host') ?? '').split(':')[0].toLowerCase()
   if (hostname === WORKSPACE_DOMAIN || !hostname.endsWith(`.${WORKSPACE_DOMAIN}`)) {
     return pass()
   }
@@ -128,7 +144,7 @@ export async function middleware(request: NextRequest) {
   if (slug.includes('.') || APEX_LABELS.has(slug)) {
     return pass()
   }
-  const verdict = await resolveOrgSlug(slug)
+  const verdict = await resolveOrgSlug(slug, new URL(request.url).origin)
   if (verdict.movedTo) {
     const moved = request.nextUrl.clone()
     moved.hostname = `${verdict.movedTo}.${WORKSPACE_DOMAIN}`

@@ -131,17 +131,63 @@ workspace subdomain scopes the **console**, not published sites:
 
 ```mermaid
 flowchart LR
-  B["Browser:<br/>business1.aglyn.com"] --> MW{"Next middleware:<br/>slug known?<br/>(public orgSlugs read, cached)"}
+  B["Browser:<br/>business1.aglyn.com"] --> MW{"Next middleware:<br/>slug known?<br/>(Admin-SDK verdict route, cached)"}
   MW -- "yes" --> CON["Console renders;<br/>OrgScopeProvider pins the org scope"]
   MW -- "no" --> APEX["Redirect to apex console<br/>?unknown-workspace=slug"]
   A2["Browser: app.aglyn.com"] --> SW["Org switcher<br/>(users/#lcub;uid#rcub;/orgs)"]
   SW --> CON
 ```
 
-The middleware is inert until ops sets `NEXT_PUBLIC_WORKSPACE_DOMAIN` beside the
-wildcard domain. Organizations are the permanent tenancy model (not release-flagged):
-every account operates inside an org, and the switcher appears as soon as a user
+Organizations are the permanent tenancy model (not release-flagged): every
+account operates inside an org, and the switcher appears as soon as a user
 belongs to one.
+
+### Which hostnames may serve the console
+
+**The Vercel domain allowlist is the boundary, not the middleware.** Only
+`app.aglyn.com`, `auth.aglyn.com`, and *explicitly registered* workspace
+subdomains are attached to the `aglyn-console` project. `*.aglyn.com` used to
+be, which meant every hostname under the domain served a real console: measured
+before the change, `https://billing-security-update.aglyn.com/signin` returned
+**200** with a genuine Aglyn sign-in page under a valid Aglyn certificate.
+It now returns **404**.
+
+This has to be the boundary rather than the middleware because `/api/*` is
+outside the middleware matcher — a host that middleware would redirect could
+still call an API route, and the session cookie is issued with
+`Domain=.aglyn.com`, so the browser attaches it.
+
+`console.aglyn.com` is registered as a **308 redirect** to `app.aglyn.com`
+rather than dropped, so existing links keep working without a second hostname
+serving a full console.
+
+:::warning A new org's subdomain is not automatic
+Removing the wildcard means `{slug}.aglyn.com` resolves only if that exact
+domain has been added to the console project. Org creation does **not** do this
+yet, so a newly created workspace is reachable at
+`app.aglyn.com/{slug}` (the canonical, path-based route) but **not** at its own
+subdomain until the domain is added. Adding/removing the domain on org
+create/rename/erase is the outstanding half of this work.
+:::
+
+The middleware gate is defence in depth behind that. Two corrections worth
+recording, because the earlier version of this page asserted the opposite:
+
+- It was **not** "inert until ops sets `NEXT_PUBLIC_WORKSPACE_DOMAIN`". That
+  constant is declared in eight places; seven default to `aglyn.com` and only
+  the gate did not, so the gate alone disabled itself while the session route
+  kept minting domain-wide cookies. All of them now derive from
+  `apps/console/constants/workspace-domain.ts`.
+- The slug check is **not** a public `orgSlugs` read. App Check is enforced on
+  this project, so an unauthenticated Firestore REST read from the edge returns
+  `403 PERMISSION_DENIED` for every slug, including ones that exist. The gate
+  treated any non-200/404 as *known*, so setting the env var alone would have
+  judged every rogue subdomain a real workspace. It now asks
+  `/api/orgs/slug-verdict`, which reads through the Admin SDK.
+
+Both layers fail **open** on a Firestore outage: a workspace going dark because
+a lookup timed out is worse than the residual exposure, given the allowlist
+above is what actually stops an unregistered host.
 
 ## Billing & cost attribution
 

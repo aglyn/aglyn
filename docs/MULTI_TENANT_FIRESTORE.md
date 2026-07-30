@@ -13,8 +13,10 @@ Author: Zach Gover, 2026-07-09
 > (kept in sync by the org APIs) instead of a second rules `get()`, and
 > hosts remain top-level (`hostIndex` resolves host → org) — ancestry
 > nesting was traded for keeping every existing `hosts/{hostId}` path
-> working. Second pass (same day): workspace-subdomain middleware (inert
-> until ops sets `NEXT_PUBLIC_WORKSPACE_DOMAIN`), org-scoped host
+> working. Second pass (same day): workspace-subdomain middleware (believed
+> inert "until ops sets `NEXT_PUBLIC_WORKSPACE_DOMAIN`" — it was in fact
+> disabled by that variable being the one copy of eight without a default,
+> and its App-Check-blocked slug lookup failed open; both fixed), org-scoped host
 > creation, billing mirrored to org docs with entitlements resolving from
 > them (AGL-237 part 1), per-org usage rollups (AGL-238 part 1), and a
 > rules emulator matrix (`npm run test:rules`, 13 cases) that caught and
