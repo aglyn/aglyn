@@ -198,9 +198,21 @@ async function handler(request: Request): Promise<Response> {
           hostAccess[hostId] = hostRole as HostAccessRole
         }
       }
-      // Manager-seat quota (AGL-471): fail the invite early when the org
-      // has no seat left (members + pending invites); accept re-checks.
-      {
+      // Dedup (AGL-1111): one pending invite per address. Re-inviting someone
+      // who already has a pending invite UPDATES it (correcting the role/site
+      // access + re-sending), rather than stacking a second row — two rows for
+      // one person also double-counted the seat quota and left two accept
+      // links. Two `==` filters need no composite index (single-field merge).
+      const existingPending = await invitesRef
+        .where('email', '==', email)
+        .where('acceptedAt', '==', null)
+        .limit(1)
+        .get()
+      const reusing = !existingPending.empty
+      // Manager-seat quota (AGL-471): only a genuinely NEW invite consumes a
+      // seat — reusing an already-pending row does not, so skip the gate then
+      // (it already counts toward `used`). Accept re-checks authoritatively.
+      if (!reusing) {
         const orgRef = firestore.collection('orgs').doc(orgId)
         const [orgSnapshot, memberCount, pendingInvites] = await Promise.all([
           orgRef.get(),
@@ -220,26 +232,34 @@ async function handler(request: Request): Promise<Response> {
           }, { status: 403 })
         }
       }
-      const inviteId = createResourceUid()
-      await invitesRef.doc(inviteId).set({
-        email,
-        role,
-        allHosts: body?.allHosts === true,
-        hostAccess,
-        invitedBy: decoded.uid,
-        createdAt: FieldValue.serverTimestamp(),
-        acceptedAt: null,
-      })
+      const inviteId = reusing
+        ? existingPending.docs[0].id
+        : createResourceUid()
+      await invitesRef.doc(inviteId).set(
+        {
+          email,
+          role,
+          allHosts: body?.allHosts === true,
+          hostAccess,
+          invitedBy: decoded.uid,
+          createdAt: FieldValue.serverTimestamp(),
+          acceptedAt: null,
+        },
+        { merge: true },
+      )
       void logOrgActivity(
         orgId,
         { uid: decoded.uid, email: decoded.email },
-        `Invited ${email} as ${role}`,
+        `${reusing ? 'Updated invite for' : 'Invited'} ${email} as ${role}`,
         { type: 'invite', id: inviteId, name: email },
       )
       // Best-effort delivery via Resend (AGL-708): the invite works without
       // it — the console banner surfaces it after sign-in either way.
       const emailed = await sendInviteEmail(email, role)
-      return Response.json({ ok: true, inviteId, emailed }, { status: 200 })
+      return Response.json(
+        { ok: true, inviteId, emailed, updated: reusing },
+        { status: 200 },
+      )
     }
 
     if (action === 'revoke') {
