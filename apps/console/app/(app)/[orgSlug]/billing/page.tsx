@@ -17,6 +17,8 @@
 'use client'
 
 import {
+  ENTERPRISE_PLAN_LABEL,
+  isEnterpriseOrg,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   type OrgPlan,
@@ -97,6 +99,11 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // Workspace-scoped (AGL-236): meters cover the selected org's sites.
   const { hosts } = useOrgHosts(firestore, user?.uid, orgId)
   const plan = (org?.plan ?? 'free') as OrgPlan
+  // Enterprise deals ride a base plan (usually agency) but read as "Enterprise"
+  // and bill a negotiated custom price rather than the plan's list price
+  // (AGL-1110).
+  const enterprise = isEnterpriseOrg(org)
+  const customMonthlyUsd = org?.subscription?.customMonthlyUsd ?? 0
   const subscriptionStatus = org?.subscription?.status
   const subscriptionActive = ['active', 'trialing', 'past_due'].includes(
     String(subscriptionStatus ?? ''),
@@ -415,7 +422,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     spacing={1}
                     sx={{ alignItems: 'center', mb: 1 }}
                   >
-                    <Typography variant="h5">{PLAN_LABELS[plan]}</Typography>
+                    <Typography variant="h5">
+                      {enterprise ? ENTERPRISE_PLAN_LABEL : PLAN_LABELS[plan]}
+                    </Typography>
                     <Chip
                       label={org?.subscription?.status ?? 'no subscription'}
                       size="small"
@@ -429,8 +438,15 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       variant="outlined"
                     />
                   </Stack>
-                  {/* Plan price + headline entitlements (AGL-367). */}
-                  {PLAN_PRICING[plan]?.basePriceMonthlyUsd ? (
+                  {/* Plan price + headline entitlements (AGL-367). Enterprise
+                      shows its negotiated custom price, not the base list
+                      price (AGL-1110). */}
+                  {enterprise ? (
+                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                      {`$${customMonthlyUsd.toLocaleString()}/mo · custom` +
+                        `${org?.subscription?.interval === 'year' ? ' (billed yearly)' : ''}`}
+                    </Typography>
+                  ) : PLAN_PRICING[plan]?.basePriceMonthlyUsd ? (
                     <Typography variant="subtitle2" sx={{ mb: 1 }}>
                       {`$${PLAN_PRICING[plan].basePriceMonthlyUsd}/mo · ` +
                         `$${PLAN_PRICING[plan].basePriceAnnualMonthlyUsd}/mo billed yearly`}
