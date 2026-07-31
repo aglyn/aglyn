@@ -194,9 +194,18 @@ because deleting a domain is not a reconcile job's decision.
 
 :::note Env
 `VERCEL_TOKEN`, `VERCEL_CONSOLE_PROJECT_ID`, and `VERCEL_TEAM_ID` for a
-team-scoped project. The token needs project-domain scope. Note the existing
-`VERCEL_TOKEN` in `apps/console/.env.production.local` is a *local* file — this
-needs a real deployment secret.
+team-scoped project; the token needs project-domain scope. **All three are set
+on the console deployment** (production, preview), so this is live rather than
+waiting on ops. Unset in any environment — local dev, self-hosted — is a silent
+no-op by design.
+
+Reading them back is not uniform, which is worth knowing before concluding a
+variable is missing: Vercel returns `encrypted` values through
+`GET /v1/projects/{id}/env/{envId}` but **never** returns `sensitive` ones. Most
+of this project's variables are `sensitive`, so "the API gave me nothing" means
+"that type is unreadable", not "it is unset". And the list endpoint **paginates**
+— pass a `limit` or you will filter a truncated page and conclude a variable
+does not exist when it does.
 :::
 
 The middleware gate is defence in depth behind that. Two corrections worth
