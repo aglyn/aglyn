@@ -27,6 +27,7 @@ import {
   type HostUsageSnapshot,
 } from '../../../../utils/usage-metering'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { CRON_CHUNK_SIZE, selectCronChunk } from '../../../../utils/cron-chunk'
 
 /** Previous calendar month as YYYY-MM (the default rollup target). */
 function previousMonth(): string {
@@ -197,8 +198,23 @@ async function handler(request: Request): Promise<Response> {
     // subject — the meter event uses the org's mirrored Stripe customer
     // and an org-month identifier, idempotent via the usage doc's
     // reportedAt on our side and the identifier on Stripe's.
+    // Bounded, resumable sweep (AGL-1141). Walking every org in one
+    // invocation is what produced the 504; `maxDuration` buys headroom but
+    // the ceiling is fixed and the org count is not, so the sweep is chunked
+    // and the caller loops on the cursor.
+    const chunk = selectCronChunk(
+      Object.keys(byOrg),
+      typeof body?.cursor === 'string' ? body.cursor : null,
+      Number(body?.limit) || CRON_CHUNK_SIZE,
+    )
     const orgResults: Record<string, any> = {}
-    for (const [orgId, hostRefs] of Object.entries(byOrg)) {
+    const failures: Record<string, string> = {}
+    // The cursor must name the last org FINISHED, never the last attempted —
+    // handing back a failed org's id skips it forever, which is the
+    // partial-month bug wearing a cursor.
+    for (const orgId of chunk.items) {
+      const hostRefs = byOrg[orgId] ?? []
+      try {
       const usage = await Promise.all(hostRefs.map(usageFor))
       const estimate = estimateMonthlyUsageCost(usage)
       const orgRef = firestore.collection('orgs').doc(orgId)
@@ -294,8 +310,37 @@ async function handler(request: Request): Promise<Response> {
         { merge: true },
       )
       orgResults[orgId] = { billedCents, reported }
+      } catch (error) {
+        // One org's bad data must not abandon the rest of the month. Recorded
+        // and surfaced in the response, so a partial sweep is visible rather
+        // than silent — being silent is what made the original timeout hard
+        // to notice.
+        console.error(`[report-usage] org ${orgId} failed`, error)
+        failures[orgId] = (error as Error)?.message ?? 'unknown'
+      }
     }
-    return Response.json({ month, orgs: orgResults }, { status: 200 })
+    // The cursor ALWAYS advances past what was attempted, including failures.
+    // Holding it back to retry a failed org sounds kinder and is not: an org
+    // that fails deterministically would pin the sweep on it forever and the
+    // months behind it would never be rolled up at all.
+    //
+    // A failed org is therefore skipped for THIS pass and picked up by the
+    // next daily run — and `failures` in the response makes the workflow exit
+    // non-zero, so the skip is loud instead of quiet. A cron should finish
+    // what it can and complain, not spin.
+    const failed = Object.keys(failures)
+    return Response.json(
+      {
+        month,
+        orgs: orgResults,
+        ...(failed.length ? { failures } : {}),
+        processed: chunk.items.length,
+        total: chunk.total,
+        nextCursor: chunk.nextCursor,
+        done: chunk.done,
+      },
+      { status: failed.length ? 207 : 200 },
+    )
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Rollup failed' }, { status: 500 })
