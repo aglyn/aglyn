@@ -17,9 +17,19 @@
 
 'use client'
 
-import { canLinkSocialProvider } from '@aglyn/aglyn'
+import {
+  canLinkSocialProvider,
+  normalizeAddress,
+  normalizePhone,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import {
+  FIELD_SCHEMA_ADDRESS_CITY,
+  FIELD_SCHEMA_ADDRESS_COUNTRY,
+  FIELD_SCHEMA_ADDRESS_LINE1,
+  FIELD_SCHEMA_ADDRESS_LINE2,
+  FIELD_SCHEMA_ADDRESS_POSTAL_CODE,
+  FIELD_SCHEMA_ADDRESS_STATE,
   FIELD_SCHEMA_FIRST_NAME,
   FIELD_SCHEMA_LAST_NAME,
   FIELD_SCHEMA_ORGANIZATION_NAME,
@@ -98,6 +108,16 @@ const basicSchema: FormSchema = {
     FIELD_SCHEMA_LAST_NAME,
     FIELD_SCHEMA_PHONE_NUMBER,
     FIELD_SCHEMA_ORGANIZATION_NAME,
+    // AGL-1133. Personal, and deliberately NOT mirrored onto the org roster:
+    // a roster doc is readable by every org member and every site
+    // collaborator (AGL-1122/1026), which is fine for a display name and
+    // squarely wrong for a home address.
+    FIELD_SCHEMA_ADDRESS_LINE1,
+    FIELD_SCHEMA_ADDRESS_LINE2,
+    FIELD_SCHEMA_ADDRESS_CITY,
+    FIELD_SCHEMA_ADDRESS_STATE,
+    FIELD_SCHEMA_ADDRESS_POSTAL_CODE,
+    FIELD_SCHEMA_ADDRESS_COUNTRY,
   ],
 }
 const securitySchema: FormSchema = {
@@ -208,7 +228,31 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     async (fields: any) => {
       const dequeueLoading = queueLoading()
       try {
-        await setDoc(userRef, { ...fields }, { merge: true })
+        // Normalize before storing, not after reading (AGL-1133). Production
+        // held `phoneNumber: "7376006900"` — ten digits, no country code —
+        // which is unusable for SMS or for a Stripe customer, and every later
+        // reader would have had to guess a country to fix it.
+        //
+        // The whole address is REPLACED rather than merged: Firestore merges
+        // nested maps key by key, so clearing one line would silently leave
+        // the old value behind. `normalizeAddress` returns null for an empty
+        // address, and null here means "no address", not "an object of empty
+        // strings" — which every `if (address)` in the codebase would read as
+        // having one.
+        const normalizedPhone = normalizePhone(fields?.phoneNumber)
+        const address = normalizeAddress(fields?.address)
+        await setDoc(
+          userRef,
+          {
+            ...fields,
+            // Keep exactly what was typed if it cannot be normalized
+            // confidently, rather than dropping the user's data on the floor.
+            // The field's own validator is what stops nonsense arriving here.
+            phoneNumber: normalizedPhone ?? fields?.phoneNumber ?? null,
+            address,
+          },
+          { merge: true },
+        )
         // Keep Firebase Auth's displayName in step (AGL-852): rosters and
         // comments read it, so without this a name edit here was invisible to
         // teammates. Best-effort — a failed sync must not fail the save.

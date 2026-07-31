@@ -23,6 +23,10 @@
 // 👇
 
 export * from './definitions/components.types'
+// One postal address + one phone format, shared by the personal profile, the
+// org billing address and the Stripe customer (AGL-1133). The failure this
+// prevents is a phone number stored three ways in three collections.
+export * from './definitions/contact.types'
 export * from './definitions/organization.types'
 export * from './definitions/shared'
 export {

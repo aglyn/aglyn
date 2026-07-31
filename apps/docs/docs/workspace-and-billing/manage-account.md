@@ -62,6 +62,28 @@ them here wins permanently — signing in again never re-applies the provider's
 version over your own. If your company signs you in through its own identity
 provider and these are blank, that provider is not sending a name; type one here.
 
+### Contact details
+
+Phone number, organization name, and your address.
+
+Your **phone number** is stored in international format — type it however you like,
+including `(512) 555-0123`, and it is saved as `+15125550123`. Include the country
+code for anywhere outside the US and Canada, since a bare national number cannot be
+matched to a country without guessing.
+
+**Country** is the two-letter code (`US`, `GB`, `DE`). Stripe Tax cannot compute
+anything from a spelled-out country name, which is why the field insists.
+
+:::note Who can see this
+Your address and phone live on your personal account, visible only to you and to
+Aglyn staff. They are **not** copied onto your organization's member list — that
+list is readable by every member of the organization and by site collaborators,
+which is appropriate for a name and not for a home address.
+
+This is separate from the **billing address** on an invoice, which is collected at
+checkout and belongs to the organization rather than to you.
+:::
+
 ## Security
 
 Change your password.

@@ -230,4 +230,81 @@ export const FIELD_SCHEMA_PHONE_NUMBER: FieldSchema = {
   name: 'phoneNumber',
   label: 'Phone number',
   type: 'text',
+  helperText: 'Include the country code for numbers outside the US and Canada',
+  validate: [
+    {
+      // Deliberately permissive: this rejects obvious nonsense so the save
+      // can normalize to E.164 with confidence, and leaves the real parsing
+      // to `normalizePhone` (AGL-1133). A strict E.164 pattern here would
+      // reject "(512) 555-0123", which is how people actually type a phone
+      // number, and a field that refuses correct input is worse than an
+      // unnormalized one.
+      type: validatorTypes.PATTERN,
+      pattern: /^\+?[\d][\d\s().-]{8,}$/,
+      message: 'Enter a valid phone number, e.g. (512) 555-0123',
+    },
+  ],
+}
+
+/**
+ * Postal address (AGL-1133).
+ *
+ * Dotted names so the form submits ONE nested `address` object matching
+ * `AglynPostalAddress`, rather than six loose columns that each caller would
+ * have to reassemble — reassembling is where variants come from.
+ */
+export const FIELD_SCHEMA_ADDRESS_LINE1: FieldSchema = {
+  component: componentTypes.TEXT_FIELD,
+  name: 'address.line1',
+  label: 'Address',
+  type: 'text',
+}
+
+export const FIELD_SCHEMA_ADDRESS_LINE2: FieldSchema = {
+  component: componentTypes.TEXT_FIELD,
+  name: 'address.line2',
+  label: 'Apartment, suite, etc.',
+  type: 'text',
+}
+
+export const FIELD_SCHEMA_ADDRESS_CITY: FieldSchema = {
+  component: componentTypes.TEXT_FIELD,
+  name: 'address.city',
+  label: 'City',
+  type: 'text',
+}
+
+export const FIELD_SCHEMA_ADDRESS_STATE: FieldSchema = {
+  component: componentTypes.TEXT_FIELD,
+  // `state`, not `region` — Stripe's customer address and the commerce
+  // plugin's OrderAddress both call it `state`, and a third spelling in the
+  // one type meant to end variants would be self-defeating.
+  name: 'address.state',
+  label: 'State / Province',
+  type: 'text',
+}
+
+export const FIELD_SCHEMA_ADDRESS_POSTAL_CODE: FieldSchema = {
+  component: componentTypes.TEXT_FIELD,
+  name: 'address.postalCode',
+  label: 'Postal code',
+  type: 'text',
+}
+
+export const FIELD_SCHEMA_ADDRESS_COUNTRY: FieldSchema = {
+  component: componentTypes.TEXT_FIELD,
+  name: 'address.country',
+  label: 'Country',
+  type: 'text',
+  helperText: 'Two-letter code, e.g. US',
+  validate: [
+    {
+      // ISO-3166-1 alpha-2 because Stripe Tax cannot compute anything from a
+      // typed country name. Enforced here so the field says so, and again in
+      // `normalizeAddress` so an API caller cannot bypass it.
+      type: validatorTypes.PATTERN,
+      pattern: /^[A-Za-z]{2}$/,
+      message: 'Use the two-letter country code, e.g. US',
+    },
+  ],
 }

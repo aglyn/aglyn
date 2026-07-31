@@ -554,7 +554,7 @@ export const DOCS_HELP_ANCHORS = {
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#tips', '#related'],
   languageSwitcher: ['#steps', '#tips', '#related'],
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
-  manageAccount: ['#account', '#sign-in-methods', '#profile-image', '#basic-info', '#security', '#related'],
+  manageAccount: ['#account', '#sign-in-methods', '#profile-image', '#basic-info', '#contact-details', '#security', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#engagement-stats', '#related'],
   media: ['#organize', '#upload', '#deliver-over-cdn', '#urls-are-stable', '#who-an-asset-is-shared-with', '#private-files', '#components', '#related'],
