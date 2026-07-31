@@ -161,13 +161,42 @@ still call an API route, and the session cookie is issued with
 rather than dropped, so existing links keep working without a second hostname
 serving a full console.
 
-:::warning A new org's subdomain is not automatic
+### Attaching a workspace's subdomain
+
 Removing the wildcard means `{slug}.aglyn.com` resolves only if that exact
-domain has been added to the console project. Org creation does **not** do this
-yet, so a newly created workspace is reachable at
-`app.aglyn.com/{slug}` (the canonical, path-based route) but **not** at its own
-subdomain until the domain is added. Adding/removing the domain on org
-create/rename/erase is the outstanding half of this work.
+domain is attached to the console project, so org lifecycle now manages it
+(AGL-1136):
+
+| Event | Domain action |
+| --- | --- |
+| org created | attach `{slug}` |
+| org renamed | attach the new slug, **keep the old one** |
+| org erased | detach `{slug}` |
+
+A rename deliberately does **not** detach. The previous slug keeps a tombstone
+that 308s to the new one, and a redirect can only run on a hostname that still
+resolves — detaching would break the very redirect the tombstone exists to
+serve.
+
+**The attach can never fail an org.** It runs after the transaction, unawaited,
+and swallows its own errors: the console is path-routed and
+`app.aglyn.com/{slug}` is the canonical form, so a workspace with no subdomain
+is fully usable, while an org creation rolled back because a DNS API was slow
+would not be. With no `VERCEL_TOKEN` it is a silent no-op — self-hosted
+deployments have no Vercel project and must not log an error per signup.
+
+Drift is therefore expected rather than exceptional, and
+`tools/scripts/reconcile-workspace-domains.mjs` is both the drift check and the
+backfill. Dry-run by default; it also reports **orphaned** workspace domains —
+attached names with no `orgSlugs` doc, which keep resolving to a console for a
+deleted org and block the slug from being reclaimed — but never removes them,
+because deleting a domain is not a reconcile job's decision.
+
+:::note Env
+`VERCEL_TOKEN`, `VERCEL_CONSOLE_PROJECT_ID`, and `VERCEL_TEAM_ID` for a
+team-scoped project. The token needs project-domain scope. Note the existing
+`VERCEL_TOKEN` in `apps/console/.env.production.local` is a *local* file — this
+needs a real deployment secret.
 :::
 
 The middleware gate is defence in depth behind that. Two corrections worth

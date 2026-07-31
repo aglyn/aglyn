@@ -18,6 +18,7 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { deleteHostProjectionForAllMembers } from './host-memberships'
+import { detachWorkspaceDomain } from './workspace-domains'
 
 /** The reversible hold before a requested erasure is executed (AGL-485). */
 export const ERASURE_HOLD_MS = 7 * 24 * 60 * 60 * 1000
@@ -224,6 +225,12 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
   await firestore.recursiveDelete(orgRef)
   if (slug) {
     await firestore.collection('orgSlugs').doc(slug).delete().catch(() => undefined)
+    // Release the workspace subdomain too (AGL-1136), or the name stays
+    // attached to the project and keeps resolving to a console for an org
+    // that no longer exists — and blocks the slug from being claimed again.
+    // Best-effort like every other cleanup here: an erasure must not fail
+    // because a DNS API did.
+    await detachWorkspaceDomain(slug).catch(() => undefined)
   }
 
   await firestore

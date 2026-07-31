@@ -517,7 +517,7 @@ export const DOCS_HELP_ANCHORS = {
   addSearch: ['#steps', '#tips', '#related'],
   aiAssist: ['#copy-assist', '#ai-generate-section', '#related'],
   analytics: ['#pageview-tracking', '#insights', '#per-screen-traffic', '#google-analytics', '#related'],
-  architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#billing--cost-attribution', '#related'],
+  architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#attaching-a-workspaces-subdomain', '#billing--cost-attribution', '#related'],
   besigner: ['#preview-vs-canvas', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#inline-and-rich-text', '#reusable-components', '#ai-in-the-canvas', '#related'],
   billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#seats', '#audience-contacts', '#organization-data', '#api-access', '#payments', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],

@@ -44,6 +44,7 @@ import {
   syncHostProjectionForMembers,
   syncMemberHostProjections,
 } from './host-memberships'
+import { attachWorkspaceDomain } from './workspace-domains'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
@@ -132,6 +133,16 @@ export async function createOrganization(
       { role: 'owner', orgName: name, slug, orgWide: true },
     )
   })
+  // Make `{slug}.aglyn.com` resolve (AGL-1136). AGL-1135 removed the
+  // `*.aglyn.com` wildcard — it served a real sign-in page on every hostname
+  // under the domain — so a workspace subdomain now only works if the domain
+  // is attached to the project.
+  //
+  // AFTER the transaction and deliberately un-awaited for correctness, not
+  // speed: the org exists and is usable at `app.aglyn.com/{slug}` either way,
+  // and no workspace should fail to be created because a DNS API was slow.
+  // The helper swallows its own errors; this catch is belt and braces.
+  void attachWorkspaceDomain(slug).catch(() => undefined)
   return orgId
 }
 
@@ -263,6 +274,11 @@ export async function changeOrgSlug(
       })
     }
   })
+  // Attach the new subdomain, and deliberately KEEP the old one (AGL-1136).
+  // The previous slug's tombstone 308s to the new one, and a redirect can
+  // only run on a hostname that still resolves — detaching it here would
+  // break the very redirect the tombstone exists to serve.
+  void attachWorkspaceDomain(newSlug).catch(() => undefined)
   // Reverse index carries the slug for the switcher display.
   const members = await listOrgMembers(orgId)
   const batch = db.batch()
