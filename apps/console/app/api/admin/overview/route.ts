@@ -19,6 +19,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   isBillingSubscription,
   isEnterpriseOrg,
+  orgMonthlyCogsUsd,
   orgMonthlyRevenueUsd,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
@@ -165,10 +166,31 @@ async function handler(request: Request): Promise<Response> {
     const anomalies = usagePairs
       .map(({ orgId, current, prior }) => {
         if (!current.exists || !prior.exists) return null
+        // Priced through the shared cost model (AGL-1134) rather than the
+        // rollup's own `costUsd`, so this detector and the discount guardrail
+        // cannot disagree about what an org costs. It also widens what counts
+        // as a spike: `costUsd` prices storage, page views and form
+        // submissions only, so a runaway in dataset storage, API requests or
+        // contacts — all recorded on the same document — was invisible here.
+        //
+        // Both sides of the ratio use the same function, so the 10x
+        // comparison is unaffected by the change in absolute scale.
+        const measured = (snap: typeof current) =>
+          orgMonthlyCogsUsd(
+            {
+              storageGb: snap.get('storageGb'),
+              pageViews: snap.get('pageViews'),
+              formSubmissions: snap.get('formSubmissions'),
+              dataStorageMb: snap.get('dataStorageMb'),
+              apiRequests: snap.get('apiRequests'),
+              contactsCount: snap.get('contactsCount'),
+            },
+            0,
+          ).measuredUsd
         const pageViews = Number(current.get('pageViews') ?? 0)
-        const costUsd = Number(current.get('costUsd') ?? 0)
+        const costUsd = measured(current)
         const priorPageViews = Number(prior.get('pageViews') ?? 0)
-        const priorCostUsd = Number(prior.get('costUsd') ?? 0)
+        const priorCostUsd = measured(prior)
         const spikes: string[] = []
         if (priorPageViews >= 100 && pageViews >= priorPageViews * 10) {
           spikes.push(
