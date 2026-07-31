@@ -98,3 +98,20 @@ sequenceDiagram
   adding a registry entry, seeding the template, and wrapping the page in `<FeatureGate>`.
 - If Remote Config is unreachable, the registry defaults gate — a default-off feature
   never flashes on while offline.
+- **The registry default and the seeded value must agree**, and a spec now enforces it
+  (`release-flags-template.spec.ts`). They are read in different situations — the code
+  default when Remote Config is unreachable, the template when it is not — so a
+  disagreement ships the same build with a feature on in one environment and off in
+  another, with neither looking wrong enough to be reported. The spec also fails on a
+  registry flag that was never seeded, and on a seeded `release_*` no code declares.
+
+### A flag is not always sufficient on its own
+
+`release_native_checkout` (in-page Stripe checkout, AGL-1132) is gated on the flag **and**
+on `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` being set. An embedded Checkout session returns a
+client secret and no redirect URL, so a browser that cannot mount the form has nowhere to
+send the buyer — flipping the flag without the key would turn Upgrade into a dead button.
+The route requires both and otherwise serves the redirect.
+
+Worth copying whenever a flag turns on a path that needs configuration the flag does not
+itself provide: gate on the capability, not just on the intent.

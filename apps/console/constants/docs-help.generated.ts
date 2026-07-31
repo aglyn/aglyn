@@ -543,7 +543,7 @@ export const DOCS_HELP_ANCHORS = {
   emailCampaigns: ['#send-a-campaign', '#personalize-with-merge-tags', '#schedule-a-send', '#email-lists', '#experiments', '#opens--clicks', '#compliance', '#related'],
   errorScreens: ['#the-error-screens', '#design-one', '#tips', '#related'],
   events: ['#manage-events', '#show-events-on-a-screen', '#search-engines', '#related'],
-  featureFlags: ['#how-a-flag-is-evaluated', '#how-gating-behaves', '#managing-flags', '#under-the-hood'],
+  featureFlags: ['#how-a-flag-is-evaluated', '#how-gating-behaves', '#managing-flags', '#under-the-hood', '#a-flag-is-not-always-sufficient-on-its-own'],
   firstPlugin: ['#1-scaffold', '#2-write-the-entry', '#3-develop-against-a-live-workspace', '#4-verify', '#5-publish', '#6-install-enable-load', '#7-uninstall', '#troubleshooting'],
   forms: ['#build-a-form', '#field-types', '#example-a-quick-survey', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#where-submissions-go', '#related'],
   generateSection: ['#use-it', '#tips', '#related'],

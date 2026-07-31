@@ -90,6 +90,13 @@
       },
       "description": "Self-serve add-on purchases on the Billing page: seats, datasets, extra sites, POS registers, Event Calendar.",
       "valueType": "JSON"
+    },
+    "release_native_checkout": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Pay for a plan without leaving the console - Stripe embedded Checkout instead of a redirect. OFF by default until a real card has been through it.",
+      "valueType": "JSON"
     }
   },
   "version": {

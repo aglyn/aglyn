@@ -18,6 +18,7 @@
 import {
   buildRoute,
   isCustomPricedPlan,
+  isReleaseFlagOn,
   pluginRequestFromWeb,
   Route,
   type OrgPlan,
@@ -25,6 +26,7 @@ import {
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getServerReleaseFlagValues,
   isImpersonationSession,
   memberHasOrgPermission,
   resolveOrgMembership,
@@ -131,12 +133,48 @@ async function handler(request: Request): Promise<Response> {
       ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
       : '/'
 
+    // In-page checkout (AGL-1132), behind `release_native_checkout` and OFF by
+    // default. Embedded mode was chosen for the console over the Payment
+    // Element deliberately: this is our own chrome, so nobody expects the form
+    // branded, and keeping Stripe's own form means tax, wallets and 3DS do not
+    // have to be rebuilt and re-verified. The storefront is the opposite case
+    // and wants the Payment Element — tracked separately, not folded in here.
+    //
+    // The redirect stays the default until a real card has been through this,
+    // which is not something a test suite can do for us.
+    const flagValues = await getServerReleaseFlagValues()
+    // BOTH conditions, not just the flag. An embedded session returns a client
+    // secret and no `url`, so if the browser cannot mount it — which needs a
+    // publishable key that is currently set nowhere — flipping the flag would
+    // strand a paying customer with a dead Upgrade button. Requiring the key
+    // here means the worst case of a premature flag flip is the redirect we
+    // already ship.
+    const embedded =
+      Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) &&
+      isReleaseFlagOn(
+        'release_native_checkout',
+        flagValues['release_native_checkout'],
+        // Bucket by org, so a rollout moves a whole workspace together rather
+        // than showing one owner a different checkout from their colleague.
+        orgId,
+      )
     const params = new URLSearchParams({
       mode: 'subscription',
       'line_items[0][price]': priceId,
       'line_items[0][quantity]': '1',
-      success_url: `${origin}${billingPath}?status=success`,
-      cancel_url: `${origin}${billingPath}?status=canceled`,
+      // Embedded sessions take a single `return_url` and REJECT
+      // success_url/cancel_url; the hosted redirect requires the pair. The
+      // session id rides the return so the page can show a result without
+      // being told the outcome by the client — see the fulfilment note below.
+      ...(embedded
+        ? {
+            ui_mode: 'embedded',
+            return_url: `${origin}${billingPath}?status=success&session_id={CHECKOUT_SESSION_ID}`,
+          }
+        : {
+            success_url: `${origin}${billingPath}?status=success`,
+            cancel_url: `${origin}${billingPath}?status=canceled`,
+          }),
       client_reference_id: orgId,
       'subscription_data[metadata][orgId]': orgId,
       'subscription_data[metadata][plan]': plan,
@@ -195,12 +233,25 @@ async function handler(request: Request): Promise<Response> {
       },
       body: params.toString(),
     })
-    const session = (await response.json()) as { url?: string; error?: any }
-    if (!response.ok || !session.url) {
+    const session = (await response.json()) as {
+      url?: string
+      client_secret?: string
+      error?: any
+    }
+    // An embedded session has NO `url` — mounting its client secret is the
+    // whole point — so the old `!session.url` guard would have rejected every
+    // successful embedded session as a Stripe failure.
+    const token = embedded ? session.client_secret : session.url
+    if (!response.ok || !token) {
       console.error('Stripe checkout error', session.error)
       return Response.json({ error: 'Stripe checkout failed' }, { status: 502 })
     }
-    return Response.json({ url: session.url }, { status: 200 })
+    // Never both: the client picks its path by which key is present, so
+    // returning one shape per mode keeps that unambiguous.
+    return Response.json(
+      embedded ? { clientSecret: token } : { url: token },
+      { status: 200 },
+    )
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Checkout failed' }, { status: 500 })

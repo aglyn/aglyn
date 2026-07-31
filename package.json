@@ -101,6 +101,8 @@
     "@mui/x-data-grid": "^9.10.1",
     "@mui/x-date-pickers": "^9.10.1",
     "@react-aria/utils": "^3.34.1",
+    "@stripe/react-stripe-js": "^3.10.0",
+    "@stripe/stripe-js": "^5.10.0",
     "@swc/helpers": "0.5.23",
     "@tippyjs/react": "^4.2.6",
     "@uiw/codemirror-theme-github": "^4.25.11",
