@@ -17,7 +17,13 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
-import { canManageOrg, checkEntitlement, isValidOrgSlug } from '@aglyn/aglyn/server'
+import {
+  canManageOrg,
+  checkEntitlement,
+  isValidOrgSlug,
+  normalizeAddress,
+  normalizePhone,
+} from '@aglyn/aglyn/server'
 import {
   changeOrgSlug,
   emailUnverifiedResponse,
@@ -174,28 +180,111 @@ async function handler(request: Request): Promise<Response> {
       if (logoUrl && !/^https:\/\//i.test(logoUrl)) {
         return Response.json({ error: 'Logo URLs must be https://' }, { status: 400 })
       }
+      // The org's address is STRUCTURED (AGL-1133). It was a 400-character
+      // free-text blob, which reads as an address to a human and is unusable
+      // to anything else: Stripe Tax cannot compute from it and it cannot be
+      // placed on an invoice programmatically.
+      //
+      // Converting the existing field rather than adding a `billingAddress`
+      // beside it, because a third address — personal, contact, billing —
+      // is the exact variant sprawl this issue exists to stop. Safe to
+      // convert: measured on production 2026-07-31, all four orgs have
+      // `contact.address` unset, so there is nothing to migrate.
+      const address = normalizeAddress({
+        line1: clean(body?.contactAddressLine1),
+        line2: clean(body?.contactAddressLine2),
+        city: clean(body?.contactAddressCity),
+        state: clean(body?.contactAddressState),
+        postalCode: clean(body?.contactAddressPostalCode, 20),
+        country: clean(body?.contactAddressCountry, 2),
+      })
+      const rawPhone = clean(body?.contactPhone, 40)
       const contact = {
         email: clean(body?.contactEmail),
-        phone: clean(body?.contactPhone, 40),
+        // Normalized on save like the personal profile, so one org's phone
+        // is not stored in a different format from its owner's.
+        phone: rawPhone ? (normalizePhone(rawPhone) ?? rawPhone) : '',
         website: clean(body?.contactWebsite),
-        address: clean(body?.contactAddress, 400),
+        address,
+      }
+      if (
+        contact.address &&
+        !contact.address.country &&
+        clean(body?.contactAddressCountry, 2)
+      ) {
+        // normalizeAddress drops anything that is not ISO-3166 alpha-2. Say
+        // so rather than silently saving an address Stripe Tax cannot use.
+        return Response.json(
+          { error: 'Country must be a two-letter code, e.g. US' },
+          { status: 400 },
+        )
       }
       if (contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) {
         return Response.json({ error: 'Enter a valid contact email' }, { status: 400 })
       }
-      await firebaseAdmin
-        .app()
-        .firestore()
-        .collection('orgs')
-        .doc(orgId)
-        .set(
-          {
-            logoUrl: logoUrl || firebaseAdmin.firestore.FieldValue.delete(),
-            contact,
-            updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        )
+      const orgFirestore = firebaseAdmin.app().firestore()
+      const orgDocRef = orgFirestore.collection('orgs').doc(orgId)
+      await orgDocRef.set(
+        {
+          logoUrl: logoUrl || firebaseAdmin.firestore.FieldValue.delete(),
+          contact,
+          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+      // Push to the Stripe customer ON CHANGE (AGL-1133). Checkout collects
+      // an address at purchase; nothing carried a later EDIT across, so an
+      // org that moved kept the old address on every future invoice —
+      // which is the case that actually matters for tax.
+      //
+      // Best-effort and un-awaited: the settings save is the user's action
+      // and must not fail because Stripe was slow. A missed sync self-heals
+      // on the next save, and the address is already correct in Firestore.
+      void (async () => {
+        const secretKey = process.env.STRIPE_SECRET_KEY
+        const customerId = (await orgDocRef.get()).get('stripeCustomerId') as
+          | string
+          | undefined
+        if (!secretKey || !customerId) return
+        const params = new URLSearchParams()
+        if (contact.address) {
+          const a = contact.address
+          // Stripe rejects an address without a country, so send one only
+          // when it is complete enough to be accepted at all.
+          if (a.country) {
+            if (a.line1) params.set('address[line1]', a.line1)
+            if (a.line2) params.set('address[line2]', a.line2)
+            if (a.city) params.set('address[city]', a.city)
+            if (a.state) params.set('address[state]', a.state)
+            if (a.postalCode) params.set('address[postal_code]', a.postalCode)
+            params.set('address[country]', a.country)
+          }
+        }
+        if (contact.phone) params.set('phone', contact.phone)
+        if (![...params.keys()].length) return
+        try {
+          const response = await fetch(
+            `https://api.stripe.com/v1/customers/${customerId}`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${secretKey}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: params.toString(),
+            },
+          )
+          if (!response.ok) {
+            console.error(
+              '[orgs/settings] Stripe customer sync failed',
+              orgId,
+              (await response.json().catch(() => null))?.error?.message,
+            )
+          }
+        } catch (error) {
+          console.error('[orgs/settings] Stripe customer sync threw', orgId, error)
+        }
+      })()
       void logOrgActivity(
         orgId,
         { uid: decoded.uid, email: decoded.email },

@@ -268,15 +268,35 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
     contactEmail: '',
     contactPhone: '',
     contactWebsite: '',
-    contactAddress: '',
+    // Structured (AGL-1133) — this is the address an invoice uses, so it has
+    // to be parseable. A free-text blob reads as an address to a human and
+    // is unusable to Stripe Tax.
+    contactAddressLine1: '',
+    contactAddressLine2: '',
+    contactAddressCity: '',
+    contactAddressState: '',
+    contactAddressPostalCode: '',
+    contactAddressCountry: '',
   })
   useEffect(() => {
+    const address = ((org as any)?.contact?.address ?? {}) as Record<
+      string,
+      string | undefined
+    >
     setProfile({
       logoUrl: String((org as any)?.logoUrl ?? ''),
       contactEmail: String((org as any)?.contact?.email ?? ''),
       contactPhone: String((org as any)?.contact?.phone ?? ''),
       contactWebsite: String((org as any)?.contact?.website ?? ''),
-      contactAddress: String((org as any)?.contact?.address ?? ''),
+      // `?? {}` above rather than a String() cast: the field was a string
+      // before this change, and casting an object would have painted
+      // "[object Object]" into the form.
+      contactAddressLine1: String(address.line1 ?? ''),
+      contactAddressLine2: String(address.line2 ?? ''),
+      contactAddressCity: String(address.city ?? ''),
+      contactAddressState: String(address.state ?? ''),
+      contactAddressPostalCode: String(address.postalCode ?? ''),
+      contactAddressCountry: String(address.country ?? ''),
     })
   }, [org])
   const handleProfileSave = async () => {
@@ -485,15 +505,70 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                   }))
                 }
               />
+              {/* Structured, and labelled as the billing address (AGL-1133):
+                  this is the one that goes on an invoice, and it is distinct
+                  from the owner's personal address in Manage Account. Saying
+                  which is which at the field is the cheapest way to stop
+                  someone entering a home address here. */}
               <TextField
-                label="Address"
-                multiline
-                minRows={2}
-                value={profile.contactAddress}
+                label="Billing address"
+                helperText="Used on your invoices and receipts"
+                value={profile.contactAddressLine1}
                 onChange={(event) =>
                   setProfile((prev) => ({
                     ...prev,
-                    contactAddress: event.target.value,
+                    contactAddressLine1: event.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="Apartment, suite, etc."
+                value={profile.contactAddressLine2}
+                onChange={(event) =>
+                  setProfile((prev) => ({
+                    ...prev,
+                    contactAddressLine2: event.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="City"
+                value={profile.contactAddressCity}
+                onChange={(event) =>
+                  setProfile((prev) => ({
+                    ...prev,
+                    contactAddressCity: event.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="State / Province"
+                value={profile.contactAddressState}
+                onChange={(event) =>
+                  setProfile((prev) => ({
+                    ...prev,
+                    contactAddressState: event.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="Postal code"
+                value={profile.contactAddressPostalCode}
+                onChange={(event) =>
+                  setProfile((prev) => ({
+                    ...prev,
+                    contactAddressPostalCode: event.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="Country"
+                helperText="Two-letter code, e.g. US — required for tax"
+                value={profile.contactAddressCountry}
+                onChange={(event) =>
+                  setProfile((prev) => ({
+                    ...prev,
+                    contactAddressCountry: event.target.value,
                   }))
                 }
               />
