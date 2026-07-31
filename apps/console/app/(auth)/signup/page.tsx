@@ -17,14 +17,20 @@
 
 'use client'
 
+import {
+  onboardingDestination,
+  parseOnboardingPlanIntent,
+} from '@aglyn/aglyn'
 import type { AuthResultError } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_EMAIL,
   FIELD_SCHEMA_FIRST_NAME,
   FIELD_SCHEMA_LAST_NAME,
+  FIELD_SCHEMA_ORGANIZATION_NAME,
   FIELD_SCHEMA_PASSWORD,
   FIELD_SCHEMA_PASSWORD_CONFIRM,
 } from '@aglyn/shared-data-forms'
+import { useSearchParams } from 'next/navigation'
 import {
   AppLink,
   useLoading,
@@ -51,7 +57,7 @@ import {
   type UserCredential,
 } from 'firebase/auth'
 import { doc, setDoc, type Firestore } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   useAnalytics,
   useAuth,
@@ -76,6 +82,11 @@ const formSchema: FormSchema = {
   fields: [
     FIELD_SCHEMA_FIRST_NAME,
     FIELD_SCHEMA_LAST_NAME,
+    // Collected here so a new account lands in a ready workspace instead of
+    // an empty chooser (AGL-1115). It is the org's display name; the slug is
+    // derived server-side by `/api/orgs/create`, so nobody has to think about
+    // URLs while signing up.
+    FIELD_SCHEMA_ORGANIZATION_NAME,
     FIELD_SCHEMA_EMAIL,
     FIELD_SCHEMA_PASSWORD,
     FIELD_SCHEMA_PASSWORD_CONFIRM,
@@ -122,6 +133,47 @@ async function persistSignUpProfile(
   }
 }
 
+/**
+ * Provision the workspace the user just named, and say where to land them
+ * (AGL-1115 / AGL-1117).
+ *
+ * Best-effort by contract, like the profile write above it: the account
+ * exists and the user is signed in by this point, so a failed org create must
+ * not surface as a failed sign-up. It returns `null` and the caller falls
+ * back to the workspace picker — which is exactly where signup used to land
+ * everyone, so the worst case is the old behaviour.
+ */
+async function provisionSignUpOrg(
+  credential: UserCredential,
+  orgName: string,
+): Promise<string | null> {
+  const name = orgName.trim()
+  if (!name) return null
+  try {
+    const idToken = await credential.user.getIdToken()
+    const response = await fetch('/api/orgs/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({ name }),
+    })
+    const payload = await response.json().catch(() => null)
+    // A 409 means the slug was taken — the org was NOT created, so falling
+    // through to the picker is right; inventing a suffix here would hand the
+    // user a workspace URL they never chose.
+    if (!response.ok) {
+      console.error('sign-up org create failed', payload?.error)
+      return null
+    }
+    return typeof payload?.slug === 'string' ? payload.slug : null
+  } catch (error) {
+    console.error('sign-up org create failed', error)
+    return null
+  }
+}
+
 function SignUp() {
   const { queueLoading, loading } = useLoading()
   const firebaseAuth = useAuth()
@@ -132,6 +184,15 @@ function SignUp() {
   const [consented, setConsented] = useState(false)
   const [consentError, setConsentError] = useState(false)
   const analytics = useAnalytics()
+  // The plan a visitor picked on the marketing pricing page (AGL-1117):
+  // `/signup?plan=pro&interval=year`. Parsed once and defensively — the
+  // contract is with a site we cannot deploy in lockstep with, so a bad
+  // param degrades to ordinary signup rather than breaking it.
+  const searchParams = useSearchParams()
+  const planIntent = useMemo(
+    () => parseOnboardingPlanIntent(searchParams),
+    [searchParams],
+  )
   // Org workspace subdomains can't run OAuth — hand sign-in to the auth
   // host and skip the local form/redirect-result entirely (AGL-465).
   const delegation = useDelegateWorkspaceSignIn('signup')
@@ -187,6 +248,24 @@ function SignUp() {
           // route seeds from that (AGL-1127).
           if (values) {
             await persistSignUpProfile(firestore, credential, values)
+            // Provision the workspace and land in it (AGL-1115), carrying the
+            // plan the visitor picked on the marketing site (AGL-1117).
+            //
+            // Only the email/password branch: the Google buttons submit no
+            // form, so there is no org name to create one from. Those still
+            // land on the workspace picker, unchanged — collecting a name
+            // from them needs the two-step flow AGL-1115 also suggests, and
+            // that is a bigger change than this.
+            const slug = await provisionSignUpOrg(
+              credential,
+              String(values[FIELD_SCHEMA_ORGANIZATION_NAME.name] ?? ''),
+            )
+            if (slug) {
+              // A hard navigation on purpose: the org is brand new, so the
+              // whole chrome (switcher, plan badge, nav) has to resolve
+              // against it rather than re-using the pre-signup tree.
+              window.location.assign(onboardingDestination(slug, planIntent))
+            }
           }
         })
         .catch((error) => {
@@ -208,6 +287,7 @@ function SignUp() {
       firebaseAuth,
       firestore,
       loading,
+      planIntent,
       queueLoading,
     ],
   )

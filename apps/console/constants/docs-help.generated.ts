@@ -348,6 +348,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Multi-select & multi-drag',
     excerpt: 'Select several elements at once and move the whole selection together.',
   },
+  onboardingDeepLinks: {
+    path: '/staff-console/onboarding-deep-links',
+    title: 'Onboarding deep links (marketing → console)',
+    excerpt: 'The plan-aware signup contract the marketing pricing page links into, and what the console does with it.',
+  },
   passwordAScreen: {
     path: '/building-sites/site-protection/password-a-screen',
     title: 'Password-protect a screen',
@@ -566,6 +571,7 @@ export const DOCS_HELP_ANCHORS = {
   modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#edit-records', '#tips', '#related'],
   multilingual: ['#locale-variants', '#hreflang--discovery', '#language-switcher', '#related'],
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#tips', '#related'],
+  onboardingDeepLinks: ['#the-contract', '#what-the-console-does-with-it', '#rules-this-parser-follows-and-why', '#known-gap'],
   passwordAScreen: ['#steps', '#password-vs-members-only', '#related'],
   pluginManagerApi: ['#console-extensions--feature-plugins', '#loading--plugin-loader', '#server-apis--api-plugins-server-only', '#site-pipeline--site-runtime-site-page-hooks-server-for-hooks', '#billing--billing-webhook-hooks-server', '#enablement-flags-config-fields-permissions-jobs', '#remote-bundles--realm-plugins-isomorphic-realm-server-server', '#sandbox--plugin-bridge'],
   plugins: ['#install--upgrade', '#how-plugins-run', '#configure', '#publish-your-own', '#related'],
