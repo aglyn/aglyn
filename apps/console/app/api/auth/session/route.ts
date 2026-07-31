@@ -22,6 +22,10 @@ import {
   seedUserProfile,
 } from '@aglyn/tenant-data-admin'
 import { parseSignedOut, signedOutTombstone } from './session-tombstone'
+import {
+  WORKSPACE_DOMAIN,
+  workspaceSlugFromHost,
+} from '../../../../constants/workspace-domain'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +36,6 @@ const SESSION_COOKIE = '__session'
 // `authForTenant`. Absent → default-tenant session (the unchanged path).
 const SESSION_TENANT_COOKIE = '__session_tenant'
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000
-const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 
 /**
  * Cross-subdomain sessions (AGL-236): Firebase client auth persists
@@ -85,9 +88,52 @@ function readCookie(request: Request, name: string): string | undefined {
   return undefined
 }
 
+/**
+ * Refuse to mint or exchange a `.aglyn.com`-scoped cookie on a hostname that
+ * is not a real workspace.
+ *
+ * `/api/*` sits outside the middleware matcher, so the host gate in
+ * `middleware.ts` never sees this route: an unregistered subdomain that could
+ * not render a console page could still call it, and — because the cookie
+ * carries `Domain=.aglyn.com` — the browser would attach the caller's real
+ * `__session` to that request. This route hands that cookie back as a custom
+ * token, so it is the one worth guarding directly rather than relying on the
+ * layers above it.
+ *
+ * DELETE is exempt: signing out from an unexpected host should always work.
+ */
+async function rejectUnknownWorkspaceHost(
+  request: Request,
+): Promise<Response | null> {
+  const slug = workspaceSlugFromHost(request.headers.get('host'))
+  // The apex, the reserved labels, localhost, previews and self-hosted
+  // domains all return null — none of them is a workspace subdomain.
+  if (slug === null) return null
+  try {
+    const snapshot = await firebaseAdmin
+      .firestore()
+      .doc(`orgSlugs/${slug}`)
+      .get()
+    if (snapshot.exists) return null
+  } catch {
+    // Fail open on an outage, matching the middleware. The Vercel domain
+    // allowlist is the boundary; this is defence in depth.
+    return null
+  }
+  return Response.json(
+    { error: 'unknown-workspace', workspace: slug },
+    { status: 421 },
+  )
+}
+
 async function handler(request: Request): Promise<Response> {
   try {
     const auth = firebaseAdmin.app().auth()
+
+    if (request.method !== 'DELETE') {
+      const rejected = await rejectUnknownWorkspaceHost(request)
+      if (rejected) return rejected
+    }
 
     if (request.method === 'POST') {
       const authorization = request.headers.get('authorization') ?? ''

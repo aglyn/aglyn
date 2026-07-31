@@ -171,3 +171,13 @@ async function handler(request: Request): Promise<Response> {
 
 export const dynamic = 'force-dynamic'
 export { handler as GET, handler as POST }
+
+/**
+ * Cron routes run long: this one sweeps every org (AGL-1141).
+ *
+ * Vercel Hobby defaults a function to 10s, and nothing here set a duration —
+ * so `report-usage` 504d with FUNCTION_INVOCATION_TIMEOUT at 10.2s on
+ * 2026-07-31 having succeeded the day before. A pass sitting right on the
+ * boundary fails intermittently, which reads as flaky rather than as a limit.
+ */
+export const maxDuration = 60

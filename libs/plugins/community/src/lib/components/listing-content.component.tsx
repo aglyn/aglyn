@@ -954,8 +954,17 @@ export function CommunityListingContent({
                               />
                             )
                           ) : null}
+                          {/* Two claims, shown separately (AGL-1121): who
+                              wrote it, and whether these bytes were read. */}
                           {listing?.reviewStatus === 'verified' ? (
-                            <Chip size="small" color="info" label="Verified" />
+                            <Chip
+                              size="small"
+                              color="info"
+                              label="Verified publisher"
+                            />
+                          ) : null}
+                          {listing?.latestVersionReviewState === 'approved' ? (
+                            <Chip size="small" color="success" label="Reviewed" />
                           ) : null}
                           {/* Private listings never reach browse (AGL-993),
                               so this page is the only place their state is
@@ -994,9 +1003,16 @@ export function CommunityListingContent({
                         <Typography variant="body2" color="text.secondary">
                           {listing?.description ?? 'No description provided.'}
                         </Typography>
+                        {/* Keyed off the BYTES, not the publisher badge
+                            (AGL-1121). This used to hide whenever the listing
+                            was `verified` — a status that survives a version
+                            bump — so the one case that most needed the
+                            caution, brand-new unreviewed code from a
+                            previously-verified publisher, was the one case
+                            that suppressed it. */}
                         {isPlugin &&
                         !realmTrusted &&
-                        listing?.reviewStatus !== 'verified' ? (
+                        listing?.latestVersionReviewState !== 'approved' ? (
                           <Alert severity="info">
                             {'Community plugin: runs sandboxed and cannot ' +
                               'access your site data directly. Review the ' +

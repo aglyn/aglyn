@@ -1063,6 +1063,110 @@ export const NET_MARGIN_WARN_BAND_PCT = 0.1
 export const INFRA_COGS_PER_SITE_USD = 2
 
 /**
+ * Monthly unit costs for the meters the rollup already records (AGL-1134).
+ *
+ * These are OUR costs, not prices — the org is billed at cost × 1.30
+ * (`METERED_MARKUP`, AGL-41). Storage/page-view/form rates match
+ * `METERED_UNIT_RATES_USD` in the metering module on purpose: two files
+ * disagreeing about what a page view costs is exactly the drift this function
+ * exists to remove.
+ *
+ * The three added here are operator-tuned estimates of the same quality as
+ * the existing three — Firestore-backed dataset storage is priced well above
+ * object storage because it is, and API requests and contacts are priced off
+ * the reads behind them. Treat all six as provisional until validated against
+ * a real Firebase + Vercel invoice month; AGL-1134 says so out loud rather
+ * than implying the numbers are derived.
+ */
+export const ORG_COGS_UNIT_RATES_USD = {
+  storagePerGbMonth: 0.03,
+  perPageView: 0.0001,
+  perFormSubmission: 0.0005,
+  /** Firestore-backed dataset bytes — an order pricier than object storage. */
+  dataStoragePerGbMonth: 0.18,
+  perApiRequest: 0.000002,
+  perContactMonth: 0.0002,
+}
+
+/** The rollup fields `orgMonthlyCogsUsd` prices. All optional and all absent-safe. */
+export interface OrgUsageRollupInput {
+  hostCount?: number | null
+  storageGb?: number | null
+  pageViews?: number | null
+  formSubmissions?: number | null
+  dataStorageMb?: number | null
+  apiRequests?: number | null
+  contactsCount?: number | null
+}
+
+export interface OrgCogsResult {
+  /** What the guardrail should charge against revenue. */
+  cogsUsd: number
+  /** Which arm produced it — `floor` means the meters came in under the flat estimate. */
+  basis: 'measured' | 'floor'
+  /** Cost from the meters alone, before the floor is applied. */
+  measuredUsd: number
+  /** `INFRA_COGS_PER_SITE_USD` × sites. */
+  floorUsd: number
+  /** Per-meter contributions, for showing the working in staff UI. */
+  breakdown: Record<string, number>
+}
+
+/**
+ * One org's monthly infrastructure COGS — the single cost model (AGL-1134).
+ *
+ * Replaces two things that had drifted apart: the discount guardrail read the
+ * rollup's `costUsd`, and the staff MRR views read the same field separately,
+ * so neither could be changed without silently changing the other's meaning.
+ *
+ * `costUsd` was also incomplete. The rollup records `dataStorageMb`,
+ * `apiRequests` and `contactsCount`, and `estimateMonthlyUsageCost` prices
+ * none of them — it sums storage, page views and form submissions only. So
+ * the "measured" cost omitted three meters the platform was already at the
+ * trouble of recording.
+ *
+ * The flat per-site figure stays a FLOOR rather than a fallback: measured
+ * cost wins only when it exceeds the estimate. A rollup that has not run, or
+ * an org with genuinely tiny usage, must not make the guardrail more generous
+ * — that is the one direction that costs money.
+ *
+ * Measured against production 2026-07-30, that floor is doing all the work:
+ * the largest real org's `costUsd` was **$0.0000054** against a $4.00 floor
+ * for two sites. Five orders of magnitude. So this function changes no verdict
+ * today, and will not until there is real traffic — which is the honest
+ * reason to build it now, while nothing depends on the answer.
+ */
+export function orgMonthlyCogsUsd(
+  rollup: OrgUsageRollupInput | null | undefined,
+  siteCount: number,
+): OrgCogsResult {
+  const num = (value: unknown) => {
+    const parsed = Number(value ?? 0)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+  }
+  const rates = ORG_COGS_UNIT_RATES_USD
+  const breakdown = {
+    storage: num(rollup?.storageGb) * rates.storagePerGbMonth,
+    pageViews: num(rollup?.pageViews) * rates.perPageView,
+    formSubmissions: num(rollup?.formSubmissions) * rates.perFormSubmission,
+    // Megabytes on the doc, gigabytes in the rate — the unit mismatch is in
+    // the stored field name, so convert here rather than in each caller.
+    dataStorage: (num(rollup?.dataStorageMb) / 1024) * rates.dataStoragePerGbMonth,
+    apiRequests: num(rollup?.apiRequests) * rates.perApiRequest,
+    contacts: num(rollup?.contactsCount) * rates.perContactMonth,
+  }
+  const measuredUsd = Object.values(breakdown).reduce((sum, x) => sum + x, 0)
+  const floorUsd = Math.max(0, siteCount) * INFRA_COGS_PER_SITE_USD
+  return {
+    cogsUsd: Math.max(measuredUsd, floorUsd),
+    basis: measuredUsd > floorUsd ? 'measured' : 'floor',
+    measuredUsd,
+    floorUsd,
+    breakdown,
+  }
+}
+
+/**
  * Percent-off at or above which creating a coupon needs explicit staff
  * sign-off (AGL-1105). A ≥40%-off coupon is a real revenue commitment, so the
  * creation route rejects it unless the caller passes a confirm flag; the UI

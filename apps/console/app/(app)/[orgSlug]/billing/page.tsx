@@ -62,6 +62,7 @@ import BillingPlanCardsComponent, {
 } from '../../../../components/billing/billing-plan-cards.component'
 import BillingMeteredEstimateComponent from '../../../../components/billing/billing-metered-estimate.component'
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
+import EmbeddedCheckoutDialogComponent from '../../../../components/embedded-checkout-dialog.component'
 import { useReleaseFlag } from '../../../../hooks/use-release-flags'
 import { docsHelp } from '../../../../constants/docs-links'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
@@ -87,6 +88,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const { confirm } = useConfirmationContext()
   // Annual billing (AGL-269): checkout maps to the *_YEARLY price ids.
   const [interval, setInterval] = useState<'month' | 'year'>('month')
+  // Non-null while an in-page checkout is open (AGL-1132). Null is both the
+  // closed state and the state on every deploy where the route chose the
+  // redirect instead, so nothing here has to know which mode is live.
+  const [checkoutClientSecret, setCheckoutClientSecret] = useState<
+    string | null
+  >(null)
   // The toggle starts on the live subscription's interval (AGL-532) so
   // annual orgs see their real prices and switches keep their interval.
   const subscriptionInterval = (org?.subscription as any)?.interval
@@ -307,6 +314,14 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             'Billing is not configured yet — Stripe keys are pending.',
             { variant: 'info', persist: false },
           )
+        }
+        // In-page checkout (AGL-1132) when the route returns a client secret;
+        // otherwise the unchanged redirect. The route decides — it only picks
+        // embedded when the flag is on AND a publishable key is configured —
+        // so the two shapes are mutually exclusive and this never has to guess.
+        if (payload?.clientSecret) {
+          setCheckoutClientSecret(String(payload.clientSecret))
+          return
         }
         if (!response.ok || !payload?.url) {
           throw new Error(payload?.error ?? 'Checkout failed')
@@ -790,6 +805,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           ]}
         />
         )}
+        {/* In-page checkout (AGL-1132). Renders nothing unless the route
+            handed back a client secret, so on the redirect path — which is
+            still the default — this costs a null. */}
+        <EmbeddedCheckoutDialogComponent
+          clientSecret={checkoutClientSecret}
+          onClose={() => setCheckoutClientSecret(null)}
+        />
       </Container>
     </DashboardLayout>
   )

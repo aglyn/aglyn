@@ -131,17 +131,101 @@ workspace subdomain scopes the **console**, not published sites:
 
 ```mermaid
 flowchart LR
-  B["Browser:<br/>business1.aglyn.com"] --> MW{"Next middleware:<br/>slug known?<br/>(public orgSlugs read, cached)"}
+  B["Browser:<br/>business1.aglyn.com"] --> MW{"Next middleware:<br/>slug known?<br/>(Admin-SDK verdict route, cached)"}
   MW -- "yes" --> CON["Console renders;<br/>OrgScopeProvider pins the org scope"]
   MW -- "no" --> APEX["Redirect to apex console<br/>?unknown-workspace=slug"]
   A2["Browser: app.aglyn.com"] --> SW["Org switcher<br/>(users/#lcub;uid#rcub;/orgs)"]
   SW --> CON
 ```
 
-The middleware is inert until ops sets `NEXT_PUBLIC_WORKSPACE_DOMAIN` beside the
-wildcard domain. Organizations are the permanent tenancy model (not release-flagged):
-every account operates inside an org, and the switcher appears as soon as a user
+Organizations are the permanent tenancy model (not release-flagged): every
+account operates inside an org, and the switcher appears as soon as a user
 belongs to one.
+
+### Which hostnames may serve the console
+
+**The Vercel domain allowlist is the boundary, not the middleware.** Only
+`app.aglyn.com`, `auth.aglyn.com`, and *explicitly registered* workspace
+subdomains are attached to the `aglyn-console` project. `*.aglyn.com` used to
+be, which meant every hostname under the domain served a real console: measured
+before the change, `https://billing-security-update.aglyn.com/signin` returned
+**200** with a genuine Aglyn sign-in page under a valid Aglyn certificate.
+It now returns **404**.
+
+This has to be the boundary rather than the middleware because `/api/*` is
+outside the middleware matcher — a host that middleware would redirect could
+still call an API route, and the session cookie is issued with
+`Domain=.aglyn.com`, so the browser attaches it.
+
+`console.aglyn.com` is registered as a **308 redirect** to `app.aglyn.com`
+rather than dropped, so existing links keep working without a second hostname
+serving a full console.
+
+### Attaching a workspace's subdomain
+
+Removing the wildcard means `{slug}.aglyn.com` resolves only if that exact
+domain is attached to the console project, so org lifecycle now manages it
+(AGL-1136):
+
+| Event | Domain action |
+| --- | --- |
+| org created | attach `{slug}` |
+| org renamed | attach the new slug, **keep the old one** |
+| org erased | detach `{slug}` |
+
+A rename deliberately does **not** detach. The previous slug keeps a tombstone
+that 308s to the new one, and a redirect can only run on a hostname that still
+resolves — detaching would break the very redirect the tombstone exists to
+serve.
+
+**The attach can never fail an org.** It runs after the transaction, unawaited,
+and swallows its own errors: the console is path-routed and
+`app.aglyn.com/{slug}` is the canonical form, so a workspace with no subdomain
+is fully usable, while an org creation rolled back because a DNS API was slow
+would not be. With no `VERCEL_TOKEN` it is a silent no-op — self-hosted
+deployments have no Vercel project and must not log an error per signup.
+
+Drift is therefore expected rather than exceptional, and
+`tools/scripts/reconcile-workspace-domains.mjs` is both the drift check and the
+backfill. Dry-run by default; it also reports **orphaned** workspace domains —
+attached names with no `orgSlugs` doc, which keep resolving to a console for a
+deleted org and block the slug from being reclaimed — but never removes them,
+because deleting a domain is not a reconcile job's decision.
+
+:::note Env
+`VERCEL_TOKEN`, `VERCEL_CONSOLE_PROJECT_ID`, and `VERCEL_TEAM_ID` for a
+team-scoped project; the token needs project-domain scope. **All three are set
+on the console deployment** (production, preview), so this is live rather than
+waiting on ops. Unset in any environment — local dev, self-hosted — is a silent
+no-op by design.
+
+Reading them back is not uniform, which is worth knowing before concluding a
+variable is missing: Vercel returns `encrypted` values through
+`GET /v1/projects/{id}/env/{envId}` but **never** returns `sensitive` ones. Most
+of this project's variables are `sensitive`, so "the API gave me nothing" means
+"that type is unreadable", not "it is unset". And the list endpoint **paginates**
+— pass a `limit` or you will filter a truncated page and conclude a variable
+does not exist when it does.
+:::
+
+The middleware gate is defence in depth behind that. Two corrections worth
+recording, because the earlier version of this page asserted the opposite:
+
+- It was **not** "inert until ops sets `NEXT_PUBLIC_WORKSPACE_DOMAIN`". That
+  constant is declared in eight places; seven default to `aglyn.com` and only
+  the gate did not, so the gate alone disabled itself while the session route
+  kept minting domain-wide cookies. All of them now derive from
+  `apps/console/constants/workspace-domain.ts`.
+- The slug check is **not** a public `orgSlugs` read. App Check is enforced on
+  this project, so an unauthenticated Firestore REST read from the edge returns
+  `403 PERMISSION_DENIED` for every slug, including ones that exist. The gate
+  treated any non-200/404 as *known*, so setting the env var alone would have
+  judged every rogue subdomain a real workspace. It now asks
+  `/api/orgs/slug-verdict`, which reads through the Admin SDK.
+
+Both layers fail **open** on a Firestore outage: a workspace going dark because
+a lookup timed out is worse than the residual exposure, given the allowlist
+above is what actually stops an unregistered host.
 
 ## Billing & cost attribution
 

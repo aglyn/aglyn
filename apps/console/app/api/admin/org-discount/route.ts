@@ -16,7 +16,7 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { checkDiscountMargin } from '@aglyn/aglyn/server'
+import { checkDiscountMargin, orgMonthlyCogsUsd } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -40,14 +40,25 @@ import {
  */
 
 /**
- * The org's most recent measured monthly cost (AGL-1120), from the usage
- * rollup at `orgs/{id}/usage/{month}.costUsd` that the metering job writes.
+ * The org's most recent measured monthly cost, priced by the shared cost
+ * model (AGL-1134) from the usage rollup at `orgs/{id}/usage/{month}`.
  *
- * Returns null when there is no rollup yet, which is the honest answer —
+ * It used to read the rollup's `costUsd` field directly. That field prices
+ * only storage, page views and form submissions — the same document also
+ * records `dataStorageMb`, `apiRequests` and `contactsCount`, and the metering
+ * estimate charges nothing for any of them. `orgMonthlyCogsUsd` prices all
+ * six, and is the same function the staff overview now uses, so the guardrail
+ * and the MRR view cannot answer "what does this org cost" differently.
+ *
+ * Returns null when there is no rollup, which is the honest answer —
  * `checkDiscountMargin` then falls back to the flat per-site estimate rather
  * than treating "not measured" as "costs nothing". Best-effort: a missing
  * index or a read failure must not block a staff action, and the flat floor
  * still applies.
+ *
+ * NOTE: on production data this is currently inert. The largest real org's
+ * measured cost was $0.0000054 against a $4.00 two-site floor, so the floor
+ * wins for every org today and will until there is real traffic.
  */
 async function latestMeasuredCogsUsd(orgId: string): Promise<number | null> {
   try {
@@ -60,8 +71,23 @@ async function latestMeasuredCogsUsd(orgId: string): Promise<number | null> {
       .orderBy('month', 'desc')
       .limit(1)
       .get()
-    const cost = snapshot.docs[0]?.get('costUsd')
-    return typeof cost === 'number' && Number.isFinite(cost) ? cost : null
+    const rollup = snapshot.docs[0]
+    if (!rollup) return null
+    const { measuredUsd } = orgMonthlyCogsUsd(
+      {
+        storageGb: rollup.get('storageGb'),
+        pageViews: rollup.get('pageViews'),
+        formSubmissions: rollup.get('formSubmissions'),
+        dataStorageMb: rollup.get('dataStorageMb'),
+        apiRequests: rollup.get('apiRequests'),
+        contactsCount: rollup.get('contactsCount'),
+      },
+      // Site count comes from `checkDiscountMargin`, which applies the flat
+      // floor itself — passing 0 here keeps this the MEASURED half only, so
+      // the floor is not applied twice.
+      0,
+    )
+    return Number.isFinite(measuredUsd) ? measuredUsd : null
   } catch (error) {
     console.error('[admin/org-discount] usage rollup read failed', error)
     return null

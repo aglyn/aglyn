@@ -46,7 +46,6 @@ import { collection, limit, query } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
-import Head from 'next/head'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo } from 'react'
 // Dynamic site-plugin activation (AGL-417): canvas components register
@@ -223,7 +222,7 @@ function LayoutBesignerPage(props) {
     <InteractionsProvider hostId={hostId}>
     <BesignerMediaPickerProvider hostId={hostId}>
       {hostFontsHref ? (
-        <Head>
+        <>
           <link
             key="host-fonts-preconnect"
             rel="preconnect"
@@ -231,7 +230,7 @@ function LayoutBesignerPage(props) {
             crossOrigin="anonymous"
           />
           <link key="host-fonts" rel="stylesheet" href={hostFontsHref} />
-        </Head>
+        </>
       ) : null}
       <MainLayout
         enableAppBarElevation

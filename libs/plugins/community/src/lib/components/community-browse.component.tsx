@@ -497,12 +497,21 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                     {/* The reviewed badge belongs HERE most of all
                         (AGL-1002): the detail page showed it, but browse is
                         where someone is comparing options and deciding whose
-                        code to run. */}
+                        code to run.
+
+                        TWO CLAIMS, SHOWN SEPARATELY (AGL-1121). This chip
+                        vouches for the PUBLISHER; the one beside it says
+                        whether THESE bytes were reviewed. They were a single
+                        "Verified" chip driven by `reviewStatus`, which lives
+                        on the listing and deliberately survives a version
+                        bump — so a publisher verified on v1.0.0 could ship
+                        v1.9.0 containing anything and still be badged as
+                        though the code had been read. */}
                     {listing.reviewStatus === 'verified' ? (
                       <Chip
                         size="small"
                         color="info"
-                        label="Verified"
+                        label="Verified publisher"
                         // Carries more weight than the neighbouring
                         // classification chips on purpose: it is the only one
                         // that says a human vouched for the code, and the
@@ -517,6 +526,13 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                         }
                         sx={{ fontWeight: 600 }}
                       />
+                    ) : null}
+                    {/* The bytes on offer, not the person who wrote them.
+                        Absent on a listing published before this field
+                        existed, which reads as "not reviewed" — the safe
+                        direction for a claim about code. */}
+                    {listing.latestVersionReviewState === 'approved' ? (
+                      <Chip size="small" color="success" label="Reviewed" />
                     ) : null}
                     {priceUsd > 0 ? (
                       <Chip

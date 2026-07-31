@@ -35,6 +35,7 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { useParams } from 'next/navigation'
@@ -1234,15 +1235,36 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                     >
                       {detail.reviewStatus !== 'verified' ? (
-                        <Button
-                          size="small"
-                          color="success"
-                          variant="outlined"
-                          disabled={busy || blocked}
-                          onClick={() => void post({ action: 'verify' }, 'Verified')}
+                        // Say WHY it is disabled, at the button (AGL-1121).
+                        // The checklist alert lives elsewhere on the page, so
+                        // a reviewer met a greyed-out control with no stated
+                        // cause and reasonably read it as broken. The tooltip
+                        // names the count and where to clear it; a disabled
+                        // MUI Button swallows pointer events, so the wrapper
+                        // is what the tooltip can attach to.
+                        <Tooltip
+                          title={
+                            blocked
+                              ? `Complete the review checklist first — ` +
+                                `${detail.checklistOutstanding.length} required ` +
+                                `item(s) outstanding for this version's bytes`
+                              : ''
+                          }
                         >
-                          {'Verify ✓ (badge)'}
-                        </Button>
+                          <span>
+                            <Button
+                              size="small"
+                              color="success"
+                              variant="outlined"
+                              disabled={busy || blocked}
+                              onClick={() =>
+                                void post({ action: 'verify' }, 'Verified')
+                              }
+                            >
+                              {'Verify ✓ (badge)'}
+                            </Button>
+                          </span>
+                        </Tooltip>
                       ) : null}
                       {detail.private ? (
                         <Chip size="small" label="Private — never listed" />

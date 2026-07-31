@@ -39,6 +39,7 @@ export type ReleaseFlagKey =
   | 'release_inbox'
   | 'release_logic'
   | 'release_addon_store'
+  | 'release_native_checkout'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -159,6 +160,16 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'Self-serve add-on purchases on the Billing page: seats, datasets, ' +
       'extra sites, POS registers, Event Calendar (AGL-524..531).',
     defaultEnabled: true,
+  },
+  {
+    key: 'release_native_checkout',
+    label: 'In-page checkout',
+    description:
+      'Pay for a plan without leaving the console — Stripe embedded ' +
+      'Checkout instead of a redirect to checkout.stripe.com (AGL-1132). ' +
+      'OFF by default: the redirect is the proven path, and this one cannot ' +
+      'be verified without putting a real card through it.',
+    defaultEnabled: false,
   },
 ]
 

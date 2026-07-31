@@ -125,6 +125,46 @@ jobs:
           echo "--- response ---"
           cat /tmp/cron-body || true
           echo
+          # Resumable sweeps (AGL-1141). A route too big for one function
+          # invocation returns `done:false` with a `nextCursor`; keep calling
+          # until it finishes. Routes that do not chunk never emit the field
+          # and fall straight through, so this is opt-in per route.
+          #
+          # 207 means "finished this chunk, some subjects failed" — the loop
+          # continues (the cursor has already moved past them) and the failure
+          # is re-checked at the end, so one bad org cannot both stall the
+          # sweep and go unnoticed.
+          partial=0
+          if [ "$code" = "207" ]; then partial=1; fi
+          pages=1
+          while [ "$code" = "200" ] || [ "$code" = "207" ]; do
+            # Pure-shell matching, not sed alternation: `\(true\|false\)` is a
+            # GNU extension that BSD sed does not support, so it would work on
+            # the Ubuntu runner and silently never loop anywhere else. A cron
+            # that quietly stops after one chunk is the bug this loop exists
+            # to fix, so it must not depend on which sed is installed.
+            body=$(tr -d ' \n' < /tmp/cron-body)
+            case "$body" in *'"done":false'*) ;; *) break ;; esac
+            cursor=$(printf '%s' "$body" | sed -n 's/.*"nextCursor":"\([^"]*\)".*/\1/p' | head -1)
+            if [ -z "$cursor" ]; then
+              echo "done:false but no nextCursor — refusing to loop" >&2
+              exit 1
+            fi
+            pages=$((pages + 1))
+            if [ "$pages" -gt 50 ]; then
+              echo "Sweep did not finish in 50 chunks — stopping" >&2
+              exit 1
+            fi
+            echo "--- chunk $pages (cursor $cursor) ---"
+            code=$(curl -sS --max-time 300 -o /tmp/cron-body -w '%{http_code}' \
+              -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}" \
+              -H 'content-type: application/json' \
+              -d "{\"cursor\":\"${cursor}\"}")
+            echo "HTTP $code"
+            cat /tmp/cron-body || true
+            echo
+            if [ "$code" = "207" ]; then partial=1; fi
+          done
           if [ "$code" -ge 300 ] && [ "$code" -lt 400 ]; then
             echo "Cron route returned $code — BASE_URL ($BASE_URL) redirects." >&2
             echo "curl drops the POST body and x-cron-secret across a redirect," >&2
@@ -132,7 +172,15 @@ jobs:
             echo "actually serves the console (see AGL-786)." >&2
             exit 1
           fi
-          if [ "$code" != "200" ]; then
+          if [ "$code" != "200" ] && [ "$code" != "207" ]; then
             echo "Cron route returned $code (expected 200)" >&2
+            exit 1
+          fi
+          # A sweep that finished but skipped subjects must go RED. The whole
+          # reason the original timeout went unnoticed for a day is that a
+          # partial month looked like no month at all — silence is the bug.
+          if [ "$partial" = "1" ]; then
+            echo "Sweep completed with per-subject failures (HTTP 207) —" >&2
+            echo "see the 'failures' map in the responses above." >&2
             exit 1
           fi

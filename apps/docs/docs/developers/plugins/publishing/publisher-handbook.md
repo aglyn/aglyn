@@ -247,11 +247,35 @@ content, declared capabilities, and a fresh static-verification run.
 Outcomes:
 
 - **Listed** — publicly browsable.
-- **Verified ✅** — listed plus the quality badge.
+- **Verified publisher ✅** — a badge on *you*, not on any one release. See
+  below.
 - **Rejected** — you're notified with the reason; fix and republish.
 - **Realm trust** (separate, rare): staff may additionally sign a version
   so it runs in the app realm instead of the sandbox — first-party-grade
   placement for plugins that earn it.
+
+### The two badges, and what each one promises
+
+The marketplace shows **two separate claims**, because they answer different
+questions and conflating them would let one vouch for the other:
+
+| Badge | What it means | Scope |
+| --- | --- | --- |
+| **Verified publisher** | A human at Aglyn confirmed who you are and that your listing describes what your code does. | The **publisher**. It survives a version bump. |
+| **Reviewed** | A reviewer completed the checklist against **these exact bytes** (`{version, sha256}`). | That **one version**. |
+
+**Publishing a new version clears the Reviewed badge** and puts the release
+back in the queue — including on a listing whose publisher is already
+verified. That is deliberate: the badge is a statement about code someone
+read, so it cannot follow code nobody has.
+
+Your **Verified publisher** badge is unaffected by a version bump. Buyers see
+both, so a new release from a verified publisher reads honestly: we vouch for
+you, and we have not read this release yet.
+
+Until a version is Reviewed, its listing page carries the standard "review the
+publisher and docs before installing" note. Being a verified publisher does
+not remove it — the plugin still runs sandboxed either way.
 
 Speed the review up: a real README, a license, sane `capabilities`
 (request only the network origins you use), and working links — which is
