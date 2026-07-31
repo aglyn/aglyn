@@ -182,6 +182,12 @@ member subscriptions alike. Selling requires a paid plan with commerce.
   invoice** (View), a **PDF download** of the invoice, and the payment **Receipt** once
   it's paid — everything you need for expense reports and bookkeeping. Older invoices
   load on demand.
+- **Changing your billing address** — edit it under **Settings → Profile**. It is
+  the workspace's address, kept separate from the personal address on your own
+  Manage Account page: the workspace's is what appears on invoices, and yours is
+  visible only to you and to Aglyn staff. Saving pushes the change to the payment
+  processor, so a workspace that moves gets the new address on its *next*
+  invoice rather than keeping the one captured at signup.
 - **Billing details at checkout** — checkout asks for a **billing address**, a
   **phone number**, and optionally a **business tax ID** (VAT, ABN, EIN and the like).
   The address and tax ID appear on the invoice, which is what makes it usable for

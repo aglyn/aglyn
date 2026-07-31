@@ -296,18 +296,36 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     contactEmail: '',
     contactPhone: '',
     contactWebsite: '',
-    contactAddress: '',
+    // Structured (AGL-1133). Kept in step with the customer-facing Settings
+    // page deliberately: both post the same `update-profile` action, so a
+    // staff edit that still sent a free-text string would overwrite a
+    // structured address with a blob.
+    contactAddressLine1: '',
+    contactAddressLine2: '',
+    contactAddressCity: '',
+    contactAddressState: '',
+    contactAddressPostalCode: '',
+    contactAddressCountry: '',
   })
   const [orgEditBusy, setOrgEditBusy] = useState(false)
   useEffect(() => {
     if (!org) return
+    const address = (org.contact?.address ?? {}) as Record<
+      string,
+      string | undefined
+    >
     setOrgEdit({
       name: String(org.name ?? ''),
       logoUrl: String(org.logoUrl ?? ''),
       contactEmail: String(org.contact?.email ?? ''),
       contactPhone: String(org.contact?.phone ?? ''),
       contactWebsite: String(org.contact?.website ?? ''),
-      contactAddress: String(org.contact?.address ?? ''),
+      contactAddressLine1: String(address.line1 ?? ''),
+      contactAddressLine2: String(address.line2 ?? ''),
+      contactAddressCity: String(address.city ?? ''),
+      contactAddressState: String(address.state ?? ''),
+      contactAddressPostalCode: String(address.postalCode ?? ''),
+      contactAddressCountry: String(address.country ?? ''),
     })
   }, [org])
   const handleOrgEditSave = async () => {
@@ -341,7 +359,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
           contactEmail: orgEdit.contactEmail,
           contactPhone: orgEdit.contactPhone,
           contactWebsite: orgEdit.contactWebsite,
-          contactAddress: orgEdit.contactAddress,
+          contactAddressLine1: orgEdit.contactAddressLine1,
+          contactAddressLine2: orgEdit.contactAddressLine2,
+          contactAddressCity: orgEdit.contactAddressCity,
+          contactAddressState: orgEdit.contactAddressState,
+          contactAddressPostalCode: orgEdit.contactAddressPostalCode,
+          contactAddressCountry: orgEdit.contactAddressCountry,
         }),
       })
       if (!response.ok) {
@@ -816,14 +839,57 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                         />
                         <TextField
                           size="small"
-                          label="Address"
-                          multiline
-                          minRows={2}
-                          value={orgEdit.contactAddress}
+                          label="Billing address"
+                          value={orgEdit.contactAddressLine1}
                           onChange={(event) =>
                             setOrgEdit((prev) => ({
                               ...prev,
-                              contactAddress: event.target.value,
+                              contactAddressLine1: event.target.value,
+                            }))
+                          }
+                        />
+                        <TextField
+                          size="small"
+                          label="City"
+                          value={orgEdit.contactAddressCity}
+                          onChange={(event) =>
+                            setOrgEdit((prev) => ({
+                              ...prev,
+                              contactAddressCity: event.target.value,
+                            }))
+                          }
+                        />
+                        <TextField
+                          size="small"
+                          label="State / Province"
+                          value={orgEdit.contactAddressState}
+                          onChange={(event) =>
+                            setOrgEdit((prev) => ({
+                              ...prev,
+                              contactAddressState: event.target.value,
+                            }))
+                          }
+                        />
+                        <TextField
+                          size="small"
+                          label="Postal code"
+                          value={orgEdit.contactAddressPostalCode}
+                          onChange={(event) =>
+                            setOrgEdit((prev) => ({
+                              ...prev,
+                              contactAddressPostalCode: event.target.value,
+                            }))
+                          }
+                        />
+                        <TextField
+                          size="small"
+                          label="Country"
+                          helperText="Two-letter code, e.g. US"
+                          value={orgEdit.contactAddressCountry}
+                          onChange={(event) =>
+                            setOrgEdit((prev) => ({
+                              ...prev,
+                              contactAddressCountry: event.target.value,
                             }))
                           }
                         />
