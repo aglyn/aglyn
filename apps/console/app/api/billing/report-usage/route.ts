@@ -47,23 +47,29 @@ async function orgDatasetBytes(
   orgRef: FirebaseFirestore.DocumentReference,
 ): Promise<number> {
   const datasets = await orgRef.collection('datasets').get()
-  let total = 0
-  for (const dataset of datasets.docs) {
-    total += JSON.stringify(dataset.data() ?? {}).length
-    const records = dataset.ref.collection('records')
-    const [countSnapshot, sample] = await Promise.all([
-      records.count().get(),
-      records.limit(50).get(),
-    ])
-    const count = Number(countSnapshot.data().count ?? 0)
-    const sampleBytes = sample.docs.reduce(
-      (sum, record) => sum + JSON.stringify(record.data() ?? {}).length,
-      0,
-    )
-    const average = sample.size > 0 ? sampleBytes / sample.size : 0
-    total += Math.round(average * count)
-  }
-  return total
+  // Datasets in parallel (AGL-1141). Each is two independent reads and the
+  // results are summed, so walking them in sequence cost the sum of the
+  // latencies for no ordering benefit — an org with 20 datasets paid 20
+  // round trips end to end.
+  const perDataset = await Promise.all(
+    datasets.docs.map(async (dataset) => {
+      const records = dataset.ref.collection('records')
+      const [countSnapshot, sample] = await Promise.all([
+        records.count().get(),
+        records.limit(50).get(),
+      ])
+      const count = Number(countSnapshot.data().count ?? 0)
+      const sampleBytes = sample.docs.reduce(
+        (sum, record) => sum + JSON.stringify(record.data() ?? {}).length,
+        0,
+      )
+      const average = sample.size > 0 ? sampleBytes / sample.size : 0
+      return (
+        JSON.stringify(dataset.data() ?? {}).length + Math.round(average * count)
+      )
+    }),
+  )
+  return perDataset.reduce((sum, bytes) => sum + bytes, 0)
 }
 
 /** Approximate persisted size of one version doc's node payload. */
@@ -89,25 +95,32 @@ async function orgSiteSizeBytes(
   firestore: FirebaseFirestore.Firestore,
   hostRefs: FirebaseFirestore.DocumentReference[],
 ): Promise<number> {
-  let total = 0
-  for (const hostRef of hostRefs) {
-    const [screens, layouts] = await Promise.all([
-      hostRef.collection('screens').limit(200).get(),
-      hostRef.collection('layouts').limit(50).get(),
-    ])
-    const versionRefs: FirebaseFirestore.DocumentReference[] = []
-    for (const doc of [...screens.docs, ...layouts.docs]) {
-      const versionId = doc.get('versionId')
-      if (versionId) {
-        versionRefs.push(doc.ref.collection('versions').doc(String(versionId)))
+  // Hosts in parallel (AGL-1141). This is the most expensive thing the
+  // rollup does — O(hosts × published docs) — and it ran host after host, so
+  // an org's site-size measurement alone took as long as all its hosts put
+  // together. The per-host work is unchanged; only the waiting is shared.
+  const perHost = await Promise.all(
+    hostRefs.map(async (hostRef) => {
+      const [screens, layouts] = await Promise.all([
+        hostRef.collection('screens').limit(200).get(),
+        hostRef.collection('layouts').limit(50).get(),
+      ])
+      const versionRefs: FirebaseFirestore.DocumentReference[] = []
+      for (const doc of [...screens.docs, ...layouts.docs]) {
+        const versionId = doc.get('versionId')
+        if (versionId) {
+          versionRefs.push(doc.ref.collection('versions').doc(String(versionId)))
+        }
       }
-    }
-    if (versionRefs.length) {
+      if (!versionRefs.length) return 0
       const versions = await firestore.getAll(...versionRefs)
-      for (const version of versions) total += nodesBytes(version.get('nodes'))
-    }
-  }
-  return total
+      return versions.reduce(
+        (sum, version) => sum + nodesBytes(version.get('nodes')),
+        0,
+      )
+    }),
+  )
+  return perHost.reduce((sum, bytes) => sum + bytes, 0)
 }
 
 async function hostUsage(
@@ -215,36 +228,48 @@ async function handler(request: Request): Promise<Response> {
     for (const orgId of chunk.items) {
       const hostRefs = byOrg[orgId] ?? []
       try {
-      const usage = await Promise.all(hostRefs.map(usageFor))
-      const estimate = estimateMonthlyUsageCost(usage)
       const orgRef = firestore.collection('orgs').doc(orgId)
-      const orgSnapshot = await orgRef.get()
-      // Dataset storage overage (AGL-240): plan-priced (not cost-plus),
-      // metered on top of the infra estimate.
-      const datasetBytes = await orgDatasetBytes(orgRef)
+      // Six INDEPENDENT round trips, previously awaited one after another
+      // (AGL-1141). None consumes another's result — the quota checks below
+      // combine them, but only once all six are in hand — so the sequencing
+      // was incidental, and it made an org cost the SUM of its reads rather
+      // than the slowest of them. That is most of why four orgs took ~10s.
+      const [
+        usage,
+        orgSnapshot,
+        datasetBytes,
+        siteSizeBytes,
+        apiUsageSnap,
+        contactsSnap,
+      ] = await Promise.all([
+        Promise.all(hostRefs.map(usageFor)),
+        orgRef.get(),
+        // Dataset storage overage (AGL-240): plan-priced (not cost-plus),
+        // metered on top of the infra estimate.
+        orgDatasetBytes(orgRef),
+        // Published-site size (AGL-1107): stored on the rollup so the daily
+        // usage-alerts cron can warn on the `totalSiteSizeMb` cap cheaply,
+        // without re-reading every version payload itself.
+        orgSiteSizeBytes(firestore, hostRefs),
+        // Customer REST API request overage (AGL-635): plan-priced per 1,000
+        // requests over the included quota. The durable counter is written
+        // per-request by the API auth chokepoint.
+        orgRef.collection('apiUsage').doc(month).get(),
+        // Contacts audience-band overage (AGL-890): one aggregate count per
+        // org — contacts are org-scoped (AGL-237).
+        orgRef.collection('contacts').count().get(),
+      ])
+      const estimate = estimateMonthlyUsageCost(usage)
       const dataStorageMb =
         Math.round((datasetBytes / (1024 * 1024)) * 10) / 10
-      // Published-site size (AGL-1107): stored on the rollup so the daily
-      // usage-alerts cron can warn on the `totalSiteSizeMb` cap cheaply,
-      // without re-reading every version payload itself.
-      const siteSizeBytes = await orgSiteSizeBytes(firestore, hostRefs)
       const siteSizeMb = Math.round((siteSizeBytes / (1024 * 1024)) * 10) / 10
       const dataQuota = checkDataStorageQuota(
         orgSnapshot.data() as any,
         dataStorageMb,
       )
-      // Customer REST API request overage (AGL-635): plan-priced per 1,000
-      // requests over the included quota, metered like dataset storage. The
-      // durable counter is written per-request by the API auth chokepoint.
-      const apiUsageSnap = await orgRef.collection('apiUsage').doc(month).get()
       const apiRequests = Number(apiUsageSnap.get('count') ?? 0)
       const apiQuota = checkApiRequestQuota(orgSnapshot.data() as any, apiRequests)
-      // Contacts audience-band overage (AGL-890): plan-priced per 1,000
-      // contacts over the included band, metered like dataset storage.
-      // One aggregate count per org — contacts are org-scoped (AGL-237).
-      const contactsCount = Number(
-        (await orgRef.collection('contacts').count().get()).data().count ?? 0,
-      )
+      const contactsCount = Number(contactsSnap.data().count ?? 0)
       const contactQuota = checkContactQuota(
         orgSnapshot.data() as any,
         contactsCount,
