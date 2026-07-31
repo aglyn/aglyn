@@ -755,6 +755,17 @@ async function handler(request: Request): Promise<Response> {
       // approvals never change listing status — that is the point: an
       // update is reviewed without disturbing what customers already have.
       const listing = (await listingRef.get()).data() ?? {}
+
+      // Mirror this verdict onto the listing for the marketplace (AGL-1121),
+      // but ONLY when it is the newest version. Approving an old version
+      // must not let the listing claim its newest bytes were reviewed —
+      // which is the exact shape of the bug this mirror exists to fix.
+      if (String(listing.latestVersion ?? '') === version) {
+        await listingRef.set(
+          { latestVersionReviewState: approving ? 'approved' : 'rejected' },
+          { merge: true },
+        )
+      }
       if (
         approving &&
         !['listed', 'verified'].includes(String(listing.reviewStatus ?? ''))

@@ -459,6 +459,16 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         priceUsd,
         ...contentVerdict.content,
         latestVersion: manifest.version,
+        // Mirror of `pluginVersions/{latestVersion}.reviewState`, for the
+        // marketplace (AGL-1121). Browse reads listings directly and cannot
+        // afford a version subdoc read per card, so the newest bytes' verdict
+        // has to live here to be shown at all.
+        //
+        // Reset to 'pending' on EVERY publish, including a bump on a listing
+        // that staff already verified. That is the whole point: the listing's
+        // `reviewStatus` deliberately survives a version bump, so before this
+        // the marketplace badged brand-new, unreviewed bytes as reviewed.
+        latestVersionReviewState: 'pending',
         deletedAt: null,
         // Review queue (AGL-432): first publish enters as 'submitted';
         // version bumps keep whatever status staff granted — which is safe
