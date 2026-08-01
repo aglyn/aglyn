@@ -19,6 +19,9 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { deleteHostProjectionForAllMembers } from './host-memberships'
 import { detachWorkspaceDomain } from './workspace-domains'
+import { authForPool, findUserByUidAcrossPools } from './auth-pools'
+import { removeOrgMember } from './organizations'
+import { isBillingSubscription } from '@aglyn/aglyn/server'
 
 /** The reversible hold before a requested erasure is executed (AGL-485). */
 export const ERASURE_HOLD_MS = 7 * 24 * 60 * 60 * 1000
@@ -246,4 +249,169 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
     .catch(() => undefined)
 
   return { ok: true, exportPath, hosts: hosts.size }
+}
+
+/** An org that stops a person's account from being erased. */
+export interface UserErasureBlocker {
+  orgId: string
+  orgName: string
+  /** Whether the org still bills — the reason a human must intervene. */
+  hasLiveSubscription: boolean
+  /** Other people who would be stranded if this org lost its owner. */
+  otherMembers: number
+}
+
+export interface UserErasureCandidateOrg {
+  orgId: string
+  orgName: string
+  ownerUid: string | null
+  hasLiveSubscription: boolean
+  memberCount: number
+}
+
+/**
+ * Which orgs block erasing `uid` (AGL-1140).
+ *
+ * Pure so the policy can be tested without Firestore, because the policy is
+ * the part worth arguing about — the deletion itself is mechanical.
+ *
+ * **Owning an org blocks erasure, always.** Not only when it bills, and not
+ * only when other members would be stranded. The alternative — cascading
+ * into `eraseOrg` — deletes a workspace, its sites and its data as a side
+ * effect of someone closing a personal account, and no consent given to the
+ * second act was given to the first. Blocking is recoverable; a cascade is
+ * not.
+ *
+ * A live subscription and stranded members are reported rather than gating,
+ * so the message can say WHY this org needs attention instead of a bare
+ * refusal — "transfer ownership" is useless advice if you do not know which
+ * of eleven workspaces is the problem.
+ */
+export function userErasureBlockers(
+  uid: string,
+  orgs: readonly UserErasureCandidateOrg[],
+): UserErasureBlocker[] {
+  return orgs
+    .filter((org) => org.ownerUid === uid)
+    .map((org) => ({
+      orgId: org.orgId,
+      orgName: org.orgName,
+      hasLiveSubscription: org.hasLiveSubscription,
+      // The owner themselves is a member; anyone beyond that is stranded.
+      otherMembers: Math.max(0, org.memberCount - 1),
+    }))
+}
+
+export interface EraseUserResult {
+  ok: boolean
+  /** Set when the account was NOT erased. */
+  skippedReason?: 'not-found' | 'owns-orgs'
+  /** Orgs that must be handed over or deleted first. */
+  blockers?: UserErasureBlocker[]
+  /** What was actually removed, for the audit row and the caller's message. */
+  deleted?: { subcollections: string[]; authRecord: boolean; photo: boolean }
+}
+
+/**
+ * Permanently erase a person's account (AGL-1140).
+ *
+ * Nothing did this before: `eraseHost`, `eraseSubtree` and `eraseOrg` existed
+ * and no path anywhere deleted a `users/{uid}`. That was survivable while the
+ * doc held a name and a phone; AGL-1133 added a postal address, and "we have
+ * no mechanism to delete it" is a bad answer to an erasure request.
+ *
+ * `eraseOrg` is deliberately NOT the model here. An org is a workspace with
+ * one owner; a person belongs to many orgs, so erasing them must not take
+ * anything with it that outlives them.
+ *
+ * Order matters:
+ *   1. Refuse if they own an org — see `userErasureBlockers`.
+ *   2. Remove their membership from every org they belong to, so no roster
+ *      keeps their email and no host projection keeps granting them access.
+ *      This runs BEFORE the profile delete: a half-erased account that still
+ *      appears on a roster is worse than one not yet started.
+ *   3. Delete the profile subtree, the avatar, then the auth record last —
+ *      once that is gone there is no uid to retry with.
+ */
+export async function eraseUser(uid: string): Promise<EraseUserResult> {
+  const firestore = firebaseAdmin.app().firestore()
+  const userRef = firestore.collection('users').doc(uid)
+  const snapshot = await userRef.get()
+  const membership = await userRef.collection('orgs').get()
+  // An absent profile doc is not an absent account — the doc is only born on
+  // first save (AGL-1127), so the auth record and the org memberships can
+  // outlive it. Treat "nothing anywhere" as not-found, not "no doc".
+  if (!snapshot.exists && membership.empty) {
+    const record = await findUserByUidAcrossPools(uid).catch(() => null)
+    if (!record) return { ok: false, skippedReason: 'not-found' }
+  }
+
+  const candidates: UserErasureCandidateOrg[] = []
+  for (const row of membership.docs) {
+    const orgRef = firestore.collection('orgs').doc(row.id)
+    const [org, members] = await Promise.all([
+      orgRef.get(),
+      orgRef.collection('members').count().get(),
+    ])
+    if (!org.exists) continue
+    candidates.push({
+      orgId: row.id,
+      orgName: String(org.get('name') ?? row.id),
+      ownerUid: (org.get('ownerUid') as string | undefined) ?? null,
+      hasLiveSubscription: isBillingSubscription(org.data() as never),
+      memberCount: Number(members.data().count ?? 0),
+    })
+  }
+  const blockers = userErasureBlockers(uid, candidates)
+  if (blockers.length) {
+    return { ok: false, skippedReason: 'owns-orgs', blockers }
+  }
+
+  // Memberships first — a roster row carries their email and a host
+  // projection carries their access, and both outlive the profile doc.
+  for (const candidate of candidates) {
+    await removeOrgMember(candidate.orgId, uid).catch((error) => {
+      console.error(`eraseUser: membership cleanup failed for ${candidate.orgId}`, error)
+    })
+  }
+
+  // The avatar outlives the doc otherwise.
+  let photo = false
+  try {
+    await storageBucket().deleteFiles({ prefix: `users/${uid}/` })
+    photo = true
+  } catch (error) {
+    console.error(`eraseUser: storage cleanup failed for ${uid}`, error)
+  }
+
+  const subcollections = (await userRef.listCollections()).map((c) => c.id)
+  await firestore.recursiveDelete(userRef)
+
+  // Auth record LAST: once it is gone there is no uid to retry with, and
+  // `authForPool` is required because a project-level delete cannot see an
+  // SSO account at all (AGL-1122).
+  let authRecord = false
+  try {
+    const record = await findUserByUidAcrossPools(uid)
+    if (record) {
+      await authForPool(record.tenantId).deleteUser(uid)
+      authRecord = true
+    }
+  } catch (error) {
+    console.error(`eraseUser: auth record delete failed for ${uid}`, error)
+  }
+
+  await firestore
+    .collection('adminAudit')
+    .add({
+      actorUid: 'system:erase-user',
+      action: 'user.erased',
+      target: `users/${uid}`,
+      before: { orgs: candidates.length },
+      after: { subcollections, authRecord, photo },
+      at: FieldValue.serverTimestamp(),
+    })
+    .catch(() => undefined)
+
+  return { ok: true, deleted: { subcollections, authRecord, photo } }
 }
