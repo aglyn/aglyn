@@ -138,11 +138,22 @@ export async function createOrganization(
   // under the domain — so a workspace subdomain now only works if the domain
   // is attached to the project.
   //
-  // AFTER the transaction and deliberately un-awaited for correctness, not
-  // speed: the org exists and is usable at `app.aglyn.com/{slug}` either way,
-  // and no workspace should fail to be created because a DNS API was slow.
-  // The helper swallows its own errors; this catch is belt and braces.
-  void attachWorkspaceDomain(slug).catch(() => undefined)
+  // AFTER the transaction, and AWAITED. It was `void`, on the reasoning that
+  // no workspace should fail to be created because a DNS API was slow — right
+  // requirement, wrong mechanism (AGL-1136). On a serverless runtime `void`
+  // does not mean "in the background", it means "may never run": the instance
+  // can be frozen the moment the response is flushed. Confirmed twice on this
+  // codebase already, on the Stripe org sync and the profile seed.
+  //
+  // Awaiting cannot fail org creation, and that property comes from the
+  // helper, not from the `void` — `attachWorkspaceDomain` swallows every
+  // error and returns an outcome rather than throwing. The cost is one HTTP
+  // round trip on an operation that already runs a Firestore transaction; the
+  // alternative was advertising a workspace URL that 404s.
+  //
+  // `erase.ts` already awaits the matching detach, which is what made the
+  // asymmetry worth looking at.
+  await attachWorkspaceDomain(slug)
   return orgId
 }
 
@@ -278,7 +289,9 @@ export async function changeOrgSlug(
   // The previous slug's tombstone 308s to the new one, and a redirect can
   // only run on a hostname that still resolves — detaching it here would
   // break the very redirect the tombstone exists to serve.
-  void attachWorkspaceDomain(newSlug).catch(() => undefined)
+  // Awaited for the same reason as the create path above (AGL-1136): a
+  // `void` here is not a background task, it is a coin flip.
+  await attachWorkspaceDomain(newSlug)
   // Reverse index carries the slug for the switcher display.
   const members = await listOrgMembers(orgId)
   const batch = db.batch()
