@@ -16,8 +16,15 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { checkEntitlement, type OrgRole } from '@aglyn/aglyn/server'
 import {
+  checkEntitlement,
+  resolveIdpDisplayName,
+  resolveIdpPhone,
+  resolveIdpPhotoUrl,
+  type OrgRole,
+} from '@aglyn/aglyn/server'
+import {
+  backfillMemberIdentity,
   firebaseAdmin,
   logOrgActivity,
   resolveOrgMembership,
@@ -121,9 +128,19 @@ async function handler(request: Request): Promise<Response> {
     // their name never has it overwritten by the IdP's copy on next sign-in.
     // Best-effort: a cosmetic prefill must not cost anyone their access, and
     // it self-heals on the next sign-in.
+    //
+    // Read through `resolveIdp*` rather than off `decoded` directly: a SAML
+    // assertion's mapped attributes arrive under `firebase.sign_in_attributes`
+    // and NEVER as top-level claims, so the old `decoded['name']` read was
+    // always empty for this provider — measured on a real sign-in after the
+    // Workspace mapping was in place (AGL-1131).
+    const idpName = resolveIdpDisplayName(decoded)
+    const idpPhoto = resolveIdpPhotoUrl(decoded)
     try {
       await seedUserProfile(decoded.uid, {
-        displayName: (decoded['name'] as string | undefined) ?? null,
+        displayName: idpName || null,
+        photoUrl: idpPhoto || null,
+        phoneNumber: resolveIdpPhone(decoded) || null,
       })
     } catch (error) {
       console.error('[auth/sso-jit] profile seed failed', error)
@@ -132,6 +149,23 @@ async function handler(request: Request): Promise<Response> {
     // Already a member? Idempotent success (a resync, not a re-grant).
     const existing = await resolveOrgMembership(decoded.uid, orgId)
     if (existing?.member) {
+      // Backfill the roster's display identity on the way out. This branch is
+      // what EVERY sign-in after the first takes, and the `upsertOrgMember`
+      // below — the only other writer of `displayName`/`photoURL` — sits after
+      // it, so an account that joined before the IdP mapping existed would
+      // otherwise show a blank name on the roster forever. That is the state
+      // measured for the one live SSO account (AGL-1131).
+      //
+      // Absent-only and best-effort, for the same reason as the profile seed:
+      // a cosmetic backfill must not cost anyone their sign-in.
+      try {
+        await backfillMemberIdentity(orgId, decoded.uid, {
+          displayName: idpName || null,
+          photoURL: idpPhoto || null,
+        })
+      } catch (error) {
+        console.error('[auth/sso-jit] roster identity backfill failed', error)
+      }
       return Response.json({ ok: true, orgId, orgSlug: orgData?.slug ?? null, alreadyMember: true }, { status: 200 })
     }
 
@@ -155,11 +189,8 @@ async function handler(request: Request): Promise<Response> {
       allHosts: invite ? invite.get('allHosts') === true : true,
       hostAccess: invite ? (invite.get('hostAccess') ?? {}) : {},
       email,
-      displayName: (decoded['name'] as string | undefined) ?? null,
-      // Measured 2026-07-30: this tenant's SAML app releases no picture
-      // attribute, so this is null today. Read anyway, so mapping one on the
-      // IdP (AGL-1131) starts working without a code change.
-      photoURL: (decoded['picture'] as string | undefined) ?? null,
+      displayName: idpName || null,
+      photoURL: idpPhoto || null,
       invitedBy: invite ? (invite.get('invitedBy') ?? null) : 'sso',
     })
     if (invite) {

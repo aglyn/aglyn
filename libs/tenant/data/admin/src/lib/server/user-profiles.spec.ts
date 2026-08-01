@@ -58,6 +58,66 @@ describe('seedUserProfile', () => {
     })
   })
 
+  it('seeds the avatar and phone the assertion carried (AGL-1131)', async () => {
+    const firestore = fakeFirestore()
+    const result = await seedUserProfile('uid-1', {
+      displayName: 'Zach Gover',
+      photoUrl: 'https://cdn.example/z.png',
+      phoneNumber: '+15125550142',
+      firestore,
+    })
+    expect(result.fields.sort()).toEqual([
+      'firstName',
+      'lastName',
+      'phoneNumber',
+      'photoUrl',
+    ])
+    expect(firestore.state.data).toMatchObject({
+      photoUrl: 'https://cdn.example/z.png',
+      phoneNumber: '+15125550142',
+    })
+  })
+
+  it('never replaces an avatar or phone the user set', async () => {
+    // Same absent-only rule as the name. An uploaded avatar losing to the
+    // directory thumbnail on the next sign-in is the failure to avoid.
+    const firestore = fakeFirestore({
+      photoUrl: 'https://cdn.example/uploaded.png',
+      phoneNumber: '+15125550001',
+    })
+    const result = await seedUserProfile('uid-1', {
+      photoUrl: 'https://directory.example/thumb.png',
+      phoneNumber: '+15125559999',
+      firestore,
+    })
+    expect(result).toEqual({ created: false, fields: [] })
+    expect(firestore.writes).toEqual([])
+  })
+
+  it('writes photoUrl, not the roster spelling photoURL', async () => {
+    // Manage Account reads `photoUrl`; writing `photoURL` would add a field
+    // nothing renders and leave the avatar looking unseeded.
+    const firestore = fakeFirestore()
+    await seedUserProfile('uid-1', {
+      photoUrl: 'https://cdn.example/z.png',
+      firestore,
+    })
+    expect(Object.keys(firestore.writes[0])).toContain('photoUrl')
+    expect(Object.keys(firestore.writes[0])).not.toContain('photoURL')
+  })
+
+  it('ignores blank photo and phone rather than writing empty strings', async () => {
+    // The callers pass `resolveIdp*(...) || null`, and a written '' would
+    // make the field look set and block a later real one.
+    const firestore = fakeFirestore()
+    const result = await seedUserProfile('uid-1', {
+      photoUrl: '   ',
+      phoneNumber: null,
+      firestore,
+    })
+    expect(result).toEqual({ created: true, fields: [] })
+  })
+
   it('never overwrites a name the user has edited', async () => {
     // The regression this guards: an IdP whose assertion still says "Zachary
     // Gover" re-asserting it over the "Zach" typed in Basic info, on every

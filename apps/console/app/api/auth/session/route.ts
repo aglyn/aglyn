@@ -16,11 +16,17 @@
  */
 
 import {
+  resolveIdpDisplayName,
+  resolveIdpPhone,
+  resolveIdpPhotoUrl,
+} from '@aglyn/aglyn/server'
+import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
   seedUserProfile,
 } from '@aglyn/tenant-data-admin'
+import { after } from 'next/server'
 import { parseSignedOut, signedOutTombstone } from './session-tombstone'
 import {
   WORKSPACE_DOMAIN,
@@ -174,18 +180,36 @@ async function handler(request: Request): Promise<Response> {
         // hang this off), and SSO. It is also what backfills the accounts
         // that predate this, on their next sign-in, without a migration.
         //
-        // Deliberately NOT awaited: minting the session is what the user is
-        // waiting on, and a cosmetic prefill must neither delay it nor fail
-        // it. It re-runs on every mint, and the seed only ever fills fields
-        // that are absent, so a dropped one costs nothing.
+        // Off the critical path via `after()`: minting the session is what the
+        // user is waiting on, and a cosmetic prefill must neither delay it nor
+        // fail it. This was a bare `void promise` — which on a serverless
+        // runtime is not the same thing. The instance can freeze the moment
+        // the response is flushed, so the seed ran only when the box happened
+        // to stay warm. The same bug was confirmed this session on the Stripe
+        // org sync, where Firestore updated and Stripe did not.
+        //
+        // The seed only ever fills absent fields, so re-running it on every
+        // mint is safe, and it doubles as the backfill for accounts that
+        // predate it.
         //
         // Email/password sign-up seeds itself from the form instead — the
         // first/last name it collects are not on the token at this point,
         // because the account was created seconds ago with no displayName.
-        void seedUserProfile(decoded.uid, {
-          displayName: decoded['name'] as string | undefined,
-        }).catch((error) => {
-          console.error('[auth/session] profile seed failed', error)
+        const uid = decoded.uid
+        const seed = {
+          // Not `decoded['name']`: a SAML assertion puts mapped attributes
+          // under `firebase.sign_in_attributes`, so the old read was blank for
+          // every SSO account (AGL-1131).
+          displayName: resolveIdpDisplayName(decoded) || null,
+          photoUrl: resolveIdpPhotoUrl(decoded) || null,
+          phoneNumber: resolveIdpPhone(decoded) || null,
+        }
+        after(async () => {
+          try {
+            await seedUserProfile(uid, seed)
+          } catch (error) {
+            console.error('[auth/session] profile seed failed', error)
+          }
         })
       } catch {
         return Response.json({ error: 'Unauthenticated' }, { status: 401 })

@@ -199,20 +199,22 @@ async function handler(request: Request): Promise<Response> {
       billing_address_collection: 'required',
       'phone_number_collection[enabled]': 'true',
       'tax_id_collection[enabled]': 'true',
+      // Stripe computes and charges tax (AGL-1133). Decision by Zach — this
+      // changes what customers pay, so it was never mine to switch on.
+      //
+      // The address collection above is its PREREQUISITE, not decoration:
+      // automatic tax on a session with no address reports
+      // `requires_location_inputs` and charges nothing, so enabling this
+      // without `billing_address_collection: required` would look enabled
+      // and quietly collect no tax at all.
+      //
+      // The prices all carry `tax_behavior: unspecified`, which sounds fatal
+      // and is not — the account's Tax default is `inferred_by_currency`,
+      // which covers them. Measured before shipping, not assumed: a live
+      // session created with this flag was accepted.
+      'automatic_tax[enabled]': 'true',
       ...(decoded.email ? { customer_email: decoded.email } : {}),
     })
-    // NOT enabled here: `automatic_tax`. Not because it would fail —
-    // I assumed it would, since all 65 active live prices have
-    // `tax_behavior: unspecified`, and a live session created with
-    // `automatic_tax[enabled]=true` was ACCEPTED (status
-    // `requires_location_inputs`); the account's Tax default of
-    // `inferred_by_currency` covers unspecified prices. Stripe Tax is
-    // `active` with a head office set, so it is ready.
-    //
-    // It is off because turning it on changes what customers are charged,
-    // which is a pricing decision rather than a technical one. The collection
-    // above is its prerequisite and is safe on its own: an address and a tax
-    // id on the customer change no amount.
 
     // Attach the shared metered price (AGL-635) as a second subscription
     // item so usage overage — storage AND API requests, both reported to
