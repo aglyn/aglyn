@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { after } from 'next/server'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
@@ -237,10 +238,16 @@ async function handler(request: Request): Promise<Response> {
       // org that moved kept the old address on every future invoice —
       // which is the case that actually matters for tax.
       //
-      // Best-effort and un-awaited: the settings save is the user's action
-      // and must not fail because Stripe was slow. A missed sync self-heals
-      // on the next save, and the address is already correct in Firestore.
-      void (async () => {
+      // `after()` rather than a bare `void promise`. The first version used
+      // the latter to keep the save fast, and it silently never ran: on
+      // serverless the function can be frozen once the response is sent, so
+      // work scheduled after it is not guaranteed to execute. Measured —
+      // Firestore had the new address and Stripe still had the old one.
+      //
+      // Still best-effort inside: a settings save is the user's action and
+      // must not fail because Stripe was slow, and Firestore is already
+      // correct so a missed sync self-heals on the next save.
+      after(async () => {
         const secretKey = process.env.STRIPE_SECRET_KEY
         const customerId = (await orgDocRef.get()).get('stripeCustomerId') as
           | string
@@ -284,7 +291,7 @@ async function handler(request: Request): Promise<Response> {
         } catch (error) {
           console.error('[orgs/settings] Stripe customer sync threw', orgId, error)
         }
-      })()
+      })
       void logOrgActivity(
         orgId,
         { uid: decoded.uid, email: decoded.email },
