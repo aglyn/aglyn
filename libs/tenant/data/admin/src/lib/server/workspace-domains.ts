@@ -86,6 +86,30 @@ function query(teamId?: string): string {
 }
 
 /**
+ * Ceiling on the Vercel call (AGL-1136).
+ *
+ * These are awaited now — org creation and rename wait for them — so an
+ * unresponsive DNS API would otherwise hang the operation until the platform
+ * killed the function, turning "the subdomain is not attached yet" into "the
+ * workspace could not be created". The whole point of this call being
+ * best-effort is that it can lose without taking anything with it, and a
+ * promise with no timeout cannot lose.
+ *
+ * Five seconds is far beyond a normal response and far below any request
+ * budget worth defending.
+ */
+const VERCEL_TIMEOUT_MS = 5000
+
+/** `AbortSignal.timeout`, without assuming the runtime has it. */
+function deadline(): AbortSignal | undefined {
+  try {
+    return AbortSignal.timeout(VERCEL_TIMEOUT_MS)
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Attach `{slug}.<workspace domain>` so the workspace subdomain resolves.
  *
  * Idempotent: Vercel answers `domain_already_in_use` when the domain is
@@ -108,6 +132,7 @@ export async function attachWorkspaceDomain(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ name: domain }),
+        signal: deadline(),
       },
     )
     if (response.ok) return { outcome: 'attached', domain }
@@ -120,8 +145,12 @@ export async function attachWorkspaceDomain(
     console.error('[workspace-domains] attach failed', domain, code)
     return { outcome: 'failed', domain, detail: code || String(response.status) }
   } catch (error) {
+    // Includes the abort above: a timeout is reported as a failure like any
+    // other, because to every caller it is one.
+    const aborted = (error as { name?: string })?.name === 'TimeoutError' ||
+      (error as { name?: string })?.name === 'AbortError'
     console.error('[workspace-domains] attach threw', domain, error)
-    return { outcome: 'failed', domain, detail: 'network' }
+    return { outcome: 'failed', domain, detail: aborted ? 'timeout' : 'network' }
   }
 }
 
@@ -143,6 +172,7 @@ export async function detachWorkspaceDomain(
       {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${settings.token}` },
+        signal: deadline(),
       },
     )
     if (response.ok) return { outcome: 'detached', domain }
