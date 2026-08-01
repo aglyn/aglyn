@@ -20,6 +20,7 @@ import {
   authForPool,
   consumePasswordResetSend,
   emailUnverifiedResponse,
+  eraseUser,
   findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
@@ -42,6 +43,9 @@ const ACTIONS = [
   'updateProfile',
   'sendPasswordReset',
   'setPassword',
+  // Permanent, and the only action here that cannot be undone by another
+  // action (AGL-1140). Everything else on this list is reversible.
+  'erase',
 ] as const
 const STAFF_ROLES = ['support', 'billing', 'super'] as const
 type ManageAction = (typeof ACTIONS)[number]
@@ -89,9 +93,57 @@ async function handler(request: Request): Promise<Response> {
     }
     if (
       decoded.uid === uid &&
-      (action === 'revokeStaff' || action === 'disable')
+      (action === 'revokeStaff' || action === 'disable' || action === 'erase')
     ) {
       return Response.json({ error: 'You cannot lock yourself out' }, { status: 400 })
+    }
+
+    // Erasure runs BEFORE the pool lookup below (AGL-1140). `eraseUser` does
+    // its own cross-pool resolution and, more to the point, deliberately
+    // treats an account with no auth record as still erasable — a profile
+    // doc and roster rows can outlive the record. Requiring `findUserByUid`
+    // to succeed first would refuse exactly the half-deleted accounts most
+    // in need of cleaning up.
+    if (action === 'erase') {
+      const reason = String(body?.reason ?? '').trim().slice(0, 500)
+      if (!reason) {
+        // A permanent deletion should carry why it was ordered. This is the
+        // record that answers "who asked for this" a year from now.
+        return Response.json(
+          { error: 'A reason is required to erase an account' },
+          { status: 400 },
+        )
+      }
+      const result = await eraseUser(uid)
+      if (!result.ok) {
+        return Response.json(
+          {
+            error:
+              result.skippedReason === 'owns-orgs'
+                ? 'This person owns workspaces — transfer ownership or delete them first'
+                : 'No such account',
+            skippedReason: result.skippedReason,
+            blockers: result.blockers,
+          },
+          { status: result.skippedReason === 'owns-orgs' ? 409 : 404 },
+        )
+      }
+      await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('adminAudit')
+        .add({
+          actorUid: decoded.uid,
+          actorEmail: decoded.email ?? null,
+          action: 'user.erased',
+          target: `users/${uid}`,
+          // The uid is all that is left to identify them by — the account it
+          // named no longer exists — so the reason has to carry the meaning.
+          after: { reason, ...result.deleted },
+          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        })
+        .catch(() => undefined)
+      return Response.json({ ok: true, deleted: result.deleted }, { status: 200 })
     }
 
     // Resolve which pool the TARGET lives in (AGL-1122) and mutate there.
