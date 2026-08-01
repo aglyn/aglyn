@@ -687,6 +687,51 @@ export async function upsertOrgMember(
 }
 
 /**
+ * Fill in a roster row's display identity from an identity provider, writing
+ * ONLY the fields that are currently blank (AGL-1131).
+ *
+ * Separate from `upsertOrgMember` because the caller is the SSO sign-in path
+ * on its already-a-member branch, where the member's role, host access and
+ * invite state are settled and must not be touched. `upsertOrgMember`
+ * requires a `role` and re-asserts it, so reusing it here would let an SSO
+ * sign-in quietly reset an admin to the org's `sso.defaultRole`.
+ *
+ * Absent-only, so it is safe on every sign-in: it backfills the rows that
+ * predate the IdP mapping and then never writes again, and it can never
+ * overwrite a name or photo a person chose.
+ *
+ * @returns the field names it wrote, for logging and tests.
+ */
+export async function backfillMemberIdentity(
+  orgId: string,
+  uid: string,
+  identity: { displayName?: string | null; photoURL?: string | null },
+  db = firestore(),
+): Promise<string[]> {
+  const ref = db.collection('orgs').doc(orgId).collection('members').doc(uid)
+  const snapshot = await ref.get()
+  // A missing row is NOT this function's job to create — creating one here
+  // would mint a membership with no role, which every permission check reads
+  // as a member of some kind.
+  if (!snapshot.exists) return []
+
+  const blank = (value: unknown) => typeof value !== 'string' || !value.trim()
+  const patch: Record<string, string> = {}
+  const displayName = identity.displayName?.trim()
+  const photoURL = identity.photoURL?.trim()
+  if (displayName && blank(snapshot.get('displayName'))) {
+    patch['displayName'] = displayName
+  }
+  if (photoURL && blank(snapshot.get('photoURL'))) {
+    patch['photoURL'] = photoURL
+  }
+  if (!Object.keys(patch).length) return []
+
+  await ref.set(patch, { merge: true })
+  return Object.keys(patch)
+}
+
+/**
  * Transfers org ownership (AGL-232): the target must already be on the
  * roster; the previous owner steps down to admin. One transaction across
  * the org doc, both member docs and both reverse-index entries, then the

@@ -41,6 +41,13 @@ const firestore = () => firebaseAdmin.app().firestore()
 export interface SeedUserProfileInput {
   /** The provider's single name string, when the assertion carries one. */
   displayName?: string | null
+  /**
+   * Avatar and phone from the same assertion (AGL-1131). Callers pass these
+   * through `resolveIdpPhotoUrl` / `resolveIdpPhone`, which is where the
+   * https-only check on the photo lives — this function does not re-validate.
+   */
+  photoUrl?: string | null
+  phoneNumber?: string | null
   /** Injectable for tests; defaults to the admin app's Firestore. */
   firestore?: any
 }
@@ -73,6 +80,16 @@ export async function seedUserProfile(
   const seed: Record<string, unknown> = {}
   if (firstName && blank(snapshot.get('firstName'))) seed['firstName'] = firstName
   if (lastName && blank(snapshot.get('lastName'))) seed['lastName'] = lastName
+  // Same absent-only rule: a directory photo fills an empty avatar, and never
+  // replaces one somebody uploaded. `photoUrl` here, not `photoURL` — this
+  // doc's spelling differs from the roster's, and writing the roster's would
+  // add a field Manage Account does not read.
+  if (input.photoUrl?.trim() && blank(snapshot.get('photoUrl'))) {
+    seed['photoUrl'] = input.photoUrl.trim()
+  }
+  if (input.phoneNumber?.trim() && blank(snapshot.get('phoneNumber'))) {
+    seed['phoneNumber'] = input.phoneNumber.trim()
+  }
 
   // An existing doc with nothing missing needs no write at all — the common
   // case on every sign-in after the first.
