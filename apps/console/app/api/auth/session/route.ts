@@ -27,7 +27,12 @@ import {
   seedUserProfile,
 } from '@aglyn/tenant-data-admin'
 import { after } from 'next/server'
-import { parseSignedOut, signedOutTombstone } from './session-tombstone'
+import {
+  parseSignedOut,
+  signedOutTombstone,
+  tombstoneIsExpired,
+  SESSION_TOMBSTONE_TTL_MS,
+} from './session-tombstone'
 import {
   WORKSPACE_DOMAIN,
   workspaceSlugFromHost,
@@ -265,6 +270,22 @@ async function handler(request: Request): Promise<Response> {
       // latter must heal, not force a logout on refresh.
       const tombstone = parseSignedOut(cookie)
       if (tombstone) {
+        // An expired tombstone is treated as no cookie at all, and cleared on
+        // the way out (AGL-1142). Enforcing the lifetime HERE, not only via
+        // the cookie's Max-Age, is what heals the ones already in browsers:
+        // they were written with the session cookie's 14-day lifetime, and a
+        // shorter Max-Age only applies to tombstones written from now on.
+        //
+        // Measured on production 2026-07-31: a nine-day-old tombstone was
+        // still answering `401 signed-out` to every cross-subdomain exchange,
+        // on an account that had signed in interactively since.
+        if (tombstoneIsExpired(tombstone.at, Date.now())) {
+          return jsonWithCookie(
+            { error: 'No session', reason: 'absent' },
+            401,
+            [`${SESSION_COOKIE}=; ${cookieAttributes(request, 0)}`],
+          )
+        }
         return Response.json(
           { error: 'Signed out', reason: 'signed-out', signedOutAt: tombstone.at },
           { status: 401 },
@@ -327,7 +348,11 @@ async function handler(request: Request): Promise<Response> {
       // sign-out is newer than their last sign-in — while a truly absent
       // cookie no longer signs anyone out.
       return jsonWithCookie({ ok: true }, 200, [
-        `${SESSION_COOKIE}=${signedOutTombstone(Date.now())}; ${cookieAttributes(request, SESSION_TTL_MS / 1000)}`,
+        // A day, not the session's own 14 (AGL-1142). The tombstone only has
+        // to outlive the window in which another subdomain might still be
+        // acting on a session this sign-out ended; past that it can only deny
+        // sessions nobody asked it to.
+        `${SESSION_COOKIE}=${signedOutTombstone(Date.now())}; ${cookieAttributes(request, SESSION_TOMBSTONE_TTL_MS / 1000)}`,
         `${SESSION_TENANT_COOKIE}=; ${cookieAttributes(request, 0)}`,
       ])
     }

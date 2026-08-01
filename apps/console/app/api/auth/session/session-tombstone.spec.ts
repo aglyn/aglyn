@@ -17,9 +17,11 @@
 
 import {
   SESSION_SIGNED_OUT,
+  SESSION_TOMBSTONE_TTL_MS,
   parseSignedOut,
   signedOutTombstone,
   tombstoneEndsSession,
+  tombstoneIsExpired,
 } from './session-tombstone'
 
 describe('session tombstone (AGL-624)', () => {
@@ -68,5 +70,60 @@ describe('session tombstone (AGL-624)', () => {
       expect(tombstoneEndsSession(Number.NaN, 1_000)).toBe(false)
       expect(tombstoneEndsSession(2_000, Number.NaN)).toBe(true)
     })
+  })
+})
+
+/**
+ * AGL-1142. The tombstone inherited the session cookie's 14-day lifetime,
+ * which is far longer than it can be useful for. Measured on production
+ * 2026-07-31: a `__session` holding a tombstone from NINE DAYS earlier, on an
+ * account that had signed in interactively since, answering `401 signed-out`
+ * to every cross-subdomain exchange for all of it.
+ */
+describe('tombstoneIsExpired (AGL-1142)', () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const now = 1_785_600_000_000
+
+  it('expires the nine-day-old tombstone that was actually observed', () => {
+    expect(tombstoneIsExpired(now - 9 * DAY, now)).toBe(true)
+  })
+
+  it('honours a tombstone from moments ago', () => {
+    // The case it exists to serve: a real sign-out on another subdomain,
+    // which must still end this session.
+    expect(tombstoneIsExpired(now - 1000, now)).toBe(false)
+  })
+
+  it('holds right up to the TTL and expires past it', () => {
+    expect(tombstoneIsExpired(now - (SESSION_TOMBSTONE_TTL_MS - 1), now)).toBe(false)
+    expect(tombstoneIsExpired(now - (SESSION_TOMBSTONE_TTL_MS + 1), now)).toBe(true)
+  })
+
+  it('expires a legacy untimestamped tombstone', () => {
+    // It carries no date, so it cannot be shown to be recent — and an
+    // undateable tombstone healing rather than denying is the same call
+    // `tombstoneEndsSession` already makes.
+    expect(tombstoneIsExpired(0, now)).toBe(true)
+  })
+
+  it('expires rather than honours anything nonsensical', () => {
+    // Fail-open is right here and only here: the failure mode of honouring a
+    // garbage tombstone is a user who cannot move between workspaces and has
+    // no way to tell why.
+    expect(tombstoneIsExpired(Number.NaN, now)).toBe(true)
+    expect(tombstoneIsExpired(-1, now)).toBe(true)
+  })
+
+  it('does not expire a tombstone dated slightly in the future', () => {
+    // Clock skew between the browser and the server is normal; treating a
+    // future tombstone as expired would drop real sign-outs.
+    expect(tombstoneIsExpired(now + 30_000, now)).toBe(false)
+  })
+
+  it('is much shorter than the session cookie it used to inherit', () => {
+    // The regression in one line. 14 days was never a deliberate choice for
+    // this value — it was the session TTL, reused.
+    expect(SESSION_TOMBSTONE_TTL_MS).toBeLessThan(14 * DAY)
+    expect(SESSION_TOMBSTONE_TTL_MS).toBeGreaterThanOrEqual(60 * 60 * 1000)
   })
 })
