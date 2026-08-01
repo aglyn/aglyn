@@ -23,9 +23,7 @@ import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import { Link, Typography } from '@mui/material'
-import { AuthErrorCodes, sendPasswordResetEmail } from 'firebase/auth'
 import { useCallback, useState } from 'react'
-import { useAuth } from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
@@ -37,7 +35,6 @@ const formSchema: FormSchema = {
 
 function AccountRecovery() {
   const { queueLoading, loading } = useLoading()
-  const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)
   // Once the email is dispatched we swap the form for a confirmation step —
   // this is the first leg of Firebase's out-of-band reset flow (AGL-475).
@@ -48,28 +45,34 @@ function AccountRecovery() {
       if (loading) return
       if (error) setError(null)
       const dequeueLoading = queueLoading()
-      await sendPasswordResetEmail(firebaseAuth, email, {
-        // Where Firebase's "Continue" lands the user after they finish the
-        // reset. The oobCode link itself is routed to /reset-password by the
-        // action URL configured in the Firebase console (see docs).
-        url: `${window.location.origin}/signin`,
-        handleCodeInApp: false,
-      })
-        .then(() => setSentTo(email))
-        .catch((error) => {
-          // Don't leak whether an account exists — a missing account still
-          // advances to the confirmation step (anti-enumeration). Everything
-          // else surfaces in the alert.
-          if (error?.code === AuthErrorCodes.USER_DELETED) {
-            setSentTo(email)
-            return
-          }
-          console.error(error)
-          setError(error)
+      try {
+        // Aglyn sends this now, not Firebase (AGL-1112). The client SDK's
+        // `sendPasswordResetEmail` had Firebase compose it from a template
+        // nobody can edit — the subject still said `[aglyn.io]` and the link
+        // landed on `aglyn-main.firebaseapp.com`. Firebase still mints the
+        // one-time code, which is the part that has to be Firebase's.
+        //
+        // Anti-enumeration moved to the server with the send: the route
+        // answers 200 for every address, so there is no longer a client-side
+        // error code to special-case. A missing account and a real one are
+        // now indistinguishable from here, which is stronger than catching
+        // `USER_DELETED` was — that relied on every other failure mode
+        // producing a different code.
+        const response = await fetch('/api/auth/send-password-reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
         })
-        .finally(() => dequeueLoading())
+        if (!response.ok) throw new Error(`Request failed (${response.status})`)
+        setSentTo(email)
+      } catch (error) {
+        console.error(error)
+        setError(error as AuthResultError)
+      } finally {
+        dequeueLoading()
+      }
     },
-    [error, firebaseAuth, loading, queueLoading],
+    [error, loading, queueLoading],
   )
 
   const handleFormSubmit = useCallback(

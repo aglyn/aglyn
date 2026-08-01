@@ -54,11 +54,16 @@ connect **Email & password** from [Manage Account](manage-account.md#sign-in-met
 first.
 
 :::note Self-hosting
-Password reset uses Firebase's out-of-band email action flow. Point the Firebase console
-action URL (**Authentication → Templates → Password reset → edit → Customize action URL**)
-at `https://<your-console-domain>/reset-password` so the emailed link opens the console's
-own reset screen instead of Firebase's default page. The console domain must be listed
-under **Authentication → Settings → Authorized domains**.
+Aglyn composes and sends the reset and verification emails itself, through your configured
+mail provider — **you do not need to set a Firebase action URL**, and the Firebase email
+templates are not used at all. Firebase still mints the one-time code; only the message
+and the link's host are Aglyn's, and the link is built from your own console origin.
+
+What you do still need: the console domain listed under **Authentication → Settings →
+Authorized domains**, and a working mail provider. If mail is unconfigured, account
+recovery still returns its usual "check your email" screen — deliberately, so the screen
+can't be used to probe who has an account — but no message goes out. Check your server
+logs for `[auth/send-password-reset] email is not configured`.
 :::
 
 ## One session across workspaces

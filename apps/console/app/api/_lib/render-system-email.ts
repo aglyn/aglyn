@@ -76,7 +76,7 @@ export async function loadSystemEmail(
   if (!definition) return null
   // A Firebase- or Stripe-delivered email is sent by that service from its
   // own templates, so rendering one here would produce output nothing ever
-  // sends (AGL-751/767).
+  // sends (AGL-767).
   if (definition.deliveredBy !== 'resend') return null
 
   try {

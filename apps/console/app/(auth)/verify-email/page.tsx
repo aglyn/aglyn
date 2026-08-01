@@ -24,7 +24,7 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { useContinueUrl } from '@aglyn/shared-util-next'
 import { Button, CircularProgress, Link, Stack, Typography } from '@mui/material'
-import { sendEmailVerification } from 'firebase/auth'
+import { applyActionCode } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
@@ -63,23 +63,45 @@ function VerifyEmail() {
     setError(null)
     const dequeueLoading = queueLoading()
     try {
-      await sendEmailVerification(user, {
-        url: `${window.location.origin}/verify-email`,
-        handleCodeInApp: false,
+      // Aglyn sends this now, not Firebase (AGL-1112) — same reason as the
+      // reset mail: the Firebase template is locked, so its subject still
+      // carries `[aglyn.io]` and its link lands on a firebaseapp.com host.
+      // The one-time code is still minted by Firebase.
+      const idToken = await user.getIdToken()
+      const response = await fetch('/api/auth/send-verification', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
       })
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string
+        alreadyVerified?: boolean
+      }
+      if (response.status === 429) {
+        setError('Too many requests — wait a moment before requesting another link.')
+        return
+      }
+      if (!response.ok) {
+        setError(payload.error ?? 'We couldn’t send the verification email. Try again shortly.')
+        return
+      }
+      // Verified in another tab while this page sat open. Sending a mail
+      // whose link is already a no-op would read as the flow being stuck.
+      if (payload.alreadyVerified) {
+        await goToApp()
+        return
+      }
       setSent(true)
     } catch (e: any) {
-      // Firebase rate-limits repeated sends; surface it rather than silently
-      // leaving the user waiting for an email that won't arrive.
-      setError(
-        e?.code === 'auth/too-many-requests'
-          ? 'Too many requests — wait a moment before requesting another link.'
-          : 'We couldn’t send the verification email. Try again shortly.',
-      )
+      console.error(e)
+      setError('We couldn’t send the verification email. Try again shortly.')
     } finally {
       dequeueLoading()
     }
-  }, [firebaseAuth, loading, queueLoading])
+  }, [firebaseAuth, goToApp, loading, queueLoading])
 
   // Re-check verification: reload the user, and if verified, head to the app.
   const checkNow = useCallback(async () => {
@@ -89,10 +111,62 @@ function VerifyEmail() {
     if (user.emailVerified) await goToApp()
   }, [firebaseAuth, goToApp])
 
-  // Signed out (or session lost) — nothing to verify here.
+  // Redeem the code from the emailed link (AGL-1112).
+  //
+  // Aglyn's own link points here directly instead of at Firebase's
+  // `/__/auth/action` handler, so this page has to do what that handler used
+  // to: apply the code. Nothing did before, because the link never arrived
+  // here — it arrived at firebaseapp.com, which applied it and redirected.
+  //
+  // Runs BEFORE the signed-out redirect below, and does not require a
+  // session: people open verification links in whatever browser their mail
+  // client hands them, frequently not the one they signed up in. Bouncing
+  // them to /signin without applying the code would waste the code and leave
+  // the account unverified.
+  const [applying, setApplying] = useState(() =>
+    typeof window !== 'undefined'
+      ? Boolean(new URLSearchParams(window.location.search).get('oobCode'))
+      : false,
+  )
   useEffect(() => {
+    if (!applying) return
+    const oobCode = new URLSearchParams(window.location.search).get('oobCode')
+    if (!oobCode) {
+      setApplying(false)
+      return
+    }
+    void (async () => {
+      try {
+        await applyActionCode(firebaseAuth, oobCode)
+        const user = firebaseAuth.currentUser
+        if (user) {
+          // Refresh so `email_verified` is true on the next token the gate
+          // reads; without this the app bounces straight back here.
+          await user.reload().catch(() => undefined)
+          await goToApp()
+          return
+        }
+        router.replace('/signin?verified=1')
+      } catch {
+        // Expired, already used, or malformed. Not fatal: the page below
+        // offers to send another, which is the only useful next step.
+        setError(
+          'That verification link has expired or was already used. ' +
+            'Send yourself a new one below.',
+        )
+      } finally {
+        setApplying(false)
+      }
+    })()
+  }, [applying, firebaseAuth, goToApp, router])
+
+  // Signed out (or session lost) — nothing to verify here. Held off while a
+  // code is being applied, so an out-of-browser click is not redirected away
+  // mid-redemption.
+  useEffect(() => {
+    if (applying) return
     if (!authLoading && !signedIn) router.replace('/signin')
-  }, [authLoading, signedIn, router])
+  }, [applying, authLoading, signedIn, router])
 
   // Already verified (e.g. an OAuth account that shouldn't be here, or a link
   // clicked before this mounted) — the layout will route away; nudge it.
@@ -103,14 +177,14 @@ function VerifyEmail() {
   // Auto-send one link on first mount for a signed-in unverified user, then
   // poll for verification. Guarded so re-mounts / a returning tab don't spam.
   useEffect(() => {
-    if (authLoading || !signedIn) return
+    if (applying || authLoading || !signedIn) return
     if (!sentOnceRef.current) {
       sentOnceRef.current = true
       void sendLink()
     }
     const timer = setInterval(() => void checkNow(), POLL_MS)
     return () => clearInterval(timer)
-  }, [authLoading, signedIn, sendLink, checkNow])
+  }, [applying, authLoading, signedIn, sendLink, checkNow])
 
   if (authLoading || !signedIn || signInCheckResult?.user?.emailVerified) {
     return (
