@@ -186,7 +186,9 @@ export function CloseAccountCard({ user, hasPassword }: CloseAccountCardProps) {
 
   return (
     <CardDisplay
-      title="Close account"
+      header={'Close account'}
+      contentGutterX
+      contentGutterY
       help={docsHelp('account', {
         anchor: '#closing-your-account',
         excerpt:
