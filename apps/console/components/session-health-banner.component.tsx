@@ -19,8 +19,12 @@
 import { Alert, Button } from '@mui/material'
 import { signOut } from 'firebase/auth'
 import { useEffect, useState } from 'react'
-import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
+import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { markInteractiveSignOut } from '../utils/interactive-signin'
+import {
+  probePublicRead,
+  type PublicReadProbe,
+} from '../utils/probe-public-read'
 import {
   subscribeSessionHealth,
   type SessionHealthState,
@@ -46,6 +50,9 @@ import {
 export function SessionHealthBanner() {
   const { data: user } = useUser()
   const auth = useAuth()
+  const firestore = useFirestore()
+  // Which layer is refusing us — measured, not guessed (AGL-1143).
+  const [probe, setProbe] = useState<PublicReadProbe | null>(null)
   const [health, setHealth] = useState<SessionHealthState>({
     staleSession: false,
     deniedCollections: [],
@@ -57,7 +64,10 @@ export function SessionHealthBanner() {
   // Re-arm when the evidence clears (a successful server read) so a later
   // recurrence is not silenced by an earlier dismissal.
   useEffect(() => {
-    if (!health.staleSession) setDismissed(false)
+    if (!health.staleSession) {
+      setDismissed(false)
+      setProbe(null)
+    }
   }, [health.staleSession])
 
   /**
@@ -66,8 +76,14 @@ export function SessionHealthBanner() {
    * AGL-1062 could not answer this retrospectively — re-authenticating
    * destroyed the evidence — and that one missing fact is what turned a
    * ten-minute diagnosis into hours. A forced token refresh is the cheap
-   * discriminator: if it FAILS the ID token is the problem; if it succeeds
-   * and reads are still denied, suspect App Check or the session cookie.
+   * discriminator: if it FAILS the ID token is the problem.
+   *
+   * If it SUCCEEDS, this used to say "suspect App Check or the session
+   * cookie" and stop there. AGL-1143 turned that hint into a measurement:
+   * reading the one unconditionally public collection separates a refusal
+   * BY the rules from a refusal in FRONT of them, and those need opposite
+   * responses. Both facts are logged together, because the pair is what
+   * identifies the layer — either alone is ambiguous.
    */
   useEffect(() => {
     if (!health.staleSession || !user) return
@@ -80,7 +96,9 @@ export function SessionHealthBanner() {
         ?.getIdToken?.(true)
         .then(() => true)
         .catch((error: unknown) => error)
+      const publicRead = await probePublicRead(firestore)
       if (!active) return
+      setProbe(publicRead.outcome)
       console.error(
         'Session health: server reads denied across ' +
           `${health.deniedCollections.length} collections ` +
@@ -91,25 +109,34 @@ export function SessionHealthBanner() {
           tokenIssuedAt: result?.issuedAtTime ?? 'unknown',
           authTime: result?.authTime ?? 'unknown',
           forcedRefresh: refreshed === true ? 'ok' : refreshed,
+          publicRead: publicRead.outcome,
+          publicReadCode: publicRead.code,
           hint:
             refreshed === true
-              ? 'ID token refreshed fine — suspect App Check or the session ' +
-                'cookie rather than the ID token.'
+              ? publicRead.hint
               : 'ID token refresh FAILED — the sign-in itself is dead.',
         },
       )
     })()
     return () => void (active = false)
-  }, [health.staleSession, health.deniedCollections, user])
+  }, [health.staleSession, health.deniedCollections, user, firestore])
 
   if (!health.staleSession || dismissed) return null
 
+  // A public read being denied too means the refusal is in front of the
+  // rules, so this is not the user's session and signing in again does
+  // nothing. Offering that button anyway would send them through a sign-out
+  // that destroys the evidence and changes nothing — the AGL-1062 trap, with
+  // the console doing the misleading this time (AGL-1143).
+  const notTheSession = probe === 'denied'
+
   return (
     <Alert
-      severity="warning"
+      severity={notTheSession ? 'error' : 'warning'}
       sx={{ borderRadius: 0, position: 'sticky', top: 0, zIndex: 1400 }}
       onClose={() => setDismissed(true)}
       action={
+        notTheSession ? null : (
         <Button
           color="inherit"
           size="small"
@@ -129,11 +156,18 @@ export function SessionHealthBanner() {
         >
           {'Sign in again'}
         </Button>
+        )
       }
     >
-      {'Your session needs refreshing — this account can no longer read your ' +
-        'data from the server, so pages may be empty or out of date. ' +
-        'Nothing has been deleted. Signing in again fixes it.'}
+      {notTheSession
+        ? 'The console cannot reach your data right now. This is not your ' +
+          'account and not your session — signing in again will not help, ' +
+          'and nothing has been deleted. It usually clears on its own; if it ' +
+          'does not, contact support and mention that public reads are being ' +
+          'denied.'
+        : 'Your session needs refreshing — this account can no longer read ' +
+          'your data from the server, so pages may be empty or out of date. ' +
+          'Nothing has been deleted. Signing in again fixes it.'}
     </Alert>
   )
 }
