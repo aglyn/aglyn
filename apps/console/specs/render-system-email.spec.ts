@@ -83,11 +83,25 @@ describe('renderSystemEmail', () => {
       expect(mockGet).not.toHaveBeenCalled()
     })
 
-    it('when the email is delivered by Firebase, not us', async () => {
-      // Rendering these would produce output nothing ever sends (AGL-751).
-      expect(await renderSystemEmail('password-reset')).toBeNull()
-      expect(await renderSystemEmail('email-verification')).toBeNull()
+    it('when the email is delivered by Stripe, not us', async () => {
+      // Rendering these would produce output nothing ever sends (AGL-767).
+      // `password-reset` and `email-verification` used to be the examples
+      // here; AGL-1112 moved them to Resend, so they now belong to the test
+      // below instead.
+      expect(await renderSystemEmail('stripe-receipt')).toBeNull()
+      expect(await renderSystemEmail('stripe-invoice')).toBeNull()
       expect(mockGet).not.toHaveBeenCalled()
+    })
+
+    it('but DOES reach Firestore for the auth emails now (AGL-1112)', async () => {
+      // The inverse of the assertion this replaced, and the one that would
+      // have caught a half-done takeover: flipping the catalog to 'resend'
+      // without the routes, or shipping the routes while the renderer still
+      // short-circuits, both leave staff an editor that does nothing.
+      mockGet.mockResolvedValue(snapshot(null))
+      await renderSystemEmail('password-reset')
+      await renderSystemEmail('email-verification')
+      expect(mockGet).toHaveBeenCalled()
     })
 
     it('when no template document exists', async () => {
@@ -185,8 +199,8 @@ describe('renderSystemEmail', () => {
       expect(result?.subject).not.toContain('{{')
     })
 
-    it('returns null for a Firebase-delivered or unknown key', async () => {
-      expect(await renderEffectiveSystemEmail('password-reset')).toBeNull()
+    it('returns null for a Stripe-delivered or unknown key', async () => {
+      expect(await renderEffectiveSystemEmail('stripe-receipt')).toBeNull()
       expect(await renderEffectiveSystemEmail('not-a-template')).toBeNull()
     })
   })
@@ -217,8 +231,8 @@ describe('renderSystemEmail', () => {
     })
 
     it('loads null for a non-Resend key without reading Firestore', async () => {
-      expect(await loadSystemEmail('password-reset')).toBeNull()
       expect(await loadSystemEmail('stripe-receipt')).toBeNull()
+      expect(await loadSystemEmail('stripe-card-expiring')).toBeNull()
       expect(mockGet).not.toHaveBeenCalled()
     })
   })

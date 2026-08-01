@@ -106,16 +106,47 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
   })
 
   describe('delivery ownership', () => {
-    it('marks the auth emails as Firebase-delivered', () => {
-      // These are the ones a besigner template cannot reach yet (AGL-751).
-      // If this ever flips to 'resend' without the takeover shipping, staff
-      // get an editor that silently does nothing.
+    it('sends the auth emails itself — nothing is left to Firebase', () => {
+      // Inverted by AGL-1112. These two were the last Firebase-delivered
+      // rows, and the reason the editor above them did nothing: Firebase
+      // composed them from a template locked behind
+      // `EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`, so the `[aglyn.io]` subject and
+      // the firebaseapp.com link could not be changed by anyone.
       expect(getSystemEmailTemplate('password-reset')?.deliveredBy).toBe(
-        'firebase',
+        'resend',
       )
       expect(getSystemEmailTemplate('email-verification')?.deliveredBy).toBe(
-        'firebase',
+        'resend',
       )
+    })
+
+    it('has no Firebase-delivered template left at all', () => {
+      // The actual claim of AGL-1112, asserted over the whole catalog rather
+      // than the two rows above — adding a third would otherwise reintroduce
+      // the dependency with both of those still passing.
+      //
+      // Through `string` on purpose. `SystemEmailDeliveredBy` no longer has a
+      // `'firebase'` member, so comparing directly is a type error and the
+      // type is the real guard. This one survives someone widening the union
+      // back, which is the change that would need catching.
+      const delivery = SYSTEM_EMAIL_TEMPLATES.map(
+        (entry) => entry.deliveredBy as string,
+      )
+      expect(delivery).not.toContain('firebase')
+      expect(new Set(delivery)).toEqual(new Set(['resend', 'stripe']))
+    })
+
+    it('gives the auth emails the merge token their copy needs', () => {
+      // An editable template whose link token is missing renders a mail with
+      // no way to act on it — worse than the un-editable version it replaced.
+      expect(
+        getSystemEmailTemplate('password-reset')?.mergeTokens.map((t) => t.name),
+      ).toContain('resetUrl')
+      expect(
+        getSystemEmailTemplate('email-verification')?.mergeTokens.map(
+          (t) => t.name,
+        ),
+      ).toContain('verifyUrl')
     })
 
     it('marks the emails Aglyn sends itself as Resend-delivered', () => {

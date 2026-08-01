@@ -291,12 +291,12 @@ function AdminEmails() {
             {/* Stated plainly rather than left for someone to discover by
                 editing a template and wondering why nothing changed. */}
             <Alert severity="info">
-              {'Password reset and email verification are sent by Firebase ' +
-                'Auth from its own templates, so they cannot be designed ' +
-                'here yet. Editing them will become possible once Aglyn ' +
-                'takes over those sends (AGL-751). Billing emails — receipts, ' +
-                'failed payments, refunds — are sent by Stripe from its ' +
-                'Dashboard settings and are shown here for reference only.'}
+              {'Billing emails — receipts, failed payments, refunds — are ' +
+                'sent by Stripe from its Dashboard settings and are shown ' +
+                'here for reference only. Everything else on this list is ' +
+                'composed and sent by Aglyn, including password reset and ' +
+                'email verification (AGL-1112), so editing it changes what ' +
+                'recipients actually get.'}
             </Alert>
 
             <Typography variant="caption" color="text.secondary">

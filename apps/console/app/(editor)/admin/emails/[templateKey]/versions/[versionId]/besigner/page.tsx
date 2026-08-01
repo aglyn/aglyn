@@ -149,8 +149,10 @@ function SystemEmailBesignerPage() {
   const listUrl = buildRoute(Route.ADMIN_EMAILS)
 
   const definition = getSystemEmailTemplate(templateKey)
-  // A Firebase-delivered entry has an editor that could never change what a
-  // recipient sees (AGL-751), so it is refused rather than opened.
+  // A Stripe-delivered entry has an editor that could never change what a
+  // recipient sees (AGL-767), so it is refused rather than opened. The auth
+  // emails used to be refused here too; AGL-1112 made them ours, so they now
+  // open like any other.
   const editable = Boolean(definition && isSystemEmailEditable(definition))
 
   const [propertiesOpen, setPropertiesOpen] = useState(false)
@@ -312,9 +314,9 @@ function SystemEmailBesignerPage() {
       </Alert>
     ) : !editable ? (
       <Alert severity="warning" sx={{ m: 3 }}>
-        {`${definition.name} is sent by Firebase Auth from its own template, ` +
+        {`${definition.name} is sent by Stripe from its own template, ` +
           'so designing it here would change nothing a recipient sees ' +
-          '(AGL-751).'}
+          '(AGL-767).'}
       </Alert>
     ) : null
 

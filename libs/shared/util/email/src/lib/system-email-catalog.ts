@@ -25,7 +25,7 @@ import { EMAIL_NODE_ROOT_ID } from './email-render'
  *
  * `firebase` — Firebase Auth sends it from its own templates, configured in
  * the Firebase console. **A besigner template cannot affect these at all**
- * until the send is taken over (AGL-751).
+ * because the sender owns the copy (AGL-767).
  *
  * `stripe` — Stripe sends it on Aglyn's behalf from the Dashboard's
  * Customer-emails settings (billing receipts, dunning, refunds, expiring-card
@@ -37,7 +37,17 @@ import { EMAIL_NODE_ROOT_ID } from './email-render'
  * them as non-editable rather than offering an editor that silently does
  * nothing.
  */
-export type SystemEmailDeliveredBy = 'resend' | 'firebase' | 'stripe'
+/**
+ * Who actually puts the message on the wire.
+ *
+ * `'firebase'` was removed by AGL-1112, once nothing was left that Firebase
+ * Auth composed. Deliberately not kept "just in case": with the variant gone,
+ * reintroducing a Firebase-sent email is a compile error rather than a row in
+ * a table that quietly stops being editable. The staff editor is wired to
+ * `'resend'`, so any other value silently produces a template that renders
+ * nothing — which is exactly how the `[aglyn.io]` subject survived so long.
+ */
+export type SystemEmailDeliveredBy = 'resend' | 'stripe'
 
 export interface SystemEmailMergeToken {
   /** Token as written in the template, without braces. */
@@ -457,27 +467,86 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       source: 'apps/console/app/api/_lib/password-admin.ts',
     },
+    // Aglyn composes and sends both of these now (AGL-1112). They were
+    // Firebase's, from a template nobody could edit — the subject still
+    // carried `[aglyn.io]`, a domain the company no longer uses, and the link
+    // landed on `aglyn-main.firebaseapp.com`. Neither could be fixed: every
+    // write under `notification.sendEmail` is refused with
+    // `EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`.
+    //
+    // Firebase still MINTS the one-time code, which is the part that has to
+    // be its. Only the message around it, and the host the link points at,
+    // became ours. So editing these here now does what it says.
     {
       key: 'password-reset',
       name: 'Forgot password',
       description:
-        'Password reset link. Sent by Firebase Auth from its own template ' +
-        '— editing it here has no effect until AGL-751.',
-      deliveredBy: 'firebase',
-      defaultSubject: 'Reset your password',
-      mergeTokens: [],
-      source: 'apps/console/app/(auth)/account-recovery/page.tsx',
+        'Password reset link, sent when someone asks for one from Account ' +
+        'recovery.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Reset your Aglyn password',
+      mergeTokens: [
+        {
+          name: 'resetUrl',
+          description: 'One-time link that opens the choose-a-new-password page',
+          sample: 'https://app.aglyn.com/reset-password?oobCode=\u2026',
+        },
+      ],
+      // Mirrors the fallbackText in the route, so the designed and undesigned
+      // versions say the same thing.
+      defaultBody: [
+        { block: 'text', text: 'Reset your password', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            'Someone asked to reset the password for your Aglyn account. ' +
+            'Choose a new one here:',
+          variant: 'body',
+        },
+        { block: 'button', label: 'Choose a new password', href: '{{resetUrl}}' },
+        {
+          block: 'text',
+          text:
+            'The link expires shortly. If this was not you, you can ignore ' +
+            'this email — your password stays as it is.',
+          variant: 'caption',
+        },
+      ],
+      source: 'apps/console/app/api/auth/send-password-reset/route.ts',
     },
     {
       key: 'email-verification',
       name: 'Confirm email',
       description:
-        'Address verification link. Sent by Firebase Auth from its own ' +
-        'template — editing it here has no effect until AGL-751.',
-      deliveredBy: 'firebase',
-      defaultSubject: 'Verify your email address',
-      mergeTokens: [],
-      source: 'apps/console/app/(auth)/verify-email/page.tsx',
+        'Address verification link, sent after sign-up and whenever someone ' +
+        'asks for another from the verify screen.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Confirm your email address',
+      mergeTokens: [
+        {
+          name: 'verifyUrl',
+          description: 'One-time link that confirms the address',
+          sample: 'https://app.aglyn.com/verify-email?oobCode=\u2026',
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Confirm your email', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            'Confirm this address to finish setting up your Aglyn account:',
+          variant: 'body',
+        },
+        { block: 'button', label: 'Confirm my email', href: '{{verifyUrl}}' },
+        {
+          block: 'text',
+          text:
+            'If you did not create an Aglyn account, you can ignore this ' +
+            'email.',
+          variant: 'caption',
+        },
+      ],
+      source: 'apps/console/app/api/auth/send-verification/route.ts',
     },
     // Stripe-delivered billing email (AGL-767). Aglyn never composes these —
     // Stripe sends them from the Dashboard's Customer-emails and Subscription

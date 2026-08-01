@@ -78,8 +78,8 @@ set password](/img/staff-console/admin-user-password.png)
   before sending. **Reset to default** puts the built-in copy back.
   The list is generated from the emails the product actually sends, so staff edit the
   system emails that exist — adding one is a code change. Password reset and email
-  verification are sent by Firebase Auth from its own templates and are shown as
-  non-editable until Aglyn takes those sends over.
+  verification are Aglyn's own and are fully editable. Billing emails — receipts, failed
+  payments, refunds — are sent by Stripe from its Dashboard and are listed read-only.
 - **[Feature flags](feature-flags.md)** — release-gate console features via Remote
   Config, with percentage rollout; staff preview everything.
 - **[Multi-tenant architecture](architecture-multi-tenancy.md)** — how organizations,
