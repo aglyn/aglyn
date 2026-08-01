@@ -367,6 +367,14 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
     return { ok: false, skippedReason: 'owns-orgs', blockers }
   }
 
+  // Inventory BEFORE anything is deleted. Taken after the membership sweep
+  // below, this under-reported: `removeOrgMember` empties `users/{uid}/orgs`,
+  // and Firestore does not list a collection with no documents in it — so a
+  // live run erased three subcollections and the audit record named two.
+  // An erasure audit trail that understates what it destroyed is the one
+  // record that has to be right. Measured 2026-08-01 (AGL-1140).
+  const subcollections = (await userRef.listCollections()).map((c) => c.id)
+
   // Memberships first — a roster row carries their email and a host
   // projection carries their access, and both outlive the profile doc.
   for (const candidate of candidates) {
@@ -384,7 +392,6 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
     console.error(`eraseUser: storage cleanup failed for ${uid}`, error)
   }
 
-  const subcollections = (await userRef.listCollections()).map((c) => c.id)
   await firestore.recursiveDelete(userRef)
 
   // Auth record LAST: once it is gone there is no uid to retry with, and
