@@ -31,6 +31,30 @@
 
 export const SESSION_SIGNED_OUT = 'signed-out'
 
+/**
+ * How long a sign-out tombstone stays meaningful (AGL-1142).
+ *
+ * It used to inherit the session cookie's own 14-day lifetime, which is far
+ * longer than it can possibly be useful. Measured on production 2026-07-31:
+ * a `__session` cookie holding a tombstone from **nine days earlier**, on an
+ * account that had signed in interactively since. Every cross-subdomain
+ * silent sign-in was answered `401 signed-out` for those nine days, and the
+ * only reason it was not reported as broken is that the console falls back to
+ * Firebase's own client persistence and looks fine.
+ *
+ * A day is generous for what this actually does. The tombstone exists to tell
+ * OTHER subdomains that a sign-out happened, and the console idle-signs-out
+ * after an hour — so any tab still alive a day later has been in active use,
+ * which means it has already asked. Past that, all a tombstone can do is
+ * deny a session nobody asked it to deny.
+ *
+ * Deliberately not "until the sign-out is older than the client's last
+ * sign-in": that comparison already exists in `tombstoneEndsSession`, it is
+ * made client-side, and it is not reached when the cookie value IS the
+ * tombstone — which is the exact case that broke.
+ */
+export const SESSION_TOMBSTONE_TTL_MS = 24 * 60 * 60 * 1000
+
 export interface SignedOutTombstone {
   /** Sign-out time in epoch ms; 0 for a legacy untimestamped tombstone. */
   at: number
@@ -71,4 +95,26 @@ export function tombstoneEndsSession(
 ): boolean {
   if (!Number.isFinite(signedOutAtMs) || signedOutAtMs <= 0) return false
   return signedOutAtMs > (Number.isFinite(lastSignInMs) ? lastSignInMs : 0)
+}
+
+/**
+ * Has this tombstone outlived its usefulness? (AGL-1142)
+ *
+ * Enforced on the SERVER as well as by the cookie's own `Max-Age`, and that
+ * is the half that matters: shortening the cookie only helps tombstones
+ * written from now on. Browsers are already holding ones with a 14-day
+ * lifetime, and those heal only if the server stops honouring them.
+ *
+ * A legacy untimestamped tombstone (`at: 0`) is treated as expired. It
+ * carries no date, so it cannot be shown to be recent, and the whole point of
+ * the timestamp was that an undateable tombstone should heal rather than
+ * deny — `tombstoneEndsSession` already treats it that way.
+ */
+export function tombstoneIsExpired(
+  signedOutAtMs: number,
+  nowMs: number,
+  ttlMs: number = SESSION_TOMBSTONE_TTL_MS,
+): boolean {
+  if (!Number.isFinite(signedOutAtMs) || signedOutAtMs <= 0) return true
+  return nowMs - signedOutAtMs > ttlMs
 }
