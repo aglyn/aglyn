@@ -80,6 +80,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import CardDisplayFormTemplate from '../../../../components/card-display-form-template'
+import CloseAccountCard from '../../../../components/close-account-card.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -663,6 +664,14 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
           },
         ]
       : []),
+    // Last, and its own section rather than a row at the bottom of Security
+    // (AGL-1140) — an irreversible control should not sit one mis-click below
+    // a password field somebody is already typing in.
+    {
+      id: 'close',
+      label: 'Close account',
+      content: <CloseAccountCard user={user} hasPassword={hasPassword} />,
+    },
   ]
 
   const onTabChange = useCallback(

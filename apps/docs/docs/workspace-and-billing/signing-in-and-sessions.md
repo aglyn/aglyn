@@ -86,3 +86,32 @@ sign-out — yours, or a staff-initiated revocation — retires the shared sessi
 The idle window is configurable via the `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES`
 environment variable (default `60`; set `0` to disable).
 :::
+
+## Closing your account
+
+**Manage Account → Close account** permanently deletes your personal account. It removes
+your profile and contact details, your avatar, your notifications, and your sign-in, and
+takes you off every workspace roster you're on.
+
+This cannot be undone, and support cannot restore it.
+
+**Workspaces are never deleted by closing an account.** A workspace outlives the person
+who created it, and deleting one as a side effect of someone closing their personal
+account would take its sites and data with it. So if you are the **sole owner** of a
+workspace, closing your account is refused until you hand that workspace over — the
+message names each one, along with whether it has an active subscription and how many
+other members it has. Transfer ownership from **Team → Permissions**, then come back here.
+
+Being a member, editor, admin or site collaborator is never a blocker; only sole
+ownership is.
+
+You'll be asked to confirm twice: once by proving it's you (your password, or a fresh
+sign-in through your provider), and once by typing `DELETE`. Both are required, and the
+confirmation of identity has to be recent — starting the flow and leaving it open for an
+hour will ask you again.
+
+:::note Single sign-on
+If your organization uses SSO, your account also exists in your identity provider's
+directory. Closing it here removes you from Aglyn; it does not touch your account with
+your identity provider, and an administrator there may be able to provision you again.
+:::
