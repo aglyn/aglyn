@@ -188,6 +188,13 @@ member subscriptions alike. Selling requires a paid plan with commerce.
   visible only to you and to Aglyn staff. Saving pushes the change to the payment
   processor, so a workspace that moves gets the new address on its *next*
   invoice rather than keeping the one captured at signup.
+- **Clearing the address does not remove it from your invoices.** An invoice with
+  no address on it cannot have tax calculated, so emptying those fields is not
+  treated as an instruction to strip the address from your billing account — the
+  one already on file keeps being used. When the two differ, **Settings → Profile**
+  says so, and the same warning appears if a change ever fails to reach the
+  payment processor. To *replace* the address, enter the new one and save; there
+  is no supported way to leave a paying workspace with no billing address at all.
 - **Billing details at checkout** — checkout asks for a **billing address**, a
   **phone number**, and optionally a **business tax ID** (VAT, ABN, EIN and the like).
   The address and tax ID appear on the invoice, which is what makes it usable for

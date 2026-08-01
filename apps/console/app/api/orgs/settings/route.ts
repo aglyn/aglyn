@@ -16,6 +16,8 @@
  */
 
 import { after } from 'next/server'
+import { FieldValue } from 'firebase-admin/firestore'
+import { stripeAddressDivergence } from '../../../../utils/stripe-address-divergence'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
@@ -268,7 +270,52 @@ async function handler(request: Request): Promise<Response> {
           }
         }
         if (contact.phone) params.set('phone', contact.phone)
-        if (![...params.keys()].length) return
+
+        // Nothing to push. Clearing an address here deliberately does NOT
+        // clear it on the Stripe customer (AGL-1133): that address is what an
+        // active subscription's invoices carry and what `automatic_tax`
+        // computes from, so wiping it on Stripe's side would silently stop
+        // tax being calculated and put an addressless invoice in front of a
+        // tax authority. Emptying a form field is not a request to do that.
+        //
+        // It does leave the two out of step, and the previous behaviour was
+        // to leave that difference invisible — the console showed no address
+        // while every invoice still carried the old one. So ASK Stripe what
+        // it actually holds and record the answer, rather than inferring
+        // divergence from the fact that we skipped a write: the customer may
+        // well have no address either, and a warning that fires on a
+        // perfectly consistent pair is one people learn to ignore.
+        if (![...params.keys()].length) {
+          try {
+            const customer = await fetch(
+              `https://api.stripe.com/v1/customers/${customerId}`,
+              { headers: { Authorization: `Bearer ${secretKey}` } },
+            )
+            const held = (await customer.json()) as {
+              address?: { line1?: string | null; country?: string | null } | null
+              phone?: string | null
+            }
+            await orgDocRef.set(
+              {
+                billing: {
+                  // Only the fact, never the address itself. The UI needs to
+                  // say "Stripe still has one"; echoing it back onto the org
+                  // doc would put it in front of every member and site
+                  // collaborator who can read that doc (AGL-1122).
+                  ...stripeAddressDivergence({
+                    pushed: false,
+                    stripeHasAddress: Boolean(held?.address?.line1),
+                  }),
+                  addressCheckedAt: FieldValue.serverTimestamp(),
+                },
+              },
+              { merge: true },
+            )
+          } catch (error) {
+            console.error('[orgs/settings] Stripe address read failed', orgId, error)
+          }
+          return
+        }
         try {
           const response = await fetch(
             `https://api.stripe.com/v1/customers/${customerId}`,
@@ -288,8 +335,33 @@ async function handler(request: Request): Promise<Response> {
               (await response.json().catch(() => null))?.error?.message,
             )
           }
+          // Record the outcome either way. A failed push leaves the same
+          // invisible mismatch as a cleared address — the console shows the
+          // new address, the invoice still carries the old one — and it is
+          // the case nobody would think to look for, because the save itself
+          // reported success.
+          await orgDocRef.set(
+            {
+              billing: {
+                ...stripeAddressDivergence({ pushed: true, pushOk: response.ok }),
+                addressCheckedAt: FieldValue.serverTimestamp(),
+              },
+            },
+            { merge: true },
+          )
         } catch (error) {
           console.error('[orgs/settings] Stripe customer sync threw', orgId, error)
+          await orgDocRef
+            .set(
+              {
+                billing: {
+                  ...stripeAddressDivergence({ pushed: true, pushOk: false }),
+                  addressCheckedAt: FieldValue.serverTimestamp(),
+                },
+              },
+              { merge: true },
+            )
+            .catch(() => undefined)
         }
       })
       void logOrgActivity(

@@ -31,6 +31,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
+  AlertTitle,
   Avatar,
   Button,
   MenuItem,
@@ -299,6 +300,14 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
       contactAddressCountry: String(address.country ?? ''),
     })
   }, [org])
+  // Written by the settings route after it tells Stripe about an address
+  // change — or finds it cannot (AGL-1133).
+  const stripeAddressDiverged = Boolean(
+    (org as any)?.billing?.addressDivergedFromStripe,
+  )
+  const stripeAddressReason = String(
+    (org as any)?.billing?.addressDivergedReason ?? '',
+  )
   const handleProfileSave = async () => {
     if (!currentOrg || busy) return
     setBusy(true)
@@ -572,6 +581,27 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                   }))
                 }
               />
+              {/* The address here and the one Stripe bills from can be out
+                  of step, and used to be so invisibly (AGL-1133). Clearing
+                  this form deliberately does not clear Stripe's copy —
+                  that is what an active subscription's invoices carry and
+                  what tax is computed from — so the difference is said out
+                  loud instead. The flag is written from what Stripe was
+                  ASKED, not assumed, so this cannot cry wolf. */}
+              {stripeAddressDiverged && (
+                <Alert severity="warning">
+                  <AlertTitle>{'Invoices use a different address'}</AlertTitle>
+                  {stripeAddressReason === 'sync-failed'
+                    ? 'The last change here did not reach Stripe, so invoices ' +
+                      'and tax still use the previous address. Saving again ' +
+                      'will retry.'
+                    : 'Stripe still has a billing address on file for this ' +
+                      'organization, and invoices and tax will keep using it. ' +
+                      'Clearing the fields here does not remove it — an ' +
+                      'invoice with no address cannot have tax calculated. ' +
+                      'Enter the correct address and save to replace it.'}
+                </Alert>
+              )}
               <Stack direction="row">
                 <Button
                   variant="contained"
