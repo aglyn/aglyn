@@ -52,6 +52,29 @@ are paid.
   it once no site keeps its own pin. **Uninstalling never deletes the data a plugin
   created** — reinstall and it picks up where it left off.
 
+## What the badges on a listing mean
+
+Two badges can appear on a listing, and they say **different** things. Read them as two
+separate claims, because that is what they are (AGL-1121).
+
+| Badge | What Aglyn is claiming | What it survives |
+| --- | --- | --- |
+| **Verified publisher** | A human at Aglyn confirmed **who the publisher is**, and that their listing describes what their code does. | A version bump. It is a claim about the *publisher*, not about any particular release. |
+| **Reviewed** | A human at Aglyn read **these exact bytes** — the version currently on offer — against a required checklist. | Nothing. It is re-earned per version, so a new release starts without it. |
+
+So a new release from a verified publisher shows **Verified publisher** but not
+**Reviewed**, and that is honest rather than a gap: we vouch for the person, and nobody
+has read this particular code yet.
+
+**Neither badge is a security guarantee.** Every plugin runs in the same sandbox with the
+same limits whether it is badged or not, and installability is identical — a listed
+plugin is installable by every workspace regardless. The badges tell you how much human
+attention this listing has had, not whether the code is safe.
+
+A listing with **neither** badge is not necessarily suspect; it may simply be new. It
+does mean nobody at Aglyn has looked at it, so read the publisher and the docs before
+installing.
+
 ## How plugins run
 
 - Each plugin loads into a **sandboxed PluginFrame** host runtime, isolated by origin.

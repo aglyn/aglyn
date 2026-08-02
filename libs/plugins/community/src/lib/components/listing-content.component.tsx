@@ -66,6 +66,7 @@ import {
   FormLabel,
   Link as MuiLink,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
@@ -957,14 +958,34 @@ export function CommunityListingContent({
                           {/* Two claims, shown separately (AGL-1121): who
                               wrote it, and whether these bytes were read. */}
                           {listing?.reviewStatus === 'verified' ? (
-                            <Chip
-                              size="small"
-                              color="info"
-                              label="Verified publisher"
-                            />
+                            <Tooltip
+                              title={
+                                'A human at Aglyn confirmed who this ' +
+                                'publisher is, and that the listing describes ' +
+                                'what the code does. A claim about the ' +
+                                'publisher, not this release — it survives a ' +
+                                'version bump.'
+                              }
+                            >
+                              <Chip
+                                size="small"
+                                color="info"
+                                label="Verified publisher"
+                              />
+                            </Tooltip>
                           ) : null}
                           {listing?.latestVersionReviewState === 'approved' ? (
-                            <Chip size="small" color="success" label="Reviewed" />
+                            <Tooltip
+                              title={
+                                'A human at Aglyn read these exact bytes — ' +
+                                'the version on offer — against a required ' +
+                                'checklist. Re-earned per version. Not a ' +
+                                'security guarantee: every plugin runs in the ' +
+                                'same sandbox either way.'
+                              }
+                            >
+                              <Chip size="small" color="success" label="Reviewed" />
+                            </Tooltip>
                           ) : null}
                           {/* Private listings never reach browse (AGL-993),
                               so this page is the only place their state is
