@@ -1,7 +1,7 @@
 # Promo Countdown
 
 A live **"sale ends in…"** countdown banner you can drop onto any tenant site.
-It's a complete, self-contained example community plugin — everything you need
+It's a complete, self-contained example marketplace plugin — everything you need
 to publish is in this folder.
 
 ![slot: page element + hostActivity widget](.)
@@ -52,7 +52,7 @@ Console → **Marketplace → Publish → A plugin (upload a bundle)**. Upload
 description, then submit. New listings enter the **review queue** as
 `submitted`; staff list (or verify ✅) them before they appear in Browse.
 
-Publishing needs a community publisher profile, a Pro plan, and — for paid
+Publishing needs a marketplace publisher profile, a Pro plan, and — for paid
 listings — payouts onboarding. There's a daily publish cap.
 
 ## Configure on a site

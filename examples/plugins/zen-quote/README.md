@@ -1,6 +1,6 @@
 # Zen Quote
 
-A sandboxed community plugin that shows one line of public text fetched from
+A sandboxed marketplace plugin that shows one line of public text fetched from
 `https://api.github.com/zen`. No build step — `src/index.js` **is** the bundle.
 
 It exists to be the worked example of the thing no other example in this repo
