@@ -40,7 +40,7 @@ async function stripe(path: string, params?: URLSearchParams) {
  * Merchant payments onboarding (AGL-284): Stripe Connect Express for
  * storefront selling. Same account storage the checkout reads
  * (`profiles/{ownerUid}.stripeAccountId`, AGL-46) but without the
- * community-profile prerequisite — commerce merchants aren't necessarily
+ * marketplace-profile prerequisite — commerce merchants aren't necessarily
  * publishers. Only the owning org's owner may onboard (payouts land on
  * their account). 501 without Stripe env.
  */

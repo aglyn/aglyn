@@ -474,7 +474,7 @@ describe('hosts', () => {
   it('listing owners are resolved via the org, and cannot write rating aggregates', async () => {
     await env.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore()
-      await setDoc(doc(db, 'communityListings', 'listing-rated'), {
+      await setDoc(doc(db, 'marketplaceListings', 'listing-rated'), {
         displayName: 'Thing',
         profileId: ORG, // org-owned (AGL-652)
         artifactType: 'component',
@@ -482,25 +482,25 @@ describe('hosts', () => {
         ratingCount: 2,
       })
       await setDoc(
-        doc(db, 'communityListings', 'listing-rated', 'reviews', VIEWER),
+        doc(db, 'marketplaceListings', 'listing-rated', 'reviews', VIEWER),
         { uid: VIEWER, rating: 5 },
       )
     })
     // An org manager may edit their own listing's metadata.
     await assertSucceeds(
-      updateDoc(doc(authed(OWNER), 'communityListings', 'listing-rated'), {
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-rated'), {
         displayName: 'Renamed',
       }),
     )
     // A non-manager member of the same org may not.
     await assertFails(
-      updateDoc(doc(authed(VIEWER), 'communityListings', 'listing-rated'), {
+      updateDoc(doc(authed(VIEWER), 'marketplaceListings', 'listing-rated'), {
         displayName: 'Nope',
       }),
     )
     // Nor may an outsider.
     await assertFails(
-      updateDoc(doc(authed(OUTSIDER), 'communityListings', 'listing-rated'), {
+      updateDoc(doc(authed(OUTSIDER), 'marketplaceListings', 'listing-rated'), {
         displayName: 'Nope',
       }),
     )
@@ -514,7 +514,7 @@ describe('hosts', () => {
       ['ratingSum', 500],
     ]) {
       await assertFails(
-        updateDoc(doc(authed(OWNER), 'communityListings', 'listing-rated'), {
+        updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-rated'), {
           [field]: value,
         }),
       ).catch((error) => {
@@ -524,18 +524,18 @@ describe('hosts', () => {
     // Reviews are world-readable but never client-written — every gate
     // (verified installer, publisher self-review) lives in the API.
     await assertSucceeds(
-      getDoc(doc(authed(OUTSIDER), 'communityListings', 'listing-rated', 'reviews', VIEWER)),
+      getDoc(doc(authed(OUTSIDER), 'marketplaceListings', 'listing-rated', 'reviews', VIEWER)),
     )
     await assertFails(
       setDoc(
-        doc(authed(OUTSIDER), 'communityListings', 'listing-rated', 'reviews', OUTSIDER),
+        doc(authed(OUTSIDER), 'marketplaceListings', 'listing-rated', 'reviews', OUTSIDER),
         { uid: OUTSIDER, rating: 5, verifiedInstaller: true },
       ),
     )
     // Including overwriting someone else's.
     await assertFails(
       updateDoc(
-        doc(authed(OWNER), 'communityListings', 'listing-rated', 'reviews', VIEWER),
+        doc(authed(OWNER), 'marketplaceListings', 'listing-rated', 'reviews', VIEWER),
         { rating: 1 },
       ),
     )
@@ -545,18 +545,18 @@ describe('hosts', () => {
   it('staff takedown fields and abuse reports are out of owner reach', async () => {
     await env.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore()
-      await setDoc(doc(db, 'communityListings', 'listing-hidden'), {
+      await setDoc(doc(db, 'marketplaceListings', 'listing-hidden'), {
         displayName: 'Dodgy', profileId: ORG, artifactType: 'component',
         hiddenAt: new Date(), hiddenBy: STAFF, hiddenReason: 'spam',
       })
-      await setDoc(doc(db, 'communityReports', 'report-1'), {
+      await setDoc(doc(db, 'marketplaceReports', 'report-1'), {
         targetType: 'listing', listingId: 'listing-hidden',
         reporterUid: OUTSIDER, reason: 'spam', status: 'open',
       })
     })
     // The owner may still edit ordinary metadata...
     await assertSucceeds(
-      updateDoc(doc(authed(OWNER), 'communityListings', 'listing-hidden'), {
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-hidden'), {
         description: 'Reworded',
       }),
     )
@@ -564,7 +564,7 @@ describe('hosts', () => {
     // suggestion.
     for (const field of ['hiddenAt', 'hiddenBy', 'hiddenReason']) {
       await assertFails(
-        updateDoc(doc(authed(OWNER), 'communityListings', 'listing-hidden'), {
+        updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-hidden'), {
           [field]: null,
         }),
       ).catch((error) => {
@@ -574,16 +574,16 @@ describe('hosts', () => {
     // Reports name their reporter, so only staff read them — otherwise a
     // publisher learns exactly who to retaliate against.
     await assertSucceeds(
-      getDoc(doc(authed(STAFF, { staff: true }), 'communityReports', 'report-1')),
+      getDoc(doc(authed(STAFF, { staff: true }), 'marketplaceReports', 'report-1')),
     )
-    await assertFails(getDoc(doc(authed(OWNER), 'communityReports', 'report-1')))
+    await assertFails(getDoc(doc(authed(OWNER), 'marketplaceReports', 'report-1')))
     await assertFails(
-      getDoc(doc(authed(OUTSIDER), 'communityReports', 'report-1')),
+      getDoc(doc(authed(OUTSIDER), 'marketplaceReports', 'report-1')),
     )
     // And nobody files one by writing directly — the route stamps the
     // reporter from the verified token.
     await assertFails(
-      setDoc(doc(authed(OUTSIDER), 'communityReports', 'forged'), {
+      setDoc(doc(authed(OUTSIDER), 'marketplaceReports', 'forged'), {
         targetType: 'listing', listingId: 'listing-hidden',
         reporterUid: OWNER, reason: 'framed',
       }),
@@ -1119,11 +1119,11 @@ describe('pre-release hardening guards', () => {
       await setDoc(doc(db, 'hosts', HOST, 'installs', 'p1'), {
         version: '1.0.0', sha256: 'abc',
       })
-      // Community listing with server-managed fields (M6). `profileId` holds
+      // Marketplace listing with server-managed fields (M6). `profileId` holds
       // the publishing ORG since AGL-652 — the fixture used to carry a uid,
       // which no publish path has produced since, so the ownership rule was
       // being exercised against a shape that no longer exists.
-      await setDoc(doc(db, 'communityListings', LISTING), {
+      await setDoc(doc(db, 'marketplaceListings', LISTING), {
         profileId: ORG, name: 'Plugin', installCount: 5, priceUsd: 10,
       })
       // Org publisher profile (AGL-652) — created server-side, so the rules
@@ -1310,39 +1310,39 @@ describe('pre-release hardening guards', () => {
 
   it('listing owner cannot tamper server-managed fields (AGL-503)', async () => {
     await assertSucceeds(
-      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), { deletedAt: new Date() }),
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), { deletedAt: new Date() }),
     )
     await assertFails(
-      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), { installCount: 9999 }),
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), { installCount: 9999 }),
     )
     await assertFails(
-      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), { priceUsd: 0 }),
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), { priceUsd: 0 }),
     )
     await assertFails(
-      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), { profileId: OUTSIDER }),
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), { profileId: OUTSIDER }),
     )
     // The review verdict is staff-owned (AGL-651). It decides the trust badge
     // AND whether a plugin is publicly browsable, so an owner able to write it
     // could self-promote to 'verified' and bypass staff review entirely.
     await assertFails(
-      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), {
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
         reviewStatus: 'verified',
       }),
     )
     await assertFails(
-      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), {
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
         reviewStatus: 'listed',
       }),
     )
     await assertFails(
-      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), {
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
         reviewedBy: OWNER,
         reviewedAt: new Date(),
       }),
     )
     // Non-owners still can't touch someone else's listing.
     await assertFails(
-      updateDoc(doc(authed(EDITOR), 'communityListings', LISTING), { deletedAt: new Date() }),
+      updateDoc(doc(authed(EDITOR), 'marketplaceListings', LISTING), { deletedAt: new Date() }),
     )
   })
 

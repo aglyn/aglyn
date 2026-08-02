@@ -40,7 +40,7 @@ import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 /**
  * Org-scope publisher storefront (AGL-869): every marketplace listing from one
  * publisher, reached from a listing's Publisher card or a browse card's
- * "by @handle" link. The body is the community plugin's browse widget filtered
+ * "by @handle" link. The body is the marketplace plugin's browse widget filtered
  * to this publisher — the app stays plugin-free and reuses one grid.
  */
 const OrgMarketplacePublisher: NextPageWithLayout<Record<string, never>> = () => {

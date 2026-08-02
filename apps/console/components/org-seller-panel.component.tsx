@@ -63,7 +63,7 @@ export interface OrgSellerPanelProps {
 
 /**
  * Seller area (AGL-44/798/801): the org's marketplace identity and its
- * published listings, folded out of the retired `/[orgSlug]/community` page.
+ * published listings, folded out of the retired `/[orgSlug]/marketplace` page.
  * Each section (profile, listings, payouts, sales) is its own Marketplace tab
  * (AGL-801), so this renders exactly one card per the `section` prop. The
  * shared Firestore hooks run regardless of section — Firebase dedupes
@@ -86,7 +86,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const { data: listings } = useFirestoreCollection<any>(
     () =>
       query(
-        collection(firestore, 'communityListings'),
+        collection(firestore, 'marketplaceListings'),
         // Listings are org-owned (AGL-652): `profileId` is the org id, not a
         // uid — filtering by uid left this list permanently empty (AGL-781).
         where('profileId', '==', orgId || '-none-'),
@@ -98,7 +98,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const { data: sales } = useFirestoreCollection<any>(
     () =>
       query(
-        collection(firestore, 'communityPurchases'),
+        collection(firestore, 'marketplacePurchases'),
         // Sales belong to the ORG that published (AGL-652).
         where('sellerOrgId', '==', orgId || '-none-'),
       ),
@@ -119,7 +119,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     setPayoutsBusy(true)
     try {
       const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/community/connect', {
+      const response = await fetch('/api/marketplace/connect', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -179,7 +179,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       // for one handle would both succeed and one would silently lose its
       // marketplace URL. The rules reject a client handle write outright.
       const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/community/publisher-profile', {
+      const response = await fetch('/api/marketplace/publisher-profile', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -228,7 +228,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       // write itself is not evidence of anything, and the rules block the
       // field outright.
       const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/community/publisher-profile', {
+      const response = await fetch('/api/marketplace/publisher-profile', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -298,7 +298,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       setVisibilityBusy(listing.$id)
       try {
         const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/community/publish-plugin', {
+        const response = await fetch('/api/marketplace/publish-plugin', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -338,7 +338,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const handleUnpublish = useCallback(
     (listing: any) => async () => {
       try {
-        await updateDoc(doc(firestore, 'communityListings', listing.$id), {
+        await updateDoc(doc(firestore, 'marketplaceListings', listing.$id), {
           deletedAt: listing.deletedAt ? null : Timestamp.now(),
         })
         enqueueSnackbar(listing.deletedAt ? 'Republished' : 'Unpublished', {
@@ -372,7 +372,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       >
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
-            {'Shown on every component you publish to the community. A ' +
+            {'Shown on every component you publish to the marketplace. A ' +
               'profile is required before publishing.'}
           </Typography>
           <TextField

@@ -34,16 +34,16 @@ events.
 
 ## Listing & version documents
 
-- `communityListings/{listingId}` — public: `displayName`, `description`,
+- `marketplaceListings/{listingId}` — public: `displayName`, `description`,
   `categories[]` (fixed taxonomy), `logoUrl`, `screenshots[]`, `readme`
   (markdown), `homepageUrl`, `repositoryUrl`, `license`, `priceUsd`,
   `latestVersion`, `installCount` (cumulative installs ever),
   `activeInstalls` (installs live right now — the detail page shows both,
   e.g. `41 installs · 12 active`), `reviewStatus`.
-- `communityListings/{id}/pluginVersions/{version}` — **server-only**:
+- `marketplaceListings/{id}/pluginVersions/{version}` — **server-only**:
   `sha256`, `objectPath`, `manifest`, `changelog`, `trust?`, `signature?`.
   The buyer-safe subset (version/changelog/trust/hostAbi/date) is exposed
-  by `GET /api/community/listing-versions`.
+  by `GET /api/marketplace/listing-versions`.
 - Installs pin `{version, sha256}` at `hosts/{hostId}/installs/{listingId}`
   (host tier) or `orgs/{orgId}/installs/{listingId}` (org tier). Artifacts
   are immutable content-addressed objects:

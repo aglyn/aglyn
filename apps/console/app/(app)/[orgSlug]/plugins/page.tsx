@@ -172,7 +172,7 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
       chunks.map((chunk) =>
         getDocs(
           query(
-            collection(firestore, 'communityListings'),
+            collection(firestore, 'marketplaceListings'),
             where(documentId(), 'in', chunk),
           ),
         ),

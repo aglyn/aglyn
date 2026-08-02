@@ -69,9 +69,9 @@ describe('resolveProvenance (AGL-1015)', () => {
     expect(resolveProvenance(null).state).toBe('unknown')
   })
 
-  it('infers a legacy component install from its `community` block', () => {
+  it('infers a legacy component install from its `marketplace` block', () => {
     const resolved = resolveProvenance(
-      { community: { listingId: 'listing-1', profileId: 'org-1', version: 3 } },
+      { marketplace: { listingId: 'listing-1', profileId: 'org-1', version: 3 } },
       'component',
     )
     expect(resolved.state).toBe('inferred')
@@ -120,7 +120,7 @@ describe('resolveProvenance (AGL-1015)', () => {
   it('prefers the full stamp over the legacy block on a re-stamped document', () => {
     const resolved = resolveProvenance({
       installedFrom: stamp,
-      community: { listingId: 'stale', version: 1 },
+      marketplace: { listingId: 'stale', version: 1 },
     })
     expect(resolved.listingId).toBe('listing-1')
     expect(resolved.version).toBe('2.0.0')

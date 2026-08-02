@@ -33,7 +33,7 @@ export type ReleaseFlagKey =
   | 'release_workflows'
   | 'release_redirects'
   | 'release_commerce_v2'
-  | 'release_community'
+  | 'release_marketplace'
   | 'release_marketing'
   | 'release_email'
   | 'release_inbox'
@@ -116,11 +116,11 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     defaultEnabled: true,
   },
   {
-    key: 'release_community',
-    label: 'Community marketplace',
-    description: 'Community browsing, publishing and plugin installs.',
+    key: 'release_marketplace',
+    label: 'Marketplace marketplace',
+    description: 'Marketplace browsing, publishing and plugin installs.',
     defaultEnabled: true,
-    navTabId: 'nav-tab-community',
+    navTabId: 'nav-tab-marketplace',
   },
   // AGL-422: every first-party plugin is release-flagged — the flag now
   // feeds the plugin LOADER (console, published sites, API dispatch), not

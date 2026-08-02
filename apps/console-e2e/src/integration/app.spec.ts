@@ -37,7 +37,7 @@ const PAGES = [
   `${ORG}/team`,
   `${ORG}/media`,
   `${ORG}/billing`,
-  `${ORG}/community`,
+  `${ORG}/marketplace`,
   `${ORG}/support`,
   `${ORG}/settings`,
   '/admin/flags',
@@ -64,6 +64,10 @@ const API_ROUTES: Array<[string, number]> = [
   ['/api/hosts/create', 405],
   ['/api/hosts/members?hostId=x', 401],
   ['/api/support/tickets', 401],
+  ['/api/marketplace/install-plugin', 405],
+  // The retired prefix still answers, and must (AGL-975): published plugin
+  // bundles in the field call it by URL and cannot be redeployed with us.
+  // Same 405, proving the alias reaches the real handler rather than 404ing.
   ['/api/community/install-plugin', 405],
   ['/api/billing/checkout', 405],
 ]

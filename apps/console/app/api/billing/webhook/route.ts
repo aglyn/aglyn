@@ -312,7 +312,7 @@ async function handler(request: Request): Promise<Response> {
 
 
     // Plugin-owned sections (AGL-418): commerce orders/carts/drafts/
-    // reservations/subscriptions, booking payments, and community
+    // reservations/subscriptions, booking payments, and marketplace
     // purchases now live in their plugins and register through
     // registerBillingWebhookHandler. Handlers self-select on the event
     // metadata and errors propagate — a throw still 500s so Stripe

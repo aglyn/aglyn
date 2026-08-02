@@ -41,7 +41,7 @@ import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 /**
  * Org marketplace listing detail (AGL-772): the org-scope counterpart of the
  * per-site listing page. The app owns the Dashboard chrome; the body is the
- * community plugin's `communityListing` widget, rendered with `orgScoped` so
+ * marketplace plugin's `marketplaceListing` widget, rendered with `orgScoped` so
  * its links resolve to the org marketplace. Install pins validate against a
  * site, so the detail acts through the org's first site until targeting
  * lands (AGL-773).
@@ -58,7 +58,7 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
   // The listing itself, so the owner can edit the whole page in place
   // (AGL-869) rather than through a cramped sidebar card.
   const { data: listing } = useFirestoreDoc<any>(
-    () => doc(firestore, 'communityListings', listingId || '-missing-'),
+    () => doc(firestore, 'marketplaceListings', listingId || '-missing-'),
     [firestore, listingId],
     { idField: '$id' },
   )
@@ -197,7 +197,7 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
             </Container>
           ) : (
             <PluginWidgetSlot
-              slot="communityListing"
+              slot="marketplaceListing"
               hostId={actingHost}
               listingId={listingId}
               permissions={permissions}

@@ -105,7 +105,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
     description: string
   } | null>(null)
 
-  // Community publish (AGL-44): posts to the server-side publish API —
+  // Marketplace publish (AGL-44): posts to the server-side publish API —
   // sanitization/allowlisting happen there; clients cannot create listings.
   const { data: user } = useUser()
   const router = useRouter()
@@ -128,7 +128,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
     setPublisher((prev) => (prev ? { ...prev, busy: true } : prev))
     try {
       const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/community/publish', {
+      const response = await fetch('/api/marketplace/publish', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -151,7 +151,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         })
       }
       setPublisher(null)
-      enqueueSnackbar(`Published v${payload.version} to the community`, {
+      enqueueSnackbar(`Published v${payload.version} to the marketplace`, {
         variant: 'success',
         persist: false,
       })
@@ -475,13 +475,13 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>{'Publish to community'}</DialogTitle>
+        <DialogTitle>{'Publish to marketplace'}</DialogTitle>
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
         >
           <Typography variant="body2" color="text.secondary">
             {'Publishes a snapshot as a public listing under your ' +
-              'community profile. Re-publishing releases a new version; ' +
+              'marketplace profile. Re-publishing releases a new version; ' +
               'sites that installed it choose when to update.'}
           </Typography>
           <TextField
@@ -521,7 +521,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           <TextField
             label="Price (USD)"
             placeholder="0 = free"
-            helperText="Paid listings need payouts set up on your community profile"
+            helperText="Paid listings need payouts set up on your marketplace profile"
             value={publisher?.price ?? ''}
             onChange={(event) =>
               setPublisher((prev) =>

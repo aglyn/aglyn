@@ -52,7 +52,7 @@ const PublishPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const searchParams = useSearchParams()
   const listingId = String(searchParams?.get('listing') ?? '')
   const { data: listing } = useFirestoreDoc<any>(
-    () => doc(firestore, 'communityListings', listingId || '-none-'),
+    () => doc(firestore, 'marketplaceListings', listingId || '-none-'),
     [firestore, listingId],
     { idField: '$id' },
   )
@@ -67,7 +67,7 @@ const PublishPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   // defaults to ALL TRUE, so reading it early would render the form for a
   // member who cannot publish and let them get as far as a 403.
   const ready = !loading && loaded
-  const allowed = ready && permissions?.publishToCommunity === true
+  const allowed = ready && permissions?.publishToMarketplace === true
 
   return (
     <DashboardLayout

@@ -70,8 +70,8 @@ describe('normalizeNotificationLink', () => {
     expect(normalizeNotificationLink('/acme/hosts/shop/inbox', ctx)).toBe(
       '/acme/hosts/shop/inbox',
     )
-    expect(normalizeNotificationLink('/manage/community', ctx)).toBe(
-      '/manage/community',
+    expect(normalizeNotificationLink('/manage/marketplace', ctx)).toBe(
+      '/manage/marketplace',
     )
     expect(normalizeNotificationLink('/admin/overview', ctx)).toBe(
       '/admin/overview',

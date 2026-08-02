@@ -30,10 +30,10 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-commerce'),
   },
   {
-    id: 'community',
-    apiPrefixes: ["community"],
-    register: {"console":"registerCommunityConsole"},
-    load: () => import('@aglyn/plugins-community'),
+    id: 'marketplace',
+    apiPrefixes: ["marketplace"],
+    register: {"console":"registerMarketplaceConsole"},
+    load: () => import('@aglyn/plugins-marketplace'),
   },
   {
     id: 'contacts',

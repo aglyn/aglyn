@@ -207,7 +207,7 @@ export function OrgPublishPanel({
   const openPublish = () => {
     if (kind === 'site') {
       return setTarget({
-        endpoint: 'community/publish-template',
+        endpoint: 'marketplace/publish-template',
         payload: { hostId },
         displayName: hostLabel,
         noun: 'site template',
@@ -216,7 +216,7 @@ export function OrgPublishPanel({
     if (kind === 'component') {
       const chosen = components.find((entry: any) => entry.$id === selectedId)
       return setTarget({
-        endpoint: 'community/publish',
+        endpoint: 'marketplace/publish',
         payload: { hostId, componentId: selectedId },
         displayName: artifactName(chosen),
         noun: 'component',
@@ -226,7 +226,7 @@ export function OrgPublishPanel({
       const chosen = datasets.find((entry: any) => entry.$id === selectedId)
       // Datasets are org-scoped, so this route takes orgId rather than hostId.
       return setTarget({
-        endpoint: 'community/publish-dataset-schema',
+        endpoint: 'marketplace/publish-dataset-schema',
         payload: { orgId, datasetId: selectedId },
         displayName: artifactName(chosen),
         noun: 'dataset schema',
@@ -234,7 +234,7 @@ export function OrgPublishPanel({
     }
     if (kind === 'emailTemplate') {
       return setTarget({
-        endpoint: 'community/publish-email-template',
+        endpoint: 'marketplace/publish-email-template',
         payload: { hostId, templateKey: selectedId },
         displayName: emailLabel(selectedId),
         noun: 'email template',
@@ -242,7 +242,7 @@ export function OrgPublishPanel({
     }
     const chosen = layouts.find((entry: any) => entry.$id === selectedId)
     setTarget({
-      endpoint: 'community/publish-layout',
+      endpoint: 'marketplace/publish-layout',
       payload: { hostId, layoutId: selectedId },
       displayName: artifactName(chosen),
       noun: 'layout',

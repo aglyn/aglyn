@@ -40,7 +40,7 @@
 
 import {
   getRealmPluginInstalls,
-  resolveCommunityPluginVersion,
+  resolveMarketplacePluginVersion,
 } from './realm-plugins'
 import firebaseAdmin from './firebase-admin'
 
@@ -53,7 +53,7 @@ const db = () => firebaseAdmin.app().firestore()
 
 /** A listing whose pinned version is realm-trusted and signed. */
 async function seed(): Promise<void> {
-  const listing = db().collection('communityListings').doc(LISTING)
+  const listing = db().collection('marketplaceListings').doc(LISTING)
   await listing.set({ displayName: 'Takedown Fixture', orgId: ORG })
   await listing.collection('pluginVersions').doc(VERSION).set({
     sha256: 'a'.repeat(64),
@@ -72,13 +72,13 @@ async function seed(): Promise<void> {
 }
 
 async function wipe(): Promise<void> {
-  await db().recursiveDelete(db().collection('communityListings').doc(LISTING))
+  await db().recursiveDelete(db().collection('marketplaceListings').doc(LISTING))
   await db().recursiveDelete(db().collection('orgs').doc(ORG))
   await db().recursiveDelete(db().collection('hosts').doc(HOST))
   await db().collection('revocations').doc(LISTING).delete().catch(() => undefined)
 }
 
-const listingRef = () => db().collection('communityListings').doc(LISTING)
+const listingRef = () => db().collection('marketplaceListings').doc(LISTING)
 
 jest.setTimeout(30000)
 
@@ -156,15 +156,15 @@ describe('a taken-down plugin stops resolving (AGL-958)', () => {
     expect(await getRealmPluginInstalls({ orgId: ORG })).toHaveLength(1)
   })
 
-  it('is enforced in resolveCommunityPluginVersion, where every path funnels', async () => {
+  it('is enforced in resolveMarketplacePluginVersion, where every path funnels', async () => {
     // The console join, the site join and both bundle loaders all go through
     // this one function. Asserting the gate here is what makes the other
     // callers safe without testing each.
-    expect(await resolveCommunityPluginVersion(LISTING, VERSION)).toMatchObject({
+    expect(await resolveMarketplacePluginVersion(LISTING, VERSION)).toMatchObject({
       trust: 'realm',
     })
     await listingRef().set({ hiddenAt: new Date() }, { merge: true })
-    expect(await resolveCommunityPluginVersion(LISTING, VERSION)).toBeNull()
+    expect(await resolveMarketplacePluginVersion(LISTING, VERSION)).toBeNull()
   })
 
   it('survives a hard-deleted listing doc, because installs outlive it', async () => {

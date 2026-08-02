@@ -19,7 +19,7 @@
  * The SANDBOX execution path on published tenant sites (AGL-45), and what
  * stops it (AGL-948/952).
  *
- * `getPluginInstalls` resolves what a host's `communityPlugin` nodes render.
+ * `getPluginInstalls` resolves what a host's `marketplacePlugin` nodes render.
  * It consults `revocations/{listingId}` and nothing else — NOT the listing's
  * `hiddenAt` — which is precisely why staff takedown had to write a
  * revocation rather than only flip a flag: a takedown that only set

@@ -218,12 +218,12 @@ export const CONSOLE_WIDGET_SLOTS = {
   orgData: 'orgData',
   /** Besigner functions (ƒx) panel. Props: hostId. */
   besignerFunctions: 'besignerFunctions',
-  /** Community listing detail body. Props: hostId, listingId, permissions. */
-  communityListing: 'communityListing',
+  /** Marketplace listing detail body. Props: hostId, listingId, permissions. */
+  marketplaceListing: 'marketplaceListing',
   /**
    * Org marketplace browse body (AGL-772). Props: hostId (acting site),
    * permissions, orgScoped. The single org-scope place to browse + install,
-   * replacing the per-site community tab.
+   * replacing the per-site marketplace tab.
    */
   orgMarketplace: 'orgMarketplace',
   /** Plugins & add-ons hub installs section. Props: hostId. */
@@ -271,7 +271,7 @@ export interface ConsoleExtension {
   widgets?: ConsoleWidget[]
   /**
    * App-level providers the shell mounts around every console page
-   * (AGL-419) — e.g. the community plugin's AI-assist provider.
+   * (AGL-419) — e.g. the marketplace plugin's AI-assist provider.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   providers?: Array<ComponentType<any>>

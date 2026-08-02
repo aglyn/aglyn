@@ -16,7 +16,7 @@
  */
 
 /**
- * The staff-takedown gate (AGL-948). `resolveCommunityPluginVersion` is the
+ * The staff-takedown gate (AGL-948). `resolveMarketplacePluginVersion` is the
  * chokepoint every remote plugin path funnels through — both realm joins
  * and both apps' remote-server loaders — so a regression here silently
  * un-kills a plugin that was pulled for abuse. Worth a test that reads the
@@ -39,7 +39,7 @@ jest.mock('./firebase-admin', () => ({
         collection: (name: string) => ({
           doc: (listingId: string) => ({
             get: async () =>
-              snapshot(name === 'communityListings' ? listings.get(listingId) : undefined),
+              snapshot(name === 'marketplaceListings' ? listings.get(listingId) : undefined),
             collection: () => ({
               doc: (version: string) => ({
                 get: async () => snapshot(versions.get(`${listingId}/${version}`)),
@@ -52,7 +52,7 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
-import { resolveCommunityPluginVersion } from './realm-plugins'
+import { resolveMarketplacePluginVersion } from './realm-plugins'
 
 const SHA = 'a'.repeat(64)
 
@@ -67,10 +67,10 @@ beforeEach(() => {
   })
 })
 
-describe('resolveCommunityPluginVersion — takedown gate', () => {
+describe('resolveMarketplacePluginVersion — takedown gate', () => {
   it('resolves a version on a listed plugin', async () => {
     listings.set('listing1', { displayName: 'Plugin' })
-    await expect(resolveCommunityPluginVersion('listing1', '1.0.0')).resolves.toEqual(
+    await expect(resolveMarketplacePluginVersion('listing1', '1.0.0')).resolves.toEqual(
       { sha256: SHA, signature: 'sig', trust: 'realm', hostAbi: 2 },
     )
   })
@@ -78,7 +78,7 @@ describe('resolveCommunityPluginVersion — takedown gate', () => {
   it('refuses a listing under staff takedown', async () => {
     listings.set('listing1', { displayName: 'Plugin', hiddenAt: new Date() })
     await expect(
-      resolveCommunityPluginVersion('listing1', '1.0.0'),
+      resolveMarketplacePluginVersion('listing1', '1.0.0'),
     ).resolves.toBeNull()
   })
 
@@ -87,7 +87,7 @@ describe('resolveCommunityPluginVersion — takedown gate', () => {
     // must not break the sites already paying for it.
     listings.set('listing1', { displayName: 'Plugin', deletedAt: new Date() })
     await expect(
-      resolveCommunityPluginVersion('listing1', '1.0.0'),
+      resolveMarketplacePluginVersion('listing1', '1.0.0'),
     ).resolves.toMatchObject({ sha256: SHA })
   })
 
@@ -95,14 +95,14 @@ describe('resolveCommunityPluginVersion — takedown gate', () => {
     // Firestore does not cascade to subcollections, so a hard-deleted
     // listing leaves working installs on an orphaned version doc.
     await expect(
-      resolveCommunityPluginVersion('listing1', '1.0.0'),
+      resolveMarketplacePluginVersion('listing1', '1.0.0'),
     ).resolves.toMatchObject({ sha256: SHA })
   })
 
   it('returns null for an unknown version', async () => {
     listings.set('listing1', { displayName: 'Plugin' })
     await expect(
-      resolveCommunityPluginVersion('listing1', '9.9.9'),
+      resolveMarketplacePluginVersion('listing1', '9.9.9'),
     ).resolves.toBeNull()
   })
 })

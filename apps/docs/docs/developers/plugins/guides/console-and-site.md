@@ -42,7 +42,7 @@ target one zone; the shell renders all of them.
 ## Wrap every console page (providers)
 
 `providers: [MyProvider]` mounts around every console page once the
-registry is populated — the community plugin's AI-assist provider is the
+registry is populated — the marketplace plugin's AI-assist provider is the
 reference. Providers receive the org billing doc as `tenant`.
 
 ## Add a canvas component (Besigner + published sites)

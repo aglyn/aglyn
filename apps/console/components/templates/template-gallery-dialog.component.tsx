@@ -136,22 +136,22 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const orgSlug = useOrgSlug()
   const hostSubdomain = useHostSubdomain()
 
-  // Community site templates (AGL-137): published bundles with previews.
+  // Marketplace site templates (AGL-137): published bundles with previews.
   const { data: templateListings } = useFirestoreCollection<any>(
     () =>
       query(
-        collection(firestore, 'communityListings'),
+        collection(firestore, 'marketplaceListings'),
         where('kind', '==', 'template'),
         limit(30),
       ),
     [firestore],
     { idField: '$id' },
   )
-  // Community listings are whole-site page bundles, so — like the starters
+  // Marketplace listings are whole-site page bundles, so — like the starters
   // below — they belong only in the page-kind picker (AGL-699). Offering a
   // five-page site on the components list would install pages nobody asked
   // for.
-  const communityAll = useMemo(
+  const marketplaceAll = useMemo(
     () =>
       kind !== 'page'
         ? []
@@ -270,17 +270,17 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     [savedPagesAll, matches],
   )
   // Search covers every section on screen, not just the two local ones —
-  // leaving community cards visible under a query that excluded everything
+  // leaving marketplace cards visible under a query that excluded everything
   // else would read as a broken filter.
-  const communityTemplates = useMemo(
+  const marketplaceTemplates = useMemo(
     () =>
-      communityAll.filter((listing: any) =>
+      marketplaceAll.filter((listing: any) =>
         matches(listing.displayName, listing.description, listing.category),
       ),
-    [communityAll, matches],
+    [marketplaceAll, matches],
   )
   const isEmpty =
-    !savedPages.length && !starterCards.length && !communityTemplates.length
+    !savedPages.length && !starterCards.length && !marketplaceTemplates.length
 
   const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
     null,
@@ -293,7 +293,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
       const dequeue = queueLoading()
       try {
         const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/community/install-template', {
+        const response = await fetch('/api/marketplace/install-template', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -683,13 +683,13 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
             </Grid>
           </>
         ) : null}
-        {communityTemplates.length ? (
+        {marketplaceTemplates.length ? (
           <>
             <Typography variant="subtitle1" sx={{ mt: 3, mb: 1 }}>
-              {'Community templates'}
+              {'Marketplace templates'}
             </Typography>
             <Grid container spacing={2}>
-              {communityTemplates.map((listing: any) => (
+              {marketplaceTemplates.map((listing: any) => (
                 <Grid key={listing.$id} size={{ xs: 12, sm: 6, md: 4 }}>
                   <Card variant="outlined" sx={{ height: '100%' }}>
                     {listing.previewImageUrl ? (

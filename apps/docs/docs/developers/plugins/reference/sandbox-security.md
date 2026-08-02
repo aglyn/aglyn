@@ -1,12 +1,12 @@
 ---
 sidebar_position: 5
 title: Sandbox security model
-description: How sandboxed community plugins are isolated — separate origin, per-manifest CSP, pinned artifacts — and what that means when you write one.
+description: How sandboxed marketplace plugins are isolated — separate origin, per-manifest CSP, pinned artifacts — and what that means when you write one.
 ---
 
 # Sandbox security model
 
-Community plugins run **sandboxed by default**: in an iframe on a separate origin,
+Marketplace plugins run **sandboxed by default**: in an iframe on a separate origin,
 with a Content-Security-Policy built from your own manifest. This page is what that
 means in practice, because most of it only becomes visible when something you wrote
 doesn't work.

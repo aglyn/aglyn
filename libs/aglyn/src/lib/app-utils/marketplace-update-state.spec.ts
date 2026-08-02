@@ -120,7 +120,7 @@ describe('resolveUpdateState (AGL-1016)', () => {
 
   it('still compares a pre-AGL-1015 install, which knows its version', () => {
     const status = resolveUpdateState(
-      { community: { listingId: 'l', version: 1 } },
+      { marketplace: { listingId: 'l', version: 1 } },
       { latestVersion: 2 },
       'component',
     )

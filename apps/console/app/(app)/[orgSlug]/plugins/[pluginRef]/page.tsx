@@ -173,7 +173,7 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
   // read, and absent for first-party plugins — which have no listing and no
   // version, so there is nothing to be behind.
   const { data: listing } = useFirestoreDoc<any>(
-    () => doc(firestore, 'communityListings', listingId || '-missing-'),
+    () => doc(firestore, 'marketplaceListings', listingId || '-missing-'),
     [firestore, listingId],
   )
   const updateStatus = useMemo(

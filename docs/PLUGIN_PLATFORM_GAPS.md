@@ -24,8 +24,8 @@ docs: `docs/PLUGIN_LOADING.md` (current architecture),
 ### Developer experience — the adoption blocker
 - **No scaffolding CLI.** Strapi: `npx @strapi/sdk-plugin init` generates a
   working plugin skeleton. Aglyn: copy an existing `libs/plugins/*` by hand
-  (first-party) or start from a 40-line demo (community realm).
-- **No local dev loop for community authors.** Strapi: `watch` /
+  (first-party) or start from a 40-line demo (marketplace realm).
+- **No local dev loop for marketplace authors.** Strapi: `watch` /
   `watch:link` (yalc) hot-reloads a plugin inside a running app. Aglyn:
   publish → install → reload; no way to iterate against a live workspace.
 - **No pre-publish verification.** Strapi: `strapi-plugin verify` checks
@@ -74,7 +74,7 @@ docs: `docs/PLUGIN_LOADING.md` (current architecture),
 
 ### Release-flag coverage (internal ask)
 8 of 13 first-party plugins have release flags (`contacts, bookings,
-events, data_store, workflows, redirects, commerce_v2, community`).
+events, data_store, workflows, redirects, commerce_v2, marketplace`).
 **Missing: marketing, email, inbox, logic** (mui is always-on base).
 Flags also gate only nav/pages via FeatureGate — they don't feed the
 plugin loader, so a flagged-off plugin still loads its bundles and serves

@@ -571,8 +571,8 @@ await put(dataRef.collection('datasets').doc('seed-inventory-log'), {
   createdAt: now,
 })
 
-// ── Community listing (AGL-45): a published reusable component.
-await put(firestore.collection('communityListings').doc('seed-listing-hero'), {
+// ── Marketplace listing (AGL-45): a published reusable component.
+await put(firestore.collection('marketplaceListings').doc('seed-listing-hero'), {
   displayName: 'Hero banner',
   description: 'A reusable hero section with a headline and CTA.',
   category: 'Sections',

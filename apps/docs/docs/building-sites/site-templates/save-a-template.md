@@ -1,13 +1,13 @@
 ---
 sidebar_position: 3
 title: Save & share a template
-description: Turn a site into a reusable template and install community templates.
+description: Turn a site into a reusable template and install marketplace templates.
 ---
 
 # Save & share a template
 
 Turn a site you've built into a **template** others can start from — or start your own site
-from the community gallery.
+from the marketplace gallery.
 
 :::info Plan availability
 **Free** to use the starter gallery; sharing scales with your tier.
@@ -30,11 +30,11 @@ templates of its own kind:
 
 | List | What the picker offers |
 | --- | --- |
-| **Screens** | Page templates, plus Aglyn's starter sites and community templates |
+| **Screens** | Page templates, plus Aglyn's starter sites and marketplace templates |
 | **Layouts** | Layout templates |
 | **Components** | Component templates |
 
-Starter sites and community templates are whole-site page bundles, so they appear
+Starter sites and marketplace templates are whole-site page bundles, so they appear
 only on **Screens** — a layout or component picker would have nothing to do with
 them.
 
@@ -44,7 +44,7 @@ category.
 ## Save your site as a template
 
 1. From the site, choose **save as template**.
-2. Publish it so others can **browse and install** it from the community.
+2. Publish it so others can **browse and install** it from the marketplace.
 
 ## Tips
 

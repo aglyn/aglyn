@@ -578,7 +578,7 @@ describe('plan entitlements', () => {
     expect(checkEntitlement(created, 'videoMedia')).toBe(false)
     // media/upload + media/replace
     expect(checkEntitlement(created, 'mediaCdn')).toBe(false)
-    // community publish / publish-plugin / publish-template
+    // marketplace publish / publish-plugin / publish-template
     expect(checkEntitlement(created, 'marketplaceSelling')).toBe(false)
 
     // Quotas: the free caps apply — a plan-less org is NOT unmetered.

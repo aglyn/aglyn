@@ -188,11 +188,11 @@ template + the catalog entry).
   via the app's `PluginWidgetSlot`. The guaranteed zones (and the props
   each receives) are the exported `CONSOLE_WIDGET_SLOTS` catalog
   (AGL-433): `hostActivity`, `commerceGlance`, `orgData`,
-  `besignerFunctions`, `communityListing`, `orgAddons`,
+  `besignerFunctions`, `marketplaceListing`, `orgAddons`,
   `dashboardFooter`, `orgSettings`, `hostSettings`, and the staff-only
   `adminOrgDetail`.
 - **Providers** — `ConsoleExtension.providers` mount around every console
-  page (e.g. community's AI-assist provider).
+  page (e.g. marketplace's AI-assist provider).
 - **Site runtimes** — `registerSiteRuntime` components run on every rendered
   tenant page (marketing's overlays/experiments/automations), reading back
   the props their server enricher wrote.
@@ -219,7 +219,7 @@ template + the catalog entry).
   your `Input`; your `validate` runs after the base checks on both client
   and server. Register the pure-data half from `/server` too (the AGL-428
   pattern) so imports/writes validate without a client. Reference adopter:
-  community's `rating`.
+  marketplace's `rating`.
 - **Bootstrap phase** (AGL-429) — export `bootstrap<Surface>()`
   (`bootstrapConsole`, `bootstrapSite`, …) next to your register fn and the
   loader calls it after EVERY plugin in the batch has registered — the
@@ -247,7 +247,7 @@ first-party-grade extensions installed per workspace, no repo change.
   `globalThis.__AGLYN_PLUGIN_HOST__` (the app's own singletons), so the
   emitted bundle imports nothing. Export `register(host)` for client
   surfaces; `registerApi()` for server handlers.
-- Publish through the community pipeline, install (pins `{version,
+- Publish through the marketplace pipeline, install (pins `{version,
   sha256}`), then staff grant trust via `POST /api/admin/sign-plugin`.
 - The console loads an org's realm installs before the shell renders;
   published sites load them post-hydration (additive runtimes — first
@@ -370,7 +370,7 @@ That generates the complete `libs/plugins/my-plugin` library (correctly
 tagged, with register entries per surface and a passing spec), registers it
 in `plugins.config.json` + the tsconfig aliases, re-runs the manifest
 codegen, and prints the two manual follow-ups (catalog entry + release
-flag). Community/marketplace authors start from
+flag). Marketplace/marketplace authors start from
 `tools/plugin-loader/realm/template` instead — a standalone npm package
 that builds a host-ABI realm bundle.
 
@@ -416,8 +416,8 @@ Conventions the scaffold already applies:
   reader, site members + leads, and the borrowed **Orders** and **Campaigns**
   tabs. Depends on `@aglyn/plugins-commerce` + `@aglyn/plugins-email` — a
   plugin can compose tabs from other plugins the same way the app did.
-- **Community** (`libs/plugins/community`) — console-only, multi-page
-  (AGL-395): the plugin owns the hub page and its cards + `useCommunityActions`,
+- **Marketplace** (`libs/plugins/marketplace`) — console-only, multi-page
+  (AGL-395): the plugin owns the hub page and its cards + `useMarketplaceActions`,
   but the listing/publisher **detail** pages stay as app file-routes (nested
   dynamic segments the single-segment plugin route can't serve) and import the
   hook from the plugin. It's why `ConsolePluginPageProps` also carries

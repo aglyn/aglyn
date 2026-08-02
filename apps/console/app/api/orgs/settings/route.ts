@@ -172,7 +172,7 @@ async function handler(request: Request): Promise<Response> {
 
     // Org profile (AGL-363): logo + contact details, admin-writable.
     // Logo URLs must be https; contact fields are plain strings, length
-    // capped — they surface on invoices, the community profile, and the
+    // capped — they surface on invoices, the marketplace profile, and the
     // admin console.
     if (body?.action === 'update-profile') {
       const clean = (value: unknown, max = 200) =>

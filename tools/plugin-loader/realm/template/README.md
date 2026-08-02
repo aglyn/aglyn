@@ -9,7 +9,7 @@ One paragraph: what the plugin does and who it's for.
 
 ## Setup
 
-1. Install from the Aglyn community marketplace.
+1. Install from the Aglyn marketplace marketplace.
 2. Enable it on the organization's **Plugins & add-ons** page (installs
    enable automatically).
 3. Any configuration steps your plugin needs.

@@ -232,7 +232,7 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
                 size: { xs: 12, md: 6 },
                 children: (
                   <CardDisplay
-                    header={'Community forum'}
+                    header={'Marketplace forum'}
                     help={docsHelp('supportAndCommunity', {
                       anchor: '#community-forum',
                       excerpt:

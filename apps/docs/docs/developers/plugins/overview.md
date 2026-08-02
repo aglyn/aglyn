@@ -25,7 +25,7 @@ flowchart LR
 ```
 
 :::info Plan availability
-**Free** to install community plugins; some plugins and marketplace monetization features
+**Free** to install marketplace plugins; some plugins and marketplace monetization features
 are paid.
 :::
 
@@ -92,7 +92,7 @@ behave differently on each site.
 ## Publish your own
 
 The **publish + install pipeline** lets developers ship plugins to the marketplace with
-version pinning. The community marketplace also supports **paid listings**, Stripe Connect
+version pinning. The marketplace marketplace also supports **paid listings**, Stripe Connect
 payouts, and a publisher **ledger**.
 
 ## Related

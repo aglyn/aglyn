@@ -70,7 +70,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       return res.status(409).json({ error: 'This site cannot sell yet' })
     }
     // Storefront selling is the `commerce` entitlement (Starter+) — not
-    // `marketplaceSelling`, which gates the community marketplace (AGL-470).
+    // `marketplaceSelling`, which gates the marketplace marketplace (AGL-470).
     if (!Aglyn.checkEntitlement(ownerOrg.org as any, 'commerce')) {
       return res.status(403).json({ error: 'Selling is not enabled' })
     }

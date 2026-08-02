@@ -22,7 +22,7 @@
  * (the only core-billing concern), then fans the event out here. Handlers
  * self-select on `type` + `object.metadata.type` exactly as the old inline
  * sections did (commerce orders/carts/drafts/reservations/subscriptions,
- * booking payments, community purchases). Errors PROPAGATE: a throwing
+ * booking payments, marketplace purchases). Errors PROPAGATE: a throwing
  * handler fails the webhook with a 500 so Stripe redelivers — identical to
  * the pre-extraction behavior, and every section is idempotent by doc key.
  */

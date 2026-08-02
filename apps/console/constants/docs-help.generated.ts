@@ -376,7 +376,7 @@ export const DOCS_HELP_TOPICS = {
   publishAPlugin: {
     path: '/developers/plugins/publish-a-plugin',
     title: 'Publish a plugin',
-    excerpt: 'Ship your own plugin to the community marketplace with version pinning.',
+    excerpt: 'Ship your own plugin to the marketplace marketplace with version pinning.',
   },
   publisherHandbook: {
     path: '/developers/plugins/publishing/publisher-handbook',
@@ -411,12 +411,12 @@ export const DOCS_HELP_TOPICS = {
   sandboxSecurity: {
     path: '/developers/plugins/reference/sandbox-security',
     title: 'Sandbox security model',
-    excerpt: 'How sandboxed community plugins are isolated — separate origin, per-manifest CSP, pinned artifacts — and what that means when you write one.',
+    excerpt: 'How sandboxed marketplace plugins are isolated — separate origin, per-manifest CSP, pinned artifacts — and what that means when you write one.',
   },
   saveATemplate: {
     path: '/building-sites/site-templates/save-a-template',
     title: 'Save & share a template',
-    excerpt: 'Turn a site into a reusable template and install community templates.',
+    excerpt: 'Turn a site into a reusable template and install marketplace templates.',
   },
   screens: {
     path: '/building-sites/screens-and-layouts/overview',

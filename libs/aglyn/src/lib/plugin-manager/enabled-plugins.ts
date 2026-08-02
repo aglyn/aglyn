@@ -20,7 +20,7 @@
  * switchboard that decides which plugins LOAD for a workspace — the loader
  * (AGL-417) dynamically imports only these. It composes with (not replaces)
  * the existing gates: a surface renders when its plugin is enabled AND its
- * `featureFlag` entitlement resolves; marketplace/community listings keep
+ * `featureFlag` entitlement resolves; marketplace/marketplace listings keep
  * their per-host/org `installs` docs on top.
  *
  * This catalog intentionally knows ids and labels only — package names live
@@ -54,7 +54,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   },
   { id: 'bookings', label: 'Bookings', description: 'Services, open slots, and paid bookings.', releaseFlag: 'release_bookings' },
   { id: 'commerce', label: 'Commerce', description: 'Products, carts, checkout, orders, POS.', releaseFlag: 'release_commerce_v2' },
-  { id: 'community', label: 'Community', description: 'Marketplace listings, templates, and installs.', releaseFlag: 'release_community' },
+  { id: 'marketplace', label: 'Marketplace', description: 'Marketplace listings, templates, and installs.', releaseFlag: 'release_marketplace' },
   { id: 'contacts', label: 'Contacts', description: 'People, segments, and interactions.', releaseFlag: 'release_contacts' },
   { id: 'data', label: 'Data', description: 'Datasets, records, and CSV import/export.', releaseFlag: 'release_data_store' },
   { id: 'email', label: 'Email', description: 'Designed emails and campaign sending.', releaseFlag: 'release_email' },

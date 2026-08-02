@@ -58,32 +58,34 @@ describe('buildRoute', () => {
     ).toBe('/acme/hosts/shop/pos')
   })
 
-  it('builds the community routes plugin components link to', () => {
+  it('builds the marketplace routes plugin components link to', () => {
+    // Org-scope only since AGL-975 finished retiring the per-site tab and the
+    // `/[orgSlug]/community` seller area — the word is being freed for a
+    // public forum, so no marketplace URL carries it and none takes a `host`.
+    expect(buildRoute(Route.ORG_MARKETPLACE, { orgSlug: 'acme' })).toBe(
+      '/acme/marketplace',
+    )
     expect(
-      buildRoute(Route.HOST_COMMUNITY, { orgSlug: 'acme', host: 'shop' }),
-    ).toBe('/acme/hosts/shop/community')
-    expect(
-      buildRoute(Route.HOST_COMMUNITY_LISTING, {
+      buildRoute(Route.ORG_MARKETPLACE_LISTING, {
         orgSlug: 'acme',
-        host: 'shop',
         listingId: 'listing-1',
       }),
-    ).toBe('/acme/hosts/shop/community/listing-1')
+    ).toBe('/acme/marketplace/listing-1')
     // Storefronts are addressed by HANDLE (AGL-1001) — the identity the
     // publisher chose, not the org document id the route used to carry.
-    expect(
-      buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
-        orgSlug: 'acme',
-        host: 'shop',
-        handle: 'acme-tools',
-      }),
-    ).toBe('/acme/hosts/shop/community/publisher/acme-tools')
     expect(
       buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, {
         orgSlug: 'acme',
         handle: 'acme-tools',
       }),
     ).toBe('/acme/marketplace/publisher/acme-tools')
+  })
+
+  it('has no route left carrying the word community (AGL-975)', () => {
+    // The point of the rename: `community` is reserved for a future public
+    // forum, and a marketplace route squatting on the path would take it.
+    const paths = Object.values(Route) as string[]
+    expect(paths.filter((path) => path.includes('community'))).toEqual([])
   })
 
   it('builds the besigner deep link the email plugin jumps to', () => {
@@ -100,7 +102,7 @@ describe('buildRoute', () => {
   it('leaves param-less routes alone', () => {
     expect(buildRoute(Route.AUTH_SIGN_IN)).toBe('/signin')
     expect(buildRoute(Route.ADMIN_ORGS)).toBe('/admin/orgs')
-    expect(buildRoute(Route.MANAGE_MY_COMMUNITY)).toBe('/manage/community')
+    expect(buildRoute(Route.MANAGE_NOTIFICATIONS)).toBe('/manage/notifications')
   })
 
   it('marks a missing param instead of emitting a plausible-looking path', () => {

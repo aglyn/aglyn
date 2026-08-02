@@ -198,7 +198,7 @@ const specs = [
   },
   {
     // Plugins & add-ons hub (AGL-423): the first-party switchboard card
-    // + the community plugin's installed add-ons section (widget slot).
+    // + the marketplace plugin's installed add-ons section (widget slot).
     name: 'org-plugins',
     path: '/org/plugins',
     expects: ['Save plugins', 'Marketplace add-ons', 'Installed plugins'],
@@ -214,7 +214,7 @@ const specs = [
     // Listing detail v2 (AGL-430/431): publisher README rendered through
     // markdown-lite, changelog from the public versions API, links card.
     name: 'listing-detail',
-    path: `/${HOST_ID}/community/realm-demo`,
+    path: `/${HOST_ID}/marketplace/realm-demo`,
     expects: ['Realm demo', 'Versions & changelog', 'Source repository'],
   },
 ]

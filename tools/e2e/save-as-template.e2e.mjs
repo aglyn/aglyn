@@ -432,7 +432,7 @@ try {
   // The regression this guards: install used to write screens AND routing
   // entries in one call, so a mis-click published pages to a live site.
   const listingId = 'e2e-listing-template'
-  const listingRef = db.collection('communityListings').doc(listingId)
+  const listingRef = db.collection('marketplaceListings').doc(listingId)
   await listingRef.set({
     kind: 'template',
     artifactType: 'template',
@@ -460,7 +460,7 @@ try {
   const screensBefore = (await hostRef.collection('screens').count().get()).data()
     .count
 
-  const unauthed = await fetch(`${BASE_URL}/api/community/install-template`, {
+  const unauthed = await fetch(`${BASE_URL}/api/marketplace/install-template`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ listingId, hostId: HOST_ID }),
@@ -472,7 +472,7 @@ try {
   )
 
   const installResponse = await fetch(
-    `${BASE_URL}/api/community/install-template`,
+    `${BASE_URL}/api/marketplace/install-template`,
     {
       method: 'POST',
       headers: {

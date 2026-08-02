@@ -33,7 +33,7 @@ single-owner accounts but not for the product's real shape:
 
 - **An organization subscribes to Aglyn** and owns 1–15+ websites (hosts).
 - Hosts inside an org **share** dynamic data (datasets), plugin installs,
-  community presence, media files, and billing.
+  marketplace presence, media files, and billing.
 - Hosts do **not** share site members (end-users of the published site) or
   screens/layouts.
 - **A person belongs to many orgs** with different powers in each — e.g.
@@ -65,9 +65,9 @@ tenants/{ownerUid}                 plan, entitlements, suspension, Stripe ids
 tenants/{ownerUid}/members/{uid}   tenant managers (AGL-127)
 hosts/{hostId}                     admins: {uid: true}, tenantId?
 hosts/{hostId}/screens|layouts|contacts|datasets|media|... (everything)
-profiles/{ownerUid}                community publisher profile
-communityListings/{id}             marketplace (global, fine as-is)
-communityPurchases/{id}            global, fine as-is
+profiles/{ownerUid}                marketplace publisher profile
+marketplaceListings/{id}             marketplace (global, fine as-is)
+marketplacePurchases/{id}            global, fine as-is
 revocations/{id}                   global kill switch, fine as-is
 adminAudit/{id}                    staff-only, fine as-is
 users/{uid}                        profile prefs
@@ -122,7 +122,7 @@ orgs/{orgId}
   media/{mediaId}                            # SHARED across the org's hosts
   datasets/{datasetId}                       # shared dynamic data
   pluginInstalls/{installId}                 # shared plugin installs + pins
-  profile (doc or subdoc)                    # community publisher profile
+  profile (doc or subdoc)                    # marketplace publisher profile
   usage/{yyyymm}                             # cost-attribution rollups (§9)
 
 orgSlugs/{slug} -> { orgId }                 # uniqueness reservation, tx-created
@@ -164,7 +164,7 @@ Notes:
 - **Small businesses**: signup auto-creates an org (`{slug} = handle or
   generated`), the creator is `role: owner, allHosts: true`. The console UX
   can hide org vocabulary until a second member or host exists.
-- Marketplace collections (`communityListings`, `communityPurchases`,
+- Marketplace collections (`marketplaceListings`, `marketplacePurchases`,
   `revocations`, `adminAudit`) stay global — they are cross-tenant by nature.
 
 ## 5. Authorization model

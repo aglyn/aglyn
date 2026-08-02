@@ -25,7 +25,7 @@ Control what each teammate can do with **roles** — named permission sets — p
 
 The permission catalog covers organization settings, the activity log, billing (view
 and manage separately), member management, site creation and deletion, data,
-marketing, community publishing, and plugin installs.
+marketing, marketplace publishing, and plugin installs.
 
 Permissions are enforced everywhere — across the console's APIs and every surface — so a
 role reliably limits what a member can see and do. Members without billing or settings

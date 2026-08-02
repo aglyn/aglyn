@@ -32,7 +32,7 @@
 //                              no handle and is not supposed to have one.
 //
 //   publisherProfiles/{orgId} — MARKETPLACE. The org's account for selling
-//                              listings (plugins/community). Keyed by ORG id
+//                              listings (plugins/marketplace). Keyed by ORG id
 //                              since AGL-652, and this is the one that
 //                              carries a handle and a display name.
 //
@@ -106,7 +106,7 @@ for (const source of SOURCES) {
   // live, which is the difference between "dead test artifact" and "someone
   // is actually selling through this".
   const listingsSnapshot = await firestore
-    .collection('communityListings')
+    .collection('marketplaceListings')
     .where('profileId', '==', id)
     .limit(50)
     .get()

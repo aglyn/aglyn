@@ -314,7 +314,7 @@ function Layouts(props) {
             label="Publish to marketplace"
             onClick={() =>
               setPublishTarget({
-                endpoint: 'community/publish-layout',
+                endpoint: 'marketplace/publish-layout',
                 payload: { hostId, layoutId },
                 displayName: row.displayName,
                 description: row.description,

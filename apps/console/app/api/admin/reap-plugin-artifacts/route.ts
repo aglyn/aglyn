@@ -107,7 +107,7 @@ async function handler(request: Request): Promise<Response> {
     // reported, never reaped (its installs still load).
     const liveListingIds = new Set<string>()
     const listingRefs = [...listingIds].map((id) =>
-      firestore.collection('communityListings').doc(id),
+      firestore.collection('marketplaceListings').doc(id),
     )
     if (listingRefs.length) {
       const snapshots = await firestore.getAll(...listingRefs)

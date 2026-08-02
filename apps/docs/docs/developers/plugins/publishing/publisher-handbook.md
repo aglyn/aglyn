@@ -6,7 +6,7 @@ description: Publishing to the Aglyn marketplace — from profile setup through 
 
 # Publisher handbook
 
-Everything a community publisher needs. The developer side (building the
+Everything a marketplace publisher needs. The developer side (building the
 bundle) is the [first-plugin guide](../guides/first-plugin.md); this is
 the marketplace side.
 

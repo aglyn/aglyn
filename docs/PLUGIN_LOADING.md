@@ -31,7 +31,7 @@ by the nx boundary rule (`scope:app` may not depend on `aglyn:addons`,
 are unioned in via `resolveEnabledPlugins(org)`. Managed on the console's
 **Plugins & add-ons** page (org section, AGL-423) — first-party toggles
 with release-flag state chips plus the marketplace installs (upgrade /
-uninstall / share-with-org via the community plugin's `orgAddons` widget);
+uninstall / share-with-org via the marketplace plugin's `orgAddons` widget);
 the org-settings "Plugins" tab links there.
 
 On top of the org switchboard sits the **platform release gate**
@@ -84,7 +84,7 @@ Every link must hold before a byte executes:
 3. **Kill switch** — `revocations/{listingId}` beats a still-present trust
    grant; revoked versions are dropped by the server-side join. **Staff
    takedown is a kill switch too** (AGL-948): hiding a plugin listing
-   writes the revocation as well, and `resolveCommunityPluginVersion`
+   writes the revocation as well, and `resolveMarketplacePluginVersion`
    refuses any listing carrying `hiddenAt`, so one moderation action stops
    the bundle everywhere instead of only de-listing it. Un-hiding clears
    the revocation only if the takedown wrote it (`source: 'takedown'`), so
@@ -213,7 +213,7 @@ UTC) alongside the other scheduled routes, and is in that workflow's
   it; a run racing an in-flight publish would otherwise see a legitimate
   bundle as an orphan. Capped at 200 deletions per run and audited to
   `adminAudit` (`plugins.artifacts.reap`).
-- **Reported, never deleted**: objects whose parent `communityListings`
+- **Reported, never deleted**: objects whose parent `marketplaceListings`
   doc is gone (Firestore doesn't cascade to subcollections, and existing
   installs of a hard-deleted listing still load off the orphaned version
   doc), and anything under `artifacts/` that isn't a canonical path.
@@ -308,7 +308,7 @@ Firebase, just Cloud Storage SKUs rather than the Firebase Storage line.
    switch with no human in it. It also runs weekly (Mondays 06:00 UTC),
    where it skips every already-current verdict without downloading
    anything.
-3. Publish through the community pipeline (`community/publish-plugin`) —
+3. Publish through the marketplace pipeline (`marketplace/publish-plugin`) —
    content-addressed upload + version doc with sha256.
 4. Workspace installs (pin) the listing; org enables it.
 5. Staff review, then `POST /api/admin/sign-plugin`

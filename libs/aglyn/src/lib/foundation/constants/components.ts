@@ -43,7 +43,7 @@ export enum ComponentCategory {
 /**
  * Display rank of the element drawer/picker categories (AGL-538). Lower
  * ranks first; categories not listed here (plugin-registered strings like
- * "Community" or the per-host "Your components") sort after the ranked
+ * "Marketplace" or the per-host "Your components") sort after the ranked
  * ones alphabetically, and Uncategorized/All always sink to the bottom.
  */
 export const COMPONENT_CATEGORY_ORDER: readonly string[] = [

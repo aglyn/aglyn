@@ -130,7 +130,7 @@ export default function ConsolePluginsGate({
     return <BootSplash />
   }
   // Plugin-registered app providers (AGL-419) wrap every console page —
-  // e.g. the community plugin's AI-assist provider. Scoped to this org, so
+  // e.g. the marketplace plugin's AI-assist provider. Scoped to this org, so
   // a provider from a previously visited workspace does not linger.
   return listConsoleProviders(enabledPluginIds).reduce<ReactNode>(
     (inner, Provider, index) => (
