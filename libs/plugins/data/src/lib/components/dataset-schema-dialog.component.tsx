@@ -28,6 +28,7 @@ import {
   type DatasetModel,
   describeScope,
   effectiveDatasetModel,
+  HOST_ACCESS_ROLES,
   hostScopeToken,
   narrowsScope,
   scopeCovers,
@@ -61,6 +62,7 @@ import {
   useFirestoreCollection,
   useOrgDataScope,
   useScopeTokens,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
 
 /** Types surfaced in the picker; the rest exist for compat, not authoring. */
@@ -135,15 +137,34 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   )
   // Sites in this org, for naming what a narrowing would cost. Queried
   // here rather than via the console's useOrgHosts — this component lives
-  // in a lib and cannot import from an app.
+  // in a lib and cannot import from an app — so it must repeat that hook's
+  // membership filter, which is the part this was missing (AGL-1145).
+  //
+  // `/hosts/{hostId}` is gated per document on `memberRoles.{uid}`, and
+  // Firestore evaluates a LIST against the QUERY rather than its results: it
+  // refuses to run one that COULD return a denied document, whatever today's
+  // data happens to hold. So filtering on `orgId` alone was not a partial
+  // result, it was a flat denial for every non-staff caller — including one
+  // who is a member of every site in the org. Proved in the emulator
+  // (cloud/hosts-list-constraint.spec.mjs); the reason nobody hit it is that
+  // staff match the rule's other branch, and staff are who tested it.
+  const { data: user } = useUser()
+  const uid = (user as { uid?: string } | undefined)?.uid
   const { data: orgHostDocs } = useFirestoreCollection<any>(
+    // Hold rather than substitute a placeholder while the uid resolves. The
+    // old `orgId ?? '-none-'` fired a real query on every mount before the
+    // scope was known; a sentinel is still a question asked of the server,
+    // and here it is one that gets denied.
     () =>
-      query(
-        collection(firestore, 'hosts'),
-        where('orgId', '==', orgId ?? '-none-'),
-        limit(200),
-      ),
-    [firestore, orgId],
+      uid && orgId
+        ? query(
+            collection(firestore, 'hosts'),
+            where(`memberRoles.${uid}`, 'in', HOST_ACCESS_ROLES),
+            where('orgId', '==', orgId),
+            limit(200),
+          )
+        : null,
+    [firestore, orgId, uid],
     { idField: '$id' },
   )
   const orgHostList: Array<{ $id: string; name?: string; subdomain?: string }> =
