@@ -65,8 +65,8 @@ jobs:
       - name: Probe health endpoints
         run: |
           node tools/scripts/probe-uptime.mjs \
-            "${CONSOLE_BASE_URL:-https://app.aglyn.com}" \
-            "${TENANT_BASE_URL:-https://demo.aglyn.com}"
+            "console=${CONSOLE_BASE_URL:-https://app.aglyn.com}" \
+            "tenant=${TENANT_BASE_URL:-https://demo.aglyn.com}"
         env:
           CONSOLE_BASE_URL: ${{ vars.CONSOLE_BASE_URL }}
           TENANT_BASE_URL: ${{ vars.TENANT_BASE_URL }}
