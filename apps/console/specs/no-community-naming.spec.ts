@@ -35,11 +35,6 @@ import { join } from 'node:path'
  */
 const ALLOWED = new Map<string, string>([
   [
-    'app/api/[...pluginApi]/route.ts',
-    'The /api/community/* alias. Published plugin bundles in the field call ' +
-      'those URLs and cannot be redeployed with us.',
-  ],
-  [
     'constants/docs-help.generated.ts',
     'Generated from the docs, and the entry is the support/community FORUM ' +
       'page — the meaning the word is being freed for.',

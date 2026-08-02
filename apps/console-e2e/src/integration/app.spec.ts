@@ -65,10 +65,11 @@ const API_ROUTES: Array<[string, number]> = [
   ['/api/hosts/members?hostId=x', 401],
   ['/api/support/tickets', 401],
   ['/api/marketplace/install-plugin', 405],
-  // The retired prefix still answers, and must (AGL-975): published plugin
-  // bundles in the field call it by URL and cannot be redeployed with us.
-  // Same 405, proving the alias reaches the real handler rather than 404ing.
-  ['/api/community/install-plugin', 405],
+  // The retired prefix is GONE (AGL-975), not aliased. Checked against every
+  // published bundle first: none of the 7 in the artifacts bucket calls
+  // `/api/community/*`, so the "public contract" the alias existed for turned
+  // out to be theoretical. 404, like any other path nobody registered.
+  ['/api/community/install-plugin', 404],
   ['/api/billing/checkout', 405],
 ]
 
