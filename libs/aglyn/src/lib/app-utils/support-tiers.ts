@@ -62,6 +62,15 @@ export interface SupportCommitment {
   firstResponse: ResponseWindow | null
   /** A named human, not a queue. Enterprise only. */
   namedManager: boolean
+  /**
+   * Access to the community forum.
+   *
+   * True on every tier including Community, and that is the whole meaning of
+   * "forum only": a tier with no ticket commitment whose forum was also shut
+   * would have no support channel at all, which is not a tier — it is nothing
+   * wearing a tier's name.
+   */
+  forum: boolean
 }
 
 /**
@@ -78,42 +87,51 @@ export const SUPPORT_BY_PLAN: Record<OrgPlan, SupportCommitment> = {
     label: 'Community',
     firstResponse: null,
     namedManager: false,
+    forum: true,
   },
   starter: {
-    tier: 'standard',
-    label: 'Standard',
-    firstResponse: { min: 7, max: 14, unit: 'business-days' },
+    tier: 'community',
+    label: 'Community',
+    // Forum only, same as Free: ticket support starts at Pro. Starter pays
+    // for product, not for our time.
+    firstResponse: null,
     namedManager: false,
+    forum: true,
   },
   pro: {
     tier: 'standard',
     label: 'Standard',
     firstResponse: { min: 7, max: 14, unit: 'business-days' },
     namedManager: false,
+    forum: true,
   },
   business: {
     tier: 'business',
     label: 'Business',
     firstResponse: { min: 4, max: 6, unit: 'business-days' },
     namedManager: false,
+    forum: true,
   },
   scale: {
     tier: 'business',
     label: 'Business',
     firstResponse: { min: 4, max: 6, unit: 'business-days' },
     namedManager: false,
+    forum: true,
   },
   advanced: {
     tier: 'business',
     label: 'Business',
     firstResponse: { min: 4, max: 6, unit: 'business-days' },
     namedManager: false,
+    forum: true,
   },
   agency: {
     tier: 'priority',
     label: 'Priority',
     firstResponse: { min: 1, max: 3, unit: 'business-days' },
     namedManager: false,
+    forum: true,
   },
   enterprise: {
     tier: 'dedicated',
@@ -125,6 +143,7 @@ export const SUPPORT_BY_PLAN: Record<OrgPlan, SupportCommitment> = {
     // not, so this cannot silently regress.
     firstResponse: { min: 24, max: 48, unit: 'hours' },
     namedManager: true,
+    forum: true,
   },
 }
 

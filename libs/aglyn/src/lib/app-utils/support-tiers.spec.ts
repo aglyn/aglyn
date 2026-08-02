@@ -56,8 +56,31 @@ describe('supportForPlan', () => {
     }
   })
 
-  it('commits to nothing on free, and to a named human only on enterprise', () => {
+  it('starts ticket support at PRO — free and starter are forum only', () => {
+    // The boundary the gates derive from. `plan !== 'free'` used to decide
+    // this in two routes; Starter is paid AND forum-only, so a hardcoded paid
+    // check is now wrong in a direction no type can catch.
+    const ticketed = Object.entries(SUPPORT_BY_PLAN)
+      .filter(([, commitment]) => commitment.firstResponse !== null)
+      .map(([plan]) => plan)
+      .sort()
+    expect(ticketed).toEqual(
+      ['advanced', 'agency', 'business', 'enterprise', 'pro', 'scale'].sort(),
+    )
     expect(supportForPlan('free').firstResponse).toBeNull()
+    expect(supportForPlan('starter').firstResponse).toBeNull()
+  })
+
+  it('gives EVERY tier the forum, including the ones with no ticket channel', () => {
+    // "Forum only" is only a tier if the forum is open. A tier with neither
+    // is nothing wearing a tier's name — which is what Free had before.
+    for (const [plan, commitment] of Object.entries(SUPPORT_BY_PLAN)) {
+      expect(`${plan}: ${commitment.forum}`).toBe(`${plan}: true`)
+    }
+    expect(supportForPlan(undefined).forum).toBe(true)
+  })
+
+  it('names a human only on enterprise', () => {
     const named = Object.entries(SUPPORT_BY_PLAN)
       .filter(([, commitment]) => commitment.namedManager)
       .map(([plan]) => plan)
@@ -111,7 +134,7 @@ describe('responseDueAt', () => {
   it('commits to the WORST case, not the best', () => {
     // The range is what we advertise; the upper bound is what a breach is
     // measured against. Using `min` here would make us late by design.
-    expect(responseDueAt(supportForPlan('starter'), MONDAY)).toBe(
+    expect(responseDueAt(supportForPlan('pro'), MONDAY)).toBe(
       addBusinessDays(MONDAY, 14),
     )
     expect(responseDueAt(supportForPlan('agency'), MONDAY)).toBe(
@@ -158,7 +181,7 @@ describe('the ladder gets better as plans get stronger (AGL-1103)', () => {
   })
 
   it('quotes the same window for every plan sharing a tier', () => {
-    // starter/pro, and business/scale/advanced, are each one tier. A drift
+    // free/starter, and business/scale/advanced, are each one tier. A drift
     // between them is a promise that depends on which plan page you read.
     const byTier = new Map<string, string>()
     for (const commitment of Object.values(SUPPORT_BY_PLAN)) {

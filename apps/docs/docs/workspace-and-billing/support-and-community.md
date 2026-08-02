@@ -24,8 +24,23 @@ any of their teammates can carry the thread on.
 :::
 
 :::info Plan availability
-**Paid.** Support tickets and the community forum are included with every paid plan.
-On Free, both are read-gated — the page explains the upgrade. See
+**The community forum is on every plan, including Free.** Private support tickets
+start on **Pro** — Free and Starter are forum-only tiers.
+
+Each plan with tickets carries a first-response target, shown on the Support page
+itself:
+
+| Plan | Tier | First response |
+| --- | --- | --- |
+| Free · Starter | Community | Forum only — no ticket channel |
+| Pro | Standard | 7–14 business days |
+| Business · Scale · Advanced | Business | 4–6 business days |
+| Agency | Priority | 1–3 business days |
+| Enterprise | Dedicated | 24–48 hours, plus a named success manager |
+
+Enterprise is measured in clock hours rather than business days, so a ticket opened
+on Friday is still answered over the weekend. The target is the upper bound of the
+range, measured to our **first reply** — not to resolution. See
 [Billing & plans](billing-and-plans/overview.md#tiers--entitlements).
 :::
 
@@ -63,7 +78,7 @@ billing, say which plan and which invoice.
 ## Community forum
 
 The forum is for questions other builders can answer, and for sharing what you've
-made. Threads are visible to everyone on a paid plan across all organizations — so
+made. Threads are visible to everyone with forum access across all organizations — so
 **don't post anything private** (account details, customer data, keys). That's what a
 support ticket is for.
 

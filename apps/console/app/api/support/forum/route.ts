@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  pluginRequestFromWeb,
+  supportForPlan,
+  type OrgPlan,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -51,16 +55,19 @@ async function handler(request: Request): Promise<Response> {
     const firestore = app.firestore()
     const isStaff = Boolean(decoded['staff'])
 
-    // Paid gate rides the caller's org plan (AGL-238).
-    const paid = async () => {
+    // Forum access rides the support ladder, not a second copy of the plan
+    // rule (AGL-1103). Free and Starter are "forum only" tiers — a tier with
+    // no ticket commitment whose forum was ALSO shut would have no support
+    // channel at all, which is not a tier. The previous `plan !== 'free'`
+    // check said exactly that about Free: no tickets, no forum, nothing.
+    const canUseForum = async () => {
       if (isStaff) return true
       const resolved = await getOrgForUser(decoded.uid)
-      const plan = resolved?.org?.plan
-      return Boolean(plan && plan !== 'free')
+      return supportForPlan(resolved?.org?.plan as OrgPlan | null).forum
     }
-    if (!(await paid())) {
+    if (!(await canUseForum())) {
       return Response.json({
-        error: 'The community forum is for paid plans — see Billing',
+        error: 'The community forum is not available on this plan',
       }, { status: 403 })
     }
 
