@@ -68,10 +68,32 @@ function* sourceFiles(dir: string): Generator<string> {
   }
 }
 
+/**
+ * `libs/` is walked too (AGL-1144). The commerce billing webhook had this bug
+ * and was invisible to a console-only guard — which is exactly how it was
+ * found by grep rather than by CI. The receiver allowlist already handles the
+ * legitimate pool-scoped calls that live there, like `sso-enforcement.ts`
+ * calling `pool.listUsers`.
+ */
+const ROOTS = [
+  join(__dirname, '..', 'app'),
+  join(__dirname, '..', '..', '..', 'libs'),
+]
+
+/**
+ * `auth-pools.ts` IS the abstraction. Searching the project pool is half of
+ * what "across pools" means, so the one file implementing it necessarily
+ * makes the calls every other file is forbidden from making. Exempting it by
+ * path rather than by a receiver pattern keeps that explicit — a second file
+ * claiming the exemption has to edit this line and say why.
+ */
+const EXEMPT = /auth-pools\.ts$/
+
 describe('project-level auth lookups (AGL-1122)', () => {
-  it('are not used anywhere in the console', () => {
+  it('are not used anywhere in the console or libs', () => {
     const offenders: string[] = []
-    for (const file of sourceFiles(join(__dirname, '..', 'app'))) {
+    for (const file of ROOTS.flatMap((root) => [...sourceFiles(root)])) {
+      if (EXEMPT.test(file)) continue
       const source = readFileSync(file, 'utf8')
       const lines = source.split('\n')
       lines.forEach((line, index) => {
@@ -87,7 +109,7 @@ describe('project-level auth lookups (AGL-1122)', () => {
           const previous = lines[index - 1] ?? ''
           if (ALLOWED_RECEIVER.test(previous.trimEnd())) continue
           offenders.push(
-            `${file.split('/apps/')[1]}:${index + 1} → .${call}(`,
+            `${file.split(/\/(?:apps|libs)\//)[1] ?? file}:${index + 1} → .${call}(`,
           )
         }
       })
