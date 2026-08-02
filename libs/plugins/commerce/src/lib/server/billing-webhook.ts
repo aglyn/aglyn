@@ -18,6 +18,7 @@
 import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import {
+  findUserByUidAcrossPools,
   firebaseAdmin,
   getOrgForHost,
   notifyHostManagers,
@@ -1025,11 +1026,21 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const sellerUid = (await getOrgForHost(String(hostId)))?.org
             ?.ownerUid
           if (sellerUid) {
-            const seller = await firebaseAdmin
-              .app()
-              .auth()
-              .getUser(sellerUid)
-              .catch(() => null)
+            // Across pools (AGL-1144/AGL-1122). This was a project-level
+            // `getUser`, which THROWS `auth/user-not-found` for a seller who
+            // signs in through SSO — their record lives in their org's GCIP
+            // tenant. The `.catch(() => null)` then skipped the block
+            // entirely, so an SSO merchant was never told they had made a
+            // sale, on any order, ever, with nothing logged.
+            //
+            // The order itself was never at risk: this runs after payment,
+            // the buyer's receipt above uses the address from the order, and
+            // no payout logic reads this. It is a notification, and it was
+            // silently absent for exactly the customers on the plan that has
+            // SSO.
+            const seller = (await findUserByUidAcrossPools(sellerUid).catch(
+              () => null,
+            ))?.record
             if (seller?.email) {
               const siteName = String(
                 hostSnapshot.get('displayName') ?? hostId,
