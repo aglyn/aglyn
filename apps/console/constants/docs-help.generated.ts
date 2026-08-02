@@ -574,7 +574,7 @@ export const DOCS_HELP_ANCHORS = {
   onboardingDeepLinks: ['#the-contract', '#what-the-console-does-with-it', '#rules-this-parser-follows-and-why', '#known-gap'],
   passwordAScreen: ['#steps', '#password-vs-members-only', '#related'],
   pluginManagerApi: ['#console-extensions--feature-plugins', '#loading--plugin-loader', '#server-apis--api-plugins-server-only', '#site-pipeline--site-runtime-site-page-hooks-server-for-hooks', '#billing--billing-webhook-hooks-server', '#enablement-flags-config-fields-permissions-jobs', '#remote-bundles--realm-plugins-isomorphic-realm-server-server', '#sandbox--plugin-bridge'],
-  plugins: ['#install--upgrade', '#how-plugins-run', '#configure', '#publish-your-own', '#related'],
+  plugins: ['#install--upgrade', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#configure', '#publish-your-own', '#related'],
   pos: ['#registers', '#the-register', '#when-something-disconnects', '#reservations', '#related'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#publishing-a-version', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#private-plugins', '#authoring-your-listing', '#versioning--updates', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#getting-paid'],

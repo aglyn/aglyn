@@ -21,6 +21,7 @@ import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Box,
   Chip,
+  Tooltip,
   Grid,
   MenuItem,
   Stack,
@@ -508,6 +509,14 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                         v1.9.0 containing anything and still be badged as
                         though the code had been read. */}
                     {listing.reviewStatus === 'verified' ? (
+                      <Tooltip
+                        title={
+                          'A human at Aglyn confirmed who this publisher is, ' +
+                          'and that the listing describes what the code does. ' +
+                          'It is a claim about the publisher, not about this ' +
+                          'release — it survives a version bump.'
+                        }
+                      >
                       <Chip
                         size="small"
                         color="info"
@@ -526,13 +535,24 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                         }
                         sx={{ fontWeight: 600 }}
                       />
+                      </Tooltip>
                     ) : null}
                     {/* The bytes on offer, not the person who wrote them.
                         Absent on a listing published before this field
                         existed, which reads as "not reviewed" — the safe
                         direction for a claim about code. */}
                     {listing.latestVersionReviewState === 'approved' ? (
-                      <Chip size="small" color="success" label="Reviewed" />
+                      <Tooltip
+                        title={
+                          'A human at Aglyn read these exact bytes — the ' +
+                          'version on offer — against a required checklist. ' +
+                          'Re-earned per version, so a new release starts ' +
+                          'without it. Not a security guarantee: every plugin ' +
+                          'runs in the same sandbox either way.'
+                        }
+                      >
+                        <Chip size="small" color="success" label="Reviewed" />
+                      </Tooltip>
                     ) : null}
                     {priceUsd > 0 ? (
                       <Chip
