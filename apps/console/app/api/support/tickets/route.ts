@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  pluginRequestFromWeb,
+  responseDueAt,
+  supportForPlan,
+  supportTierRank,
+  type OrgPlan,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -81,7 +87,19 @@ async function handler(request: Request): Promise<Response> {
           .limit(200)
           .get()
         return Response.json({
-          ticket: { $id: ticketSnapshot.id, ...ticket },
+          ticket: {
+            $id: ticketSnapshot.id,
+            ...ticket,
+            // Timestamps do not survive JSON as anything a client can read
+            // (AGL-1103) — the other two were already converted below, and a
+            // new one added to the document silently would not have been.
+            createdAt: ticketSnapshot.get('createdAt')?.toMillis?.() ?? null,
+            updatedAt: ticketSnapshot.get('updatedAt')?.toMillis?.() ?? null,
+            responseDueAt:
+              ticketSnapshot.get('responseDueAt')?.toMillis?.() ?? null,
+            firstRespondedAt:
+              ticketSnapshot.get('firstRespondedAt')?.toMillis?.() ?? null,
+          },
           messages: messages.docs.map((doc) => ({
             $id: doc.id,
             ...doc.data(),
@@ -100,6 +118,8 @@ async function handler(request: Request): Promise<Response> {
           ...doc.data(),
           createdAt: doc.get('createdAt')?.toMillis?.() ?? null,
           updatedAt: doc.get('updatedAt')?.toMillis?.() ?? null,
+          responseDueAt: doc.get('responseDueAt')?.toMillis?.() ?? null,
+          firstRespondedAt: doc.get('firstRespondedAt')?.toMillis?.() ?? null,
         })),
       }, { status: 200 })
     }
@@ -121,10 +141,28 @@ async function handler(request: Request): Promise<Response> {
       }
       const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
       const ticketRef = ticketsRef.doc()
+      // What this org is owed, resolved at OPEN time and frozen on the ticket
+      // (AGL-1103). Deriving it later from `org.plan` would silently rewrite
+      // history: a downgrade would retire a breach that already happened, and
+      // an upgrade would invent one that never did. The plan is stamped beside
+      // it so a disputed ticket can be read without reconstructing billing.
+      const plan = resolved?.org?.plan ?? null
+      const commitment = supportForPlan(plan as OrgPlan | null)
+      const openedAtMs = Date.now()
+      const dueAtMs = responseDueAt(commitment, openedAtMs)
       await ticketRef.set({
         orgId,
         subject,
         status: 'open',
+        plan,
+        supportTier: commitment.tier,
+        supportTierRank: supportTierRank(commitment.tier),
+        // Null for a tier with no commitment. The staff queue treats a missing
+        // due date as "no clock", not as "overdue since 1970".
+        responseDueAt: dueAtMs
+          ? firebaseAdmin.firestore.Timestamp.fromMillis(dueAtMs)
+          : null,
+        firstRespondedAt: null,
         createdAt: now,
         updatedAt: now,
       })
@@ -172,6 +210,15 @@ async function handler(request: Request): Promise<Response> {
         })
         // A reply reopens a closed ticket unless the caller also closes it.
         updates['status'] = 'open'
+        // Stop the SLA clock on the FIRST staff reply (AGL-1103). Without
+        // this, `responseDueAt` is a deadline nothing can ever satisfy — the
+        // queue would show every ticket we ever answered as still owed, which
+        // is the same shape as a control that is configured, tested and never
+        // called. `firstRespondedAt` is write-once: a later staff message must
+        // not move it, or a slow first answer is erased by a fast second one.
+        if (isStaff && !ticket['firstRespondedAt']) {
+          updates['firstRespondedAt'] = now
+        }
         // A subscriber replying needs to reach staff (AGL-850); a staff reply
         // is outbound to the customer, so it raises no staff notification.
         if (!isStaff) {

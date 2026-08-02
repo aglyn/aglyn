@@ -86,6 +86,15 @@ const ALLOWED = new Map<string, string>([
     'apps/docs/docs/staff-console/support-queue.md',
     'Staff view of the forum queue.',
   ],
+  [
+    'libs/aglyn/src/lib/app-utils/support-tiers.ts',
+    'The FREE tier’s support channel is the community forum, and “Community” ' +
+      'is its name (AGL-1103) — the forum meaning again, not the marketplace.',
+  ],
+  [
+    'libs/aglyn/src/lib/app-utils/support-tiers.spec.ts',
+    'Asserts the Community tier commits to nothing.',
+  ],
 
   // ---- Open-source project governance: "community" means contributors. ----
   ['CODE_OF_CONDUCT.md', 'Contributor covenant; the word is the boilerplate.'],
