@@ -118,8 +118,12 @@ is something concrete to point a paid external monitor at when one is chosen.
 
 Tracked in **AGL-1148**:
 
-- An external uptime monitor with real alerting.
-- A public status page.
-- An incident-response and comms process.
+- An external uptime monitor with real alerting. The GitHub probe is not one,
+  and the status page is a live check rather than a monitor — neither wakes
+  anybody up.
+- **Stored samples.** Until something records history there is no availability
+  figure to publish, which is why the status page shows none.
+- An incident-response and comms process, and whoever updates the status page
+  during one.
 - The uptime percentage itself, plus SLA credit terms — the commercial half,
   and the part that must not be guessed.
