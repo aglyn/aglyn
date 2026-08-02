@@ -18,6 +18,7 @@
 'use client'
 
 import {
+  PLAN_LABELS,
   onboardingDestination,
   parseOnboardingPlanIntent,
 } from '@aglyn/aglyn'
@@ -364,7 +365,21 @@ function SignUp() {
         </Typography>
       }
       headingTop={'Sign up'}
-      headingBottom={'Create a new Aglyn Account'}
+      headingBottom={
+        // Say which plan they picked (AGL-1117). The deep link carried it all
+        // the way to checkout already, but the form said nothing — so someone
+        // who clicked "Get Pro, billed yearly" on the pricing page landed on a
+        // generic "Create a new Aglyn Account" with no sign their choice had
+        // survived the click. Cheap to doubt, and expensive to doubt on the
+        // one page where abandoning costs a sale.
+        planIntent
+          ? planIntent.contactSales
+            ? `Create your account — we’ll get you set up on ${PLAN_LABELS[planIntent.plan]}`
+            : `Create your account to start on ${PLAN_LABELS[planIntent.plan]}, billed ${
+                planIntent.interval === 'year' ? 'yearly' : 'monthly'
+              }`
+          : 'Create a new Aglyn Account'
+      }
       paperAfter={
         <Typography component="div" variant="body2">
           {'Already have an account? '}
