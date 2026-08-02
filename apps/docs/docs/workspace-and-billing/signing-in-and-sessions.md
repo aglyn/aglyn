@@ -31,6 +31,11 @@ profile, same workspaces, no duplicate account. Manage them under
 Your last remaining sign-in method can never be removed, so there's no way to lock
 yourself out.
 
+**Single sign-on accounts are the exception.** If your company signs you in through
+its own identity provider, no other method can be linked — see
+[Manage Account](manage-account.md#sign-in-methods) for why, and for what happens
+to methods linked before your organization enabled enforcement.
+
 ## Resetting your password
 
 Forgot your password? From the sign-in screen, choose **Account recovery** and enter your
