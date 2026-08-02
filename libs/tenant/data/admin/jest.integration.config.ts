@@ -1,7 +1,7 @@
 /* eslint-disable */
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,24 +16,26 @@
  * limitations under the License.
  */
 
-/* eslint-disable */
+/**
+ * Integration tests against a live Firestore emulator (AGL-958).
+ *
+ * Separate from `jest.config.ts` so `nx test` never runs them — they need an
+ * emulator on 8082 and would fail the sweep on any machine without one.
+ *
+ *   npx firebase emulators:start --only firestore --project aglyn-main
+ *   npx jest --config libs/tenant/data/admin/jest.integration.config.ts
+ */
 export default {
-  displayName: 'tenant-data-admin',
+  displayName: 'tenant-data-admin-integration',
   preset: '../../../../jest.preset.js',
-  globals: {},
   testEnvironment: 'node',
+  testMatch: ['**/*.integration.spec.ts'],
+  setupFiles: ['<rootDir>/jest.integration.setup.ts'],
   transform: {
     '^.+\\.[tj]sx?$': [
       'ts-jest',
-      {
-        tsconfig: '<rootDir>/tsconfig.spec.json',
-      },
+      { tsconfig: '<rootDir>/tsconfig.spec.json' },
     ],
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  // Integration specs need a live Firestore emulator, so they are not part of
-  // the default sweep (AGL-958). Run them with
-  // `npx jest --config libs/tenant/data/admin/jest.integration.config.ts`.
-  testPathIgnorePatterns: ['/node_modules/', '\\.integration\\.spec\\.ts$'],
-  coverageDirectory: '../../../../coverage/libs/tenant/data/admin',
 }
