@@ -87,6 +87,10 @@ const ALLOWED = new Map<string, string>([
     'Staff view of the forum queue.',
   ],
   [
+    'apps/docs/src/pages/trust.md',
+    'Links to the support/community FORUM page for response targets.',
+  ],
+  [
     'libs/aglyn/src/lib/app-utils/support-tiers.ts',
     'The FREE tier’s support channel is the community forum, and “Community” ' +
       'is its name (AGL-1103) — the forum meaning again, not the marketplace.',
