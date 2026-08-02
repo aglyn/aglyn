@@ -16,7 +16,11 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { generateOrgSlug, isValidOrgSlug } from '@aglyn/aglyn/server'
+import {
+  generateOrgSlug,
+  isValidOrgSlug,
+  resolveIdpDisplayName,
+} from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
@@ -69,7 +73,11 @@ async function handler(request: Request): Promise<Response> {
       slug,
       ownerUid: decoded.uid,
       ownerEmail: decoded.email ?? null,
-      ownerDisplayName: (decoded['name'] as string | undefined) ?? null,
+      // Not `decoded['name']` (AGL-1131): a SAML assertion puts its mapped
+      // attributes under `firebase.sign_in_attributes` and never promotes
+      // them to a top-level claim, so this was empty for every SSO account —
+      // stamping the org's first roster row, its owner, as nameless.
+      ownerDisplayName: resolveIdpDisplayName(decoded) || null,
     })
 
     // Welcome email on the owner's FIRST org only (AGL-768): someone who
@@ -91,7 +99,9 @@ async function handler(request: Request): Promise<Response> {
         ).size
         if (ownedCount === 1) {
           const origin = headers.origin ?? `https://${headers.host}`
-          const ownerName = (decoded['name'] as string | undefined) || 'there'
+          // Same claim, same reason (AGL-1131) — the welcome email opened
+          // "Hi there," for SSO owners regardless of what their IdP sent.
+          const ownerName = resolveIdpDisplayName(decoded) || 'there'
           const fallbackText =
             `Hi ${ownerName}, thanks for creating ${name}. Your workspace ` +
             `is ready.\n\nOpen your dashboard at ${origin}.`

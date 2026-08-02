@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  pluginRequestFromWeb,
+  resolveIdpDisplayName,
+  resolveIdpPhotoUrl,
+} from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   buildRoute,
@@ -413,8 +417,10 @@ async function handler(request: Request): Promise<Response> {
         allHosts: invite['allHosts'] === true,
         hostAccess: invite['hostAccess'] ?? {},
         email,
-        displayName: (decoded['name'] as string | undefined) ?? null,
-        photoURL: (decoded['picture'] as string | undefined) ?? null,
+        // AGL-1131 — read from wherever the provider put them. An SSO user
+        // accepting an invite joined the roster nameless and faceless.
+        displayName: resolveIdpDisplayName(decoded) || null,
+        photoURL: resolveIdpPhotoUrl(decoded) || null,
         invitedBy: invite['invitedBy'] ?? null,
       })
       await invitesRef.doc(inviteId).set(

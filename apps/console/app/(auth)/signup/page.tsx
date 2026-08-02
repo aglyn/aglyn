@@ -244,6 +244,34 @@ function SignUp() {
           logEvent(analytics, 'sign_up', {
             method: credential.providerId,
           })
+          // A Google sign-up has no form, so it never had a workspace name
+          // and used to land on the picker with the plan intent discarded
+          // (AGL-1117). Someone who clicked "Get Pro" and then "Sign up with
+          // Google" got no plan, no workspace, and a chooser.
+          //
+          // Only when a plan was actually picked. Without one, the picker is
+          // still the right landing: naming a workspace after somebody who
+          // never asked for one is a worse default than letting them choose.
+          // With one, they have told us what they came to do, and stranding
+          // them costs the sale.
+          //
+          // The name is derived the same way `ensureOrgForUser` derives it
+          // server-side — display name, else the email local part — so the
+          // two paths cannot disagree about what a personal workspace is
+          // called. It is renameable afterwards.
+          if (!values && planIntent) {
+            const derived =
+              credential.user.displayName?.trim() ||
+              credential.user.email?.split('@')[0]?.trim() ||
+              ''
+            const slug = derived
+              ? await provisionSignUpOrg(credential, derived)
+              : null
+            if (slug) {
+              window.location.assign(onboardingDestination(slug, planIntent))
+              return
+            }
+          }
           // Only the email/password branch has form values to keep; the
           // Google branches carry their name on the token, and the session
           // route seeds from that (AGL-1127).
