@@ -36,6 +36,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
 jest.mock('../model/community', () => ({
   listingArtifactType: () => 'plugin',
   newestApprovedVersion: () => null,
+  // The REAL predicate, not a stub: the public branch now filters on it
+  // (AGL-976), so faking it would test the filter against itself.
+  isVersionApproved: (version: { reviewState?: string } | null | undefined) =>
+    version?.reviewState === 'approved',
 }))
 
 jest.mock('./version-stats', () => ({
@@ -64,6 +68,21 @@ const VERSION_FIELDS: Record<string, unknown> = {
   },
 }
 
+/**
+ * An APPROVED version alongside the rejected one (AGL-976).
+ *
+ * Both branches need it. The publisher must still see the rejected version —
+ * it is their submission and the reason is theirs to act on — while a buyer
+ * must see only this one. With a single rejected doc in the fixture, "the
+ * public branch returns nothing" and "the filter works" are indistinguishable.
+ */
+const APPROVED_VERSION_FIELDS: Record<string, unknown> = {
+  version: '1.0.0',
+  sha256: 'cafebabe',
+  reviewState: 'approved',
+  changelog: 'First release',
+}
+
 jest.mock('@aglyn/tenant-data-admin', () => {
   const versionDoc = {
     id: '1.0.1',
@@ -71,6 +90,13 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       key === 'publishedAt'
         ? { toMillis: () => 1_760_000_000_000 }
         : VERSION_FIELDS[key],
+  }
+  const approvedDoc = {
+    id: '1.0.0',
+    get: (key: string) =>
+      key === 'publishedAt'
+        ? { toMillis: () => 1_750_000_000_000 }
+        : APPROVED_VERSION_FIELDS[key],
   }
   const listingRef = {
     get: async () => {
@@ -86,7 +112,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     set: async () => undefined,
     collection: () => ({
       orderBy: () => ({
-        limit: () => ({ get: async () => ({ docs: [versionDoc] }) }),
+        // Newest first, as the real query orders them.
+        limit: () => ({ get: async () => ({ docs: [versionDoc, approvedDoc] }) }),
       }),
     }),
   }
@@ -190,5 +217,25 @@ describe('publisher-scoped listing versions (AGL-1079)', () => {
     expect(entry.rejectionReason).toBeUndefined()
     expect(entry.sha256).toBeUndefined()
     expect(entry.attestation).toBeUndefined()
+  })
+
+  it('shows buyers approved versions only (AGL-976)', async () => {
+    // The listing's Version history reads this. Before the filter it listed
+    // pending and rejected versions too — with "Latest" on whichever was
+    // newest — so a version rejected for undeclared network access was
+    // advertised to buyers as the current release, changelog and all.
+    const result = await call({ listingId: 'l1' })
+    expect(result.body.versions.map((v: { version: string }) => v.version)).toEqual([
+      '1.0.0',
+    ])
+  })
+
+  it('still shows the publisher their rejected version', async () => {
+    // The other half, and the one a filter is likely to break: a publisher
+    // who cannot see their own rejected submission cannot act on the reason.
+    const result = await call({ listingId: 'l1', scope: 'publisher' })
+    expect(result.body.versions.map((v: { version: string }) => v.version)).toContain(
+      '1.0.1',
+    )
   })
 })

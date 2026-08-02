@@ -17,7 +17,11 @@
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { listingArtifactType, newestApprovedVersion } from '../model/community'
+import {
+  isVersionApproved,
+  listingArtifactType,
+  newestApprovedVersion,
+} from '../model/community'
 import { compareArtifactVersions } from '@aglyn/aglyn/server'
 import { versionCollectionFor } from './version-stats'
 import { canActAsPublisher } from './publisher-profile'
@@ -144,7 +148,29 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
       .orderBy('publishedAt', 'desc')
       .limit(20)
       .get()
-    const versions = snapshot.docs.map((doc) => ({
+    // Buyers see APPROVED versions only (AGL-976).
+    //
+    // This handler returned every version, so the listing's Version history
+    // advertised pending and rejected ones — with `Latest` on whichever was
+    // newest. A version rejected for undeclared network access was shown to
+    // buyers, by us, as the current release, changelog and all. Installing it
+    // was already impossible (AGL-966 gates that), which made the card a
+    // promise the product would not keep.
+    //
+    // Plugins only: `reviewState` is a plugin concept, and a copied artifact's
+    // `versions` docs carry none — filtering those would empty every
+    // component and template history.
+    //
+    // Through `isVersionApproved`, whose contract is the one that matters
+    // here: ABSENT STATE IS NOT APPROVAL. That hides versions published
+    // before review existed, which is the safe direction — the alternative is
+    // showing unreviewed code as reviewed.
+    const visibleDocs = isPlugin
+      ? snapshot.docs.filter((doc) => isVersionApproved({
+          reviewState: doc.get('reviewState'),
+        }))
+      : snapshot.docs
+    const versions = visibleDocs.map((doc) => ({
       version: String(doc.get('version') ?? doc.id),
       // Per-version install counts (AGL-1036). `installCount` is every install
       // that ever landed on this version; `activeInstalls` is how many are on

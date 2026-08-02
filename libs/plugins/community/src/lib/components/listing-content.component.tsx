@@ -131,6 +131,66 @@ const renderInlines = (inlines: MarkdownInline[]) =>
  * written docs can't inject markup or javascript: URLs. Code blocks and
  * tables carry text only (AGL-974); the same guarantee holds for both.
  */
+/**
+ * What changed between versions (AGL-976).
+ *
+ * The changelog was already collected per version and already returned by the
+ * versions endpoint, but the only place it appeared was a caption in the
+ * sidebar timeline — plain text, in a narrow column, next to a date. A buyer
+ * deciding whether to upgrade reads this, and publishers write it as ordinary
+ * markdown: a config note, a list of fixes, sometimes a fenced snippet.
+ *
+ * So it renders through the same markdown-lite path as the README, which
+ * gained code fences and tables in AGL-974 — and inherits the same safety
+ * posture: no raw HTML, `safeUrl` gating every link.
+ *
+ * APPROVED VERSIONS ONLY, and that is enforced server-side rather than here
+ * (AGL-976). A filter in the renderer would leave the same data leaking
+ * through the endpoint to anything else that reads it.
+ */
+function ListingChangelog({
+  versions,
+}: {
+  versions: readonly ListingVersionEntry[]
+}) {
+  const entries = useMemo(
+    () => versions.filter((entry) => String(entry.changelog ?? '').trim()),
+    [versions],
+  )
+  // Nothing to say is different from nothing to show: a listing whose
+  // publisher has never written a changelog should not get an empty card
+  // implying they withheld one.
+  if (!entries.length) return null
+  return (
+    <CardDisplay header={'Changelog'} contentGutterX contentGutterY>
+      <Stack spacing={2.5}>
+        {entries.map((entry, index) => (
+          <Stack key={entry.version} spacing={1}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+            >
+              <Typography variant="subtitle2">{`v${entry.version}`}</Typography>
+              {index === 0 ? <Chip size="small" label="Latest" /> : null}
+              {entry.trust === 'realm' ? (
+                <Chip size="small" color="success" label="Realm-trusted" />
+              ) : null}
+              {entry.publishedAtMs ? (
+                <Typography variant="caption" color="text.secondary">
+                  {new Date(entry.publishedAtMs).toLocaleDateString()}
+                </Typography>
+              ) : null}
+            </Stack>
+            <ListingReadme readme={String(entry.changelog ?? '')} />
+            {index < entries.length - 1 ? <Divider /> : null}
+          </Stack>
+        ))}
+      </Stack>
+    </CardDisplay>
+  )
+}
+
 function ListingReadme({ readme }: { readme: string }) {
   const blocks = useMemo<MarkdownBlock[]>(
     () => parseMarkdownLite(readme.slice(0, LISTING_README_MAX_CHARS)),
@@ -1094,6 +1154,10 @@ export function CommunityListingContent({
                   ),
                 },
                 {
+                  size: { xs: 12, md: 8 },
+                  children: <ListingChangelog versions={versions} />,
+                },
+                {
                   size: { xs: 12, md: 4 },
                   children: (
                     <Stack spacing={3}>
@@ -1587,14 +1651,11 @@ export function CommunityListingContent({
                                       : ''}
                                   </Typography>
                                 </Stack>
-                                {entry.changelog ? (
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                  >
-                                    {entry.changelog}
-                                  </Typography>
-                                ) : null}
+                                {/* The changelog moved to its own card
+                                    (AGL-976) — rendered as markdown, in the
+                                    main column, with room to be read. This
+                                    timeline keeps what it is good at: dates,
+                                    trust, and who is still on which version. */}
                                 {/* Per-version installs (AGL-1036). The
                                     listing total cannot answer "who is still
                                     on the old version" — this can, and that is
