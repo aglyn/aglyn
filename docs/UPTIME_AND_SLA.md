@@ -62,6 +62,27 @@ database. A leading **or** trailing double underscore alone is fine; it is the
 pair that is reserved.
 :::
 
+## The status page
+
+**https://docs.aglyn.com/status**
+
+Served from the docs site on purpose. `aglyn-docs` is a separate Vercel project
+from the console and the tenant runtime, so a console outage does not take the
+page reporting it down with it — which is the whole job. A status page served by
+the thing it reports on is decoration.
+
+It reads the health endpoints **live from the visitor's browser**, which is why
+those endpoints send `Access-Control-Allow-Origin: *`. Without it the browser
+blocks the read and every service renders as unreachable on a perfectly healthy
+day. The body is already public and carries no secrets, so opening it costs
+nothing.
+
+It deliberately shows **no uptime percentage and no history** — nothing stores
+samples yet, and inventing "99.9%" from one successful fetch is how a status
+page loses its credibility. It also says "unreachable from your browser" rather
+than "down", because from a browser a real outage, a DNS failure and a local
+network problem are indistinguishable.
+
 ## The probe
 
 ```bash
@@ -97,8 +118,12 @@ is something concrete to point a paid external monitor at when one is chosen.
 
 Tracked in **AGL-1148**:
 
-- An external uptime monitor with real alerting.
-- A public status page.
-- An incident-response and comms process.
+- An external uptime monitor with real alerting. The GitHub probe is not one,
+  and the status page is a live check rather than a monitor — neither wakes
+  anybody up.
+- **Stored samples.** Until something records history there is no availability
+  figure to publish, which is why the status page shows none.
+- An incident-response and comms process, and whoever updates the status page
+  during one.
 - The uptime percentage itself, plus SLA credit terms — the commercial half,
   and the part that must not be guessed.

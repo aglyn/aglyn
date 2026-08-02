@@ -69,6 +69,16 @@ describe('nothing may cache a health check', () => {
     }
   })
 
+  it('is readable cross-origin, or the status page reports a false outage', () => {
+    // The status page is served from a DIFFERENT deployment on purpose — a
+    // status page hosted on the thing it reports on cannot survive its
+    // outage. Without this header the browser blocks the read and every
+    // service renders as down on a perfectly healthy day.
+    for (const status of ['ok', 'degraded'] as const) {
+      expect(healthHeaders(status)['Access-Control-Allow-Origin']).toBe('*')
+    }
+  })
+
   it('asks a monitor to retry only when degraded', () => {
     expect(healthHeaders('degraded')['Retry-After']).toBe('30')
     expect(healthHeaders('ok')['Retry-After']).toBeUndefined()
