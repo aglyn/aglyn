@@ -35,7 +35,8 @@
  * point a real monitor at when one is chosen. AGL-1148 tracks that.
  *
  *   node tools/scripts/probe-uptime.mjs
- *   node tools/scripts/probe-uptime.mjs https://app.aglyn.com https://demo.aglyn.com
+ *   node tools/scripts/probe-uptime.mjs console=https://app.aglyn.com
+ *   node tools/scripts/probe-uptime.mjs http://localhost:4200
  */
 
 const DEFAULT_TARGETS = [
@@ -45,8 +46,21 @@ const DEFAULT_TARGETS = [
 
 const TIMEOUT_MS = 15_000
 
-const targets = process.argv.slice(2).length
-  ? process.argv.slice(2).map((base, index) => [`target-${index + 1}`, base])
+/**
+ * Arguments are `name=url`, or a bare url.
+ *
+ * Names matter more than they look: the workflow log is the incident record,
+ * and "target-2 is DOWN" makes whoever reads it at 3am go and work out which
+ * service that was. `tenant=https://…` does not.
+ */
+const args = process.argv.slice(2)
+const targets = args.length
+  ? args.map((arg, index) => {
+      const at = arg.indexOf('=')
+      return at > 0
+        ? [arg.slice(0, at), arg.slice(at + 1)]
+        : [DEFAULT_TARGETS[index]?.[0] ?? `target-${index + 1}`, arg]
+    })
   : DEFAULT_TARGETS
 
 /**
