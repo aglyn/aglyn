@@ -191,10 +191,15 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
         (address
           ? `<p>${[address.name, address.line1, address.line2, `${address.city ?? ''} ${address.state ?? ''} ${address.postalCode ?? ''}`, address.country].filter(Boolean).join('<br/>')}</p>`
           : '') +
-        `<table border="0" cellpadding="6">${rows}</table>` +
-        `<script>window.print()</script>`,
+        `<table border="0" cellpadding="6">${rows}</table>`,
     )
     win.document.close()
+    // Print from the opener, not from an injected inline script (AGL-523) —
+    // the popup inherits this document's CSP, where an un-nonced inline
+    // script is blocked under the enforcing policy. Same reasoning as the POS
+    // receipt.
+    win.focus()
+    win.print()
   }, [order, orderId])
 
   if (!order) return null
