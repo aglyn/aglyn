@@ -257,7 +257,15 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
                 size: { xs: 12, md: 6 },
                 children: (
                   <CardDisplay
-                    header={'Marketplace forum'}
+                    // The COMMUNITY forum. The AGL-975 sweep renamed this
+                    // heading along with the marketplace, which is the one
+                    // meaning that rename existed to protect — and it left the
+                    // card disagreeing with its own docs anchor
+                    // (`#community-forum`) and its route (`/api/support/forum`)
+                    // two lines below. Caught by looking at the rendered page;
+                    // no test could see it, because the naming guard is what
+                    // wanted the word gone.
+                    header={'Community forum'}
                     help={docsHelp('supportAndCommunity', {
                       anchor: '#community-forum',
                       excerpt:
