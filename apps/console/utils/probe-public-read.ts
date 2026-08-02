@@ -42,8 +42,19 @@
 
 import { doc, getDoc, type Firestore } from 'firebase/firestore'
 
-/** Not a real slug. Nothing creates it; nothing should. */
-const PROBE_DOC = '__console-health-probe__'
+/**
+ * Not a real slug. Nothing creates it; nothing should.
+ *
+ * NOT named `__…__`. Firestore reserves document ids matching `__.*__`, and a
+ * read of one fails with INVALID_ARGUMENT before it ever reaches the rules —
+ * which this function would then report as `outcome: 'error'`, "likely offline
+ * or blocked by the network". So the probe built to tell App Check apart from
+ * a rules denial was answering neither, always, since it shipped. Found by
+ * running the same pattern in the AGL-1102 health check and getting a 503 out
+ * of a healthy database. Leading OR trailing double underscores are fine
+ * alone; it is the pair that is reserved.
+ */
+const PROBE_DOC = 'console-health-probe-does-not-exist'
 
 export type PublicReadProbe =
   | 'ok'
