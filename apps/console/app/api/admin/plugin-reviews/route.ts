@@ -29,6 +29,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
+  findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
@@ -297,8 +298,14 @@ async function listingDetail(
   let attestedBy: string | null = attesterUid ?? null
   if (attesterUid) {
     try {
-      const user = await firebaseAdmin.app().auth().getUser(attesterUid)
-      attestedBy = user.email ?? user.displayName ?? attesterUid
+      // Across pools (AGL-1122): an SSO attester is invisible to project-level
+      // `getUser`, so this fell through to the catch and the review page named
+      // the attester by raw uid — indistinguishable from "account deleted".
+      const found = await findUserByUidAcrossPools(attesterUid)
+      if (found) {
+        attestedBy =
+          found.record.email ?? found.record.displayName ?? attesterUid
+      }
     } catch {
       // Account gone — the uid still identifies the statement.
     }
