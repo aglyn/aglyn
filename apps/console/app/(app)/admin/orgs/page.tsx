@@ -388,17 +388,47 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         entitlements[field.key] = value
       }
     }
-    const features: Record<string, boolean> = {}
+    // "Inherit" has to DELETE the key, not omit it (AGL-1109).
+    //
+    // The write below is `{ merge: true }`, and a merge writes nested maps by
+    // key rather than replacing them. So a `features` map that simply left out
+    // an inherited flag changed nothing: the stored `true` survived, the org
+    // kept the feature, and the override count stayed put. Only "Force off"
+    // appeared to work, because writing an explicit `false` is a change a
+    // merge can see. That made a clean revert impossible — you could turn an
+    // override off, but never remove it.
+    //
+    // `deleteField()` is the sentinel a merge does act on.
+    const features: Record<string, boolean | ReturnType<typeof deleteField>> = {}
+    // Tracked separately from `features`, which now contains delete sentinels
+    // and can therefore be non-empty while expressing no override at all.
+    const explicitFeatures: Record<string, boolean> = {}
     for (const key of FLAG_FIELDS) {
       const state = editor.flags[key] ?? ''
-      if (state === 'on') features[key] = true
-      if (state === 'off') features[key] = false
+      if (state === 'on') {
+        features[key] = true
+        explicitFeatures[key] = true
+      } else if (state === 'off') {
+        features[key] = false
+        explicitFeatures[key] = false
+      } else {
+        features[key] = deleteField()
+      }
     }
-    if (Object.keys(features).length) entitlements['features'] = features
-    const hasOverrides = Object.keys(entitlements).length > 0
+    // Whether anything is actually overridden — quotas, or a flag forced
+    // either way. Deletes do not count, or clearing the last override would
+    // leave an empty `entitlements` map behind instead of removing it.
+    const hasOverrides =
+      Object.keys(entitlements).length > 0 ||
+      Object.keys(explicitFeatures).length > 0
+    if (hasOverrides) entitlements['features'] = features
     const after = {
       plan: plan || null,
-      entitlements: hasOverrides ? entitlements : null,
+      // The audit row records the resulting STATE, never the sentinels — a
+      // `deleteField()` does not serialise to anything a reader can act on.
+      entitlements: hasOverrides
+        ? { ...entitlements, features: explicitFeatures }
+        : null,
     }
     try {
       await setDoc(
