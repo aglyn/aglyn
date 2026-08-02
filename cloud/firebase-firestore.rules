@@ -808,83 +808,6 @@ service cloud.firestore {
       }
     }
 
-    // AGL-975 cutover: the same rules under the new collection name.
-    // Both are served until production is verified reading `marketplaceListings`,
-    // so no client is denied mid-rollout. The `marketplaceListings` block
-    // above is deleted with the collection itself.
-    match /marketplaceListings/{listingId} {
-      allow read: if true;
-      allow create: if false;
-      // Listings are ORG-owned since AGL-652, so `profileId` holds an org
-      // id. The owner check used to compare it to `request.auth.uid`, which
-      // a uid can never satisfy — it did not error, it just silently denied
-      // every publisher access to their own listing. Same shape as the
-      // publisherProfiles block above; `exists()` first because reading
-      // `.data` off a missing member doc errors rather than denying.
-      function listingManager() {
-        return isSignedIn() &&
-          exists(/databases/$(database)/documents/orgs/$(resource.data.profileId)/members/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/orgs/$(resource.data.profileId)/members/$(request.auth.uid))
-            .data.role in ['owner', 'admin'];
-      }
-      // Owners toggle metadata (deletedAt un/republish) client-side, but
-      // must NOT touch server-managed fields (AGL-503): installCount is
-      // incremented by the install API (ranking integrity), priceUsd gates
-      // purchases, and profileId is the ownership key. The review verdict is
-      // equally server-owned (AGL-651): `reviewStatus` decides both the
-      // trust badge and whether a plugin is publicly browsable at all, so an
-      // owner who could write it could self-promote to 'verified' and skip
-      // staff review outright. Delete stays open to the owner; staff moderate
-      // anything.
-      allow update: if isStaff() ||
-        (listingManager() &&
-          !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['installCount', 'priceUsd', 'profileId',
-                     'reviewStatus', 'reviewedBy', 'reviewedAt',
-                     'rejectionReason',
-                     // The newest version that passed review (AGL-1016),
-                     // denormalised here because `pluginVersions` is
-                     // server-only. It is what the console's update badge
-                     // offers, so a publisher who could write it could
-                     // advertise unreviewed code as an available update —
-                     // the exact leak AGL-966 closed.
-                     'latestApprovedVersion',
-                     // Rating aggregates (AGL-655) drive ranking and the
-                     // trust signal buyers read, so they are maintained by
-                     // the reviews API alone — a publisher who could write
-                     // them could invent a five-star average.
-                     'ratingSum', 'ratingCount', 'ratingAverage',
-                     'commentCount',
-                     // Staff takedown (AGL-658). An owner who could clear
-                     // `hiddenAt` could un-hide their own listing, which
-                     // makes moderation a suggestion.
-                     'hiddenAt', 'hiddenBy', 'hiddenReason']));
-      allow delete: if isStaff() || listingManager();
-      // Version snapshots hold the actual (possibly paid) content — no
-      // client reads; installs go through /api/marketplace/install, which
-      // checks the purchase record server-side (AGL-46).
-      match /versions/{version} {
-        allow read, write: if isStaff();
-      }
-      // Ratings and comments (AGL-655). Public read so the detail page can
-      // render them without auth. Writes are API-ONLY: the route decides
-      // whether the author is a verified installer, blocks the publisher's
-      // own org, and adjusts the listing aggregates in the same
-      // transaction. Letting a client write here would make every one of
-      // those checks advisory.
-      match /reviews/{authorUid} {
-        allow read: if true;
-        allow write: if false;
-      }
-      // Plugin version records hold the artifact sha256 + manifest (AGL-45).
-      // Server-only, same as component versions: installs go through
-      // /api/marketplace/install-plugin, which checks entitlement + kill
-      // switch and copies the pin into the host's installs.
-      match /pluginVersions/{version} {
-        allow read, write: if isStaff();
-      }
-    }
-
     // Immutable base snapshots of installed marketplace content (AGL-1015),
     // keyed by their own content hash. Written only by the install routes
     // through the Admin SDK, and never rewritten — a document at a given hash
@@ -896,14 +819,6 @@ service cloud.firestore {
     // could read this collection could fetch any listing's content by hash
     // without buying it — exactly the leak the version subcollection is closed
     // for. The diff and reset paths (AGL-1018) read it server-side.
-    match /marketplaceArtifactBases/{sha256} {
-      allow read, write: if false;
-    }
-
-    // AGL-975 cutover: the same rules under the new collection name.
-    // Both are served until production is verified reading `marketplaceArtifactBases`,
-    // so no client is denied mid-rollout. The `marketplaceArtifactBases` block
-    // above is deleted with the collection itself.
     match /marketplaceArtifactBases/{sha256} {
       allow read, write: if false;
     }
@@ -927,28 +842,6 @@ service cloud.firestore {
       allow read, write: if isStaff();
     }
 
-    // AGL-975 cutover: the same rules under the new collection name.
-    // Both are served until production is verified reading `marketplaceReports`,
-    // so no client is denied mid-rollout. The `marketplaceReports` block
-    // above is deleted with the collection itself.
-    match /marketplaceReports/{reportId} {
-      allow read, write: if isStaff();
-    }
-
-    match /marketplacePurchases/{purchaseId} {
-      // The seller is an ORG (AGL-652), so the sales side is a membership
-      // check, not a uid match — a uid never equals an org id, and leaving
-      // the old comparison would hide every publisher's own revenue.
-      allow read: if isStaff() || (isSignedIn() &&
-        (resource.data.buyerUid == request.auth.uid ||
-         exists(/databases/$(database)/documents/orgs/$(resource.data.sellerOrgId)/members/$(request.auth.uid))));
-      allow write: if false;
-    }
-
-    // AGL-975 cutover: the same rules under the new collection name.
-    // Both are served until production is verified reading `marketplacePurchases`,
-    // so no client is denied mid-rollout. The `marketplacePurchases` block
-    // above is deleted with the collection itself.
     match /marketplacePurchases/{purchaseId} {
       // The seller is an ORG (AGL-652), so the sales side is a membership
       // check, not a uid match — a uid never equals an org id, and leaving

@@ -1,10 +1,18 @@
 /**
- * AGL-975. The cutover duplicates four `marketplace*` rule blocks under
- * `marketplace*` names. Two things need proving, and the second is the one
- * that nearly went wrong: an earlier attempt used a single
- * `match /{collection}/{id}` to serve both names, which is a WILDCARD over
- * every top-level collection — and `marketplaceListings` is `allow read: if
- * true`, so it would have made every unmatched collection world-readable.
+ * AGL-975. The marketplace collections were renamed off the word `community`,
+ * which is being freed for a public forum.
+ *
+ * The cutover ran duplicate rule blocks under both names until production was
+ * confirmed reading the new ones; those duplicates are now collapsed, so this
+ * asserts the END state: the new names carry the rules, and the retired names
+ * are matched by NOTHING — which in Firestore means denied, the default that
+ * makes deleting the old collections safe.
+ *
+ * The wildcard checks are the reason this file exists at all. An earlier
+ * attempt served both names from a single `match /{collection}/{id}`, which is
+ * a wildcard over every top-level collection — and `marketplaceListings` is
+ * `allow read: if true`, so it would have made `apiKeys` (API token hashes)
+ * and `adminAudit` world-readable. They are kept as standing regressions.
  *
  *   npx firebase emulators:start --only firestore --project aglyn-main
  *   node cloud/marketplace-rules.spec.mjs
@@ -38,22 +46,27 @@ const check = async (label, fn) => {
 
 await env.withSecurityRulesDisabled(async (c) => {
   const db = c.firestore()
-  await setDoc(doc(db, 'marketplaceListings', 'l1'), { displayName: 'Old' })
   await setDoc(doc(db, 'marketplaceListings', 'l1'), { displayName: 'New' })
+  // Seeded past the rules on purpose: the retired name must be unreadable
+  // even when a document is genuinely sitting there. Asserting a denial over
+  // an empty collection would pass for the wrong reason.
+  await setDoc(doc(db, 'communityListings', 'l1'), { displayName: 'Retired' })
   await setDoc(doc(db, 'apiKeys', 'secret1'), { hash: 'nope' })
   await setDoc(doc(db, 'adminAudit', 'a1'), { action: 'x' })
 })
 
 const anon = env.unauthenticatedContext().firestore()
 
-await check('a stranger reads the OLD listings collection (unchanged)', () =>
+await check('a stranger reads the listings collection', () =>
   assertSucceeds(getDoc(doc(anon, 'marketplaceListings', 'l1'))),
 )
-await check('a stranger reads the NEW listings collection', () =>
-  assertSucceeds(getDoc(doc(anon, 'marketplaceListings', 'l1'))),
-)
-await check('neither is writable by a stranger', () =>
+await check('a stranger cannot write it', () =>
   assertFails(setDoc(doc(anon, 'marketplaceListings', 'l1'), { x: 1 })),
+)
+// The pair above used to assert the same collection twice under an "OLD" and
+// a "NEW" label — true, and hollow, once the rename made both strings equal.
+await check('the RETIRED community name is matched by no rule at all', () =>
+  assertFails(getDoc(doc(anon, 'communityListings', 'l1'))),
 )
 
 // THE REGRESSION THIS EXISTS FOR.
