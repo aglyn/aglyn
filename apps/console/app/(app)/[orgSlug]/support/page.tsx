@@ -64,10 +64,23 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
   // The org's support commitment (AGL-1103). `ready` gates the claim, never
   // the lookup: `supportForPlan` fails closed to the community tier, so
   // rendering it early would tell a paying customer they are owed nothing.
-  const { org, ready: orgReady } = useCurrentOrg()
+  const { org, orgId, ready: orgReady } = useCurrentOrg()
   const supportCommitment = supportForPlan(org?.plan)
   const supportWindow = describeResponseWindow(supportCommitment.firstResponse)
 
+  /**
+   * Every support call carries the CURRENT org (AGL-1147).
+   *
+   * Threaded here rather than at each call site because the bug was one
+   * omission repeated: no support request sent an `orgId` at all, so both
+   * routes fell back to `getOrgForUser(uid)` with no org — the caller's FIRST
+   * one. In production that put a ticket belonging to the personal workspace
+   * on the support page of two unrelated organizations, and AGL-1103 made it
+   * material: a ticket opened from an Enterprise workspace was filed against
+   * the wrong org AND took that org's response commitment.
+   *
+   * Attaching it in the helper means a new call cannot forget it.
+   */
   const request = useCallback(
     async (
       path: string,
@@ -76,13 +89,20 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
     ): Promise<any | null> => {
       try {
         const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(path, {
+        const scoped = orgId
+          ? `${path}${path.includes('?') ? '&' : '?'}orgId=${encodeURIComponent(orgId)}`
+          : path
+        const response = await fetch(scoped, {
           method,
           headers: {
             'Content-Type': 'application/json',
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
-          ...(body ? { body: JSON.stringify(body) } : {}),
+          // Sent in the body too: the routes read `query.orgId ?? payload.orgId`,
+          // and a body-only reader would otherwise miss it.
+          ...(body || orgId
+            ? { body: JSON.stringify({ ...(body ?? {}), ...(orgId ? { orgId } : {}) }) }
+            : {}),
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
@@ -98,7 +118,7 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
         return null
       }
     },
-    [user, enqueueSnackbar],
+    [user, orgId, enqueueSnackbar],
   )
 
   // --- Tickets ------------------------------------------------------------

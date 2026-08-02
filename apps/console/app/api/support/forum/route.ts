@@ -62,7 +62,14 @@ async function handler(request: Request): Promise<Response> {
     // check said exactly that about Free: no tickets, no forum, nothing.
     const canUseForum = async () => {
       if (isStaff) return true
-      const resolved = await getOrgForUser(decoded.uid)
+      // Scoped to the CURRENT org, the same way the tickets route beside this
+      // one does (AGL-1147). `getOrgForUser(uid)` with no org resolves the
+      // caller's FIRST one, so a user whose first workspace is Free was read
+      // with Free's entitlement while sitting in an Enterprise workspace.
+      const resolved = await getOrgForUser(
+        decoded.uid,
+        String(query['orgId'] ?? payload?.orgId ?? '') || null,
+      )
       return supportForPlan(resolved?.org?.plan as OrgPlan | null).forum
     }
     if (!(await canUseForum())) {
