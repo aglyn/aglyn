@@ -1,0 +1,72 @@
+name: Uptime probe
+
+# Measures before committing to a number (AGL-1102).
+#
+# The SLA issue asks for a percentage, a status page and an incident process.
+# None of those mean anything without uptime history, and there was none: no
+# health endpoint, no probe, nothing recorded. This is the plumbing. The
+# percentage is AGL-1148, deliberately gated on data this produces.
+#
+# Runs on GitHub's runners, NOT our infrastructure. That is the only part that
+# makes it a real probe — a monitor hosted on the thing it monitors cannot
+# observe its own outage.
+#
+# WHAT THIS IS NOT: a substitute for an external uptime monitor. GitHub's
+# scheduled runs are best-effort; they can be delayed or skipped under load,
+# and they do not run at all if the repository goes quiet for 60 days. So a
+# gap here is NOT evidence of an outage, and an unbroken green history is NOT
+# evidence of 100% uptime. Do not quote it as one. It exists so the endpoints
+# are continuously exercised from outside the deploy, and so there is
+# something concrete to point a paid monitor at when one is chosen.
+#
+# The run history IS the record. A failed run is where an incident starts.
+#
+# Optional:
+#   var CONSOLE_BASE_URL — defaults to https://app.aglyn.com
+#   var TENANT_BASE_URL  — defaults to https://demo.aglyn.com
+#
+# Both must be hosts that SERVE the app, not ones that redirect to it. The
+# probe refuses to follow a 3xx and reports it, because a redirecting host is
+# exactly the misconfiguration that broke every scheduled cron run for a week
+# after the aglyn.io → aglyn.com move (AGL-786).
+
+on:
+  schedule:
+    # Every 15 minutes. Finer than GitHub reliably delivers, and there is no
+    # value in pretending otherwise — see the caveat above.
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  # A delayed run must not pile up behind a later one; the newest sample is
+  # the only one worth having.
+  group: uptime-probe
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # No install step on purpose: the probe uses only built-in fetch, so
+      # this job cannot be broken by a dependency, a lockfile, or a registry
+      # outage. A monitor that fails for reasons unrelated to what it monitors
+      # is worse than no monitor — every false alarm makes the next real one
+      # easier to ignore.
+      - name: Probe health endpoints
+        run: |
+          node tools/scripts/probe-uptime.mjs \
+            "${CONSOLE_BASE_URL:-https://app.aglyn.com}" \
+            "${TENANT_BASE_URL:-https://demo.aglyn.com}"
+        env:
+          CONSOLE_BASE_URL: ${{ vars.CONSOLE_BASE_URL }}
+          TENANT_BASE_URL: ${{ vars.TENANT_BASE_URL }}
