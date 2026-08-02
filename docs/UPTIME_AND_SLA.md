@@ -62,6 +62,27 @@ database. A leading **or** trailing double underscore alone is fine; it is the
 pair that is reserved.
 :::
 
+## The status page
+
+**https://docs.aglyn.com/status**
+
+Served from the docs site on purpose. `aglyn-docs` is a separate Vercel project
+from the console and the tenant runtime, so a console outage does not take the
+page reporting it down with it — which is the whole job. A status page served by
+the thing it reports on is decoration.
+
+It reads the health endpoints **live from the visitor's browser**, which is why
+those endpoints send `Access-Control-Allow-Origin: *`. Without it the browser
+blocks the read and every service renders as unreachable on a perfectly healthy
+day. The body is already public and carries no secrets, so opening it costs
+nothing.
+
+It deliberately shows **no uptime percentage and no history** — nothing stores
+samples yet, and inventing "99.9%" from one successful fetch is how a status
+page loses its credibility. It also says "unreachable from your browser" rather
+than "down", because from a browser a real outage, a DNS failure and a local
+network problem are indistinguishable.
+
 ## The probe
 
 ```bash

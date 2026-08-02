@@ -110,6 +110,25 @@ export async function GET(): Promise<Response> {
   )
 }
 
+/**
+ * Preflight, so a cross-origin reader that sets any header still works.
+ *
+ * A plain GET is a "simple request" and never preflights, so the status page
+ * does not need this — but a monitor that adds one custom header would, and
+ * discovering that during an incident is the wrong time.
+ */
+export async function OPTIONS(): Promise<Response> {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      ...healthHeaders('ok'),
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': '*',
+      'Access-Control-Max-Age': '86400',
+    },
+  })
+}
+
 /** Cheap liveness for monitors that only issue HEAD. Touches nothing. */
 export async function HEAD(): Promise<Response> {
   return new Response(null, {

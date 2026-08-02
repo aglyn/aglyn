@@ -81,6 +81,17 @@ export function healthBody(report: HealthReport): Record<string, unknown> {
 export function healthHeaders(status: 'ok' | 'degraded'): Record<string, string> {
   return {
     'Cache-Control': HEALTH_NO_STORE,
+    // Readable from any origin, deliberately.
+    //
+    // A status page must not live on the thing it reports on, so it is served
+    // from a DIFFERENT deployment and reads these cross-origin. Without this
+    // header the browser blocks the read and the page renders every service as
+    // down during a perfectly healthy day — a status page that cries outage is
+    // worse than none.
+    //
+    // Safe to open: the body is already public and unauthenticated, carries no
+    // secrets, and a failing check reports a code rather than a message.
+    'Access-Control-Allow-Origin': '*',
     // Tells a well-behaved monitor the failure is transient rather than a
     // permanent 5xx worth escalating on the first sample.
     ...(status === 'ok' ? {} : { 'Retry-After': '30' }),
