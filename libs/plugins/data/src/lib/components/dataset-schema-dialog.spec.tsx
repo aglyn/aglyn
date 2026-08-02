@@ -43,6 +43,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // Scoped sharing (AGL-1044). Org-wide by default so these specs exercise
   // the editable path; the read-only branch is covered by the rules tests.
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
+  // The sites query is membership-constrained on the signed-in uid, because
+  // `/hosts/{hostId}` is gated per document and Firestore rejects a LIST that
+  // could return a denied doc (AGL-1145). No uid, no query — so a mock that
+  // omitted this would leave the hook returning nothing for the wrong reason.
+  useUser: () => ({ data: { uid: 'uid-test' } }),
   useFirestoreCollection: () => ({ data: [] }),
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({

@@ -48,6 +48,28 @@ export type OrgRole = 'owner' | 'admin' | 'editor' | 'viewer'
 /** Per-host refinement for editor/viewer members ("3 of 15 sites"). */
 export type HostAccessRole = 'admin' | 'editor' | 'viewer'
 
+/**
+ * Every host role, as a value — for `where('memberRoles.{uid}', 'in', …)`.
+ *
+ * `/hosts/{hostId}` is gated per document on `memberRoles.{uid}`, and
+ * Firestore refuses to run a LIST that could return a denied document. So
+ * every client query over `hosts` must carry this filter, and it must name
+ * ALL the roles: a role missing from the array is a site the member owns and
+ * cannot see, with no error to explain it (AGL-1145).
+ *
+ * Built from a `Record` rather than written as an array so that adding a role
+ * to the union above fails to COMPILE here. A plain `HostAccessRole[]` would
+ * happily stay short, which is the silent half of the bug.
+ */
+const HOST_ACCESS_ROLE_KEYS: Record<HostAccessRole, true> = {
+  admin: true,
+  editor: true,
+  viewer: true,
+}
+export const HOST_ACCESS_ROLES = Object.keys(
+  HOST_ACCESS_ROLE_KEYS,
+) as HostAccessRole[]
+
 export interface AglynOrganization extends AglynDocument {
   $id: OrgUid
   name?: string

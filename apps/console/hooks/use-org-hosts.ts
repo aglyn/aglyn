@@ -16,6 +16,7 @@
  */
 'use client'
 
+import type { HostAccessRole } from '@aglyn/aglyn'
 import {
   collection,
   getDocsFromServer,
@@ -26,6 +27,26 @@ import {
   type Firestore,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
+
+/**
+ * Every host role, as a value (AGL-1145).
+ *
+ * `/hosts/{hostId}` is gated per document on `memberRoles.{uid}` and Firestore
+ * refuses to run a LIST that could return a denied document, so this filter is
+ * mandatory — and it must name ALL the roles, or a member silently cannot see
+ * a site they hold.
+ *
+ * Declared here rather than imported as a value: the `@aglyn/aglyn` barrel
+ * pulls the whole library in, which these hooks do not otherwise need. The
+ * `Record` keeps it honest anyway — adding a role to `HostAccessRole` fails to
+ * compile here, exactly as it does at the shared `HOST_ACCESS_ROLES`.
+ */
+const HOST_ACCESS_ROLE_KEYS: Record<HostAccessRole, true> = {
+  admin: true,
+  editor: true,
+  viewer: true,
+}
+const HOST_ACCESS_ROLES = Object.keys(HOST_ACCESS_ROLE_KEYS) as HostAccessRole[]
 
 const RETRY_DELAY_MS = 400
 // Cold loads (a refresh or a pasted deep link) restore the auth session and
@@ -92,7 +113,7 @@ export function useOrgHosts(
       // rules' membership constraint.
       const q = query(
         collection(firestore, 'hosts'),
-        where(`memberRoles.${uid}`, 'in', ['admin', 'editor', 'viewer']),
+        where(`memberRoles.${uid}`, 'in', HOST_ACCESS_ROLES),
         ...(orgId ? [where('orgId', '==', orgId)] : []),
       )
       unsubscribe = onSnapshot(
