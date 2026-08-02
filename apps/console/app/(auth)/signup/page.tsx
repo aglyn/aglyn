@@ -19,6 +19,7 @@
 
 import {
   PLAN_LABELS,
+  generateOrgSlug,
   onboardingDestination,
   parseOnboardingPlanIntent,
 } from '@aglyn/aglyn'
@@ -79,6 +80,34 @@ import guardPopupLoading from '../../../utils/popup-loading-guard'
 
 const googleOAuthProvider = new GoogleAuthProvider()
 
+/**
+ * The org name has to survive becoming a workspace address (AGL-1115).
+ *
+ * `/api/orgs/create` derives the slug with `generateOrgSlug` and rejects the
+ * request when nothing usable is left — reserved words like "workspace",
+ * "admin" or "api", anything under two characters, and names that are all
+ * punctuation or emoji. `provisionSignUpOrg` is best-effort, so that 400 was
+ * swallowed and the person landed on the workspace picker having typed a name
+ * and been given nothing, with no idea why.
+ *
+ * Checked here rather than on the shared field: Manage Account collects the
+ * same "organization name" as free text about the person's employer, and it
+ * never becomes a subdomain. Only signup has this constraint.
+ */
+const signupOrgNameField = {
+  ...FIELD_SCHEMA_ORGANIZATION_NAME,
+  helperText: 'This becomes your workspace address, e.g. acme-inc.aglyn.com',
+  validate: [
+    ...(FIELD_SCHEMA_ORGANIZATION_NAME.validate ?? []),
+    (value: unknown) =>
+      !String(value ?? '').trim() || generateOrgSlug(String(value ?? ''))
+        ? undefined
+        : 'Pick a different name — this one can’t be used as a workspace ' +
+          'address. Try adding a word, and avoid reserved names like ' +
+          '“admin” or “workspace”.',
+  ],
+} as typeof FIELD_SCHEMA_ORGANIZATION_NAME
+
 const formSchema: FormSchema = {
   fields: [
     FIELD_SCHEMA_FIRST_NAME,
@@ -87,7 +116,7 @@ const formSchema: FormSchema = {
     // an empty chooser (AGL-1115). It is the org's display name; the slug is
     // derived server-side by `/api/orgs/create`, so nobody has to think about
     // URLs while signing up.
-    FIELD_SCHEMA_ORGANIZATION_NAME,
+    signupOrgNameField,
     FIELD_SCHEMA_EMAIL,
     FIELD_SCHEMA_PASSWORD,
     FIELD_SCHEMA_PASSWORD_CONFIRM,
