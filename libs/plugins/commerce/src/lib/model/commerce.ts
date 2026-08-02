@@ -29,7 +29,7 @@
  * Platform fee on tenant-site product sales (Commerce Starter, AGL-90) —
  * the tenant sells to their own visitors through their connected account,
  * so the platform takes a processing/management share only. (Relocated
- * from app-utils/community.ts, where it was misfiled — AGL-411.)
+ * from app-utils/marketplace.ts, where it was misfiled — AGL-411.)
  */
 export const COMMERCE_PLATFORM_FEE_PERCENT = 2
 /** Product price ceiling (whole USD). */

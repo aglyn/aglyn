@@ -210,7 +210,7 @@ await put(firestore.collection('orgs').doc(orgId), {
     'mui',
     'bookings',
     'commerce',
-    'community',
+    'marketplace',
     'contacts',
     'data',
     'email',
@@ -1007,7 +1007,7 @@ await put(
 // the detail page, installs, and the review queue have real content to
 // exercise. The sha matches tools/plugin-loader/realm/demo's bundle when
 // that has been built; install tests re-seed the sha as needed.
-const demoListing = firestore.collection('communityListings').doc('realm-demo')
+const demoListing = firestore.collection('marketplaceListings').doc('realm-demo')
 await put(demoListing, {
   type: 'plugin',
   profileId: 'seed-publisher',
@@ -1045,7 +1045,7 @@ await put(demoListing.collection('pluginVersions').doc('1.0.0'), {
 })
 
 // A submitted listing so the staff review queue (AGL-432) has content.
-await put(firestore.collection('communityListings').doc('pending-review'), {
+await put(firestore.collection('marketplaceListings').doc('pending-review'), {
   type: 'plugin',
   profileId: 'seed-publisher',
   pluginId: 'pending-review',
@@ -1060,7 +1060,7 @@ await put(firestore.collection('communityListings').doc('pending-review'), {
 })
 await put(
   firestore
-    .collection('communityListings')
+    .collection('marketplaceListings')
     .doc('pending-review')
     .collection('pluginVersions')
     .doc('0.1.0'),

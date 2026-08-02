@@ -18,7 +18,7 @@
 import { pluginArtifactPath } from '../app-utils/plugin-manifest'
 
 /**
- * Trusted-realm remote plugins (AGL-420). Community bundles normally run
+ * Trusted-realm remote plugins (AGL-420). Marketplace bundles normally run
  * inside the cross-origin sandboxed PluginFrame; listings a staff member
  * has REVIEWED AND SIGNED (`trust: 'realm'`) may instead load into the app
  * realm and register real components/runtimes — first-party-grade

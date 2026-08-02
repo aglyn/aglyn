@@ -12,7 +12,7 @@
  * the loader-manifest codegen. Prints the manual follow-ups (catalog entry
  * + release flag) it deliberately does not auto-edit.
  *
- * Community/marketplace plugins use `tools/plugin-loader/realm/template`
+ * Marketplace/marketplace plugins use `tools/plugin-loader/realm/template`
  * instead — they build standalone bundles against the host ABI.
  */
 import { execSync } from 'node:child_process'

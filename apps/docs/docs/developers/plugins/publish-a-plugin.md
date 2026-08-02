@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Publish a plugin
-description: Ship your own plugin to the community marketplace with version pinning.
+description: Ship your own plugin to the marketplace marketplace with version pinning.
 ---
 
 # Publish a plugin
@@ -13,7 +13,7 @@ process, listing authoring, versioning, payouts — is the
 :::
 
 
-Built something reusable? Publish it to the **community marketplace** so other Aglyn users
+Built something reusable? Publish it to the **marketplace marketplace** so other Aglyn users
 can install it — free or paid.
 
 :::info Plan availability

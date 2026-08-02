@@ -20,7 +20,7 @@ import { buildRoute, Route } from './route-links'
 
 /**
  * The host dashboard's tab strip, previously copy-pasted into every
- * host-scoped page (extracted with the Community tab, AGL-44). Ids are
+ * host-scoped page (extracted with the Marketplace tab, AGL-44). Ids are
  * stable — DashboardLayout keys the active tab on them.
  *
  * Plugin-contributed tabs (AGL-394) are spliced in from the
@@ -105,7 +105,7 @@ export function hostNavTabItems(
     // ConsoleExtension, served by the generic route (AGL-395).
     // Logic, Workflows (nav + page) now come from their plugins'
     // ConsoleExtensions, served by the generic route (AGL-395).
-    // Community (nav + hub page) now comes from the community plugin's
+    // Marketplace (nav + hub page) now comes from the marketplace plugin's
     // ConsoleExtension, served by the generic route (AGL-395); the listing
     // + publisher detail pages remain app routes.
     {

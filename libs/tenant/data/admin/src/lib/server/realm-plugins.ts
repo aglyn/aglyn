@@ -63,11 +63,11 @@ export async function getPluginConfig(
  * the install — so this join is the single source the loaders consume:
  *
  * 1. Read the org's installs (and the host's, when a host is in scope).
- * 2. Join each pin with its `communityListings/{id}/pluginVersions/{v}`
+ * 2. Join each pin with its `marketplaceListings/{id}/pluginVersions/{v}`
  *    doc; only versions carrying `trust: 'realm'` survive.
  * 3. Drop revoked versions (`revocations/{listingId}` kill switch) — a
  *    revocation beats a still-present trust grant.
- * 4. Drop hidden listings (AGL-948) — `resolveCommunityPluginVersion`
+ * 4. Drop hidden listings (AGL-948) — `resolveMarketplacePluginVersion`
  *    returns null for a listing under staff takedown. `deletedAt` is not
  *    a blocker; see that function for why the two differ.
  *
@@ -97,7 +97,7 @@ interface InstallPin {
  * listing must not break the sites already paying for it; unpublish
  * blocks new installs (`install-plugin`) and that is all it means.
  */
-export async function resolveCommunityPluginVersion(
+export async function resolveMarketplacePluginVersion(
   listingId: string,
   version: string,
 ): Promise<{
@@ -109,7 +109,7 @@ export async function resolveCommunityPluginVersion(
   const listingRef = firebaseAdmin
     .app()
     .firestore()
-    .collection('communityListings')
+    .collection('marketplaceListings')
     .doc(listingId)
   const [listing, snapshot] = await Promise.all([
     listingRef.get(),
@@ -183,7 +183,7 @@ export async function getRealmPluginInstalls(options: {
 
   const installs = await Promise.all(
     [...pins.values()].map(async (pin): Promise<RealmPluginInstall | null> => {
-      const pinned = await resolveCommunityPluginVersion(
+      const pinned = await resolveMarketplacePluginVersion(
         pin.listingId,
         pin.version,
       )

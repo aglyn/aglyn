@@ -32,12 +32,12 @@ Each links into its section for the how-to.
 - **[One Marketplace for the whole organization](developers/plugins/overview.md)** — browse,
   install, manage and publish marketplace items from a single **Marketplace** destination in
   the organization navigation (**Browse**, **Installed**, and **Publish** tabs), instead of a
-  per-site Community tab. Old per-site links redirect here.
+  per-site Marketplace tab. Old per-site links redirect here.
 - **One section for everything pluggable and sellable** — the separate **Plugins** and
-  **Community** org tabs were folded into the Marketplace. The **Installed** tab now holds the
+  **Marketplace** org tabs were folded into the Marketplace. The **Installed** tab now holds the
   first-party plugin switchboard and per-plugin settings alongside marketplace installs, and
   the seller area is its own set of tabs — **Publish**, **Profile**, **Listings**, **Payouts**,
-  and **Sales**. The old `/plugins` and `/community` links redirect into the matching tab.
+  and **Sales**. The old `/plugins` and `/marketplace` links redirect into the matching tab.
 - **Install targeting** — when you install, choose **All sites** (organization-wide, and any
   sites you add later) or **Selected sites**. Site-scoped artifacts (components, templates,
   layouts) install onto every current site and note that new sites aren't added automatically.
@@ -131,7 +131,7 @@ Each links into its section for the how-to.
   inline tester.
 - **Org & team v2** — organization logo + contact details, a team member
   detail page with role/title editing and per-member activity, personal
-  community profiles, and profile images for every user.
+  marketplace profiles, and profile images for every user.
 - **Staff console v3** — impersonate a user or an org's owner (audited,
   bannered), edit orgs and user identities directly, and paginated,
   card-styled admin lists.

@@ -21,7 +21,7 @@ import ListingDetailEditor from './listing-detail-editor.component'
 
 export interface EditListingDialogProps {
   orgId: string
-  /** The listing being edited (a `communityListings` doc with `$id`). */
+  /** The listing being edited (a `marketplaceListings` doc with `$id`). */
   listing: Record<string, any> | null
   open: boolean
   onClose: () => void

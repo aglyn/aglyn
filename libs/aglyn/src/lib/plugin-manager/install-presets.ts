@@ -19,7 +19,7 @@ import type { PresetSchema } from '../types/nodes'
 
 /**
  * Install→preset mapping seam (AGL-419): the besigner drawer shows a
- * preset per installed community plugin, but the preset shape (component
+ * preset per installed marketplace plugin, but the preset shape (component
  * id, drawer category, icon) belongs to the mui plugin — so the mapper is
  * REGISTERED by plugins-mui and the console consumes it through core,
  * never importing the plugin.

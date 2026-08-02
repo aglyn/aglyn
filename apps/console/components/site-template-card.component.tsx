@@ -34,9 +34,9 @@ import { docsHelp } from '../constants/docs-links'
 
 /**
  * Save-as-template (AGL-137): publishes this host's published screens +
- * theme to the community library as a site template (free or paid). The
+ * theme to the marketplace library as a site template (free or paid). The
  * API applies the same sanitizer and gates as component publishing;
- * preview images attach afterwards from Manage → Community.
+ * preview images attach afterwards from Manage → Marketplace.
  */
 export function SiteTemplateCard(props: { hostId: string }) {
   const { hostId } = props
@@ -54,7 +54,7 @@ export function SiteTemplateCard(props: { hostId: string }) {
     setBusy(true)
     try {
       const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/community/publish-template', {
+      const response = await fetch('/api/marketplace/publish-template', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -78,7 +78,7 @@ export function SiteTemplateCard(props: { hostId: string }) {
       setOpen(false)
       enqueueSnackbar(
         `Template published (v${payload.version}) — add a preview image ` +
-          'from Manage → Community',
+          'from Manage → Marketplace',
         { variant: 'success', persist: false },
       )
     } catch (error) {

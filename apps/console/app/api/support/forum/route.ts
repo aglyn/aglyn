@@ -31,7 +31,7 @@ const FORUM_CATEGORIES = ['General', 'Building', 'Showcase', 'Feedback']
  * subscribers (staff always). Data at `forumThreads/{id}` + `replies`,
  * absent from the Firestore rules by design — reads and writes pass this
  * route so the paid gate can't be bypassed. Author display names come
- * from community profiles when present, else the email local part.
+ * from marketplace profiles when present, else the email local part.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, body: payload, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -67,7 +67,7 @@ async function handler(request: Request): Promise<Response> {
     const authorName = async () => {
       // Prefer the personal account the user actually edits (Manage →
       // Profile writes users/{uid}). `profiles/{uid}` used to be the only
-      // source, but its editor was the community page — retiring that with
+      // source, but its editor was the marketplace page — retiring that with
       // AGL-653 would have silently dropped every forum author back to an
       // email prefix. Legacy profile values still win over that fallback.
       const [account, profile] = await Promise.all([

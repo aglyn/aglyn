@@ -33,7 +33,7 @@ describe('parsePluginPropsJson (AGL-192)', () => {
 })
 
 describe('muiPluginInstallToPreset (AGL-190)', () => {
-  it('builds a Community-category preset pinning the listing id', () => {
+  it('builds a Marketplace-category preset pinning the listing id', () => {
     const preset = muiPluginInstallToPreset({
       $id: 'L1',
       displayName: 'Weather',

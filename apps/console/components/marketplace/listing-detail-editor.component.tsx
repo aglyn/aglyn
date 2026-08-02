@@ -35,7 +35,7 @@ import MarkdownField, {
 import MediaPickerDialog from '../media/media-picker-dialog.component'
 import mediaSrc from '../../utils/media-src'
 
-// Mirrors the server's fixed taxonomy (community plugin model), which the
+// Mirrors the server's fixed taxonomy (marketplace plugin model), which the
 // console can't import across the aglyn:addons boundary. The server
 // re-validates, so drift fails the save rather than corrupting a listing.
 const LISTING_CATEGORIES = [
@@ -73,7 +73,7 @@ export interface ListingDetailEditorProps {
  * as blog content (`MarkdownVisualEditor`), and every image — preview, logo,
  * screenshots, and inline body images — picks from the shared DAM.
  *
- * Content saves through the community plugin's HTTP API (`update-listing`);
+ * Content saves through the marketplace plugin's HTTP API (`update-listing`);
  * the preview image goes through its dedicated endpoint since it isn't a
  * content field. Both are merges, so an unchanged field is left untouched.
  */
@@ -149,7 +149,7 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
       // Preview image isn't a content field, so it has its own endpoint
       // (AGL-863). Only touch it when it actually changed.
       if (values.previewImageUrl !== originalPreview.current) {
-        await fetch('/api/community/preview-image', {
+        await fetch('/api/marketplace/preview-image', {
           method: values.previewImageUrl ? 'POST' : 'DELETE',
           headers,
           body: JSON.stringify({
@@ -158,7 +158,7 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
           }),
         })
       }
-      const response = await fetch('/api/community/publish-plugin', {
+      const response = await fetch('/api/marketplace/publish-plugin', {
         method: 'POST',
         headers,
         body: JSON.stringify({

@@ -21,7 +21,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
-  resolveCommunityPluginVersion,
+  resolveMarketplacePluginVersion,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -47,7 +47,7 @@ export async function ensureRemoteServerBundles(): Promise<void> {
     return
   }
   const loaded = await loadRemoteServerBundles({
-    resolveVersion: resolveCommunityPluginVersion,
+    resolveVersion: resolveMarketplacePluginVersion,
     artifactsBase,
   })
   // Audit trail (AGL-437): every remote server bundle this process runs
@@ -61,7 +61,7 @@ export async function ensureRemoteServerBundles(): Promise<void> {
         .add({
           actorUid: 'system',
           action: 'plugins.remoteServer.load',
-          target: `communityListings/${bundle.listingId}/pluginVersions/${bundle.version}`,
+          target: `marketplaceListings/${bundle.listingId}/pluginVersions/${bundle.version}`,
           after: { sha256: bundle.sha256, app: 'tenant' },
           at: new Date(),
         })

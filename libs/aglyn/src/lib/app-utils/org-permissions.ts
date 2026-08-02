@@ -36,7 +36,7 @@ export type OrgPermission =
   | 'hosts.delete'
   | 'data.manage'
   | 'marketing.manage'
-  | 'community.publish'
+  | 'marketplace.publish'
   | 'plugins.install'
 
 /**
@@ -49,7 +49,7 @@ export interface OrgPermissions {
   createHosts: boolean
   editHosts: boolean
   editBilling: boolean
-  publishToCommunity: boolean
+  publishToMarketplace: boolean
   installPlugins: boolean
   manageMembers: boolean
 }
@@ -108,14 +108,14 @@ export const ORG_PERMISSIONS: readonly OrgPermissionDefinition[] = [
     description: 'Edit announcement bars, popups, and campaigns.',
   },
   {
-    key: 'community.publish',
-    label: 'Publish to community',
+    key: 'marketplace.publish',
+    label: 'Publish to marketplace',
     description: 'Publish listings under the organization profile.',
   },
   {
     key: 'plugins.install',
     label: 'Install plugins',
-    description: 'Install or remove community plugins.',
+    description: 'Install or remove marketplace plugins.',
   },
 ]
 
@@ -147,7 +147,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     ...NO_PERMISSIONS,
     'data.manage': true,
     'marketing.manage': true,
-    'community.publish': true,
+    'marketplace.publish': true,
     'plugins.install': true,
   },
   viewer: NO_PERMISSIONS,

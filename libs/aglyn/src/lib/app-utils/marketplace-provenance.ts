@@ -18,13 +18,13 @@
 /**
  * Everything an org can publish to the marketplace (AGL-654).
  *
- * The union lives in core rather than the community plugin because the
+ * The union lives in core rather than the marketplace plugin because the
  * console reasons about installed artifacts too — a Plugins index that cannot
  * name an artifact type cannot render an update chip — and module boundaries
- * (rightly) forbid an app depending on an addon lib. The community model
+ * (rightly) forbid an app depending on an addon lib. The marketplace model
  * re-exports it, so publishing code still reads it from one place.
  */
-export type CommunityArtifactType =
+export type MarketplaceArtifactType =
   | 'component'
   | 'template'
   | 'plugin'
@@ -38,7 +38,7 @@ export type CommunityArtifactType =
  *
  * Every install route used to stamp its own shape — plugins wrote a pin,
  * dataset schemas a `source`, email templates an `installedFrom`, components a
- * `community` — and none of them kept the content as installed. Without the
+ * `marketplace` — and none of them kept the content as installed. Without the
  * original there is no way to tell the publisher's change from the user's, so
  * an update can only overwrite. This module defines the one shape all install
  * routes write and the one reader everything else asks.
@@ -51,7 +51,7 @@ export type CommunityArtifactType =
  * Top-level rather than per-host on purpose: the same listing version installed
  * onto twenty sites is one document, and re-installing it rewrites nothing.
  */
-export const ARTIFACT_BASE_COLLECTION = 'communityArtifactBases'
+export const ARTIFACT_BASE_COLLECTION = 'marketplaceArtifactBases'
 
 /**
  * Firestore's per-document ceiling is 1 MiB. Snapshots are stored whole, so
@@ -67,7 +67,7 @@ export interface InstalledFrom {
   version: string | null
   /** Content hash of the base snapshot — the key into {@link ARTIFACT_BASE_COLLECTION}. */
   sha256: string | null
-  artifactType: CommunityArtifactType
+  artifactType: MarketplaceArtifactType
   installedAt: unknown
   /** The publishing org (`listing.profileId`, org-owned since AGL-652). */
   publisherOrgId: string | null
@@ -90,7 +90,7 @@ export interface ResolvedProvenance {
   listingId: string | null
   version: string | null
   sha256: string | null
-  artifactType: CommunityArtifactType | null
+  artifactType: MarketplaceArtifactType | null
   publisherOrgId: string | null
   /**
    * A base snapshot exists, so this artifact can be diffed and safely updated.
@@ -128,7 +128,7 @@ export function resolveProvenance(
     | {
         installedFrom?: Partial<InstalledFrom> | null
         /** Component installs (`hosts/{h}/components`). */
-        community?: { listingId?: string; profileId?: string; version?: unknown } | null
+        marketplace?: { listingId?: string; profileId?: string; version?: unknown } | null
         /** Template, layout and dataset-schema installs. */
         source?: { type?: string; listingId?: string; version?: unknown } | null
         /** Plugin pins are their own provenance: the pin IS the version. */
@@ -140,7 +140,7 @@ export function resolveProvenance(
       }
     | null
     | undefined,
-  fallbackArtifactType?: CommunityArtifactType,
+  fallbackArtifactType?: MarketplaceArtifactType,
 ): ResolvedProvenance {
   if (!doc) return UNKNOWN_PROVENANCE
 
@@ -154,7 +154,7 @@ export function resolveProvenance(
       listingId: stamped.listingId,
       version: asVersion(stamped.version),
       sha256: stamped.sha256,
-      artifactType: stamped.artifactType as CommunityArtifactType,
+      artifactType: stamped.artifactType as MarketplaceArtifactType,
       publisherOrgId: stamped.publisherOrgId ?? null,
       updatable: true,
     }
@@ -162,11 +162,11 @@ export function resolveProvenance(
 
   const legacy = stamped?.listingId
     ? { listingId: stamped.listingId, version: stamped.version, profileId: null }
-    : doc.community?.listingId
+    : doc.marketplace?.listingId
       ? {
-          listingId: doc.community.listingId,
-          version: doc.community.version,
-          profileId: doc.community.profileId ?? null,
+          listingId: doc.marketplace.listingId,
+          version: doc.marketplace.version,
+          profileId: doc.marketplace.profileId ?? null,
         }
       : doc.source?.listingId
         ? {

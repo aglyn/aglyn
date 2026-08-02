@@ -7,7 +7,7 @@
  * app's registries.
  *
  * Build: `npm run build` → dist/plugin.bundle.mjs. Publish that file
- * through the Aglyn community pipeline; its sha256 becomes the content
+ * through the Aglyn marketplace pipeline; its sha256 becomes the content
  * pin every install verifies.
  */
 

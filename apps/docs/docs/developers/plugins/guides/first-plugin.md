@@ -8,14 +8,14 @@ description: The full loop — scaffold, develop against a live workspace, verif
 
 Two tracks share the same registries. **First-party** plugins live in this
 repo under `libs/plugins/*` and load through the generated manifests;
-**community** plugins are standalone bundles published to the marketplace.
-This walkthrough does community end-to-end and notes the first-party
+**marketplace** plugins are standalone bundles published to the marketplace.
+This walkthrough does marketplace end-to-end and notes the first-party
 deltas.
 
 ## 1. Scaffold
 
 ```bash
-# Community: copy the standalone starter out of the repo
+# Marketplace: copy the standalone starter out of the repo
 cp -r tools/plugin-loader/realm/template my-plugin && cd my-plugin
 npm install
 
@@ -24,7 +24,7 @@ node tools/scripts/create-plugin.mjs my-plugin \
   --label "My Plugin" --surfaces console,tenantApi
 ```
 
-The community starter gives you `src/index.js` (the entry contract),
+The marketplace starter gives you `src/index.js` (the entry contract),
 `manifest.json`, a build config that compiles your `react` /
 `@aglyn/aglyn` imports into host-ABI lookups, and a README that becomes
 your marketplace listing docs. The first-party scaffolder generates the
@@ -97,7 +97,7 @@ bundle plus `manifest.json` fields and your listing content (README,
 logo, screenshots, links, license, categories — see the
 [publisher handbook](../publishing/publisher-handbook.md)). New listings
 enter the **review queue** as `submitted`; staff list (or verify ✅) them
-before they appear in browse. Publishing requires a community profile, a
+before they appear in browse. Publishing requires a marketplace profile, a
 Pro plan, and payouts onboarding for paid listings; there's a daily
 publish cap.
 

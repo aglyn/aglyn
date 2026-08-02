@@ -35,8 +35,8 @@ import useOrgPermissions from '../../../../hooks/use-org-permissions'
 
 /**
  * Org marketplace (AGL-772): the single org-scope place to browse and
- * install marketplace items, replacing the per-site community tab. The app
- * owns only the chrome — the grid is the community plugin's `orgMarketplace`
+ * install marketplace items, replacing the per-site marketplace tab. The app
+ * owns only the chrome — the grid is the marketplace plugin's `orgMarketplace`
  * widget (the app never imports the plugin), rendered with `orgScoped` so
  * listing links resolve to this route.
  *
@@ -134,8 +134,8 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
               </Stack>
             ) : null}
             {/* Browse + manage in one place (AGL-774). Both are the
-                community plugin's widgets (the app stays plugin-free) and
-                render nothing if the community plugin is disabled. */}
+                marketplace plugin's widgets (the app stays plugin-free) and
+                render nothing if the marketplace plugin is disabled. */}
             <HubTabs
               // Lazy panels (AGL-785): Browse, Installed and Publish each
               // run their own Firestore subscriptions; mounting all three at
@@ -210,9 +210,9 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                 // Seller area (AGL-776/798/801): one tab each for the
                 // publish action and the seller sections — profile,
                 // listings, payouts and sales — folded in from the retired
-                // Community page. Gated on the publish permission; the server
+                // Marketplace page. Gated on the publish permission; the server
                 // enforces it too.
-                ...(permissions.publishToCommunity && currentOrg?.$id
+                ...(permissions.publishToMarketplace && currentOrg?.$id
                   ? [
                       {
                         id: 'publish',

@@ -46,7 +46,7 @@ import mediaSrc from '../../utils/media-src'
 import { buildRoute, Route } from '../../constants/route-links'
 
 // Mirrors the server taxonomy; the server re-validates (the console cannot
-// import the community plugin's model — scope:app may not reach aglyn:addons).
+// import the marketplace plugin's model — scope:app may not reach aglyn:addons).
 const LISTING_CATEGORIES = [
   'analytics',
   'automation',
@@ -270,7 +270,7 @@ export interface PublishPluginFormProps {
  * to be scrolled past to be read.
  *
  * Same server contract: this posts the identical body to
- * `/api/community/publish-plugin`. What changed is the container, and what
+ * `/api/marketplace/publish-plugin`. What changed is the container, and what
  * the container makes possible — sections, a draft that survives a reload,
  * server problems shown against the field that caused them, and somewhere
  * to go afterwards.
@@ -441,7 +441,7 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
       const idToken = await (
         user as { getIdToken?: () => Promise<string> }
       )?.getIdToken?.()
-      const response = await fetch('/api/community/publish-plugin', {
+      const response = await fetch('/api/marketplace/publish-plugin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -28,7 +28,7 @@ import { PluginFrame } from './plugin-frame'
 // Component id is persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = Aglyn.PLUGIN_COMPONENT_ID
 
-export interface CommunityPluginProps {
+export interface MarketplacePluginProps {
   /** Installed listing id; the only prop authors set. */
   listingId?: string
   /** Injected at compose by `attachPluginInstalls` (AGL-45). */
@@ -93,7 +93,7 @@ export function placeholderText(listingId: string | undefined): string {
 }
 
 /**
- * Community plugin element (AGL-45): a placement for an installed executable
+ * Marketplace plugin element (AGL-45): a placement for an installed executable
  * plugin. The saved node carries only `listingId`; the tenant compose pass
  * (`attachPluginInstalls`) injects the pinned version/sha256/capabilities +
  * kill-switch state, and this renders them through the sandboxed
@@ -102,7 +102,7 @@ export function placeholderText(listingId: string | undefined): string {
  * execute in the editor. The plugin origin is a NEXT_PUBLIC env so it's
  * available in the browser bundle; unset = plugins disabled (placeholder).
  */
-const CommunityPlugin = forwardRef<HTMLElement, CommunityPluginProps>(
+const MarketplacePlugin = forwardRef<HTMLElement, MarketplacePluginProps>(
   (props, ref) => {
     const {
       listingId,
@@ -168,9 +168,9 @@ const CommunityPlugin = forwardRef<HTMLElement, CommunityPluginProps>(
     )
   },
 )
-CommunityPlugin.displayName = 'AglynCommunityPlugin'
+MarketplacePlugin.displayName = 'AglynMarketplacePlugin'
 
-export const schema: Aglyn.ComponentSchema<CommunityPluginProps> = {
+export const schema: Aglyn.ComponentSchema<MarketplacePluginProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Plugin',
@@ -207,7 +207,7 @@ export const presets: Aglyn.PresetSchema[] = [
     type: Aglyn.NodeType.PRESET,
     displayName: 'Plugin',
     pluginId: BUNDLE_ID,
-    description: 'Sandboxed community plugin region',
+    description: 'Sandboxed marketplace plugin region',
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
     icon: { path: mdiPuzzle.path, sx: { color: '#5e35b1' } },
     data: {
@@ -220,7 +220,7 @@ export const presets: Aglyn.PresetSchema[] = [
 ]
 
 /** The besigner drawer category installed plugins register under (AGL-190). */
-export const PLUGIN_DRAWER_CATEGORY = 'Community'
+export const PLUGIN_DRAWER_CATEGORY = 'Marketplace'
 
 export interface PluginInstallLike {
   listingId?: string
@@ -236,9 +236,9 @@ export interface PluginInstallLike {
 
 /**
  * Builds a besigner preset for an installed plugin (AGL-190): a named,
- * draggable drawer entry that drops a `communityPlugin` node with the
+ * draggable drawer entry that drops a `marketplacePlugin` node with the
  * listing id pre-pinned, so editors never hand-type ids. Reuses the single
- * `communityPlugin` renderer — no per-plugin component registration. The
+ * `marketplacePlugin` renderer — no per-plugin component registration. The
  * manifest's lineal rules ride on the node data for later enforcement.
  * Returns null for an install without a resolvable listing id.
  */
@@ -248,13 +248,13 @@ export function muiPluginInstallToPreset(
   const listingId = install.listingId ?? install.$id
   if (!listingId) return null
   const name =
-    install.displayName || install.manifest?.name || 'Community plugin'
+    install.displayName || install.manifest?.name || 'Marketplace plugin'
   return {
     $id: `plugin__${listingId}`,
     type: Aglyn.NodeType.PRESET,
     displayName: name,
     pluginId: BUNDLE_ID,
-    description: 'Installed community plugin',
+    description: 'Installed marketplace plugin',
     category: PLUGIN_DRAWER_CATEGORY,
     icon: { path: mdiPuzzle.path, sx: { color: '#5e35b1' } },
     data: {
@@ -272,4 +272,4 @@ export function muiPluginInstallToPreset(
   }
 }
 
-export default CommunityPlugin
+export default MarketplacePlugin

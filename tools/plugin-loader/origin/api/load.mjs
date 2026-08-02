@@ -122,7 +122,7 @@ export default async function handler(req, res) {
   if (LISTING_ID.test(listingId) && VERSION.test(version)) {
     try {
       const payload = await fetchJson(
-        'https://app.aglyn.com/api/community/listing-versions?listingId=' +
+        'https://app.aglyn.com/api/marketplace/listing-versions?listingId=' +
           encodeURIComponent(listingId),
       )
       const entry = (payload?.versions ?? []).find(

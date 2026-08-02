@@ -52,7 +52,7 @@ describe('ComponentManager.schemasBySortedCategories (AGL-538)', () => {
     manager.registerPreset([
       makePreset('p-uncat', ComponentCategory.UNCATEGORIZED),
       makePreset('p-input', ComponentCategory.INPUT),
-      makePreset('p-community', 'Community'),
+      makePreset('p-marketplace', 'Marketplace'),
       makePreset('p-blocks', ComponentCategory.BLOCKS),
       makePreset('p-data', ComponentCategory.DATA_DISPLAY),
       makePreset('p-yours', 'Your components'),
@@ -85,10 +85,10 @@ describe('ComponentManager.schemasBySortedCategories (AGL-538)', () => {
         labels.includes(label),
       ).map((label) => labels.indexOf(label)),
     )
-    const community = labels.indexOf('Community')
+    const marketplace = labels.indexOf('Marketplace')
     const yours = labels.indexOf('Your components')
-    expect(community).toBeGreaterThan(lastRanked)
-    expect(yours).toBeGreaterThan(community)
+    expect(marketplace).toBeGreaterThan(lastRanked)
+    expect(yours).toBeGreaterThan(marketplace)
   })
 
   it('keeps Uncategorized at the bottom', () => {

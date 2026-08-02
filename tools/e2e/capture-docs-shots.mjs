@@ -686,7 +686,7 @@ async function seedGuideFixtures() {
   })
 
   const listing = async (id, data, version) => {
-    const ref = firestore.collection('communityListings').doc(id)
+    const ref = firestore.collection('marketplaceListings').doc(id)
     await put(ref, {
       profileId: orgId,
       priceUsd: 0,
@@ -1173,7 +1173,7 @@ await shot({
 
 // ── 5b. Org marketplace (AGL-782) ─────────────────────────────────────────
 
-// Replaces community-page.png, which still showed the per-site Community tab
+// Replaces marketplace-page.png, which still showed the per-site Marketplace tab
 // that AGL-775 deleted — and whose alt text had since been rewritten to
 // describe tabs the picture didn't contain.
 

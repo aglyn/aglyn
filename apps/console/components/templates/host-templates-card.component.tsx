@@ -226,7 +226,7 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
     void Promise.all(
       listingIds.split(',').map(async (id) => {
         try {
-          const snapshot = await getDoc(doc(firestore, 'communityListings', id))
+          const snapshot = await getDoc(doc(firestore, 'marketplaceListings', id))
           const version = snapshot.get('latestVersion')
           return version == null ? null : ([id, version] as const)
         } catch {
@@ -287,7 +287,7 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
       setUpdating(template.$id)
       try {
         const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/community/install-template', {
+        const response = await fetch('/api/marketplace/install-template', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

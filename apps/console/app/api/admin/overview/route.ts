@@ -84,12 +84,12 @@ async function handler(request: Request): Promise<Response> {
         .catch(() => firestore.collection('orgs').limit(500).get()),
       firestore.collection('hosts').count().get(),
       firestore
-        .collection('communityPurchases')
+        .collection('marketplacePurchases')
         .orderBy('createdAt', 'desc')
         .limit(50)
         .get()
         .catch(() =>
-          firestore.collection('communityPurchases').limit(50).get(),
+          firestore.collection('marketplacePurchases').limit(50).get(),
         ),
     ])
     // Org usage rollups live at orgs/{orgId}/usage/{month} (AGL-238) —

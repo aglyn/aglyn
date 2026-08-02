@@ -91,7 +91,7 @@ built-in tiers, toggling individual permission keys like `createHosts` or
 
 ### Publisher
 
-An account that has published to the community marketplace. Each publisher
+An account that has published to the marketplace marketplace. Each publisher
 has one public profile (handle, display name, listings).
 → [Publisher handbook](../developers/plugins/publishing/publisher-handbook.md)
 
@@ -285,7 +285,7 @@ dataset fields, variables, page context. → [Bindings](../building-sites/bindin
 
 A self-contained feature package that extends the console, the Besigner
 canvas, the published site, or the server APIs — without touching core code.
-First-party features and community submissions use the same system.
+First-party features and marketplace submissions use the same system.
 → [Plugins overview](../developers/plugins/overview.md)
 
 ### Add-on
@@ -379,7 +379,7 @@ the trusted tier, verified by hash and signature before import.
 
 ### Sandbox
 
-The default isolation for community plugin UI: an iframe bridge with a
+The default isolation for marketplace plugin UI: an iframe bridge with a
 versioned message protocol, prop allowlists, and host-mediated network
 access. → [Building feature plugins](../developers/plugins/building-feature-plugins.md)
 

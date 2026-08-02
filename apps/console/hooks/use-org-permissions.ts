@@ -36,7 +36,7 @@ const ALL_TRUE: OrgPermissions = {
   createHosts: true,
   editHosts: true,
   editBilling: true,
-  publishToCommunity: true,
+  publishToMarketplace: true,
   installPlugins: true,
   manageMembers: true,
 }
@@ -52,7 +52,7 @@ function toLegacyPermissions(
     createHosts: granted['hosts.create'],
     editHosts: role !== 'viewer',
     editBilling: granted['billing.manage'],
-    publishToCommunity: granted['community.publish'],
+    publishToMarketplace: granted['marketplace.publish'],
     installPlugins: granted['plugins.install'],
     manageMembers: granted['members.manage'],
   }

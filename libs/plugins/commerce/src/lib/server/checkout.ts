@@ -92,7 +92,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     }
 
     // Seller resolution rides the owning org (AGL-238): plan gate from
-    // the org doc, Stripe account from the owner's community profile.
+    // the org doc, Stripe account from the owner's marketplace profile.
     const ownerOrg = await getOrgForHost(hostId)
     const ownerId = ownerOrg?.org?.ownerUid
     if (!ownerId) {
@@ -103,7 +103,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       .doc(String(ownerId))
       .get()
     // Storefront selling is the `commerce` entitlement (Starter+) — not
-    // `marketplaceSelling`, which gates the community marketplace (AGL-470).
+    // `marketplaceSelling`, which gates the marketplace marketplace (AGL-470).
     if (!Aglyn.checkEntitlement(ownerOrg.org as any, 'commerce')) {
       return res.status(403).json({ error: 'Selling is not enabled' })
     }

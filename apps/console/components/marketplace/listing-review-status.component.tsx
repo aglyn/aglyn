@@ -145,7 +145,7 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
         )?.getIdToken?.()
         if (!idToken) return
         const response = await fetch(
-          `/api/community/listing-versions?scope=publisher&listingId=${encodeURIComponent(
+          `/api/marketplace/listing-versions?scope=publisher&listingId=${encodeURIComponent(
             listingId,
           )}`,
           { headers: { Authorization: `Bearer ${idToken}` } },

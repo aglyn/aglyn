@@ -49,7 +49,7 @@ module.exports = withAglyn({
   // Manage → Org section move (AGL-236): old bookmarks keep working.
   async redirects() {
     return [
-      ...['billing', 'team', 'support', 'community'].map((section) => ({
+      ...['billing', 'team', 'support', 'marketplace'].map((section) => ({
         source: `/manage/${section}`,
         destination: `/org/${section}`,
         permanent: true,

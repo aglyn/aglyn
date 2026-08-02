@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { CommunityArtifactType } from './marketplace-provenance'
+import type { MarketplaceArtifactType } from './marketplace-provenance'
 import { resolveProvenance } from './marketplace-provenance'
 
 /**
@@ -105,7 +105,7 @@ export function compareArtifactVersions(
 export interface UpdateComparableInstall {
   version?: unknown
   installedFrom?: Record<string, unknown> | null
-  community?: { listingId?: string; version?: unknown } | null
+  marketplace?: { listingId?: string; version?: unknown } | null
   source?: { listingId?: string; version?: unknown } | null
   listingId?: string
   pluginId?: string
@@ -143,7 +143,7 @@ const UNKNOWN: UpdateStatus = {
 export function resolveUpdateState(
   installed: UpdateComparableInstall | null | undefined,
   listing: UpdateComparableListing | null | undefined,
-  artifactType?: CommunityArtifactType,
+  artifactType?: MarketplaceArtifactType,
 ): UpdateStatus {
   const provenance = resolveProvenance(installed as never, artifactType)
   if (!installed || provenance.state === 'unknown' || !provenance.version) {

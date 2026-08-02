@@ -14,7 +14,7 @@ block library**, and a **blog** with content collections.
 scale with your tier.
 :::
 
-![Templates in the community marketplace](/img/guides/marketplace-browse.png)
+![Templates in the marketplace marketplace](/img/guides/marketplace-browse.png)
 
 ## Site templates & starter gallery
 
@@ -22,7 +22,7 @@ scale with your tier.
   screens for you. Starters are copied into your site's own
   [template library](./templates-library.md), so you can edit and version them like any
   other template.
-- **Save a site as a template**, then browse and install community templates.
+- **Save a site as a template**, then browse and install marketplace templates.
 
 ## Section & block library
 

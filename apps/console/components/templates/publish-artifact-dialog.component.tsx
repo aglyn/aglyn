@@ -31,7 +31,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 
 export interface PublishArtifactTarget {
-  /** Plugin API path, e.g. `community/publish-layout`. */
+  /** Plugin API path, e.g. `marketplace/publish-layout`. */
   endpoint: string
   /** Extra body fields identifying what is being published. */
   payload: Record<string, unknown>
@@ -181,7 +181,7 @@ export function PublishArtifactDialog({
             size="small"
             label="Price (USD)"
             placeholder="0 = free"
-            helperText="Paid listings need payouts set up on your community profile"
+            helperText="Paid listings need payouts set up on your marketplace profile"
             value={price}
             onChange={(event) =>
               setPrice(event.target.value.replace(/[^0-9]/g, ''))

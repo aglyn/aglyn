@@ -42,11 +42,11 @@
       "description": "Redirect manager with usage analytics.",
       "valueType": "JSON"
     },
-    "release_community": {
+    "release_marketplace": {
       "defaultValue": {
         "value": "{\"enabled\":true,\"rolloutPercent\":0}"
       },
-      "description": "Community browsing, publishing and plugin installs.",
+      "description": "Marketplace browsing, publishing and plugin installs.",
       "valueType": "JSON"
     },
     "release_commerce_v2": {

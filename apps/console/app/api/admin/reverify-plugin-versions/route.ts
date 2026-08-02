@@ -107,7 +107,7 @@ async function handler(request: Request): Promise<Response> {
     if (listingIds.length) {
       const snapshots = await firestore.getAll(
         ...listingIds.map((id) =>
-          firestore.collection('communityListings').doc(id),
+          firestore.collection('marketplaceListings').doc(id),
         ),
       )
       for (const snapshot of snapshots) {

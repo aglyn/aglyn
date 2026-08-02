@@ -25,7 +25,7 @@ import {
 describe('notification categories (AGL-267)', () => {
   it('buckets a type by its prefix and falls back to system', () => {
     expect(notificationCategory('billing.invoice')).toBe('billing')
-    expect(notificationCategory('community.review')).toBe('community')
+    expect(notificationCategory('marketplace.review')).toBe('marketplace')
     expect(notificationCategory('nonsense.thing')).toBe('system')
   })
 
@@ -45,12 +45,12 @@ describe('the verifier-regression alert is not mutable as marketplace noise (AGL
     // stop routine listing-review chatter. Filing this alert there would let
     // an unrelated preference drop "a live plugin now fails the verifier".
     expect(notificationCategory(REGRESSION)).toBe('system')
-    expect(notificationCategory(REGRESSION)).not.toBe('community')
+    expect(notificationCategory(REGRESSION)).not.toBe('marketplace')
   })
 
   it('survives a staff member who muted marketplace notifications', () => {
-    const prefs = { community: false }
-    expect(notificationMuted(prefs, 'community.review')).toBe(true)
+    const prefs = { marketplace: false }
+    expect(notificationMuted(prefs, 'marketplace.review')).toBe(true)
     expect(notificationMuted(prefs, REGRESSION)).toBe(false)
   })
 

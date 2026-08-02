@@ -74,7 +74,7 @@ async function handler(request: Request): Promise<Response> {
     const versionRef = firebaseAdmin
       .app()
       .firestore()
-      .collection('communityListings')
+      .collection('marketplaceListings')
       .doc(listingId)
       .collection('pluginVersions')
       .doc(version)
@@ -144,7 +144,7 @@ async function handler(request: Request): Promise<Response> {
       .add({
         actorUid: decoded.uid,
         action: `plugins.trust.${action}`,
-        target: `communityListings/${listingId}/pluginVersions/${version}`,
+        target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
         after: action === 'grant' ? { trust: 'realm' } : { trust: null },
         at: FieldValue.serverTimestamp(),
       })

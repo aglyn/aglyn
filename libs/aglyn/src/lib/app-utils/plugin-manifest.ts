@@ -18,7 +18,7 @@
 /**
  * Executable-plugin manifest, artifact-path, CSP, and revocation helpers
  * (AGL-45), per the accepted AGL-43 design. Plugins — unlike declarative
- * components (see `community.ts`) — are code, so they never run in the
+ * components (see `marketplace.ts`) — are code, so they never run in the
  * console/tenant origin: they load in a sandboxed iframe on a dedicated
  * plugin origin, and this manifest is the contract the install screen
  * shows verbatim and the serving layer turns into CSP. Pure module — safe
@@ -393,7 +393,7 @@ export function isPluginNetworkAllowed(
 }
 
 /** Component id of the sandboxed plugin canvas element (plugins-mui). */
-export const PLUGIN_COMPONENT_ID = 'communityPlugin'
+export const PLUGIN_COMPONENT_ID = 'marketplacePlugin'
 
 /** Resolved install data injected into a plugin node's props at compose. */
 export interface ResolvedPluginInstall {
@@ -406,7 +406,7 @@ export interface ResolvedPluginInstall {
 
 /**
  * Compose-time injection (AGL-45), mirroring `attachFunctionDefinitions`:
- * a `communityPlugin` node carries only a `listingId` in the saved screen;
+ * a `marketplacePlugin` node carries only a `listingId` in the saved screen;
  * the tenant compose pass resolves that to the host's pinned install
  * (version/sha256/capabilities) and the kill-switch state, and stamps them
  * onto the node's props so `PluginFrame` renders without a client read.

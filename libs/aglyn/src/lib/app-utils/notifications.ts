@@ -36,7 +36,7 @@ export type AglynNotificationType =
   | 'content.order'
   | 'content.lowStock'
   // Marketplace review verdicts (AGL-432/653).
-  | 'community.review'
+  | 'marketplace.review'
   // Support desk, staff audience (AGL-850): a subscriber opened or replied to
   // a ticket. Fanned out to staff-claim holders, not org members.
   | 'support.ticketOpened'
@@ -46,7 +46,7 @@ export type AglynNotificationType =
   // Staff audience: bytes we told workspaces were checked now fail checks
   // that did not exist when they were approved.
   //
-  // Deliberately NOT under `community.` (AGL-1088). Category is the prefix,
+  // Deliberately NOT under `marketplace.` (AGL-1088). Category is the prefix,
   // categories are mutable per user, and Marketplace is the category a staff
   // member mutes to stop routine listing-review chatter — which would drop
   // this alert as collateral. `system` is the bucket nobody mutes to reduce
@@ -86,7 +86,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'content.booking': 'New booking',
     'content.order': 'New order',
     'content.lowStock': 'Low stock',
-    'community.review': 'Listing review',
+    'marketplace.review': 'Listing review',
 
     'support.ticketOpened': 'New support ticket',
     'support.ticketReply': 'Support ticket reply',
@@ -100,7 +100,7 @@ export type NotificationCategory =
   | 'billing'
   | 'team'
   | 'content'
-  | 'community'
+  | 'marketplace'
   | 'support'
   | 'system'
 
@@ -111,7 +111,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<
   billing: 'Billing',
   team: 'Team & access',
   content: 'Forms & bookings',
-  community: 'Marketplace',
+  marketplace: 'Marketplace',
   support: 'Support',
   system: 'Product & system',
 }
@@ -121,7 +121,7 @@ export function notificationCategory(
 ): NotificationCategory {
   const prefix = String(type).split('.')[0]
   return (
-    ['billing', 'team', 'content', 'community', 'support', 'system'].includes(
+    ['billing', 'team', 'content', 'marketplace', 'support', 'system'].includes(
       prefix,
     )
       ? prefix

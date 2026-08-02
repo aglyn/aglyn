@@ -17,7 +17,7 @@
  * Your entry must export `register(host)` (site/console surfaces) and/or
  * `registerApi()` (server handler bundles, loaded only behind
  * PLUGIN_REMOTE_SERVER). Publish the emitted file through the standard
- * community pipeline; a staff member signs the version to grant realm
+ * marketplace pipeline; a staff member signs the version to grant realm
  * trust.
  */
 

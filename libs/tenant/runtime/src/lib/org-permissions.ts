@@ -78,7 +78,7 @@ const ORG_LEVEL_PERMISSIONS = [
   'manageMembers',
   // Publishing is org-owned since AGL-652 — a listing carries the workspace's
   // name and takes its money, so a contractor on one site does not ship one.
-  'publishToCommunity',
+  'publishToMarketplace',
 ] as const
 
 /** On the roster but with no standing here — or not on it at all. */

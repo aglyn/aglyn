@@ -139,7 +139,7 @@ async function listingDetail(
   listingId: string,
   requestedVersion?: string,
 ): Promise<Response> {
-  const listingRef = firestore.collection('communityListings').doc(listingId)
+  const listingRef = firestore.collection('marketplaceListings').doc(listingId)
   const snapshot = await listingRef.get()
   const listing = snapshot.data()
   if (!listing) {
@@ -449,7 +449,7 @@ async function handler(request: Request): Promise<Response> {
       // listing's latest version doc costs one read per listing and needs
       // no new composite index.
       const snapshot = await firestore
-        .collection('communityListings')
+        .collection('marketplaceListings')
         .where('type', '==', 'plugin')
         .limit(100)
         .get()
@@ -576,11 +576,11 @@ async function handler(request: Request): Promise<Response> {
       const reviewUid = String(body?.reviewUid ?? '')
       const target = reviewUid
         ? firestore
-            .collection('communityListings')
+            .collection('marketplaceListings')
             .doc(listingId)
             .collection('reviews')
             .doc(reviewUid)
-        : firestore.collection('communityListings').doc(listingId)
+        : firestore.collection('marketplaceListings').doc(listingId)
       const targetSnapshot = await target.get()
       if (!targetSnapshot.exists) {
         return Response.json({ error: 'Unknown target' }, { status: 404 })
@@ -648,8 +648,8 @@ async function handler(request: Request): Promise<Response> {
         actorUid: decoded.uid,
         action: `plugins.takedown.${action}`,
         target: reviewUid
-          ? `communityListings/${listingId}/reviews/${reviewUid}`
-          : `communityListings/${listingId}`,
+          ? `marketplaceListings/${listingId}/reviews/${reviewUid}`
+          : `marketplaceListings/${listingId}`,
         after: {
           hidden: action === 'hide',
           ...(hideReason ? { reason: hideReason } : {}),
@@ -674,7 +674,7 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Unknown checklist item' }, { status: 400 })
       }
       const versionRef = firestore
-        .collection('communityListings')
+        .collection('marketplaceListings')
         .doc(listingId)
         .collection('pluginVersions')
         .doc(version)
@@ -703,7 +703,7 @@ async function handler(request: Request): Promise<Response> {
       await firestore.collection('adminAudit').add({
         actorUid: decoded.uid,
         action: `plugins.review.checklist.${checked ? 'check' : 'uncheck'}`,
-        target: `communityListings/${listingId}/pluginVersions/${version}`,
+        target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
         after: {
           itemId,
           checked,
@@ -720,7 +720,7 @@ async function handler(request: Request): Promise<Response> {
     // longer ship code past review on their own.
     if (action === 'approve-version' || action === 'reject-version') {
       const version = String(body?.version ?? '')
-      const listingRef = firestore.collection('communityListings').doc(listingId)
+      const listingRef = firestore.collection('marketplaceListings').doc(listingId)
       const versionRef = listingRef.collection('pluginVersions').doc(version)
       const versionSnapshot = await versionRef.get()
       if (!versionSnapshot.exists) {
@@ -830,7 +830,7 @@ async function handler(request: Request): Promise<Response> {
       await firestore.collection('adminAudit').add({
         actorUid: decoded.uid,
         action: `plugins.review.version.${approving ? 'approve' : 'reject'}`,
-        target: `communityListings/${listingId}/pluginVersions/${version}`,
+        target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
         after: {
           sha256,
           ...(reason ? { reason } : {}),
@@ -852,7 +852,7 @@ async function handler(request: Request): Promise<Response> {
 
       if (listing.profileId) {
         await notifyOrgAdmins(String(listing.profileId), {
-          type: 'community.review',
+          type: 'marketplace.review',
           title: approving
             ? `"${listing.displayName}" v${version} approved`
             : `"${listing.displayName}" v${version} was not approved`,
@@ -917,7 +917,7 @@ async function handler(request: Request): Promise<Response> {
           { status: 400 },
         )
       }
-      const listingRef = firestore.collection('communityListings').doc(listingId)
+      const listingRef = firestore.collection('marketplaceListings').doc(listingId)
       const listing = (await listingRef.get()).data() ?? {}
       const revocationRef = firestore.collection('revocations').doc(listingId)
       const current = (await revocationRef.get()).data() as
@@ -945,14 +945,14 @@ async function handler(request: Request): Promise<Response> {
       await firestore.collection('adminAudit').add({
         actorUid: decoded.uid,
         action: `plugins.revocation.${revoking ? 'revoke' : 'restore'}`,
-        target: `communityListings/${listingId}/pluginVersions/${version}`,
+        target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
         after: { versions: next?.versions ?? null },
         at: FieldValue.serverTimestamp(),
       })
 
       if (listing.profileId) {
         await notifyOrgAdmins(String(listing.profileId), {
-          type: 'community.review',
+          type: 'marketplace.review',
           title: revoking
             ? `"${listing.displayName}" v${version} was stopped`
             : `"${listing.displayName}" v${version} was allowed to run again`,
@@ -982,7 +982,7 @@ async function handler(request: Request): Promise<Response> {
       if (invalid) return Response.json({ error: invalid }, { status: 400 })
     }
 
-    const listingRef = firestore.collection('communityListings').doc(listingId)
+    const listingRef = firestore.collection('marketplaceListings').doc(listingId)
     const listing = (await listingRef.get()).data()
     if (!listing) return Response.json({ error: 'Unknown listing' }, { status: 404 })
 
@@ -1050,7 +1050,7 @@ async function handler(request: Request): Promise<Response> {
         : undefined
       if (publisherOrgId) {
         await notifyOrgAdmins(publisherOrgId, {
-          type: 'community.review',
+          type: 'marketplace.review',
           title:
             action === 'reject'
               ? `"${listing.displayName}" was rejected`
@@ -1077,7 +1077,7 @@ async function handler(request: Request): Promise<Response> {
                 : 'Your plugin passed review.',
           orgId: publisherOrgId,
           link: publisherSlug
-            ? buildRoute(Route.MANAGE_COMMUNITY_PROFILE, {
+            ? buildRoute(Route.ORG_MARKETPLACE, {
                 orgSlug: publisherSlug,
               })
             : '/',
@@ -1104,7 +1104,7 @@ async function handler(request: Request): Promise<Response> {
     await firestore.collection('adminAudit').add({
       actorUid: decoded.uid,
       action: `plugins.review.${action}`,
-      target: `communityListings/${listingId}`,
+      target: `marketplaceListings/${listingId}`,
       after: { reviewStatus: nextStatus, ...(reason ? { reason } : {}) },
       at: FieldValue.serverTimestamp(),
     })

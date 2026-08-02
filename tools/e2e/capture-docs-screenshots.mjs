@@ -136,8 +136,8 @@ const shots = [
     waitFor: 'Redirects',
   },
   {
-    out: 'plugins/community-page.png',
-    path: `/${HOST_BASE}/community`,
+    out: 'plugins/marketplace-page.png',
+    path: `/${HOST_BASE}/marketplace`,
     waitFor: 'Realm demo',
   },
   {

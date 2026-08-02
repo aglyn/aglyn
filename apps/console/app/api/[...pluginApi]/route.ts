@@ -28,6 +28,30 @@ import {
 import { ensureRemoteServerBundles } from '../../../utils/remote-server-bundles'
 import { serverPluginLoader as loader } from '../../../utils/server-plugin-loader'
 
+/**
+ * `/api/community/*` still answers, as `/api/marketplace/*` (AGL-975).
+ *
+ * The word is being freed for a public forum, so the marketplace's routes gave
+ * it up — but these thirteen paths are a PUBLIC CONTRACT. Published plugin
+ * bundles call them by URL, and a bundle in the field cannot be redeployed
+ * with us. Renaming without keeping the old prefix would break installed
+ * plugins on customers' sites, which is the one cost this rename must not
+ * have.
+ *
+ * Rewritten here, before route resolution, rather than as thirteen alias
+ * registrations: one line cannot drift out of step with the real list, and
+ * there is nothing to forget when a fourteenth path is added.
+ *
+ * Not deprecated on a timer. It can only be removed once no bundle anywhere
+ * calls the old prefix, and there is no telemetry that proves a negative —
+ * so it stays until the plugin API is versioned.
+ */
+function marketplacePathAlias(path: string): string {
+  return path === 'community' || path.startsWith('community/')
+    ? `marketplace${path.slice('community'.length)}`
+    : path
+}
+
 export const dynamic = 'force-dynamic'
 
 /**
@@ -46,7 +70,9 @@ async function dispatch(
   // first-party handlers above.
   await ensureRemoteServerBundles()
   const { pluginApi } = await params
-  const path = Array.isArray(pluginApi) ? pluginApi.join('/') : ''
+  const path = marketplacePathAlias(
+    Array.isArray(pluginApi) ? pluginApi.join('/') : '',
+  )
 
   // Per-request org gate: owning plugin from the path prefix; target host
   // from query `hostId`, else the JSON body read off a clone so the handler

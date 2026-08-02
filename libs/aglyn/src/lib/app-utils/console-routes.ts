@@ -19,7 +19,7 @@
 // so the URL — not client-side precedence — is the source of truth for the
 // active workspace. Host routes nest under `/[orgSlug]/hosts/[host]`; the
 // org area (settings, team, billing, media, data, plugins, support,
-// community) lives directly under `/[orgSlug]`. User-level `manage/*`,
+// marketplace) lives directly under `/[orgSlug]`. User-level `manage/*`,
 // staff `admin/*`, and `auth` routes are NOT org-scoped. Hosts stay keyed
 // by doc id here; AGL-622 swaps `[hostId]` for the subdomain slug.
 export enum Route {
@@ -57,8 +57,11 @@ export enum Route {
   // first-party plugin — hence `pluginRef` rather than `listingId`.
   ORG_PLUGIN_INSTALLATION = '/[orgSlug]/plugins/[pluginRef]',
   // Org-scope marketplace (AGL-772): the single place to browse, view and
-  // install marketplace items — the per-site community tab
-  // (`HOST_COMMUNITY*`) is being retired in favor of this.
+  // install marketplace items. The per-site tab it replaced, and the retired
+  // `/[orgSlug]/marketplace` seller area, were removed with the rest of the
+  // `marketplace` naming in AGL-975 — the word is being freed for a public
+  // forum, and a redirect stub sitting on `/marketplace` would have taken the
+  // one path that feature wants.
   ORG_MARKETPLACE = '/[orgSlug]/marketplace',
   ORG_MARKETPLACE_LISTING = '/[orgSlug]/marketplace/[listingId]',
   ORG_MARKETPLACE_PUBLISHER = '/[orgSlug]/marketplace/publisher/[handle]',
@@ -70,17 +73,12 @@ export enum Route {
   MANAGE_BILLING = '/[orgSlug]/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
   MANAGE_NOTIFICATIONS = '/manage/notifications',
-  MANAGE_MY_COMMUNITY = '/manage/community',
   AUTH_SIGN_IN = '/signin',
   AUTH_SIGN_OUT = '/signout',
   AUTH_SIGN_UP = '/signup',
   AUTH_VERIFY_EMAIL = '/verify-email',
   HOST_LIST = '/[orgSlug]/hosts',
-  HOST_COMMUNITY = '/[orgSlug]/hosts/[host]/community',
-  HOST_COMMUNITY_LISTING = '/[orgSlug]/hosts/[host]/community/[listingId]',
-  HOST_COMMUNITY_PUBLISHER = '/[orgSlug]/hosts/[host]/community/publisher/[handle]',
   HOST_CONTENT = '/[orgSlug]/hosts/[host]/content',
-  MANAGE_COMMUNITY_PROFILE = '/[orgSlug]/community',
   MANAGE_TEAM = '/[orgSlug]/team',
   MANAGE_TEAM_MEMBER = '/[orgSlug]/team/[uid]',
   MANAGE_SUPPORT = '/[orgSlug]/support',
@@ -186,22 +184,9 @@ export interface RoutePayload {
   [Route.ORG_MARKETPLACE_PUBLISH_PLUGIN]: { orgSlug: string }
   [Route.MANAGE_USER_SETTINGS]: undefined
   [Route.MANAGE_NOTIFICATIONS]: undefined
-  [Route.MANAGE_MY_COMMUNITY]: undefined
   [Route.ORG_SETTINGS]: { orgSlug: string }
   [Route.HOST_LIST]: { orgSlug: string }
-  [Route.HOST_COMMUNITY]: { orgSlug: string; host: string }
-  [Route.HOST_COMMUNITY_LISTING]: {
-    orgSlug: string
-    host: string
-    listingId: string
-  }
-  [Route.HOST_COMMUNITY_PUBLISHER]: {
-    orgSlug: string
-    host: string
-    handle: string
-  }
   [Route.HOST_CONTENT]: { orgSlug: string; host: string }
-  [Route.MANAGE_COMMUNITY_PROFILE]: { orgSlug: string }
   [Route.MANAGE_TEAM]: { orgSlug: string }
   [Route.MANAGE_TEAM_MEMBER]: { orgSlug: string; uid: string }
   [Route.MANAGE_SUPPORT]: { orgSlug: string }

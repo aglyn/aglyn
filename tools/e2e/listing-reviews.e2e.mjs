@@ -62,7 +62,7 @@ function check(label, ok, detail) {
 }
 
 async function review(uid, body, method = 'POST') {
-  const response = await fetch(`${BASE_URL}/api/community/reviews`, {
+  const response = await fetch(`${BASE_URL}/api/marketplace/reviews`, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -77,7 +77,7 @@ const LISTING = 'e2e-reviewed-listing'
 const PUBLISHER_ORG = 'e2e-owner' // the org e2e-owner belongs to
 const RATER = 'e2e-nonstaff-owner' // owns a different org
 
-const listingRef = db.collection('communityListings').doc(LISTING)
+const listingRef = db.collection('marketplaceListings').doc(LISTING)
 await listingRef.set({
   displayName: 'Reviewed Thing',
   artifactType: 'component',
@@ -204,7 +204,7 @@ check(
 )
 
 // 8. Unauthenticated writes are refused.
-const anon = await fetch(`${BASE_URL}/api/community/reviews`, {
+const anon = await fetch(`${BASE_URL}/api/marketplace/reviews`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ listingId: LISTING, rating: 5 }),

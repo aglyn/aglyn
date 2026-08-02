@@ -31,7 +31,7 @@ duplicating. Nothing outside the target host and its org is touched.
 | **Marketing** | a sent campaign, a **designed email** template (email-kind screen), an announcement bar + a popup overlay, an A/B experiment |
 | **Redirects** | exact, prefix, and regex rules |
 | **Org data** (AGL-240) | a contact, a segment, a list, an extra dataset — written to `orgs/{orgId}/…` when the host is org-wired |
-| Community | a published community listing |
+| Marketplace | a published marketplace listing |
 
 ## Notes
 

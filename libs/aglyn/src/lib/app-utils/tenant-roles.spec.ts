@@ -24,7 +24,7 @@ describe('tenant roles', () => {
       createHosts: false,
       editHosts: true,
       editBilling: false,
-      publishToCommunity: true,
+      publishToMarketplace: true,
     })
     expect(resolveRolePermissions('viewer').installPlugins).toBe(false)
   })
@@ -51,11 +51,11 @@ describe('tenant roles', () => {
     const customRoles = {
       marketer: {
         name: 'Marketer',
-        permissions: { publishToCommunity: true, installPlugins: true },
+        permissions: { publishToMarketplace: true, installPlugins: true },
       },
     }
     const resolved = resolveRolePermissions('marketer', null, customRoles)
-    expect(resolved.publishToCommunity).toBe(true)
+    expect(resolved.publishToMarketplace).toBe(true)
     expect(resolved.installPlugins).toBe(true)
     expect(resolved.createHosts).toBe(false)
     // Per-user overrides still win over the custom role.
@@ -65,7 +65,7 @@ describe('tenant roles', () => {
     ).toBe(false)
     // Unknown custom id stays least-privilege viewer.
     expect(
-      resolveRolePermissions('ghost', null, customRoles).publishToCommunity,
+      resolveRolePermissions('ghost', null, customRoles).publishToMarketplace,
     ).toBe(false)
   })
 })

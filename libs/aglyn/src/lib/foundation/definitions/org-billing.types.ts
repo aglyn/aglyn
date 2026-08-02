@@ -78,7 +78,7 @@ export interface OrgFeatureFlags {
   removeBranding?: boolean
   /** Schedule a version to publish at a date/time (tier above versioning). */
   scheduledPublishing?: boolean
-  /** Sell listings on the community marketplace (AGL-46). */
+  /** Sell listings on the marketplace marketplace (AGL-46). */
   marketplaceSelling?: boolean
   /** AI copy assist in the besigner (AGL-89). */
   aiAssist?: boolean

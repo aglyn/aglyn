@@ -46,8 +46,8 @@
  * where a human should decide:
  *
  * - **Orphaned listing** — the object is claimed by a version doc whose
- *   parent `communityListings` doc is gone. Firestore does not cascade to
- *   subcollections, and `resolveCommunityPluginVersion` reads the version
+ *   parent `marketplaceListings` doc is gone. Firestore does not cascade to
+ *   subcollections, and `resolveMarketplacePluginVersion` reads the version
  *   doc by path, so existing installs of a hard-deleted listing still load.
  *   Deleting the bytes would break them.
  * - **Unrecognized path** — anything under `artifacts/` that does not match

@@ -35,7 +35,7 @@ initializeApp({
 const firestore = getFirestore()
 
 const listings = await firestore
-  .collection('communityListings')
+  .collection('marketplaceListings')
   .where('type', '==', 'plugin')
   .get()
 

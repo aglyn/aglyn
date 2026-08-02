@@ -26,8 +26,8 @@ import useFirestoreCollection from './use-firestore-collection'
 
 /**
  * Registers the host's installed plugins as named besigner drawer entries
- * (AGL-190): one preset per install under the Community category, dropping
- * a `communityPlugin` node with the listing id pre-pinned. Presets are
+ * (AGL-190): one preset per install under the Marketplace category, dropping
+ * a `marketplacePlugin` node with the listing id pre-pinned. Presets are
  * re-synced whenever installs change and removed on host change/unmount so
  * switching hosts never leaks another host's plugins into the drawer.
  */

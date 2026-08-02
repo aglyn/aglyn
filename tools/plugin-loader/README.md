@@ -3,7 +3,7 @@
 Reference implementation of the **dedicated plugin origin** from the
 [AGL-43 marketplace security design](https://linear.app/aglyn/document/marketplace-security-and-architecture-design-agl-43-a224cc4e9696).
 
-Executable community plugins never run in the console or tenant realms.
+Executable marketplace plugins never run in the console or tenant realms.
 They load inside a cross-origin sandboxed iframe served from a **separate
 Firebase project / domain** (e.g. `plugins.aglyn.app`) whose only job is to
 serve `load.html` and stream plugin bundles out of the isolated artifacts
@@ -84,7 +84,7 @@ client- and server-side before a byte executes).
 - **`realm/demo/`** — a minimal realm plugin (console widget in the
   `hostActivity` slot). Build with
   `cd realm/demo && npx rollup -c ../rollup.config.mjs`.
-- **`realm/template/`** — the standalone starter for community authors
+- **`realm/template/`** — the standalone starter for marketplace authors
   (AGL-425): npm package with the build config, entry-contract stubs,
   `manifest.json`, and a README that doubles as the marketplace listing
   documentation. Copy it out of the repo and go.

@@ -21,7 +21,7 @@ import {
 
 /**
  * Resolves a host's pinned plugin installs (AGL-45) into the compose-time
- * shape `attachPluginInstalls` stamps onto `communityPlugin` nodes, keyed
+ * shape `attachPluginInstalls` stamps onto `marketplacePlugin` nodes, keyed
  * by listing id. The kill switch is folded in per install: a revoked pin
  * renders the disabled placeholder. Fail-open: on error an empty map is
  * returned and plugin nodes show a safe "not installed" placeholder rather

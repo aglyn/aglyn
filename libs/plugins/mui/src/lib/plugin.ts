@@ -35,7 +35,7 @@ import * as Image from './components/image'
 import * as Icon from './components/icon'
 import * as LanguageSwitcher from './components/language-switcher'
 import * as Video from './components/video'
-import * as CommunityPlugin from './components/plugin'
+import * as MarketplacePlugin from './components/plugin'
 import * as CustomHtml from './components/custom-html'
 import * as DrawerComponents from './components/drawer'
 import * as NavMenuComponents from './components/nav-menu'
@@ -104,7 +104,7 @@ export function registerMuiPlugin(): void {
     { component: DrawerComponents.DrawerToggle, schema: DrawerComponents.drawerToggleSchema },
     { component: FunctionWidget.default, schema: FunctionWidget.schema, presets: FunctionWidget.presets },
     { component: Product.default, schema: Product.schema, presets: Product.presets },
-    { component: CommunityPlugin.default, schema: CommunityPlugin.schema, presets: CommunityPlugin.presets },
+    { component: MarketplacePlugin.default, schema: MarketplacePlugin.schema, presets: MarketplacePlugin.presets },
     { component: CustomHtml.default, schema: CustomHtml.schema, presets: CustomHtml.presets },
     { component: SearchBox.default, schema: SearchBox.schema, presets: SearchBox.presets },
     { component: Section.default, schema: Section.schema, presets: Section.presets },
