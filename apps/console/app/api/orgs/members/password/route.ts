@@ -19,6 +19,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   consumePasswordResetSend,
   emailUnverifiedResponse,
+  findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
   logOrgActivity,
@@ -123,7 +124,31 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 404 })
     }
 
-    const target = await auth.getUser(targetUid)
+    // Across pools (AGL-1122). Project-level `getUser` THROWS for an SSO
+    // member, so this route 500'd rather than explaining itself — on a page
+    // whose whole purpose is to say whether a password can be set.
+    const found = await findUserByUidAcrossPools(targetUid)
+    if (!found) {
+      return Response.json({ error: 'No such user' }, { status: 404 })
+    }
+    const { record: target, tenantId } = found
+    // An SSO account HAS no password to set: it authenticates against the
+    // org's identity provider, and a password minted here would be a second
+    // credential outside the system that is supposed to govern access —
+    // which is the thing SSO customers buy. Reported as a block, not an
+    // error, so the UI says why instead of failing.
+    if (tenantId) {
+      const ssoBlock =
+        'This person signs in through your organization’s identity ' +
+        'provider. Passwords are managed there, not in Aglyn.'
+      if (method === 'GET') {
+        return Response.json(
+          { email: target.email ?? null, canSetPassword: false, blockedReason: ssoBlock },
+          { status: 200 },
+        )
+      }
+      return Response.json({ error: ssoBlock }, { status: 400 })
+    }
 
     if (method === 'GET') {
       const blockedReason = target.email

@@ -21,7 +21,12 @@ import { resolveBrandingProfile } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
-import { ERASURE_HOLD_MS, eraseOrg, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  ERASURE_HOLD_MS,
+  eraseOrg,
+  findUserByUidAcrossPools,
+  firebaseAdmin,
+} from '@aglyn/tenant-data-admin'
 
 /**
  * Executes due GDPR erasures (AGL-487) — completes the self-serve deletion
@@ -73,11 +78,13 @@ async function handler(request: Request): Promise<Response> {
         org.data() as Partial<AglynOrgBilling>,
       )
       const ownerUid = String(org.get('ownerUid') ?? '')
+      // Across pools (AGL-1122) — an SSO owner is invisible to project-level
+      // `getUser`, so the "your workspace has been erased" notice never went
+      // out for exactly the orgs on the plan that has SSO.
       const ownerEmail =
         emailConfigured && ownerUid
-          ? await auth
-              .getUser(ownerUid)
-              .then((user) => user.email)
+          ? await findUserByUidAcrossPools(ownerUid)
+              .then((found) => found?.record.email)
               .catch(() => undefined)
           : undefined
 

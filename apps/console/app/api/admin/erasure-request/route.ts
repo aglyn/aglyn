@@ -22,6 +22,7 @@ import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
   emailUnverifiedResponse,
+  findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
@@ -79,10 +80,12 @@ async function handler(request: Request): Promise<Response> {
       orgSnapshot.data() as Partial<AglynOrgBilling>,
     )
     const ownerUid = String(orgSnapshot.get('ownerUid') ?? '')
+    // Across pools (AGL-1122): project-level `getUser` cannot see an SSO
+    // owner, so the notice that their workspace is scheduled for erasure was
+    // answered `no-owner-email` and never sent.
     const ownerEmail = ownerUid
-      ? await auth
-          .getUser(ownerUid)
-          .then((user) => user.email)
+      ? await findUserByUidAcrossPools(ownerUid)
+          .then((found) => found?.record.email)
           .catch(() => undefined)
       : undefined
     if (!ownerEmail) {

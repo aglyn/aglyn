@@ -23,7 +23,10 @@ import {
   loadSystemEmail,
   renderLoadedSystemEmail,
 } from '../../_lib/render-system-email'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  findUserByUidAcrossPools,
+  firebaseAdmin,
+} from '@aglyn/tenant-data-admin'
 
 /** Previous calendar month as YYYY-MM (the default summary target). */
 function previousMonth(): string {
@@ -98,10 +101,16 @@ async function handler(request: Request): Promise<Response> {
         continue
       }
       const ownerUid = String(orgDoc.get('ownerUid') ?? '')
+      // Across pools (AGL-1122): an SSO owner lives in their org's GCIP
+      // tenant, which project-level `getUser` cannot see — it throws
+      // `auth/user-not-found`, the catch below swallowed it, and the org was
+      // recorded as `skipped: 'no email'`. Measured 2026-08-01: aglyn-org is
+      // on the `enterprise` plan and its owner is exactly such a user, so the
+      // one org most likely to want a usage summary was the one silently not
+      // getting one.
       const email = ownerUid
-        ? await auth
-            .getUser(ownerUid)
-            .then((user) => user.email)
+        ? await findUserByUidAcrossPools(ownerUid)
+            .then((found) => found?.record.email)
             .catch(() => undefined)
         : undefined
       if (!email) {

@@ -17,7 +17,9 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  authForPool,
   emailUnverifiedResponse,
+  findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
@@ -53,11 +55,23 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded['staff']) {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
-    const target = await auth.getUser(uid)
+    // Across pools (AGL-1122). Project-level `getUser` THROWS for an SSO
+    // account — its record lives in the org's GCIP tenant — so this route
+    // 500'd for every enterprise customer, and staff could not open a support
+    // session for the tier most likely to be asking for one.
+    const found = await findUserByUidAcrossPools(uid)
+    if (!found) {
+      return Response.json({ error: 'No such user' }, { status: 404 })
+    }
+    const { record: target, tenantId } = found
     if (target.customClaims?.['staff']) {
       return Response.json({ error: 'Staff accounts cannot be impersonated' }, { status: 400 })
     }
-    const token = await auth.createCustomToken(uid, {
+    // Minted by the pool the user actually lives in. A custom token signed by
+    // the project auth is not accepted for a tenant account, so getting the
+    // lookup right and the mint wrong would swap a 500 for a token that fails
+    // at sign-in — the same outage, one step later and harder to read.
+    const token = await authForPool(tenantId).createCustomToken(uid, {
       impersonatedBy: decoded.uid,
       impersonatedByEmail: decoded.email ?? null,
     })
@@ -70,7 +84,7 @@ async function handler(request: Request): Promise<Response> {
         action: 'user.impersonate',
         target: `users/${uid}`,
         before: null,
-        after: { email: target.email ?? null },
+        after: { email: target.email ?? null, tenantId: tenantId ?? null },
         at: FieldValue.serverTimestamp(),
       })
     return Response.json({ token }, { status: 200 })
