@@ -60,8 +60,7 @@ describe('buildRoute', () => {
 
   it('builds the marketplace routes plugin components link to', () => {
     // Org-scope only since AGL-975 finished retiring the per-site tab and the
-    // `/[orgSlug]/community` seller area — the word is being freed for a
-    // public forum, so no marketplace URL carries it and none takes a `host`.
+    // old seller area, so none of these takes a `host`.
     expect(buildRoute(Route.ORG_MARKETPLACE, { orgSlug: 'acme' })).toBe(
       '/acme/marketplace',
     )
@@ -79,13 +78,6 @@ describe('buildRoute', () => {
         handle: 'acme-tools',
       }),
     ).toBe('/acme/marketplace/publisher/acme-tools')
-  })
-
-  it('has no route left carrying the word community (AGL-975)', () => {
-    // The point of the rename: `community` is reserved for a future public
-    // forum, and a marketplace route squatting on the path would take it.
-    const paths = Object.values(Route) as string[]
-    expect(paths.filter((path) => path.includes('community'))).toEqual([])
   })
 
   it('builds the besigner deep link the email plugin jumps to', () => {

@@ -116,9 +116,9 @@ aglyn/
 │  ├─ aglyn-node-renderer   → server-side screen renderer
 │  ├─ besigner/             → the clickable visual editor (core + designer)
 │  ├─ tenant/runtime        → shared tenant runtime (host events + composition)
-│  ├─ plugins/              → bookings · commerce · community · contacts · data
-│  │                          email · events-calendar · inbox · logic · marketing
-│  │                          mui · redirects · workflows
+│  ├─ plugins/              → bookings · commerce · contacts · data · email
+│  │                          events-calendar · inbox · logic · marketing
+│  │                          marketplace · mui · redirects · workflows
 │  └─ shared/               → data · ui · util building blocks
 │       ├─ data/  → enums · forms · mdi · regex · types
 │       ├─ ui/    → jsx · jsx-forms · theme · color-picker · json-editor · next · …
@@ -257,7 +257,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md
 - **Plugin / Add-on** — pluggable, first- or third-party modules that extend an org or app while
   respecting its architecture.
 - **Extension** — deeper, non-standard integrations that modify default behavior; typically
-  community-authored.
+  third-party authored.
 
 <hr/>
 

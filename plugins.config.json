@@ -37,14 +37,14 @@
       ]
     },
     {
-      "id": "community",
-      "package": "@aglyn/plugins-community",
+      "id": "marketplace",
+      "package": "@aglyn/plugins-marketplace",
       "register": {
-        "console": "registerCommunityConsole",
-        "consoleApi": "registerCommunityConsoleApi"
+        "console": "registerMarketplaceConsole",
+        "consoleApi": "registerMarketplaceConsoleApi"
       },
       "apiPrefixes": [
-        "community"
+        "marketplace"
       ]
     },
     {

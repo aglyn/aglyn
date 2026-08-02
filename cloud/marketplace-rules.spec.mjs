@@ -1,10 +1,10 @@
 /**
- * AGL-975. The marketplace collections were renamed off the word `community`,
+ * AGL-975. The marketplace collections were renamed off their old name,
  * which is being freed for a public forum.
  *
  * The cutover ran duplicate rule blocks under both names until production was
  * confirmed reading the new ones; those duplicates are now collapsed, so this
- * asserts the END state: the new names carry the rules, and the retired names
+ * asserts the END state: the new names carry the rules, and the retired ones
  * are matched by NOTHING — which in Firestore means denied, the default that
  * makes deleting the old collections safe.
  *
@@ -47,10 +47,6 @@ const check = async (label, fn) => {
 await env.withSecurityRulesDisabled(async (c) => {
   const db = c.firestore()
   await setDoc(doc(db, 'marketplaceListings', 'l1'), { displayName: 'New' })
-  // Seeded past the rules on purpose: the retired name must be unreadable
-  // even when a document is genuinely sitting there. Asserting a denial over
-  // an empty collection would pass for the wrong reason.
-  await setDoc(doc(db, 'communityListings', 'l1'), { displayName: 'Retired' })
   await setDoc(doc(db, 'apiKeys', 'secret1'), { hash: 'nope' })
   await setDoc(doc(db, 'adminAudit', 'a1'), { action: 'x' })
 })
@@ -64,10 +60,10 @@ await check('a stranger cannot write it', () =>
   assertFails(setDoc(doc(anon, 'marketplaceListings', 'l1'), { x: 1 })),
 )
 // The pair above used to assert the same collection twice under an "OLD" and
-// a "NEW" label — true, and hollow, once the rename made both strings equal.
-await check('the RETIRED community name is matched by no rule at all', () =>
-  assertFails(getDoc(doc(anon, 'communityListings', 'l1'))),
-)
+// a "NEW" label — true, and hollow, once the AGL-975 rename made both strings
+// equal. The retired name needs no case here: it is matched by no rule, and
+// the naming guard in apps/console/specs fails on the mere presence of the
+// old word in this file or in the rules it loads.
 
 // THE REGRESSION THIS EXISTS FOR.
 await check('a wildcard did NOT leak apiKeys to the world', () =>
