@@ -25,7 +25,7 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { SystemEmailTemplateDefinition } from '@aglyn/shared-util-email'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Autocomplete,
@@ -35,9 +35,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 /**
  * A thing whose fields can populate a template's merge tokens: an org, a
@@ -77,30 +75,36 @@ export interface SystemEmailTestDrawerProps {
  * default) and mails a `[Test]` copy.
  *
  * Same right-anchored drawer shell as the create-screen/create-component
- * flows. Orgs and hosts are read straight from Firestore (staff-readable);
- * users come from the staff `/api/admin/users` listing.
+ * flows. Orgs, hosts and users all come from staff endpoints.
+ *
+ * Orgs and hosts USED to be read straight from Firestore as client LISTs,
+ * on the reasoning that both are staff-readable. They are — but a client LIST
+ * over a collection whose rule is evaluated PER DOCUMENT can poison the local
+ * document cache (AGL-929). When a document drops out of a query target — a
+ * rule re-evaluating, or an App Check token failing to mint (AGL-1143, live on
+ * this deployment) — the SDK cannot tell "denied" from "deleted", resolves it
+ * with a single-doc listen, and on another denial records a DELETION at the
+ * path. `remoteDocumentsV14` is keyed by path, so that tombstone is then
+ * served to every other reader of `orgs/{orgId}` — including `useCurrentOrg`.
+ *
+ * A staff-only picker is not worth that. AGL-878 moved the staff org list off
+ * the client for exactly this reason; this drawer had the same shape and was
+ * missed.
  */
 export function SystemEmailTestDrawer(props: SystemEmailTestDrawerProps) {
   const { open, onClose, definition } = props
-  const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
 
-  const { data: orgDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'orgs'), limit(200)),
-    [firestore],
-    { idField: '$id' },
-  )
-  const { data: hostDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts'), limit(200)),
-    [firestore],
-    { idField: '$id' },
-  )
+  const [orgDocs, setOrgDocs] = useState<any[]>([])
+  const [hostDocs, setHostDocs] = useState<any[]>([])
   const [users, setUsers] = useState<
     { uid: string; email: string | null; displayName: string | null }[]
   >([])
 
-  // Users aren't a plain collection read — the staff endpoint lists them.
+  // One fetch per source, all staff endpoints. Only while the drawer is open —
+  // it mounts with the page and these are three list reads nobody asked for
+  // until they open it.
   useEffect(() => {
     if (!open || !user) return undefined
     let active = true
@@ -108,12 +112,21 @@ export function SystemEmailTestDrawer(props: SystemEmailTestDrawerProps) {
       const idToken = await (
         user as { getIdToken?: () => Promise<string> }
       )?.getIdToken?.()
-      const response = await fetch('/api/admin/users', {
-        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-      })
-      if (!response.ok) return
-      const payload = await response.json()
-      if (active) setUsers(payload?.users ?? [])
+      const headers = idToken ? { Authorization: `Bearer ${idToken}` } : {}
+      const load = async (path: string, key: string) => {
+        const response = await fetch(path, { headers })
+        if (!response.ok) return []
+        return (await response.json())?.[key] ?? []
+      }
+      const [orgs, hosts, userList] = await Promise.all([
+        load('/api/admin/orgs', 'orgs'),
+        load('/api/admin/hosts', 'hosts'),
+        load('/api/admin/users', 'users'),
+      ])
+      if (!active) return
+      setOrgDocs(orgs)
+      setHostDocs(hosts)
+      setUsers(userList)
     })().catch(() => undefined)
     return () => {
       active = false
