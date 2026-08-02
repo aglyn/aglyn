@@ -63,11 +63,14 @@ async function handler(request: Request): Promise<Response> {
     )
     const orgId = resolved?.orgId ?? null
 
-    // Paid gate for subscriber operations (staff bypasses).
-    const requirePaid = () => {
-      const plan = resolved?.org?.plan
-      return Boolean(plan && plan !== 'free')
-    }
+    // Ticket access is DERIVED from the support ladder, not a second copy of
+    // it (AGL-1103). This was `plan !== 'free'`, which is now wrong in a way
+    // no test would catch: Starter is forum-only, so a hardcoded paid check
+    // would keep letting it open tickets we have not committed to answer.
+    // A tier with no first-response window has no ticket channel, by
+    // definition — one place decides, and the gate cannot drift from the copy.
+    const requireTicketSupport = () =>
+      supportForPlan(resolved?.org?.plan as OrgPlan | null).firstResponse !== null
 
     const ticketsRef = firestore.collection('supportTickets')
 
@@ -125,9 +128,11 @@ async function handler(request: Request): Promise<Response> {
     }
 
     if (method === 'POST') {
-      if (!requirePaid()) {
+      if (!requireTicketSupport()) {
+        // Names the actual boundary. "Paid plans" was already misleading and
+        // is now false: Starter is paid and forum-only.
         return Response.json({
-          error: 'Support tickets are for paid plans — see Billing',
+          error: 'Support tickets start on Pro — see Billing',
         }, { status: 403 })
       }
       const subject = String(payload?.subject ?? '')

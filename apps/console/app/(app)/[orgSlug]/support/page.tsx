@@ -49,8 +49,13 @@ function formatWhen(ms: number | null): string {
 }
 
 /**
- * Support (AGL-142): ticket threads with staff and the subscriber forum,
- * both server-gated to paid plans via the /api/support routes.
+ * Support (AGL-142): ticket threads with staff and the community forum.
+ *
+ * Both are server-gated by the SUPPORT LADDER rather than a plan check
+ * (AGL-1103): tickets need a tier with a first-response commitment, which
+ * starts at Pro, while the forum is open to every tier including Free. What
+ * this page renders is derived from the same table the routes enforce, so the
+ * copy cannot promise a channel the API refuses.
  */
 const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
@@ -188,15 +193,14 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
                       anchor: '#support-tickets',
                       excerpt:
                         'Private ticket threads with the Aglyn team — ' +
-                        'included with every paid plan.',
+                        'from Pro upward.',
                     })}
                     contentGutterX
                     contentGutterY
                   >
                     <Stack spacing={1}>
                       <Typography variant="body2" color="text.secondary">
-                        {'Direct line to the Aglyn team — included with ' +
-                          'every paid plan.'}
+                        {'Direct line to the Aglyn team.'}
                       </Typography>
                       {/*
                         What THIS org is owed (AGL-1103). Held back until
@@ -213,6 +217,19 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
                           {supportCommitment.namedManager
                             ? ' Your success manager is copied on every ticket.'
                             : ''}
+                        </Typography>
+                      ) : null}
+                      {/*
+                        A forum-only tier gets told so, here, rather than
+                        finding out from a 403 after typing a ticket. The
+                        route's refusal is correct and the UI still has to
+                        anticipate it — a perfect error nobody renders is how
+                        AGL-1093 went wrong.
+                      */}
+                      {orgReady && !supportWindow ? (
+                        <Typography variant="body2">
+                          {'Your plan includes the community forum — ask there, ' +
+                            'or upgrade to Pro for private ticket support.'}
                         </Typography>
                       ) : null}
                       {tickets.map((ticket) => (
@@ -241,14 +258,21 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
                           </Button>
                         </Stack>
                       ))}
-                      <Button
-                        size="small"
-                        color="secondary"
-                        sx={{ alignSelf: 'flex-start' }}
-                        onClick={() => setNewTicket({ subject: '', body: '' })}
-                      >
-                        {'New ticket'}
-                      </Button>
+                      {/*
+                        Hidden until the org is known to have a ticket
+                        channel — NOT merely until `orgReady`, so the button
+                        never flashes for a tier that cannot use it.
+                      */}
+                      {orgReady && supportWindow ? (
+                        <Button
+                          size="small"
+                          color="secondary"
+                          sx={{ alignSelf: 'flex-start' }}
+                          onClick={() => setNewTicket({ subject: '', body: '' })}
+                        >
+                          {'New ticket'}
+                        </Button>
+                      ) : null}
                     </Stack>
                   </CardDisplay>
                 ),
