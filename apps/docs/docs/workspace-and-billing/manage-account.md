@@ -41,6 +41,22 @@ You can never remove your **last** sign-in method; the attempt is refused rather
 than locking you out. Closing the Google popup mid-flow simply cancels — nothing
 changes.
 
+:::note If your organization uses single sign-on
+Accounts that sign in through a company identity provider **cannot link Google or
+any other method** — the option is shown as unavailable, with the reason. That is
+deliberate, not a limitation we intend to lift.
+
+Single sign-on exists so your organization's identity provider is the *only* gate:
+they revoke access there, require MFA there, and offboard people there. A linked
+personal Google account would be a way in that your IT administrators cannot see
+or revoke, which is the thing SSO is bought to prevent.
+
+If your organization turns on SSO **enforcement** later, sign-in methods that were
+linked before are removed at that point, and any active sessions using them end.
+Your account is never left with no way in: if removing a method would orphan an
+account, it is skipped and reported to your administrators instead.
+:::
+
 ## Profile image
 
 Your avatar, shown in the account menu, on the workspace team roster, and beside
