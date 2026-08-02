@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  pluginRequestFromWeb,
+  resolveIdpDisplayName,
+} from '@aglyn/aglyn/server'
 import {
   consumePasswordResetSend,
   emailUnverifiedResponse,
@@ -173,9 +176,12 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 400 })
     }
     const origin = originFromHeaders(headers)
+    // AGL-1131: an SSO admin's name lives in `firebase.sign_in_attributes`,
+    // so this fell straight through to their email address in a mail that
+    // tells someone their password was changed by a person.
     const actorName =
-      decoded['name'] ??
-      decoded.email ??
+      resolveIdpDisplayName(decoded) ||
+      decoded.email ||
       `An admin at ${orgSnapshot.get('name') ?? 'your organization'}`
     const targetName =
       memberSnapshot.get('displayName') ??

@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  pluginRequestFromWeb,
+  resolveIdpDisplayName,
+} from '@aglyn/aglyn/server'
 import {
   canManageOrg,
   checkQuota,
@@ -85,7 +88,10 @@ async function handler(request: Request): Promise<Response> {
       ? await resolveOrgMembership(decoded.uid, requestedOrgId)
       : await ensureOrgForUser(decoded.uid, {
           email: decoded.email ?? null,
-          displayName: (decoded['name'] as string | undefined) ?? null,
+          // AGL-1131. `ensureOrgForUser` NAMES the workspace from this, so an
+          // SSO user creating their first site got a workspace named after
+          // their email local part instead of themselves.
+          displayName: resolveIdpDisplayName(decoded) || null,
         })
     if (!orgMembership) {
       return Response.json({ error: 'You are not a member of that organization' }, { status: 403 })
