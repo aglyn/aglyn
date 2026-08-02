@@ -17,6 +17,7 @@
 
 'use client'
 
+import { describeResponseWindow, supportForPlan } from '@aglyn/aglyn'
 import { mdiLifebuoy } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -39,6 +40,7 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
+import useCurrentOrg from '../../../../hooks/use-current-org'
 import { useOrgSlug } from '../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
@@ -54,6 +56,12 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
+  // The org's support commitment (AGL-1103). `ready` gates the claim, never
+  // the lookup: `supportForPlan` fails closed to the community tier, so
+  // rendering it early would tell a paying customer they are owed nothing.
+  const { org, ready: orgReady } = useCurrentOrg()
+  const supportCommitment = supportForPlan(org?.plan)
+  const supportWindow = describeResponseWindow(supportCommitment.firstResponse)
 
   const request = useCallback(
     async (
@@ -190,6 +198,23 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
                         {'Direct line to the Aglyn team — included with ' +
                           'every paid plan.'}
                       </Typography>
+                      {/*
+                        What THIS org is owed (AGL-1103). Held back until
+                        `ready`: `org` is undefined both while the read is in
+                        flight and when there is no org doc, so rendering
+                        before then would quote the Free tier's "no
+                        commitment" to a paying customer — the same shape as
+                        the plan-dependent UI this flag exists for.
+                      */}
+                      {orgReady && supportWindow ? (
+                        <Typography variant="body2">
+                          <strong>{`${supportCommitment.label} support`}</strong>
+                          {` — first response within ${supportWindow}.`}
+                          {supportCommitment.namedManager
+                            ? ' Your success manager is copied on every ticket.'
+                            : ''}
+                        </Typography>
+                      ) : null}
                       {tickets.map((ticket) => (
                         <Stack
                           key={ticket.$id}
