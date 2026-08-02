@@ -18,7 +18,7 @@
 
 import {
   checkDiscountMargin,
-  INFRA_COGS_PER_SITE_USD,
+  orgMonthlyCogsUsd,
   netOfProcessorFee,
   orgSiteCount,
   PLAN_ENTITLEMENTS,
@@ -118,6 +118,15 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     () => doc(firestore, 'orgs', orgId || 'missing'),
     [firestore, orgId],
     { idField: '$id' },
+  )
+  // This month's usage rollup, for the real cost model (AGL-1134). The
+  // enterprise pricing preview below used the flat per-site estimate, which
+  // is the drift AGL-1134 exists to stop — and it drifts on the one screen
+  // where staff decide what to charge an enterprise customer.
+  const usageMonth = useMemo(() => new Date().toISOString().slice(0, 7), [])
+  const { data: usageRollup } = useFirestoreDoc<any>(
+    () => doc(firestore, 'orgs', orgId || 'missing', 'usage', usageMonth),
+    [firestore, orgId, usageMonth],
   )
   const { data: hostDocs } = useFirestoreCollection<any>(
     () =>
@@ -593,10 +602,20 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     const amount = Number(entAmount)
     if (!(amount > 0) || !org) return null
     const net = netOfProcessorFee(amount, entInterval === 'year')
-    const infra = INFRA_COGS_PER_SITE_USD * orgSiteCount(org)
+    // Measured cost, not the $2/site placeholder (AGL-1134). The flat figure
+    // prices storage, page views and form submissions at nothing, and an
+    // enterprise org is exactly the shape where dataset storage, API requests
+    // and contacts dominate — so the margin shown here could be comfortably
+    // green on a deal that loses money.
+    //
+    // Falls back to the per-site floor on its own when there is no rollup
+    // yet, which is what a brand-new org looks like, so this never renders
+    // a margin of 100% for want of data.
+    const cogs = orgMonthlyCogsUsd(usageRollup, orgSiteCount(org))
+    const infra = cogs.cogsUsd
     const marginPct = net > 0 ? (net - infra) / net : -1
-    return { amount, net, infra, marginPct }
-  }, [entAmount, entInterval, org])
+    return { amount, net, infra, marginPct, basis: cogs.basis }
+  }, [entAmount, entInterval, org, usageRollup])
 
   const handleProvisionEnterprise = async () => {
     const amount = Number(entAmount)
@@ -1499,7 +1518,17 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   ? ` ($${entMargin.amount * 12}/yr)`
                                   : ''
                               } keeps $${entMargin.net} net of processor fees, ` +
-                              `less $${entMargin.infra} infra.`}
+                              // Name which cost model produced the figure
+                              // (AGL-1134). "$2 infra" and "$2 measured
+                              // across storage, requests and contacts" are
+                              // very different grounds for signing a deal,
+                              // and they can print the same number.
+                              `less $${entMargin.infra.toFixed(2)} cost ` +
+                              `(${
+                                entMargin.basis === 'measured'
+                                  ? 'measured from this month’s usage'
+                                  : 'per-site floor — no usage recorded yet'
+                              }).`}
                           </Alert>
                         ) : null}
                         {entResult?.checkoutUrl ? (
