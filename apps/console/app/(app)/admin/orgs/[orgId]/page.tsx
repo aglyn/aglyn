@@ -128,16 +128,41 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     () => doc(firestore, 'orgs', orgId || 'missing', 'usage', usageMonth),
     [firestore, orgId, usageMonth],
   )
-  const { data: hostDocs } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'hosts'),
-        where('orgId', '==', orgId || 'missing'),
-        limit(50),
-      ),
-    [firestore, orgId],
-    { idField: '$id' },
-  )
+  // Off the client (AGL-929). This was a LIST over `hosts`, whose rule is
+  // evaluated PER DOCUMENT (`isStaff() || memberRoles[uid] != null`). When a
+  // document drops out of a query target — a rule re-evaluating, or an App
+  // Check token failing to mint (AGL-1143, live on this deployment) — the SDK
+  // cannot tell "denied" from "deleted", resolves it with a single-doc listen,
+  // and on another denial records a DELETION at the path. `remoteDocumentsV14`
+  // is keyed by path, so that tombstone is then served to every other reader
+  // of `hosts/{hostId}`.
+  //
+  // AGL-878 moved the staff ORG list off the client for exactly this reason
+  // and this list, one page deeper, kept the shape. Reading with the Admin SDK
+  // sidesteps rules and App Check, so nothing can be tombstoned.
+  //
+  // The endpoint projects `$id`, `displayName`, `subdomain`, `orgId` — checked
+  // against what this card renders before switching, since a projection that
+  // drops a field the UI reads fails silently as a blank.
+  const [hostDocs, setHostDocs] = useState<any[] | null>(null)
+  useEffect(() => {
+    if (!isStaff || !orgId) return undefined
+    let active = true
+    void (async () => {
+      const idToken = await (user as any)?.getIdToken?.()
+      if (!idToken) return
+      const response = await fetch(
+        `/api/admin/hosts?orgId=${encodeURIComponent(orgId)}`,
+        { headers: { Authorization: `Bearer ${idToken}` } },
+      )
+      if (!response.ok) return
+      const payload = await response.json()
+      if (active) setHostDocs(payload?.hosts ?? [])
+    })().catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [isStaff, orgId, user])
   const { data: memberDocs } = useFirestoreCollection<any>(
     () =>
       query(
