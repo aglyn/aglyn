@@ -308,9 +308,20 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           ? `\nCHANGE ${usd(lastReceipt.changeCents)}`
           : '') +
         `\n${new Date().toLocaleString()}` +
-        `</pre><script>window.print()</script>`,
+        `</pre>`,
     )
     win.document.close()
+    // Print from HERE, not from a `<script>` written into the receipt
+    // (AGL-523). `window.open('')` yields an about:blank document that
+    // INHERITS the opener's CSP, so an injected inline script has no nonce and
+    // `strict-dynamic` means `'self'` will not save it either. Under the
+    // enforcing policy that script is blocked, the receipt window opens, and
+    // the print dialog never appears — a silent break of the one action the
+    // window exists for.
+    //
+    // This call is in the opener, whose script Next has already nonced.
+    win.focus()
+    win.print()
   }, [lastReceipt])
 
   return (
