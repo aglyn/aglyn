@@ -42,6 +42,11 @@ import {
   outstandingChecklistItems,
   PLUGIN_REVIEW_CHECKLIST,
 } from '../../../../constants/plugin-review-checklist'
+import {
+  pluginRejectionCategory,
+  rejectionHeadline,
+  rejectionInputError,
+} from '../../../../constants/plugin-rejection-categories'
 import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestation'
 import {
   PUBLISHER_AGREEMENT_VERSION,
@@ -331,6 +336,7 @@ async function listingDetail(
       publisherSlug: publisher?.get('slug') ?? null,
       reviewStatus: listing.reviewStatus ?? 'submitted',
       rejectionReason: listing.rejectionReason ?? '',
+      rejectionCategory: listing.rejectionCategory ?? '',
       priceUsd: Number(listing.priceUsd ?? 0),
       latestVersion: String(listing.latestVersion ?? ''),
       // The version the checklist, verifier verdict and approve/reject
@@ -738,11 +744,13 @@ async function handler(request: Request): Promise<Response> {
         }
       }
       const reason = String(body?.reason ?? '').slice(0, 500)
-      if (!approving && !reason.trim()) {
-        return Response.json(
-          { error: 'Rejecting a version needs a reason' },
-          { status: 400 },
-        )
+      // Structured rejection (AGL-977). The category is what makes rejections
+      // comparable across reviewers and queryable afterwards; the comment is
+      // what makes one actionable. Requiring only free text gave neither.
+      const category = String(body?.category ?? '')
+      if (!approving) {
+        const invalid = rejectionInputError(category, reason)
+        if (invalid) return Response.json({ error: invalid }, { status: 400 })
       }
       await versionRef.set(
         {
@@ -753,7 +761,18 @@ async function handler(request: Request): Promise<Response> {
           // the same version string can never inherit this verdict.
           reviewedSha256: sha256,
           grandfathered: FieldValue.delete(),
-          ...(approving ? {} : { reviewRejectionReason: reason }),
+          ...(approving
+            ? {
+                // Clear a previous rejection's fields on approval, or a
+                // version that was rejected and then approved keeps
+                // explaining why it was turned down.
+                reviewRejectionReason: FieldValue.delete(),
+                reviewRejectionCategory: FieldValue.delete(),
+              }
+            : {
+                reviewRejectionReason: reason,
+                reviewRejectionCategory: category,
+              }),
         },
         { merge: true },
       )
@@ -812,7 +831,14 @@ async function handler(request: Request): Promise<Response> {
         actorUid: decoded.uid,
         action: `plugins.review.version.${approving ? 'approve' : 'reject'}`,
         target: `communityListings/${listingId}/pluginVersions/${version}`,
-        after: { sha256, ...(reason ? { reason } : {}) },
+        after: {
+          sha256,
+          ...(reason ? { reason } : {}),
+          // Both, not one (AGL-971 + AGL-977): the category is what an audit
+          // can be counted by, the comment is what makes a single row make
+          // sense to a human reading it later.
+          ...(category ? { category } : {}),
+        },
         at: FieldValue.serverTimestamp(),
       })
 
@@ -950,8 +976,10 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Unknown action' }, { status: 400 })
     }
     const reason = String(body?.reason ?? '').slice(0, 500)
-    if (action === 'reject' && !reason.trim()) {
-      return Response.json({ error: 'Rejection needs a reason' }, { status: 400 })
+    const category = String(body?.category ?? '')
+    if (action === 'reject') {
+      const invalid = rejectionInputError(category, reason)
+      if (invalid) return Response.json({ error: invalid }, { status: 400 })
     }
 
     const listingRef = firestore.collection('communityListings').doc(listingId)
@@ -997,8 +1025,11 @@ async function handler(request: Request): Promise<Response> {
         reviewedBy: decoded.uid,
         reviewedAt: FieldValue.serverTimestamp(),
         ...(action === 'reject'
-          ? { rejectionReason: reason }
-          : { rejectionReason: FieldValue.delete() }),
+          ? { rejectionReason: reason, rejectionCategory: category }
+          : {
+              rejectionReason: FieldValue.delete(),
+              rejectionCategory: FieldValue.delete(),
+            }),
       },
       { merge: true },
     )
@@ -1028,7 +1059,17 @@ async function handler(request: Request): Promise<Response> {
                 : `"${listing.displayName}" is now ${nextStatus}`,
           body:
             action === 'reject'
-              ? reason
+              ? // Category, then what to do about it, then the reviewer's own
+                // words (AGL-977). The publisher's first question is "what do
+                // I fix" — a bare comment answered that only as well as the
+                // reviewer happened to write it.
+                [
+                  pluginRejectionCategory(category)?.label,
+                  pluginRejectionCategory(category)?.guidance,
+                  reason,
+                ]
+                  .filter(Boolean)
+                  .join('\n\n')
               : action === 'delist'
                 ? reason ||
                   'It has been removed from the marketplace while we take ' +
@@ -1044,7 +1085,10 @@ async function handler(request: Request): Promise<Response> {
         await emailPublisher(
           publisherOrgId,
           action === 'reject'
-            ? `${listing.displayName} was rejected`
+            ? `${listing.displayName} was rejected — ${rejectionHeadline(
+                category,
+                reason,
+              )}`
             : action === 'delist'
               ? `${listing.displayName} was removed from the marketplace`
               : `${listing.displayName} is now ${nextStatus}`,

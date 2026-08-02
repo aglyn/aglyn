@@ -46,6 +46,12 @@ import MarkdownLiteView from '../../../../../components/markdown-lite-view.compo
 import StaffOnly from '../../../../../components/staff-only.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { PLUGIN_REVIEW_CHECKLIST } from '../../../../../constants/plugin-review-checklist'
+import {
+  PLUGIN_REJECTION_CATEGORIES,
+  pluginRejectionCategory,
+  rejectionHeadline,
+  rejectionInputError,
+} from '../../../../../constants/plugin-rejection-categories'
 import { PUBLISHER_ATTESTATION } from '@aglyn/aglyn/app-utils/publisher-attestation'
 import { reviewStatusMeaning } from '../../../../../constants/plugin-review-status'
 import { buildRoute, Route } from '../../../../../constants/route-links'
@@ -83,6 +89,7 @@ interface ListingDetail {
   publisherSlug: string | null
   reviewStatus: string
   rejectionReason: string
+  rejectionCategory?: string
   priceUsd: number
   latestVersion: string
   activeInstalls: number
@@ -153,6 +160,15 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [reason, setReason] = useState('')
+  // Structured rejection (AGL-977). The comment stays — it is what tells a
+  // publisher what to fix — but it is no longer the only thing recorded.
+  const [rejectCategory, setRejectCategory] = useState('')
+  // The same predicate the route enforces, so the button and the server
+  // cannot disagree about what a complete rejection looks like.
+  const rejectBlocked = rejectionInputError(rejectCategory, reason)
+  const rejectCategoryNeedsComment = Boolean(
+    pluginRejectionCategory(rejectCategory)?.requiresComment,
+  )
   const [takedownReason, setTakedownReason] = useState('')
   // Which version is being reviewed. Empty = let the server pick the oldest
   // one still awaiting a verdict, which is the work queue for this listing.
@@ -554,7 +570,15 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ) : null}
                   {detail.rejectionReason ? (
                     <Alert severity="error">
-                      {`Rejected: ${detail.rejectionReason}`}
+                      {`Rejected: ${rejectionHeadline(
+                        detail.rejectionCategory,
+                        detail.rejectionReason,
+                      )}${
+                        detail.rejectionReason &&
+                        pluginRejectionCategory(detail.rejectionCategory)
+                          ? ` — ${detail.rejectionReason}`
+                          : ''
+                      }`}
                     </Alert>
                   ) : null}
                   {detail.hidden ? (
@@ -1286,8 +1310,36 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                     >
                       <TextField
+                        select
                         size="small"
-                        placeholder="Reason (required to reject)"
+                        label="Rejection reason"
+                        value={rejectCategory}
+                        onChange={(event) =>
+                          setRejectCategory(event.target.value)
+                        }
+                        // `displayEmpty` is not enough on a MUI Select: an
+                        // empty value renders NOTHING without a rendered
+                        // option, so the field reads as broken.
+                        slotProps={{
+                          select: { displayEmpty: true },
+                          inputLabel: { shrink: true },
+                        }}
+                        sx={{ minWidth: 260 }}
+                      >
+                        <MenuItem value="">{'Select a reason…'}</MenuItem>
+                        {PLUGIN_REJECTION_CATEGORIES.map((entry) => (
+                          <MenuItem key={entry.id} value={entry.id}>
+                            {entry.label}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                      <TextField
+                        size="small"
+                        placeholder={
+                          rejectCategoryNeedsComment
+                            ? 'Comment (required for “Other”)'
+                            : 'Comment (optional)'
+                        }
                         value={reason}
                         onChange={(event) => setReason(event.target.value)}
                         sx={{ minWidth: 260 }}
@@ -1321,14 +1373,25 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       <Button
                         size="small"
                         color="error"
-                        disabled={busy}
+                        // Disabled rather than left to fail server-side: the
+                        // route validates too, but a reviewer should not have
+                        // to press a button to learn the form is incomplete.
+                        disabled={busy || Boolean(rejectBlocked)}
                         onClick={() =>
-                          void post({ action: 'reject', reason }, 'Rejected')
+                          void post(
+                            { action: 'reject', reason, category: rejectCategory },
+                            'Rejected',
+                          )
                         }
                       >
                         {'Reject'}
                       </Button>
                     </Stack>
+                    {rejectBlocked ? (
+                      <Typography variant="caption" color="text.secondary">
+                        {rejectBlocked}
+                      </Typography>
+                    ) : null}
                     <Typography variant="caption" color="text.secondary">
                       {'Delist pulls it from the marketplace and blocks new ' +
                         'installs; existing installs keep working. Unverify ' +
