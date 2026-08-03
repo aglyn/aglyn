@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { hostCollectionKind, screenRoutePathToUrl } from '@aglyn/aglyn/server'
+import {
+  hostCollectionKind,
+  hostPublicOrigin,
+  screenRoutePathToUrl,
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import getHost from '../../../utils/get-host'
 
@@ -47,8 +51,26 @@ export async function GET(request: Request): Promise<Response> {
     return new Response('Not found', { status: 404 })
   }
 
-  const requestHost = String(request.headers.get('host') ?? host)
-  const base = `https://${requestHost}`
+  // The `<loc>` base is the site's PUBLIC origin, not the domain this request
+  // happened to arrive on (AGL-1160). Deriving it from the `Host` header meant
+  // the sitemap contradicted the page's own `<link rel="canonical">`, which
+  // `[host]/[[...slug]]/page.tsx` already builds from `hostPublicOrigin` — so a
+  // site reachable on both its custom domain and `.aglyn.app` published two
+  // different answers about where it lives. A preview deployment was worse
+  // still: it emitted a sitemap full of `*.vercel.app` URLs.
+  //
+  // It is also what lets this response be cached at all. A cache keys on the
+  // URL, never the `Host` header, and `demo.aglyn.app`, `app.aglyn.com` and
+  // every preview host all rewrite to `/api/sitemap?host=demo` — one key, three
+  // bases. Reading the origin from the host record removes the header from the
+  // output, so the response becomes a pure function of the URL.
+  //
+  // The header stays as a fallback only for a host record carrying neither a
+  // cname nor a subdomain; `hostPublicOrigin` returns undefined there rather
+  // than inventing a half-built URL.
+  const base =
+    hostPublicOrigin(hostRes.host) ??
+    `https://${String(request.headers.get('host') ?? host)}`
   const urls = Object.values(hostRes.host.screens ?? {})
     .map((path) => `${base}${screenRoutePathToUrl(path)}`)
     .sort()

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { resolveEntryCategoryName } from '@aglyn/aglyn/server'
+import { hostPublicOrigin, resolveEntryCategoryName } from '@aglyn/aglyn/server'
 import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
 import getHost from '../../../utils/get-host'
 
@@ -46,7 +46,13 @@ export async function GET(request: Request): Promise<Response> {
   })
   if (!content.collection) return new Response('Not found', { status: 404 })
 
-  const base = `https://${request.headers.get('host') ?? host}`
+  // The site's public origin, not the domain the request arrived on — see the
+  // longer note in `../sitemap/route.ts` (AGL-1160). It matters more here: a
+  // feed's `<guid>` is the identity a reader stores, so a URL that changes with
+  // the requesting domain re-announces every old entry as new.
+  const base =
+    hostPublicOrigin(hostRes.host) ??
+    `https://${request.headers.get('host') ?? host}`
   const categories = content.collection.categories
   const items = content.entries
     .map(
