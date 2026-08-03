@@ -328,6 +328,12 @@ const renderEntry = (entry: AppBarMenubarEntryProps, i: number) => {
                     width: '30ch',
                     overflowY: 'auto',
                     paddingY: 1,
+                    // Paper transitions `box-shadow` by default. Base UI reads
+                    // a running transition on the popup as a close animation
+                    // and waits for `transitionend` before unmounting — and
+                    // box-shadow never changes here, so that event never came:
+                    // the closed menu stayed on screen holding focus.
+                    transition: 'none',
                     filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
                     backgroundColor: 'surface.main',
                     '&:before': {
