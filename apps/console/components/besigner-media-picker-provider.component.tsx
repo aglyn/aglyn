@@ -51,8 +51,23 @@ export function BesignerMediaPickerProvider(
         open={open}
         onClose={() => setOpen(false)}
         onPick={(media) => {
-          const url = (media as any).url as string | undefined
-          if (url) pendingPick.current?.(url)
+          // Prefer the stable, mediaId-keyed CDN path (AGL-1214). The raw
+          // `url` is a firebasestorage download URL that names the object's
+          // CURRENT location, so a folder move — which physically copies the
+          // object, rewrites `url` and DELETES the original — turns every
+          // node holding it into a permanent 404. `cdnPath` survives moves
+          // and replaces, and it is the only form the image element can
+          // build a responsive srcSet from, so picking the raw URL also
+          // silently cost every picked image its WebP variants.
+          //
+          // The dialog has already host-qualified `cdnPath` for org assets
+          // restricted to specific sites, so take it verbatim. Relative on
+          // purpose: the CDN route is mounted in the console AND the tenant
+          // app, so one path resolves in the editor canvas and on the
+          // published site. `url` remains the fallback for free-tier orgs
+          // (cdnPath is a paid `mediaCdn` entitlement) and legacy uploads.
+          const src = media.cdnPath || media.url
+          if (src) pendingPick.current?.(src)
           pendingPick.current = null
           setOpen(false)
         }}

@@ -29,11 +29,18 @@ export function mediaSrc(media: {
   url?: string
   cdnPath?: string
 }): string {
-  if (media.url) return media.url
+  // `cdnPath` FIRST (AGL-1214). It is keyed by media id, so it survives a
+  // folder move — which physically copies the object, rewrites `url` and
+  // deletes the original, permanently breaking anything holding the old
+  // raw URL. Preferring `url` meant this helper emitted the fragile form
+  // for every paid org, where both fields are always populated. `url`
+  // stays the fallback for free-tier orgs (`cdnPath` is a paid `mediaCdn`
+  // entitlement) and legacy uploads that predate it.
   if (media.cdnPath)
     return typeof window === 'undefined'
       ? media.cdnPath
       : `${window.location.origin}${media.cdnPath}`
+  if (media.url) return media.url
   return ''
 }
 
