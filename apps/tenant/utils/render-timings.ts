@@ -77,6 +77,19 @@ const MODULE_LOADED_AT = Date.now()
  * evaluation (a bundle problem, overlapping AGL-1151), time after it is ours.
  * Captured at module scope, never per request — it is a property of the
  * instance, and reading it later would measure the request instead.
+ *
+ * **Only meaningful on a serverless instance.** A lambda boots and serves its
+ * first request immediately, so uptime-at-load IS the pre-render cost. On a
+ * long-lived local server it also counts however long the process sat idle
+ * before the first request, which is not a cost anyone pays — a local run
+ * reported 7.3 s and 8.8 s for the same build purely because of when the
+ * request was issued. Do not read a local value as a boot measurement.
+ *
+ * Local runs did settle one thing by another route: with the server already
+ * warm, a page request took 3.33 s against a loader reporting 2.83 s, so module
+ * loading plus the React render beyond the loader is only ~0.5 s. Production's
+ * missing ~7.8 s is therefore neither the loader nor the render — it is lambda
+ * initialisation, which is what this field measures there.
  */
 const PROCESS_UPTIME_AT_LOAD_MS = Math.round(process.uptime() * 1000)
 
