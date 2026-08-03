@@ -68,6 +68,16 @@ properties:
   the per-item controls: grid column/row placement, flex grow, flex
   shrink, flex basis, and order.
 
+Length fields — width, height, the min/max bounds, font size, letter
+spacing, the position offsets, and flex basis — are a **number box plus
+a unit menu**, the same pairing as the box stylers, so you type the
+number and pick px, %, rem, vh, `auto` and the rest from the menu
+rather than typing the unit yourself. Anything richer than a plain
+length (`calc(100% - 2rem)`, `min-content`, a `{{token}}` binding) stays
+editable as text and is never rewritten. Gap, corner radius, and line
+height stay plain text fields: a bare number there means a *theme*
+multiple, not pixels.
+
 Every control **applies immediately** — toggles and switches on click,
 text fields on a short pause in typing (or when focus leaves the
 field). There is no Save button in the styles panel; undo/redo covers

@@ -36,12 +36,12 @@ import type { BaseFieldProps } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
 /**
- * CssDimension (AGL-1219): a number box plus a unit picker for attributes
- * that hold a CSS length — an image's Width, a drawer's Width, a video
- * block's Height. Authors used to type the whole string (`920px`) into a
- * free-text field and were expected to remember the unit; the styles panel
- * has had a number+unit control for these all along, so this brings the
- * attributes panel in line with it.
+ * CssDimension (AGL-1219): a number box plus a unit picker for anything
+ * holding a CSS length — an image's Width, a drawer's Width, a video
+ * block's Height, and every length in the styles panel's field groups.
+ * Authors used to type the whole string (`920px`) into a free-text field
+ * and were expected to remember the unit, while the box stylers right
+ * above them had a number+unit pair all along.
  *
  * The PERSISTED value is unchanged: still one CSS string (`"920px"`,
  * `"100%"`, `"auto"`, `""`). This is purely an input affordance, so nothing
@@ -68,10 +68,41 @@ interface DimensionDraft {
   custom: boolean
 }
 
-export const seedDimensionDraft = (value: unknown): DimensionDraft => {
-  const parsed = parseCssDimension(
-    typeof value === 'string' || typeof value === 'number' ? value : undefined,
-  )
+/**
+ * How a value stored as a bare NUMBER is to be read (AGL-1219). A node prop
+ * is plain CSS, so a number is pixels — the default.
+ *
+ * `'mui-sizing'` is for the styles panel's `sx` sizing keys, where a number
+ * is NOT pixels: MUI's `sizingTransform` renders any number in (0, 1] as a
+ * fraction of the parent, so `width: 0.5` is 50%. Read as pixels it would
+ * show "0.5" with no unit and the first nudge would turn a half-width
+ * element into a 0.6px one.
+ */
+export type DimensionNumberAs = 'px' | 'mui-sizing'
+
+/**
+ * The CSS string a stored value stands for — the only place a bare number
+ * is given its meaning. Mirrors MUI's `sizingTransform` for `'mui-sizing'`.
+ */
+export const dimensionValueToCss = (
+  value: unknown,
+  numberAs: DimensionNumberAs = 'px',
+): string => {
+  if (typeof value === 'string') return value
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+  if (numberAs === 'mui-sizing' && value <= 1 && value !== 0) {
+    // `0.3 * 100` is 30.000000000000004 in binary floating point — MUI
+    // emits that verbatim; showing it in a number box would be absurd.
+    return `${Number((value * 100).toFixed(4))}%`
+  }
+  return `${value}px`
+}
+
+export const seedDimensionDraft = (
+  value: unknown,
+  numberAs: DimensionNumberAs = 'px',
+): DimensionDraft => {
+  const parsed = parseCssDimension(dimensionValueToCss(value, numberAs))
   if (parsed.raw !== undefined) {
     return { text: parsed.raw, unit: '', custom: true }
   }
@@ -95,6 +126,8 @@ export interface CssDimensionProps extends BaseFieldProps {
   placeholder?: string
   /** Units offered; defaults to the full shared list. */
   units?: CssUnit[]
+  /** How a bare number is read. See {@link DimensionNumberAs}. */
+  numberAs?: DimensionNumberAs
   FormFieldGridProps?: FormFieldGridProps
 }
 
@@ -112,6 +145,7 @@ export const CssDimensionField = (props: CssDimensionProps) => {
     meta,
     help,
     units = CSS_UNITS,
+    numberAs = 'px',
     FormFieldGridProps = {},
     // Free-text leftovers from the attribute schema that must never reach
     // the DOM (the attributes it was authored with as a TEXT_FIELD).
@@ -121,15 +155,12 @@ export const CssDimensionField = (props: CssDimensionProps) => {
     ...rest
   } = useFieldApi(props)
   const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
-  // A node prop authored as a bare number (`width: 320`) is still a value the
-  // author has to see — reading only strings would blank the field and then
-  // overwrite the number on the first edit.
-  const value =
-    typeof input.value === 'string'
-      ? input.value
-      : typeof input.value === 'number'
-        ? `${input.value}`
-        : ''
+  // A value authored as a bare number (`width: 320`, or `width: 0.5` in an
+  // sx) is still a value the author has to see — reading only strings would
+  // blank the field and then overwrite the number on the first edit. The
+  // number is resolved to the CSS it stands for HERE, not in the form value,
+  // so an untouched field still emits nothing and the stored number survives.
+  const value = dimensionValueToCss(input.value, numberAs)
 
   const [draft, setDraft] = useState<DimensionDraft>(() =>
     seedDimensionDraft(value),

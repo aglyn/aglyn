@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { FieldComponentType } from '@aglyn/aglyn'
 import { SX_SCHEME_DARK_KEY } from '@aglyn/aglyn-node-renderer'
 import { readSxValue, writeSxValue } from './responsive-sx'
 import {
@@ -144,6 +145,63 @@ describe('style field groups (AGL-540/587)', () => {
     for (const name of names) {
       expect(BASE_PANEL_KEYS).not.toContain(name)
     }
+  })
+
+  // Number box + unit picker for lengths (AGL-1219). Asserted at the
+  // DECLARATION end so a field that quietly reverts to free text — or a
+  // theme-multiple field that gets swept into the dimension editor — fails
+  // here rather than in a screenshot.
+  describe('length editors', () => {
+    const componentOf = (name: string) =>
+      [...groups.flatMap((group) => group.fields), ...gapGroup.fields].find(
+        (field) => field.name === name,
+      )?.['component']
+
+    it.each([
+      'width',
+      'height',
+      'minWidth',
+      'maxWidth',
+      'minHeight',
+      'maxHeight',
+      'fontSize',
+      'letterSpacing',
+      'top',
+      'right',
+      'bottom',
+      'left',
+      'flexBasis',
+    ])('gives %s a number box and a unit picker', (name) => {
+      expect(componentOf(name)).toBe(FieldComponentType.CSS_DIMENSION)
+    })
+
+    it.each([
+      // A NUMBER in these means a theme multiple, not pixels: `gap: 2` is
+      // 16px (× the spacing unit) and `borderRadius: 2` is 8px (×
+      // shape.borderRadius). A px picker would show "2" and turn the next
+      // nudge into 3px — a silent 8× shrink.
+      'gap',
+      'rowGap',
+      'columnGap',
+      'borderRadius',
+      // Unitless by convention; a unit picker would push px onto 1.5.
+      'lineHeight',
+    ])('keeps %s free text — its bare number is not pixels', (name) => {
+      expect(componentOf(name)).toBe(FieldComponentType.TEXT_FIELD)
+    })
+
+    it('tells the sizing keys that a fraction is a percentage', () => {
+      // MUI's sizingTransform: width: 0.5 renders 50%, not 0.5px.
+      const sizing = groups.find((group) => group.$id === 'sizing')!
+      for (const field of sizing.fields) {
+        expect(field['numberAs']).toBe('mui-sizing')
+      }
+      // Everything else is plain CSS, where a number IS pixels.
+      const fontSize = groups
+        .flatMap((group) => group.fields)
+        .find((field) => field.name === 'fontSize')
+      expect(fontSize?.['numberAs']).toBeUndefined()
+    })
   })
 
   it('feeds the theme palette into every color picker', () => {

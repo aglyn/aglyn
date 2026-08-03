@@ -74,6 +74,42 @@ const textField = (
 
 const half = { FormFieldGridProps: { size: { xs: 12, sm: 6 } } }
 
+/**
+ * A length field: number box + unit picker (AGL-1219) instead of a
+ * free-text box the author has to type `px` into. The PERSISTED value is
+ * unchanged — still one CSS string in `sx` — so this is purely an input
+ * affordance and nothing downstream has to know about it. Anything the
+ * control cannot model (`calc(100% - 2rem)`, `min-content`, MUI's
+ * `maxWidth: 'sm'` breakpoint key) falls back to a text box holding the
+ * raw string, so no existing value is destroyed.
+ *
+ * Not every length is one of these. Fields whose NUMBER means a theme
+ * multiple — `borderRadius` (× `shape.borderRadius`), `gap`/`rowGap`/
+ * `columnGap` (× the spacing unit) — stay free text: a stored `gap: 2` is
+ * 16px, and a px picker would show "2" and turn the next nudge into 3px.
+ * `lineHeight` stays free text for the same reason (a unitless 1.5 is the
+ * normal value, and a unit picker would push `px` onto it).
+ */
+const dimensionField = (
+  name: string,
+  label: string,
+  description: string,
+  extra?: Record<string, unknown>,
+) => ({
+  component: FieldComponentType.CSS_DIMENSION,
+  name,
+  label,
+  description,
+  ...extra,
+})
+
+/**
+ * Sizing keys read their bare numbers through MUI's `sizingTransform`,
+ * where a number in (0, 1] is a FRACTION of the parent — `width: 0.5`
+ * renders 50%, not 0.5px (AGL-1219).
+ */
+const muiSizing = { numberAs: 'mui-sizing' as const }
+
 const selectField = (
   name: string,
   label: string,
@@ -195,31 +231,37 @@ export function buildStyleFieldGroups(
       $id: 'sizing',
       label: 'Sizing',
       fields: [
-        textField('width', 'Width', 'CSS width, e.g. 320px, 50%, 20rem.', half),
-        textField('height', 'Height', 'CSS height, e.g. 240px or 100vh.', half),
-        textField(
+        dimensionField('width', 'Width', 'CSS width, e.g. 320px, 50%, 20rem.', {
+          ...muiSizing,
+          ...half,
+        }),
+        dimensionField('height', 'Height', 'CSS height, e.g. 240px or 100vh.', {
+          ...muiSizing,
+          ...half,
+        }),
+        dimensionField(
           'minWidth',
           'Min Width',
           'Lower bound for the element width.',
-          half,
+          { ...muiSizing, ...half },
         ),
-        textField(
+        dimensionField(
           'maxWidth',
           'Max Width',
           'Upper bound for the element width.',
-          half,
+          { ...muiSizing, ...half },
         ),
-        textField(
+        dimensionField(
           'minHeight',
           'Min Height',
           'Lower bound for the element height.',
-          half,
+          { ...muiSizing, ...half },
         ),
-        textField(
+        dimensionField(
           'maxHeight',
           'Max Height',
           'Upper bound for the element height.',
-          half,
+          { ...muiSizing, ...half },
         ),
       ],
     },
@@ -227,7 +269,7 @@ export function buildStyleFieldGroups(
       $id: 'typography',
       label: 'Typography',
       fields: [
-        textField(
+        dimensionField(
           'fontSize',
           'Font Size',
           'CSS font size, e.g. 18px, 1.25rem.',
@@ -250,7 +292,7 @@ export function buildStyleFieldGroups(
           'Line box height, e.g. 1.5 or 28px.',
           half,
         ),
-        textField(
+        dimensionField(
           'letterSpacing',
           'Letter Spacing',
           'Tracking between characters, e.g. 0.5px or 0.02em.',
@@ -355,10 +397,15 @@ export function buildStyleFieldGroups(
           'Positioning scheme; offsets below apply to non-static elements.',
           ['static', 'relative', 'absolute', 'fixed', 'sticky'],
         ),
-        textField('top', 'Top', 'Offset from the top edge.', half),
-        textField('right', 'Right', 'Offset from the right edge.', half),
-        textField('bottom', 'Bottom', 'Offset from the bottom edge.', half),
-        textField('left', 'Left', 'Offset from the left edge.', half),
+        dimensionField('top', 'Top', 'Offset from the top edge.', half),
+        dimensionField('right', 'Right', 'Offset from the right edge.', half),
+        dimensionField(
+          'bottom',
+          'Bottom',
+          'Offset from the bottom edge.',
+          half,
+        ),
+        dimensionField('left', 'Left', 'Offset from the left edge.', half),
         textField(
           'zIndex',
           'Z-Index',
@@ -431,7 +478,7 @@ export function buildStyleFieldGroups(
           'How much this flex item shrinks when space is tight.',
           { type: 'number', ...half },
         ),
-        textField(
+        dimensionField(
           'flexBasis',
           'Flex Basis',
           'Initial main size of this flex item, e.g. 200px or 30%.',

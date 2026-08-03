@@ -25,6 +25,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 
 import { FormRenderer, useFormApi } from '../vendor/data-driven-forms'
 import CssDimensionField, {
+  dimensionValueToCss,
   seedDimensionDraft,
   serializeDimensionDraft,
 } from './css-dimension'
@@ -122,6 +123,55 @@ describe('dimension draft round trip (AGL-1219)', () => {
       unit: '',
       custom: true,
     })
+  })
+})
+
+/**
+ * How a value stored as a bare NUMBER is read (AGL-1219). Plain CSS says
+ * pixels; MUI's `sx` sizing keys do not — `sizingTransform` renders any
+ * number in (0, 1] as a fraction of the parent, so the styles panel's
+ * width/height fields pass `numberAs: 'mui-sizing'`.
+ */
+describe('bare numbers (AGL-1219)', () => {
+  it('reads a number as pixels by default', () => {
+    expect(dimensionValueToCss(320)).toBe('320px')
+    expect(seedDimensionDraft(320)).toEqual({
+      text: '320',
+      unit: CssUnit.PIXELS,
+      custom: false,
+    })
+  })
+
+  it('reads a sizing fraction as the percentage MUI renders', () => {
+    expect(dimensionValueToCss(0.5, 'mui-sizing')).toBe('50%')
+    expect(dimensionValueToCss(1, 'mui-sizing')).toBe('100%')
+    // Above 1 (and exactly 0) MUI falls through to a plain length.
+    expect(dimensionValueToCss(320, 'mui-sizing')).toBe('320px')
+    expect(dimensionValueToCss(0, 'mui-sizing')).toBe('0px')
+    expect(seedDimensionDraft(0.5, 'mui-sizing')).toEqual({
+      text: '50',
+      unit: CssUnit.PERCENT,
+      custom: false,
+    })
+  })
+
+  it('does not put binary floating-point noise in the number box', () => {
+    // MUI itself emits `30.000000000000004%` here; a number box must not.
+    expect(dimensionValueToCss(0.3, 'mui-sizing')).toBe('30%')
+  })
+
+  it('has nothing to show for a non-value', () => {
+    expect(dimensionValueToCss(undefined)).toBe('')
+    expect(dimensionValueToCss(null)).toBe('')
+    expect(dimensionValueToCss(Number.NaN)).toBe('')
+    expect(dimensionValueToCss({ nested: true })).toBe('')
+  })
+
+  it('leaves strings alone — only a NUMBER needs interpreting', () => {
+    expect(dimensionValueToCss('0.5', 'mui-sizing')).toBe('0.5')
+    expect(dimensionValueToCss('calc(100% - 2rem)', 'mui-sizing')).toBe(
+      'calc(100% - 2rem)',
+    )
   })
 })
 
