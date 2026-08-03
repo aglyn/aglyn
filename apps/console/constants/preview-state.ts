@@ -18,7 +18,7 @@
 import type { AglynHostTheme, NodesMap } from '@aglyn/aglyn'
 
 /**
- * Which kind of besigner document a preview snapshot came from (AGL-1204).
+ * Which kind of besigner document a preview snapshot came from (AGL-1203).
  *
  * The kind is part of the storage key, not decoration: component, layout,
  * template and screen ids are minted from the same generator and live in

@@ -27,7 +27,7 @@ const TENANT_PREVIEW_HOST =
 
 /**
  * A console served from localhost links to the LOCAL tenant dev server
- * (AGL-1204), not the remote preview deployment.
+ * (AGL-1203), not the remote preview deployment.
  *
  * Sending a local console to `aglyn-tenant-git-main-*.vercel.app` meant every
  * Live link 404'd for anything that had not been deployed yet — which is the

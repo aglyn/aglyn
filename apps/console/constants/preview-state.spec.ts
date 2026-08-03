@@ -28,7 +28,7 @@ import {
 
 const nodes = { _root_: { $id: '_root_' } } as any
 
-describe('preview-state (AGL-1204)', () => {
+describe('preview-state (AGL-1203)', () => {
   beforeEach(() => window.localStorage.clear())
 
   it('round-trips a snapshot with its theme', () => {

@@ -49,7 +49,7 @@ export interface DocumentPreviewProps {
 }
 
 /**
- * Renders a besigner draft snapshot the way the live site would (AGL-1204).
+ * Renders a besigner draft snapshot the way the live site would (AGL-1203).
  *
  * One surface for all four document kinds. Screens were the only kind with a
  * preview route; components, layouts and templates showed a Preview button

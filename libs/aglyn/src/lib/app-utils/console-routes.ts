@@ -116,7 +116,7 @@ export enum Route {
   COMPONENT_BESIGNER = '/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/besigner',
   TEMPLATE_BESIGNER = '/[orgSlug]/hosts/[host]/templates/[templateId]/besigner',
   LAYOUT_BESIGNER = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/besigner',
-  // Draft preview for every besigner document kind (AGL-1204). Screens had
+  // Draft preview for every besigner document kind (AGL-1203). Screens had
   // the only preview route; components, layouts and templates showed a
   // Preview button that did nothing. Each renders the same localStorage
   // snapshot through the site renderer, so they work on localhost with no

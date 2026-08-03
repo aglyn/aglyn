@@ -39,7 +39,7 @@ export interface UseOpenPreviewOptions {
 }
 
 /**
- * Snapshot the current besigner draft and open its preview tab (AGL-1204).
+ * Snapshot the current besigner draft and open its preview tab (AGL-1203).
  *
  * The snapshot goes through `localStorage` rather than a deployment, so
  * preview works against a local dev server. Reusing one window name per

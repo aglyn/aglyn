@@ -29,7 +29,7 @@ const host = {
 
 
 describe('tenant-links', () => {
-  describe('isLocalConsole (AGL-1204)', () => {
+  describe('isLocalConsole (AGL-1203)', () => {
     it('matches localhost and its subdomains only', () => {
       expect(isLocalConsole('localhost')).toBe(true)
       expect(isLocalConsole('app.localhost')).toBe(true)

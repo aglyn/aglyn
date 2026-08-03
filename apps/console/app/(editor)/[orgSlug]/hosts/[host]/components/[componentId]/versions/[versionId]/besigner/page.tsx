@@ -297,7 +297,7 @@ function ComponentBesignerPage(props) {
 
   const hostTheme = hostResult?.data?.theme
 
-  // Draft preview (AGL-1204): a reusable component renders on its own, so the
+  // Draft preview (AGL-1203): a reusable component renders on its own, so the
   // canvas snapshot is the whole story — no layout chain to compose.
   const handlePreview = useOpenPreview({
     ids: hostId

@@ -264,7 +264,7 @@ function TemplateBesignerPage(props) {
 
   const hostTheme = hostResult?.data?.theme
 
-  // Draft preview (AGL-1204). Templates version but never publish, so the
+  // Draft preview (AGL-1203). Templates version but never publish, so the
   // snapshot key and route carry no versionId.
   const handlePreview = useOpenPreview({
     ids: hostId ? { hostId, kind: 'template', docId: templateId } : null,

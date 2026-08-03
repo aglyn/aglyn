@@ -112,7 +112,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
           >
             {'Live'}
           </AppLink>
-          {/* Disabled without a handler (AGL-1204): components, layouts and
+          {/* Disabled without a handler (AGL-1203): components, layouts and
               templates rendered an enabled Preview button that silently did
               nothing, which reads as a broken feature rather than a missing
               one. All four kinds pass a handler now; this keeps any future
