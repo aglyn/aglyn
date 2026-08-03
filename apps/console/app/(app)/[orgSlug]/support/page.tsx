@@ -92,15 +92,25 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
         const scoped = orgId
           ? `${path}${path.includes('?') ? '&' : '?'}orgId=${encodeURIComponent(orgId)}`
           : path
+        // A GET/HEAD request MAY NOT carry a body — `fetch` throws
+        // `TypeError: Request with GET/HEAD method cannot have body` before it
+        // opens a connection (AGL-1157). AGL-1147 attached the org to the body
+        // as well as the query so a body-only reader could not miss it, which
+        // silently killed every GET on this page the moment `orgId` resolved:
+        // the throw landed in the bare catch below, so there was no request, no
+        // status, and no error text — just an empty ticket list.
+        //
+        // The query carries it either way, and the routes read
+        // `query.orgId ?? payload.orgId`, so dropping the body here loses
+        // nothing. POSTs still send both.
+        const sendsBody = method !== 'GET' && method !== 'HEAD'
         const response = await fetch(scoped, {
           method,
           headers: {
             'Content-Type': 'application/json',
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
-          // Sent in the body too: the routes read `query.orgId ?? payload.orgId`,
-          // and a body-only reader would otherwise miss it.
-          ...(body || orgId
+          ...(sendsBody && (body || orgId)
             ? { body: JSON.stringify({ ...(body ?? {}), ...(orgId ? { orgId } : {}) }) }
             : {}),
         })
@@ -113,7 +123,12 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
           return null
         }
         return payload
-      } catch {
+      } catch (error) {
+        // Logged, not just swallowed (AGL-1157). A bare `catch {}` here turned
+        // a thrown TypeError into an empty list and a generic toast, which is
+        // indistinguishable from "this org has no tickets" — the reason the
+        // GET-with-body bug survived a release.
+        console.error('[support] request failed', method, path, error)
         enqueueSnackbar('An error has occurred', { variant: 'error' })
         return null
       }
@@ -130,11 +145,22 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
   } | null>(null)
   const [reply, setReply] = useState('')
 
+  /**
+   * Both loaders wait for `orgId`, not just `user` (AGL-1154).
+   *
+   * `user` resolves BEFORE the org list does — the orgs are queried by `user` —
+   * so gating on `user` alone left a window where the request went out with no
+   * org. The routes fall back to `getOrgForUser(uid, null)` there, which is the
+   * caller's FIRST org: exactly the bug AGL-1147 fixed, reappearing on first
+   * paint until `orgId` landed and the effect re-ran.
+   *
+   * Declining to ask is the right answer while the question is unanswerable.
+   */
   const refreshTickets = useCallback(async () => {
-    if (!user) return
+    if (!user || !orgId) return
     const payload = await request('/api/support/tickets', 'GET')
     if (payload?.tickets) setTickets(payload.tickets)
-  }, [user, request])
+  }, [user, orgId, request])
   useEffect(() => {
     void refreshTickets()
   }, [refreshTickets])
@@ -166,13 +192,15 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
   const [forumReply, setForumReply] = useState('')
 
   const refreshForum = useCallback(async () => {
-    if (!user) return
+    // Same `orgId` gate as the tickets loader above (AGL-1154) — the forum
+    // route takes the org the same way, so it has the same first-org window.
+    if (!user || !orgId) return
     const payload = await request(
       `/api/support/forum${category ? `?category=${category}` : ''}`,
       'GET',
     )
     if (payload?.threads) setForum(payload)
-  }, [user, category, request])
+  }, [user, orgId, category, request])
   useEffect(() => {
     void refreshForum()
   }, [refreshForum])
