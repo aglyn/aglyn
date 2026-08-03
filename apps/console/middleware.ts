@@ -28,6 +28,14 @@ import { APEX_LABELS, WORKSPACE_DOMAIN } from './constants/workspace-domain'
 import { baseCspDirectives } from '../../security-origins'
 
 /**
+ * Arms enforcing CSP for one session (AGL-523). Set by `?csp=enforce`, cleared
+ * by `?csp=off`. Only ever tightens the policy, so it is a testing affordance
+ * rather than something worth defending — but it is `httpOnly` so page script
+ * cannot flip it.
+ */
+const CSP_ENFORCE_COOKIE = 'aglyn-csp-enforce'
+
+/**
  * Workspace-subdomain gate (AGL-236): on `{slug}.<workspace domain>`
  * requests, verifies the slug against the `orgSlugs` collection and bounces
  * unknown workspaces to the apex console. In-app org scoping stays
@@ -119,66 +127,74 @@ async function resolveOrgSlug(
 }
 
 export async function middleware(request: NextRequest) {
-  // Per-request CSP nonce, ENFORCING (AGL-518, fixed in AGL-523).
+  // CSP script-src: REPORT-ONLY by default, enforceable per-session for
+  // testing (AGL-518, AGL-523). Target state is enforcing before beta.
   //
-  // Next reads the nonce out of the `Content-Security-Policy` header on the
-  // request and stamps it on every script it emits; `strict-dynamic` then
-  // trusts the chunks those scripts load.
+  // The rule everything here follows, found by measurement and documented
+  // nowhere: **the response `Content-Security-Policy` is copied onto the
+  // request the renderer reads.** Next resolves the nonce with
+  // `content-security-policy || …-report-only`, so an enforcing policy that
+  // carries no `script-src` short-circuits the `||` and shadows the nonce
+  // policy entirely — which is why every script rendered `nonce="$undefined"`
+  // while a perfectly good nonce sat in the report-only header.
   //
-  // It reached zero scripts in production for as long as this was report-only,
-  // and the cause is a mirroring rule worth stating plainly: **the response
-  // `Content-Security-Policy` is copied onto the request the renderer reads.**
-  // A static policy from `with-aglyn.nextjs.config.js` therefore shadowed this
-  // one — Next resolves with `content-security-policy || …-report-only`, so a
-  // 632-character policy carrying no `script-src` short-circuited the `||` and
-  // the nonce policy sitting in the report-only header was never read. Every
-  // script rendered `nonce="$undefined"`.
+  // The uncomfortable consequence: "script-src report-only" and "the nonce
+  // works" cannot both be true. Leaving `script-src` out of the enforcing
+  // header is what breaks the nonce. So the default below accepts a broken
+  // nonce — the state production has always been in — and `CSP_ENFORCE_COOKIE`
+  // opts a single session into the real thing, where the nonce works and the
+  // policy is genuinely enforced.
   //
-  // That rule also means "enforce the base directives, rehearse script-src" is
-  // not a reachable state: any enforcing CSP shadows the nonce policy, and with
-  // no nonce `strict-dynamic` — which makes `'self'` inert — blocks everything.
-  // Enforcing the nonce'd script-src is what makes the nonce work at all.
+  // That opt-in only ever makes the policy STRICTER, so it is not an attack
+  // surface; it exists so the surfaces behind a login (the besigner canvas,
+  // realm-plugin `blob:` imports) can be click-tested on production before
+  // this is switched on for everyone.
   const nonce = crypto.randomUUID().replace(/-/g, '')
-  // ENFORCED policy. Deliberately NOT `strict-dynamic` yet.
-  //
-  // `strict-dynamic` makes `'self'`, `https:` and `blob:` inert — trust flows
-  // only from a nonced script to what it loads. That is the right destination,
-  // and it verifiably works on the sign-in page (React hydrates, reCAPTCHA and
-  // GA both execute). But the besigner canvas and the realm-plugin `blob:`
-  // imports are behind a login I cannot exercise here, and under
-  // `strict-dynamic` a single un-nonced inline script there is a blank page.
-  //
-  // So enforce the policy whose failure modes are known, and rehearse the
-  // strict one below. This still blocks the actual XSS vector — an injected
-  // inline `<script>` has no nonce and does not run — plus `http:` and `data:`
-  // sources. Same-origin chunks, https third parties (reCAPTCHA, GA) and
-  // `blob:` plugin imports all keep working without depending on trust
-  // propagation.
-  const scriptSrc = `script-src 'self' https: blob: 'nonce-${nonce}'`
-  // The destination policy, reported not enforced, so violations from the
-  // surfaces I could not sign into show up before it is switched on.
-  const strictScriptSrc = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
   const baseDirectives = baseCspDirectives(
     process.env.NODE_ENV === 'production',
   )
-  // `x-nonce` is for our own inline scripts to read via `headers()`; Next's
-  // own scripts are nonced from the CSP header, not from this.
+  // Not `strict-dynamic`: that makes `'self'`, `https:` and `blob:` inert, so
+  // one un-nonced inline script anywhere is a blank page. Verified working on
+  // sign-in (React hydrates, reCAPTCHA and GA execute, 50/50 scripts nonced).
+  // It still blocks the real XSS vector — an injected inline `<script>` has no
+  // nonce and does not run — plus `http:` and `data:` sources.
+  const scriptSrc = `script-src 'self' https: blob: 'nonce-${nonce}'`
+  // The destination policy. Reported, never enforced, so violations from the
+  // surfaces that have not been click-tested surface before the switch.
+  const strictScriptSrc = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
+  // `?csp=enforce` arms it for the session; `?csp=off` disarms. The cookie is
+  // what the middleware reads, so a tester navigates normally afterwards.
+  const cspParam = request.nextUrl.searchParams.get('csp')
+  const enforcing =
+    cspParam === 'enforce' ||
+    (cspParam !== 'off' &&
+      request.cookies.get(CSP_ENFORCE_COOKIE)?.value === '1')
+  // `x-nonce` is for our own inline scripts to read via `headers()`; Next's own
+  // scripts are nonced from the CSP header, not from this.
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
-  // One policy, carrying script-src and the base directives together. Because
-  // the response header is mirrored onto the request, this is self-consistent
-  // by construction: the nonce Next stamps on scripts is read from this exact
-  // string, so it is always the nonce this header authorises.
-  const policy = `${scriptSrc}; ${baseDirectives}`
   const applyCsp = (res: NextResponse) => {
-    res.headers.set('Content-Security-Policy', policy)
-    // Next reads the nonce from the ENFORCING header, which carries one — so
-    // adding this report-only header cannot shadow anything. It exists purely
-    // to collect violations against the stricter destination policy.
-    res.headers.set(
-      'Content-Security-Policy-Report-Only',
-      `${strictScriptSrc}; ${baseDirectives}`,
-    )
+    if (enforcing) {
+      // One policy carrying script-src and the base directives together, so it
+      // is self-consistent by construction: the nonce Next stamps on scripts is
+      // read from this exact string.
+      res.headers.set('Content-Security-Policy', `${scriptSrc}; ${baseDirectives}`)
+      res.headers.set(
+        'Content-Security-Policy-Report-Only',
+        `${strictScriptSrc}; ${baseDirectives}`,
+      )
+    } else {
+      // Default. The base directives enforce exactly as they always have; the
+      // nonce is shadowed and script-src is not enforced, so nothing can be
+      // blocked. Same behaviour as before AGL-523, now with one owner.
+      res.headers.set('Content-Security-Policy', baseDirectives)
+      res.headers.set('Content-Security-Policy-Report-Only', strictScriptSrc)
+    }
+    if (cspParam === 'enforce') {
+      res.cookies.set(CSP_ENFORCE_COOKIE, '1', { path: '/', httpOnly: true })
+    } else if (cspParam === 'off') {
+      res.cookies.delete(CSP_ENFORCE_COOKIE)
+    }
     return res
   }
   const pass = () =>
