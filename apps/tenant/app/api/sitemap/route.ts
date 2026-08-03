@@ -152,7 +152,23 @@ export async function GET(request: Request): Promise<Response> {
     status: 200,
     headers: {
       'Content-Type': 'application/xml',
-      'Cache-Control': 's-maxage=3600, stale-while-revalidate',
+      // 60 s, matching the ISR window every page uses, so the platform has ONE
+      // staleness number rather than a page answer and a sitemap answer 60×
+      // apart (AGL-1160).
+      //
+      // Why not a cache tag, which is what the issue proposed: the CDN is the
+      // only layer a visitor sees here, and `revalidateTag` cannot reach it.
+      // `force-dynamic` already keeps this route out of Next's cache, and it
+      // has to stay that way — the host is resolved per request. So a tag would
+      // only ever save origin work, never shorten what a crawler is served.
+      // Bounding the header is the whole fix; anything else is decoration on
+      // top of it.
+      //
+      // `stale-while-revalidate` carried no delta-seconds before. RFC 5861
+      // requires one, so the old value was malformed and a CDN was free to
+      // treat it as unbounded — that is the "worst case is longer than an hour"
+      // the issue suspected. Bounded now, so worst case is 60 + 60 s.
+      'Cache-Control': 's-maxage=60, stale-while-revalidate=60',
     },
   })
 }
