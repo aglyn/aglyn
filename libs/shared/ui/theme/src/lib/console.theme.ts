@@ -278,6 +278,18 @@ const baseOptions: ThemeOptions = {
         indicatorColor: 'secondary',
       },
     },
+    // Everything else that paints an accent (AGL-1182). Same reason as the
+    // tabs above: these all default to `primary`, and the dark scheme's
+    // primary is #2C3540 — a surface tone — so a slider track, a spinner or
+    // a checked box rendered near-invisible on a dark page. Secondary is
+    // the accent in this palette, as MuiButton and MuiLink already assume.
+    MuiCheckbox: { defaultProps: { color: 'secondary' } },
+    MuiRadio: { defaultProps: { color: 'secondary' } },
+    MuiSwitch: { defaultProps: { color: 'secondary' } },
+    MuiSlider: { defaultProps: { color: 'secondary' } },
+    MuiCircularProgress: { defaultProps: { color: 'secondary' } },
+    MuiLinearProgress: { defaultProps: { color: 'secondary' } },
+    MuiBadge: { defaultProps: { color: 'secondary' } },
     MuiToolbar: {
       styleOverrides: {
         root: ({ theme }) => ({
