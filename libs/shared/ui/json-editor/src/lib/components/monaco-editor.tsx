@@ -16,11 +16,30 @@
  */
 
 import ReactMonacoEditor, { EditorProps } from '@monaco-editor/react'
+import { useColorScheme, useTheme } from '@mui/material/styles'
 
 export interface MonacoEditorProps extends EditorProps {}
 
 export const MonacoEditor = (props: MonacoEditorProps) => {
-  return <ReactMonacoEditor defaultLanguage="json" {...props} />
+  // Monaco defaults to its light theme regardless of the app's, so the raw
+  // JSON editor rendered a white page inside a dark dialog.
+  //
+  // `palette.mode` is NOT the answer on its own: the console runs a CSS-vars
+  // theme whose scheme is driven by a class on <html>, so `palette.mode`
+  // stays 'light' whatever the user picked. `useColorScheme` is the live
+  // one — `systemMode` when following the OS, else the explicit `mode` —
+  // with `palette.mode` kept as the fallback for the non-CSS-vars trees.
+  // `props` spreads last, so a caller can still pin a Monaco theme.
+  const { palette } = useTheme()
+  const { mode, systemMode } = useColorScheme()
+  const resolved = systemMode ?? mode ?? palette.mode
+  return (
+    <ReactMonacoEditor
+      defaultLanguage="json"
+      theme={resolved === 'dark' ? 'vs-dark' : 'light'}
+      {...props}
+    />
+  )
 }
 MonacoEditor.displayName = 'MonacoEditor'
 

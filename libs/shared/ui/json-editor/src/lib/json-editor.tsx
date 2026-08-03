@@ -145,14 +145,35 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
       <Dialog
         ref={ref}
         open={open}
-        maxWidth="lg"
+        // A raw-JSON editor is unusable in a small box — component
+        // overrides run to hundreds of lines. Fill most of the viewport in
+        // BOTH axes; `rest` spreads after, so a caller can still override.
+        maxWidth={false}
         fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              width: '95vw',
+              maxWidth: 'none',
+              height: '92vh',
+              maxHeight: 'none',
+            },
+          },
+        }}
         onClose={handleClose}
         // keepMounted
         {...rest}
       >
         <DialogTitle>{title}</DialogTitle>
-        <DialogContent sx={{ position: 'relative', p: 0 }}>
+        <DialogContent
+          sx={{
+            position: 'relative',
+            p: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+          }}
+        >
           {description ? (
             <Box sx={{ px: 3, pb: 1, color: 'text.secondary' }}>
               {description}
@@ -168,7 +189,8 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
               <Then>
                 <Box
                   sx={{
-                    height: "50vh",
+                    flex: 1,
+                    minHeight: 0,
                     position: 'relative',
                     left: 0,
                     right: 0,
@@ -201,8 +223,9 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
                 </Box>
               </Then>
               <Else>
+                {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition */}
                 <Editor
-                  height="50vh"
+                  height="100%"
                   defaultValue={data}
                   value={JSON.stringify(parsedValue, null, 2)}
                   onChange={handleChange}
