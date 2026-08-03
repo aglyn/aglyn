@@ -23,6 +23,7 @@ import {
 import { marketplaceBillingWebhookHandler } from './server/billing-webhook'
 import { aiAssistHandler } from './server/ai-assist'
 import { publishPluginHandler } from './server/publish-plugin'
+import { verificationRequestHandler } from './server/verification-request'
 import { checkoutHandler } from './server/checkout'
 import { connectHandler } from './server/connect'
 import { installHandler } from './server/install'
@@ -87,6 +88,10 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginApiRoute(
     'marketplace/publisher-profile',
     publisherProfileSaveHandler,
+  )
+  registerPluginApiRoute(
+    'marketplace/verification-request',
+    verificationRequestHandler,
   )
   registerPluginApiRoute('marketplace/publish-layout', publishLayoutHandler)
   registerPluginApiRoute('marketplace/publish-template', publishTemplateHandler)

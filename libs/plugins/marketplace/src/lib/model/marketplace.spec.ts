@@ -18,6 +18,10 @@
 import { DATASET_FIELD_TYPES } from '@aglyn/aglyn'
 import {
   MARKETPLACE_COMPONENT_ID_ALLOWLIST,
+  VERIFICATION_BLOCK_MESSAGES,
+  VERIFICATION_DECLINE_COOLDOWN_DAYS,
+  verificationRequestBlock,
+  type VerificationRequestBlock,
   MARKETPLACE_DATASET_FIELD_TYPES,
   MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
   installsUnreviewedFallback,
@@ -906,5 +910,118 @@ describe('installsUnreviewedFallback (AGL-1083)', () => {
       installsUnreviewedFallback({ profileId: OWNER_ORG }, OWNER_ORG),
     ).toBe(false)
     expect(installsUnreviewedFallback(null, OWNER_ORG)).toBe(false)
+  })
+})
+
+describe('verificationRequestBlock (AGL-1217)', () => {
+  const PUBLISHER = 'org-publisher'
+  const NOW = Date.parse('2026-08-03T00:00:00Z')
+  const DAY = 86_400_000
+
+  const block = (
+    listing: Record<string, unknown> | null,
+    viewerOrgId: string | null = PUBLISHER,
+  ) =>
+    verificationRequestBlock({
+      listing: listing as never,
+      viewerOrgId,
+      nowMs: NOW,
+    })
+
+  const listed = { profileId: PUBLISHER, reviewStatus: 'listed' }
+
+  it('lets the publisher of a listed plugin ask', () => {
+    expect(block(listed)).toBeNull()
+  })
+
+  it('refuses anyone who is not the publishing org', () => {
+    expect(block(listed, 'org-someone-else')).toBe('not-publisher')
+    expect(block(listed, null)).toBe('not-publisher')
+    expect(block(null)).toBe('not-publisher')
+  })
+
+  it('refuses a listing that already carries the badge', () => {
+    expect(block({ ...listed, reviewStatus: 'verified' })).toBe(
+      'already-verified',
+    )
+  })
+
+  it('refuses a listing that is not live', () => {
+    // The badge is a claim about something customers can install. Asking for
+    // it on a listing still in the queue conflates two reasons to look at it.
+    for (const reviewStatus of ['submitted', 'in_review', 'rejected']) {
+      expect(block({ ...listed, reviewStatus })).toBe('not-listed')
+    }
+    // Legacy listings carry no status at all and are treated as `listed`
+    // elsewhere — but not here. Verification is a deliberate act, so an
+    // absent status is not good enough to hang a badge request on.
+    expect(block({ profileId: PUBLISHER })).toBe('not-listed')
+  })
+
+  it('allows only one pending request at a time', () => {
+    expect(
+      block({ ...listed, verificationRequest: { state: 'pending' } }),
+    ).toBe('already-pending')
+  })
+
+  it('holds a declined publisher off for the cooldown, then lets them back', () => {
+    const declinedAgo = (days: number) => ({
+      ...listed,
+      verificationRequest: {
+        state: 'declined',
+        decidedAt: { toMillis: () => NOW - days * DAY },
+      },
+    })
+    expect(block(declinedAgo(1))).toBe('cooling-down')
+    expect(block(declinedAgo(VERIFICATION_DECLINE_COOLDOWN_DAYS - 1))).toBe(
+      'cooling-down',
+    )
+    expect(block(declinedAgo(VERIFICATION_DECLINE_COOLDOWN_DAYS))).toBeNull()
+    expect(block(declinedAgo(VERIFICATION_DECLINE_COOLDOWN_DAYS + 1))).toBeNull()
+  })
+
+  it('reads a serialized {seconds} timestamp, not just an SDK one', () => {
+    // A doc that has been through JSON loses `toMillis`. Reading only the SDK
+    // shape would score every such decline as undated.
+    const decided = { seconds: (NOW - 40 * DAY) / 1000 }
+    expect(
+      block({ ...listed, verificationRequest: { state: 'declined', decidedAt: decided } }),
+    ).toBeNull()
+  })
+
+  it('treats an undated decline as still cooling down', () => {
+    // Fail closed: assuming an undated decline is old enough turns a missing
+    // field into a free retry, which is what the cooldown exists to stop.
+    expect(
+      block({ ...listed, verificationRequest: { state: 'declined' } }),
+    ).toBe('cooling-down')
+  })
+
+  it('lets a withdrawn or previously granted request be re-asked', () => {
+    expect(
+      block({ ...listed, verificationRequest: { state: 'withdrawn' } }),
+    ).toBeNull()
+    // `granted` on a listing that is no longer `verified` means the badge was
+    // taken away by a takedown (AGL-1121). Asking again is legitimate.
+    expect(
+      block({ ...listed, verificationRequest: { state: 'granted' } }),
+    ).toBeNull()
+  })
+
+  it('has a message for every block reason', () => {
+    // A reason with no copy renders an empty tooltip, which reads as broken.
+    const reasons: VerificationRequestBlock[] = [
+      'not-publisher',
+      'already-verified',
+      'not-listed',
+      'already-pending',
+      'cooling-down',
+    ]
+    for (const reason of reasons) {
+      expect(VERIFICATION_BLOCK_MESSAGES[reason]).toBeTruthy()
+    }
+    expect(Object.keys(VERIFICATION_BLOCK_MESSAGES).sort()).toEqual(
+      [...reasons].sort(),
+    )
   })
 })

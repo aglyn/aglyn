@@ -283,6 +283,38 @@ exactly what the pre-publish checklist above asks you to confirm. A
 confirmation that turns out to be false is a dated statement by a named
 publisher, and it's grounds for removal.
 
+### Asking to be verified
+
+Verification used to be something only a reviewer could start, which meant
+there was no way to ask and no sign that asking was allowed. There is now a
+**Request verification** button on your own listing page, under *Review
+status*.
+
+You can ask once your plugin is **listed** — that is, live and installable.
+Before that, the review queue already has your submission for a different
+reason, and a badge on something nobody can install would not mean much.
+
+What happens next:
+
+- Your plugin **stays listed and installable** the whole time. A verification
+  request never changes what your buyers can do.
+- One request at a time. You can **withdraw** it while it is waiting.
+- If it is **granted**, the Verified publisher badge appears on your listing.
+- If it is **declined**, you are told why, and you can ask again 30 days after
+  the decision. A decline is a refusal of the badge, not a verdict on your
+  plugin — nothing about your listing changes.
+
+Asking does not make verification more likely on its own. It is the same bar
+described above: we have to be able to confirm who you are, and to agree that
+your listing describes what your code does. Getting those two things in order
+first is what actually moves it.
+
+:::note
+Verification is free today. We may charge for it in future; if that happens it
+will be announced before it applies, and it will not affect badges already
+granted.
+:::
+
 ### Testing a version before it is approved
 
 You can install **your own** unapproved version, on your own sites. That is
