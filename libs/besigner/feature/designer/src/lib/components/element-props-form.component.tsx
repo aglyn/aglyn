@@ -28,6 +28,8 @@ import {
   useFormApi,
 } from '@aglyn/shared-ui-jsx-forms'
 import {
+  getMdiIconPath,
+  iconPathPropName,
   mdiContentSave,
 } from '@aglyn/shared-data-mdi'
 import {
@@ -622,6 +624,23 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
               (bindingFunctions ?? {}) as any,
             )
           }
+        }
+        // Denormalize each picked icon's SVG path next to its id (AGL-1212).
+        // The catalog is ~2.9 MB and only picker surfaces load it, so a render
+        // surface that had to look the id up got `DEFAULT_ICON` — a real path,
+        // so every published icon painted a "help" glyph. Resolving here means
+        // the id stays the source of truth while the path travels with the
+        // document. This runs where the picker already loaded the catalog; a
+        // miss writes `undefined` and leaves the renderer's own fallback.
+        for (const attribute of node?.componentSchema?.attributes ?? []) {
+          if (attribute.component !== Aglyn.FieldComponentType.ICON_PICKER) {
+            continue
+          }
+          const pathProp = iconPathPropName(attribute.name)
+          if (pathProp === attribute.name) continue
+          const pickedId = normalized[attribute.name]
+          normalized[pathProp] =
+            typeof pickedId === 'string' ? getMdiIconPath(pickedId) : undefined
         }
         Aglyn.canvas.updateNodeProps(node, normalized)
       },

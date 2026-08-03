@@ -64,6 +64,22 @@
  */
 const MODULE_LOADED_AT = Date.now()
 
+/**
+ * How long the Node process had ALREADY been alive when this module evaluated.
+ *
+ * This is the number the first production read was missing (AGL-1152). A cold
+ * request measured 11.57 s end to end while the loader reported 3.77 s, leaving
+ * ~7.8 s unaccounted for — and `sinceBootMs` cannot see any of it, because it
+ * starts counting at module evaluation, which happens at the END of boot.
+ *
+ * `process.uptime()` is measured from process start, so reading it here splits
+ * that gap cleanly: time before this line is runtime + framework + module-graph
+ * evaluation (a bundle problem, overlapping AGL-1151), time after it is ours.
+ * Captured at module scope, never per request — it is a property of the
+ * instance, and reading it later would measure the request instead.
+ */
+const PROCESS_UPTIME_AT_LOAD_MS = Math.round(process.uptime() * 1000)
+
 /** Flipped by the first render on this instance; every later render is warm. */
 let hasRendered = false
 
@@ -104,6 +120,10 @@ export const startRenderTimer = (): RenderTimer => {
         JSON.stringify({
           tag: 'AGL-1152:render',
           cold,
+          // Boot BEFORE our code existed. On a cold instance this is the
+          // pre-loader cost; on a warm one it is just how old the instance is
+          // at load time, so read it together with `cold`/`sinceBootMs`.
+          preLoadBootMs: PROCESS_UPTIME_AT_LOAD_MS,
           sinceBootMs: startedAt - MODULE_LOADED_AT,
           totalMs: Date.now() - startedAt,
           phases,

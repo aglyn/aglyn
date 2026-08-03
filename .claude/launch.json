@@ -22,6 +22,18 @@
       "port": 4500
     },
     {
+      "name": "console-prod-alt",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "nx",
+        "serve",
+        "console",
+        "--configuration=production",
+        "--port=4700"
+      ],
+      "port": 4700
+    },
+    {
       "name": "tenant-alt",
       "runtimeExecutable": "npx",
       "runtimeArgs": [

@@ -19,7 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   mdiGestureTapButton,
 } from '@aglyn/shared-data-mdi'
-import { getMdiIconFromId } from '@aglyn/shared-data-mdi'
+import { getMdiIconPath } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import Button, { type ButtonProps } from '@mui/material/Button'
 import { forwardRef } from 'react'
@@ -45,13 +45,24 @@ export interface LinkableButtonProps extends ButtonProps {
   startIconId?: string
   /** mdi icon id rendered after the label (AGL-146). */
   endIconId?: string
+  /** Resolved SVG path for `startIconId`, stored at author time (AGL-1212). */
+  startIconPath?: string
+  /** Resolved SVG path for `endIconId`, stored at author time (AGL-1212). */
+  endIconPath?: string
 }
 
-/** mdi id → icon element; unknown/empty ids render nothing. */
-function iconFromId(iconId?: string) {
-  if (!iconId) return undefined
-  const icon = getMdiIconFromId(iconId)
-  return icon?.path ? <MdiIcon path={icon.path} fontSize="small" /> : undefined
+/**
+ * mdi id → icon element; unknown/empty ids render nothing.
+ *
+ * Prefers the persisted path (AGL-1212) so render surfaces never need the
+ * ~2.9 MB catalog, and falls back to the catalog for buttons authored before
+ * paths were stored. `getMdiIconPath` rather than `getMdiIconFromId`: the
+ * latter substitutes `DEFAULT_ICON`, which has a real path, so a miss used to
+ * render a "help" glyph instead of nothing.
+ */
+function iconFromId(iconId?: string, iconPath?: string) {
+  const path = iconPath || getMdiIconPath(iconId)
+  return path ? <MdiIcon path={path} fontSize="small" /> : undefined
 }
 
 // Only navigable protocols — mirrors ScreenLink's hardening.
@@ -64,11 +75,18 @@ const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
  * doesn't resolve.
  */
 const LinkableButton = forwardRef<any, LinkableButtonProps>((props, ref) => {
-  const { screenId, href: externalHref, startIconId, endIconId, ...rest } =
-    props
+  const {
+    screenId,
+    href: externalHref,
+    startIconId,
+    endIconId,
+    startIconPath,
+    endIconPath,
+    ...rest
+  } = props
   const iconProps = {
-    startIcon: iconFromId(startIconId),
-    endIcon: iconFromId(endIconId),
+    startIcon: iconFromId(startIconId, startIconPath),
+    endIcon: iconFromId(endIconId, endIconPath),
   }
   const { href: resolvedHref, suppressNavigation } =
     Aglyn.useScreenLink(screenId)
