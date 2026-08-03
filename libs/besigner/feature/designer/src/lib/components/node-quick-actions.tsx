@@ -67,12 +67,13 @@ const LabelAction = forwardRef<any, LabelActionProps>((props, ref) => {
 
   return (
     <MuiTooltip ref={ref} {...rest}>
-      {/* Tertiary, not the accent (AGL-1186): this floating bar is EDITOR
-          chrome sitting on top of the user's canvas. `primary` used to be
-          the slate that reads as chrome; after the rotation it became the
-          cyan accent and the bar started competing with the design being
-          edited. Tertiary is where that slate now lives. */}
-      <ActionButton variant={'contained'} color={'tertiary'} {...ButtonProps}>
+      {/* Chrome, not accent (AGL-1186), and now transparent on the slate
+          strip rather than a contained pill on it (AGL-1194): a contained
+          tertiary button on a tertiary bar would be invisible, and the
+          pills were the reason the bar carried two hues at once. `inherit`
+          takes the strip's ink, so contrast is a pairing rather than a
+          guess in either scheme. */}
+      <ActionButton variant={'text'} color={'inherit'} {...ButtonProps}>
         <MdiIcon fontSize="inherit" {...icon} />
         <SrOnly {...SrOnlyProps}>{children}</SrOnly>
       </ActionButton>
@@ -120,8 +121,14 @@ export const NodeQuickActions = observer(
           marginLeft: '-2px',
 
           marginBottom: '1px',
-          backgroundColor: 'primary.light',
-          color: 'primary.contrastText',
+          // One slate surface for the whole floating control (AGL-1194).
+          // The strip was `primary.light` while the buttons on it were
+          // `tertiary` — two chrome hues on one control, and an ink colour
+          // paired with a background it no longer sat on. Ink is now the
+          // contrastText OF THIS background, so it follows the scheme
+          // instead of being picked once against the old one.
+          backgroundColor: 'tertiary.main',
+          color: 'tertiary.contrastText',
           px: 0.5,
           pl: 0.5,
           pr: 0.25,

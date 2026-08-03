@@ -38,6 +38,12 @@ const NodeOutlineRoot = styled('div', {
   slot: 'Root',
 })(({ theme }) => {
   const tv = (theme as any).vars || theme
+  // Everything below rides `tv`, so both the outline colour and the fill
+  // alphas follow the previewed scheme. `tertiary` carries the generated
+  // light/dark/mainChannel tokens (addShadeVariants + the CSS-vars theme),
+  // verified against the running console's computed custom properties.
+  const slate = tv.palette.tertiary.main
+  const slateChannel = tv.palette.tertiary.mainChannel
   return {
     pointerEvents: 'none',
     position: 'absolute',
@@ -51,22 +57,32 @@ const NodeOutlineRoot = styled('div', {
     outlineStyle: 'dashed',
     content: '""',
 
+    // Canvas chrome is the SLATE (AGL-1194). Selected used to be
+    // `secondary` and hover `primary` — two different accent hues on the
+    // same control, both competing with the design being edited. The four
+    // states now differ by STYLE and WEIGHT on one hue, which is what
+    // distinguishes them anyway: dashed hover, solid selection, a fill for
+    // the node in flight, and the heaviest treatment for the drop target.
     [`&.${classKeys.selectedSelf}`]: {
       outlineWidth: 2,
       outlineStyle: 'solid',
-      outlineColor: tv.palette.secondary.main,
+      outlineColor: slate,
     },
     [`&.${classKeys.hoveringSelf}`]: {
-      outlineColor: tv.palette.primary.main,
-      backgroundColor: `rgba(${tv.palette.primary.mainChannel} / 0.12)`,
+      outlineColor: slate,
+      backgroundColor: `rgba(${slateChannel} / 0.08)`,
     },
     [`&.${classKeys.draggingSelf}`]: {
       outlineColor: 'transparent',
-      backgroundColor: `rgba(${tv.palette.primary.lightChannel} / 0.12)`,
+      backgroundColor: `rgba(${slateChannel} / 0.12)`,
     },
+    // The drop target is momentary and must be unmistakable, so it keeps
+    // the strongest treatment rather than a second hue.
     [`&.${classKeys.draggingOver}`]: {
-      outlineColor: tv.palette.secondary.main,
-      backgroundColor: `rgba(${tv.palette.secondary.darkChannel} / 0.12)`,
+      outlineWidth: 2,
+      outlineStyle: 'solid',
+      outlineColor: slate,
+      backgroundColor: `rgba(${slateChannel} / 0.16)`,
     },
     [`&.${classKeys.draggingOver}.${classKeys.draggingSelf}`]: {
       outlineColor: tv.palette.grey['500'],

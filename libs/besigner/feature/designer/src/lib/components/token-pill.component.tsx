@@ -38,8 +38,12 @@ import type { ResolvedTokenLabel } from '../utils/token-segments'
 
 /** Pill colors by token family — stable theme-palette assignments. */
 const PILL_GROUP_STYLES: Record<string, { bgcolor: string; color: string }> = {
-  variable: { bgcolor: 'primary.main', color: 'primary.contrastText' },
-  function: { bgcolor: 'primary.main', color: 'primary.contrastText' },
+  // Slate, not the accent (AGL-1194): a pill is editor chrome rendered
+  // inside the user's own text, so it must not read as content styling.
+  // The other families keep their semantic hues — they encode WHAT the
+  // token is, which is information, not decoration.
+  variable: { bgcolor: 'tertiary.main', color: 'tertiary.contrastText' },
+  function: { bgcolor: 'tertiary.main', color: 'tertiary.contrastText' },
   entry: { bgcolor: 'info.main', color: 'info.contrastText' },
   collection: { bgcolor: 'success.main', color: 'success.contrastText' },
   dataset: { bgcolor: 'grey.700', color: 'common.white' },
