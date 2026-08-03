@@ -164,6 +164,67 @@ describe('mergeThemeOptions (AGL-1180)', () => {
     expect(palette['secondary']?.main).toBe('#00b0ff')
   })
 
+  // The reason components must merge deeply: the brand styles several of
+  // them with FUNCTIONS of the theme, which JSON cannot express — so a
+  // shallow merge would let a one-property override delete styling the
+  // editor could never put back.
+  it('keeps a component style function when the host overrides a sibling prop', () => {
+    const rootStyle = () => ({ padding: 8 })
+    const merged = mergeThemeOptions(
+      {
+        components: {
+          MuiButton: {
+            defaultProps: { color: 'secondary', size: 'small' },
+            styleOverrides: { root: rootStyle },
+          },
+        },
+      } as any,
+      {
+        components: {
+          MuiButton: { defaultProps: { color: 'primary' } },
+        },
+      } as any,
+    )
+    const button = (merged.components as any).MuiButton
+    expect(button.defaultProps.color).toBe('primary')
+    // Untouched sibling property and the function both survive.
+    expect(button.defaultProps.size).toBe('small')
+    expect(button.styleOverrides.root).toBe(rootStyle)
+  })
+
+  it('leaves other components alone when one is overridden', () => {
+    const merged = mergeThemeOptions(
+      {
+        components: {
+          MuiButton: { defaultProps: { color: 'secondary' } },
+          MuiLink: { defaultProps: { underline: 'hover' } },
+        },
+      } as any,
+      { components: { MuiButton: { defaultProps: { color: 'primary' } } } } as any,
+    )
+    expect((merged.components as any).MuiLink.defaultProps.underline).toBe(
+      'hover',
+    )
+  })
+
+  it('replaces arrays rather than merging them', () => {
+    const merged = mergeThemeOptions(
+      { components: { MuiX: { variants: ['a', 'b', 'c'] } } } as any,
+      { components: { MuiX: { variants: ['z'] } } } as any,
+    )
+    expect((merged.components as any).MuiX.variants).toEqual(['z'])
+  })
+
+  it('keeps every theme component when the host overrides none', () => {
+    const merged = mergeThemeOptions(
+      consoleOptions,
+      hostThemeToThemeOptions({ spacing: 8 }, 'light'),
+    )
+    expect(Object.keys(merged.components ?? {}).length).toBe(
+      Object.keys(consoleOptions.components ?? {}).length,
+    )
+  })
+
   it('carries the base through when the host customizes nothing', () => {
     const merged = mergeThemeOptions(
       consoleOptions,

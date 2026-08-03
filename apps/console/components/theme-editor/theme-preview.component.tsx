@@ -25,19 +25,41 @@ import {
   ThemeProvider,
 } from '@aglyn/shared-ui-theme'
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   AppBar,
+  Avatar,
+  Badge,
   Box,
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
+  CircularProgress,
   Divider,
+  IconButton,
+  LinearProgress,
   Link,
+  List,
+  ListItemButton,
+  ListItemText,
+  Radio,
+  Slider,
   Stack,
   Switch,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Tabs,
   TextField,
   Toolbar,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { useMemo } from 'react'
@@ -89,13 +111,22 @@ export function ThemePreview(props: ThemePreviewProps) {
           </Toolbar>
         </AppBar>
         <Stack spacing={2} sx={{ p: 2 }}>
+          {/* The type ramp, not one sample: heading sizes and weights are
+              the first thing a font change alters. */}
           <Typography variant="h4">{'Heading four'}</Typography>
+          <Typography variant="h6">{'Heading six'}</Typography>
+          <Typography variant="subtitle2" color="text.secondary">
+            {'Subtitle two — secondary text'}
+          </Typography>
           <Typography variant="body1">
             {'Body copy shows the font family, size, and text colors. '}
             <Link href="#" onClick={(e) => e.preventDefault()}>
               {'A link'}
             </Link>
             {' sits inline with the text.'}
+          </Typography>
+          <Typography variant="caption" color="text.disabled">
+            {'Caption — disabled text, the smallest size in the ramp.'}
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             {/* Every colour is named EXPLICITLY (AGL-1180). The theme sets
@@ -125,6 +156,36 @@ export function ThemePreview(props: ThemePreviewProps) {
             <Chip label="Tertiary" color="tertiary" />
             <Chip label="Outlined" variant="outlined" />
             <Switch defaultChecked />
+            <Checkbox defaultChecked />
+            <Radio checked />
+          </Stack>
+          {/* The status colours — error/warning/info/success each have a
+              palette swatch, and until now only two of them appeared. */}
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+            <Chip label="Error" color="error" />
+            <Chip label="Warning" color="warning" />
+            <Chip label="Info" color="info" />
+            <Chip label="Success" color="success" />
+          </Stack>
+          <LinearProgress />
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Avatar>{'A'}</Avatar>
+            <Tooltip title="Tooltips use the theme too">
+              <IconButton color="primary" aria-label="tooltip demo">
+                <Box
+                  sx={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    border: '2px solid currentColor',
+                  }}
+                />
+              </IconButton>
+            </Tooltip>
+            <Divider orientation="vertical" flexItem />
+            <Typography variant="body2" color="text.secondary">
+              {'Divider and avatar'}
+            </Typography>
           </Stack>
           <Card>
             <CardContent>
@@ -152,10 +213,87 @@ export function ThemePreview(props: ThemePreviewProps) {
               {'Raised panels and toolbars sit on the surface color.'}
             </Typography>
           </Box>
-          <TextField label="Text field" size="small" fullWidth />
+          <Stack direction="row" spacing={1}>
+            <TextField label="Text field" size="small" fullWidth />
+            <TextField
+              label="Error"
+              size="small"
+              fullWidth
+              error
+              defaultValue="Invalid"
+              helperText="Field errors use the error color."
+            />
+          </Stack>
           <Divider />
           <Alert severity="success">{'Success alert uses the palette.'}</Alert>
+          <Alert severity="info">{'Info alert uses the palette.'}</Alert>
+          <Alert severity="warning">{'Warning alert uses the palette.'}</Alert>
           <Alert severity="error">{'Error alert uses the palette.'}</Alert>
+
+          {/* Selection and navigation surfaces — a theme change lands on
+              these just as hard as on buttons, and none were represented. */}
+          <Tabs value={0} sx={{ minHeight: 0 }}>
+            <Tab label="Tab one" />
+            <Tab label="Tab two" />
+          </Tabs>
+          <List dense disablePadding>
+            <ListItemButton selected>
+              <ListItemText
+                primary="Selected list row"
+                secondary="Selection uses the palette's action colors."
+              />
+            </ListItemButton>
+            <ListItemButton>
+              <ListItemText primary="Unselected list row" />
+            </ListItemButton>
+          </List>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>{'Column'}</TableCell>
+                <TableCell align="right">{'Value'}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell>{'Table rows show divider color'}</TableCell>
+                <TableCell align="right">{'12'}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell>{'and the paper background'}</TableCell>
+                <TableCell align="right">{'34'}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+          <Accordion disableGutters>
+            <AccordionSummary>
+              <Typography variant="body2">{'Accordion summary'}</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary">
+                {'Expanded detail sits on the paper background.'}
+              </Typography>
+            </AccordionDetails>
+          </Accordion>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Badge badgeContent={4} color="secondary">
+              <Box
+                sx={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 1,
+                  bgcolor: 'action.selected',
+                }}
+              />
+            </Badge>
+            <Slider
+              size="small"
+              defaultValue={40}
+              aria-label="preview slider"
+              sx={{ maxWidth: 160 }}
+            />
+            <CircularProgress size={20} />
+          </Stack>
         </Stack>
       </Box>
     </ThemeProvider>

@@ -205,22 +205,66 @@ export function mergeThemeOptions(
 ): ThemeOptions {
   const merged: ThemeOptions = { ...base, ...overrides }
 
+  // Palette merges ONE level: overriding a colour replaces its whole record
+  // so MUI re-derives light/dark/contrastText from the new `main`, which is
+  // the partial-palette behaviour the converter is written for. Overriding
+  // `primary` still must not disturb `secondary`, hence the level.
   merged.palette = { ...base.palette, ...overrides.palette }
+  merged.shape = { ...base.shape, ...overrides.shape }
 
   // `typography` is an object in every base we ship, but MUI's type also
   // allows a function of the palette — merging into that would silently drop
   // the base, so prefer the override wholesale in that case.
   if (
-    typeof base.typography === 'object' &&
-    typeof overrides.typography === 'object'
+    isPlainObject(base.typography) &&
+    isPlainObject(overrides.typography)
   ) {
-    merged.typography = { ...base.typography, ...overrides.typography }
+    merged.typography = deepMerge(
+      base.typography,
+      overrides.typography,
+    ) as ThemeOptions['typography']
   }
 
-  merged.shape = { ...base.shape, ...overrides.shape }
-  merged.components = { ...base.components, ...overrides.components }
+  // Components merge DEEPLY. A host override names one component, and often
+  // one property inside it — `MuiButton.defaultProps.color`. A shallow merge
+  // would swap out the entire `MuiButton` entry and take the brand's
+  // `styleOverrides` with it, and those styles are frequently FUNCTIONS of
+  // the theme that JSON cannot express, so the editor could not put them
+  // back even in principle. Deep-merging means you override the leaf you
+  // named and inherit everything else, functions included.
+  merged.components = deepMerge(
+    (base.components ?? {}) as Record<string, unknown>,
+    (overrides.components ?? {}) as Record<string, unknown>,
+  ) as ThemeOptions['components']
 
   return merged
+}
+
+/** Plain data object — not an array, function, or class instance. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+  )
+}
+
+/**
+ * Recursive merge where the override wins at the leaves. Arrays and
+ * functions are replaced wholesale rather than merged into — half an array
+ * or a function spread into an object is never what anyone meant.
+ */
+function deepMerge(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base }
+  for (const [key, value] of Object.entries(override)) {
+    const existing = out[key]
+    out[key] =
+      isPlainObject(existing) && isPlainObject(value)
+        ? deepMerge(existing, value)
+        : value
+  }
+  return out
 }
 
 /** True when the document customizes anything, i.e. consumers should build a theme from it rather than using their default. */
