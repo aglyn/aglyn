@@ -73,7 +73,6 @@ const textField = (
 })
 
 const half = { FormFieldGridProps: { size: { xs: 12, sm: 6 } } }
-const quarter = { FormFieldGridProps: { size: { xs: 6, sm: 3 } } }
 
 const selectField = (
   name: string,
@@ -297,25 +296,25 @@ export function buildStyleFieldGroups(
           'borderTop',
           'Border Top',
           'Border on the top edge only, e.g. 1px solid.',
-          quarter,
+          half,
         ),
         textField(
           'borderRight',
           'Border Right',
           'Border on the right edge only, e.g. 1px solid.',
-          quarter,
+          half,
         ),
         textField(
           'borderBottom',
           'Border Bottom',
           'Border on the bottom edge only, e.g. 1px solid.',
-          quarter,
+          half,
         ),
         textField(
           'borderLeft',
           'Border Left',
           'Border on the left edge only, e.g. 1px solid.',
-          quarter,
+          half,
         ),
         textField(
           'borderRadius',
