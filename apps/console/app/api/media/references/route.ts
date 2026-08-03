@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  decompress,
+  mediaRefPattern,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -26,6 +30,39 @@ import {
   resolveMediaScope,
   scopeAllows,
 } from '../../../../utils/server/media-scope'
+
+/**
+ * A version document's `nodes`, flattened to text the needles can be run
+ * against.
+ *
+ * `nodes` is stored in TWO forms and both are live: a plain Firestore map,
+ * and msgpack bytes (AGL-1151 compression at rest — `screenVersionConverter`
+ * compresses on write, and decodes only binary payloads on read). The admin
+ * SDK hands a bytes field back as a `Buffer`, and `JSON.stringify` of one
+ * yields `{"type":"Buffer","data":[…]}` — a haystack containing none of the
+ * document's strings, so EVERY needle misses and the scan answers "used
+ * nowhere". That is the single worst answer this endpoint can give: it is
+ * what the AGL-1045 scope confirmation quotes before telling an author it is
+ * safe to restrict or delete an asset that is on a live page.
+ */
+function nodesHaystack(raw: unknown): string {
+  if (ArrayBuffer.isView(raw)) {
+    const bytes = raw as ArrayBufferView
+    try {
+      return JSON.stringify(
+        decompress<Record<string, unknown>>({
+          toUint8Array: () =>
+            new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+        }) ?? {},
+      )
+    } catch (error) {
+      // Undecodable nodes must not read as "no references" — say so.
+      console.error('media references: could not decode nodes', error)
+      return ''
+    }
+  }
+  return JSON.stringify(raw ?? {})
+}
 
 export interface MediaReference {
   kind: 'screen' | 'layout' | 'entry'
@@ -43,8 +80,9 @@ export interface MediaReference {
 
 /**
  * Per-asset usage scan (AGL-176): finds published screens/layouts whose
- * live version nodes reference the asset's URL in any of its forms (raw
- * storage URL or the AGL-175 CDN path). Computed on demand — a reverse
+ * live version nodes reference the asset in any of its forms — the AGL-1215
+ * media reference, or the raw storage URL and AGL-175 CDN path that predate
+ * it and still live in published documents. Computed on demand — a reverse
  * index maintained at publish time stays open as a later optimization;
  * at current host sizes a scan of live versions is a few dozen reads.
  */
@@ -97,6 +135,16 @@ async function handler(request: Request): Promise<Response> {
       // Any URL containing the storage object path also counts.
       mediaObjectPath(mediaSnapshot, scope.base),
     ].filter(Boolean) as string[]
+    // Nodes store a REFERENCE now (AGL-1215), which contains neither the
+    // storage URL nor the CDN path. Matching only the URL forms would report
+    // a picked asset as used nowhere — and this scan is what the AGL-1045
+    // scope confirmation quotes before telling an author it is safe to
+    // restrict something. One pattern covers every scope form the reference
+    // can carry, so a scan can never under-report by missing a site.
+    const refPattern = mediaRefPattern(mediaSnapshot.id)
+    const isReferenced = (haystack: string) =>
+      needles.some((needle) => haystack.includes(needle)) ||
+      refPattern.test(haystack)
 
     // Org assets can appear on any of the org's sites — scan them all;
     // a host asset scans its own site only. Carry each host's subdomain so
@@ -149,8 +197,8 @@ async function handler(request: Request): Promise<Response> {
             .doc(String(versionId))
             .get()
           if (!version.exists) return
-          const haystack = JSON.stringify(version.get('nodes') ?? {})
-          if (needles.some((needle) => haystack.includes(needle))) {
+          const haystack = nodesHaystack(version.get('nodes'))
+          if (isReferenced(haystack)) {
             references.push({
               kind: kind === 'screens' ? 'screen' : 'layout',
               id: parent.id,
@@ -175,7 +223,7 @@ async function handler(request: Request): Promise<Response> {
           for (const entry of entries.docs) {
             if (entry.get('deletedAt')) continue
             const haystack = JSON.stringify(entry.data() ?? {})
-            if (needles.some((needle) => haystack.includes(needle))) {
+            if (isReferenced(haystack)) {
               references.push({
                 kind: 'entry',
                 id: entry.id,

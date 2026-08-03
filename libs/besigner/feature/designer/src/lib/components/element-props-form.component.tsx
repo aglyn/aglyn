@@ -602,13 +602,15 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     )
     const handleBrowseMedia = useCallback(
       (propName: string) => () => {
-        onPickMedia?.((url) => {
+        // Written through verbatim: the host app decides the persisted form
+        // (today a media reference — AGL-1215), the renderer resolves it.
+        onPickMedia?.((value) => {
           const current = (
             Aglyn.canvas.toJSON().nodes as Record<string, any>
           )[node?.$id]
           Aglyn.canvas.updateNodeProps(node, {
             ...current?.props,
-            [propName]: url,
+            [propName]: value,
           })
         })
       },

@@ -600,7 +600,7 @@ export const DOCS_HELP_ANCHORS = {
   manageAccount: ['#account', '#sign-in-methods', '#profile-image', '#basic-info', '#contact-details', '#security', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#engagement-stats', '#related'],
-  media: ['#organize', '#upload', '#deliver-over-cdn', '#urls-are-stable', '#who-an-asset-is-shared-with', '#private-files', '#components', '#related'],
+  media: ['#organize', '#upload', '#deliver-over-cdn', '#urls-are-stable', '#page-elements-point-at-the-asset-not-at-a-link', '#who-an-asset-is-shared-with', '#private-files', '#components', '#related'],
   megaMenuWithInteractions: ['#what-youll-build', '#1-insert-the-mega-menu', '#2-build-the-columns', '#3-make-it-open-on-hover', '#prefer-primitives-insert-the-dropdown-panel-preset', '#4-add-a-mobile-drawer-optional', '#5-test-and-publish', '#how-it-works-under-the-hood', '#troubleshooting', '#related'],
   members: ['#1-the-built-in-sign-in-and-sign-up-pages', '#2-design-an-account-page', '#3-gate-screens-to-members', '#4-manage-members-from-the-console', '#suspend--reactivate', '#password-help', '#related'],
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],

@@ -49,8 +49,8 @@ export interface VideoProps {
  */
 const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   const {
-    src,
-    poster,
+    src: storedSrc,
+    poster: storedPoster,
     autoPlay,
     loop,
     muted,
@@ -60,6 +60,14 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
     radius,
     ...rest
   } = props
+  // Both fields are media-picker targets, so both can hold a media
+  // reference (AGL-1215) as well as any of the URL forms that predate it.
+  // Resolving here is not optional: the picker hands back one string for
+  // whichever attribute asked for it, so every field it can write to has to
+  // understand the same value.
+  const { hostId } = Aglyn.useSite()
+  const src = Aglyn.resolveMediaSrc(storedSrc, { hostId })
+  const poster = Aglyn.resolveMediaSrc(storedPoster, { hostId })
   if (!src) {
     return (
       <Box

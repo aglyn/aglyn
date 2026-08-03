@@ -27,7 +27,12 @@ import { generatePresetId } from '../utils/generate-preset-id'
 export const ID: Aglyn.ComponentId = 'image'
 
 export interface ImageProps {
-  /** Image URL — usually a media-library download URL (AGL-72). */
+  /**
+   * Where the image comes from (AGL-72). Either a **media reference** —
+   * `media:{scope}/{mediaId}`, what "Browse media" now stores (AGL-1215) —
+   * or any URL, which covers both the legacy values already in published
+   * documents and an author-typed hotlink. `resolveMediaSrc` decides.
+   */
   src?: string
   alt?: string
   objectFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down'
@@ -53,7 +58,7 @@ const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
  */
 const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
   const {
-    src,
+    src: storedSrc,
     alt,
     objectFit,
     width,
@@ -76,6 +81,19 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       ? externalHref.trim()
       : undefined
   const linkHref = screenId ? resolvedHref : safeExternalHref
+  /**
+   * Resolve the stored value to a URL (AGL-1215). A media reference becomes
+   * a CDN URL here rather than in the document, so the route shape stays an
+   * app concern; every other value — a legacy firebasestorage URL, a legacy
+   * `/api/media/cdn/…` path, an author-typed hotlink — passes through.
+   *
+   * `useSite().hostId` is the site being rendered: present on the tenant,
+   * absent in the besigner canvas and Preview. When it is there it names the
+   * asking site in the org scope, which is what lets ONE reference in a
+   * layout or reusable component resolve on each site that uses it.
+   */
+  const { hostId } = Aglyn.useSite()
+  const src = Aglyn.resolveMediaSrc(storedSrc, { hostId })
   const wrapLink = (element: JSX.Element) =>
     linkHref && !suppressNavigation ? (
       <AppLink
@@ -107,14 +125,15 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
           fontFamily: 'system-ui, sans-serif',
         }}
       >
-        {'Image — set a source URL'}
+        {'Image — choose a source'}
       </Box>
     )
   }
   // CDN URLs (AGL-175) carry WebP variants selected by `?w=`; widths
   // without a variant fall back to the original server-side, so a static
-  // srcSet is safe for any CDN-form URL.
-  const isCdnUrl = src.includes('/api/media/cdn/')
+  // srcSet is safe for any CDN-form URL. Asked of the RESOLVED url, so a
+  // reference and a legacy stored path both keep their WebP variants.
+  const isCdnUrl = Aglyn.isMediaCdnUrl(src)
   return wrapLink(
     <Box
       ref={ref}
@@ -159,10 +178,16 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
   attributes: [
     {
       name: 'src',
+      // "Browse media" is the path an author should take (AGL-1215) — it
+      // stores a reference to the asset, which survives moves, replaces and
+      // any future change to how media is delivered. Typing a URL stays
+      // supported for hotlinking somebody else's image; nobody should ever
+      // be pasting one of OUR paths in here.
       description:
-        'Image URL. Upload files on the host Media page and use "Copy URL".',
+        'Pick from your media library with "Browse media", or paste the ' +
+        'URL of an image hosted somewhere else.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
-      label: 'Source URL',
+      label: 'Image source',
     },
     {
       name: 'alt',

@@ -71,6 +71,17 @@ link you copied stays correct when you:
 So replacing a logo across a whole site is one upload, not a hunt for every reference.
 Links copied before this behavior shipped keep working too.
 
+### Page elements point at the asset, not at a link
+
+When you place an image with **Browse media**, the element records **which asset** you
+chose rather than a link to it. You never have to copy or paste a path, and the element
+keeps working through folder moves, file replacements, and any future change to how we
+deliver media. **Copy URL** is still there for pasting a link somewhere outside Aglyn.
+
+You can also type any external image URL into the field by hand — useful for hotlinking an
+image hosted elsewhere. Images placed before this shipped keep rendering exactly as they
+did.
+
 When a visitor saves a delivered file, it keeps the asset's **original filename and
 extension**, even though the URL itself doesn't carry one.
 

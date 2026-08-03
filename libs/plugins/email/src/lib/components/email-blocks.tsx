@@ -302,7 +302,12 @@ export interface EmailImageProps extends EmailBlockStyleProps {
 
 export const EmailImage = forwardRef<HTMLDivElement, EmailImageProps>(
   (props, ref) => {
-    const { src, alt, width, href, align, sx, ...rest } = props
+    const { src: storedSrc, alt, width, href, align, sx, ...rest } = props
+    // A media-picker target, so it can hold a media reference (AGL-1215).
+    // This is the CANVAS preview only — the sent HTML is built by
+    // `email-render`, which needs an absolute URL and cannot resolve either
+    // a reference or the relative CDN path it replaces.
+    const src = Aglyn.resolveMediaSrc(storedSrc)
     return (
       <Box
         ref={ref}
