@@ -26,6 +26,7 @@ import {
 } from '@aglyn/shared-ui-theme'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { CssBaseline, Stack, Typography } from '@mui/material'
+import { collection, getDocs, limit, query } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import { useEffect, useState } from 'react'
 import {
@@ -75,14 +76,60 @@ export function DocumentPreview(props: DocumentPreviewProps) {
   const [runtimePages, setRuntimePages] = useState<
     Record<string, unknown>[] | null
   >(null)
+  // Host reusable-component definitions, keyed by id (AGL-1211). `undefined`
+  // means "still loading" — see the graft below for why we wait.
+  const [definitions, setDefinitions] = useState<
+    Record<string, Aglyn.ReusableComponentTree> | undefined
+  >(undefined)
 
   const hostId = ids?.hostId
   const kind = ids?.kind
   const docId = ids?.docId
   const versionId = ids?.versionId
 
+  // Reusable-instance definitions (AGL-1211). The snapshot carries
+  // `reusableInstance` nodes verbatim — the besigner composes the layout chain
+  // but never grafts definitions, and the canvas deliberately doesn't either
+  // (the named placeholder is the editor's UX). Only the tenant server did the
+  // graft, so preview showed a dashed "SITE NAV" box where the live site shows
+  // the nav. Mirrors `libs/tenant/runtime/src/lib/get-components.ts` and is
+  // fail-open the same way: on error an empty map leaves instances as-is
+  // rather than blanking the page.
+  useEffect(() => {
+    if (!hostId || !firestore) return
+    let cancelled = false
+    getDocs(
+      query(collection(firestore, 'hosts', hostId, 'components'), limit(200)),
+    )
+      .then((res) => {
+        if (cancelled) return
+        const next: Record<string, Aglyn.ReusableComponentTree> = {}
+        for (const docSnapshot of res.docs) {
+          const value = docSnapshot.data() as Aglyn.AglynHostComponent
+          if (value?.deletedAt || !value?.nodes || !value?.rootId) continue
+          next[docSnapshot.id] = {
+            rootId: value.rootId,
+            nodes: value.nodes as Aglyn.ReusableComponentTree['nodes'],
+          }
+        }
+        setDefinitions(next)
+      })
+      .catch((error) => {
+        console.error(error)
+        if (!cancelled) setDefinitions({})
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [hostId, firestore])
+
   useEffect(() => {
     if (!hostId || !kind || !docId) return
+    // Wait for the definitions read to settle before the first paint. Grafting
+    // with a "loading" empty map would render the placeholder and then swap it
+    // for the real nav a beat later — a visible flash of chrome that the live
+    // site never shows.
+    if (!definitions) return
     const resolved: PreviewStateIds = { hostId, kind, docId, versionId }
 
     const applyState = () => {
@@ -93,7 +140,14 @@ export function DocumentPreview(props: DocumentPreviewProps) {
       }
       setMissing(false)
       setHostTheme(state.theme)
-      Aglyn.canvas.setNodes(Aglyn.canvas.processNodesToDenormalized(state.nodes))
+      Aglyn.canvas.setNodes(
+        Aglyn.canvas.processNodesToDenormalized(
+          Aglyn.composeReusableComponentNodes(
+            state.nodes as any,
+            definitions as any,
+          ) as any,
+        ),
+      )
     }
     applyState()
 
@@ -104,7 +158,7 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     }
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
-  }, [hostId, kind, docId, versionId])
+  }, [hostId, kind, docId, versionId, definitions])
 
   // Interactions parity (AGL-830): mount the registered site runtimes exactly
   // like the tenant page, each fed the page-props slice it rebuilds
