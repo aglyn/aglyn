@@ -25,6 +25,7 @@
  */
 
 import { LAYOUT_NODE_ID_PREFIXES } from './compose-layout-nodes'
+import { COMPONENT_NODE_ID_PREFIX } from './compose-reusable-components'
 
 /**
  * Class the show/hide steps toggle. The tenant page ships
@@ -220,11 +221,32 @@ export function runElementVisibilityStep(
 const LEAF_ID_NAMESPACE_PREFIXES = LAYOUT_NODE_ID_PREFIXES
 
 /**
- * Strips a single leading composition namespace prefix from a node/leaf id
- * so ids authored against the raw canvas id and ids stamped on the live
- * (layout-composed) DOM compare equal (AGL-573). Idempotent for an
+ * Whether an id looks like a reusable-component graft (AGL-1229).
+ *
+ * A graft's namespace is `cmp__{instanceId}__`, and unlike the layout
+ * prefixes it CANNOT be enumerated — there is one per placement, and the
+ * instance id is itself often composed: the nav really ships
+ * `cmp__layout__52Ef-3t6yd___R91yATrXH`.
+ *
+ * It also cannot be reliably PARSED off. With a raw id that starts with `_`
+ * (nanoid does that routinely) the `___` boundary splits two ways and both
+ * are structurally valid, so stripping guesses wrong half the time. Hence
+ * {@link leafIdsMatch} compares by suffix instead of normalizing — a
+ * composed id always ends in the raw id it was built from.
+ */
+const isComponentGraft = (id: string) =>
+  id.startsWith(COMPONENT_NODE_ID_PREFIX)
+
+/**
+ * Strips a single leading LAYOUT namespace prefix from a node/leaf id so ids
+ * authored against the raw canvas id and ids stamped on the live
+ * layout-composed DOM compare equal (AGL-573). Idempotent for an
  * already-raw id, and only a *leading* prefix is removed, so unrelated ids
  * can never be coerced into colliding.
+ *
+ * Deliberately does NOT try to strip a reusable-component graft — that
+ * namespace is unparseable (see {@link isComponentGraft}); `leafIdsMatch`
+ * and `expandLeafSelector` handle grafts by suffix.
  *
  * @example
  * normalizeLeafId('layout___5I3TBXywa') // → '_5I3TBXywa'
@@ -240,9 +262,17 @@ export function normalizeLeafId(id: string | undefined | null): string {
 
 /**
  * Whether two node ids address the same node ignoring composition
- * namespace prefixes (AGL-573) — the durable half of the fix for
- * interactions authored on layout-scoped elements, whose stored command id
- * is the raw canvas id while the live element's id is `layout__`-namespaced.
+ * namespace prefixes (AGL-573, extended to reusable-component grafts by
+ * AGL-1229) — the durable half of the fix for interactions authored on
+ * composed elements, whose stored command id is the raw canvas id while the
+ * live element's id is namespaced.
+ *
+ * Layout prefixes are stripped exactly. A component graft is matched by
+ * SUFFIX instead, because its namespace cannot be parsed off unambiguously
+ * (see {@link isComponentGraft}) — a composed id always ends in `__` plus
+ * the raw id it was built from, and a raw id is a single nanoid with no
+ * `__` boundary to spare, so the suffix cannot reach an unrelated node.
+ *
  * Two empty ids never match (a missing id is not a wildcard).
  */
 export function leafIdsMatch(
@@ -250,7 +280,12 @@ export function leafIdsMatch(
   b: string | undefined | null,
 ): boolean {
   const left = normalizeLeafId(a)
-  return left !== '' && left === normalizeLeafId(b)
+  const right = normalizeLeafId(b)
+  if (left === '' || right === '') return false
+  if (left === right) return true
+  if (isComponentGraft(right) && right.endsWith(`__${left}`)) return true
+  if (isComponentGraft(left) && left.endsWith(`__${right}`)) return true
+  return false
 }
 
 /**
@@ -265,25 +300,37 @@ export function leafIdFromSelector(selector: string): string | undefined {
 
 /**
  * Rewrites a `[data-aglyn="leaf:<id>"]` selector so it ALSO matches the
- * same node once layout composition has namespaced its live id (AGL-573):
+ * same node once composition has namespaced its live id (AGL-573, extended
+ * to reusable components by AGL-1229):
  *
  *   [data-aglyn="leaf:_5I3TBXywa"]
- *     → [data-aglyn="leaf:_5I3TBXywa"], [data-aglyn="leaf:layout___5I3TBXywa"]
+ *     → [data-aglyn="leaf:_5I3TBXywa"],
+ *       [data-aglyn="leaf:layout___5I3TBXywa"],
+ *       [data-aglyn$="___5I3TBXywa"]
  *
- * Each alternative is anchored to the exact id (raw, or a namespace prefix
- * plus the exact id), so an id can never match an unrelated node that
- * merely contains it as a substring. Any non-leaf selector — a plain CSS
- * selector an author typed by hand — passes through verbatim.
+ * The layout alternatives stay enumerated and exactly anchored. The last is
+ * a SUFFIX match, and it is the only way to reach a reusable-component
+ * graft: its namespace is `cmp__{instanceId}__`, one per placement, so
+ * there is no finite prefix list to enumerate.
+ *
+ * The suffix cannot collide. A composed id always ends in the raw id it was
+ * built from, so matching `__` + the exact raw id can only reach a
+ * composition OF THAT id — reaching an unrelated node would need that
+ * node's own raw id to end in `__` plus a full id, and raw ids are a single
+ * fixed-length nanoid with no `__` boundary to spare.
+ *
+ * Any non-leaf selector — a plain CSS selector an author typed by hand —
+ * passes through verbatim.
  */
 export function expandLeafSelector(selector: string): string {
   const rawId = leafIdFromSelector(selector)
   if (!rawId) return selector
   const base = normalizeLeafId(rawId)
-  const ids = [
+  const exact = [
     base,
     ...LEAF_ID_NAMESPACE_PREFIXES.map((prefix) => `${prefix}${base}`),
-  ]
-  return ids.map((id) => `[data-aglyn="leaf:${id}"]`).join(', ')
+  ].map((id) => `[data-aglyn="leaf:${id}"]`)
+  return [...exact, `[data-aglyn$="__${base}"]`].join(', ')
 }
 
 /* ── UI command buses (drawer AGL-562, menu AGL-568) ────────────────── */

@@ -433,10 +433,12 @@ function AutomationsEngine(props: {
 
     for (const automation of automations) {
       const { event, threshold } = automation
-      // Layout composition namespaces a node's live `data-aglyn` id, but
-      // the interaction builder records the RAW canvas id in the selector.
-      // Expand it so the trigger still matches the live element (AGL-573);
-      // hand-typed CSS selectors pass through untouched.
+      // Composition namespaces a node's live `data-aglyn` id, but the
+      // interaction builder records the RAW canvas id in the selector.
+      // Expand it so the trigger still matches the live element — layouts
+      // (AGL-573) and reusable-component grafts (AGL-1229), the latter being
+      // why every interaction authored inside the Site nav bound to nothing.
+      // Hand-typed CSS selectors pass through untouched.
       const selector = automation.selector
         ? Aglyn.expandLeafSelector(automation.selector)
         : automation.selector
