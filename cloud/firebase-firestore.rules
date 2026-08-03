@@ -367,6 +367,22 @@ service cloud.firestore {
         allow read: if isStaff() || isOrgWideMember();
         allow write: if false;
       }
+
+      // SSO domain claims (AGL-1210). Deny ALL client access, read included.
+      //
+      // The claim token is the only thing standing between an org and a
+      // domain it does not own: publish that token as a TXT record and the
+      // domain's sign-ins route to your IdP. A client-readable claim would let
+      // any org member — or anyone who can read the collection — lift another
+      // org's token, so the console goes through /api/orgs/sso, which returns
+      // a claim only to an admin of THAT org.
+      //
+      // Writes are API-only for the stronger reason: `verified` is the whole
+      // security property, and a client that can set it has defeated domain
+      // verification entirely.
+      match /ssoDomains/{domain} {
+        allow read, write: if false;
+      }
     }
 
     // Workspace-subdomain resolution ({slug}.aglyn.com): public read so
@@ -374,6 +390,19 @@ service cloud.firestore {
     match /orgSlugs/{slug} {
       allow read: if true;
       allow write: if false;
+    }
+
+    // Email domain → SSO identity pool (AGL-1101/1210). Resolved pre-auth by
+    // /api/auth/sso-lookup through the Admin SDK, which bypasses rules — so
+    // unlike `orgSlugs` this needs no public read, and does not get one.
+    //
+    // A live doc here is the statement "this org proved it owns this domain",
+    // and it is the routing decision for every sign-in on that domain. Written
+    // by `publishSsoDomains` alone, which re-checks the DNS-verified claim
+    // before each write. Any client write path would be a domain-takeover
+    // vector, so there is none.
+    match /ssoDomains/{domain} {
+      allow read, write: if false;
     }
 
     // Host → org resolver mirror, server-written beside host create.

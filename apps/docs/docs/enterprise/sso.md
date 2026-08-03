@@ -1,16 +1,62 @@
 ---
 sidebar_position: 2
 title: Single sign-on (SAML)
-description: How SAML SSO works on Aglyn, how it is provisioned, what enforcement does, and the consequences of SSO accounts living in their own identity pool.
+description: How to set up SAML SSO yourself, how domain verification works, what enforcement does, and the consequences of SSO accounts living in their own identity pool.
 ---
 
 # Single sign-on (SAML)
 
 SSO signs your team in against your own identity provider. It is an
-**Enterprise** feature and it is **provisioned by Aglyn** — there is no
-self-serve toggle in **Organization → Settings**, because setting it up means
-creating an identity pool for your organization on our side and exchanging
-metadata with your IdP.
+**Enterprise** feature, and once your organization is on Enterprise you set it
+up yourself in **Organization → Settings → Single sign-on**. There is no
+provisioning step on our side and nothing to wait for.
+
+## Setting it up
+
+### 1. Verify your domain
+
+Add each email domain your team signs in with. We give you a DNS `TXT` record
+to publish:
+
+| Record | Value |
+| --- | --- |
+| `_aglyn-challenge.yourdomain.com` | `aglyn-domain-verification=…` |
+
+Publish it at your DNS provider, then press **Verify**. DNS can take a few
+minutes to propagate; re-checking is safe and costs nothing.
+
+**This step is not a formality.** A verified domain is what tells us to send
+that domain's sign-ins to your identity provider. If anyone could claim a
+domain without proving they own it, they could point *your* domain at *their*
+IdP and intercept your team's logins. So nothing else works until a domain
+passes, and we re-check the record rather than taking your word for it.
+
+Public mailbox domains — `gmail.com`, `outlook.com` and the like — cannot be
+used. They are shared with millions of people outside your organization.
+
+### 2. Connect your identity provider
+
+The settings page shows the two values your IdP asks for when you create the
+Aglyn application:
+
+- **Reply / ACS URL**
+- **Entity ID / Audience**
+
+Create the application in your IdP, then paste its details back: the **entity
+ID**, the **sign-in URL** (which must be `https://`), and the **X.509 signing
+certificate**. Saving creates your identity pool and its SAML provider.
+
+Saving does **not** switch anything on. Your configuration sits inactive until
+you turn it on, so a half-entered setup can never start routing sign-ins.
+
+### 3. Turn it on
+
+Once at least one domain is verified and your provider is saved, **Turn on**
+publishes the routing for your verified domains and SSO goes live.
+
+Turning it off later stops the routing but **keeps your identity pool and every
+account in it**, so you can turn it back on without anyone losing their
+account.
 
 ## How it works
 
@@ -32,9 +78,13 @@ having SSO configured.
 - **Enforced** — other sign-in methods are stripped from accounts in the pool.
   Passwords stop being an option, not merely a discouraged one.
 
-Enforcement is applied by a sweep over the pool, and it can be rehearsed
-against an organization before it is switched on, so you can see exactly which
-accounts change before anything does.
+Enforcement is applied by a sweep over the pool. **Rehearse it first** — the
+settings page has a rehearsal that changes nothing and lists exactly which
+accounts would lose which sign-in methods. An account whose only way in is the
+method being removed is reported and skipped rather than orphaned.
+
+Enforcement cannot be undone by turning it off. We remove a linked credential;
+we do not keep a copy to put back. Anyone affected re-links for themselves.
 
 ## Consequences worth knowing before you switch
 

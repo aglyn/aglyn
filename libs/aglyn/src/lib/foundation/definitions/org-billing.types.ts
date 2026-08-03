@@ -199,10 +199,16 @@ export interface OrgBrandingProfile {
  * verified email domain → `{ orgId, tenantId, providerId }` so the
  * pre-auth sign-in page can resolve an SSO org without reading the org doc.
  *
- * Security: `domainVerified` must be true before SSO activates for a domain
- * (Phase 1 = staff-attested; Phase 2 = DNS TXT). `enforced` (Phase 2) will
- * block password/social login for the governed domains; Phase 1 leaves it
- * false so password/Google stays as a fallback (no lockout).
+ * Security: a domain reaches `domains[]` ONLY by passing DNS TXT verification
+ * (AGL-1210). This is the account-takeover guard, and it is the whole reason
+ * self-serve is safe: without it an org could claim a domain it does not own,
+ * `ssoDomains/{domain}` would route that domain's sign-ins to its IdP, and it
+ * would intercept another company's logins. Claims in flight live in
+ * `orgs/{orgId}/ssoDomains/{domain}` (see `OrgSsoDomainClaim`) and are NOT
+ * governed until verified.
+ *
+ * `enforced` blocks password/social login for the governed domains, so it is a
+ * lockout risk and is rehearsed (`previewSsoEnforcement`) before it is applied.
  */
 export interface OrgSsoConfig {
   /** GCIP tenant id that carries this org's IdP provider. */
@@ -213,10 +219,30 @@ export interface OrgSsoConfig {
   protocol: 'saml' | 'oidc'
   /** Human label for the IdP (shown on the SSO button + staff card). */
   displayName?: string
-  /** Email domains routed to this IdP (lowercased, no `@`). */
+  /**
+   * Email domains routed to this IdP (lowercased, no `@`). A domain is added
+   * here only after its claim passes DNS TXT verification, and removed the
+   * moment re-verification fails — so membership of this array IS the
+   * "ownership proven" statement. Never write to it from anywhere but the
+   * verification path.
+   */
   domains: string[]
-  /** Domain ownership confirmed before SSO activates (account-takeover guard). */
+  /**
+   * Retained for `sso-jit`, which gates on it. Kept in lockstep with
+   * `domains.length > 0` by the verification path; it was a staff-attested
+   * boolean before AGL-1210 and is now derived, never asserted by a human.
+   */
   domainVerified: boolean
+  /**
+   * SAML metadata the CUSTOMER supplies about their IdP. Stored so the pool's
+   * provider config can be rebuilt or re-applied without asking again. The
+   * X.509 certificate is a public signing certificate, not a secret.
+   */
+  idp?: {
+    entityId: string
+    ssoUrl: string
+    certificates: string[]
+  }
   /**
    * Require SSO for the governed domains — disables password/social login for
    * them (Phase 2). Phase 1 keeps this false so users keep a fallback.
@@ -224,9 +250,48 @@ export interface OrgSsoConfig {
   enforced: boolean
   /** Lifecycle: `configuring` (not live), `active`, or `disabled`. */
   status: 'configuring' | 'active' | 'disabled'
-  /** Staff uid + time of the last config change (mirrors adminAudit). */
+  /**
+   * Uid + time of the last config change. Since AGL-1210 this is normally an
+   * ORG ADMIN, not staff — the flow is self-serve end to end.
+   */
   configuredBy?: string
   configuredAt?: ITimestamp
+}
+
+/**
+ * A pending or proven claim on one email domain (AGL-1210), stored at
+ * `orgs/{orgId}/ssoDomains/{domain}`.
+ *
+ * A subcollection rather than a map on the org doc because domains contain
+ * dots, and a dotted key in a Firestore map is read as a nested field path by
+ * every update helper — writing `sso.domainClaims["acme.com"]` would silently
+ * create `{acme: {com: …}}`. A document id has no such ambiguity.
+ *
+ * The claim is deliberately worthless on its own: holding one grants nothing.
+ * Only `verified` moving to true adds the domain to `sso.domains`, and only
+ * that array is consulted at sign-in.
+ */
+export interface OrgSsoDomainClaim {
+  /** The domain being claimed (lowercased, no `@`); mirrors the document id. */
+  domain: string
+  /**
+   * Random value the org must publish as a DNS TXT record at
+   * `_aglyn-challenge.<domain>`. Per org+domain, so two orgs claiming the same
+   * domain get different tokens and neither can pass on the other's record.
+   */
+  token: string
+  /** True once a DNS lookup has actually seen `token` at the challenge host. */
+  verified: boolean
+  createdAt: ITimestamp
+  verifiedAt?: ITimestamp
+  /** Last lookup attempt, successful or not — drives re-verification. */
+  lastCheckedAt?: ITimestamp
+  /**
+   * TXT records seen on the last FAILED lookup. Shown back to the customer,
+   * because "no record found" and "found the wrong value" are different
+   * mistakes and the fix differs.
+   */
+  lastRecords?: string[]
 }
 
 /**
