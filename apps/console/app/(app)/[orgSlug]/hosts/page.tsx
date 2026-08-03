@@ -58,8 +58,8 @@ function HostInfoItem({ label, value }) {
           }, (theme) => {
             const tv = (theme as any).vars || theme
             return {
-              bgcolor: `rgba(${tv.palette.tertiary.lightChannel} / 0.18)`,
-              border: `1px solid rgba(${tv.palette.tertiary.lightChannel} / 0.72)`,
+              bgcolor: `rgba(${tv.palette.secondary.lightChannel} / 0.18)`,
+              border: `1px solid rgba(${tv.palette.secondary.lightChannel} / 0.72)`,
               borderRadius: '0.3em',
               px: 0.5,
               py: 0.15,
@@ -110,7 +110,7 @@ function HostsContent() {
         permissions.createHosts ? (
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             onClick={() => setCreating(true)}
           >
             {'Create site'}
@@ -138,7 +138,7 @@ function HostsContent() {
               permissions.createHosts ? (
                 <Button
                   variant="contained"
-                  color="secondary"
+                  color="primary"
                   onClick={() => setCreating(true)}
                 >
                   {'Create site'}
@@ -171,7 +171,7 @@ function HostsContent() {
                         host={host}
                         size={28}
                         fontSize="large"
-                        color="secondary"
+                        color="primary"
                       />
                     ),
                     slotProps: {

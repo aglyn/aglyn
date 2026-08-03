@@ -43,7 +43,7 @@ export function NotFoundContent() {
           <Stack direction="row" spacing={1.5}>
             <Button
               variant="contained"
-              color="secondary"
+              color="primary"
               component={AppLink as any}
               {...({ componentVariant: 'naked', nativeButton: false } as any)}
               href={'/'}

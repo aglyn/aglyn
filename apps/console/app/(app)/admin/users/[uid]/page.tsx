@@ -285,7 +285,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                         {detail.user.staff ? (
                           <Chip
                             size="small"
-                            color="secondary"
+                            color="primary"
                             label={`Staff: ${detail.user.staffRole ?? 'super'}`}
                           />
                         ) : (
@@ -421,7 +421,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   href={buildRoute(Route.ADMIN_ORG_DETAIL, {
                                     orgId: membership.orgId,
                                   })}
-                                  color="secondary"
+                                  color="primary"
                                   underline="hover"
                                 >
                                   {membership.orgName ?? membership.orgId}

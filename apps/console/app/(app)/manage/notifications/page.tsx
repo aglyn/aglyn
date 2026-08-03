@@ -323,7 +323,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
             >
               <Button
                 size="small"
-                color="secondary"
+                color="primary"
                 disabled={markingAll}
                 onClick={() => void handleMarkAllRead()}
               >
@@ -482,7 +482,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                       </TableCell>
                       <TableCell align="right">
                         {notification.readAt ? null : (
-                          <Chip size="small" color="secondary" label="New" />
+                          <Chip size="small" color="primary" label="New" />
                         )}
                       </TableCell>
                     </TableRow>
@@ -493,7 +493,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <Button
                 size="small"
-                color="secondary"
+                color="primary"
                 disabled={loading || page === 0}
                 onClick={() => loadPage(page - 1, cursors[page - 2])}
               >
@@ -504,7 +504,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
               </Typography>
               <Button
                 size="small"
-                color="secondary"
+                color="primary"
                 disabled={loading || !hasMore}
                 onClick={() => loadPage(page + 1, cursors[page])}
               >

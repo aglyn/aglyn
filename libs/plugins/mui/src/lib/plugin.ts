@@ -19,9 +19,18 @@ import { registerPluginInstallPresetMapper } from '@aglyn/aglyn'
 import { muiPluginInstallToPreset } from './components/plugin'
 import * as Aglyn from '@aglyn/aglyn'
 import { runInAction } from 'mobx'
+import * as AccordionComponents from './components/accordion'
 import * as AppBar from './components/app-bar'
+import * as Box from './components/box'
+import * as Breadcrumbs from './components/breadcrumbs'
 import * as Button from './components/button'
+import * as CardComponents from './components/card'
 import * as Container from './components/container'
+import * as Grid from './components/grid'
+import * as ImageListComponents from './components/image-list'
+import * as Pagination from './components/pagination'
+import * as Paper from './components/paper'
+import * as TabsComponents from './components/tabs'
 import * as LayoutSlot from './components/layout-slot'
 import * as List from './components/list'
 import * as ListItem from './components/list-item'
@@ -50,25 +59,19 @@ import * as Typography from './components/typography'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
- * Registers the core MUI component library with the `@aglyn/aglyn` global
- * plugin registry (`AglynNodeRenderer`, `Aglyn.canvas`, ...). This is the
- * platform's core component bundle; feature bundles (commerce,
- * events-calendar, email) declare a dependency on it.
+ * Single bundle manifest (AGL-140): one entry per component keeps
+ * register/unregister symmetric — the old hand-maintained lists had
+ * drifted (several components were never unregistered on destroy).
+ *
+ * Exported so the bundle itself is assertable (AGL-1201): duplicate
+ * component or preset ids collapse silently inside the registry's
+ * keyed records, so they can only be caught before registration.
  */
-export function registerMuiPlugin(): void {
-  // Install→preset mapper (AGL-419): the console's drawer registration
-  // consumes it through core, never importing this plugin.
-  registerPluginInstallPresetMapper(muiPluginInstallToPreset)
-  if (Aglyn.plugins.getDependency(BUNDLE_ID)) return
-
-  // Single bundle manifest (AGL-140): one entry per component keeps
-  // register/unregister symmetric — the old hand-maintained lists had
-  // drifted (several components were never unregistered on destroy).
-  const MUI_BUNDLE: Array<{
-    component: any
-    schema: Aglyn.ComponentSchema<any>
-    presets?: Aglyn.PresetSchema[]
-  }> = [
+export const MUI_BUNDLE: Array<{
+  component: any
+  schema: Aglyn.ComponentSchema<any>
+  presets?: Aglyn.PresetSchema[]
+}> = [
     { component: AppBar.default, schema: AppBar.schema, presets: AppBar.presets },
     { component: Toolbar.default, schema: Toolbar.schema, presets: Toolbar.presets },
     { component: Typography.default, schema: Typography.schema, presets: Typography.presets },
@@ -109,8 +112,37 @@ export function registerMuiPlugin(): void {
     { component: SearchBox.default, schema: SearchBox.schema, presets: SearchBox.presets },
     { component: Section.default, schema: Section.schema, presets: Section.presets },
     { component: Stack.default, schema: Stack.schema, presets: Stack.presets },
+    // Layout & surface primitives (AGL-1201).
+    { component: Box.default, schema: Box.schema, presets: Box.presets },
+    { component: Grid.default, schema: Grid.schema, presets: Grid.presets },
+    { component: Paper.default, schema: Paper.schema, presets: Paper.presets },
+    { component: CardComponents.default, schema: CardComponents.cardSchema, presets: CardComponents.cardPresets },
+    { component: CardComponents.CardHeaderElement, schema: CardComponents.cardHeaderSchema },
+    { component: CardComponents.CardContentElement, schema: CardComponents.cardContentSchema },
+    { component: CardComponents.CardActionsElement, schema: CardComponents.cardActionsSchema },
+    { component: AccordionComponents.default, schema: AccordionComponents.accordionSchema, presets: AccordionComponents.accordionPresets },
+    { component: AccordionComponents.AccordionSummaryElement, schema: AccordionComponents.accordionSummarySchema },
+    { component: AccordionComponents.AccordionDetailsElement, schema: AccordionComponents.accordionDetailsSchema },
+    { component: TabsComponents.default, schema: TabsComponents.tabsSchema, presets: TabsComponents.tabsPresets },
+    { component: TabsComponents.TabPanelElement, schema: TabsComponents.tabPanelSchema },
+    { component: ImageListComponents.default, schema: ImageListComponents.imageListSchema, presets: ImageListComponents.imageListPresets },
+    { component: ImageListComponents.ImageListItemElement, schema: ImageListComponents.imageListItemSchema },
+    { component: Pagination.default, schema: Pagination.schema, presets: Pagination.presets },
+    { component: Breadcrumbs.default, schema: Breadcrumbs.schema, presets: Breadcrumbs.presets },
     { component: ThemeModeSwitcher.default, schema: ThemeModeSwitcher.schema, presets: ThemeModeSwitcher.presets },
-  ]
+]
+
+/**
+ * Registers the core MUI component library with the `@aglyn/aglyn` global
+ * plugin registry (`AglynNodeRenderer`, `Aglyn.canvas`, ...). This is the
+ * platform's core component bundle; feature bundles (commerce,
+ * events-calendar, email) declare a dependency on it.
+ */
+export function registerMuiPlugin(): void {
+  // Install→preset mapper (AGL-419): the console's drawer registration
+  // consumes it through core, never importing this plugin.
+  registerPluginInstallPresetMapper(muiPluginInstallToPreset)
+  if (Aglyn.plugins.getDependency(BUNDLE_ID)) return
 
   Aglyn.plugins.addDependency({
     $id: BUNDLE_ID,

@@ -182,7 +182,7 @@ export const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
         onTouchMove={markUserScrolled}
         onPointerDown={handlePointerDown}
         aria-label="area navigation"
-        indicatorColor="secondary"
+        indicatorColor="primary"
         scrollButtons="auto"
         textColor="inherit"
         value={tabValue}
@@ -208,7 +208,7 @@ export const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
                 mx: 'auto',
                 width: 0.8,
                 height: 1,
-                backgroundColor: 'secondary.light',
+                backgroundColor: 'primary.light',
               },
             },
           },

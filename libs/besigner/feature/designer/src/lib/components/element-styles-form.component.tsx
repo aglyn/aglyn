@@ -479,7 +479,7 @@ const TextAlignToggleButtonGroup = (props: { onChange: (e: SyntheticEvent, value
           id={field.name}
           value={value || ''}
           size="small"
-          color="secondary"
+          color="primary"
           onChange={onChange}
           fullWidth
           exclusive
@@ -670,7 +670,7 @@ const ElementStylesForm = observer(
           >
             <Chip
               size="small"
-              color={activeBreakpoint ? 'secondary' : 'default'}
+              color={activeBreakpoint ? 'primary' : 'default'}
               label={
                 activeBreakpoint
                   ? `Styling breakpoint: ${activeBreakpoint.toUpperCase()}`
@@ -692,7 +692,7 @@ const ElementStylesForm = observer(
             >
               <Chip
                 size="small"
-                color="secondary"
+                color="primary"
                 variant="outlined"
                 sx={{ ml: 1 }}
                 label="Styling: dark scheme"

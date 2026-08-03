@@ -126,6 +126,66 @@ export function composeReusableComponentNodes<
 }
 
 /**
+ * Replaces the subtree rooted at `rootId` with an instance of `definitionId`
+ * (AGL-1193) — what "Save as reusable component" does to the tree it was
+ * promoted from.
+ *
+ * Without this the promoting document keeps an inline *copy*: the one place
+ * guaranteed never to track the component it created, silently. Deliberately
+ * in this file so the swap and {@link composeReusableComponentNodes} cannot
+ * drift about what an instance node looks like.
+ *
+ * - The instance keeps the promoted root's `$id` and `parentId`, so the
+ *   parent's child list, the undo stack and the current selection all stay
+ *   valid — the mirror of the detach path, which reuses the instance id.
+ * - Every descendant is dropped; its content now lives in the definition.
+ * - `displayName` rides along as a prop purely so the editor placeholder can
+ *   name what it stands for (definitions are not grafted into the canvas).
+ * - Unknown `rootId` is a no-op, and the input is never mutated.
+ */
+export function replaceSubtreeWithInstance<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(
+  nodes: NormalizedNodes<N>,
+  rootId: NodeId,
+  definitionId: string,
+  displayName?: string,
+): NormalizedNodes<N> {
+  const root = nodes?.[rootId]
+  if (!root || !definitionId) return nodes
+
+  // Descendants only — the root is replaced, not removed.
+  const doomed = new Set<NodeId>()
+  const queue: NodeId[] = Array.isArray(root.nodes)
+    ? [...(root.nodes as NodeId[])]
+    : []
+  while (queue.length) {
+    const id = queue.shift() as NodeId
+    if (doomed.has(id) || id === rootId || !nodes[id]) continue
+    doomed.add(id)
+    const children = nodes[id]?.nodes
+    if (Array.isArray(children)) queue.push(...(children as NodeId[]))
+  }
+
+  const next: NormalizedNodes<N> = {}
+  for (const [id, node] of Object.entries(nodes)) {
+    if (!doomed.has(id)) next[id] = node as N
+  }
+  next[rootId] = {
+    $id: rootId,
+    parentId: root.parentId ?? null,
+    componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+    pluginId: 'mui',
+    props: {
+      refId: definitionId,
+      ...(displayName && { name: displayName }),
+    },
+    nodes: [],
+  } as unknown as N
+  return next
+}
+
+/**
  * Whether a node map contains an instance of `definitionId` (AGL-703).
  *
  * The inverse of the graft above, and deliberately in the same file: a

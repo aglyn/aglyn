@@ -556,7 +556,7 @@ export function OrgMembersCard() {
                           <Typography
                             variant="caption"
                             color={
-                              kind === 'manager' ? 'secondary.main' : 'text.secondary'
+                              kind === 'manager' ? 'primary.main' : 'text.secondary'
                             }
                           >
                             {CONSOLE_USER_TYPE_LABELS[kind]}

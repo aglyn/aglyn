@@ -124,12 +124,12 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
         cursor: 'pointer',
         transition: (theme) =>
           theme.transitions.create(['box-shadow', 'border-color', 'transform']),
-        borderColor: isDropTarget ? 'secondary.main' : 'divider',
+        borderColor: isDropTarget ? 'primary.main' : 'divider',
         transform: isDropTarget ? 'scale(1.02)' : undefined,
         boxShadow: isDropTarget ? 4 : undefined,
         '&:hover': {
           boxShadow: isDropTarget ? 4 : 2,
-          borderColor: isDropTarget ? 'secondary.main' : 'text.disabled',
+          borderColor: isDropTarget ? 'primary.main' : 'text.disabled',
         },
         '&:hover .media-card-affordance, &:focus-within .media-card-affordance':
           { opacity: 1 },
@@ -141,8 +141,8 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          bgcolor: isDropTarget ? 'secondary.main' : 'action.hover',
-          color: isDropTarget ? 'secondary.contrastText' : 'text.secondary',
+          bgcolor: isDropTarget ? 'primary.main' : 'action.hover',
+          color: isDropTarget ? 'primary.contrastText' : 'text.secondary',
           transition: (theme) => theme.transitions.create(['background-color']),
         }}
       >
@@ -176,7 +176,7 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
             <Tooltip title={`Shared with ${scopeLabel}`} enterDelay={600}>
               <Typography
                 variant="caption"
-                color="secondary"
+                color="primary"
                 noWrap
                 component="div"
               >

@@ -105,7 +105,12 @@ export function ReusableComponentsProvider(
           $id: null,
           componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
           pluginId: 'mui',
-          props: { refId: definition.$id },
+          props: {
+            refId: definition.$id,
+            // Names the editor placeholder (AGL-1193) — a canvas of
+            // identical dashed boxes is unreadable once chrome is promoted.
+            name: definition.displayName ?? definition.$id,
+          },
         },
       }),
     )
@@ -146,7 +151,7 @@ export function ReusableComponentsProvider(
       // Creation rides the resources API (AGL-473): reusable components
       // render on the live site, so the Starter+ entitlement is enforced
       // server-side, not just by hiding the promote button.
-      await createHostResource({
+      const created = await createHostResource({
         hostId,
         resource: 'reusableComponent',
         data: {
@@ -156,13 +161,26 @@ export function ReusableComponentsProvider(
           nodes: definitionNodes,
         },
       })
-      // The source element stays as-is on the canvas (AGL-64): the editor
-      // renders instances as empty placeholders (definitions graft on the
-      // org only), so swapping the subtree for an instance here would
-      // visually empty the element the user just promoted.
+      // Swap the promoted subtree for an instance of what we just created
+      // (AGL-1193). Leaving it inline made the promoting document the ONE
+      // place that would never track the component it defined — edit "Site
+      // nav" later and the layout that created it silently keeps the old
+      // copy. The canvas shows instances as a named placeholder rather than
+      // the definition's content (definitions graft at render, not in the
+      // editor), which is the same thing inserting one from "Your
+      // components" has always looked like.
+      Aglyn.canvas.applyNodes(
+        Aglyn.replaceSubtreeWithInstance(
+          Aglyn.canvas.toJSON().nodes as any,
+          node.$id,
+          created.id,
+          name || 'Component',
+        ) as any,
+      )
       setPromoteNode(null)
       enqueueSnackbar(
-        `Saved "${name}" — insert it anywhere from Your components`,
+        `Saved "${name}" — this element now follows the component, and you ` +
+          'can insert it anywhere from Your components',
         { variant: 'success', persist: false },
       )
     } catch (error: any) {
@@ -282,7 +300,7 @@ export function ReusableComponentsProvider(
           <Button onClick={() => setPromoteNode(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!name.trim()}
             onClick={handlePromoteConfirm}
           >

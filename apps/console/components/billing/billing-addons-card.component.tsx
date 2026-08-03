@@ -351,7 +351,7 @@ export default function BillingAddonsCardComponent({
                   <Button
                     size="small"
                     variant="outlined"
-                    color="secondary"
+                    color="primary"
                     disabled={!canManage || busy}
                     onClick={() => void applyChange(row, draft)}
                   >

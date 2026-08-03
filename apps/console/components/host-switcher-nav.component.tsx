@@ -202,7 +202,7 @@ export function HostSwitcherNavComponent() {
                   sx={{ gap: 1 }}
                 >
                   <ListItemIcon sx={{ minWidth: 0 }}>
-                    <HostIcon host={site} color={isCurrent ? 'secondary' : undefined} />
+                    <HostIcon host={site} color={isCurrent ? 'primary' : undefined} />
                   </ListItemIcon>
                   <ListItemText
                     primary={site.displayName ?? site.$id}
@@ -249,7 +249,7 @@ export function HostSwitcherNavComponent() {
           </ListItemIcon>
           <ListItemText
             primary="View all sites"
-            slotProps={{ primary: { color: 'secondary' } }}
+            slotProps={{ primary: { color: 'primary' } }}
           />
         </MenuItem>
       </Menu>

@@ -141,7 +141,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
                   <TableCell>{entry.action}</TableCell>
                   <TableCell>
                     {href ? (
-                      <AppLink href={href} color="secondary" underline="hover">
+                      <AppLink href={href} color="primary" underline="hover">
                         {label}
                       </AppLink>
                     ) : (
@@ -161,7 +161,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Button
             size="small"
-            color="secondary"
+            color="primary"
             disabled={loading || page === 0}
             onClick={() => loadPage(page - 1, cursors[page - 2])}
           >
@@ -172,7 +172,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
           </Typography>
           <Button
             size="small"
-            color="secondary"
+            color="primary"
             disabled={loading || !hasMore}
             onClick={() => loadPage(page + 1, cursors[page])}
           >

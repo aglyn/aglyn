@@ -610,7 +610,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
                       <Button
                         size="small"
                         variant="contained"
-                        color="secondary"
+                        color="primary"
                         onClick={() => setUseTemplate(template)}
                       >
                         {'Use'}
@@ -665,7 +665,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
                       <Button
                         size="small"
                         variant="contained"
-                        color="secondary"
+                        color="primary"
                         onClick={handleUse(starter)}
                       >
                         {'Use template'}
@@ -737,7 +737,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
                       <Button
                         size="small"
                         variant="contained"
-                        color="secondary"
+                        color="primary"
                         disabled={installingId === listing.$id}
                         onClick={handleInstallTemplate(listing)}
                       >

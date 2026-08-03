@@ -539,7 +539,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       <Button
                         size="small"
                         variant="outlined"
-                        color="secondary"
+                        color="primary"
                         onClick={() => void handleOpenPortal()}
                       >
                         {'Manage payment methods'}
@@ -548,7 +548,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         // Cancel/downgrade flow (AGL-269).
                         <Button
                           size="small"
-                          color={cancelAtPeriodEnd ? 'secondary' : 'error'}
+                          color={cancelAtPeriodEnd ? 'primary' : 'error'}
                           onClick={() => void handleCancelToggle()}
                         >
                           {cancelAtPeriodEnd
@@ -724,7 +724,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         <Box sx={{ textAlign: 'center', mt: 1 }}>
                           <Button
                             size="small"
-                            color="secondary"
+                            color="primary"
                             disabled={invoicesLoading}
                             onClick={() => void fetchInvoices(invoiceCursor)}
                           >

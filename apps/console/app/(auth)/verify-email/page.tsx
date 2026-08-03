@@ -192,7 +192,7 @@ function VerifyEmail() {
         headingTop={'One moment'}
         headingBottom={'Checking your account'}
         headingBottomProps={{ sx: { pb: 4 }, component: LoadingTextComponent }}
-        headingAfter={<CircularProgress color="secondary" />}
+        headingAfter={<CircularProgress color="primary" />}
       />
     )
   }
@@ -216,7 +216,7 @@ function VerifyEmail() {
       }
     >
       <Stack spacing={1.5} sx={{ mt: 2, alignItems: 'stretch' }}>
-        <Button variant="contained" color="secondary" onClick={() => void checkNow()}>
+        <Button variant="contained" color="primary" onClick={() => void checkNow()}>
           {'I’ve verified — continue'}
         </Button>
         <Typography component="div" variant="body2" sx={{ textAlign: 'center' }}>

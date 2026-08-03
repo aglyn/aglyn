@@ -154,7 +154,7 @@ export function EmailScreensCard(props: { hostId: string }) {
         )}
         <Button
           size="small"
-          color="secondary"
+          color="primary"
           sx={{ alignSelf: 'flex-start' }}
           onClick={() => void handleCreate()}
         >

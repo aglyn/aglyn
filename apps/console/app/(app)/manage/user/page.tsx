@@ -627,7 +627,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             onClick={() => void handlePhotoSave()}
           >
             {'Save'}
@@ -718,8 +718,8 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
                   >
                     <TabList
                       orientation="vertical"
-                      textColor="secondary"
-                      indicatorColor="secondary"
+                      textColor="primary"
+                      indicatorColor="primary"
                       sx={{
                         ['.MuiTab-root']: {
                           alignItems: 'start',

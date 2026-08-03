@@ -50,7 +50,7 @@ export function EmptyState({
         sx={{ alignItems: 'center', textAlign: 'center', py: 6, px: 2 }}
       >
         {iconPath ? (
-          <MdiIcon color="secondary" fontSize="large" path={iconPath} />
+          <MdiIcon color="primary" fontSize="large" path={iconPath} />
         ) : null}
         <Typography variant="h6">{title}</Typography>
         {description ? (

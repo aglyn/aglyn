@@ -356,7 +356,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                     cursor: 'pointer',
                     border: 2,
                     borderColor:
-                      index === activeImage ? 'secondary.main' : 'transparent',
+                      index === activeImage ? 'primary.main' : 'transparent',
                   }}
                 />
               ))}
@@ -391,7 +391,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 >
                   {`$${variant.compareAtPriceUsd}`}
                 </Typography>
-                <Chip label="Sale" size="small" color="secondary" />
+                <Chip label="Sale" size="small" color="primary" />
               </>
             ) : null}
             {variant?.soldOut ? (

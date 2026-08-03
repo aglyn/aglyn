@@ -32,7 +32,7 @@ import { schema as stack } from './components/stack'
 import { schema as toolbar } from './components/toolbar'
 import { schema as typography } from './components/typography'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { registerMuiPlugin } from './plugin'
+import { MUI_BUNDLE, registerMuiPlugin } from './plugin'
 
 // These ids are persisted in screen documents and must never change
 // without a document migration.
@@ -72,6 +72,51 @@ describe('plugins-mui', () => {
   it('is idempotent', () => {
     registerMuiPlugin()
     expect(() => registerMuiPlugin()).not.toThrow()
+  })
+
+  it('registers every component under a distinct id (AGL-1201)', () => {
+    // The registry keys schemas by `$id`, so two entries sharing one
+    // collapse *silently* there and every node persisted against the
+    // loser renders as the winner. It can only be caught before
+    // registration, on the manifest itself.
+    const ids = MUI_BUNDLE.map((entry) => entry.schema.$id)
+    expect(ids.length).toBeGreaterThan(0)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('gives every preset a distinct id (AGL-1201)', () => {
+    // Same collapse, and here it also breaks unregistration: destroy()
+    // removes the shared id once and leaves a ghost in the drawer.
+    const ids = MUI_BUNDLE.flatMap((entry) =>
+      (entry.presets ?? []).map((preset) => preset.$id),
+    )
+    expect(ids.length).toBeGreaterThan(0)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('names every element and points it at a category (AGL-1201)', () => {
+    for (const { schema } of MUI_BUNDLE) {
+      // A blank displayName renders as an unnamed row in the ELEMENTS
+      // drawer and in the hierarchy panel.
+      expect(schema.displayName).toBeTruthy()
+      expect(schema.category).toBeTruthy()
+      expect(schema.pluginId).toBe(BUNDLE_ID)
+    }
+  })
+
+  it('gives every preset a component that is registered (AGL-1201)', () => {
+    // A preset pointing at an unregistered componentId drops onto the
+    // canvas as an empty box with no error anywhere.
+    const registered = new Set(MUI_BUNDLE.map((entry) => entry.schema.$id))
+    for (const entry of MUI_BUNDLE) {
+      for (const preset of entry.presets ?? []) {
+        const walk = (node: any) => {
+          expect(registered.has(node.componentId)).toBe(true)
+          for (const child of node.nodes ?? []) walk(child)
+        }
+        walk(preset.data)
+      }
+    }
   })
 
   it('keeps the persisted legacy component ids in the plugin', () => {

@@ -69,7 +69,7 @@ export const SplashScreenContent = forwardRef<HTMLDivElement, BoxProps>(
         }}
       >
         <AglynLogoFull sx={{ fontSize: 175 }} />
-        <CircularProgress color="secondary" />
+        <CircularProgress color="primary" />
         <LoadingTextComponent
           variant="overline"
           sx={{ fontWeight: 'fontWeightBold' }}

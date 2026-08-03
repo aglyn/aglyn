@@ -271,7 +271,7 @@ export function UseTemplateDialog({
         <Button
           size="small"
           variant="contained"
-          color="secondary"
+          color="primary"
           onClick={() => void handleUse()}
           disabled={busy || !name.trim()}
         >

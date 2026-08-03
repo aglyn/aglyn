@@ -38,8 +38,8 @@ export const EllipsisPulseComponent = styled('span', {
       ? theme.palette.primary.main
       : color === 'primary'
         ? theme.palette.primary.main
-        : color === 'secondary'
-          ? theme.palette.secondary.main
+        : color === 'primary'
+          ? theme.palette.primary.main
           : color === 'error'
             ? theme.palette.error.main
             : color === 'info'

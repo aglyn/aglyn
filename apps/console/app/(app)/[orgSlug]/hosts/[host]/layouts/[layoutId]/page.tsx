@@ -256,7 +256,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
     ],
   )
 
-  const listUrl = buildRoute(Route.LAYOUT_LIST, { orgSlug, host })
+  const listUrl = buildRoute(Route.HOST_LAYOUTS, { orgSlug, host })
   const dirty = name != null || description != null || parentLayoutId != null
 
   return (
@@ -351,7 +351,14 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
               value={parentLayoutId ?? definition?.layoutId ?? ''}
               onChange={(event) => setParentLayoutId(event.target.value)}
               fullWidth
-              slotProps={{ select: { native: true } }}
+              // A NATIVE select always paints its current option, so the
+              // floating label has to start shrunk — MUI cannot detect the
+              // value through the native element and left "Renders inside"
+              // sitting on top of "None".
+              slotProps={{
+                select: { native: true },
+                inputLabel: { shrink: true },
+              }}
               helperText={
                 parentOptions.length
                   ? 'Wrap this layout in another one. A layout cannot sit ' +
@@ -377,7 +384,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
             <Stack direction="row" spacing={1}>
               <Button
                 variant="contained"
-                color="secondary"
+                color="primary"
                 size="small"
                 disabled={!dirty}
                 onClick={handleSave}

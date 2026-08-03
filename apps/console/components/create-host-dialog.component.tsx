@@ -200,7 +200,7 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
         </Button>
         <Button
           variant="contained"
-          color="secondary"
+          color="primary"
           disabled={!name.trim() || !validSubdomain || busy}
           onClick={handleCreate}
         >

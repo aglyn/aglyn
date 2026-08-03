@@ -27,6 +27,12 @@ export const ID: Aglyn.ComponentId = Aglyn.REUSABLE_INSTANCE_COMPONENT_ID
 export interface ReusableInstanceProps extends BoxProps {
   /** Definition id in `hosts/{hostId}/components`; grafted at render time. */
   refId?: string
+  /**
+   * The definition's display name, carried on the instance purely so the
+   * editor placeholder can say which component this stands for (AGL-1193).
+   * Never rendered on production surfaces, where the graft fills the box.
+   */
+  name?: string
 }
 
 /**
@@ -34,14 +40,19 @@ export interface ReusableInstanceProps extends BoxProps {
  * the compose step (`composeReusableComponentNodes`) grafts the definition
  * subtree inside, so this renders as a plain container. In the editor the
  * instance has no children (definitions aren't grafted into the editable
- * canvas), so the CSS `:empty` placeholder marks it visibly instead.
+ * canvas), so the CSS `:empty` placeholder marks it visibly instead — named,
+ * since a layout whose chrome has been promoted is otherwise nothing but
+ * indistinguishable dashed boxes.
  */
 const ReusableInstance = forwardRef<any, ReusableInstanceProps>(
   (props, ref) => {
-    const { refId: _refId, children, sx, ...rest } = props
+    const { refId: _refId, name, children, sx, ...rest } = props
     return (
       <Box
         ref={ref}
+        // `content: attr()` rather than a child, so the box stays `:empty`
+        // and the placeholder cannot be mistaken for grafted content.
+        data-aglyn-component={name || 'Reusable component'}
         sx={[
           {
             '&:empty': {
@@ -56,7 +67,7 @@ const ReusableInstance = forwardRef<any, ReusableInstanceProps>(
               borderRadius: 1,
             },
             '&:empty::after': {
-              content: '"Reusable component"',
+              content: 'attr(data-aglyn-component)',
               color: 'text.secondary',
               fontSize: 12,
               letterSpacing: 1,

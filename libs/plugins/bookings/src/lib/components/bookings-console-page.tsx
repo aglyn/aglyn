@@ -297,7 +297,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
           )}
           <Button
             size="small"
-            color="secondary"
+            color="primary"
             sx={{ alignSelf: 'flex-start' }}
             onClick={handleAdd}
           >
@@ -455,7 +455,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!draft?.name.trim()}
             onClick={handleSave}
           >

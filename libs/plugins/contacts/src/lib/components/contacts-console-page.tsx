@@ -558,7 +558,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
             <Stack direction="row" spacing={1}>
               <Button
                 variant="contained"
-                color="secondary"
+                color="primary"
                 onClick={handleProfileSave}
               >
                 {'Save'}

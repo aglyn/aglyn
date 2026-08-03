@@ -495,7 +495,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                             key={host.$id}
                             size="small"
                             label={host.name ?? host.subdomain ?? host.$id}
-                            color={on ? 'secondary' : 'default'}
+                            color={on ? 'primary' : 'default'}
                             variant={on ? 'filled' : 'outlined'}
                             onClick={() =>
                               setVisibleTo((prev) =>
@@ -569,7 +569,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                     label={DATASET_FIELD_TYPE_LABELS[field.type] ?? field.type}
                   />
                   {field.required || field.validation?.required ? (
-                    <Chip size="small" color="secondary" label="required" />
+                    <Chip size="small" color="primary" label="required" />
                   ) : null}
                   <IconButton
                     size="small"
@@ -604,7 +604,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
           <Button
             size="small"
             variant="outlined"
-            color="secondary"
+            color="primary"
             onClick={openFieldEditor(null)}
             sx={{ alignSelf: 'flex-start' }}
           >
@@ -617,7 +617,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
               window writes the schema to the legacy host path. */}
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!dataScope}
             onClick={handleSave}
           >
@@ -1053,7 +1053,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
           <Button onClick={() => setFieldEditor(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!editorDefinition?.name.trim() || Boolean(fieldIdError)}
             onClick={handleFieldSave}
           >

@@ -40,7 +40,7 @@ const tabBarTitle = (
       alignItems: 'center',
       typography: 'subtitle2',
       lineHeight: 'normal',
-      color: 'tertiary.main',
+      color: 'secondary.main',
     }}
   >
     <HostSwitcherNavComponent />

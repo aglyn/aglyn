@@ -130,10 +130,10 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
         overflow: 'hidden',
         transition: (theme) =>
           theme.transitions.create(['box-shadow', 'border-color']),
-        borderColor: selected ? 'secondary.main' : 'divider',
+        borderColor: selected ? 'primary.main' : 'divider',
         '&:hover': {
           boxShadow: 2,
-          borderColor: selected ? 'secondary.main' : 'text.disabled',
+          borderColor: selected ? 'primary.main' : 'text.disabled',
         },
         // Reveal the checkbox + overflow affordances on hover/focus-within.
         '&:hover .media-card-affordance, &:focus-within .media-card-affordance':
@@ -164,7 +164,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
       ) : null}
       {picker && selected ? (
         <CheckCircleIcon
-          color="secondary"
+          color="primary"
           sx={{ position: 'absolute', top: 4, right: 4, zIndex: 2 }}
         />
       ) : null}

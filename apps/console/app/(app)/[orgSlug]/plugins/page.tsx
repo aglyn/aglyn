@@ -300,7 +300,7 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
       // getting any — the marketplace was a tab away with nothing saying so.
       headerRight={
         <AppLink href={buildRoute(Route.ORG_MARKETPLACE, { orgSlug })}>
-          <Button variant="outlined" color="secondary" component="span">
+          <Button variant="outlined" color="primary" component="span">
             {'Install a plugin'}
           </Button>
         </AppLink>

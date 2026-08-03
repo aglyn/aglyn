@@ -134,7 +134,7 @@ export function LanguagesCard(props: { hostId: string }) {
         <Button
           size="small"
           variant="contained"
-          color="secondary"
+          color="primary"
           sx={{ alignSelf: 'flex-start' }}
           onClick={handleSave}
         >

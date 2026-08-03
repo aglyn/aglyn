@@ -131,7 +131,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
                 label={discount.code || discount.name || 'Automatic'}
                 size="small"
                 variant="outlined"
-                color={discount.code ? 'secondary' : 'info'}
+                color={discount.code ? 'primary' : 'info'}
               />
               <Typography variant="body2" sx={{ flex: 1 }} noWrap>
                 {describe(discount)}
@@ -368,7 +368,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={
               (draft?.kind === 'percent' && !((draft?.valuePct ?? 0) > 0)) ||
               (draft?.kind === 'fixed' && !((draft?.valueCents ?? 0) > 0))

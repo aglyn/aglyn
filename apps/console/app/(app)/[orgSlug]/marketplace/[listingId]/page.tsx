@@ -136,14 +136,14 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
                   orgSlug,
                 })}?listing=${encodeURIComponent(listingId)}`}
               >
-                <Button variant="contained" color="secondary" component="span">
+                <Button variant="contained" color="primary" component="span">
                   {'Publish new version'}
                 </Button>
               </AppLink>
             ) : null}
             <Button
               variant="outlined"
-              color="secondary"
+              color="primary"
               onClick={() => setEditing(true)}
             >
               {'Edit listing'}

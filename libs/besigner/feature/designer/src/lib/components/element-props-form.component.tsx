@@ -195,7 +195,7 @@ export const ElementPropsFormTemplate = forwardRef<
           <Box sx={{ mt: 2 }}>
             <FormControl margin="normal" fullWidth>
               <Button
-                color="secondary"
+                color="primary"
                 disabled={submitting || !valid || pristine}
                 startIcon={<MdiIcon path={mdiContentSave.path} />}
                 style={{ marginRight: 8 }}
@@ -693,7 +693,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                 {insertOptions.length && textEditable ? (
                   <FormControl margin="none" fullWidth>
                     <Button
-                      color="secondary"
+                      color="primary"
                       onClick={(event) =>
                         setBindingAnchor(event.currentTarget)
                       }
@@ -717,7 +717,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                   ? mediaAttributes.map((field: any) => (
                       <FormControl key={field.name} margin="none" fullWidth>
                         <Button
-                          color="secondary"
+                          color="primary"
                           onClick={handleBrowseMedia(field.name)}
                           sx={{ mt: 2 }}
                           fullWidth
@@ -842,7 +842,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                       nodeExperiment ? (
                         <Typography
                           variant="caption"
-                          color="secondary"
+                          color="primary"
                           sx={{ mt: 1 }}
                         >
                           {`A/B test: ${nodeExperiment.name ?? nodeExperiment.id}` +
@@ -850,7 +850,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                         </Typography>
                       ) : (
                         <Button
-                          color="secondary"
+                          color="primary"
                           size="small"
                           sx={{ mt: 1, alignSelf: 'flex-start' }}
                           onClick={() =>
@@ -880,7 +880,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                 {onRewrite && (textEditable || hasTextAttributes) ? (
                   <FormControl margin="none" fullWidth>
                     <Button
-                      color="secondary"
+                      color="primary"
                       onClick={() => onRewrite(node)}
                       sx={{ mt: 2 }}
                       fullWidth
@@ -892,7 +892,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                 {onPromote && !isInstance && unlocked ? (
                   <FormControl margin="none" fullWidth>
                     <Button
-                      color="secondary"
+                      color="primary"
                       onClick={() => onPromote(node)}
                       sx={{ mt: 2 }}
                       fullWidth
@@ -904,7 +904,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                 {onDemote && isInstance && unlocked ? (
                   <FormControl margin="none" fullWidth>
                     <Button
-                      color="secondary"
+                      color="primary"
                       onClick={() => onDemote(node)}
                       sx={{ mt: 2 }}
                       fullWidth

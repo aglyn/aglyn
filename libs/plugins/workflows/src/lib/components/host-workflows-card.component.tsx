@@ -355,7 +355,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         )}
         <Button
           size="small"
-          color="secondary"
+          color="primary"
           sx={{ alignSelf: 'flex-start' }}
           onClick={handleAdd}
         >
@@ -597,7 +597,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
             size="small"
           />
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Button size="small" color="secondary" onClick={handleTestRun}>
+            <Button size="small" color="primary" onClick={handleTestRun}>
               {'Test run'}
             </Button>
             <Typography variant="caption" color="text.secondary">
@@ -616,7 +616,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!draft?.name.trim() || nameTaken}
             onClick={handleSave}
           >

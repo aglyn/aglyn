@@ -455,3 +455,38 @@ describe('nav menu schemas & presets (AGL-562)', () => {
     for (const preset of navMenuPresets) walk(preset.data)
   })
 })
+
+describe('menu trigger typography (AGL-1198)', () => {
+  /** The Button MUI renders inside the element, not the element root. */
+  const trigger = () => screen.getByRole('button', { name: /Product/ })
+
+  it('does not shout the label — a menu sits in a nav, not on a CTA', () => {
+    renderLive(<MegaMenu label="Product" />)
+    // MUI's Button default is `uppercase`; a nav item beside plain links
+    // reading "PRODUCT" next to "Pricing" is the bug.
+    expect(getComputedStyle(trigger()).textTransform).not.toBe('uppercase')
+  })
+
+  it('is the same on the canvas as on the live site', () => {
+    // The canvas must not show sentence case for something that ships
+    // uppercase, or vice versa.
+    renderEditor(<MegaMenu label="Product" />)
+    expect(getComputedStyle(trigger()).textTransform).not.toBe('uppercase')
+  })
+
+  it('lets an authored text transform win, which nothing could before', () => {
+    // STYLES → Typography lands on the element root; the trigger inherits,
+    // so an author who does want uppercase can still have it.
+    const { container } = renderLive(
+      <MegaMenu label="Product" sx={{ textTransform: 'uppercase' }} />,
+    )
+    const root = container.firstElementChild as HTMLElement
+    expect(getComputedStyle(root).textTransform).toBe('uppercase')
+    expect(getComputedStyle(trigger()).textTransform).toBe('inherit')
+  })
+
+  it('applies to the plain dropdown trigger too', () => {
+    renderLive(<NavMenu label="Product" />)
+    expect(getComputedStyle(trigger()).textTransform).not.toBe('uppercase')
+  })
+})

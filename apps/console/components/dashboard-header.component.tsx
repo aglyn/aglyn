@@ -120,9 +120,9 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
                         fontSize: `1.5em`,
                         borderWidth: `1px`,
                         borderStyle: 'solid',
-                        borderColor: 'tertiary.dark',
-                        color: 'tertiary.contrastText',
-                        bgcolor: 'tertiary.main',
+                        borderColor: 'secondary.dark',
+                        color: 'secondary.contrastText',
+                        bgcolor: 'secondary.main',
                         borderRadius: (theme) =>
                           `${theme.shape.appIconBorderRadius}`,
                       },
@@ -149,7 +149,7 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
                     a: {
                       textDecoration: 'none',
                       ':hover': {
-                        color: 'secondary.main',
+                        color: 'primary.main',
                       },
                     },
                   }}

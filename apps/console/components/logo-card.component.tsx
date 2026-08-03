@@ -74,7 +74,7 @@ export function LogoCard(props: LogoCardProps) {
         )}
         <Button
           size="small"
-          color="secondary"
+          color="primary"
           onClick={() => setPickerOpen(true)}
         >
           {logoUrl ? 'Replace from media' : 'Choose from media'}

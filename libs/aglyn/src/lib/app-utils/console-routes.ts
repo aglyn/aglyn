@@ -116,7 +116,16 @@ export enum Route {
   COMPONENT_BESIGNER = '/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/besigner',
   TEMPLATE_BESIGNER = '/[orgSlug]/hosts/[host]/templates/[templateId]/besigner',
   LAYOUT_BESIGNER = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/besigner',
-  LAYOUT_LIST = '/[orgSlug]/hosts/[host]/layouts/list',
+  // The list sits at the bare path, like HOST_COMPONENTS. It used to be
+  // `/layouts/list`: the pages router had a `layouts/index.tsx` that
+  // redirected to `layouts/list.tsx`, and the App Router migration carried
+  // the pair over verbatim. Components, added later, had no such legacy and
+  // put its list at the bare path — which is the shape we want everywhere.
+  // `/layouts/list` still serves the same page so old links survive — an
+  // alias, not a redirect, because the bare path used to answer a cached 308
+  // pointing at `/list` and redirecting back would loop. See the comment in
+  // `app/(app)/[orgSlug]/hosts/[host]/screens/list/page.tsx`.
+  HOST_LAYOUTS = '/[orgSlug]/hosts/[host]/layouts',
   // Layout detail (AGL-695), completing the list → detail → besigner shape
   // across screens, components, templates and layouts.
   LAYOUT_DETAILS = '/[orgSlug]/hosts/[host]/layouts/[layoutId]',
@@ -127,7 +136,9 @@ export enum Route {
   HOST_EMAIL_BESIGNER = '/[orgSlug]/hosts/[host]/emails/[templateKey]/versions/[versionId]/besigner',
   SCREEN_DETAILS = '/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view',
   SCREEN_PREVIEW = '/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/preview',
-  SCREEN_LIST = '/[orgSlug]/hosts/[host]/screens/list',
+  // Bare path, matching HOST_LAYOUTS and HOST_COMPONENTS — see the note on
+  // HOST_LAYOUTS. `/screens/list` still serves the same page as an alias.
+  HOST_SCREENS = '/[orgSlug]/hosts/[host]/screens',
 }
 
 /**
@@ -235,7 +246,7 @@ export interface RoutePayload {
     layoutId: string
     versionId: string
   }
-  [Route.LAYOUT_LIST]: { orgSlug: string; host: string }
+  [Route.HOST_LAYOUTS]: { orgSlug: string; host: string }
   [Route.LAYOUT_DETAILS]: { orgSlug: string; host: string; layoutId: string }
   [Route.SCREEN_DETAILS]: {
     orgSlug: string
@@ -249,7 +260,7 @@ export interface RoutePayload {
     screenId: string
     versionId: string
   }
-  [Route.SCREEN_LIST]: { orgSlug: string; host: string }
+  [Route.HOST_SCREENS]: { orgSlug: string; host: string }
 }
 
 export const routeReplacePattern = /\[([^\]]+)\]/g

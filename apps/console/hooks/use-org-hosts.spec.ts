@@ -117,6 +117,71 @@ describe('useOrgHosts (AGL-813 / AGL-827)', () => {
     expect(result.current.hosts).toEqual([])
   })
 
+  /**
+   * AGL-929. The AGL-827 heal above only fires on an EMPTY live result, so an
+   * org with several sites that tombstoned ONE of them produced a shorter —
+   * not empty — snapshot, ran no confirm, and dropped that site from the
+   * switcher until the resume token was discarded. For a multi-site org that
+   * is the likelier failure, not the rarer one.
+   */
+  describe('a host that vanishes from a non-empty result (AGL-929)', () => {
+    it('is confirmed against the backend, not silently dropped', async () => {
+      const { result } = renderHook(() => useOrgHosts(firestore, 'u1', 'org1'))
+      emitSuccess([{ id: 'h1', data: {} }, { id: 'h2', data: {} }])
+      await waitFor(() => expect(result.current.hosts).toHaveLength(2))
+
+      // h2 tombstoned in the local cache: still on the server, absent here.
+      mockGetDocsFromServer.mockResolvedValue(
+        snap([{ id: 'h1', data: {} }, { id: 'h2', data: {} }]),
+      )
+      emitSuccess([{ id: 'h1', data: {} }])
+
+      await waitFor(() => expect(result.current.hosts).toHaveLength(2))
+      expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1)
+      expect(result.current.error).toBe(false)
+    })
+
+    it('confirms a genuine removal once, then stops re-confirming', async () => {
+      const { result } = renderHook(() => useOrgHosts(firestore, 'u1', 'org1'))
+      emitSuccess([{ id: 'h1', data: {} }, { id: 'h2', data: {} }])
+      await waitFor(() => expect(result.current.hosts).toHaveLength(2))
+
+      // The server agrees h2 is gone — access really was removed.
+      mockGetDocsFromServer.mockResolvedValue(snap([{ id: 'h1', data: {} }]))
+      emitSuccess([{ id: 'h1', data: {} }])
+      await waitFor(() => expect(result.current.hosts).toHaveLength(1))
+      expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1)
+
+      // Every later snapshot still omits h2. Without `confirmedGone` this
+      // would bill a server read on each one, forever.
+      emitSuccess([{ id: 'h1', data: {} }])
+      emitSuccess([{ id: 'h1', data: {} }])
+      expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1)
+      expect(result.current.hosts).toEqual([{ $id: 'h1' }])
+    })
+
+    it('re-arms the empty confirm after a real result', async () => {
+      const { result } = renderHook(() => useOrgHosts(firestore, 'u1', 'org1'))
+
+      // First empty result confirms — the pre-existing AGL-827 behaviour.
+      mockGetDocsFromServer.mockResolvedValue(snap([]))
+      emitSuccess([])
+      await waitFor(() => expect(result.current.ready).toBe(true))
+      expect(mockGetDocsFromServer).toHaveBeenCalledTimes(1)
+
+      // A real result lands, then everything vanishes again. `serverConfirmed`
+      // used to be a one-shot for the life of the subscription, so this second
+      // total loss went unconfirmed and read as a genuine 404.
+      emitSuccess([{ id: 'h1', data: {} }])
+      await waitFor(() => expect(result.current.hosts).toHaveLength(1))
+
+      mockGetDocsFromServer.mockResolvedValue(snap([{ id: 'h1', data: {} }]))
+      emitSuccess([])
+      await waitFor(() => expect(result.current.hosts).toHaveLength(1))
+      expect(mockGetDocsFromServer).toHaveBeenCalledTimes(2)
+    })
+  })
+
   it('flags error (not a clean empty) once listen retries are exhausted', () => {
     jest.useFakeTimers()
     try {

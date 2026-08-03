@@ -23,6 +23,7 @@ import {
   installsUnreviewedFallback,
   installTargetsFor,
   isListingBrowsable,
+  isListingDeleted,
   isPrivateListing,
   resolveInstallPlan,
   resolveOrgInstallSummary,
@@ -429,6 +430,36 @@ describe('isListingBrowsable (AGL-658)', () => {
     expect(isPrivateListing({})).toBe(false)
     expect(isPrivateListing({ visibility: 'public' })).toBe(false)
     expect(isPrivateListing({ visibility: 'private' })).toBe(true)
+  })
+})
+
+/**
+ * AGL-1196. Browse used to express this as `where('deletedAt','==',null)` in
+ * the query. That is a MUTABLE field in a predicate: `deletedAt` flips on
+ * every unpublish/republish, and a document that stops matching a live query
+ * can leave a `noDocument` tombstone at its own path — which the detail page
+ * reads BY ID and 404s on. The filter moved in-memory so no document can stop
+ * matching, and this pins the semantics the query used to provide.
+ */
+describe('isListingDeleted (AGL-1196)', () => {
+  it('is true only for a listing carrying a deletion stamp', () => {
+    expect(isListingDeleted({ deletedAt: new Date() })).toBe(true)
+    expect(isListingDeleted({ deletedAt: { seconds: 1 } })).toBe(true)
+  })
+
+  it('treats an explicit null as live — what every publish path writes', () => {
+    // publish.ts, publish-plugin.ts, install.ts and update-artifact.ts all
+    // stamp `deletedAt: null` on create, which is the only reason the old
+    // `== null` query matched anything at all.
+    expect(isListingDeleted({ deletedAt: null })).toBe(false)
+  })
+
+  it('treats an ABSENT field as live — the case the old query got wrong', () => {
+    // Firestore's `== null` matches an explicit null and cannot express
+    // "field is absent", so a listing written without the field was invisible
+    // to browse entirely. Nothing writes one today; nothing should have to.
+    expect(isListingDeleted({})).toBe(false)
+    expect(isListingDeleted({ deletedAt: undefined })).toBe(false)
   })
 })
 

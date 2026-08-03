@@ -558,8 +558,8 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                   >
                     <TabList
                       orientation="vertical"
-                      textColor="secondary"
-                      indicatorColor="secondary"
+                      textColor="primary"
+                      indicatorColor="primary"
                       sx={{
                         ['.MuiTab-root']: {
                           alignItems: 'start',

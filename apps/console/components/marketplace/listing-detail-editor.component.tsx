@@ -387,7 +387,7 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
         <Stack direction="row" spacing={1} sx={{ pt: 1 }}>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={busy || !values.displayName.trim()}
             onClick={() => void save()}
           >

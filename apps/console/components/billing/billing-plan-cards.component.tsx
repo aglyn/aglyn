@@ -161,7 +161,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                 borderColor: isCurrent
                   ? 'success.main'
                   : isRecommended
-                    ? 'secondary.main'
+                    ? 'primary.main'
                     : 'divider',
                 borderWidth: isCurrent || isRecommended ? 2 : 1,
               }}
@@ -175,7 +175,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   {isCurrent ? (
                     <Chip label="Current plan" color="success" size="small" />
                   ) : isRecommended ? (
-                    <Chip label="Recommended" color="secondary" size="small" />
+                    <Chip label="Recommended" color="primary" size="small" />
                   ) : null}
                 </Stack>
                 <Stack
@@ -215,7 +215,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     fullWidth
                     size="small"
                     variant={index > currentIndex ? 'contained' : 'outlined'}
-                    color="secondary"
+                    color="primary"
                     // Free has no Stripe price to check out; moving down to
                     // it means canceling the subscription (Stripe portal,
                     // not built yet).
@@ -223,8 +223,11 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     onClick={() => onSelect(tier)}
                     sx={{ mb: 1.5 }}
                   >
+                    {/* AGL-1178: while pre-release, the Free card must not
+                        promise the price is permanent — no price locks, no
+                        grandfathering. Enforced by no-price-commitment.spec. */}
                     {tier === 'free'
-                      ? 'Free forever'
+                      ? 'No credit card required'
                       : currentIndex < 0 || index > currentIndex
                         ? 'Upgrade'
                         : 'Downgrade'}
@@ -422,7 +425,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   <Button
                     fullWidth
                     variant="contained"
-                    color="secondary"
+                    color="primary"
                     href={ENTERPRISE_CONTACT_URL}
                     target="_blank"
                     rel="noopener"

@@ -218,7 +218,7 @@ export function SuppliersCard(props: SuppliersCardProps) {
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!draft?.name.trim()}
             onClick={handleSave}
           >

@@ -101,7 +101,7 @@ export function AuthConsentCheckbox({
             checked={checked}
             onChange={(event) => onChange(event.target.checked)}
             size="small"
-            color={error ? 'error' : 'secondary'}
+            color={error ? 'error' : 'primary'}
             sx={{ pt: 0 }}
             slotProps={{
               input: {

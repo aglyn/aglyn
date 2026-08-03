@@ -114,7 +114,7 @@ const renderInlines = (inlines: MarkdownInline[]) =>
             href={inline.href}
             target="_blank"
             rel="noopener noreferrer"
-            color="secondary"
+            color="primary"
             underline="hover"
           >
             {inline.text}
@@ -921,7 +921,7 @@ export function MarketplaceListingContent({
                   <AppLink href={marketplaceHref}>
                     <Button
                       variant="contained"
-                      color="secondary"
+                      color="primary"
                       component="span"
                     >
                       {'Back to the marketplace'}
@@ -1064,7 +1064,7 @@ export function MarketplaceListingContent({
                           ) : null}
                           <Chip
                             size="small"
-                            color={priceUsd > 0 ? 'secondary' : 'default'}
+                            color={priceUsd > 0 ? 'primary' : 'default'}
                             label={priceUsd > 0 ? `$${priceUsd}` : 'Free'}
                           />
                           <Typography
@@ -1425,7 +1425,7 @@ export function MarketplaceListingContent({
                             // state where it steps back to an outline.
                             fullWidth
                             variant={upToDate ? 'outlined' : 'contained'}
-                            color="secondary"
+                            color="primary"
                             disabled={
                               Boolean(upToDate) ||
                               !listing?.profileId ||
@@ -1552,7 +1552,7 @@ export function MarketplaceListingContent({
                                       )
                                     : undefined
                             }
-                            color="secondary"
+                            color="primary"
                             underline="hover"
                             variant="body2"
                           >
@@ -1589,7 +1589,7 @@ export function MarketplaceListingContent({
                                 href={listing.homepageUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                color="secondary"
+                                color="primary"
                                 underline="hover"
                                 variant="body2"
                               >
@@ -1601,7 +1601,7 @@ export function MarketplaceListingContent({
                                 href={listing.repositoryUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                color="secondary"
+                                color="primary"
                                 underline="hover"
                                 variant="body2"
                               >
@@ -1775,7 +1775,7 @@ export function MarketplaceListingContent({
               <Button onClick={() => setConfirmOpen(false)}>{'Cancel'}</Button>
               <Button
                 variant="contained"
-                color="secondary"
+                color="primary"
                 onClick={runInstall}
               >
                 {unreviewedInstall

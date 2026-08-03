@@ -70,7 +70,7 @@ export function NewestSiteUsersCard(props: { hostId: string }) {
             {...({ componentVariant: 'naked', nativeButton: false } as any)}
             href={buildRoute(Route.HOST_USERS, { orgSlug,  host })}
             size="small"
-            color="secondary"
+            color="primary"
           >
             {'View all'}
           </Button>

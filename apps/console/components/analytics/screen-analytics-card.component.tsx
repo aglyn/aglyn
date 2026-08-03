@@ -185,7 +185,7 @@ export function ScreenAnalyticsCard(props: {
                   sx={{
                     flex: 1,
                     height: `${Math.max(4, (day.total / max) * 100)}%`,
-                    bgcolor: day.total ? 'secondary.main' : 'action.hover',
+                    bgcolor: day.total ? 'primary.main' : 'action.hover',
                     borderRadius: 0.5,
                   }}
                 />

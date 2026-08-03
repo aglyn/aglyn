@@ -216,8 +216,8 @@ const ElementInfo = function ElementInfo({
                       (theme) => {
                         const tv = (theme as any).vars || theme
                         return {
-                          bgcolor: `rgba(${tv.palette.secondary.lightChannel} / 0.18)`,
-                          border: `1px solid rgba(${tv.palette.secondary.lightChannel} / 0.72)`,
+                          bgcolor: `rgba(${tv.palette.primary.lightChannel} / 0.18)`,
+                          border: `1px solid rgba(${tv.palette.primary.lightChannel} / 0.72)`,
                           borderRadius: '0.3em',
                           px: 0.5,
                           py: 0.15,
@@ -280,7 +280,7 @@ const ElementsTree = forwardRef<any, NodeTreeViewProps>((props, ref) => {
     <TabPanelInner sx={{ pl: 0.5 }}>
       <Box sx={{ px: 0.05, pb: 1, pt: 1 }}>
         <Button
-          color="secondary"
+          color="primary"
           startIcon={
             <MdiIcon fontSize="inherit" path={ICON_VARIANT_MODIFY_ADD.path} />
           }
@@ -431,7 +431,7 @@ export const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
                   },
                   '& .MuiTabs-indicator': {
                     top: 0,
-                    backgroundColor: 'tertiary.main',
+                    backgroundColor: 'secondary.main',
                   },
                 }}
               >

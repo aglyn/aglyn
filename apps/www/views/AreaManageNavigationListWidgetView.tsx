@@ -55,7 +55,7 @@ const StyledListItem = styled(ListItemButton, {
       borderRadius: '50%',
       left: theme.spacing(0.75),
       top: 'calc(50% - 2.5px)',
-      background: theme.palette.secondary.main,
+      background: theme.palette.primary.main,
     },
   },
   [`&.${classKeys.childActive}`]: {
@@ -68,7 +68,7 @@ const StyledListItem = styled(ListItemButton, {
       borderRadius: '3px 0 0 3px',
       right: 0,
       top: 0,
-      background: theme.palette.secondary.main,
+      background: theme.palette.primary.main,
     },
   },
   [`&.${classKeys.nested}`]: {

@@ -206,8 +206,8 @@ function CrumbDropZone(props: {
         borderRadius: 1,
         px: 0.5,
         transition: (theme) => theme.transitions.create(['background-color']),
-        bgcolor: isOver ? 'secondary.main' : undefined,
-        color: isOver ? 'secondary.contrastText' : undefined,
+        bgcolor: isOver ? 'primary.main' : undefined,
+        color: isOver ? 'primary.contrastText' : undefined,
       }}
     >
       {props.children}
@@ -2112,7 +2112,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
         <Button
           variant="contained"
-          color="secondary"
+          color="primary"
           disabled={busy}
           onClick={() => inputRef.current?.click()}
         >
@@ -2121,7 +2121,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         {onSelect ? null : (
           <Button
             variant="outlined"
-            color="secondary"
+            color="primary"
             onClick={() =>
               setFolderPrompt({
                 title: folderParentContext
@@ -2230,7 +2230,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 key={tag}
                 label={tag}
                 size="small"
-                color={tagFilter === tag ? 'secondary' : 'default'}
+                color={tagFilter === tag ? 'primary' : 'default'}
                 onClick={() =>
                   setTagFilter((prev) => (prev === tag ? '' : tag))
                 }
@@ -2669,7 +2669,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                             key={host.$id}
                             size="small"
                             label={host.name ?? host.subdomain ?? host.$id}
-                            color={on ? 'secondary' : 'default'}
+                            color={on ? 'primary' : 'default'}
                             variant={on ? 'filled' : 'outlined'}
                             onClick={() =>
                               setEditor((prev) =>
@@ -2890,7 +2890,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
             <Button
               variant="contained"
-              color="secondary"
+              color="primary"
               onClick={handleEditorSave}
             >
               {'Save'}
@@ -2991,7 +2991,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           <Button onClick={() => setBulkTag(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!bulkTag?.value.trim()}
             onClick={handleBulkTag}
           >
@@ -3060,7 +3060,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                       key={host.$id}
                       size="small"
                       label={hostNameById[host.$id]}
-                      color={on ? 'secondary' : 'default'}
+                      color={on ? 'primary' : 'default'}
                       variant={on ? 'filled' : 'outlined'}
                       onClick={() =>
                         setScopeDialog((prev) =>
@@ -3143,7 +3143,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           </Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={
               scopeRun?.running ||
               !Aglyn.normalizeVisibleTo(scopeDialog?.visibleTo ?? [])?.length
@@ -3186,7 +3186,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           <Button onClick={() => setFolderPrompt(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={folderPromptBusy || !folderPrompt?.value.trim()}
             onClick={handleFolderPromptSave}
           >
@@ -3204,7 +3204,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             zIndex: (theme) => theme.zIndex.modal - 1,
             borderRadius: 1,
             border: '2px dashed',
-            borderColor: 'secondary.main',
+            borderColor: 'primary.main',
             bgcolor: (theme) =>
               alpha(theme.palette.background.paper, 0.9),
             display: 'flex',
@@ -3214,8 +3214,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           }}
         >
           <Stack spacing={1} sx={{ alignItems: 'center' }}>
-            <CloudUploadIcon color="secondary" sx={{ fontSize: 56 }} />
-            <Typography variant="h6" color="secondary">
+            <CloudUploadIcon color="primary" sx={{ fontSize: 56 }} />
+            <Typography variant="h6" color="primary">
               {'Drop files to upload'}
             </Typography>
             <Typography variant="body2" color="text.secondary">

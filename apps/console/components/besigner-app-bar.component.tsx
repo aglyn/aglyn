@@ -64,7 +64,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
         tabBarTitle={
           <Button
             size="small"
-            color="secondary"
+            color="primary"
             onClick={onPropertiesEdit}
             endIcon={
               <MdiIcon
@@ -106,7 +106,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             target="_blank"
             rel="noopener noreferrer"
             size="small"
-            color="secondary"
+            color="primary"
             disabled={!liveUrl}
             endIcon={<MdiIcon path={ICON_VARIANT_PAGES.path} />}
           >
@@ -115,7 +115,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
           <Button
             onClick={onPreview}
             size="small"
-            color="secondary"
+            color="primary"
             endIcon={<MdiIcon path={ICON_VARIANT_NEW_TAB.path} />}
           >
             {'Preview'}

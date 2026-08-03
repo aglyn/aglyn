@@ -226,7 +226,7 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
             onClick={handleButtonClick}
             variant="button"
             component="button"
-            color="secondary"
+            color="primary"
             sx={{
               display: 'flex',
               flexDirection: 'row',
@@ -264,7 +264,7 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
             </Grid>
             <Grid>
               <Button
-                color="secondary"
+                color="primary"
                 onClick={handleChooseButtonClick}
                 variant="contained"
               >

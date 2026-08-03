@@ -532,6 +532,29 @@ export function isPrivateListing(listing: {
 }
 
 /**
+ * Whether a listing has been soft-deleted (AGL-1196).
+ *
+ * Browse used to express this as `where('deletedAt','==',null)` in the query
+ * itself. That put a MUTABLE field in a predicate: `deletedAt` flips on every
+ * unpublish/republish, and a document that stops matching a live query can
+ * leave a `noDocument` tombstone at its own path — which the detail page then
+ * reads BY ID and 404s on (AGL-827, AGL-929). Filtering in memory removes the
+ * mechanism instead of healing it.
+ *
+ * FALSY, not `=== null`. Firestore's `== null` matches only an explicit null
+ * and cannot express "field is absent", so a listing written without the field
+ * was invisible to the old query. Absent means live.
+ *
+ * Deliberately NOT folded into `isListingBrowsable`: that check carries an
+ * owner exemption, so a publisher can watch their own submission move through
+ * review. Deletion has no such exemption — a deleted listing is gone for
+ * everyone, including the org that owns it.
+ */
+export function isListingDeleted(listing: { deletedAt?: unknown }): boolean {
+  return Boolean(listing.deletedAt)
+}
+
+/**
  * What a listing is still missing before it can face the marketplace
  * (AGL-968/994).
  *

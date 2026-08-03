@@ -112,28 +112,28 @@ const TreeView = styled(MuiList)<MuiListProps>(({ theme }) => ({
         [`& .${classKey.dragHandle}`]: {
           visibility: 'visible',
         },
-        backgroundColor: `rgba(${(theme as any).vars.palette.secondary.darkChannel} / calc(${(theme as any).vars.palette.action.hoverOpacity} + 0.2))`,
+        backgroundColor: `rgba(${(theme as any).vars.palette.primary.darkChannel} / calc(${(theme as any).vars.palette.action.hoverOpacity} + 0.2))`,
         [`&:has(> .${listItemButtonClasses.focusVisible})`]: {
-          backgroundColor: `rgba(${(theme as any).vars.palette.secondary.darkChannel} / calc(${(theme as any).vars.palette.action.focusOpacity} + 0.3))`,
+          backgroundColor: `rgba(${(theme as any).vars.palette.primary.darkChannel} / calc(${(theme as any).vars.palette.action.focusOpacity} + 0.3))`,
         },
       },
       [`&:has(> .${listItemButtonClasses.focusVisible})`]: {
-        backgroundColor: `rgba(${(theme as any).vars.palette.secondary.darkChannel} / calc(${(theme as any).vars.palette.action.focusOpacity} + 0.2))`,
+        backgroundColor: `rgba(${(theme as any).vars.palette.primary.darkChannel} / calc(${(theme as any).vars.palette.action.focusOpacity} + 0.2))`,
       },
     },
     [`&.${classKey.itemSelected}`]: {
       [`> .${classKey.treeListItem}`]: {
-        backgroundColor: `rgba(${(theme as any).vars.palette.tertiary.mainChannel} / ${(theme as any).vars.palette.action.selectedOpacity})`,
+        backgroundColor: `rgba(${(theme as any).vars.palette.secondary.mainChannel} / ${(theme as any).vars.palette.action.selectedOpacity})`,
 
         [`&:hover, &.${classKey.itemHovered}`]: {
-          backgroundColor: `rgba(${(theme as any).vars.palette.tertiary.mainChannel} / calc(${(theme as any).vars.palette.action.selectedOpacity} + 0.2))`,
+          backgroundColor: `rgba(${(theme as any).vars.palette.secondary.mainChannel} / calc(${(theme as any).vars.palette.action.selectedOpacity} + 0.2))`,
 
           [`&:has(> .${listItemButtonClasses.focusVisible})`]: {
-            backgroundColor: `rgba(${(theme as any).vars.palette.tertiary.mainChannel} / calc(${(theme as any).vars.palette.action.selectedOpacity} + 0.2))`,
+            backgroundColor: `rgba(${(theme as any).vars.palette.secondary.mainChannel} / calc(${(theme as any).vars.palette.action.selectedOpacity} + 0.2))`,
           },
         },
         [`&:has(> .${listItemButtonClasses.focusVisible})`]: {
-          backgroundColor: `rgba(${(theme as any).vars.palette.tertiary.mainChannel} / ${(theme as any).vars.palette.action.activatedOpacity})`,
+          backgroundColor: `rgba(${(theme as any).vars.palette.secondary.mainChannel} / ${(theme as any).vars.palette.action.activatedOpacity})`,
         },
       },
     },
@@ -311,7 +311,7 @@ const NodeTreeItem = observer(
                 border: 1,
                 borderColor: 'divider',
                 boxShadow: 1,
-                color: 'tertiary',
+                color: 'primary',
                 display: 'flex',
                 alignItems: 'center',
                 flexDirection: 'column',

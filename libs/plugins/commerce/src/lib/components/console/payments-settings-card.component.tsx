@@ -150,7 +150,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
           <Button
             size="small"
             variant={chargesEnabled ? 'text' : 'contained'}
-            color="secondary"
+            color="primary"
             disabled={busy}
             onClick={handleConnect}
             sx={{ alignSelf: 'flex-start' }}

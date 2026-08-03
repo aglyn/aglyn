@@ -288,6 +288,34 @@ export function buildStyleFieldGroups(
           presetColors,
           ...half,
         },
+        // Per-side borders (AGL-1199). A divider under a bar, a rule
+        // between columns and a left accent rail are all far more common
+        // than a box outlined on four sides, and the shorthand above
+        // cannot express any of them — `border` writes all four.
+        textField(
+          'borderTop',
+          'Border Top',
+          'Border on the top edge only, e.g. 1px solid.',
+          half,
+        ),
+        textField(
+          'borderRight',
+          'Border Right',
+          'Border on the right edge only, e.g. 1px solid.',
+          half,
+        ),
+        textField(
+          'borderBottom',
+          'Border Bottom',
+          'Border on the bottom edge only, e.g. 1px solid.',
+          half,
+        ),
+        textField(
+          'borderLeft',
+          'Border Left',
+          'Border on the left edge only, e.g. 1px solid.',
+          half,
+        ),
         textField(
           'borderRadius',
           'Corner Radius',

@@ -970,7 +970,7 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <Button
           variant="contained"
-          color="secondary"
+          color="primary"
           onClick={() => void submit()}
           disabled={blocked}
         >

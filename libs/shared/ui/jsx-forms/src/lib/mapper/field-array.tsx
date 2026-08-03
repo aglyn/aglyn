@@ -136,7 +136,7 @@ const ArrayItem = memo<ArrayItemProps>(
           {...RemoveButtonGridProps}
         >
           <Button
-            color="secondary"
+            color="primary"
             onClick={() => remove(fieldIndex)}
             disabled={length <= minItems}
             {...RemoveButtonProps}

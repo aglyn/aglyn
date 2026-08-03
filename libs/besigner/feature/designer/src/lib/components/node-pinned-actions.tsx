@@ -204,7 +204,7 @@ export const NodePinnedActions = observer(
           data-aglyn-node={$id}
           data-aglyn-kind="overlay-actions"
           variant="contained"
-          color="secondary"
+          color="primary"
           aria-label="element controls"
           size="small"
           sx={{
@@ -291,7 +291,9 @@ export const NodePinnedActions = observer(
                   placement === 'bottom' ? 'center top' : 'center bottom',
               }}
             >
-              <Paper sx={{ bgcolor: 'secondary.main' }}>
+              {/* Matches the quick-actions bar: editor chrome stays on the
+                  slate, which is `tertiary` after the AGL-1186 rotation. */}
+              <Paper sx={{ bgcolor: 'tertiary.main' }}>
                 <ClickAwayListener onClickAway={closeMore}>
                   <MenuList
                     color="inherit"

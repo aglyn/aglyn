@@ -453,7 +453,7 @@ export function ScreensHierarchyTableComponent(
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(undefined)}
     >
-      {loading && <LinearProgress color="secondary" />}
+      {loading && <LinearProgress color="primary" />}
       <TableContainer>
         <Table size="small" aria-label="Screens hierarchy">
           {/* Header height matches the DataTable used by layouts, components

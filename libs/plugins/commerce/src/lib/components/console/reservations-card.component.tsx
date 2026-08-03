@@ -499,7 +499,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
           <Button onClick={() => setResourceDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={
               !resourceDraft?.name?.trim() ||
               !((resourceDraft?.nightlyRateUsd ?? 0) > 0)
@@ -580,7 +580,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
           <Button onClick={() => setWalkIn(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!walkIn?.resourceId || !walkIn?.checkIn || !walkIn?.checkOut}
             onClick={handleWalkIn}
           >

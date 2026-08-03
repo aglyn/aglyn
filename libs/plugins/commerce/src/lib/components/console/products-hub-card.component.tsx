@@ -394,7 +394,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           </TextField>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             size="small"
             disabled={!productQuota}
             onClick={() => {
@@ -596,7 +596,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           <Button onClick={() => setKeysFor(null)}>{'Close'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!keysText.trim()}
             onClick={async () => {
               const keys = keysText
@@ -692,7 +692,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           <Button onClick={() => setImporting(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!importing?.parsed?.products.length}
             onClick={handleImportApply}
           >
@@ -790,7 +790,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           <Button onClick={() => setAdjusting(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!Math.round(Number(adjusting?.delta))}
             onClick={handleAdjustSave}
           >

@@ -41,6 +41,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import {
   isListingBrowsable,
+  isListingDeleted,
   isPrivateListing,
   listingArtifactType,
   listingArtifactLabel,
@@ -151,13 +152,39 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
           })
         : undefined
 
+  /**
+   * NO `where('deletedAt','==',null)` HERE — soft-deleted listings are dropped
+   * in `items` below instead (AGL-1196).
+   *
+   * `deletedAt` flips every time a publisher unpublishes or republishes. A
+   * document that stops matching a live query leaves the query target, and the
+   * client can cache a `noDocument` tombstone at its own path — which is then
+   * served to every reader of that path, including the detail page, which
+   * reads `marketplaceListings/{id}` BY ID. So a browse session open across an
+   * unpublish could 404 a listing that exists, and republishing would not
+   * clear it: a resumed listen only pulls deltas, so an otherwise-unchanged
+   * document is never re-sent (AGL-827, AGL-929).
+   *
+   * Dropping the predicate removes the mechanism rather than healing it: with
+   * no `where`, no document can stop matching. The rule permits it —
+   * `marketplaceListings` is `allow read: if true`, with no `resource.data`
+   * term, so an unconstrained list is not denied. (That is NOT true of the
+   * scoped `datasets` query below, which is why this fix does not generalise.)
+   *
+   * It also fixes a quieter bug: `== null` matches only an EXPLICIT null, and
+   * Firestore cannot express "field is absent". Every publish path stamps
+   * `deletedAt: null` today, so this happens to be exact — but any future
+   * write path that omits the field would make a live listing silently
+   * invisible. An in-memory falsy check treats absent as live, which is what
+   * the dataset and email-template filters in this file already do.
+   *
+   * The cap counts CANDIDATES, not results — private and unreviewed listings
+   * already consume slots and get filtered below, so this is the same class of
+   * consumption, nudged up to leave room for soft-deleted rows. Measured on
+   * production 2026-08-03: 7 listings, 0 soft-deleted, 0 missing the field.
+   */
   const { data: listings } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'marketplaceListings'),
-        where('deletedAt', '==', null),
-        limit(60),
-      ),
+    () => query(collection(firestore, 'marketplaceListings'), limit(90)),
     [firestore],
     { idField: '$id' },
   )
@@ -341,6 +368,11 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
       // promises will not happen. Owners reach theirs from
       // Marketplace › Listings, whose View opens the same detail page
       // installs happen on.
+      // Soft-deleted listings used to be excluded by the query itself; they
+      // are dropped here now so no mutable field sits in a `where`
+      // (AGL-1196). Unconditional — unlike the review gate below, deletion
+      // has no owner exemption.
+      if (isListingDeleted(listing)) return false
       if (isPrivateListing(listing)) return false
       // Review queue gate (AGL-432): unreviewed/rejected plugin listings
       // stay off the public browse; the owner still sees their own (the
@@ -391,7 +423,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
             key={value}
             label={value}
             variant={category === value ? 'filled' : 'outlined'}
-            color={category === value ? 'secondary' : 'default'}
+            color={category === value ? 'primary' : 'default'}
             onClick={() =>
               setCategory((previous) => (previous === value ? null : value))
             }
@@ -555,7 +587,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                     {priceUsd > 0 ? (
                       <Chip
                         size="small"
-                        color="secondary"
+                        color="primary"
                         label={`$${priceUsd}`}
                       />
                     ) : null}
@@ -567,7 +599,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                         {' · by '}
                         <AppLink
                           href={publisherHref(listing.profileId)}
-                          color="secondary"
+                          color="primary"
                           underline="hover"
                         >
                           {`@${handles[listing.profileId]}`}
@@ -654,7 +686,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                     componentVariant="button"
                     size="small"
                     variant="outlined"
-                    color="secondary"
+                    color="primary"
                     href={detailHref ?? ''}
                     disabled={!detailHref}
                   >

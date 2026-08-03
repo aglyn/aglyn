@@ -581,7 +581,7 @@ export function HostActionsCard(props: {
         ))}
         <Button
           size="small"
-          color="secondary"
+          color="primary"
           sx={{ alignSelf: 'flex-start' }}
           onClick={handleAdd}
         >
@@ -1533,7 +1533,7 @@ export function HostActionsCard(props: {
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!draft?.name.trim()}
             onClick={handleSave}
           >

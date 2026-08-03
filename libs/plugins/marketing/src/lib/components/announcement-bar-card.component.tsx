@@ -191,7 +191,7 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
           ) : null}
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!dirty || (Boolean(draft.enabled) && !draft.text?.trim())}
             onClick={handleSave}
             sx={{ alignSelf: 'flex-start' }}

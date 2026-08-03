@@ -43,7 +43,7 @@ export const FormCardWrapper = forwardRef<any, CardDisplayProps>(
               <FormControl margin="normal">
                 <Button
                   loading={validating || submitting}
-                  color="secondary"
+                  color="primary"
                   disabled={submitting || pristine || !valid || validating}
                   // style={{ marginRight: 8 }}
                   type="submit"

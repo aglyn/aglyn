@@ -62,7 +62,7 @@ function sourceLabel(source: { type?: string; version?: string } | undefined) {
   if (source?.type === 'marketplace') {
     return {
       label: source.version ? `Marketplace · v${source.version}` : 'Marketplace',
-      color: 'secondary' as const,
+      color: 'primary' as const,
       title: 'Installed from the marketplace',
     }
   }
@@ -355,7 +355,7 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
             <Stack direction="row" spacing={1}>
               <Button
                 variant="contained"
-                color="secondary"
+                color="primary"
                 size="small"
                 disabled={!dirty}
                 onClick={handleSave}

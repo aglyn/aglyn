@@ -78,7 +78,7 @@ const StyledBreadcrumbs = styled(MuiBreadcrumbs)(({ theme }) => {
         color: tv.palette.text.primary,
         background: `rgba(${tv.palette.primary.lightChannel} / ${theme.palette.action.hoverOpacity})`,
         [`:hover, .${breadcrumbItemClassKey.hovered}`]: {
-          background: `rgba(${tv.palette.secondary.lightChannel} / ${theme.palette.action.activatedOpacity})`,
+          background: `rgba(${tv.palette.primary.lightChannel} / ${theme.palette.action.activatedOpacity})`,
         },
         [`:focus`]: {
           background: `rgba(${tv.palette.primary.lightChannel} / ${theme.palette.action.focusOpacity})`,
@@ -116,15 +116,15 @@ const StyledBreadcrumbs = styled(MuiBreadcrumbs)(({ theme }) => {
         `.${breadcrumbItemClassKey.root} .${breadcrumbItemClassKey.lastItem}`,
       ].join()]: {
         color: tv.palette.text.primary,
-        background: `rgba(${tv.palette.tertiary.lightChannel} / ${theme.palette.action.selectedOpacity})`,
+        background: `rgba(${tv.palette.secondary.lightChannel} / ${theme.palette.action.selectedOpacity})`,
         [`:hover, ${breadcrumbItemClassKey.hovered}`]: {
-          background: `rgba(${tv.palette.tertiary.lightChannel} / ${theme.palette.action.activatedOpacity})`,
+          background: `rgba(${tv.palette.secondary.lightChannel} / ${theme.palette.action.activatedOpacity})`,
         },
         [`:focus, .Mui-focusVisible`]: {
-          background: `rgba(${tv.palette.tertiary.lightChannel} / ${theme.palette.action.focusOpacity})`,
+          background: `rgba(${tv.palette.secondary.lightChannel} / ${theme.palette.action.focusOpacity})`,
         },
         [`:active`]: {
-          background: `rgba(${tv.palette.tertiary.lightChannel} / ${theme.palette.action.hoverOpacity})`,
+          background: `rgba(${tv.palette.secondary.lightChannel} / ${theme.palette.action.hoverOpacity})`,
         },
       },
     },
@@ -247,7 +247,7 @@ const Breadcrumbs = observer((props: BreadcrumbsProps) => {
           label={`+${selectionCount - 1} selected`}
           size="small"
           variant="outlined"
-          color="secondary"
+          color="primary"
           sx={{ ml: 0.5, height: 18, fontSize: '0.65rem' }}
         />
       ) : null}

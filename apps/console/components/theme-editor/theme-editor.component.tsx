@@ -21,7 +21,13 @@ import type {
   HostThemeSchemeColors,
 } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { getGoogleFontsUrl, sanitizeHostTheme } from '@aglyn/shared-ui-theme'
+import {
+  consoleOptions,
+  consoleThemeDark,
+  consoleThemeLight,
+  getGoogleFontsUrl,
+  sanitizeHostTheme,
+} from '@aglyn/shared-ui-theme'
 import { deepEqual } from '@aglyn/shared-util-vendor'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import {
@@ -64,6 +70,24 @@ export interface ThemeEditorProps {
   onSave: (theme: HostTheme) => Promise<void> | void
 }
 
+/**
+ * True when a value survives a JSON round-trip unchanged.
+ *
+ * `console.theme.ts` styles several components with a function of the theme
+ * (`MuiToolbar`, `MuiAvatar`, `MuiLink`…). `JSON.stringify` drops functions
+ * SILENTLY rather than throwing, so seeding the editor without this check
+ * would show `{}` where a real style lives and let a save replace it with
+ * nothing.
+ */
+function isJsonSafe(value: unknown): boolean {
+  if (value === null) return true
+  const kind = typeof value
+  if (kind === 'string' || kind === 'number' || kind === 'boolean') return true
+  if (kind !== 'object') return false
+  if (Array.isArray(value)) return value.every(isJsonSafe)
+  return Object.values(value as Record<string, unknown>).every(isJsonSafe)
+}
+
 function setSchemeValue(
   draft: HostTheme,
   scheme: HostThemeScheme,
@@ -97,6 +121,67 @@ export function ThemeEditor(props: ThemeEditorProps) {
   )
   const schemeColors = draft.colorSchemes?.[scheme]
   const previewFontsHref = getGoogleFontsUrl(draft.fonts)
+
+  // What each slot resolves to when it is left unset — the brand palette the
+  // site actually renders (AGL-1180). Surfaced next to every "Default" so the
+  // swatches are distinguishable and a single change is attributable.
+  // Read the BUILT theme, not the options: text, divider and the light/dark
+  // shades are derived by MUI, so the raw options would leave those slots
+  // showing a bare "Default" with nothing to identify them by.
+  const basePalette = (
+    scheme === 'dark' ? consoleThemeDark : consoleThemeLight
+  ).palette as unknown as Record<string, any>
+  const inheritedColor = useCallback(
+    (key: string): string | undefined => basePalette?.[key]?.main,
+    [basePalette],
+  )
+  const inheritedSurfaceColor = useCallback(
+    (path: readonly [string, string]): string | undefined =>
+      basePalette?.[path[0]]?.[path[1]],
+    [basePalette],
+  )
+  const inheritedDivider = typeof basePalette?.['divider'] === 'string'
+    ? (basePalette['divider'] as string)
+    : undefined
+  // Shape/spacing/typography defaults come from the brand theme too — these
+  // used to be the literals `?? 4` and `?? 8`, which happen to match today
+  // and would silently stop matching the moment console.theme.ts changed.
+  const baseShapeRadius =
+    typeof consoleThemeLight.shape?.borderRadius === 'number'
+      ? consoleThemeLight.shape.borderRadius
+      : 4
+  const baseSpacing =
+    typeof consoleOptions.spacing === 'number' ? consoleOptions.spacing : 8
+  // The inherited stack is a long CSS font list; name its first family so
+  // the fallback option says what you actually get instead of the
+  // meaningless "System default".
+  const baseFontFamily = String(
+    (consoleOptions.typography as { fontFamily?: string } | undefined)
+      ?.fontFamily ?? '',
+  )
+    .split(',')[0]
+    .replace(/["']/g, '')
+    .trim()
+
+  /**
+   * The brand's own component overrides, offered as the starting point in
+   * the raw-JSON editor so you edit from what the site actually renders
+   * rather than from `{}`. Passed through the same sanitizer the save path
+   * uses, so it only ever shows entries that are on the whitelist — and
+   * only the ones that survive JSON, since the theme styles some
+   * components with functions.
+   */
+  const inheritedComponents = useMemo<Record<string, unknown>>(() => {
+    const whitelisted =
+      sanitizeHostTheme({
+        components: consoleOptions.components as HostTheme['components'],
+      }).components ?? {}
+    const jsonSafe: Record<string, unknown> = {}
+    for (const [key, entry] of Object.entries(whitelisted)) {
+      if (isJsonSafe(entry)) jsonSafe[key] = entry
+    }
+    return jsonSafe
+  }, [])
 
   const handleSchemeTab = useCallback((_, value: HostThemeScheme) => {
     setScheme(value)
@@ -219,15 +304,45 @@ export function ThemeEditor(props: ThemeEditorProps) {
   }, [])
 
   const [overridesOpen, setOverridesOpen] = useState(false)
-  const handleOverridesSave = useCallback((_, value) => {
-    setDraft((prev) => {
-      const sanitized = sanitizeHostTheme({
-        ...prev,
-        components: value as HostTheme['components'],
+  const handleOverridesSave = useCallback(
+    (_, value) => {
+      setDraft((prev) => {
+        // Store only what differs from the theme's own overrides (AGL-1180).
+        // The editor OPENS on those defaults, so saving untouched would
+        // otherwise freeze a copy into the host document and stop it
+        // tracking console.theme.ts.
+        //
+        // Dropping an entry is safe because what remains is DEEP-merged over
+        // the theme at render time: an entry that names one leaf keeps the
+        // rest of that component, including the style functions JSON cannot
+        // represent. Emptying the editor to `{}` therefore does not strip
+        // the component styling from the site — it just means this site adds
+        // nothing of its own.
+        const edited = (value ?? {}) as Record<string, unknown>
+        const changed: Record<string, unknown> = {}
+        for (const [key, entry] of Object.entries(edited)) {
+          const inherited = inheritedComponents[key]
+          if (inherited && deepEqual(entry, inherited, { strict: true })) {
+            continue
+          }
+          changed[key] = entry
+        }
+        return sanitizeHostTheme({
+          ...prev,
+          components: changed as HostTheme['components'],
+        })
       })
-      return sanitized
+      setOverridesOpen(false)
+    },
+    [inheritedComponents],
+  )
+
+  const handleOverridesReset = useCallback(() => {
+    setDraft((prev) => {
+      const next = { ...prev }
+      delete next.components
+      return next
     })
-    setOverridesOpen(false)
   }, [])
 
   const handleDiscard = useCallback(() => {
@@ -285,6 +400,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
                       key={key}
                       label={label}
                       value={schemeColors?.[key]?.main}
+                      inheritedValue={inheritedColor(key)}
                       onChange={setMainColor(key)}
                     />
                   ))}
@@ -296,12 +412,14 @@ export function ThemeEditor(props: ThemeEditorProps) {
                       key={path.join('.')}
                       label={label}
                       value={getSchemeColor(schemeColors, path)}
+                      inheritedValue={inheritedSurfaceColor(path)}
                       onChange={setSurfaceColor(path)}
                     />
                   ))}
                   <ColorField
                     label="Divider"
                     value={schemeColors?.divider}
+                    inheritedValue={inheritedDivider}
                     onChange={setDividerColor}
                   />
                 </Stack>
@@ -327,7 +445,11 @@ export function ThemeEditor(props: ThemeEditorProps) {
               value={activeFontFamily}
               onChange={handleFontChange}
             >
-              <MenuItem value={SYSTEM_FONT_VALUE}>{'System default'}</MenuItem>
+              <MenuItem value={SYSTEM_FONT_VALUE}>
+                {baseFontFamily
+                  ? `Theme default (${baseFontFamily})`
+                  : 'Theme default'}
+              </MenuItem>
               {GOOGLE_FONT_OPTIONS.map((option) => (
                 <MenuItem key={option.family} value={option.family}>
                   {`${option.family} (${option.category})`}
@@ -348,14 +470,14 @@ export function ThemeEditor(props: ThemeEditorProps) {
             <Stack spacing={2}>
               <Stack spacing={0.5}>
                 <Typography variant="body2">
-                  {`Border radius: ${draft.shape?.borderRadius ?? 4}px`}
+                  {`Border radius: ${draft.shape?.borderRadius ?? baseShapeRadius}px`}
                 </Typography>
                 <Slider
                   aria-label="border radius"
                   size="small"
                   min={0}
                   max={24}
-                  value={draft.shape?.borderRadius ?? 4}
+                  value={draft.shape?.borderRadius ?? baseShapeRadius}
                   onChange={handleRadiusChange}
                 />
               </Stack>
@@ -363,7 +485,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
                 type="number"
                 size="small"
                 label="Spacing unit (px)"
-                value={draft.spacing ?? 8}
+                value={draft.spacing ?? baseSpacing}
                 onChange={handleSpacingChange}
                 slotProps={{ htmlInput: { min: 2, max: 16 } }}
               />
@@ -381,17 +503,31 @@ export function ThemeEditor(props: ThemeEditorProps) {
           >
             <Stack spacing={1}>
               <Typography variant="body2" color="text.secondary">
-                {`Advanced: JSON overrides for whitelisted components (${
-                  Object.keys(draft.components ?? {}).length
-                } set). Unknown components are stripped on apply.`}
+                {draft.components
+                  ? `Advanced: ${
+                      Object.keys(draft.components).length
+                    } component override(s) on this site, deep-merged over the theme's own — name just the property you want to change and the rest of that component is inherited. Emptying the editor to {} drops this site's overrides; the theme's defaults still apply. Unknown components are stripped on apply.`
+                  : `Advanced: no overrides on this site — it renders the theme's own ${
+                      Object.keys(inheritedComponents).length
+                    } component defaults, which the editor opens on. Edits are deep-merged, so you only need to name the property you're changing; only what differs is saved.`}
               </Typography>
-              <Button
-                size="small"
-                onClick={() => setOverridesOpen(true)}
-                sx={{ alignSelf: 'flex-start' }}
-              >
-                {'Edit overrides'}
-              </Button>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" onClick={() => setOverridesOpen(true)}>
+                  {'Edit overrides'}
+                </Button>
+                {/* Clearing the host's overrides IS resetting to the theme
+                    defaults — with nothing stored, the site renders the
+                    brand's own component styles. Saving `{}` from the editor
+                    does the same thing; this is the one-click version. */}
+                <Button
+                  size="small"
+                  color="error"
+                  disabled={!draft.components}
+                  onClick={handleOverridesReset}
+                >
+                  {'Reset to theme defaults'}
+                </Button>
+              </Stack>
             </Stack>
           </CardDisplay>
 
@@ -432,7 +568,9 @@ export function ThemeEditor(props: ThemeEditorProps) {
           open={overridesOpen}
           onClose={() => setOverridesOpen(false)}
           onSave={handleOverridesSave}
-          defaultValue={(draft.components ?? {}) as any}
+          defaultValue={
+            (draft.components ?? inheritedComponents) as any
+          }
         />
       ) : null}
     </Grid>

@@ -422,7 +422,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
         )}
         <Button
           size="small"
-          color="secondary"
+          color="primary"
           sx={{ alignSelf: 'flex-start' }}
           onClick={() => {
             // Plan cap (AGL-99): dark-launch — plan-less workspaces uncapped.
@@ -818,7 +818,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
                 sx={{ width: 110 }}
               />
             ))}
-            <Button size="small" color="secondary" onClick={handleTestRun}>
+            <Button size="small" color="primary" onClick={handleTestRun}>
               {'Run'}
             </Button>
           </Stack>
@@ -834,7 +834,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!draft?.name.trim() || nameTaken}
             onClick={handleSave}
           >

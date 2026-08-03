@@ -587,7 +587,7 @@ export const BesignerVersionsComponent = observer(
             </Box>
             <Button
               variant="outlined"
-              color="secondary"
+              color="primary"
               size="small"
               onClick={handleCreateVersion}
             >
@@ -669,7 +669,7 @@ export const BesignerVersionsComponent = observer(
                         </Button>
                         <Button
                           size="small"
-                          color="secondary"
+                          color="primary"
                           disabled={isPublished}
                           onClick={handlePublish(version.$id)}
                         >
@@ -685,7 +685,7 @@ export const BesignerVersionsComponent = observer(
                           <span>
                             <Button
                               size="small"
-                              color="secondary"
+                              color="primary"
                               disabled={isPublished}
                               onClick={handleScheduleOpen(version.$id)}
                               aria-label="schedule publish"
@@ -777,7 +777,7 @@ export const BesignerVersionsComponent = observer(
             <Button onClick={() => setNameDialog(null)}>{'Cancel'}</Button>
             <Button
               variant="contained"
-              color="secondary"
+              color="primary"
               disabled={!nameValue.trim()}
               onClick={handleNameConfirm}
             >
@@ -812,7 +812,7 @@ export const BesignerVersionsComponent = observer(
             <Button onClick={() => setScheduleFor(null)}>{'Cancel'}</Button>
             <Button
               variant="contained"
-              color="secondary"
+              color="primary"
               disabled={!scheduleAt}
               onClick={handleScheduleConfirm}
             >

@@ -198,7 +198,7 @@ export function PublishArtifactDialog({
         <Button
           size="small"
           variant="contained"
-          color="secondary"
+          color="primary"
           disabled={busy || !name.trim()}
           onClick={() => void handlePublish()}
         >

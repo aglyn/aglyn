@@ -491,7 +491,7 @@ export const InlineTextEditorComponent = observer(
               {insertButton}
               <Button
                 size="small"
-                color="secondary"
+                color="primary"
                 onMouseDown={keepFocus}
                 onClick={commit}
               >
@@ -516,7 +516,7 @@ export const InlineTextEditorComponent = observer(
                 bgcolor: 'background.paper',
                 color: 'text.primary',
                 border: '2px solid',
-                borderColor: 'secondary.main',
+                borderColor: 'tertiary.main',
                 borderRadius: 0.5,
                 outline: 'none',
                 boxShadow: 4,
@@ -545,7 +545,7 @@ export const InlineTextEditorComponent = observer(
               {insertButton}
               <Button
                 size="small"
-                color="secondary"
+                color="primary"
                 onMouseDown={keepFocus}
                 onClick={commit}
               >
@@ -573,7 +573,7 @@ export const InlineTextEditorComponent = observer(
                 color: 'text.primary',
                 border: '2px solid',
                 borderRadius: 0.5,
-                borderColor: 'secondary.main',
+                borderColor: 'tertiary.main',
                 outline: 'none',
                 boxShadow: 4,
                 ...tokenPillContainerSx,

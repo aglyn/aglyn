@@ -63,7 +63,7 @@ export const mainNavigation = [
   {
     children: 'Get Access',
     variant: 'contained',
-    color: 'secondary',
+    color: 'primary',
     href: '/contact',
   },
 ]

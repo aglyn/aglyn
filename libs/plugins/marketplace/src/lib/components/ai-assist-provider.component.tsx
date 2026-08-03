@@ -305,7 +305,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
           </Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!instruction.trim() || busy}
             startIcon={busy ? <CircularProgress size={16} /> : undefined}
             onClick={handleConfirm}
@@ -351,7 +351,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
           </Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!sectionPrompt.trim() || busy}
             startIcon={busy ? <CircularProgress size={16} /> : undefined}
             onClick={handleSectionConfirm}

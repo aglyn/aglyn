@@ -317,7 +317,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
             <Stack direction="row" spacing={1}>
               <Button
                 variant="contained"
-                color="secondary"
+                color="primary"
                 size="small"
                 disabled={!dirty}
                 onClick={handleSave}

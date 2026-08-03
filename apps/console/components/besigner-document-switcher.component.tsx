@@ -251,7 +251,7 @@ export const BesignerDocumentSwitcherComponent = observer(
                   : ICON_VARIANT_DOCUMENT.path
               }
               fontSize="small"
-              sx={{ color: isCurrent ? 'secondary.main' : 'text.secondary' }}
+              sx={{ color: isCurrent ? 'primary.main' : 'text.secondary' }}
             />
           </ListItemIcon>
           <ListItemText
@@ -389,7 +389,7 @@ export const BesignerDocumentSwitcherComponent = observer(
           <MenuItem
             onClick={() => {
               close()
-              void router.push(buildRoute(Route.SCREEN_LIST, { orgSlug, host }))
+              void router.push(buildRoute(Route.HOST_SCREENS, { orgSlug, host }))
             }}
             sx={{ gap: 1 }}
           >
@@ -398,7 +398,7 @@ export const BesignerDocumentSwitcherComponent = observer(
             </ListItemIcon>
             <ListItemText
               primary="View all screens"
-              slotProps={{ primary: { color: 'secondary' } }}
+              slotProps={{ primary: { color: 'primary' } }}
             />
           </MenuItem>
         </Menu>

@@ -23,6 +23,7 @@ import type {
   HostThemeScheme,
   HostThemeSchemeColors,
 } from '@aglyn/shared-data-types'
+import { objectDeepMergeReplaceArrays } from '@aglyn/shared-util-vendor'
 import type { PaletteOptions, ThemeOptions } from '../../vendor/mui'
 
 /**
@@ -34,18 +35,27 @@ import type { PaletteOptions, ThemeOptions } from '../../vendor/mui'
 export const HOST_THEME_COMPONENT_WHITELIST = [
   'MuiAppBar',
   'MuiAvatar',
+  'MuiBadge',
   'MuiButton',
   'MuiButtonBase',
   'MuiCard',
   'MuiCardContent',
+  'MuiCheckbox',
   'MuiChip',
+  'MuiCircularProgress',
   'MuiDivider',
   'MuiIconButton',
+  'MuiLinearProgress',
   'MuiLink',
   'MuiList',
   'MuiListItem',
   'MuiMenu',
   'MuiPaper',
+  'MuiRadio',
+  'MuiSlider',
+  'MuiSwitch',
+  'MuiTab',
+  'MuiTabs',
   'MuiTextField',
   'MuiToolbar',
   'MuiTooltip',
@@ -180,6 +190,71 @@ export function hostThemeToThemeOptions(
   }
 
   return options
+}
+
+/**
+ * Layers a host's overrides ONTO a base set of theme options (AGL-1180).
+ *
+ * `hostThemeToThemeOptions` deliberately emits only what the host explicitly
+ * set, so building a theme from it alone leaves every other slot to MUI's
+ * stock palette. Consumers used to switch — console theme when the document
+ * was empty, host document when it was not — which meant setting a single
+ * value (the spec's own example is `{ spacing: 8 }`) silently repainted
+ * secondary, tertiary, surface, info, success, warning, error, background
+ * and paper in MUI blue/purple. Merging instead of switching keeps the brand
+ * as the floor no matter how much the host customizes.
+ *
+ * `palette` merges one level deep so overriding `primary` cannot drop
+ * `secondary`. Within a single colour the override replaces the whole record
+ * — MUI derives shades and contrast text from `main`, which is exactly the
+ * partial-palette behaviour the converter is written for.
+ */
+export function mergeThemeOptions(
+  base: ThemeOptions,
+  overrides: ThemeOptions,
+): ThemeOptions {
+  const merged: ThemeOptions = { ...base, ...overrides }
+
+  // Palette merges ONE level: overriding a colour replaces its whole record
+  // so MUI re-derives light/dark/contrastText from the new `main`, which is
+  // the partial-palette behaviour the converter is written for. Overriding
+  // `primary` still must not disturb `secondary`, hence the level.
+  merged.palette = { ...base.palette, ...overrides.palette }
+  merged.shape = { ...base.shape, ...overrides.shape }
+
+  // `typography` is an object in every base we ship, but MUI's type also
+  // allows a function of the palette — merging into that would silently drop
+  // the base, so prefer the override wholesale in that case.
+  if (
+    isPlainObject(base.typography) &&
+    isPlainObject(overrides.typography)
+  ) {
+    merged.typography = objectDeepMergeReplaceArrays(
+      base.typography,
+      overrides.typography,
+    ) as ThemeOptions['typography']
+  }
+
+  // Components merge DEEPLY. A host override names one component, and often
+  // one property inside it — `MuiButton.defaultProps.color`. A shallow merge
+  // would swap out the entire `MuiButton` entry and take the brand's
+  // `styleOverrides` with it, and those styles are frequently FUNCTIONS of
+  // the theme that JSON cannot express, so the editor could not put them
+  // back even in principle. Deep-merging means you override the leaf you
+  // named and inherit everything else, functions included.
+  merged.components = objectDeepMergeReplaceArrays(
+    base.components ?? {},
+    overrides.components ?? {},
+  ) as ThemeOptions['components']
+
+  return merged
+}
+
+/** Plain data object — not an array, function, or class instance. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+  )
 }
 
 /** True when the document customizes anything, i.e. consumers should build a theme from it rather than using their default. */

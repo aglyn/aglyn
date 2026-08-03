@@ -274,7 +274,7 @@ export const ComponentPicker = observer(
                                   sx={[
                                     { cursor: 'pointer' },
                                     selected?.$id === node?.$id
-                                      ? { borderColor: 'secondary.main' }
+                                      ? { borderColor: 'primary.main' }
                                       : null,
                                   ]}
                                   node={node as any}

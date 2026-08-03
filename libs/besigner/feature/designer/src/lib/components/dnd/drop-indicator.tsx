@@ -60,7 +60,9 @@ const Indicator = styled(motion.div, {
     zIndex: theme.zIndex.modal,
 
     [`& .${classes.line}`]: {
-      border: `${lineW / 2}px solid ${tv.palette.secondary.main}`,
+      // Slate, not the accent (AGL-1194): the indicator is drawn over the
+      // user's design and must not read as part of it.
+      border: `${lineW / 2}px solid ${tv.palette.tertiary.main}`,
       flexGrow: 1,
       width: !vertical ? undefined : lineW,
       height: !vertical ? lineW : undefined,
@@ -70,7 +72,7 @@ const Indicator = styled(motion.div, {
     [`& .${classes.handle}`]: {
       backgroundColor: tv.palette.surface.main,
       borderRadius: handleW,
-      border: `1px solid ${tv.palette.secondary.dark}`,
+      border: `1px solid ${tv.palette.tertiary.dark}`,
       width: handleW,
       height: handleW,
       display: 'block',

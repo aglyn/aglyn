@@ -104,8 +104,19 @@ export function useOrgHosts(
     let unsubscribe: (() => void) | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     let attempt = 0
-    // One-shot guard for the server-confirm fallback below.
+    // Guards for the two server-confirm fallbacks below (AGL-827, AGL-929).
+    //
+    // `serverConfirmed` covers an EMPTY live result. It resets once a real
+    // result arrives, so a second transient later in the same session can heal
+    // too — it used to be a one-shot for the life of the subscription.
+    //
+    // `seen` and `confirmedGone` cover the PARTIAL case: a host this
+    // subscription already saw that has since vanished. A host is only added
+    // to `confirmedGone` when the SERVER agrees it is gone, so one that came
+    // back from a tombstone stays eligible to heal if it disappears again.
     let serverConfirmed = false
+    const seen = new Set<string>()
+    const confirmedGone = new Set<string>()
 
     const subscribe = () => {
       // The org membership projection (AGL-233) is the only host
@@ -140,11 +151,18 @@ export function useOrgHosts(
           // match if healed, a genuine 404 if truly empty, or a retry if the
           // confirm itself failed. A populated list settles immediately and
           // costs no extra read.
-          if (snapshot.empty && !serverConfirmed) {
-            serverConfirmed = true
+          const confirmAgainstServer = (candidates: string[]) => {
             getDocsFromServer(q)
               .then((fresh) => {
                 if (cancelled) return
+                const freshIds = new Set(fresh.docs.map((doc) => doc.id))
+                // Only a host the SERVER also reports missing is genuinely
+                // gone. One that reappears was a tombstone, and must stay
+                // eligible to heal the next time it vanishes.
+                candidates.forEach((id) => {
+                  if (!freshIds.has(id)) confirmedGone.add(id)
+                })
+                freshIds.forEach((id) => seen.add(id))
                 setHosts(
                   fresh.docs.map((doc) => ({ $id: doc.id, ...doc.data() })),
                 )
@@ -158,8 +176,36 @@ export function useOrgHosts(
                 setError(true)
                 setReady(true)
               })
+          }
+
+          if (snapshot.empty && !serverConfirmed) {
+            serverConfirmed = true
+            confirmAgainstServer([...seen])
             return
           }
+
+          // AGL-929: the empty check above only catches TOTAL loss. An org
+          // with three sites that tombstones ONE produces a snapshot of two —
+          // not empty — so the heal never ran and that site stayed missing
+          // from the switcher until the resume token was discarded. For a
+          // multi-site org that is the likelier failure, not the rarer one.
+          //
+          // A host this subscription has already seen, now absent, is the same
+          // signature as the empty case and gets the same treatment. A genuine
+          // removal confirms once and then sits in `confirmedGone`, so it does
+          // not re-confirm on every later snapshot.
+          const present = new Set(snapshot.docs.map((doc) => doc.id))
+          const vanished = [...seen].filter(
+            (id) => !present.has(id) && !confirmedGone.has(id),
+          )
+          if (vanished.length) {
+            confirmAgainstServer(vanished)
+            return
+          }
+
+          snapshot.docs.forEach((doc) => seen.add(doc.id))
+          // A real result means the next empty one deserves its own confirm.
+          serverConfirmed = false
           setError(false)
           setReady(true)
           setHosts(

@@ -139,7 +139,7 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
                 title={usd(cents)}
                 sx={{
                   flex: 1,
-                  bgcolor: 'secondary.main',
+                  bgcolor: 'primary.main',
                   opacity: cents ? 0.9 : 0.25,
                   borderRadius: 0.5,
                   height: `${Math.max(6, Math.round((cents / maxDay) * 100))}%`,

@@ -73,7 +73,7 @@ export function CampaignGlanceCard(props: { hostId: string }) {
             {...({ componentVariant: 'naked', nativeButton: false } as any)}
             href={buildRoute(Route.HOST_MARKETING, { orgSlug,  host })}
             size="small"
-            color="secondary"
+            color="primary"
           >
             {'Marketing'}
           </Button>

@@ -470,7 +470,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={
               busy || !subject.trim() || (!templateScreenId && !body.trim())
             }

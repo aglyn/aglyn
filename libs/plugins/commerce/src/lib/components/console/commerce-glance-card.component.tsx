@@ -102,7 +102,7 @@ export function CommerceGlanceCard(props: { hostId: string }) {
             {...({ componentVariant: 'naked', nativeButton: false } as any)}
             href={consoleRoute.base ? `${consoleRoute.base}/products` : undefined}
             size="small"
-            color="secondary"
+            color="primary"
           >
             {'Open store'}
           </Button>

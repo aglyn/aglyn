@@ -345,7 +345,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   return (
     <Box ref={ref} {...rest} sx={{ display: 'inline-flex' }}>
       <IconButton aria-label="Cart" onClick={() => setOpen(true)}>
-        <Badge badgeContent={cart?.count ?? 0} color="secondary">
+        <Badge badgeContent={cart?.count ?? 0} color="primary">
           <SvgIcon>
             <path d={mdiCartOutline.path} />
           </SvgIcon>

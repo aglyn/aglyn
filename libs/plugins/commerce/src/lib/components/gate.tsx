@@ -86,12 +86,12 @@ const Gate = forwardRef<HTMLDivElement, GateProps>((props, ref) => {
         {...rest}
         sx={{
           border: '1px dashed',
-          borderColor: 'secondary.main',
+          borderColor: 'primary.main',
           borderRadius: 1,
           p: 1,
         }}
       >
-        <Typography variant="caption" color="secondary">
+        <Typography variant="caption" color="primary">
           {'🔒 Members only — visitors see the teaser'}
         </Typography>
         <Box>{children}</Box>

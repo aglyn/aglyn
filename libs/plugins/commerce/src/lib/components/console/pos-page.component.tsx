@@ -507,7 +507,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           <Stack direction="row" spacing={1}>
             <Button
               variant="contained"
-              color="secondary"
+              color="primary"
               disabled={lines.length === 0}
               onClick={() => setPaying('cash')}
               sx={{ flex: 1 }}
@@ -567,7 +567,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           <Button onClick={() => setPaying(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={busy || Math.round(Number(cashReceived) * 100) < dueCents}
             onClick={settle}
           >
@@ -599,7 +599,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           <Button onClick={() => setPaying(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={busy || !folioReservation}
             onClick={settle}
           >

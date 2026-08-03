@@ -37,12 +37,20 @@ import { generatePresetId } from '../utils/generate-preset-id'
 export const DRAWER_ID: Aglyn.ComponentId = 'muiDrawer'
 export const DRAWER_TOGGLE_ID: Aglyn.ComponentId = 'muiDrawerToggle'
 
-export type DrawerAnchor = 'left' | 'right'
+export type DrawerAnchor = 'left' | 'right' | 'top' | 'bottom'
+
+/** All four edges MUI's Drawer supports. */
+export const DRAWER_ANCHORS: DrawerAnchor[] = ['left', 'right', 'top', 'bottom']
+
+/** Horizontal anchors are the ones the `width` setting applies to. */
+export function isSideAnchor(anchor: unknown): boolean {
+  return anchor !== 'top' && anchor !== 'bottom'
+}
 
 export interface DrawerElementProps {
   /** Which edge the drawer slides in from. */
   anchor?: DrawerAnchor
-  /** CSS width of the open panel (default 280px). */
+  /** CSS width of the open panel (default 280px). Side anchors only. */
   width?: string
   children?: ReactNode
 }
@@ -109,7 +117,14 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
     }
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(sx) ? sx : sx ? [sx] : []
-    const resolvedAnchor: DrawerAnchor = anchor === 'right' ? 'right' : 'left'
+    const resolvedAnchor: DrawerAnchor = DRAWER_ANCHORS.includes(
+      anchor as DrawerAnchor,
+    )
+      ? (anchor as DrawerAnchor)
+      : 'left'
+    // A top/bottom sheet spans the viewport; a width would pin it to a
+    // narrow strip against the edge, which is never what was meant.
+    const sideAnchored = isSideAnchor(resolvedAnchor)
     const { editorInert } = Aglyn.useScreenLink(undefined)
     const [open, setOpen] = useState(false)
     // The renderer stamps the node id on every leaf; commands target it.
@@ -157,7 +172,7 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
             {
               m: 0.5,
               p: 2,
-              width: width || 280,
+              width: sideAnchored ? width || 280 : '100%',
               maxWidth: '100%',
               border: '1px dashed',
               borderColor: 'divider',
@@ -189,7 +204,14 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
       >
         {/* Node styles land on the panel body, where authors expect
             padding/background edits to show. */}
-        <Box sx={[{ width: width || 280, maxWidth: '90vw', p: 2 }, ...nodeSx]}>
+        <Box
+          sx={[
+            sideAnchored
+              ? { width: width || 280, maxWidth: '90vw', p: 2 }
+              : { width: 'auto', p: 2 },
+            ...nodeSx,
+          ]}
+        >
           <Stack direction="row" sx={{ justifyContent: 'flex-end', mb: 1 }}>
             <IconButton
               aria-label="Close menu"
@@ -254,13 +276,20 @@ export const drawerSchema: Aglyn.ComponentSchema<DrawerElementProps> = {
       options: [
         { value: '', label: 'Left (default)' },
         { value: 'right', label: 'Right' },
+        { value: 'top', label: 'Top' },
+        { value: 'bottom', label: 'Bottom' },
       ],
     },
     {
       name: 'width',
-      description: 'CSS width of the open drawer, e.g. 280px or 20rem.',
+      description:
+        'CSS width of the open drawer, e.g. 280px or 20rem. Top and ' +
+        'bottom drawers span the viewport instead.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Width',
+      // A width on a top/bottom sheet is ignored by the renderer, so the
+      // control is hidden rather than left to do nothing.
+      condition: { when: 'anchor', is: ['top', 'bottom'], notMatch: true },
     },
   ],
 }

@@ -732,7 +732,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           <Chip
                             label={org?.plan ?? 'no plan'}
                             size="small"
-                            color={org?.plan ? 'secondary' : 'default'}
+                            color={org?.plan ? 'primary' : 'default'}
                           />
                           {org?.suspendedAt ? (
                             <Chip
@@ -1024,7 +1024,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   Route.ADMIN_ORG_HOST_DETAIL,
                                   { orgId, hostId: host.$id },
                                 )}
-                                color="secondary"
+                                color="primary"
                                 underline="hover"
                                 variant="body2"
                                 noWrap
@@ -1425,7 +1425,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                         <Button
                           size="small"
                           variant="contained"
-                          color="secondary"
+                          color="primary"
                           disabled={
                             discountBusy ||
                             !selectedCoupon ||
@@ -1581,7 +1581,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                         <Button
                           size="small"
                           variant="contained"
-                          color="secondary"
+                          color="primary"
                           disabled={entBusy || !(Number(entAmount) > 0)}
                           onClick={() => void handleProvisionEnterprise()}
                           sx={{ alignSelf: 'flex-start' }}
@@ -1682,7 +1682,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           />
                           <Button
                             variant="contained"
-                            color="secondary"
+                            color="primary"
                             size="small"
                             disabled={noteBusy || !noteDraft.trim()}
                             onClick={() => void handleAddNote()}

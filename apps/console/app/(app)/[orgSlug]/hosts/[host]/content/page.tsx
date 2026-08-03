@@ -762,7 +762,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                 <Button
                   size="small"
                   variant="outlined"
-                  color="secondary"
+                  color="primary"
                   onClick={() => setCategoriesOpen(true)}
                 >
                   {'Categories'}
@@ -770,7 +770,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                 <Button
                   size="small"
                   variant="outlined"
-                  color="secondary"
+                  color="primary"
                   onClick={() => {
                     setBodyTab('visual')
                     setEditor({
@@ -881,7 +881,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                           </Button>
                           <Button
                             size="small"
-                            color="secondary"
+                            color="primary"
                             onClick={handleTogglePublish(entry)}
                           >
                             {entry.status === 'published'
@@ -890,7 +890,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                           </Button>
                           <Button
                             size="small"
-                            color="secondary"
+                            color="primary"
                             onClick={() => {
                               const initial = new Date(
                                 Date.now() + 60 * 60 * 1000,
@@ -970,7 +970,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           </Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!collectionName.trim() || collectionSlugOwner !== null}
             onClick={handleCreateCollection}
           >
@@ -1056,7 +1056,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             <Button
               size="small"
               variant="contained"
-              color="secondary"
+              color="primary"
               disabled={
                 !newCategoryName.trim() ||
                 categories.length >= Aglyn.COLLECTION_CATEGORIES_MAX
@@ -1230,7 +1230,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           >
             <Button
               size="small"
-              color="secondary"
+              color="primary"
               onClick={() => {
                 if (!hasEntitlement('ai-assist', org)) {
                   return void enqueueSnackbar(
@@ -1306,7 +1306,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!editor?.title.trim()}
             onClick={handleSaveEntry}
           >
@@ -1354,7 +1354,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           </Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!aiInstruction?.trim() || aiBusy}
             onClick={handleAiConfirm}
           >
@@ -1420,7 +1420,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           <Button onClick={() => setScheduler(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!scheduler?.at}
             onClick={handleScheduleEntry}
           >

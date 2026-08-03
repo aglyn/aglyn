@@ -519,7 +519,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           <Button onClick={() => setCategoryDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!categoryDraft?.name.trim()}
             onClick={handleCategorySave}
           >
@@ -720,7 +720,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           <Button onClick={() => setCollectionDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!collectionDraft?.name.trim() || Boolean(collectionError)}
             onClick={handleCollectionSave}
           >

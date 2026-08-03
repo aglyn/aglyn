@@ -448,7 +448,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                   label="All"
                   size="small"
                   variant={selectedCategoryId ? 'outlined' : 'filled'}
-                  color={selectedCategoryId ? 'default' : 'secondary'}
+                  color={selectedCategoryId ? 'default' : 'primary'}
                   onClick={() => setActiveCategoryId('*')}
                 />
                 {chipCategories.map((category) => (
@@ -678,7 +678,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
             label="In stock"
             size="small"
             variant={inStockOnly ? 'filled' : 'outlined'}
-            color={inStockOnly ? 'secondary' : 'default'}
+            color={inStockOnly ? 'primary' : 'default'}
             onClick={() => setInStockOnly((prev) => !prev)}
           />
           {facetTags.map((facetTag) => (
@@ -687,7 +687,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
               label={facetTag}
               size="small"
               variant={activeTag === facetTag ? 'filled' : 'outlined'}
-              color={activeTag === facetTag ? 'secondary' : 'default'}
+              color={activeTag === facetTag ? 'primary' : 'default'}
               onClick={() =>
                 setActiveTag((prev) => (prev === facetTag ? '' : facetTag))
               }

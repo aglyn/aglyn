@@ -56,6 +56,11 @@ contents; click elsewhere and it collapses again.
 With the Mega Menu selected, set its **Label** in the inspector (for the
 demo it's *Explore*). Use the **Panel width** attribute to choose *Fit
 content*, *Wide* (720px), or *Full width*.
+
+The label renders in the case you type it, so it sits beside plain nav
+links without shouting. If you want it uppercase, set **Text transform**
+in **Styles → Typography** on the Mega Menu itself and the trigger
+follows.
 :::
 
 ## 2. Build the columns
@@ -72,6 +77,15 @@ section:
    breaks the menu.
 3. Add as many columns, links, images, or promo cards as you like — a mega
    menu panel takes any content.
+
+:::tip Menu links should render as links
+A Screen Link ships as a **button** by default, which is right for a call
+to action but wrong for navigation: it picks up button typography and the
+theme's uppercase transform, and it announces itself as a button to screen
+readers. Set **Render as** to **Text link** on the links inside a menu
+panel, a footer, or a body paragraph. The button-only attributes (Variant,
+Size, Full width) disappear when you do, because a link ignores them.
+:::
 
 ## 3. Make it open on hover
 

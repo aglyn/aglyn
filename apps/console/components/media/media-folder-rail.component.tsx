@@ -85,12 +85,12 @@ function FolderRow(props: {
         borderRadius: 1,
         cursor: 'pointer',
         bgcolor: isOver
-          ? 'secondary.main'
+          ? 'primary.main'
           : selected
             ? 'action.selected'
             : undefined,
-        color: isOver ? 'secondary.contrastText' : undefined,
-        '&:hover': { bgcolor: isOver ? 'secondary.main' : 'action.hover' },
+        color: isOver ? 'primary.contrastText' : undefined,
+        '&:hover': { bgcolor: isOver ? 'primary.main' : 'action.hover' },
       }}
     >
       <Typography
@@ -210,12 +210,12 @@ export function MediaFolderRail(props: MediaFolderRailProps) {
           borderRadius: 1,
           cursor: 'pointer',
           bgcolor: rootOver
-            ? 'secondary.main'
+            ? 'primary.main'
             : current === null
               ? 'action.selected'
               : undefined,
-          color: rootOver ? 'secondary.contrastText' : undefined,
-          '&:hover': { bgcolor: rootOver ? 'secondary.main' : 'action.hover' },
+          color: rootOver ? 'primary.contrastText' : undefined,
+          '&:hover': { bgcolor: rootOver ? 'primary.main' : 'action.hover' },
         }}
       >
         <Typography variant="body2" sx={{ flex: 1 }}>
@@ -314,7 +314,7 @@ export function MediaFolderRail(props: MediaFolderRailProps) {
           <Button onClick={() => setPrompt(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={promptBusy || !prompt?.value.trim()}
             onClick={handlePromptSave}
           >

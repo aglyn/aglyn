@@ -894,7 +894,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             </TextField>
             <Button
               size="small"
-              color="secondary"
+              color="primary"
               onClick={handleOpenRecord()}
             >
               {'Add record'}
@@ -1008,7 +1008,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           <Button
             size="small"
             variant="outlined"
-            color="secondary"
+            color="primary"
             onClick={handleOpenCreator}
           >
             {'Add dataset'}
@@ -1065,7 +1065,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           <Button onClick={() => setCreator(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={
               !scopeReady ||
               !creator?.name.trim() ||
@@ -1238,7 +1238,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             onClick={handleSaveRecord}
           >
             {editor?.id ? 'Save' : 'Add'}
@@ -1313,7 +1313,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           <Button onClick={() => setImporter(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!importPreview?.valid}
             onClick={handleImport}
           >
@@ -1360,7 +1360,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           <Button onClick={() => setJoiner(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={
               !scopeReady || !joiner?.a || !joiner?.b || joiner.a === joiner.b
             }

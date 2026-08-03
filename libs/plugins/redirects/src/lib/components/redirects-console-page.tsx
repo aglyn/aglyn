@@ -391,7 +391,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
           ))}
           <Button
             size="small"
-            color="secondary"
+            color="primary"
             sx={{ alignSelf: 'flex-start' }}
             onClick={handleAdd}
           >
@@ -518,7 +518,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!draft?.source.trim() || !draft?.destination.trim()}
             onClick={handleSave}
           >

@@ -140,7 +140,7 @@ export function activityHref(
               screenId: id,
               versionId,
             })
-          : buildRoute(Route.SCREEN_LIST, { orgSlug, host })
+          : buildRoute(Route.HOST_SCREENS, { orgSlug, host })
       case 'component':
         return id
           ? buildRoute(Route.COMPONENT_DETAILS, {
@@ -160,7 +160,7 @@ export function activityHref(
       case 'layout':
         return id
           ? buildRoute(Route.LAYOUT_DETAILS, { orgSlug, host, layoutId: id })
-          : buildRoute(Route.LAYOUT_LIST, { orgSlug, host })
+          : buildRoute(Route.HOST_LAYOUTS, { orgSlug, host })
       case 'theme':
         return buildRoute(Route.HOST_THEME, { orgSlug, host })
       case 'media':

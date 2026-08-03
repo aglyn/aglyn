@@ -110,7 +110,7 @@ export function SiteTemplateCard(props: { hostId: string }) {
         <Button
           size="small"
           variant="contained"
-          color="secondary"
+          color="primary"
           sx={{ alignSelf: 'flex-start' }}
           onClick={() => setOpen(true)}
         >
@@ -169,7 +169,7 @@ export function SiteTemplateCard(props: { hostId: string }) {
           </Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!name.trim() || busy}
             onClick={handlePublish}
           >

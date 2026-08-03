@@ -15,7 +15,12 @@ a **reusable component**.
 
 1. Select the element (and its children) you want to reuse.
 2. **Promote** it to a reusable component and give it a name.
-3. The original stays intact where it was.
+3. The element you promoted becomes the **first instance** of the new component, so the
+   document you built it in follows the component like every other one does.
+
+On the canvas an instance shows as a named dashed placeholder rather than its content —
+the source is grafted at render time, not in the editor. Open the component itself to edit
+what it contains, or **Detach** an instance to turn it back into ordinary elements.
 
 ## Insert instances
 
