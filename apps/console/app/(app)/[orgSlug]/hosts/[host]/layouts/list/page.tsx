@@ -36,11 +36,11 @@ import {
   AppLinkNakedLinkProps,
   CardDisplay,
   Container,
-  DataTableComponent,
   MdiIcon,
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
+import { DataTableComponent } from '@aglyn/shared-ui-jsx/components/data-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack } from '@mui/material'

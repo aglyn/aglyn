@@ -19,10 +19,12 @@
 import {
   AppLink,
   CardDisplay,
-  DataTableComponent,
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import {
+  DataTableComponent,
+} from '@aglyn/shared-ui-jsx/components/data-table.component'
 import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
 import {
   mdiBookmarkOutline,
