@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { Timestamp } from '@aglyn/shared-util-timestamp'
+// Deep import, NOT the package root (AGL-1151): the root's `Timestamp` extends
+// the Firestore SDK's, which is a hard runtime dependency, and these four calls
+// only stamp a log line. Importing the class here put the whole Firestore
+// client in every tenant site's eagerly-loaded page chunk.
+import { timestampNowJson } from '@aglyn/shared-util-timestamp/timestamp-json'
 import { emitter, logger } from './aglyn'
 import { AglynEvent } from './emit-manager'
 
@@ -32,11 +36,11 @@ export function lifecycleEvent(
   const { beforeEvent, beforePayload, afterEvent, afterPayload, onCatch } =
     options
   try {
-    logger.debug(Timestamp.now().toJSON(), beforeEvent, beforePayload)
-    emitter.emit(beforeEvent, Timestamp.now().toJSON(), ...beforePayload)
+    logger.debug(timestampNowJson(), beforeEvent, beforePayload)
+    emitter.emit(beforeEvent, timestampNowJson(), ...beforePayload)
     callbackFn()
-    logger.debug(Timestamp.now().toJSON(), afterEvent, afterPayload)
-    emitter.emit(afterEvent, Timestamp.now().toJSON(), ...afterPayload)
+    logger.debug(timestampNowJson(), afterEvent, afterPayload)
+    emitter.emit(afterEvent, timestampNowJson(), ...afterPayload)
   } catch (e) {
     emitter.emit(AglynEvent.ERROR_GENERAL, {
       message:

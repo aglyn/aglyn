@@ -16,7 +16,8 @@
  */
 
 import { Logger } from '@aglyn/shared-util-logger'
-import { Timestamp } from '@aglyn/shared-util-timestamp'
+// Deep import, NOT the package root (AGL-1151) — see the note in lifecycle.ts.
+import { timestampNowJson } from '@aglyn/shared-util-timestamp/timestamp-json'
 import CanvasManager from './canvas-manager'
 import ComponentManager from './components-manager'
 import EmitManager, { AglynEvent } from './emit-manager'
@@ -52,7 +53,7 @@ function wireRuntime(instance: Aglyn): Aglyn {
   const { logger, components, canvas, plugins } = instance
 
   instance.prependListener(['error', '**'], (...payload) => {
-    logger.error(Timestamp.now().toJSON(), ...payload)
+    logger.error(timestampNowJson(), ...payload)
   })
 
   instance.on(AglynEvent.PLUGIN_REGISTER, ({ plugin }) => {

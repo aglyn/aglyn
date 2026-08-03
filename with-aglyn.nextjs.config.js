@@ -171,7 +171,13 @@ const BRAND_HEADERS = [
  **/
 const AGLYN_CONFIG = {
   aglyn: {
-    analyzeBundle: ANALYZE_BUNDLE && !IS_PRODUCTION,
+    // Opt-in only, but it MUST survive a production build: the development
+    // bundle is unminified, unsplit and tree-shaken differently, so analysing
+    // it answers a question nobody asked. The old `&& !IS_PRODUCTION` gate
+    // silently disabled the analyser in exactly the build worth measuring,
+    // which is why three attempts to attribute a tenant chunk (AGL-1151) fell
+    // back to grepping minified output and got it wrong twice.
+    analyzeBundle: ANALYZE_BUNDLE,
     analyzerOptions: {},
   },
   compiler: {
