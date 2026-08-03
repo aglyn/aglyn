@@ -140,3 +140,49 @@ export function scanLayoutUsage(
     ...dependentsOf(layouts, 'layout'),
   ]
 }
+
+/**
+ * Every live screen rendered inside `layoutId`, at ANY nesting depth
+ * (AGL-1150).
+ *
+ * `scanLayoutUsage` answers one level. Layouts nest — a screen points at a
+ * layout, which can point at a parent layout, and `compose-screen-nodes` walks
+ * that whole chain when composing a page. So publishing a layout changes every
+ * screen below it, not just the ones bound to it directly, and a cache drop
+ * that only handles the direct level leaves the rest showing stale chrome for
+ * the full revalidate window.
+ *
+ * Pure, and separate from the Firestore read, so the nesting behaviour is
+ * testable without a database.
+ *
+ * Cycle-safe. `canNestLayout` refuses to create a cycle, but a document written
+ * straight to Firestore is not bound by that, and a cycle here would hang a
+ * publish request rather than surface anything.
+ */
+export function screenIdsUsingLayoutDeep(
+  layoutId: string,
+  screens: UsageCandidate[],
+  layouts: UsageCandidate[] = [],
+): string[] {
+  if (!layoutId) return []
+  const screenIds = new Set<string>()
+  const seenLayouts = new Set<string>([layoutId])
+  let frontier = [layoutId]
+
+  while (frontier.length) {
+    const next: string[] = []
+    for (const id of frontier) {
+      for (const dependent of scanLayoutUsage(id, screens, layouts)) {
+        if (dependent.type === 'screen') {
+          screenIds.add(dependent.id)
+        } else if (!seenLayouts.has(dependent.id)) {
+          seenLayouts.add(dependent.id)
+          next.push(dependent.id)
+        }
+      }
+    }
+    frontier = next
+  }
+
+  return [...screenIds]
+}

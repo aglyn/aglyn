@@ -84,6 +84,7 @@ import AuthenticatedLayout from '../../../../../../../../../../components/layout
 import DashboardLayout from '../../../../../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import SecondaryNavBarComponent from '../../../../../../../../../../components/secondary-nav-bar.component'
+import revalidateLivePages from '../../../../../../../../../../utils/revalidate-live-pages'
 import HostDisplayNameComponent from '../../../../../../../../../../components/host-display-name.component'
 import { hasEntitlement } from '../../../../../../../../../../constants/entitlements'
 import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
@@ -379,23 +380,13 @@ function ScreenDetails() {
    * underneath as the backstop.
    */
   const { data: user } = useUser()
-  const revalidateLivePage = useCallback(async () => {
-    try {
-      const idToken = await (user as { getIdToken?: () => Promise<string> } | undefined)
-        ?.getIdToken?.()
-      if (!idToken) return
-      await fetch('/api/screens/revalidate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ hostId, screenId }),
-      })
-    } catch {
-      // Best effort by design — see above.
-    }
-  }, [user, hostId, screenId])
+  // Shared with the besigner's versions panel (AGL-1150). This was the only
+  // publish site that dropped a cache; keeping the call in one helper is what
+  // stops the next publish surface from quietly forgetting it.
+  const revalidateLivePage = useCallback(
+    () => revalidateLivePages({ user, hostId, screenId }),
+    [user, hostId, screenId],
+  )
 
   // --- Version publish-now ----------------------------------------------
   const handlePublishVersion = useCallback(

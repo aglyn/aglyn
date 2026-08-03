@@ -42,11 +42,52 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { screenIdsUsingLayoutDeep } from '../../../../utils/server/scan-artifact-usage'
 
 export const dynamic = 'force-dynamic'
 
 /** Roles that may publish, and therefore may bust a cache. */
 const EDITORS = new Set(['admin', 'editor'])
+
+/**
+ * Every live screen that renders inside `layoutId`, however deep (AGL-1150).
+ *
+ * Layouts NEST — a screen points at a layout, and that layout can point at a
+ * parent layout, which `compose-screen-nodes` walks when composing. So the
+ * dependents of a published layout are not just the screens bound directly to
+ * it: a screen three levels down renders its chrome too, and shows stale
+ * chrome for the whole revalidate window if it is missed.
+ *
+ * The walk itself is `screenIdsUsingLayoutDeep`, kept pure and tested next to
+ * `scanLayoutUsage`; this only does the Firestore read it needs.
+ */
+async function screenIdsUsingLayout(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  layoutId: string,
+): Promise<string[]> {
+  const hostRef = firestore.collection('hosts').doc(hostId)
+  // Read each collection ONCE and walk in memory. The alternative — a query
+  // per level — multiplies round trips by the nesting depth on a path that
+  // runs while someone waits for a publish to feel instant.
+  const [screenDocs, layoutDocs] = await Promise.all([
+    hostRef.collection('screens').get(),
+    hostRef.collection('layouts').get(),
+  ])
+  const toCandidate = (doc: FirebaseFirestore.QueryDocumentSnapshot) => ({
+    id: doc.id,
+    displayName: doc.get('displayName'),
+    name: doc.get('name'),
+    deletedAt: doc.get('deletedAt'),
+    layoutId: doc.get('layoutId'),
+    versionId: doc.get('versionId'),
+  })
+  return screenIdsUsingLayoutDeep(
+    layoutId,
+    screenDocs.docs.map(toCandidate),
+    layoutDocs.docs.map(toCandidate),
+  )
+}
 
 const TENANT_DOMAIN =
   process.env['NEXT_PUBLIC_TENANT_DOMAIN'] ?? 'aglyn.app'
@@ -75,8 +116,16 @@ export async function POST(request: Request): Promise<Response> {
 
     const hostId = String((payload as { hostId?: unknown })?.hostId ?? '')
     const screenId = String((payload as { screenId?: unknown })?.screenId ?? '')
-    if (!hostId || !screenId) {
-      return Response.json({ error: 'Missing hostId or screenId' }, { status: 400 })
+    // Publishing a LAYOUT changes every screen rendered inside it (AGL-1150).
+    // The caller names what it published; working out which URLs that affects
+    // is this route's job, because it is the only side holding both the
+    // layout→screen graph and the tenant's cache keys.
+    const layoutId = String((payload as { layoutId?: unknown })?.layoutId ?? '')
+    if (!hostId || (!screenId && !layoutId)) {
+      return Response.json(
+        { error: 'Missing hostId, and one of screenId or layoutId' },
+        { status: 400 },
+      )
     }
 
     const hostSnapshot = await firestore.collection('hosts').doc(hostId).get()
@@ -104,8 +153,18 @@ export async function POST(request: Request): Promise<Response> {
     // The routing map is `screenId → path`, and a screen not in it is not
     // routable — nothing to invalidate, which is a success, not an error.
     const screens = (hostSnapshot.get('screens') ?? {}) as Record<string, string>
-    const routePath = screens[screenId]
-    if (!routePath) {
+
+    const affectedScreenIds = layoutId
+      ? await screenIdsUsingLayout(firestore, hostId, layoutId)
+      : [screenId]
+
+    const routePaths = affectedScreenIds
+      .map((id) => screens[id])
+      .filter((path): path is string => Boolean(path))
+
+    if (!routePaths.length) {
+      // A layout no live screen renders inside, or an unrouted screen. Nothing
+      // to invalidate is a success, not an error.
       return Response.json({ revalidated: [], reason: 'not-routed' }, { status: 200 })
     }
 
@@ -129,7 +188,7 @@ export async function POST(request: Request): Promise<Response> {
       },
       body: JSON.stringify({
         host: subdomain,
-        paths: [screenRoutePathToUrl(routePath)],
+        paths: routePaths.map((path) => screenRoutePathToUrl(path)),
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })

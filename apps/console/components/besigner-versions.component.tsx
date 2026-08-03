@@ -66,7 +66,8 @@ import {
 import { observer } from 'mobx-react-lite'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import revalidateLivePages from '../utils/revalidate-live-pages'
 import { hasEntitlement } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostSubdomain } from '../components/host-id-provider'
@@ -160,6 +161,9 @@ export const BesignerVersionsComponent = observer(
   function BesignerVersionsComponent(props: BesignerVersionsProps) {
     const { hostId, parent, versionId, publishedVersionId } = props
     const firestore = useFirestore()
+    // Publishing drops the live page's cache, and that route authenticates
+    // with the caller's ID token (AGL-1150).
+    const { data: user } = useUser()
     const orgSlug = useOrgSlug()
     const host = useHostSubdomain()
     const router = useRouter()
@@ -283,6 +287,24 @@ export const BesignerVersionsComponent = observer(
             variant: 'success',
             persist: false,
           })
+          // AGL-1150: this panel is where publishing usually happens, and it
+          // dropped no cache at all until now — for screens or layouts. Fired
+          // AFTER the snackbar and deliberately not awaited: the publish has
+          // already succeeded, and the 60s window is still the backstop.
+          //
+          // `component` is intentionally absent. A component's dependents are
+          // a node-tree scan across every screen and layout, not a pointer
+          // lookup, so it needs the where-used scanner rather than this call —
+          // filed separately rather than half-wired here.
+          if (parent.kind === 'screen' || parent.kind === 'layout') {
+            void revalidateLivePages({
+              user,
+              hostId,
+              ...(parent.kind === 'screen'
+                ? { screenId: parent.id }
+                : { layoutId: parent.id }),
+            })
+          }
         } catch (error) {
           console.error(error)
           enqueueSnackbar('An error has occurred', {
@@ -293,7 +315,16 @@ export const BesignerVersionsComponent = observer(
           dequeue()
         }
       },
-      [firestore, hostId, parentPath, queueLoading, enqueueSnackbar],
+      [
+        firestore,
+        hostId,
+        parentPath,
+        queueLoading,
+        enqueueSnackbar,
+        user,
+        parent.kind,
+        parent.id,
+      ],
     )
 
     const handleCreateVersion = useCallback(() => {
