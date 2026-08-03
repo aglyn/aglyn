@@ -31,6 +31,7 @@ import {
   scanLayoutUsage,
   type UsageCandidate,
 } from '../../../../utils/server/scan-artifact-usage'
+import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
 
 export interface WhereUsedDependent {
   /** Resource collection the dependent lives in. */
@@ -185,48 +186,24 @@ async function handler(request: Request): Promise<Response> {
     }
 
     if (kind === 'component' || kind === 'layout') {
-      /** Documents plus, for screens/layouts, their published nodes. */
+      /**
+       * Documents plus, for screens/layouts, their published nodes.
+       *
+       * Shared with the publish-time cache drop (AGL-1161) so there is one
+       * reader and one node-decode. Advisory here, so the 200 cap stands and
+       * a truncated answer is acceptable — this endpoint answers "what would
+       * I break", not "which caches must be dropped".
+       */
       const readCandidates = async (
         collectionName: 'screens' | 'layouts' | 'components',
         withNodes: boolean,
-      ): Promise<UsageCandidate[]> => {
-        const docs = await hostRef.collection(collectionName).limit(200).get()
-        return Promise.all(
-          docs.docs.map(async (docSnapshot) => {
-            const versionId = docSnapshot.get('versionId')
-            // Components keep their tree on the document; screens and
-            // layouts keep it on the published version.
-            //
-            // Only the VERSION read is decoded (AGL-1223). A component
-            // document's `nodes` is stored plainly on purpose, so the tenant
-            // runtime can read it without decoding — `decodeStoredNodes`
-            // would pass it through unchanged, but saying so here is cheaper
-            // than the next reader re-deriving it.
-            const nodes =
-              collectionName === 'components'
-                ? docSnapshot.get('nodes')
-                : withNodes && versionId
-                  ? await docSnapshot.ref
-                      .collection('versions')
-                      .doc(String(versionId))
-                      .get()
-                      .then((version) => decodeStoredNodes(version.get('nodes')))
-                      .catch(() => null)
-                  : null
-            return {
-              id: docSnapshot.id,
-              displayName: docSnapshot.get('displayName'),
-              name: docSnapshot.get('name'),
-              deletedAt: docSnapshot.get('deletedAt'),
-              nodes,
-              ...(versionId ? { versionId: String(versionId) } : {}),
-              ...(docSnapshot.get('layoutId')
-                ? { layoutId: String(docSnapshot.get('layoutId')) }
-                : {}),
-            }
-          }),
-        )
-      }
+      ): Promise<UsageCandidate[]> =>
+        (
+          await readUsageCandidates(hostRef, collectionName, {
+            withNodes,
+            limit: 200,
+          })
+        ).candidates
 
       if (kind === 'layout') {
         // No node search needed: the reference is a `layoutId` field, on

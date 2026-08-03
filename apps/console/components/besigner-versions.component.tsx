@@ -309,17 +309,24 @@ export const BesignerVersionsComponent = observer(
           // AFTER the snackbar and deliberately not awaited: the publish has
           // already succeeded, and the 60s window is still the backstop.
           //
-          // `component` is intentionally absent. A component's dependents are
-          // a node-tree scan across every screen and layout, not a pointer
-          // lookup, so it needs the where-used scanner rather than this call —
-          // filed separately rather than half-wired here.
-          if (parent.kind === 'screen' || parent.kind === 'layout') {
+          // `component` now included too (AGL-1161). Its dependents are a
+          // node-tree scan rather than a pointer lookup, so the route reads
+          // more and takes longer — which is exactly why this is not awaited.
+          // Nobody is watching one URL after a component publish the way they
+          // are after a screen publish.
+          if (
+            parent.kind === 'screen' ||
+            parent.kind === 'layout' ||
+            parent.kind === 'component'
+          ) {
             void revalidateLivePages({
               user,
               hostId,
               ...(parent.kind === 'screen'
                 ? { screenId: parent.id }
-                : { layoutId: parent.id }),
+                : parent.kind === 'layout'
+                  ? { layoutId: parent.id }
+                  : { componentId: parent.id }),
             })
           }
         } catch (error) {

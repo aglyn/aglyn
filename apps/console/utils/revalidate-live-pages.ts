@@ -46,13 +46,25 @@ export interface RevalidateLivePagesOptions {
    * both the layout→screen graph and the tenant's cache keys.
    */
   layoutId?: string
+  /**
+   * Publishing a component invalidates every screen that renders it — placed
+   * directly, nested inside another component, or sitting in a layout's
+   * chrome (AGL-1161). The console route owns that closure too, for the same
+   * reason: it is the side holding the node graph and the tenant's cache keys.
+   *
+   * Costlier than the others, because a component's dependents are found by
+   * searching node trees rather than by matching a pointer. That is why every
+   * caller fires this without awaiting — and unlike a screen publish, nobody
+   * is watching one specific URL for it to change.
+   */
+  componentId?: string
 }
 
 export async function revalidateLivePages(
   options: RevalidateLivePagesOptions,
 ): Promise<void> {
-  const { user, hostId, screenId, layoutId } = options
-  if (!hostId || (!screenId && !layoutId)) return
+  const { user, hostId, screenId, layoutId, componentId } = options
+  if (!hostId || (!screenId && !layoutId && !componentId)) return
   try {
     const idToken = await user?.getIdToken?.()
     if (!idToken) return
@@ -66,6 +78,7 @@ export async function revalidateLivePages(
         hostId,
         ...(screenId ? { screenId } : {}),
         ...(layoutId ? { layoutId } : {}),
+        ...(componentId ? { componentId } : {}),
       }),
     })
   } catch {
