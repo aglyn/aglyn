@@ -134,6 +134,24 @@ export function ThemePreview(props: ThemePreviewProps) {
               </Typography>
             </CardContent>
           </Card>
+          {/* Surface had a swatch in the palette but nothing rendering it,
+              so the one control with no feedback was the one people were
+              most likely to get wrong. */}
+          <Box
+            sx={{
+              backgroundColor: 'surface.main',
+              color: 'surface.contrastText',
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: 'divider',
+              p: 1.5,
+            }}
+          >
+            <Typography variant="subtitle2">{'Surface'}</Typography>
+            <Typography variant="body2">
+              {'Raised panels and toolbars sit on the surface color.'}
+            </Typography>
+          </Box>
           <TextField label="Text field" size="small" fullWidth />
           <Divider />
           <Alert severity="success">{'Success alert uses the palette.'}</Alert>

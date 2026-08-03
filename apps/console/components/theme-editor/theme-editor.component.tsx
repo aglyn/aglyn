@@ -22,6 +22,7 @@ import type {
 } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
+  consoleOptions,
   consoleThemeDark,
   consoleThemeLight,
   getGoogleFontsUrl,
@@ -124,6 +125,25 @@ export function ThemeEditor(props: ThemeEditorProps) {
   const inheritedDivider = typeof basePalette?.['divider'] === 'string'
     ? (basePalette['divider'] as string)
     : undefined
+  // Shape/spacing/typography defaults come from the brand theme too — these
+  // used to be the literals `?? 4` and `?? 8`, which happen to match today
+  // and would silently stop matching the moment console.theme.ts changed.
+  const baseShapeRadius =
+    typeof consoleThemeLight.shape?.borderRadius === 'number'
+      ? consoleThemeLight.shape.borderRadius
+      : 4
+  const baseSpacing =
+    typeof consoleOptions.spacing === 'number' ? consoleOptions.spacing : 8
+  // The inherited stack is a long CSS font list; name its first family so
+  // the fallback option says what you actually get instead of the
+  // meaningless "System default".
+  const baseFontFamily = String(
+    (consoleOptions.typography as { fontFamily?: string } | undefined)
+      ?.fontFamily ?? '',
+  )
+    .split(',')[0]
+    .replace(/["']/g, '')
+    .trim()
 
   const handleSchemeTab = useCallback((_, value: HostThemeScheme) => {
     setScheme(value)
@@ -357,7 +377,11 @@ export function ThemeEditor(props: ThemeEditorProps) {
               value={activeFontFamily}
               onChange={handleFontChange}
             >
-              <MenuItem value={SYSTEM_FONT_VALUE}>{'System default'}</MenuItem>
+              <MenuItem value={SYSTEM_FONT_VALUE}>
+                {baseFontFamily
+                  ? `Theme default (${baseFontFamily})`
+                  : 'Theme default'}
+              </MenuItem>
               {GOOGLE_FONT_OPTIONS.map((option) => (
                 <MenuItem key={option.family} value={option.family}>
                   {`${option.family} (${option.category})`}
@@ -378,14 +402,14 @@ export function ThemeEditor(props: ThemeEditorProps) {
             <Stack spacing={2}>
               <Stack spacing={0.5}>
                 <Typography variant="body2">
-                  {`Border radius: ${draft.shape?.borderRadius ?? 4}px`}
+                  {`Border radius: ${draft.shape?.borderRadius ?? baseShapeRadius}px`}
                 </Typography>
                 <Slider
                   aria-label="border radius"
                   size="small"
                   min={0}
                   max={24}
-                  value={draft.shape?.borderRadius ?? 4}
+                  value={draft.shape?.borderRadius ?? baseShapeRadius}
                   onChange={handleRadiusChange}
                 />
               </Stack>
@@ -393,7 +417,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
                 type="number"
                 size="small"
                 label="Spacing unit (px)"
-                value={draft.spacing ?? 8}
+                value={draft.spacing ?? baseSpacing}
                 onChange={handleSpacingChange}
                 slotProps={{ htmlInput: { min: 2, max: 16 } }}
               />
