@@ -204,6 +204,53 @@ describe('style field groups (AGL-540/587)', () => {
     })
   })
 
+  // Per-field help tips (AGL-600, wired in AGL-1220). Asserted at the
+  // DECLARATION end: the panel's accordion copy promises a ? on exactly
+  // these fields, and for years there was none anywhere because
+  // withStyleFieldHelp was never called.
+  describe('help tips', () => {
+    const allFields = [
+      ...groups.flatMap((group) => group.fields),
+      ...gapGroup.fields,
+    ]
+    const helpOf = (name: string) =>
+      allFields.find((field) => field.name === name)?.['help'] as
+        { title: string; excerpt: string; href: string } | undefined
+
+    it.each(['borderRadius', 'gap', 'rowGap', 'columnGap', 'lineHeight'])(
+      'warns on %s that its bare number is not pixels',
+      (name) => {
+        const help = helpOf(name)
+        expect(help).toBeDefined()
+        expect(help!.excerpt).toMatch(/not pixels/)
+        expect(help!.title).toBeTruthy()
+        // Clicking the tip must land on the style-groups docs section.
+        expect(help!.href).toContain('#style-groups')
+      },
+    )
+
+    it('leaves every other field to its inline description', () => {
+      // The tip's value is saying what the helper line CANNOT. Tipping
+      // all ~40 described fields duplicates the visible text and drops a
+      // ? onto each field's top border — deliberately not shipped.
+      const tipped = allFields
+        .filter((field) => field['help'])
+        .map((field) => field.name)
+        .sort()
+      expect(tipped).toEqual([
+        'borderRadius',
+        'columnGap',
+        'gap',
+        'lineHeight',
+        'rowGap',
+      ])
+      // …and every untipped field still explains itself inline.
+      for (const field of allFields) {
+        if (!field['help']) expect(field['description']).toBeTruthy()
+      }
+    })
+  })
+
   it('feeds the theme palette into every color picker', () => {
     for (const fieldName of ['borderColor', 'color', 'backgroundColor']) {
       const field = groups
@@ -234,9 +281,7 @@ describe('style field groups (AGL-540/587)', () => {
     it('clears fields the user emptied', () => {
       const partial = computeStylePartial(names, { height: undefined })
       expect(partial['height']).toBeUndefined()
-      expect(Object.prototype.hasOwnProperty.call(partial, 'height')).toBe(
-        true,
-      )
+      expect(Object.prototype.hasOwnProperty.call(partial, 'height')).toBe(true)
     })
   })
 

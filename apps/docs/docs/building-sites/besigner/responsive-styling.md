@@ -76,7 +76,10 @@ rather than typing the unit yourself. Anything richer than a plain
 length (`calc(100% - 2rem)`, `min-content`, a `{{token}}` binding) stays
 editable as text and is never rewritten. Gap, corner radius, and line
 height stay plain text fields: a bare number there means a *theme*
-multiple, not pixels.
+multiple, not pixels. Gap, row gap, column gap, corner radius and line
+height each carry a **?** you can hover for the exact rule, and they are
+the only fields that do — every other field explains itself in the line
+printed under it.
 
 Every control **applies immediately** — toggles and switches on click,
 text fields on a short pause in typing (or when focus leaves the

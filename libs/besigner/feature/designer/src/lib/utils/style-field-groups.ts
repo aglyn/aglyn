@@ -39,23 +39,73 @@ export interface StyleFieldGroup {
   fields: Array<Record<string, unknown> & { name: string }>
 }
 
-/** Give every described style field a help tooltip (AGL-600): the field's
- * own description plus a deep link into the responsive-styling docs. */
+/**
+ * Fields that earn a per-field help tip (AGL-600, wired in AGL-1220).
+ *
+ * Deliberately NOT every described field. Every field's `description`
+ * already renders as helper text UNDER its control, so a tooltip whose
+ * excerpt IS that description is ~40 question marks that say nothing new
+ * — and `FormFieldGrid` pins the icon at `top: -6, right: 0`, i.e. ON
+ * the field's top border, where on a length field it lands right beside
+ * the unit menu's caret and on a full-width select it floats detached
+ * above the box. (Colour pickers do not forward `help` at all, so the
+ * full set also left three ragged gaps.) Checked in the panel at its
+ * real ~340px width before narrowing to this list.
+ *
+ * What a tip can say that the inline line cannot is the panel's one
+ * genuine footgun: a bare NUMBER in these five fields is not pixels.
+ * `borderRadius: 2` renders 8px (× `shape.borderRadius`), `gap: 2`
+ * renders 16px (× the spacing unit), and `lineHeight: 1.5` is a ratio —
+ * a silent 8× surprise no one-line example can warn about, and the exact
+ * reason these five stayed free text while every other length became a
+ * number box + unit picker (AGL-1219). All five are plain text boxes, so
+ * the icon has the field's top-right corner to itself.
+ */
+const STYLE_FIELD_HELP: Record<string, { title: string; excerpt: string }> = {
+  borderRadius: {
+    title: 'Corner Radius',
+    excerpt:
+      'A bare number is a theme multiple, not pixels — 2 renders 8px (2 × the theme corner radius). Add a unit (8px, 50%) for an exact radius.',
+  },
+  gap: {
+    title: 'Gap',
+    excerpt:
+      'A bare number is a theme multiple, not pixels — 2 renders 16px (2 × the theme spacing unit). Add a unit (16px, 1rem) for an exact gutter.',
+  },
+  rowGap: {
+    title: 'Row Gap',
+    excerpt:
+      'A bare number is a theme multiple, not pixels — 2 renders 16px (2 × the theme spacing unit). Add a unit (16px, 1rem) for an exact gutter.',
+  },
+  columnGap: {
+    title: 'Column Gap',
+    excerpt:
+      'A bare number is a theme multiple, not pixels — 2 renders 16px (2 × the theme spacing unit). Add a unit (16px, 1rem) for an exact gutter.',
+  },
+  lineHeight: {
+    title: 'Line Height',
+    excerpt:
+      'A bare number is a ratio of the font size, not pixels — 1.5 renders one-and-a-half times the text size, and stays right when the font size changes. Add a unit (28px) to pin the line box.',
+  },
+}
+
+/** Attaches {@link STYLE_FIELD_HELP} to a group's fields, each with a
+ * deep link into the responsive-styling docs. */
 function withStyleFieldHelp(group: StyleFieldGroup): StyleFieldGroup {
   return {
     ...group,
-    fields: group.fields.map((field) =>
-      field['description'] && !field['help']
+    fields: group.fields.map((field) => {
+      const help = STYLE_FIELD_HELP[field.name]
+      return help && !field['help']
         ? {
             ...field,
             help: {
-              title: field['label'] ?? field.name,
-              excerpt: field['description'],
+              ...help,
               href: besignerDocsUrl('responsiveStyling', '#style-groups'),
             },
           }
-        : field,
-    ),
+        : field
+    }),
   }
 }
 
@@ -133,6 +183,10 @@ const selectField = (
 export function buildStyleFieldGroups(
   presetColors: string[],
 ): StyleFieldGroup[] {
+  return styleFieldGroups(presetColors).map(withStyleFieldHelp)
+}
+
+function styleFieldGroups(presetColors: string[]): StyleFieldGroup[] {
   return [
     {
       $id: 'layout',
@@ -181,8 +235,7 @@ export function buildStyleFieldGroups(
             {
               value: 'inherit',
               label: 'Inherit',
-              description:
-                'The element inherits the float value of its parent',
+              description: 'The element inherits the float value of its parent',
             },
             {
               value: 'none',
@@ -198,8 +251,7 @@ export function buildStyleFieldGroups(
             {
               value: 'right',
               label: 'Right',
-              description:
-                'The element floats to the right of its container',
+              description: 'The element floats to the right of its container',
             },
           ],
         },
@@ -502,7 +554,7 @@ export function buildStyleFieldGroups(
  * responsive-sx pipeline as every other group.
  */
 export function buildFlexGapGroup(): StyleFieldGroup {
-  return {
+  return withStyleFieldHelp({
     $id: 'flex-gaps',
     label: 'Gaps',
     fields: [
@@ -524,7 +576,7 @@ export function buildFlexGapGroup(): StyleFieldGroup {
         half,
       ),
     ],
-  }
+  })
 }
 
 /** Field names owned by a group — the only keys its save may touch. */
@@ -642,7 +694,12 @@ export function computeEffectiveStyleValues(
   }
   const out: Record<string, any> = {}
   for (const key of keys) {
-    const value = readSxValue(source, key, breakpoint, fieldSxScheme(key, scheme))
+    const value = readSxValue(
+      source,
+      key,
+      breakpoint,
+      fieldSxScheme(key, scheme),
+    )
     if (value !== undefined && typeof value !== 'object') out[key] = value
   }
   return out
