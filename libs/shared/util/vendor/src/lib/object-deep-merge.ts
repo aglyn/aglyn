@@ -15,11 +15,31 @@
  * limitations under the License.
  */
 
+import { deepmergeCustom } from 'deepmerge-ts'
+
 export {
   deepmerge as objectDeepMerge,
   deepmergeCustom as objectDeepMergeCustom,
   type DeepMergeOptions as ObjectDeepMergeOptions,
 } from 'deepmerge-ts'
+
+/**
+ * Deep merge where a later array REPLACES an earlier one rather than being
+ * concatenated onto it.
+ *
+ * `objectDeepMerge` concatenates, which is right for accumulating lists and
+ * wrong for configuration: merging `{ variants: ['a','b'] }` with
+ * `{ variants: ['z'] }` should leave `['z']`, not `['a','b','z']` — nobody
+ * overriding a setting means "append to the one I'm replacing". Reach for
+ * this whenever the objects are config (theme options, plugin manifests,
+ * settings documents) rather than data being collected.
+ *
+ * Non-plain values — functions, class instances — are replaced wholesale by
+ * the later operand, which is what config overrides want too.
+ */
+export const objectDeepMergeReplaceArrays = deepmergeCustom({
+  mergeArrays: false,
+})
 
 import objectDeepMergeFillIn from 'mout/object/deepFillIn'
 export { objectDeepMergeFillIn }

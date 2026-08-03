@@ -23,6 +23,7 @@ import type {
   HostThemeScheme,
   HostThemeSchemeColors,
 } from '@aglyn/shared-data-types'
+import { objectDeepMergeReplaceArrays } from '@aglyn/shared-util-vendor'
 import type { PaletteOptions, ThemeOptions } from '../../vendor/mui'
 
 /**
@@ -219,7 +220,7 @@ export function mergeThemeOptions(
     isPlainObject(base.typography) &&
     isPlainObject(overrides.typography)
   ) {
-    merged.typography = deepMerge(
+    merged.typography = objectDeepMergeReplaceArrays(
       base.typography,
       overrides.typography,
     ) as ThemeOptions['typography']
@@ -232,9 +233,9 @@ export function mergeThemeOptions(
   // the theme that JSON cannot express, so the editor could not put them
   // back even in principle. Deep-merging means you override the leaf you
   // named and inherit everything else, functions included.
-  merged.components = deepMerge(
-    (base.components ?? {}) as Record<string, unknown>,
-    (overrides.components ?? {}) as Record<string, unknown>,
+  merged.components = objectDeepMergeReplaceArrays(
+    base.components ?? {},
+    overrides.components ?? {},
   ) as ThemeOptions['components']
 
   return merged
@@ -245,26 +246,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return (
     typeof value === 'object' && value !== null && !Array.isArray(value)
   )
-}
-
-/**
- * Recursive merge where the override wins at the leaves. Arrays and
- * functions are replaced wholesale rather than merged into — half an array
- * or a function spread into an object is never what anyone meant.
- */
-function deepMerge(
-  base: Record<string, unknown>,
-  override: Record<string, unknown>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...base }
-  for (const [key, value] of Object.entries(override)) {
-    const existing = out[key]
-    out[key] =
-      isPlainObject(existing) && isPlainObject(value)
-        ? deepMerge(existing, value)
-        : value
-  }
-  return out
 }
 
 /** True when the document customizes anything, i.e. consumers should build a theme from it rather than using their default. */
