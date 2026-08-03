@@ -208,6 +208,14 @@ function ScreenDetails() {
     screen?.publishSchedule?.status === 'pending'
       ? screen.publishSchedule
       : undefined
+  // A schedule that came due on a plan without `scheduledPublishing` (AGL-1185).
+  // Shown rather than dropped: it silently stopped being pending, and a screen
+  // whose scheduled publish simply vanished is indistinguishable from one that
+  // was never scheduled. Dismissing clears the field like any other cancel.
+  const skippedSchedule =
+    screen?.publishSchedule?.status === 'skipped-unentitled'
+      ? screen.publishSchedule
+      : undefined
 
   // --- Edit details dialog ---------------------------------------------
   const [editor, setEditor] = useState<{
@@ -794,6 +802,31 @@ function ScreenDetails() {
                             variant="outlined"
                             onDelete={handleScheduleCancel}
                           />
+                        ) : null}
+                        {skippedSchedule ? (
+                          <Tooltip
+                            title={
+                              'Scheduled publishing is a Business feature. ' +
+                              'This schedule came due on a plan without it, ' +
+                              'so it was not applied — and it will not run ' +
+                              'later if you upgrade. Schedule it again to ' +
+                              'publish.'
+                            }
+                          >
+                            <Chip
+                              label={
+                                `Did not ${
+                                  skippedSchedule.action === 'unpublish'
+                                    ? 'unpublish'
+                                    : 'publish'
+                                } — plan does not include scheduling`
+                              }
+                              color="warning"
+                              size="small"
+                              variant="outlined"
+                              onDelete={handleScheduleCancel}
+                            />
+                          </Tooltip>
                         ) : null}
                       </Stack>
                       <TextField
