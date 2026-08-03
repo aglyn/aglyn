@@ -1,0 +1,308 @@
+{
+  "page": "Marketing",
+  "figmaNodeId": "637:1218",
+  "figmaFrameName": "Product — Marketing",
+  "frameSize": { "width": 1440, "height": 5253 },
+  "skeleton": "Matches the /product/besigner 8-section skeleton exactly: Hero · Statement · Capabilities · Deep-dive · How it works · Explore the platform · Early access · CTA. (As on Analytics, the Canvas/visual beat lives inside the Deep-dive — the Figma frame is named 'Deep-dive · canvas'.)",
+  "sections": [
+    {
+      "kind": "navbar",
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [],
+      "actions": [
+        { "label": "Sign in", "variant": "text" },
+        { "label": "Start free", "variant": "contained" }
+      ],
+      "items": [
+        { "title": "Product", "body": null, "meta": "menu" },
+        { "title": "Solutions", "body": null, "meta": "menu" },
+        { "title": "Pricing", "body": null, "meta": "link" },
+        { "title": "Docs", "body": null, "meta": "link" },
+        { "title": "Blog", "body": null, "meta": "link" },
+        { "title": "Beta", "body": null, "meta": "pill badge next to the logo" }
+      ],
+      "image": null,
+      "notes": "Shared NavBar component instance (637:1219), byte-identical on all three frames."
+    },
+    {
+      "kind": "hero",
+      "eyebrow": "MARKETING · REACH + CONVERT",
+      "heading": "Reach your audience, right from your site.",
+      "subheading": null,
+      "body": [
+        "Send email campaigns to your lists, put announcement bars and popups on any page, and A/B test what converts — all built into the same platform your site runs on."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "Watch the tour", "variant": "text" }
+      ],
+      "items": [],
+      "image": {
+        "describe": "Email campaign composer mockup, 920×580. Breadcrumb 'Marketing / Campaigns / Product launch' with a 'Schedule' action. Fields: SUBJECT 'Meet the new Aglyn'; AUDIENCE with two selectable lists — 'Newsletter · 1,240 subscribers' and 'Customers · 480 subscribers'; DELIVERY 'Schedule — Jul 28, 2026 · 9:00 AM'; a 'Recipients 1,240' readout. Right side previews the email itself: headline 'Meet the new Aglyn', a 'Start building' button, and a footer 'Aglyn LLC · Unsubscribe'.",
+        "figmaNodeId": "637:1230"
+      },
+      "notes": "Two-column, left copy 600px wide / right mockup 920px overflowing the 1440 frame. Same 28×2px magenta rule before the eyebrow as Analytics. Hero heading wraps to 3 lines at 600px (225px tall text box) vs 2–3 on Analytics. White background."
+    },
+    {
+      "kind": "statement",
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [
+        "Marketing usually means bolting on an email tool, a popup widget, and a testing script — each with its own dashboard and its own bill. Aglyn builds them into the platform, so your audience, your site, and your results live in one place."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": "Single full-bleed paragraph, 1280px wide, 80px gutters, 64px vertical padding. White background."
+    },
+    {
+      "kind": "capabilities",
+      "eyebrow": "WHAT MARKETING INCLUDES",
+      "heading": "Everything to reach your audience.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Email campaigns",
+          "body": "Design emails on the same canvas as your site, then send them to your lists — delivered through Resend.",
+          "meta": null
+        },
+        {
+          "title": "Audience lists",
+          "body": "Build and segment lists from your contacts. Every plan includes an audience band — and contacts past it are always captured and metered, never silently dropped.",
+          "meta": null
+        },
+        {
+          "title": "Announcement bars",
+          "body": "Put a scheduled bar at the top of any site for launches, sales, or notices (Starter and up).",
+          "meta": "plan gate: Starter and up"
+        },
+        {
+          "title": "Popups",
+          "body": "Trigger popups by time, scroll, or exit intent, with frequency caps so they never nag (Starter and up).",
+          "meta": "plan gate: Starter and up"
+        },
+        {
+          "title": "A/B testing",
+          "body": "Run experiments on screens and sections, and let the winning variant take over (Business and up).",
+          "meta": "plan gate: Business and up"
+        },
+        {
+          "title": "Scheduled & measured",
+          "body": "Schedule campaigns and overlays ahead of time, and see impressions and clicks on every one.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "3 columns × 2 rows, centred header — but UNLIKE Analytics the cards are NOT uniform height: card 1 is 229px, card 2 is 255px (its body runs to 4 lines), cards 3–6 are 203px. Row 2 starts at y=275 to clear the tallest card. Build with equal-height rows rather than reproducing the ragged Figma geometry. Section is white; same 410px card width and 44px icon square as Analytics. Card FRAME names are stale copies of the Analytics frame ('Card Traffic & pageviews', 'Card Cross-site rollups', 'Card Privacy-friendly' …) and contradict their own text — use the text nodes only."
+    },
+    {
+      "kind": "deep-dive",
+      "eyebrow": "OVERLAYS",
+      "heading": "Announcement bars and popups, without code.",
+      "subheading": null,
+      "body": [
+        "Add a bar or popup to any site, choose when it shows — after a delay, on scroll, or on exit intent — and cap how often it appears. Schedule it for a launch, and take it down automatically."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "title": "Bars & popups",
+          "body": "Announcement bars and modal popups, styled to match your site.",
+          "meta": null
+        },
+        {
+          "title": "Smart triggers",
+          "body": "Show on delay, scroll depth, or exit intent, with per-visitor frequency caps.",
+          "meta": null
+        },
+        {
+          "title": "Scheduled windows",
+          "body": "Set start and end times so overlays appear exactly when you want.",
+          "meta": null
+        }
+      ],
+      "image": {
+        "describe": "Overlay editor mockup, 768×580. Breadcrumb 'Marketing / Overlays' with a 'New overlay' action. Top of the previewed site shows an announcement bar reading 'Aglyn is in early access — join the beta  →'. Below it a modal popup preview: 'Join the newsletter' / 'Product updates and early-access news.' / email field 'you@email.com' / 'Subscribe' button. Right rail is the overlay's settings: name 'Welcome popup' with a 'Live' status chip, then TYPE 'Popup', TRIGGER 'After 5 seconds', FREQUENCY 'Once per session', SCHEDULE 'Always on' — each a dropdown.",
+        "figmaNodeId": "637:1308"
+      },
+      "notes": "Two-column: 440px copy column left with three icon+text bullets (each bullet body wraps to 2 lines here, so bullets are 81px tall vs 55px on Analytics), 768px mockup right. Section background is grey (bg/default #f8f9fa)."
+    },
+    {
+      "kind": "how-it-works",
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From draft to results, in one place.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Build it",
+          "body": "Design an email or overlay on the same canvas you build your site with.",
+          "meta": "01"
+        },
+        {
+          "title": "Target & schedule",
+          "body": "Pick a list or a trigger, then send now or schedule it for later.",
+          "meta": "02"
+        },
+        {
+          "title": "Measure",
+          "body": "Track impressions, clicks, and opens — and A/B test to find what works.",
+          "meta": "03"
+        }
+      ],
+      "image": null,
+      "notes": "Left-aligned header. Three equal columns, each topped by a 3px full-width rule above the two-digit step number. Eyebrow is magenta (brand/secondary #e040fb). White background (bg/paper)."
+    },
+    {
+      "kind": "explore-the-platform",
+      "eyebrow": "ONE PLATFORM",
+      "heading": "Marketing works with the rest of Aglyn",
+      "subheading": "Every product below runs on the same platform — explore what else is built in.",
+      "body": [],
+      "actions": [],
+      "items": [
+        { "title": "Besigner", "body": "Design on a live canvas and publish in one click.", "meta": "links to /product/besigner" },
+        { "title": "Commerce", "body": "Storefronts, checkout, subscriptions & digital goods.", "meta": "links to /product/commerce" },
+        { "title": "Forms & Inbox", "body": "Collect submissions in one Inbox and route them onward.", "meta": "links to /product/forms" },
+        { "title": "Media", "body": "A real DAM — folders, drag-and-drop, metadata.", "meta": "links to /product/media" },
+        { "title": "Workflows", "body": "Automate the busywork with triggers & actions.", "meta": "links to /product/workflows" },
+        { "title": "Analytics", "body": "Privacy-first traffic, top pages, and store revenue.", "meta": "links to /product/analytics" },
+        { "title": "Console", "body": "Manage every site, team, and setting in one place.", "meta": "links to /product/console" }
+      ],
+      "image": null,
+      "notes": "SEVEN link cards, 3-column grid; the 7th (Console) sits alone in column 2 of row 3 — same orphan layout as Analytics. Marketing itself is correctly omitted, but PLUGINS is missing too, so this grid is one short of the nine-product set. ⚠️ The heading here has NO TRAILING PERIOD ('Marketing works with the rest of Aglyn') while the Analytics equivalent does ('Analytics works with the rest of Aglyn.') — recorded verbatim; almost certainly a typo to fix at copy sign-off. ⚠️ The 6th card's Figma FRAME is named 'Link Plugins' but its text is Analytics — trust the text. Section background is grey (bg/default #f8f9fa)."
+    },
+    {
+      "kind": "early-access",
+      "eyebrow": "Now in early access",
+      "heading": "Be among the first to build on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Aglyn is pre-release. Join early access to start building and shape the roadmap with us."
+      ],
+      "actions": [
+        { "label": "Join early access", "variant": "contained" },
+        { "label": "See what’s included", "variant": "outlined" }
+      ],
+      "items": [
+        { "title": "1", "body": "platform, not a stack", "meta": "stat" },
+        { "title": "9", "body": "products built in", "meta": "stat" },
+        { "title": "0", "body": "plugins to wire up", "meta": "stat" },
+        { "title": "1-click", "body": "to publish", "meta": "stat" }
+      ],
+      "image": null,
+      "notes": "Identical to the Analytics and Product overview versions. Centred; Badge/Pill eyebrow; 4-up stat row with 1px × 56px dividers. Grey background (bg/default #f8f9fa)."
+    },
+    {
+      "kind": "cta",
+      "eyebrow": null,
+      "heading": "Grow with Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — add campaigns and overlays whenever you're ready."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "text" }
+      ],
+      "items": [],
+      "image": null,
+      "notes": "DARK/BRAND SECTION. Same gradient as Analytics: linear-gradient(188.73deg, #00b0ff 36.6%, #7a5cf0 76.9%, #e040fb 109.8%). White text; primary is Button/OnDark. Note the body copy uses a STRAIGHT apostrophe in \"you're\" while the rest of the design uses curly ’ — recorded verbatim; normalise at sign-off."
+    },
+    {
+      "kind": "footer",
+      "eyebrow": "ARE YOU A DEVELOPER?",
+      "heading": null,
+      "subheading": "Open source, self-hostable, API-first.",
+      "body": [
+        "© 2026 Aglyn LLC. All rights reserved."
+      ],
+      "actions": [],
+      "items": [
+        { "title": "Product", "body": "Besigner · Console · Commerce · Forms · Media · Workflows · Marketing", "meta": "column" },
+        { "title": "Solutions", "body": "Agencies · Startups · Creators · Developers · Enterprise · Small business", "meta": "column" },
+        { "title": "Use cases", "body": "Online stores · Portfolios · Blogs · SaaS websites · Documentation · Membership sites", "meta": "column" },
+        { "title": "Resources", "body": "Docs · Guides · Blog · Changelog · Newsroom", "meta": "column" },
+        { "title": "Company", "body": "About · Pricing · Careers · Press · Contact", "meta": "column" },
+        { "title": "Legal / utility bar", "body": "Privacy · Terms · Legal · Status", "meta": "row" },
+        { "title": "Social", "body": "X · LinkedIn · GitHub · Facebook · YouTube · Instagram", "meta": "row" },
+        { "title": "Beta notice", "body": "In early-access beta — features may change.", "meta": "badge 'Beta' + note" }
+      ],
+      "image": null,
+      "notes": "Shared Footer component instance (637:1439), byte-identical on all three frames. Dark background."
+    }
+  ],
+  "claimsToVerify": [
+    {
+      "phrase": "Build and segment lists from your contacts.",
+      "where": "Capabilities → card 'Audience lists' (637:1251)",
+      "why": "'your contacts' implies a Contacts CRM, which Aglyn does not have. Banned-claim list: 'a Contacts CRM'. Reword to lists built from form submissions / subscribers if that is what actually exists."
+    },
+    {
+      "phrase": "Every plan includes an audience band — and contacts past it are always captured and metered, never silently dropped.",
+      "where": "Capabilities → card 'Audience lists' (637:1251)",
+      "why": "Two things to confirm: (a) 'contacts' again, per above; (b) a concrete billing/metering PROMISE about overage behaviour. Verify against the audience-band pricing implementation before publishing."
+    },
+    {
+      "phrase": "delivered through Resend",
+      "where": "Capabilities → card 'Email campaigns' (637:1244)",
+      "why": "Names a third-party sub-processor in public marketing copy. Confirm this is intended and consistent with the privacy/sub-processor page, and that it stays true if the provider changes."
+    },
+    {
+      "phrase": "Run experiments on screens and sections, and let the winning variant take over (Business and up).",
+      "where": "Capabilities → card 'A/B testing' (637:1274)",
+      "why": "Automatic winner promotion ('let the winning variant take over') is a stronger claim than plain A/B testing. Confirm auto-promotion exists and that the gate is Business, not Pro."
+    },
+    {
+      "phrase": "and A/B test what converts",
+      "where": "Hero body (637:1226)",
+      "why": "'what converts' invokes a CONVERSIONS metric. Aglyn has no conversions metric. Banned-claim list: 'conversions/visitors metrics'."
+    },
+    {
+      "phrase": "MARKETING · REACH + CONVERT",
+      "where": "Hero eyebrow (637:1224)",
+      "why": "Second conversion reference. Lower risk (it is positioning, not a named metric) but flagged for consistency with the conversions rule."
+    },
+    {
+      "phrase": "with per-visitor frequency caps",
+      "where": "Deep-dive → bullet 'Smart triggers' (637:1300)",
+      "why": "Uses 'visitor' as a unit of measurement. Confirm frequency capping is genuinely per-visitor (device/session identity) rather than per-session only — the mockup's own FREQUENCY field reads 'Once per session'."
+    },
+    {
+      "phrase": "Schedule campaigns and overlays ahead of time",
+      "where": "Capabilities → card 'Scheduled & measured' (637:1280); also 'Put a scheduled bar…' (637:1258), 'Set start and end times…' (637:1307), 'send now or schedule it for later' (637:1323), mockup 'Schedule — Jul 28, 2026 · 9:00 AM'",
+      "why": "Scheduled sending/display appears five times. Adjacent to the banned 'scheduled/cron triggers' claim. Confirm the scheduler actually fires (it is a different feature from workflow cron triggers, but it must exist)."
+    },
+    {
+      "phrase": "and see impressions and clicks on every one.",
+      "where": "Capabilities → card 'Scheduled & measured' (637:1280); echoed in step 03 'Track impressions, clicks, and opens'",
+      "why": "Overlay impression/click and email OPEN tracking. Open tracking in particular needs confirming against the Resend integration and the 'cookieless, no tracker' privacy stance the Analytics page takes."
+    },
+    {
+      "phrase": "Track impressions, clicks, and opens — and A/B test to find what works.",
+      "where": "How it works → step 03 (637:1328)",
+      "why": "Same open-tracking concern, plus a third indirect conversions reference ('what works')."
+    },
+    {
+      "phrase": "Marketing works with the rest of Aglyn",
+      "where": "Explore the platform → heading (637:1332)",
+      "why": "Not a capability claim — a copy defect. Missing the trailing period that the sibling Analytics page has. Fix at sign-off."
+    },
+    {
+      "phrase": "9 products built in",
+      "where": "Early access → stat 2 (637:1424)",
+      "why": "Inconsistent with 'Eight products, one platform.' on the Product overview page and with the seven-card grid on this page. Same issue flagged on Analytics."
+    },
+    {
+      "phrase": "Open source, self-hostable, API-first.",
+      "where": "Shared Footer, developer strapline (276:1188)",
+      "why": "SELF-HOSTING CLAIM. Only 'Docker + your own Firebase project' is supportable. Appears on all three pages."
+    }
+  ]
+}

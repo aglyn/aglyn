@@ -114,13 +114,22 @@ const applyPageCopy = (COPY, { dryRun = true } = {}) => {
   const root = c.getNode(ROOT)
   const sections = (root.nodes ?? []).map((id) => c.getNode(id))
 
+  // The nav and footer are the LAYOUT's, not the page's — a screen document
+  // contains neither. Some extractions record them as sections anyway, which
+  // is what made two pages look like they had a different shape.
+  const CHROME = new Set(['navbar', 'nav', 'footer', 'sitenav', 'sitefooter'])
+  const copySections = COPY.sections.filter((s) => !CHROME.has(norm(s.kind)))
+
   // --- verify before touching anything -------------------------------------
   const problems = []
   if (sections.length !== CONTRACT.length) {
     problems.push(`section count ${sections.length}, expected ${CONTRACT.length}`)
   }
-  if (COPY.sections.length !== CONTRACT.length) {
-    problems.push(`copy has ${COPY.sections.length} sections, expected ${CONTRACT.length}`)
+  if (copySections.length !== CONTRACT.length) {
+    problems.push(
+      `copy has ${copySections.length} page sections, expected ${CONTRACT.length}` +
+        ` (${COPY.sections.length - copySections.length} chrome entries ignored)`,
+    )
   }
 
   const plan = []
@@ -128,7 +137,7 @@ const applyPageCopy = (COPY, { dryRun = true } = {}) => {
     CONTRACT.forEach((spec, i) => {
       const nodes = textNodes(sections[i])
       const copySection =
-        COPY.sections.find((cs) => norm(cs.kind) === spec.kind) ?? COPY.sections[i]
+        copySections.find((cs) => norm(cs.kind) === spec.kind) ?? copySections[i]
       if (norm(copySection?.kind) !== spec.kind) {
         problems.push(`[${i}] ${spec.kind}: copy section ${i} is "${copySection?.kind}" — order does not match the skeleton`)
         return

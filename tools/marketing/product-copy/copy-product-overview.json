@@ -1,0 +1,431 @@
+{
+  "page": "Product overview",
+  "figmaNodeId": "15:32",
+  "figmaFrameName": "Product · Overview (ROOT)",
+  "frameSize": { "width": 1440, "height": 7292 },
+  "widescreenVariant": "476:3052 (Product overview — Widescreen). Not needed: the 1440 frame is unambiguous, every section is a full-width stack with 80px gutters and a 1280px content column.",
+  "skeleton": "DIFFERENT FROM THE PRODUCT-DETAIL PAGES. This is the /product INDEX. It does NOT follow the 8-section Hero · Statement · Capabilities · Deep-dive · Canvas · How it works · Explore · Early access · CTA skeleton. Actual order (11 content sections): Hero · Logo strip · Features · Console showcase · Platform grid · How it works · Explore each product · Early access · Pricing teaser · Roadmap band · CTA band. Key structural differences vs a detail page: (1) there is NO Statement section — the one-paragraph editorial beat is absent; (2) there is NO Capabilities/Deep-dive pair — instead there are TWO card grids, 'Features' (3 up, the positioning argument) and 'Platform grid' (6 up, what's inside); (3) it adds three sections a detail page never has — a Logo strip of site-type chips, a Pricing teaser with three real plan cards, and a Roadmap band; (4) its 'Explore each product' grid is the PAYLOAD of the page (nine link cards out to the nine product pages) rather than a cross-sell afterthought; (5) the hero is CENTRED with the mockup below it, not the two-column left-copy/right-mockup layout the detail pages use; (6) the CTA band is 427px tall with a 56px display heading vs 383px on the detail pages.",
+  "sections": [
+    {
+      "kind": "navbar",
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [],
+      "actions": [
+        { "label": "Sign in", "variant": "text" },
+        { "label": "Start free", "variant": "contained" }
+      ],
+      "items": [
+        { "title": "Product", "body": null, "meta": "menu" },
+        { "title": "Solutions", "body": null, "meta": "menu" },
+        { "title": "Pricing", "body": null, "meta": "link" },
+        { "title": "Docs", "body": null, "meta": "link" },
+        { "title": "Blog", "body": null, "meta": "link" },
+        { "title": "Beta", "body": null, "meta": "pill badge next to the logo" }
+      ],
+      "image": null,
+      "notes": "Shared NavBar component instance (15:33), byte-identical on all three frames."
+    },
+    {
+      "kind": "hero",
+      "eyebrow": "besigner — live canvas",
+      "heading": "Design it live.\nShip it instantly.",
+      "subheading": null,
+      "body": [
+        "Aglyn’s Besigner lets you build every page on a real canvas — then publish to a platform with commerce, forms, media, and workflows already built in.",
+        "No credit card required  ·  Free while you build"
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "Watch the 2-min tour", "variant": "outlined" }
+      ],
+      "items": [],
+      "image": {
+        "describe": "Besigner canvas mockup, 920×580, centred below the copy. Toolbar: logo, 'Besigner', breadcrumb '/  Acme Studio  ›  Home', a Desktop/Tablet/Mobile device switcher (Desktop active), and a blue 'Publish' button. Left rail headed 'BLOCKS' lists Section (selected) · Hero · Text · Image · Gallery · Form · Button · Pricing. Centre canvas shows a page being edited — eyebrow 'BUILT WITH BESIGNER', headline 'Your studio, / live on the web', subcopy 'Design every page on a real canvas.', buttons 'Get started' and 'Book a demo', a gradient image block, and three feature cards below — all wrapped in a blue selection frame with corner handles and a 'Hero · Section' label chip. Right inspector headed 'Hero · Section' with a 'SELECTED' tag and controls: LAYOUT (Row/Column/Grid, Column active), PADDING 96/96/64/64, BACKGROUND 'Gradient · Aglyn', CORNER RADIUS 16px with a slider, ANIMATION 'Fade up on scroll'.",
+        "figmaNodeId": "15:67"
+      },
+      "notes": "CENTRED single-column hero, 1244px tall — the tallest section on the page. Order top to bottom: Badge/Pill → 72px display heading (920px wide, HARD LINE BREAK after 'Design it live.') → 680px lede → button row → fine print → 16px spacer → mockup. The eyebrow is a Badge/Pill (dot + label) and its label is lowercase 'besigner — live canvas', which contradicts the house rule that Besigner is always capitalised in prose — recorded verbatim, flagged below. Secondary button label differs from the detail pages ('Watch the 2-min tour' vs 'Watch the tour'). White background."
+    },
+    {
+      "kind": "logo-strip",
+      "eyebrow": "ONE PLATFORM FOR EVERY KIND OF SITE",
+      "heading": null,
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        { "title": "Portfolios", "body": null, "meta": "chip" },
+        { "title": "Online stores", "body": null, "meta": "chip" },
+        { "title": "Blogs", "body": null, "meta": "chip" },
+        { "title": "SaaS apps", "body": null, "meta": "chip" },
+        { "title": "Landing pages", "body": null, "meta": "chip" },
+        { "title": "Docs", "body": null, "meta": "chip" },
+        { "title": "Agencies", "body": null, "meta": "chip" },
+        { "title": "Communities", "body": null, "meta": "chip" }
+      ],
+      "image": null,
+      "notes": "NOT ON THE DETAIL PAGES. A 132px band: centred eyebrow over a single centred row of eight rounded pill chips (label only, no logos despite the layer name 'Logo strip'). Chips are 36px tall, ~14px gap, horizontally centred within the 1280px column. White background. On mobile this should wrap or scroll rather than shrink."
+    },
+    {
+      "kind": "features",
+      "eyebrow": "THE AGLYN DIFFERENCE",
+      "heading": "Not a website builder. A web platform you design.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Design on a live canvas",
+          "body": "Besigner is a real visual builder — drag blocks, edit in place, and see exactly what ships. No handoff, no rebuild.",
+          "meta": null
+        },
+        {
+          "title": "One platform underneath",
+          "body": "Commerce, forms, media, and workflows aren’t add-ons — they’re part of the same system your site runs on.",
+          "meta": null
+        },
+        {
+          "title": "Publish in one click",
+          "body": "Go from blank canvas to a live, fast, hosted site in minutes — on your domain, with SSL and global delivery.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "3 columns, one row. Cards are 410×241 — TALLER than the 203px cards elsewhere, with a 48px icon square (vs 44px) and 3-line bodies. Header is centred, eyebrow magenta (#e040fb), heading 44px ExtraBold on an 820px measure (wraps to 2 lines). White background."
+    },
+    {
+      "kind": "console-showcase",
+      "eyebrow": "ONE CONSOLE",
+      "heading": "Run every site from one console.",
+      "subheading": null,
+      "body": [
+        "Traffic, revenue, orders, forms, and content across every site — managed in one place with roles, permissions, and audit built in."
+      ],
+      "actions": [
+        { "label": "Explore the console", "variant": "contained" }
+      ],
+      "items": [
+        {
+          "title": "Built-in analytics",
+          "body": "See traffic and revenue for every site you run.",
+          "meta": null
+        },
+        {
+          "title": "Roles & permissions",
+          "body": "Give your team the right access with granular controls.",
+          "meta": null
+        },
+        {
+          "title": "Switch sites instantly",
+          "body": "Jump between hosts and orgs without losing context.",
+          "meta": null
+        }
+      ],
+      "image": {
+        "describe": "Console dashboard mockup, 768×580. Topbar: logo, 'Console', an org switcher 'Acme Studio ▾', a search field 'Search sites, orders, contacts…'. Left sidebar: Dashboard (active) · Sites · Commerce · Forms · Media · Analytics · Settings. Main pane headed 'Dashboard' / 'Acme Studio · acme.aglyn.app' with a blue 'Visit site' button. Four stat tiles: 'Pageviews (30d) 48,210 +12.4%', 'Revenue $26,540 +8.1%', 'Orders 1,204 +5.6%', 'Avg order $22.04 +0.4%'. Below, a 'Traffic & revenue' bar chart labelled 'Last 12 weeks' (12 rising bars) beside a 300px 'Recent activity' card listing 'New order · $128 — 2m ago', 'Form: Contact request — 14m ago', 'Site published · Home — 1h ago', 'New contact added — 3h ago'.",
+        "figmaNodeId": "66:192"
+      },
+      "notes": "The only two-column section on the page: 440px copy column left (eyebrow → 40px heading → lede → three icon+text bullets → a contained button), 768px mockup right. Figma frame is misleadingly named 'Besigner showcase' but the content is entirely the CONSOLE — trust the text. Section background is grey (bg/default #f8f9fa)."
+    },
+    {
+      "kind": "platform-grid",
+      "eyebrow": "ONE PLATFORM, FULLY LOADED",
+      "heading": "Everything your site needs to run — already inside.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Commerce",
+          "body": "Products, carts, checkout, and digital goods — a full storefront on the same stack.",
+          "meta": null
+        },
+        {
+          "title": "Forms & Inbox",
+          "body": "Build any form on the canvas and collect every submission in one Inbox.",
+          "meta": null
+        },
+        {
+          "title": "Media Library",
+          "body": "A real DAM — folders, drag-and-drop, and custom metadata for every asset.",
+          "meta": null
+        },
+        {
+          "title": "Workflows",
+          "body": "Automate the busywork — triggers, actions, and logic without leaving the console.",
+          "meta": null
+        },
+        {
+          "title": "Plugins & Marketplace",
+          "body": "Install templates and layouts, or publish and sell your own.",
+          "meta": null
+        },
+        {
+          "title": "Analytics",
+          "body": "See traffic, top pages, and store revenue for every site you run.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "3 columns × 2 rows of 410×203 cards with 44px icon squares — the same card component as the detail pages' Capabilities grid. Centred header, magenta eyebrow, 44px heading on an 880px measure. This grid is DESCRIPTIVE (six capability cards, not links); the linked grid is 'Explore each product' further down. White background."
+    },
+    {
+      "kind": "how-it-works",
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From idea to live site, in three steps.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Design",
+          "body": "Open Besigner and build on a live canvas with real components, your theme, and your content.",
+          "meta": "01"
+        },
+        {
+          "title": "Connect",
+          "body": "Bind blocks to datasets, add commerce and forms, and wire interactions — all from the platform.",
+          "meta": "02"
+        },
+        {
+          "title": "Publish",
+          "body": "Ship to your domain in one click, with SSL, global delivery, and versioning to roll back anytime.",
+          "meta": "03"
+        }
+      ],
+      "image": null,
+      "notes": "Identical component and geometry to the detail pages' How it works: left-aligned header, three equal columns, 3px full-width rule above each two-digit step number. White background."
+    },
+    {
+      "kind": "explore-each-product",
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Eight products, one platform.",
+      "subheading": "Each product has its own page — dive into any of them, or start free and get them all.",
+      "body": [],
+      "actions": [],
+      "items": [
+        { "title": "Besigner", "body": "Visual builder on a live canvas.", "meta": "→ /product/besigner" },
+        { "title": "Console", "body": "Manage every site in one place.", "meta": "→ /product/console" },
+        { "title": "Commerce", "body": "Storefronts, checkout & subscriptions.", "meta": "→ /product/commerce" },
+        { "title": "Forms & Inbox", "body": "Collect submissions in one Inbox and route them onward.", "meta": "→ /product/forms" },
+        { "title": "Media", "body": "A real digital-asset manager.", "meta": "→ /product/media" },
+        { "title": "Workflows", "body": "Automate with triggers & actions.", "meta": "→ /product/workflows" },
+        { "title": "Plugins", "body": "Extend and sell in the marketplace.", "meta": "→ /product/plugins" },
+        { "title": "Analytics", "body": "Traffic, top pages & revenue.", "meta": "→ /product/analytics" },
+        { "title": "Marketing", "body": "Email campaigns, popups & A/B testing.", "meta": "→ /product/marketing" }
+      ],
+      "image": null,
+      "notes": "THIS IS THE PAYLOAD OF THE PAGE — the index's reason to exist. NINE link cards in a clean 3×3 grid (410×159, 20px gutters), reading ACROSS: row 1 Besigner · Console · Commerce, row 2 Forms & Inbox · Media · Workflows, row 3 Plugins · Analytics · Marketing. Each card has a 40px product icon top-left and a 20px arrow glyph top-right; the whole card is the link target. ⚠️ The heading says 'Eight products' but NINE cards are present — Marketing (187:2910) was clearly added after the heading was written. Recorded verbatim; see claimsToVerify. Section background is grey (bg/default #f8f9fa). Note the card copy here is SHORTER than the same cards on the detail pages (e.g. 'Visual builder on a live canvas.' vs 'Design on a live canvas and publish in one click.') — two different copy sets for the same nine products; the builder should not assume they are shared."
+    },
+    {
+      "kind": "early-access",
+      "eyebrow": "Now in early access",
+      "heading": "Be among the first to build on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Aglyn is pre-release. Join early access to start building and shape the roadmap with us."
+      ],
+      "actions": [
+        { "label": "Join early access", "variant": "contained" },
+        { "label": "See what’s included", "variant": "outlined" }
+      ],
+      "items": [
+        { "title": "1", "body": "platform, not a stack", "meta": "stat" },
+        { "title": "9", "body": "products built in", "meta": "stat" },
+        { "title": "0", "body": "plugins to wire up", "meta": "stat" },
+        { "title": "1-click", "body": "to publish", "meta": "stat" }
+      ],
+      "image": null,
+      "notes": "Figma frame is named 'Social proof' but there is no social proof in it — it is the same Early access block as the two detail pages, character for character. Centred; Badge/Pill eyebrow; 4-up stat row with 1px × 56px dividers. White background here (the detail pages render it on grey)."
+    },
+    {
+      "kind": "pricing-teaser",
+      "eyebrow": "SIMPLE, SCALABLE PRICING",
+      "heading": "Start free. Grow when you’re ready.",
+      "subheading": null,
+      "body": [
+        "Need more? Starter $25 · Scale $249 · Advanced $399 · Agency $799 — and custom Enterprise contracts.",
+        "See full pricing →"
+      ],
+      "actions": [],
+      "items": [
+        {
+          "title": "Free",
+          "body": "For a single site to get started.",
+          "meta": "price $0 · sub-line 'No credit card required' · features: 1 site / 5 pages · 1 seat / Forms & media library / Interactions · button 'Get started' (outlined)"
+        },
+        {
+          "title": "Pro",
+          "body": "For pros running a few sites.",
+          "meta": "badge POPULAR · price $56 /mo · sub-line '$39/mo billed yearly' · features: 'Everything in Starter, plus:' / 3 sites · 10 collaborators / Versioning & AI assist / Video, POS & marketplace / Site export & analytics · button 'Start Pro' (OnDark, white-on-dark)"
+        },
+        {
+          "title": "Business",
+          "body": "For teams & agencies at scale.",
+          "meta": "price $139 /mo · sub-line '$99/mo billed yearly' · features: 'Everything in Pro, plus:' / 10 sites · 50 collaborators / API access & webhooks / A/B testing & multilingual / Full commerce + POS · button 'Choose Business' (outlined)"
+        }
+      ],
+      "image": null,
+      "notes": "NOT ON THE DETAIL PAGES. Three 410×470 plan cards. The Pro card is visually INVERTED (dark card body, POPULAR chip, white OnDark button) — the only dark card on the page. Below the row sits a single-line overflow-plan note (1280px, centred) and then a centred 'See full pricing →' text link. Feature rows are check-icon + label; the 'Everything in …, plus:' row has no icon. White section background."
+    },
+    {
+      "kind": "roadmap-band",
+      "eyebrow": "SHIPPING NEXT",
+      "heading": null,
+      "subheading": null,
+      "body": [
+        "Real-time co-editing in Besigner, passkey sign-in, an offline-capable console, marketplace themes with safe overrides, and a custom console domain for white-label orgs."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": "NOT ON THE DETAIL PAGES. A 121px band holding one full-width rounded (10px) callout card, 24px/18px padding, on a pale magenta tint #fbefff. Eyebrow 'SHIPPING NEXT' is 12px SemiBold in brand magenta #e040fb with 0.96px tracking; the body is 14.5px in #404c5c. Sits between the Pricing teaser and the CTA band. This is a forward-looking-statements block — see claimsToVerify."
+    },
+    {
+      "kind": "cta",
+      "eyebrow": null,
+      "heading": "Your next site starts on a blank canvas.",
+      "subheading": null,
+      "body": [
+        "Design it in Besigner, publish in a click, and run everything from one console."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "Talk to sales", "variant": "text" }
+      ],
+      "items": [],
+      "image": null,
+      "notes": "DARK/BRAND SECTION. Full-bleed gradient: linear-gradient(189.71deg, #00b0ff 36.6%, #7a5cf0 76.9%, #e040fb 109.8%) — one degree off the detail pages' 188.73deg, treat as the same token. 427px tall, 96px vertical padding, 56px Black display heading on a 900px measure. All text white; primary is Button/OnDark. Secondary label 'Talk to sales' is UNIQUE to this page (the detail pages use 'See pricing')."
+    },
+    {
+      "kind": "footer",
+      "eyebrow": "ARE YOU A DEVELOPER?",
+      "heading": null,
+      "subheading": "Open source, self-hostable, API-first.",
+      "body": [
+        "© 2026 Aglyn LLC. All rights reserved."
+      ],
+      "actions": [],
+      "items": [
+        { "title": "Product", "body": "Besigner · Console · Commerce · Forms · Media · Workflows · Marketing", "meta": "column" },
+        { "title": "Solutions", "body": "Agencies · Startups · Creators · Developers · Enterprise · Small business", "meta": "column" },
+        { "title": "Use cases", "body": "Online stores · Portfolios · Blogs · SaaS websites · Documentation · Membership sites", "meta": "column" },
+        { "title": "Resources", "body": "Docs · Guides · Blog · Changelog · Newsroom", "meta": "column" },
+        { "title": "Company", "body": "About · Pricing · Careers · Press · Contact", "meta": "column" },
+        { "title": "Legal / utility bar", "body": "Privacy · Terms · Legal · Status", "meta": "row" },
+        { "title": "Social", "body": "X · LinkedIn · GitHub · Facebook · YouTube · Instagram", "meta": "row" },
+        { "title": "Beta notice", "body": "In early-access beta — features may change.", "meta": "badge 'Beta' + note" }
+      ],
+      "image": null,
+      "notes": "Shared Footer component instance (21:409), byte-identical on all three frames. Dark background. Note the Product column lists SEVEN products while the page's own grid shows nine — Plugins and Analytics are missing from the footer menu."
+    }
+  ],
+  "claimsToVerify": [
+    {
+      "phrase": "Open source, self-hostable, API-first.",
+      "where": "Shared Footer, developer strapline (276:1188)",
+      "why": "SELF-HOSTING CLAIM, the strongest one in the design. Only 'Docker + your own Firebase project' is supportable; unqualified 'self-hostable' plus 'Open source' goes well past that. Appears on all three pages."
+    },
+    {
+      "phrase": "Eight products, one platform.",
+      "where": "Explore each product → heading (119:109)",
+      "why": "The grid directly beneath it contains NINE cards, and the Early access stat on the same page says '9 products built in'. Three different counts in one design. Pick one and fix the heading."
+    },
+    {
+      "phrase": "Real-time co-editing in Besigner, passkey sign-in, an offline-capable console, marketplace themes with safe overrides, and a custom console domain for white-label orgs.",
+      "where": "Roadmap band (606:1245)",
+      "why": "FIVE unshipped features presented as imminent under 'SHIPPING NEXT'. Every one needs confirming against the actual roadmap before publication, and the band needs forward-looking-statement framing so it does not read as a commitment."
+    },
+    {
+      "phrase": "Traffic, revenue, orders, forms, and content across every site — managed in one place with roles, permissions, and audit built in.",
+      "where": "Console showcase → lede (66:167)",
+      "why": "'across every site … in one place' is the clearest CROSS-SITE ANALYTICS ROLLUP claim in the whole design. Aglyn does not roll analytics up across sites. Also asserts an AUDIT log — verify it exists and is user-visible."
+    },
+    {
+      "phrase": "See traffic and revenue for every site you run.",
+      "where": "Console showcase → bullet 'Built-in analytics' (66:175)",
+      "why": "Second cross-site rollup implication."
+    },
+    {
+      "phrase": "See traffic, top pages, and store revenue for every site you run.",
+      "where": "Platform grid → card 'Analytics' (18:81)",
+      "why": "Third cross-site rollup implication."
+    },
+    {
+      "phrase": "Run every site from one console.",
+      "where": "Console showcase → heading (66:166)",
+      "why": "Fourth 'every site in one place' formulation. Management-in-one-console is defensible; paired with the analytics lede it reads as a data rollup."
+    },
+    {
+      "phrase": "Automate the busywork — triggers, actions, and logic without leaving the console.",
+      "where": "Platform grid → card 'Workflows' (18:67)",
+      "why": "'triggers, actions, and logic' is close to advertising a VISUAL WORKFLOW CANVAS and generic triggers. Confirm which trigger types exist — and specifically that no scheduled/cron trigger is implied."
+    },
+    {
+      "phrase": "No credit card required  ·  Free while you build",
+      "where": "Hero fine print (15:65)",
+      "why": "'Free while you build' is an open-ended free-tier promise adjacent to the banned 'free forever' framing. Confirm the Free plan has no build-time limit, or reword."
+    },
+    {
+      "phrase": "Everything in Starter, plus:",
+      "where": "Pricing teaser → Pro card, first feature row (81:978)",
+      "why": "COPY DEFECT: the card to its left is named 'Free', not 'Starter', and Starter ($25) is only mentioned in the overflow line below the row. As written the Pro card inherits from a plan that is not shown."
+    },
+    {
+      "phrase": "$0 / $56 /mo / $39/mo billed yearly / $139 /mo / $99/mo billed yearly",
+      "where": "Pricing teaser → all three plan cards (81:940, 81:972–974, 81:1005–1007)",
+      "why": "Live price points on a public page. Reconcile every figure against the billing implementation before publishing. Note there is no price-lock or grandfathering language anywhere, which is correct — keep it that way."
+    },
+    {
+      "phrase": "Need more? Starter $25 · Scale $249 · Advanced $399 · Agency $799 — and custom Enterprise contracts.",
+      "where": "Pricing teaser → overflow note (609:1219)",
+      "why": "Four more price points plus an Enterprise line. Same reconciliation required. 'custom Enterprise contracts' is the only Enterprise mention on the page — make sure nothing elsewhere implies Enterprise-only features (e.g. SSO) are available on lower plans."
+    },
+    {
+      "phrase": "3 sites · 10 collaborators / 10 sites · 50 collaborators",
+      "where": "Pricing teaser → Pro and Business feature rows (81:983, 81:1016)",
+      "why": "Seat and site limits stated as fact. Verify against the actual plan entitlements, and that 'collaborators' here means the same thing the console means by it."
+    },
+    {
+      "phrase": "Versioning & AI assist / Video, POS & marketplace / Site export & analytics",
+      "where": "Pricing teaser → Pro feature rows (81:988, 81:993, 81:998)",
+      "why": "Six features bundled into three terse rows. 'AI assist' and 'Site export' in particular are not evidenced anywhere else in the design — confirm both ship and are gated at Pro."
+    },
+    {
+      "phrase": "API access & webhooks / A/B testing & multilingual / Full commerce + POS",
+      "where": "Pricing teaser → Business feature rows (81:1021, 81:1026, 81:1031)",
+      "why": "'multilingual' appears nowhere else in the design. Confirm it exists and is gated at Business, and that the A/B gate matches the Marketing page's '(Business and up)'."
+    },
+    {
+      "phrase": "Search sites, orders, contacts…",
+      "where": "Console dashboard mockup, search placeholder (26:49); also activity row 'New contact added' (27:123)",
+      "why": "The mockup shows CONTACTS as a first-class console object, which reads as a Contacts CRM — a capability Aglyn does not have. Same concern as the Marketing page's 'from your contacts'."
+    },
+    {
+      "phrase": "besigner — live canvas",
+      "where": "Hero Badge/Pill label (I15:55;6:18)",
+      "why": "House style requires 'Besigner' capitalised in prose. Lowercase here. Recorded verbatim; fix at sign-off."
+    },
+    {
+      "phrase": "Go from blank canvas to a live, fast, hosted site in minutes — on your domain, with SSL and global delivery.",
+      "where": "Features → card 'Publish in one click' (16:69)",
+      "why": "Custom domain + automatic SSL + global CDN delivery, all asserted. Verify each, particularly that custom domains and SSL provisioning are available on the plan the hero sends people to (Free)."
+    },
+    {
+      "phrase": "Bind blocks to datasets, add commerce and forms, and wire interactions — all from the platform.",
+      "where": "How it works → step 02 (161:2715)",
+      "why": "'Bind blocks to datasets' is a data-binding claim not made anywhere else on the page. Confirm the dataset binding surface exists as described."
+    },
+    {
+      "phrase": "Ship to your domain in one click, with SSL, global delivery, and versioning to roll back anytime.",
+      "where": "How it works → step 03 (161:2720)",
+      "why": "Adds 'roll back anytime' to the domain/SSL/CDN claim. Confirm rollback is available and not gated (the Pricing teaser lists 'Versioning' as a PRO feature — direct contradiction with an unqualified 'anytime' here)."
+    },
+    {
+      "phrase": "9 products built in",
+      "where": "Early access → stat 2 (42:1082)",
+      "why": "Conflicts with this page's own 'Eight products' heading. Same issue flagged on the other two pages."
+    }
+  ]
+}

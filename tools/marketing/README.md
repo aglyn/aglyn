@@ -34,6 +34,16 @@ ships"*, which contradicts the marketplace's deliberate design that a
 publisher can install their own unreviewed version. Resolve the list before
 any of this copy ships.
 
-`copy-analytics.json` has **10 sections, not 8** — the Analytics page genuinely
-differs from the skeleton and needs its own pass rather than being forced
-through the applier.
+## Chrome is not a page section
+
+Extractions disagree about whether the nav and footer are "sections". They are
+the *layout's* — a screen document contains neither — so the applier filters
+them out before matching. Analytics and Marketing looked like 10-section pages
+purely because of that; all **eight detail pages are the same 8-section
+skeleton**, and all eight pour cleanly (73–74 writes each).
+
+`copy-product-overview.json` is the real exception: **11 page sections**. It is
+the `/product` index, not a detail page — no Statement, no Capabilities/
+Deep-dive pair, a centred hero with the mockup below, and three sections the
+detail pages never have (a logo strip, a pricing teaser and a roadmap band). The
+applier refuses it by design; it needs its own build.
