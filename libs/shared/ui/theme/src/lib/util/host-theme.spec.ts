@@ -24,7 +24,7 @@ import {
   mergeThemeOptions,
   sanitizeHostTheme,
 } from './host-theme'
-import { consoleOptions } from '../console.theme'
+import { consoleOptions, consoleOptionsDark } from '../console.theme'
 
 describe('hostThemeToThemeOptions', () => {
   it('returns mode-only palette options for an empty theme', () => {
@@ -150,6 +150,34 @@ describe('mergeThemeOptions (AGL-1180)', () => {
     expect(palette['primary']?.main).toBe('#00b0ff')
     expect(palette['secondary']?.main).toBe('#e040fb')
     expect(palette['tertiary']?.main).toBe('#404C5C')
+  })
+
+  // AGL-1205: the marketing host deliberately keeps its theme all-`Default`,
+  // so this is the case the besigner canvas and preview actually hit. Built
+  // WITHOUT the base they produced MUI's stock blue, meaning the editor
+  // disagreed with the site it was previewing.
+  it('keeps the brand palette for an EMPTY host theme', () => {
+    const bare = hostThemeToThemeOptions(undefined, 'light')
+    const barePalette = bare.palette as Record<string, { main?: string }>
+    // On its own the converter emits no brand colour at all — this is why
+    // merging onto the base is not optional.
+    expect(barePalette?.['primary']?.main).toBeUndefined()
+
+    const merged = mergeThemeOptions(consoleOptions, bare)
+    const palette = merged.palette as Record<string, { main?: string }>
+    expect(palette['primary']?.main).toBe('#00b0ff')
+    expect(palette['primary']?.main).not.toBe('#1976d2')
+    expect(palette['secondary']?.main).toBe('#e040fb')
+  })
+
+  it('keeps the brand dark palette for an EMPTY host theme', () => {
+    const merged = mergeThemeOptions(
+      consoleOptionsDark,
+      hostThemeToThemeOptions(undefined, 'dark'),
+    )
+    const palette = merged.palette as Record<string, { main?: string }>
+    expect(palette['primary']?.main).toBe('#00b0ff')
+    expect(palette['tertiary']?.main).toBe('#7C8CA3')
   })
 
   it('applies the override without dropping its siblings', () => {
