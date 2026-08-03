@@ -254,7 +254,11 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
           )
         : null,
     [firestore, orgId, scopeLoaded, needsScope, scopeTokens],
-    { idField: '$id' },
+    // `visibleTo` is MUTABLE — every scope edit rewrites it — so this query
+    // can tombstone a dataset the way AGL-827 tombstoned a host. The rule
+    // requires the constraint for anyone who is not org-wide, so unlike the
+    // listings query above the predicate cannot simply be dropped (AGL-1196).
+    { idField: '$id', confirmDisappearances: true },
   )
   const { data: emailDocs } = useFirestoreCollection<any>(
     () =>

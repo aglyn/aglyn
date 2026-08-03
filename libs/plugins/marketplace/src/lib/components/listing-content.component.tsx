@@ -535,7 +535,10 @@ export function MarketplaceListingContent({
           )
         : null,
     [firestore, orgId, scopeLoaded, listingId, needsScope, scopeTokens],
-    { idField: '$id' },
+    // Same mutable-predicate exposure as the browse datasets query:
+    // `visibleTo` is rewritten by every scope edit, and the rule requires the
+    // constraint for anyone who is not org-wide (AGL-1196).
+    { idField: '$id', confirmDisappearances: true },
   )
   const { data: emailInstalls } = useFirestoreCollection<any>(
     () =>
