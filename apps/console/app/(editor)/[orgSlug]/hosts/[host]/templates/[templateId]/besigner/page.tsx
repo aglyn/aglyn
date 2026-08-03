@@ -65,6 +65,7 @@ import AuthenticatedLayout from '../../../../../../../../components/layouts/auth
 import MainLayout from '../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../constants/app-setup'
 import { buildRoute, Route } from '../../../../../../../../constants/route-links'
+import useOpenPreview from '../../../../../../../../hooks/use-open-preview'
 import { useHostId, useHostSubdomain } from '../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../hooks/use-firestore-collection'
@@ -262,6 +263,14 @@ function TemplateBesignerPage(props) {
   // there is no draft-versus-live distinction to maintain (AGL-681).
 
   const hostTheme = hostResult?.data?.theme
+
+  // Draft preview (AGL-1204). Templates version but never publish, so the
+  // snapshot key and route carry no versionId.
+  const handlePreview = useOpenPreview({
+    ids: hostId ? { hostId, kind: 'template', docId: templateId } : null,
+    href: buildRoute(Route.TEMPLATE_PREVIEW, { orgSlug, host, templateId }),
+    hostTheme,
+  })
   const hostFontsHref = useMemo(
     () => getGoogleFontsUrl(hostTheme?.fonts),
     [hostTheme?.fonts],
@@ -412,6 +421,7 @@ function TemplateBesignerPage(props) {
         ) : (
           <>
             <BesignerAppBarComponent
+              onPreview={handlePreview}
               detailsUrl={listUrl}
               onSave={handleSave}
               saveAvailable={saveAvailable}

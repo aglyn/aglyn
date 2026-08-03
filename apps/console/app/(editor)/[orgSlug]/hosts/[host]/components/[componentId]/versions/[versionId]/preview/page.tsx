@@ -19,27 +19,25 @@
 
 import { useParams } from 'next/navigation'
 import '../../../../../../../../../../constants/app-setup'
-// Dynamic site-plugin activation (AGL-417): canvas components register
-// via the org-gated loader; the page gates the canvas on readiness.
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
 import DocumentPreview from '../../../../../../../../../../components/document-preview.component'
 import { useHostId } from '../../../../../../../../../../components/host-id-provider'
 
-function ScreenPreviewPage() {
-  const params = useParams<{ screenId: string; versionId: string }>()
+function ComponentPreviewPage() {
+  const params = useParams<{ componentId: string; versionId: string }>()
   const hostId = useHostId()
-  const screenId = params?.screenId as string
+  const componentId = params?.componentId as string
   const versionId = params?.versionId as string
 
   return (
     <DocumentPreview
       ids={
-        hostId && screenId
-          ? { hostId, kind: 'screen', docId: screenId, versionId }
+        hostId && componentId
+          ? { hostId, kind: 'component', docId: componentId, versionId }
           : null
       }
     />
   )
 }
 
-export default withSitePlugins(ScreenPreviewPage)
+export default withSitePlugins(ComponentPreviewPage)

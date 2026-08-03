@@ -116,6 +116,15 @@ export enum Route {
   COMPONENT_BESIGNER = '/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/besigner',
   TEMPLATE_BESIGNER = '/[orgSlug]/hosts/[host]/templates/[templateId]/besigner',
   LAYOUT_BESIGNER = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/besigner',
+  // Draft preview for every besigner document kind (AGL-1204). Screens had
+  // the only preview route; components, layouts and templates showed a
+  // Preview button that did nothing. Each renders the same localStorage
+  // snapshot through the site renderer, so they work on localhost with no
+  // deployment. TEMPLATE_PREVIEW carries no versionId, matching
+  // TEMPLATE_BESIGNER.
+  COMPONENT_PREVIEW = '/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/preview',
+  TEMPLATE_PREVIEW = '/[orgSlug]/hosts/[host]/templates/[templateId]/preview',
+  LAYOUT_PREVIEW = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/preview',
   // The list sits at the bare path, like HOST_COMPONENTS. It used to be
   // `/layouts/list`: the pages router had a `layouts/index.tsx` that
   // redirected to `layouts/list.tsx`, and the App Router migration carried
@@ -241,6 +250,23 @@ export interface RoutePayload {
     templateId: string
   }
   [Route.LAYOUT_BESIGNER]: {
+    orgSlug: string
+    host: string
+    layoutId: string
+    versionId: string
+  }
+  [Route.COMPONENT_PREVIEW]: {
+    orgSlug: string
+    host: string
+    componentId: string
+    versionId: string
+  }
+  [Route.TEMPLATE_PREVIEW]: {
+    orgSlug: string
+    host: string
+    templateId: string
+  }
+  [Route.LAYOUT_PREVIEW]: {
     orgSlug: string
     host: string
     layoutId: string

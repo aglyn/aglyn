@@ -597,7 +597,12 @@ function BesignerPage(props) {
   )
 
   const handlePreview = useCallback(async () => {
-    const ids = { hostId, screenId, versionId }
+    const ids = {
+      hostId: hostId as string,
+      kind: 'screen' as const,
+      docId: screenId,
+      versionId,
+    }
     /**
      * Preview what the site will render: the draft screen composed through
      * its whole layout CHAIN, since a layout may itself render inside

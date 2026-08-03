@@ -70,6 +70,7 @@ import AuthenticatedLayout from '../../../../../../../../../../components/layout
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
 import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
+import useOpenPreview from '../../../../../../../../../../hooks/use-open-preview'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
@@ -295,6 +296,26 @@ function ComponentBesignerPage(props) {
   ])
 
   const hostTheme = hostResult?.data?.theme
+
+  // Draft preview (AGL-1204): a reusable component renders on its own, so the
+  // canvas snapshot is the whole story — no layout chain to compose.
+  const handlePreview = useOpenPreview({
+    ids: hostId
+      ? {
+          hostId,
+          kind: 'component',
+          docId: componentId,
+          versionId,
+        }
+      : null,
+    href: buildRoute(Route.COMPONENT_PREVIEW, {
+      orgSlug,
+      host,
+      componentId,
+      versionId,
+    }),
+    hostTheme,
+  })
   const hostFontsHref = useMemo(
     () => getGoogleFontsUrl(hostTheme?.fonts),
     [hostTheme?.fonts],
@@ -454,6 +475,7 @@ function ComponentBesignerPage(props) {
         ) : (
           <>
             <BesignerAppBarComponent
+              onPreview={handlePreview}
               detailsUrl={listUrl}
               onSave={handleSave}
               saveAvailable={saveAvailable}

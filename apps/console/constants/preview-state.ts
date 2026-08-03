@@ -17,10 +17,23 @@
 
 import type { AglynHostTheme, NodesMap } from '@aglyn/aglyn'
 
+/**
+ * Which kind of besigner document a preview snapshot came from (AGL-1204).
+ *
+ * The kind is part of the storage key, not decoration: component, layout,
+ * template and screen ids are minted from the same generator and live in
+ * sibling collections, so two documents can legitimately share an id. Without
+ * the kind, previewing a layout could read a screen's snapshot.
+ */
+export type PreviewKind = 'screen' | 'component' | 'layout' | 'template'
+
 export interface PreviewStateIds {
   hostId: string
-  screenId: string
-  versionId: string
+  kind: PreviewKind
+  /** Screen / component / layout / template id. */
+  docId: string
+  /** Templates version but never publish, so they have no versionId. */
+  versionId?: string
 }
 
 export interface PreviewState {
@@ -31,11 +44,13 @@ export interface PreviewState {
 }
 
 export function previewStateKey(ids: PreviewStateIds): string {
-  return `aglyn:preview:${ids.hostId}:${ids.screenId}:${ids.versionId}`
+  const version = ids.versionId ?? 'current'
+  return `aglyn:preview:${ids.kind}:${ids.hostId}:${ids.docId}:${version}`
 }
 
 export function previewWindowName(ids: PreviewStateIds): string {
-  return `aglyn-preview-${ids.hostId}-${ids.screenId}-${ids.versionId}`
+  const version = ids.versionId ?? 'current'
+  return `aglyn-preview-${ids.kind}-${ids.hostId}-${ids.docId}-${version}`
 }
 
 export function writePreviewState(
