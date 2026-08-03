@@ -103,6 +103,12 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
   } = props
 
   const [state, setState] = useState(defaultState)
+  // One left edge per menu (AGL-1215): if any row has an icon, the rows
+  // that do not get an empty gutter of the same width instead of collapsing
+  // against the item padding.
+  const hasAnyIcon = (items as any[]).some(
+    (entry) => (entry as any)?.icon?.path,
+  )
   const child = Children.only(children) as ReactElement<any>
   const onChildClick = (child.props as any)?.onClick?.bind(null) as MouseEventHandler
   const handleClose = () => setState(defaultState)
@@ -210,6 +216,8 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
         onClose={handleClose}
         {...menuProps}
       >
+        {/* Whether ANY row in this menu carries an icon decides the gutter
+            for the rows that do not — see the ListItemIcon spacer below. */}
         {items.map(
           (
             {
@@ -257,16 +265,27 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
                     }}
                     {...item}
                   >
-                    {!icon?.path || !icon ? null : (
+                    {icon?.path ? (
                       <ListItemIcon {...ListItemIconProps}>
-                        {!icon?.path ? (
-                          icon
-                        ) : (
-                          <MdiIcon fontSize="small" {...icon} />
-                        )}
+                        <MdiIcon fontSize="small" {...icon} />
                       </ListItemIcon>
-                    )}
-                    <ListItemText {...ListItemTextProps}>
+                    ) : hasAnyIcon ? (
+                      // Reserve the icon gutter so every label in the menu
+                      // shares one left edge (AGL-1215). Iconless rows used
+                      // to render no gutter at all, and callers compensated
+                      // with `ListItemText inset` — but MUI's inset is 56px
+                      // while a dense ListItemIcon reserves 36px, so a menu
+                      // mixing icon rows, inset rows and bare rows showed
+                      // THREE different left edges.
+                      <ListItemIcon {...ListItemIconProps} />
+                    ) : null}
+                    <ListItemText
+                      {...ListItemTextProps}
+                      // The spacer above already provides the alignment
+                      // `inset` was standing in for; letting both apply
+                      // would double-indent every existing caller.
+                      inset={hasAnyIcon ? false : ListItemTextProps?.inset}
+                    >
                       {children}
                     </ListItemText>
                     {!endIcon?.path || !endIcon ? null : (
