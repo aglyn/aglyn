@@ -36,7 +36,7 @@ import {
   useState,
 } from 'react'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { DataTableComponent, type DataTableProps } from '@aglyn/shared-ui-jsx'
+import { DataTableComponent, type DataTableProps } from '@aglyn/shared-ui-jsx/components/data-table.component'
 import { type AppContextType, withAppContext } from '../contexts/app-context'
 import { type Fields } from '../forms'
 import ConsoleLayout from '../layouts/ConsoleLayout'

@@ -20,7 +20,20 @@ export * from './lib/components/aspect-ratio'
 export * from './lib/components/background-image.component'
 export * from './lib/components/card-display'
 export * from './lib/components/card-list-item'
-export * from './lib/components/data-table.component'
+// NOT in the barrel (AGL-1151). `DataTable` wraps MUI X DataGrid, which with
+// its virtualizer is ~257 KB of the bundle — and exporting it here put all of
+// that behind every `@aglyn/shared-ui-jsx` import, including the tenant
+// runtime. Every visitor to every published site downloaded a data grid to
+// render a page that has never contained one; nothing in the tenant or the
+// node renderer references DataTable at all.
+//
+// Measured both ways: removing this line drops MuiDataGrid from the tenant
+// bundle entirely (13741 KB → 13484 KB built output).
+//
+// Import it from '@aglyn/shared-ui-jsx/components/data-table.component' — the
+// subpath already resolves. Kept out of the barrel rather than lazy-loaded
+// because `GridOverlay` is used at module scope inside `styled()`, so the
+// module cannot be deferred without splitting the component.
 export * from './lib/components/children-function-prop'
 export * from './lib/components/confirmation-provider.component'
 export * from './lib/components/container'
