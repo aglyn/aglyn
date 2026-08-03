@@ -67,11 +67,27 @@ Checked against `plan-entitlements.ts`, not asked:
 All 12 price points in the pricing teaser, and the Pro/Business site and
 collaborator limits, **do** match the code.
 
+### Every other plan label checks out
+
+The remaining gates DO have entitlement keys, under names that do not match
+the marketing wording — search for the capability, not the noun in the copy:
+
+| Copy | Key | Starts at |
+| -- | -- | -- |
+| memberships + gated content (Business & up) | `storefrontSubscriptions`, `contentGating` | Business ✓ |
+| reviews (Pro & up) | `productReviews` | Pro ✓ |
+| video upload (Pro & up) | `videoMedia` | Pro ✓ |
+| Stripe payouts (Pro & up) | `marketplaceSelling` | Pro ✓ |
+| per-screen analytics (Pro & up) | `screenAnalytics` | Pro ✓ |
+| abandoned cart (Pro & up) | `abandonedCart` | Pro ✓ |
+| A/B testing (Business and up) | `abTesting` | Business ✓ |
+
+Note the feature arrays hold **seven** entries, not eight — `enterprise`
+resolves its features separately, so index 0-6 is free…agency.
+
 ### Still open
 
-Four gates have no entitlement key to check against — `memberships`,
-`reviews`, `video`, `payouts` — so their "(Pro & up)" / "(Business & up)"
-labels are unverified. The Console and Forms **mockups** still show a Contacts
+The Console and Forms **mockups** still show a Contacts
 entity and a Campaigns tab; those are inside the images and need fixing in
 Figma before re-export, not here. Product overview's `SHIPPING NEXT` roadmap
 band (five unshipped features) and its hero routing to Free while
