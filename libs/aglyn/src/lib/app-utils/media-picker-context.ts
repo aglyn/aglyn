@@ -24,7 +24,7 @@ export interface PickedMedia {
    * The chosen asset's URL — use for image `src` props.
    *
    * Already resolved by the provider, which prefers the media-id-keyed CDN
-   * path over the raw storage download URL (AGL-1214): the raw form names
+   * path over the raw storage download URL (AGL-1215): the raw form names
    * the object's current location and dies on a folder move.
    */
   url: string

@@ -29,7 +29,7 @@ export function mediaSrc(media: {
   url?: string
   cdnPath?: string
 }): string {
-  // `cdnPath` FIRST (AGL-1214). It is keyed by media id, so it survives a
+  // `cdnPath` FIRST (AGL-1215). It is keyed by media id, so it survives a
   // folder move — which physically copies the object, rewrites `url` and
   // deletes the original, permanently breaking anything holding the old
   // raw URL. Preferring `url` meant this helper emitted the fragile form

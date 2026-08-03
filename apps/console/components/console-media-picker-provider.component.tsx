@@ -72,7 +72,7 @@ export function ConsoleMediaPickerProvider(
             fileName?: string
             contentType?: string
           }
-          // Same precedence as the besigner picker (AGL-1214): the stable
+          // Same precedence as the besigner picker (AGL-1215): the stable
           // media-id-keyed CDN path first, the raw storage URL only when
           // there is no CDN path (free tier, legacy uploads).
           const src = picked.cdnPath || picked.url

@@ -51,7 +51,7 @@ export function BesignerMediaPickerProvider(
         open={open}
         onClose={() => setOpen(false)}
         onPick={(media) => {
-          // Prefer the stable, mediaId-keyed CDN path (AGL-1214). The raw
+          // Prefer the stable, mediaId-keyed CDN path (AGL-1215). The raw
           // `url` is a firebasestorage download URL that names the object's
           // CURRENT location, so a folder move — which physically copies the
           // object, rewrites `url` and DELETES the original — turns every

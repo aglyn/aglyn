@@ -549,7 +549,7 @@ export const TokenTextField = (props: TokenTextFieldProps) => {
           input: {
             readOnly: isReadOnly,
             // The surface is a contentEditable that WRAPS, but MUI's
-            // single-line input root is a fixed-height flex row (AGL-1213).
+            // single-line input root is a fixed-height flex row (AGL-1214).
             // A long unbroken value — a media URL is the common case —
             // painted straight through the outline and over the next
             // field's label. Let the root grow, and keep the token-insert

@@ -103,7 +103,7 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
   } = props
 
   const [state, setState] = useState(defaultState)
-  // One left edge per menu (AGL-1215): if any row has an icon, the rows
+  // One left edge per menu (AGL-1216): if any row has an icon, the rows
   // that do not get an empty gutter of the same width instead of collapsing
   // against the item padding.
   const hasAnyIcon = (items as any[]).some(
@@ -271,7 +271,7 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
                       </ListItemIcon>
                     ) : hasAnyIcon ? (
                       // Reserve the icon gutter so every label in the menu
-                      // shares one left edge (AGL-1215). Iconless rows used
+                      // shares one left edge (AGL-1216). Iconless rows used
                       // to render no gutter at all, and callers compensated
                       // with `ListItemText inset` — but MUI's inset is 56px
                       // while a dense ListItemIcon reserves 36px, so a menu
