@@ -187,7 +187,18 @@ const applyPageCopy = (COPY, { dryRun = true } = {}) => {
   for (const p of plan) {
     p.nodes.forEach((node, k) => {
       if (p.values[k] === null) return // invariant slot — keep the skeleton's
-      c.updateNodeProps(node, { children: p.values[k] })
+      // SPREAD THE EXISTING PROPS. `updateNodeProps` REPLACES the prop bag, it
+      // does not merge into it. Passing `{ children }` alone strips everything
+      // else the node carries — and on this skeleton that is `component: 'h1'`
+      // on all seven headings plus `variant: 'body1'` on the hero body.
+      //
+      // Losing `component` is the heading-variant trap from the other side: a
+      // Typography with neither `component` nor `variant` renders as a <p>,
+      // while the node-level `sx.fontSize` keeps painting it at 72px. So the
+      // page still SCREENSHOTS correctly and every heading has quietly stopped
+      // being a heading. Caught only by reading props back off a real canvas —
+      // the stub harness's `updateNodeProps` is a no-op, so it cannot see this.
+      c.updateNodeProps(node, { ...plain(node.props), children: p.values[k] })
       wrote += 1
     })
   }

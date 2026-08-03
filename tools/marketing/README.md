@@ -8,6 +8,7 @@ on Aglyn**). These are authoring inputs for the besigner, not application code
 | -- | -- |
 | `product-page-skeleton.md` | The `/product/*` page contract: 8 sections, 74 text slots, in document order, plus the invariants (Container geometry, the heading-variant trap, the measured type scale). Derived by reading the built `/product/besigner` document live. |
 | `apply-page-copy.js` | Pours one `product-copy/copy-<page>.json` into a freshly-pasted copy of that skeleton, in the besigner's page context. Verifies every section's slot count and writes **nothing** on a mismatch. |
+| `verify-applier.mjs` | `node tools/marketing/verify-applier.mjs` — drives the applier over all eight pages against a stub canvas that models the REAL write semantics. |
 | `product-copy/copy-<page>.json` | Copy and structure extracted verbatim from the Figma frames, one file per product page, plus a `claimsToVerify` list per page. |
 
 ## Why the applier refuses rather than repairs
@@ -24,6 +25,33 @@ reads "Now in early access" on every one). Blanking a node because the copy
 JSON happened not to name it would be the worst reading of a missing value.
 
 Run it with `{dryRun: true}` first — it returns the before/after pairs.
+
+## `updateNodeProps` REPLACES the prop bag (AGL-1227)
+
+It does not merge. Writing `{ children }` alone strips everything else off the
+node — and on this skeleton that is `component: 'h1'…'h3'` on **all seven
+headings**, `variant: 'body1'` on the hero body, and `screenId` on the Explore
+cards. Always spread: `{ ...plain(node.props), children: value }`.
+
+This is the heading-variant trap from the other side. A `muiTypography` with
+neither `component` nor `variant` renders as a **`<p>`** while its node-level
+`sx.fontSize` keeps painting it at 72px, so the page screenshots perfectly and
+has no `<h1>` on it at all.
+
+**A stub that counts calls proves the plan, never the effect.** The original
+harness's `updateNodeProps` was a no-op, so every slot-count and ordering
+assertion passed while the semantic damage was invisible. `verify-applier.mjs`
+models the replace semantics and asserts the authored props survive; run it
+after touching the applier. Its negative control is the real bug — reverting
+the spread fails 8 authored props on all eight pages.
+
+## Explore link cards are not bound by the skeleton
+
+The seven `muiScreenLink` cards carry `children`, `renderAs`, `color` and
+`variant` — and **no `screenId`**, including on the built `/product/besigner`
+reference page. Pasting the skeleton therefore gives you seven dead links.
+Bind them as part of the pour, deriving ids from the screens table at apply
+time, and refuse rather than guess if a card's label has no match.
 
 ## `claimsToVerify` is not decoration
 
