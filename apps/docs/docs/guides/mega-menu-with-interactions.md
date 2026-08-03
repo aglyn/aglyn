@@ -73,6 +73,15 @@ section:
 3. Add as many columns, links, images, or promo cards as you like — a mega
    menu panel takes any content.
 
+:::tip Menu links should render as links
+A Screen Link ships as a **button** by default, which is right for a call
+to action but wrong for navigation: it picks up button typography and the
+theme's uppercase transform, and it announces itself as a button to screen
+readers. Set **Render as** to **Text link** on the links inside a menu
+panel, a footer, or a body paragraph. The button-only attributes (Variant,
+Size, Full width) disappear when you do, because a link ignores them.
+:::
+
 ## 3. Make it open on hover
 
 Out of the box, **clicking** the nav item already toggles the panel — no

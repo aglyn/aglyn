@@ -90,4 +90,37 @@ describe('ScreenLink renderAs (AGL-1195)', () => {
       'link',
     ])
   })
+
+  it('hides the controls it drops in link mode, and only those', () => {
+    const by = (name: string) =>
+      schema.attributes.find((a: any) => a.name === name) as any
+    // Exactly the props the renderer destructures away above. Offering
+    // them in link mode would be three controls that silently do nothing.
+    for (const name of ['size', 'fullWidth', 'variant']) {
+      expect(by(name).condition).toEqual({
+        when: 'renderAs',
+        is: 'link',
+        notMatch: true,
+      })
+    }
+    // `color` rides through in `rest` and MUI's Link takes it, so it must
+    // stay visible in both shapes.
+    expect(by('color').condition).toBeUndefined()
+    for (const name of ['screenId', 'href', 'renderAs']) {
+      expect(by(name).condition).toBeUndefined()
+    }
+  })
+
+  it('leaves the shared field presets unmutated', () => {
+    // The schema spreads FIELD_SIZE/FIELD_FULL_WIDTH rather than editing
+    // them; mutating would put a `renderAs` condition on every Button,
+    // Icon Button and Menu Button in the plugin.
+    const {
+      FIELD_SIZE,
+      FIELD_FULL_WIDTH,
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+    } = require('../constants/field-presets')
+    expect(FIELD_SIZE.condition).toBeUndefined()
+    expect(FIELD_FULL_WIDTH.condition).toBeUndefined()
+  })
 })

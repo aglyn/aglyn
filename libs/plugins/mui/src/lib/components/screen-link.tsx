@@ -116,6 +116,13 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
 })
 ScreenLink.displayName = 'ScreenLink'
 
+/**
+ * Shows an attribute only in button mode. `notMatch` inverts `is`, so an
+ * unset `renderAs` — every link authored before AGL-1195 — still counts as
+ * a button and keeps its controls.
+ */
+const BUTTON_ONLY = { when: 'renderAs', is: 'link', notMatch: true }
+
 export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
@@ -159,9 +166,13 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
         { value: 'link', label: 'Text link' },
       ],
     },
+    // `color` survives both shapes — MUI's Link takes it too.
     FIELD_COLOR,
-    FIELD_SIZE,
-    FIELD_FULL_WIDTH,
+    // The rest are button-only: the renderer drops them in link mode, so
+    // leaving them on screen would offer three controls that silently do
+    // nothing. Spread rather than mutate — these presets are shared.
+    { ...FIELD_SIZE, condition: BUTTON_ONLY },
+    { ...FIELD_FULL_WIDTH, condition: BUTTON_ONLY },
     {
       name: 'variant',
       description: 'The variant to use.',
@@ -173,6 +184,7 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
         { value: 'outlined', label: 'Outlined' },
         { value: 'contained', label: 'Contained' },
       ],
+      condition: BUTTON_ONLY,
     },
   ],
 }
