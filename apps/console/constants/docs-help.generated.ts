@@ -471,7 +471,7 @@ export const DOCS_HELP_TOPICS = {
   sso: {
     path: '/enterprise/sso',
     title: 'Single sign-on (SAML)',
-    excerpt: 'How SAML SSO works on Aglyn, how it is provisioned, what enforcement does, and the consequences of SSO accounts living in their own identity pool.',
+    excerpt: 'How to set up SAML SSO yourself, how domain verification works, what enforcement does, and the consequences of SSO accounts living in their own identity pool.',
   },
   staffConsole: {
     path: '/staff-console/overview',
@@ -630,7 +630,7 @@ export const DOCS_HELP_ANCHORS = {
   serverApis: ['#an-api-route', '#webhooks-with-signature-verification', '#platform-billing-events', '#scheduled-jobs', '#troubleshooting'],
   siteProtection: ['#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#configure-it', '#related'],
-  sso: ['#how-it-works', '#enforcement', '#consequences-worth-knowing-before-you-switch', '#testing-it', '#related'],
+  sso: ['#setting-it-up', '#1-verify-your-domain', '#2-connect-your-identity-provider', '#3-turn-it-on', '#how-it-works', '#enforcement', '#consequences-worth-knowing-before-you-switch', '#testing-it', '#related'],
   staffConsole: ['#whats-there', '#related'],
   supportAndCommunity: ['#support-tickets', '#ticket-status', '#what-to-include', '#community-forum', '#related'],
   supportQueue: ['#triage', '#notifications', '#related'],

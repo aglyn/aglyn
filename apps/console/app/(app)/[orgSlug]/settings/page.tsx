@@ -44,6 +44,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import MediaUrlField from '../../../../components/media-url-field.component'
 import OrgApiKeysCard from '../../../../components/org-api-keys-card.component'
 import OrgBrandingCard from '../../../../components/org-branding-card.component'
+import OrgSsoCard from '../../../../components/org-sso-card.component'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import HubTabs from '../../../../components/hub-tabs.component'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -694,6 +695,16 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                       id: 'branding',
                       label: 'Branding',
                       content: <OrgBrandingCard />,
+                    },
+                    {
+                      id: 'sso',
+                      label: 'Single sign-on',
+                      // Shown to every admin, not only entitled orgs (AGL-1210):
+                      // the unentitled state explains that SSO comes with
+                      // Enterprise and that setup is self-serve once there.
+                      // Hiding the tab would leave "can I do SSO?" unanswerable
+                      // from inside the product.
+                      content: <OrgSsoCard />,
                     },
                   ]
                 : []),
