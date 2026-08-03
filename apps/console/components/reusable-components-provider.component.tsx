@@ -29,7 +29,7 @@ import {
   DialogTitle,
   TextField,
 } from '@mui/material'
-import { collection, doc, getDoc, limit, query } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -37,7 +37,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useHostComponentDefinitions from '../hooks/use-host-component-definitions'
 
 export interface ReusableComponentsProviderProps {
   hostId: string
@@ -82,11 +82,9 @@ export function ReusableComponentsProvider(
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
 
-  const { data: componentDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
+  // Shared with the canvas's reusable-instance graft (AGL-1217): one query,
+  // one listener, one set of skip rules for both readers.
+  const { docs: componentDocs } = useHostComponentDefinitions(hostId)
 
   // Element drawer: one preset per definition, category "Your components".
   useEffect(() => {

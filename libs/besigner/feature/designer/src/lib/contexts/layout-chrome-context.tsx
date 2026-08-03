@@ -38,9 +38,20 @@ export function useLayoutChromeContext() {
 /**
  * Builds the read-only chrome canvas from a layout version's node map.
  * Returns undefined without nodes so unbound screens skip chrome entirely.
+ *
+ * `reusableDefinitions` (host components keyed by id) grafts the layout's
+ * reusable instances before the canvas loads (AGL-1217). The placeholder an
+ * unexpanded instance renders is the EDITOR's UX — it names what you would
+ * be selecting in the document that owns it — but chrome is not editable
+ * from here, so on this canvas it is just a dashed grey box where the site
+ * shows the nav. Grafting into the chrome canvas alone keeps the layout's
+ * own editor untouched, and chrome stays as locked as it was: expansion
+ * only adds nodes to a canvas the viewport already renders non-interactive.
+ * Omitted or undefined, the graft no-ops and chrome renders as it did.
  */
 export function useLayoutChromeCanvas(
   layoutNodes: Aglyn.ProcessableNodes | undefined,
+  reusableDefinitions?: Record<string, Aglyn.ReusableComponentTree>,
 ): Aglyn.CanvasManager | undefined {
   return useMemo(() => {
     if (!layoutNodes) return undefined
@@ -48,7 +59,15 @@ export function useLayoutChromeCanvas(
     // global screen canvas — but backed by the real app: node getters reach
     // through store.aglyn.components to resolve component schemas.
     const canvas = new Aglyn.CanvasManager(Aglyn.aglyn)
-    const nodes = { ...(layoutNodes as Record<string, Aglyn.NodeSchema>) }
+    // Cast as the tenant pipeline and Preview do: the canvas's `NodeSchema`
+    // makes `componentId` optional, the graft's `AglynNodeSchema` requires
+    // it, and neither side is wrong about its own half of the trip.
+    const nodes = {
+      ...(Aglyn.composeReusableComponentNodes(
+        layoutNodes as any,
+        reusableDefinitions as any,
+      ) as Record<string, Aglyn.NodeSchema>),
+    }
     // Early seeds stored roots without $id, letting the canvas assign a
     // random one — pin the root to its canonical id before loading.
     if (nodes[Aglyn.NODE_ROOT_ID]) {
@@ -59,7 +78,7 @@ export function useLayoutChromeCanvas(
     }
     canvas.setNodes(canvas.processNodesToDenormalized(nodes))
     return canvas
-  }, [layoutNodes])
+  }, [layoutNodes, reusableDefinitions])
 }
 
 export default LayoutChromeContext

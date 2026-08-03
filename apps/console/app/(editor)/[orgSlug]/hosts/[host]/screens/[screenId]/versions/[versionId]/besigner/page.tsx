@@ -98,6 +98,7 @@ import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
 import { buildScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
+import useHostComponentDefinitions from '../../../../../../../../../../hooks/use-host-component-definitions'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 
@@ -170,8 +171,18 @@ function BesignerPage(props) {
     layoutId: layoutId ?? '-no-layout-',
     versionId: layoutVersionId ?? '-no-version-',
   })
+  // Layout chrome renders the host's reusable components for real (AGL-1217)
+  // — the same graft the tenant runtime and Preview (AGL-1211) run. Held back
+  // until the definitions settle: building the chrome canvas without them
+  // paints the dashed "SITE NAV" placeholder and swaps it for the nav a beat
+  // later, and the canvas is rebuilt wholesale per node map anyway.
+  const { definitions: componentDefinitions } =
+    useHostComponentDefinitions(hostId)
   const chromeCanvas = useLayoutChromeCanvas(
-    layoutId ? layoutVersionResult?.data?.nodes : undefined,
+    layoutId && componentDefinitions
+      ? layoutVersionResult?.data?.nodes
+      : undefined,
+    componentDefinitions,
   )
   const {doc: result, setDoc: updateScreen} = useScreenVersion({
     hostId: hostId as string,
