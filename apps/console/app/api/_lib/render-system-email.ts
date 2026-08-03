@@ -40,6 +40,18 @@ function blankUnresolvedTokens(value: string): string {
   return value.replace(/\{\{[^}]*\}\}/g, '')
 }
 
+/**
+ * Origin a picked image in a system email is fetched from (AGL-1224).
+ *
+ * A system email is staff-designed and its media lives in the platform
+ * library, which the CONSOLE's `/api/media/cdn` route serves — the tenant app
+ * mounts the same route, but a recipient of an org invite has no site to
+ * resolve against. Same expression `app/layout.tsx` uses for the console's
+ * own canonical URL, so the two cannot drift per deploy.
+ */
+const CONSOLE_ORIGIN =
+  process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'https://app.aglyn.com'
+
 export interface RenderedSystemEmail {
   subject: string
   html: string
@@ -96,6 +108,9 @@ export async function loadSystemEmail(
       .collection('versions')
       .doc(String(versionId))
       .get()
+    // Plain map, deliberately: the email besigner saves with a bare `setDoc`
+    // and no converter, so unlike a SCREEN version this is not msgpack bytes
+    // and must not be run through `decodeStoredNodes` (AGL-1223).
     const nodes = versionSnapshot.get('nodes') as
       | Record<string, unknown>
       | undefined
@@ -136,6 +151,9 @@ export function renderLoadedSystemEmail(
     subject: substituteMergeTokens(loaded.subjectTemplate, merge),
     preheader: substituteMergeTokens(loaded.preheaderTemplate, merge),
     merge,
+    // Without this a staff-picked image resolves to a site-relative CDN path,
+    // which is a broken-image box in the recipient's inbox (AGL-1224).
+    mediaOrigin: CONSOLE_ORIGIN,
   })
   if (!rendered?.html) return null
   return {
@@ -197,6 +215,7 @@ export async function renderEffectiveSystemEmail(
     rootId: EMAIL_NODE_ROOT_ID,
     subject: substituteMergeTokens(definition.defaultSubject, merge),
     merge,
+    mediaOrigin: CONSOLE_ORIGIN,
   })
   return {
     subject: blankUnresolvedTokens(

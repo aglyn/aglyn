@@ -189,11 +189,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // Unlisted pages (AGL-113 visibility) stay reachable but out of search.
   const unlisted =
     screen?.visibility === Aglyn.HostScreenVisibility.UNLISTED
-  const canonicalBase = host?.cname
-    ? `https://${host.cname}`
-    : host?.subdomain
-      ? `https://${host.subdomain}.aglyn.app`
-      : undefined
+  // Shared with the server metadata twin and the email renderer (AGL-1224) —
+  // three copies of "which name does this site answer to" would drift.
+  const canonicalBase = Aglyn.hostPublicOrigin(host)
   const screenPath = screen?.$id ? host?.screens?.[screen.$id] : undefined
   const canonical =
     canonicalBase && screenPath != null

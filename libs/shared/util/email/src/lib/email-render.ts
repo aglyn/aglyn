@@ -26,6 +26,8 @@
  * field is visible in test sends instead of silently blank.
  */
 
+import { resolveEmailMediaSrc } from './email-media-src'
+
 export interface EmailRenderProduct {
   name: string
   priceLabel?: string
@@ -54,6 +56,28 @@ export interface EmailRenderOptions {
   /** Sanitizer applied to richtext/custom HTML (defaults to identity —
    * pass the custom-html policy in app code). */
   sanitize?: (html: string) => string
+  /**
+   * Absolute origin serving this email's media, e.g. `https://acme.com`
+   * (AGL-1224).
+   *
+   * An image an author picked with "Browse media" is stored as a
+   * `media:{scope}/{mediaId}` reference, which resolves to the SITE-RELATIVE
+   * CDN path `/api/media/cdn/…`. A browser has a page to resolve that
+   * against; an inbox has nothing. Without this, every picked image is a
+   * broken-image box in the delivered mail.
+   *
+   * It is an input rather than a lookup because this module is pure, and
+   * because the CDN route is mounted in BOTH the console and the tenant app
+   * — which origin is correct depends on whose email this is.
+   */
+  mediaOrigin?: string
+  /**
+   * Host doc id of the site sending, so an `org:`-scoped reference is
+   * host-qualified. The CDN is unauthenticated and decides from the URL
+   * alone, so an org asset restricted to particular sites is only served
+   * through the qualified form.
+   */
+  mediaHostId?: string
 }
 
 export interface RenderedEmail {
@@ -112,11 +136,42 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     merge,
     products,
     sanitize = (html: string) => html,
+    mediaOrigin,
+    mediaHostId,
   } = options
 
   const textParts: string[] = []
   const sub = (value: unknown): string =>
     substituteMergeTokens(String(value ?? ''), merge)
+
+  const origin = mediaOrigin?.replace(/\/+$/, '')
+
+  /**
+   * A stored image value turned into something an inbox can actually fetch,
+   * or undefined (AGL-1224).
+   *
+   * `resolveEmailMediaSrc` handles the three stored generations — a `media:`
+   * reference, the AGL-175 relative CDN path, and a plain absolute URL an
+   * author typed — but the first two come back site-relative, which is the
+   * whole bug: only a browser has a page to resolve them against.
+   *
+   * With no origin to absolutize against, the image is DROPPED rather than
+   * emitted relative. Both are a missing picture; a dropped one leaves a gap,
+   * while `src="/api/media/cdn/…"` renders as a broken-image box, which reads
+   * to a recipient as a broken email rather than a plain one. Neither send
+   * path relies on this — both supply an origin — so reaching it means an
+   * ad-hoc caller forgot, and the quieter failure is the right one.
+   *
+   * A protocol-relative `//host/x.png` is passed through untouched: it is
+   * already absolute enough to name a host, and prefixing an origin would
+   * corrupt it.
+   */
+  const imageSrc = (value: unknown): string | undefined => {
+    const resolved = resolveEmailMediaSrc(sub(value), mediaHostId)
+    if (!resolved) return undefined
+    if (!resolved.startsWith('/') || resolved.startsWith('//')) return resolved
+    return origin ? `${origin}${resolved}` : undefined
+  }
 
   const renderChildren = (ids: string[] | undefined): string =>
     (ids ?? [])
@@ -171,7 +226,7 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
         )
       }
       case 'emailImage': {
-        const src = sub(props.src)
+        const src = imageSrc(props.src)
         if (!src) return ''
         const width = Number(props.width) > 0 ? Number(props.width) : 600
         const alt = escapeEmailHtml(String(props.alt ?? ''))
@@ -228,8 +283,11 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
           `${product.name}${product.priceLabel ? ` — ${product.priceLabel}` : ''}` +
             (product.url ? `: ${product.url}` : ''),
         )
-        const image = product.imageUrl
-          ? `<img src="${escapeEmailHtml(product.imageUrl)}" alt="${escapeEmailHtml(product.name)}" width="280" style="max-width:100%;height:auto;border:0;border-radius:6px;" /><br />`
+        // Same treatment as emailImage: a catalog image can be a picked
+        // asset, so it carries the same reference/relative forms (AGL-1224).
+        const productImage = imageSrc(product.imageUrl)
+        const image = productImage
+          ? `<img src="${escapeEmailHtml(productImage)}" alt="${escapeEmailHtml(product.name)}" width="280" style="max-width:100%;height:auto;border:0;border-radius:6px;" /><br />`
           : ''
         const button = product.url
           ? `<a href="${escapeEmailHtml(product.url)}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 24px;border-radius:6px;background-color:#1a73e8;color:#ffffff;font-family:${FONT};font-size:14px;font-weight:600;text-decoration:none;">${escapeEmailHtml(label)}</a>`

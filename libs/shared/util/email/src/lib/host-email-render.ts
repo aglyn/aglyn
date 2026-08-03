@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { hostEmailOrigin } from './email-media-src'
 import {
   EMAIL_NODE_ROOT_ID,
   renderEmailHtml,
@@ -64,6 +65,14 @@ export interface LoadedHostEmail {
   nodes: Record<string, unknown>
   subjectTemplate: string
   preheaderTemplate: string
+  /** Host doc id, so an org-scoped media reference can be host-qualified. */
+  hostId: string
+  /**
+   * The site's absolute origin, for absolutizing picked images (AGL-1224).
+   * Undefined only for a host with neither a custom domain nor a subdomain,
+   * in which case those images are dropped rather than sent broken.
+   */
+  origin?: string
 }
 
 /** Blanks any `{{token}}` the caller did not supply, so a customer never
@@ -73,27 +82,34 @@ function blankUnresolvedTokens(value: string): string {
 }
 
 /**
- * Loads a site's published email template — ONE Firestore read — or `null`
- * when there is nothing usable (no document, no published version, an empty
- * node map, an unknown or non-designable key). The host-scoped mirror of the
- * platform `loadSystemEmail`: `hosts/{hostId}/emailTemplates/{key}`.
+ * Loads a site's published email template, or `null` when there is nothing
+ * usable (no document, no published version, an empty node map, an unknown or
+ * non-designable key). The host-scoped mirror of the platform
+ * `loadSystemEmail`: `hosts/{hostId}/emailTemplates/{key}`.
  *
  * The caller passes its own Admin Firestore, so this reads through the Admin
  * SDK — the send path runs as the server, not a signed-in user.
+ *
+ * TWO reads, not one (AGL-1224): the host document is read for the site's
+ * origin, which picked images need to be fetchable from an inbox. It is read
+ * LAST, only once there is something to render, so a site with nothing
+ * published still costs a single read — and it is skipped entirely when the
+ * caller already knows the origin and passes it. Still once per batch, not
+ * once per recipient, which is the property AGL-770 cared about.
  */
 export async function loadHostEmail(
   firestore: AdminFirestoreLike,
   hostId: string,
   templateKey: string,
+  options: { origin?: string } = {},
 ): Promise<LoadedHostEmail | null> {
   const entry = getTenantEmail(templateKey)
   if (!entry || !isTenantEmailEditable(entry)) return null
   if (!hostId) return null
 
   try {
-    const templateRef = firestore
-      .collection('hosts')
-      .doc(hostId)
+    const hostRef = firestore.collection('hosts').doc(hostId)
+    const templateRef = hostRef
       .collection(TENANT_EMAIL_COLLECTION)
       .doc(templateKey)
     const templateSnapshot = await templateRef.get()
@@ -106,14 +122,28 @@ export async function loadHostEmail(
       .collection('versions')
       .doc(String(versionId))
       .get()
+    // Plain map, deliberately: the email besigner saves with a bare `setDoc`
+    // and no converter, so unlike a SCREEN version this is not msgpack bytes
+    // and must not be run through `decodeStoredNodes` (AGL-1223).
     const nodes = versionSnapshot.get('nodes') as
       | Record<string, unknown>
       | undefined
     if (!nodes || !Object.keys(nodes).length) return null
 
+    let origin = options.origin
+    if (!origin) {
+      const hostSnapshot = await hostRef.get()
+      origin = hostEmailOrigin({
+        cname: hostSnapshot.get('cname') as string | undefined,
+        subdomain: hostSnapshot.get('subdomain') as string | undefined,
+      })
+    }
+
     return {
       entry,
       nodes,
+      hostId,
+      origin,
       subjectTemplate:
         String(templateSnapshot.get('subject') ?? '') ||
         entry.defaultSubject ||
@@ -144,6 +174,10 @@ export function renderLoadedHostEmail(
     subject: substituteMergeTokens(loaded.subjectTemplate, merge),
     preheader: substituteMergeTokens(loaded.preheaderTemplate, merge),
     merge,
+    // A picked image is stored as a reference; the site's own origin is what
+    // makes it fetchable from a recipient's inbox (AGL-1224).
+    mediaOrigin: loaded.origin,
+    mediaHostId: loaded.hostId,
   })
   if (!rendered?.html) return null
   return {
@@ -166,7 +200,8 @@ export async function renderHostEmail(
   hostId: string,
   templateKey: string,
   merge: Record<string, string> = {},
+  options: { origin?: string } = {},
 ): Promise<RenderedHostEmail | null> {
-  const loaded = await loadHostEmail(firestore, hostId, templateKey)
+  const loaded = await loadHostEmail(firestore, hostId, templateKey, options)
   return loaded ? renderLoadedHostEmail(loaded, merge) : null
 }

@@ -38,12 +38,20 @@
  *   would replace a working image with a 404.
  * - A prop already holding a `media:` reference is skipped, so re-runs are
  *   no-ops and documents are only written when a node actually changed.
- * - `emailImage` nodes are SKIPPED ENTIRELY. Email clients cannot resolve a
- *   relative path, so an absolute storage URL in an email is the only form
- *   that WORKS there; converting it would trade a working image for a broken
- *   one. (The `/api/media/cdn/…` paths the first pass put in emails are
- *   already broken; that is a separate bug and not this script's to paper
- *   over.)
+ * - `emailImage` nodes are STILL SKIPPED, but no longer because they must be.
+ *   The original reason — an email client cannot resolve a relative path, so
+ *   an absolute storage URL was the only form that worked in an inbox — was
+ *   fixed at the render end by AGL-1224: `renderEmailHtml` now resolves a
+ *   reference and absolutizes it against the sending site's own origin, and
+ *   both send paths supply one. Converting these would additionally fix the
+ *   AGL-1215 folder-move 404 for email images, which is the whole point of
+ *   this script.
+ *
+ *   Lifting the skip is a DATA decision rather than a code one, so it is left
+ *   to a deliberate run: the one case it would regress is a host with neither
+ *   a custom domain nor a subdomain, whose images render today from an
+ *   absolute storage URL and would be dropped instead. Check that no host in
+ *   scope is originless before removing `emailImage` from SKIP_COMPONENT_IDS.
  *
  * Covers, for every host: `screens`, `layouts`, `components` and `templates`
  * — both the parent doc (the published snapshot the tenant renders) and every
