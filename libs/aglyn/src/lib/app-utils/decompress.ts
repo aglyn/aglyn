@@ -16,9 +16,20 @@
  */
 
 import { decode } from '@msgpack/msgpack'
-import type { Bytes } from 'firebase/firestore'
 
-export function decompress<T>(value: Bytes): T {
+/**
+ * The shape this needs, rather than the class it usually gets (AGL-1151).
+ *
+ * A structural type keeps `firebase/firestore` out of this module entirely.
+ * The import here was type-only and therefore erased — it cost nothing — but
+ * naming the shape says what is actually required and stops the next person
+ * reaching for the class again.
+ */
+export interface ByteSource {
+  toUint8Array(): Uint8Array
+}
+
+export function decompress<T>(value: ByteSource): T {
   return decode(value.toUint8Array()) as T
 }
 export default decompress

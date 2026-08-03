@@ -39,7 +39,7 @@ export const useScreenVersionRef = ({ hostId, screenId, versionId }: { hostId: s
       const { $id, ...rest } = data
       const nodes = rest?.nodes instanceof Bytes
         ? rest.nodes
-        : compress(rest?.nodes || {})
+        : Bytes.fromUint8Array(compress(rest?.nodes || {}))
       return { ...rest, nodes, updatedAt: Timestamp.now() }
     },
     fromFirestore(snapshot, options) {
