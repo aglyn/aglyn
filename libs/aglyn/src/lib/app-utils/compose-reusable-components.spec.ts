@@ -18,6 +18,7 @@
 import {
   composeReusableComponentNodes,
   nodesReferenceComponent,
+  replaceSubtreeWithInstance,
   REUSABLE_INSTANCE_COMPONENT_ID,
 } from './compose-reusable-components'
 
@@ -105,6 +106,98 @@ describe('composeReusableComponentNodes', () => {
       { selfRef },
     )
     expect(Object.keys(bounded).length).toBeGreaterThan(1)
+  })
+})
+
+describe('replaceSubtreeWithInstance', () => {
+  /** `App Bar` → brand + a link, sitting in a layout beside a footer. */
+  const layout = () =>
+    ({
+      _root_: { $id: '_root_', componentId: 'div', nodes: ['nav', 'footer'] },
+      nav: {
+        $id: 'nav',
+        parentId: '_root_',
+        componentId: 'muiAppBar',
+        nodes: ['brand', 'link'],
+      },
+      brand: {
+        $id: 'brand',
+        parentId: 'nav',
+        componentId: 'muiTypography',
+        props: { children: 'Aglyn' },
+      },
+      link: {
+        $id: 'link',
+        parentId: 'nav',
+        componentId: 'screenLink',
+        props: { children: 'Pricing' },
+      },
+      footer: { $id: 'footer', parentId: '_root_', componentId: 'muiBox' },
+    }) as any
+
+  it('swaps the promoted subtree for an instance the renderer will graft', () => {
+    const next = replaceSubtreeWithInstance(layout(), 'nav', 'cmp1', 'Site nav')
+
+    // The promoting document must now FOLLOW the component, not hold a copy.
+    expect(nodesReferenceComponent(next, 'cmp1')).toBe(true)
+    expect(next['nav']).toMatchObject({
+      $id: 'nav',
+      parentId: '_root_',
+      componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+      props: { refId: 'cmp1', name: 'Site nav' },
+      nodes: [],
+    })
+    // No frozen copy left behind.
+    expect(next['brand']).toBeUndefined()
+    expect(next['link']).toBeUndefined()
+    // Siblings and the parent's child list are untouched, so the tree still
+    // resolves and the selection still points at something.
+    expect(next['_root_'].nodes).toEqual(['nav', 'footer'])
+    expect(next['footer']).toBeDefined()
+  })
+
+  it('is the inverse of the graft: the instance re-expands to the definition', () => {
+    const before = layout()
+    const definition = {
+      rootId: 'nav',
+      nodes: {
+        nav: { $id: 'nav', componentId: 'muiAppBar', nodes: ['brand'] },
+        brand: {
+          $id: 'brand',
+          parentId: 'nav',
+          componentId: 'muiTypography',
+          props: { children: 'Aglyn' },
+        },
+      },
+    } as any
+    const swapped = replaceSubtreeWithInstance(before, 'nav', 'cmp1')
+    const composed = composeReusableComponentNodes(swapped, { cmp1: definition })
+    expect(composed['nav'].nodes).toEqual(['cmp__nav__nav'])
+    expect(composed['cmp__nav__brand']).toMatchObject({
+      props: { children: 'Aglyn' },
+    })
+  })
+
+  it('drops the whole subtree, not just direct children', () => {
+    const nodes = {
+      root: { $id: 'root', componentId: 'div', nodes: ['a'] },
+      a: { $id: 'a', parentId: 'root', componentId: 'muiStack', nodes: ['b'] },
+      b: { $id: 'b', parentId: 'a', componentId: 'muiStack', nodes: ['c'] },
+      c: { $id: 'c', parentId: 'b', componentId: 'muiTypography' },
+    } as any
+    const next = replaceSubtreeWithInstance(nodes, 'a', 'cmp1')
+    expect(Object.keys(next).sort()).toEqual(['a', 'root'])
+  })
+
+  it('never mutates the input and no-ops on an unknown root or definition', () => {
+    const before = layout()
+    const next = replaceSubtreeWithInstance(before, 'nav', 'cmp1', 'Site nav')
+    expect(before['nav'].nodes).toEqual(['brand', 'link'])
+    expect(before['brand']).toBeDefined()
+    expect(next).not.toBe(before)
+
+    expect(replaceSubtreeWithInstance(before, 'nope', 'cmp1')).toBe(before)
+    expect(replaceSubtreeWithInstance(before, 'nav', '')).toBe(before)
   })
 })
 
