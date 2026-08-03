@@ -22,6 +22,17 @@
       "port": 4500
     },
     {
+      "name": "tenant-alt",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "nx",
+        "serve",
+        "tenant",
+        "--port=4600"
+      ],
+      "port": 4600
+    },
+    {
       "name": "docs",
       "runtimeExecutable": "npx",
       "runtimeArgs": [

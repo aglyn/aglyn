@@ -31,11 +31,25 @@
  *   Module evaluation happens during cold boot, so on the FIRST request of a
  *   fresh instance this is small (boot just finished) while `cold` is true. It
  *   is large on a warm instance that has been idle.
- * - `cold` — whether this instance has served a render before. The first render
- *   pays every one-shot cost (plugin module evaluation, Firestore client
- *   construction, connection setup); later ones pay none of it. Comparing a
- *   cold line against a warm line on the same instance apportions the cost
- *   without needing a second deploy.
+ * - `cold` — whether a render had already STARTED on this instance. Read the
+ *   caveat below before trusting it.
+ *
+ * What the first production read settled (2026-08-03):
+ *
+ * - `ensureAll` was suspect #1 and is NOT the cost — 0–45 ms against a 2–5 s
+ *   total, on the first render of a fresh instance.
+ * - **`cold` is the wrong discriminator; `sinceBootMs` is the right one.** The
+ *   flag flips when a render BEGINS, so concurrent renders on a fresh instance
+ *   report `cold:false` while paying the full warm-up. Lines with
+ *   `sinceBootMs` under ~100 ms run 2–5 s regardless of the flag; the same
+ *   paths at `sinceBootMs` ~11 s run 1–1.6 s. Every phase is 3–6× slower in an
+ *   instance's first seconds, which points at shared client/connection warm-up
+ *   rather than any one phase.
+ * - Two lines per request, milliseconds apart, exposed the real defect: the
+ *   loader's `cache()` was keyed on the slug ARRAY, so `generateMetadata` and
+ *   the page never shared an entry and every render ran twice (fixed in
+ *   `load-page-data.ts`). Doubling a 5 s render is what crossed the 10 s
+ *   function limit and produced the post-deploy 502.
  *
  * Timings go through `console.log` as one line of JSON so a Vercel runtime-log
  * query can pull them without a log drain. Overhead is a `Date.now()` per

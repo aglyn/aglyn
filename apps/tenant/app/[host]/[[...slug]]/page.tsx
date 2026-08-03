@@ -29,6 +29,21 @@ import type { Props } from './types'
 export const revalidate = 60
 export const dynamicParams = true
 
+/**
+ * Headroom for a cold render (AGL-1152). The platform default is 10 s, and the
+ * first request against a fresh instance was exceeding it — Vercel then serves
+ * `502 BAD_GATEWAY` ("Task timed out after 10 seconds", confirmed in runtime
+ * errors on this route), so the visitor got a broken page rather than a slow
+ * one.
+ *
+ * This is the safety net, NOT the fix: the render is now roughly half the work
+ * it was (see `loadPageDataCached`), which is what should keep a cold render
+ * well inside the limit. Raising the ceiling only changes the failure mode from
+ * an error page to a slow page that then caches for `revalidate` seconds — a
+ * strictly better way to lose.
+ */
+export const maxDuration = 60
+
 export function generateStaticParams() {
   return []
 }
@@ -450,7 +465,9 @@ export async function generateMetadata({
  * `[[...slug]]` + getStaticProps. The server loader composes the page and
  * this route maps its result to `notFound()` / `redirect()` / the client
  * renderer. Metadata comes from `generateMetadata`; the two share one
- * `cache`d `loadPageData` call per request.
+ * `cache`d `loadPageData` call per request — which only holds because the
+ * loader keys its cache on a primitive. Passing the slug ARRAY straight through
+ * silently defeats that and doubles every render (AGL-1152).
  */
 export default async function CatchAllPage({ params }: CatchAllPageProps) {
   const { host, slug } = await params

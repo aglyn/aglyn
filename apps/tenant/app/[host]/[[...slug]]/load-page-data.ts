@@ -37,18 +37,31 @@ import { startRenderTimer } from '../../../utils/render-timings'
 import type { LoadResult, Props } from './types'
 
 /**
- * Server data loader for the catch-all tenant render (AGL-398). This is the
- * former `getStaticProps` body verbatim — same host/screen resolution,
- * redirects, collections, protected/member gating, overlays, experiments,
- * automations, and SEO composition — wrapped so the App Router page and its
- * `generateMetadata` share one `cache`d call per request. Returns the same
+ * The composition body — the former `getStaticProps` verbatim (AGL-398): host
+ * and screen resolution, redirects, collections, protected/member gating,
+ * overlays, experiments, automations and SEO. Returns the same
  * `{ props | notFound | redirect }` shapes; the page maps them to
  * `notFound()` / `redirect()` / render.
+ *
+ * Keyed on PRIMITIVES so `cache` can actually dedupe (AGL-1152).
+ *
+ * `cache()` keys on argument IDENTITY, not structure. The previous signature
+ * took `slug: string[]`, and both call sites pass `slug ?? []` — a fresh array
+ * literal per call — so `generateMetadata` and the page component never shared
+ * a cache entry and every tenant render ran this whole function TWICE,
+ * concurrently. Production timing lines showed the pair 1 ms apart, each paying
+ * every Firestore round trip in full.
+ *
+ * That doubling is what pushed a cold render past the 10 s function limit and
+ * turned the first request after a deploy into a 502. Keying on a JSON string
+ * makes the two calls collide on one entry; JSON round-tripping is lossless for
+ * a string array, so a segment containing `/` survives (a plain `join`/`split`
+ * would not).
  */
-export const loadPageData = cache(
-  async (hostParam: string, slug: string[]): Promise<LoadResult> => {
+const loadPageDataCached = cache(
+  async (hostParam: string, slugKey: string): Promise<LoadResult> => {
+    const slug = JSON.parse(slugKey) as string[]
     const context = { params: { host: hostParam, slug } }
-  console.debug('!!!!!getStaticProps', context)
 
   // AGL-1152: one structured timing line per render, reported in `finally` so
   // every exit path (404, redirect, maintenance, throw) is measured, not just
@@ -76,7 +89,6 @@ export const loadPageData = cache(
 
     const hostRes = await getHost({ host })
     timer.mark('getHost')
-    console.debug('hostRes', hostRes, params)
 
     if (hostRes.error || !hostRes.host) {
       return {
@@ -160,9 +172,10 @@ export const loadPageData = cache(
     // Plugin site-page hooks (AGL-417/418) register through the tenant
     // server manifest; ensure they're loaded before any hook runs.
     await serverPluginLoader.ensureAll(['tenantApi'])
-    // Suspect #1 for the cold-start cost: this imports the server half of all
-    // seven first-party plugins, memoised once per instance. If that theory is
-    // right, this phase dominates the `cold: true` line and is ~0 on warm ones.
+    // Was suspect #1 for the cold-start cost; MEASURED AND CLEARED (AGL-1152).
+    // Production timing lines put this at 0–45 ms on the very first render of a
+    // fresh instance, against a 2–5 s total. It is not the cold-start cost, so
+    // do not remove it on that theory — the API dispatcher needs it.
     timer.mark('ensureAll')
 
     // Redirect rules (AGL-155) fire before any route resolution, so a
@@ -257,7 +270,6 @@ export const loadPageData = cache(
     const screenEntry = Object.entries(pathsByScreenId).find(([, slug]) => {
       return slug === path
     })
-    console.debug('screenEntry', screenEntry)
 
     if (!Array.isArray(screenEntry)) {
       // Plugin page resolvers (AGL-418): commerce composes PDP/PLP
@@ -415,7 +427,6 @@ export const loadPageData = cache(
     const screenId = screenEntry[0]
     const screenRes = await getScreen({ hostId, screenId })
     timer.mark('getScreen')
-    console.debug('screenRes', screenRes)
 
     if (screenRes.error || !screenRes.screen) {
       return {
@@ -608,3 +619,13 @@ export const loadPageData = cache(
   }
   },
 )
+
+/**
+ * Server data loader for the catch-all tenant render (AGL-398). Thin, uncached
+ * wrapper that normalises the slug into a primitive cache key — see
+ * `loadPageDataCached` for why the key cannot be the array itself.
+ */
+export const loadPageData = (
+  hostParam: string,
+  slug: string[],
+): Promise<LoadResult> => loadPageDataCached(hostParam, JSON.stringify(slug))
