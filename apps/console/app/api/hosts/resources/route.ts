@@ -31,6 +31,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { countBillableScreens } from './count-billable-screens'
 
 /**
  * Quota-governed host subcollections (AGL-473): each entry maps a create
@@ -199,7 +200,9 @@ async function handler(request: Request): Promise<Response> {
                 .count()
                 .get()
             ).data().count
-          : (await collectionRef.count().get()).data().count
+          : resourceKey === 'screen'
+            ? await countBillableScreens(hostRef)
+            : (await collectionRef.count().get()).data().count
       const quota = checkQuota(org, resource.quotaKey as any, used)
       if (!quota.allowed) {
         return Response.json({

@@ -155,6 +155,39 @@ function Screens(props) {
       ),
     [data],
   )
+  // A content collection's list/entry template screens serve every entry
+  // from one screen at no URL of their own, so they don't spend the plan's
+  // screen allowance (AGL-1173). Read the collections to know which ids
+  // those are, and keep this precheck in step with the server's
+  // countBillableScreens — a client that warns on a different number than
+  // the API enforces is worse than no precheck at all.
+  const { data: contentCollections } = useFirestoreCollection<any>(
+    () => collection(firestore, 'hosts', hostId, 'collections'),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+  const collectionTemplateScreenIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const contentCollection of contentCollections ?? []) {
+      for (const field of [
+        'listScreenId',
+        'entryScreenId',
+        'templateScreenId',
+      ]) {
+        const screenId = contentCollection?.[field]
+        if (typeof screenId === 'string' && screenId) ids.add(screenId)
+      }
+    }
+    return ids
+  }, [contentCollections])
+  // `screens` already drops soft-deleted and email screens, matching the
+  // other two exclusions the server makes.
+  const billableScreenCount = useMemo(
+    () =>
+      screens.filter((screen) => !collectionTemplateScreenIds.has(screen.$id))
+        .length,
+    [screens, collectionTemplateScreenIds],
+  )
   const { data: hostData } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
@@ -188,7 +221,7 @@ function Screens(props) {
       if (loading) return
       if (error) setError(null)
       // Plan quota (AGL-39): enforced once the org has an explicit plan.
-      const quota = checkOrgQuota(org, 'screensPerHost', screens.length)
+      const quota = checkOrgQuota(org, 'screensPerHost', billableScreenCount)
       if (!quota.allowed) {
         return enqueueSnackbar(
           `Screen limit reached (${quota.limit}) — see Billing to upgrade`,
@@ -293,7 +326,7 @@ function Screens(props) {
       handleFormClose,
       enqueueSnackbar,
       org,
-      screens.length,
+      billableScreenCount,
       createHostResource,
       logActivity,
     ],
@@ -765,7 +798,7 @@ function Screens(props) {
         open={templatesOpen}
         onClose={() => setTemplatesOpen(false)}
         existingSlugs={Object.values(routingMap ?? {})}
-        screenCount={screens.length}
+        screenCount={billableScreenCount}
       />
 
       <Dialog
