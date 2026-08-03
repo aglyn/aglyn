@@ -77,6 +77,7 @@
     "worktree:new": "node tools/scripts/new-worktree.mjs"
   },
   "dependencies": {
+    "@base-ui/react": "1.6.0",
     "@codemirror/lang-json": "^6.0.1",
     "@data-driven-forms/common": "^4.2.0",
     "@data-driven-forms/react-form-renderer": "^4.2.0",
