@@ -70,3 +70,6 @@ vite.config.*.timestamp*
 .nx/polygraph
 .nx/self-healing
 .vercel
+
+# Transient scratch dir written while uploading to the DAM; never source.
+.dam-upload-tmp/
