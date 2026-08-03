@@ -21,6 +21,8 @@ import type { HostTheme } from '@aglyn/shared-data-types'
 // the shared-ui-jsx barrel.
 import LoadingLayoutAppComponent from '@aglyn/shared-ui-jsx/components/loading-layout-app.component'
 import {
+  consoleOptions,
+  consoleOptionsDark,
   consoleThemeDark,
   consoleThemeLight,
   HostThemeProvider,
@@ -53,6 +55,9 @@ export function HostThemeProviders({
     <HostThemeProvider
       theme={hostTheme}
       fallback={[consoleThemeLight, consoleThemeDark]}
+      // The same brand theme as `fallback`, in options form, so a host that
+      // customizes one value keeps the brand for the rest (AGL-1180).
+      baseOptions={[consoleOptions, consoleOptionsDark]}
     >
       <LoadingLayoutAppComponent
         brandLogoUrl={brandLogoUrl}

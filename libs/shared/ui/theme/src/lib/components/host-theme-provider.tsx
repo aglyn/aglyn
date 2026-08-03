@@ -27,7 +27,11 @@ import {
   useThemeModeState,
 } from '../hocs/create-with-theme-provider'
 import { createResponsiveTheme } from '../util/create-responsive-theme'
-import { hasHostTheme, hostThemeToThemeOptions } from '../util/host-theme'
+import {
+  hasHostTheme,
+  hostThemeToThemeOptions,
+  mergeThemeOptions,
+} from '../util/host-theme'
 
 /**
  * Carries the persisted host theme document from wherever it is fetched
@@ -47,6 +51,14 @@ export type HostThemeProviderProps = {
   theme?: HostTheme
   /** Theme(s) rendered when the host has no customization. A single theme is used for both schemes. */
   fallback: Theme | [lightTheme: Theme, darkTheme: Theme]
+  /**
+   * Options the host's overrides are layered onto (AGL-1180). Supply the
+   * same brand theme `fallback` was built from: without it a host that sets
+   * one value loses the brand for every value it did NOT set, because the
+   * converter emits only what was explicitly customized and MUI fills the
+   * rest from its own stock palette.
+   */
+  baseOptions?: ThemeOptions | [light: ThemeOptions, dark: ThemeOptions]
   /** Extra options merged into both generated schemes (e.g. portal container defaults). */
   themeOptions?: ThemeOptions
   disableCssBaseline?: boolean
@@ -63,6 +75,7 @@ export function HostThemeProvider(props: HostThemeProviderProps) {
   const {
     theme,
     fallback,
+    baseOptions,
     themeOptions,
     disableCssBaseline,
     children,
@@ -78,7 +91,17 @@ export function HostThemeProvider(props: HostThemeProviderProps) {
       const [light, dark] = _isArr(fallback) ? fallback : [fallback, fallback]
       return scheme === 'dark' ? dark : light
     }
-    const converted = hostThemeToThemeOptions(hostTheme, scheme)
+    // Layer the host's overrides onto the brand base rather than replacing
+    // it (AGL-1180) — otherwise customizing one value repaints every other
+    // slot in MUI's stock palette.
+    const [lightBase, darkBase] = _isArr(baseOptions)
+      ? baseOptions
+      : [baseOptions, baseOptions]
+    const base = (scheme === 'dark' ? darkBase : lightBase) ?? {}
+    const converted = mergeThemeOptions(
+      base,
+      hostThemeToThemeOptions(hostTheme, scheme),
+    )
     return createResponsiveTheme({
       themeOptions: {
         ...converted,
@@ -87,7 +110,7 @@ export function HostThemeProvider(props: HostThemeProviderProps) {
         components: { ...converted.components, ...themeOptions?.components },
       },
     })
-  }, [hostTheme, fallback, themeOptions, scheme])
+  }, [hostTheme, fallback, baseOptions, themeOptions, scheme])
 
   return (
     <ThemeContextDispatch.Provider value={themeModeState}>

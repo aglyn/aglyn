@@ -29,8 +29,17 @@ import { type MouseEvent, useCallback, useState } from 'react'
 
 export interface ColorFieldProps {
   label: string
-  /** Current hex value; undefined renders the "unset" checkerboard swatch. */
+  /** Current hex value; undefined means the slot is inherited, not set. */
   value?: string
+  /**
+   * The colour this slot resolves to when `value` is unset — i.e. what the
+   * site actually renders (AGL-1180). The swatch keeps its checkerboard so
+   * "inherited" stays visually distinct from "set", but the caption names
+   * the colour: otherwise "Default" tells you nothing, you cannot tell
+   * primary from secondary, and after changing one you cannot tell which
+   * one you changed.
+   */
+  inheritedValue?: string
   onChange: (hex: string | undefined) => void
 }
 
@@ -39,7 +48,7 @@ export interface ColorFieldProps {
  * the value to unset so the theme falls back to derived/default colors.
  */
 export function ColorField(props: ColorFieldProps) {
-  const { label, value, onChange } = props
+  const { label, value, inheritedValue, onChange } = props
   const [anchorEl, setAnchorEl] = useState<Element | null>(null)
 
   const handleOpen = useCallback((event: MouseEvent<HTMLElement>) => {
@@ -80,9 +89,25 @@ export function ColorField(props: ColorFieldProps) {
         <Typography variant="body2" noWrap>
           {label}
         </Typography>
-        <Typography variant="caption" color="text.secondary" noWrap>
-          {value ?? 'Default'}
-        </Typography>
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          {!value && inheritedValue ? (
+            <Box
+              aria-hidden
+              sx={{
+                width: 10,
+                height: 10,
+                flexShrink: 0,
+                borderRadius: '50%',
+                border: '1px solid',
+                borderColor: 'divider',
+                backgroundColor: inheritedValue,
+              }}
+            />
+          ) : null}
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {value ?? (inheritedValue ? `Default · ${inheritedValue}` : 'Default')}
+          </Typography>
+        </Stack>
       </Box>
       {value ? (
         <Tooltip title="Reset to default">

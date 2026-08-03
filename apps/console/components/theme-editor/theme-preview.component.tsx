@@ -17,8 +17,11 @@
 
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import {
+  consoleOptions,
+  consoleOptionsDark,
   createResponsiveTheme,
   hostThemeToThemeOptions,
+  mergeThemeOptions,
   ThemeProvider,
 } from '@aglyn/shared-ui-theme'
 import {
@@ -52,8 +55,15 @@ export function ThemePreview(props: ThemePreviewProps) {
   const { theme, scheme } = props
 
   const previewTheme = useMemo(() => {
+    // Preview what the SITE will render, which layers the host's overrides
+    // onto the brand theme (AGL-1180). Building from the host document alone
+    // showed MUI's stock blue/purple for every slot left on "Default", so an
+    // untouched host previewed in colours it would never actually serve.
     return createResponsiveTheme({
-      themeOptions: hostThemeToThemeOptions(theme, scheme),
+      themeOptions: mergeThemeOptions(
+        scheme === 'dark' ? consoleOptionsDark : consoleOptions,
+        hostThemeToThemeOptions(theme, scheme),
+      ),
     })
   }, [theme, scheme])
 
@@ -88,15 +98,31 @@ export function ThemePreview(props: ThemePreviewProps) {
             {' sits inline with the text.'}
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-            <Button variant="contained">{'Primary'}</Button>
+            {/* Every colour is named EXPLICITLY (AGL-1180). The theme sets
+                MuiButton.defaultProps.color = 'secondary', so the unlabelled
+                button that used to sit here rendered secondary under the
+                label "Primary" — two identical blue buttons, and no way to
+                tell which swatch you had just changed. */}
+            <Button variant="contained" color="primary">
+              {'Primary'}
+            </Button>
             <Button variant="contained" color="secondary">
               {'Secondary'}
             </Button>
-            <Button variant="outlined">{'Outlined'}</Button>
-            <Button variant="text">{'Text'}</Button>
+            <Button variant="contained" color="tertiary">
+              {'Tertiary'}
+            </Button>
+            <Button variant="outlined" color="primary">
+              {'Outlined'}
+            </Button>
+            <Button variant="text" color="primary">
+              {'Text'}
+            </Button>
           </Stack>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Chip label="Chip" color="primary" />
+            <Chip label="Primary" color="primary" />
+            <Chip label="Secondary" color="secondary" />
+            <Chip label="Tertiary" color="tertiary" />
             <Chip label="Outlined" variant="outlined" />
             <Switch defaultChecked />
           </Stack>

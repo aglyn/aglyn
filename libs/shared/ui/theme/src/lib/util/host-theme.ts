@@ -182,6 +182,47 @@ export function hostThemeToThemeOptions(
   return options
 }
 
+/**
+ * Layers a host's overrides ONTO a base set of theme options (AGL-1180).
+ *
+ * `hostThemeToThemeOptions` deliberately emits only what the host explicitly
+ * set, so building a theme from it alone leaves every other slot to MUI's
+ * stock palette. Consumers used to switch — console theme when the document
+ * was empty, host document when it was not — which meant setting a single
+ * value (the spec's own example is `{ spacing: 8 }`) silently repainted
+ * secondary, tertiary, surface, info, success, warning, error, background
+ * and paper in MUI blue/purple. Merging instead of switching keeps the brand
+ * as the floor no matter how much the host customizes.
+ *
+ * `palette` merges one level deep so overriding `primary` cannot drop
+ * `secondary`. Within a single colour the override replaces the whole record
+ * — MUI derives shades and contrast text from `main`, which is exactly the
+ * partial-palette behaviour the converter is written for.
+ */
+export function mergeThemeOptions(
+  base: ThemeOptions,
+  overrides: ThemeOptions,
+): ThemeOptions {
+  const merged: ThemeOptions = { ...base, ...overrides }
+
+  merged.palette = { ...base.palette, ...overrides.palette }
+
+  // `typography` is an object in every base we ship, but MUI's type also
+  // allows a function of the palette — merging into that would silently drop
+  // the base, so prefer the override wholesale in that case.
+  if (
+    typeof base.typography === 'object' &&
+    typeof overrides.typography === 'object'
+  ) {
+    merged.typography = { ...base.typography, ...overrides.typography }
+  }
+
+  merged.shape = { ...base.shape, ...overrides.shape }
+  merged.components = { ...base.components, ...overrides.components }
+
+  return merged
+}
+
 /** True when the document customizes anything, i.e. consumers should build a theme from it rather than using their default. */
 export function hasHostTheme(theme: HostTheme | undefined): theme is HostTheme {
   return !!theme && Object.keys(theme).length > 0

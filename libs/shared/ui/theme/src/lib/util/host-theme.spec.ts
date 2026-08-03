@@ -21,8 +21,10 @@ import {
   getGoogleFontsUrl,
   hasHostTheme,
   hostThemeToThemeOptions,
+  mergeThemeOptions,
   sanitizeHostTheme,
 } from './host-theme'
+import { consoleOptions } from '../console.theme'
 
 describe('hostThemeToThemeOptions', () => {
   it('returns mode-only palette options for an empty theme', () => {
@@ -130,6 +132,46 @@ describe('sanitizeHostTheme', () => {
       components: { MuiDataGrid: { defaultProps: {} } },
     })
     expect(sanitized.components).toBeUndefined()
+  })
+})
+
+describe('mergeThemeOptions (AGL-1180)', () => {
+  // The regression: `hasHostTheme({ spacing: 8 })` is true, so customizing a
+  // single unrelated value used to switch the whole site off the brand theme
+  // and onto MUI's stock palette.
+  it('keeps every brand colour when the host customizes only spacing', () => {
+    const merged = mergeThemeOptions(
+      consoleOptions,
+      hostThemeToThemeOptions({ spacing: 8 }, 'light'),
+    )
+    const palette = merged.palette as Record<string, { main?: string }>
+    expect(palette['primary']?.main).toBe('#404C5C')
+    expect(palette['secondary']?.main).toBe('#00b0ff')
+    expect(palette['tertiary']?.main).toBe('#e040fb')
+  })
+
+  it('applies the override without dropping its siblings', () => {
+    const merged = mergeThemeOptions(
+      consoleOptions,
+      hostThemeToThemeOptions(
+        { colorSchemes: { light: { primary: { main: '#123456' } } } },
+        'light',
+      ),
+    )
+    const palette = merged.palette as Record<string, { main?: string }>
+    expect(palette['primary']?.main).toBe('#123456')
+    // The whole point: overriding primary must not repaint secondary.
+    expect(palette['secondary']?.main).toBe('#00b0ff')
+  })
+
+  it('carries the base through when the host customizes nothing', () => {
+    const merged = mergeThemeOptions(
+      consoleOptions,
+      hostThemeToThemeOptions(undefined, 'light'),
+    )
+    const palette = merged.palette as Record<string, { main?: string }>
+    expect(palette['primary']?.main).toBe('#404C5C')
+    expect(merged.shape).toEqual(consoleOptions.shape)
   })
 })
 

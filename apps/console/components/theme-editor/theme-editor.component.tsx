@@ -21,7 +21,12 @@ import type {
   HostThemeSchemeColors,
 } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { getGoogleFontsUrl, sanitizeHostTheme } from '@aglyn/shared-ui-theme'
+import {
+  consoleThemeDark,
+  consoleThemeLight,
+  getGoogleFontsUrl,
+  sanitizeHostTheme,
+} from '@aglyn/shared-ui-theme'
 import { deepEqual } from '@aglyn/shared-util-vendor'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import {
@@ -97,6 +102,28 @@ export function ThemeEditor(props: ThemeEditorProps) {
   )
   const schemeColors = draft.colorSchemes?.[scheme]
   const previewFontsHref = getGoogleFontsUrl(draft.fonts)
+
+  // What each slot resolves to when it is left unset — the brand palette the
+  // site actually renders (AGL-1180). Surfaced next to every "Default" so the
+  // swatches are distinguishable and a single change is attributable.
+  // Read the BUILT theme, not the options: text, divider and the light/dark
+  // shades are derived by MUI, so the raw options would leave those slots
+  // showing a bare "Default" with nothing to identify them by.
+  const basePalette = (
+    scheme === 'dark' ? consoleThemeDark : consoleThemeLight
+  ).palette as unknown as Record<string, any>
+  const inheritedColor = useCallback(
+    (key: string): string | undefined => basePalette?.[key]?.main,
+    [basePalette],
+  )
+  const inheritedSurfaceColor = useCallback(
+    (path: readonly [string, string]): string | undefined =>
+      basePalette?.[path[0]]?.[path[1]],
+    [basePalette],
+  )
+  const inheritedDivider = typeof basePalette?.['divider'] === 'string'
+    ? (basePalette['divider'] as string)
+    : undefined
 
   const handleSchemeTab = useCallback((_, value: HostThemeScheme) => {
     setScheme(value)
@@ -285,6 +312,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
                       key={key}
                       label={label}
                       value={schemeColors?.[key]?.main}
+                      inheritedValue={inheritedColor(key)}
                       onChange={setMainColor(key)}
                     />
                   ))}
@@ -296,12 +324,14 @@ export function ThemeEditor(props: ThemeEditorProps) {
                       key={path.join('.')}
                       label={label}
                       value={getSchemeColor(schemeColors, path)}
+                      inheritedValue={inheritedSurfaceColor(path)}
                       onChange={setSurfaceColor(path)}
                     />
                   ))}
                   <ColorField
                     label="Divider"
                     value={schemeColors?.divider}
+                    inheritedValue={inheritedDivider}
                     onChange={setDividerColor}
                   />
                 </Stack>

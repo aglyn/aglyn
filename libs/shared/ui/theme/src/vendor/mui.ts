@@ -59,8 +59,13 @@ declare module '@mui/material/AppBar' {
     surface: true
   }
 }
+declare module '@mui/material/Chip' {
+  interface ChipPropsColorOverrides extends ColorPropOverrides {}
+}
 declare module '@mui/material/IconButton' {
-  interface AppBarPropsColorOverrides extends ColorPropOverrides {}
+  // Was `AppBarPropsColorOverrides` — a copy-paste from the block above, so
+  // this augmented nothing and IconButton never accepted `tertiary`.
+  interface IconButtonPropsColorOverrides extends ColorPropOverrides {}
 }
 declare module '@mui/material/Tabs' {
   interface TabsPropsIndicatorColorOverrides extends ColorPropOverrides {}
