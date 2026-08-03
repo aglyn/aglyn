@@ -31,47 +31,7 @@ const IS_TEST = NODE_ENV === 'test'
 
 const ANALYZE_BUNDLE = process.env.NEXT_ANALYZE_BUNDLE === 'true'
 
-const PRODUCTION_DOMAINS = [
-  'aglyn.io',
-  'admin.aglyn.com',
-  'admin.aglyn.io',
-  'aglyn.com',
-  'app.aglyn.com',
-  'app.aglyn.io',
-  // Dedicated OAuth origin (AGL-462/465): the Firebase auth helper iframe
-  // is served here, so it must be able to frame itself (frame-ancestors).
-  'auth.aglyn.com',
-  'auth.aglyn.io',
-  'cdn.aglyn.com',
-  'cdn.aglyn.io',
-  'cname.aglyn.com',
-  'cname.aglyn.io',
-  'console.aglyn.com',
-  'console.aglyn.io',
-  'demo.aglyn.com',
-  'demo.aglyn.io',
-  'host.aglyn.com',
-  'host.aglyn.io',
-  'io.aglyn.com',
-  'io.aglyn.io',
-  'proxy.aglyn.com',
-  'proxy.aglyn.io',
-  'tenant.aglyn.com',
-  'tenant.aglyn.io',
-  'www.aglyn.com',
-  'www.aglyn.io',
-
-  // // Ideas
-  // 'app.aglyn.com',
-  // 'bucket.aglyn.com',
-  // 'cloud.aglyn.com',
-  // 'proxy.aglyn.com',
-  // 'space.aglyn.com',
-  // 'static.aglyn.com',
-  // 'storage.aglyn.com',
-  // 'host.aglyn.com',
-  // 'hostname.aglyn.com',
-]
+const { PRODUCTION_DOMAINS } = require('./security-origins')
 
 const DEVELOPMENT_DOMAINS = IS_PRODUCTION
   ? []
@@ -102,19 +62,19 @@ const SECURITY_HEADERS = [
    * protection. Clickjacking is controlled by CSP frame-ancestors below.
    */
 
-  /**
-   * Content Security Policy. `frame-ancestors` is the clickjacking allowlist;
-   * `object-src 'none'` kills <object>/<embed> plugin-XSS; `base-uri 'self'`
-   * blocks <base>-tag hijacking of relative URLs (AGL-518). A nonce-based
-   * `script-src` is a larger follow-up — it needs per-request nonce middleware
-   * or Next would break on its own inline hydration scripts.
-   */
-  {
-    key: 'Content-Security-Policy',
-    value:
-      `object-src 'none'; base-uri 'self'; ` +
-      `frame-ancestors ${SAFE_URLS.join(' ')}`,
-  },
+  // Content-Security-Policy is NOT set here any more (AGL-523).
+  //
+  // A static policy emitted from this config also lands on the REQUEST the
+  // renderer sees on Vercel, and Next resolves the nonce with
+  // `content-security-policy || content-security-policy-report-only`. A policy
+  // with no `script-src` therefore SHADOWED the middleware's nonce policy, so
+  // every script rendered `nonce="$undefined"` and enforcing `strict-dynamic`
+  // would have served zero JavaScript on every page.
+  //
+  // The whole policy — these directives plus the nonce `script-src` — is built
+  // in each app's middleware from `security-origins.js`, so exactly one
+  // Content-Security-Policy exists per response and it always carries a
+  // script-src. Do not reintroduce one here.
 
   /**
    * This header controls DNS prefetching, allowing browsers to proactively
