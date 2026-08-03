@@ -160,8 +160,8 @@ export const videoEmbedSchema: Aglyn.ComponentSchema<VideoEmbedProps> = {
     },
     {
       name: 'height',
-      description: 'CSS height, e.g. 315px or 50vh.',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      description: 'Height of the embed — a number plus a unit, e.g. 315px or 50vh.',
+      component: Aglyn.FieldComponentType.CSS_DIMENSION,
       label: 'Height',
     },
   ],

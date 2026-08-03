@@ -283,9 +283,9 @@ export const drawerSchema: Aglyn.ComponentSchema<DrawerElementProps> = {
     {
       name: 'width',
       description:
-        'CSS width of the open drawer, e.g. 280px or 20rem. Top and ' +
+        'Width of the open drawer, e.g. 280px or 20rem. Top and ' +
         'bottom drawers span the viewport instead.',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      component: Aglyn.FieldComponentType.CSS_DIMENSION,
       label: 'Width',
       // A width on a top/bottom sheet is ignored by the renderer, so the
       // control is hidden rather than left to do nothing.

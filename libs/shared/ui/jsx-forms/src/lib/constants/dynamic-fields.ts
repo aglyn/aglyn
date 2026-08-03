@@ -22,6 +22,7 @@ import type { IconSelectProps } from '../components/icon-select.component'
 import type { ToggleButtonProps } from '../components/toggle-button.component'
 import type {
   CheckboxProps,
+  CssDimensionProps,
   DatePickerProps,
   DualListSelectProps,
   FieldArrayProps,
@@ -60,6 +61,9 @@ export const FieldSwitch = dynamic<SwitchProps>(() =>
 )
 export const FieldTextField = dynamic<TextFieldProps>(() =>
   import('../mapper/text-field').then((mod) => mod.default),
+)
+export const FieldCssDimension = dynamic<CssDimensionProps>(() =>
+  import('../mapper/css-dimension').then((mod) => mod.default),
 )
 export const FieldTextarea = dynamic<TextareaProps>(() =>
   import('../mapper/textarea').then((mod) => mod.default),

@@ -23,6 +23,7 @@ import {
   type FormTemplateRenderProps,
   FIELD_MAP_CHECKBOX,
   FIELD_MAP_COLOR_PICKER,
+  FIELD_MAP_CSS_DIMENSION,
   FIELD_MAP_ICON_PICKER,
   simpleComponentMapper,
   useFormApi,
@@ -231,6 +232,10 @@ export const elementPropsComponentMapper = {
   [Aglyn.FieldComponentType.ICON_PICKER]: FIELD_MAP_ICON_PICKER,
   [Aglyn.FieldComponentType.CHECKBOX]: FIELD_MAP_CHECKBOX,
   [Aglyn.FieldComponentType.COLOR_PICKER]: FIELD_MAP_COLOR_PICKER,
+  // Number + unit editor for CSS length attributes (AGL-1219): width,
+  // height and friends were free text, so the author had to type the unit
+  // and a bare `320` silently did nothing.
+  [Aglyn.FieldComponentType.CSS_DIMENSION]: FIELD_MAP_CSS_DIMENSION,
   // Pill-rendering editor for token-capable free-text attributes
   // (AGL-586); the attributes memo rewrites TEXT_FIELD/TEXTAREA to it.
   [TOKEN_TEXT_FIELD_COMPONENT]: TokenTextField,

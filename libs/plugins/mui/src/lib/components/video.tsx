@@ -160,14 +160,14 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
     },
     {
       name: 'width',
-      description: 'CSS width, e.g. 100% or 640px.',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      description: 'Width of the player — a number plus a unit, e.g. 100% or 640px.',
+      component: Aglyn.FieldComponentType.CSS_DIMENSION,
       label: 'Width',
     },
     {
       name: 'height',
-      description: 'CSS height, e.g. 360px. Leave empty for auto.',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      description: 'Height of the player. Leave empty for auto.',
+      component: Aglyn.FieldComponentType.CSS_DIMENSION,
       label: 'Height',
     },
   ],

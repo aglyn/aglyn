@@ -186,14 +186,14 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
     },
     {
       name: 'width',
-      description: 'CSS width, e.g. 100% or 320px.',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      description: 'Width of the image — a number plus a unit, e.g. 100% or 320px.',
+      component: Aglyn.FieldComponentType.CSS_DIMENSION,
       label: 'Width',
     },
     {
       name: 'height',
-      description: 'CSS height, e.g. 240px. Leave empty for auto.',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      description: 'Height of the image. Leave empty for auto.',
+      component: Aglyn.FieldComponentType.CSS_DIMENSION,
       label: 'Height',
     },
     {

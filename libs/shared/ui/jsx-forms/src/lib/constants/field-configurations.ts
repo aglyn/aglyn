@@ -20,6 +20,7 @@ import optionIsEqualToValue from '../utils/option-is-equal-to-value'
 import {
   FieldCheckbox,
   FieldColorPicker,
+  FieldCssDimension,
   FieldDatePicker,
   FieldDualListSelect,
   FieldFieldArray,
@@ -62,6 +63,11 @@ export const FIELD_MAP_TEXT_FIELD: FieldComponentMap = {
   ...fieldSharedOptions,
   // size: 'small',
   component: FieldTextField,
+}
+/** Number box + unit picker for CSS length attributes (AGL-1219). */
+export const FIELD_MAP_CSS_DIMENSION: FieldComponentMap = {
+  ...fieldSharedOptions,
+  component: FieldCssDimension,
 }
 export const FIELD_MAP_TEXTAREA: FieldComponentMap = {
   ...fieldSharedOptions,
