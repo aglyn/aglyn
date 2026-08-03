@@ -18,7 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { Leaf, type LeafProps } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
-import { Box } from '@mui/material'
+import { alpha, Box } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useContext, useMemo } from 'react'
 import BindingPickerContext from '../contexts/binding-picker-context'
@@ -28,11 +28,20 @@ import DraggableDroppable from './dnd/draggable-droppable'
 export interface NodeLeafProps extends LeafProps {}
 
 /**
+ * The slot marker is EDITOR CHROME, so it holds the brand accent literally
+ * rather than reading `secondary` from the theme: the canvas renders under
+ * the host's palette, so a token would repaint the editor's own furniture
+ * whenever a subscriber restyles their site — and it already rendered pink
+ * instead of the design's blue.
+ */
+const SLOT_ACCENT = '#00B0FF'
+
+/**
  * Visible placement marker for the LayoutSlot while editing a layout. The
  * slot is a passthrough at runtime, so without this it disappears once it
  * has children and designers lose track of where screen content lands.
  */
-const SlotMarker = () => (
+const SlotMarker = ({ caption }: { caption?: string }) => (
   <Box
     aria-hidden
     data-aglyn-slot-marker=""
@@ -41,19 +50,27 @@ const SlotMarker = () => (
       p: 2,
       minHeight: 64,
       display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
+      gap: 0.5,
       borderWidth: 2,
       borderStyle: 'dashed',
-      borderColor: 'divider',
+      // Brand blue on a faint tint, not a grey dashed box: the slot is the
+      // one region the layout does not own, and it should not read as just
+      // another empty container.
+      borderColor: SLOT_ACCENT,
+      backgroundColor: alpha(SLOT_ACCENT, 0.06),
       borderRadius: 1,
       color: 'text.secondary',
       fontSize: 13,
-      letterSpacing: 1,
-      textTransform: 'uppercase',
+      textAlign: 'center',
     }}
   >
-    {'Screen content renders here'}
+    <Box component="span" sx={{ color: SLOT_ACCENT, fontWeight: 700 }}>
+      {'◇ layout-slot'}
+    </Box>
+    <Box component="span">{caption || 'Screen content renders here'}</Box>
   </Box>
 )
 
@@ -131,7 +148,9 @@ export const NodeLeaf = observer(
           {...rest}
         >
           {children}
-          {showSlotMarker ? <SlotMarker /> : null}
+          {showSlotMarker ? (
+            <SlotMarker caption={node?.props?.['caption'] as string | undefined} />
+          ) : null}
         </Leaf>
       </DraggableDroppable>
     )
