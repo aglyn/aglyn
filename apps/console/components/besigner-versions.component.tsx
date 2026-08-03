@@ -65,7 +65,7 @@ import {
 } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import { useRouter } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useCallback, useImperativeHandle, useState, type Ref } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import revalidateLivePages from '../utils/revalidate-live-pages'
 import { hasEntitlement } from '../constants/entitlements'
@@ -140,6 +140,21 @@ const PARENT_TYPES = {
 
 export type BesignerVersionParentKind = keyof typeof PARENT_TYPES
 
+/**
+ * Version actions this component owns but other besigner chrome triggers —
+ * today the File ▸ New version menu item (AGL-1218).
+ *
+ * A ref rather than a context: the menu is a SIBLING of this component in
+ * the app bar, not a descendant, so there is nothing for a provider here to
+ * wrap. The entitlement check, the unsaved-canvas refusal and the name
+ * dialog all stay in one place; callers get the button, not a second copy
+ * of the rules.
+ */
+export interface BesignerVersionsActions {
+  /** Same path as the panel's "New version" button. */
+  createVersion: () => void
+}
+
 export interface BesignerVersionsProps {
   hostId: string
   /** Parent document holding the versions subcollection. */
@@ -148,6 +163,8 @@ export interface BesignerVersionsProps {
   versionId: string
   /** Published version pointer from the parent doc (`versionId` field). */
   publishedVersionId?: string
+  /** Handle exposing {@link BesignerVersionsActions} to the page chrome. */
+  actionsRef?: Ref<BesignerVersionsActions>
 }
 
 /**
@@ -159,7 +176,7 @@ export interface BesignerVersionsProps {
  */
 export const BesignerVersionsComponent = observer(
   function BesignerVersionsComponent(props: BesignerVersionsProps) {
-    const { hostId, parent, versionId, publishedVersionId } = props
+    const { hostId, parent, versionId, publishedVersionId, actionsRef } = props
     const firestore = useFirestore()
     // Publishing drops the live page's cache, and that route authenticates
     // with the caller's ID token (AGL-1150).
@@ -348,6 +365,14 @@ export const BesignerVersionsComponent = observer(
       setNameValue(`Copy of ${currentName}`)
       setNameDialog({ mode: 'create' })
     }, [org, enqueueSnackbar, versionDocs, versionId])
+
+    // The File menu's "New version" runs this exact handler (AGL-1218) —
+    // gate, unsaved-canvas refusal, name dialog and all.
+    useImperativeHandle(
+      actionsRef,
+      () => ({ createVersion: handleCreateVersion }),
+      [handleCreateVersion],
+    )
 
     const handleRename = useCallback(
       (targetId: string, currentName: string) => () => {
