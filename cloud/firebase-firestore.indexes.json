@@ -647,6 +647,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "screens",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "publishSchedule.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "publishSchedule.publishAt",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

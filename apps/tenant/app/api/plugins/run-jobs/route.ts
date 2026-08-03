@@ -23,6 +23,10 @@ import {
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { timingSafeEqual } from 'crypto'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
+// Imported for its registration side effect (AGL-1159). Core jobs have no
+// plugin manifest to load them, so the runner route is where they enter the
+// registry — `ensureAll` below only reaches plugin `/server` entries.
+import '../../../../utils/publish-schedule-job'
 
 // Constant-time secret check (AGL-512) so auth doesn't leak via timing.
 function safeEqual(a: string, b: string): boolean {
