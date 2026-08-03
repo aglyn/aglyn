@@ -34,12 +34,56 @@ export const schema: Aglyn.ComponentSchema<ListItemProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'List Item',
+  description: 'One row of a list.',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: { path: mdiFormatListText.path },
   restrictChildren: [
     Aglyn.LinealDirectiveFlag.LIMIT_TO,
     {
       components: [listItemTextSchema.$id],
+    },
+  ],
+  // Like List, this had NO attributes: dividers, density and gutters are
+  // the first things anyone reaches for on a list row, and none of them
+  // were reachable from the inspector.
+  attributes: [
+    {
+      name: 'divider',
+      label: 'Divider?',
+      description: 'If true, a 1px line is drawn under the item.',
+      component: Aglyn.FieldComponentType.SWITCH,
+    },
+    {
+      name: 'alignItems',
+      label: 'Align items',
+      description:
+        'Vertical alignment of the row content. Use flex-start when the ' +
+        'secondary text wraps to several lines.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { value: '', label: 'Center (default)' },
+        { value: 'flex-start', label: 'Top' },
+      ],
+    },
+    {
+      name: 'dense',
+      label: 'Dense?',
+      description:
+        'If true, this row is compacted vertically. The parent list’s ' +
+        'Dense setting already applies to every row.',
+      component: Aglyn.FieldComponentType.SWITCH,
+    },
+    {
+      name: 'disableGutters',
+      label: 'Disable gutters?',
+      description: 'If true, the left and right padding is removed.',
+      component: Aglyn.FieldComponentType.SWITCH,
+    },
+    {
+      name: 'disablePadding',
+      label: 'Disable padding?',
+      description: 'If true, all padding is removed.',
+      component: Aglyn.FieldComponentType.SWITCH,
     },
   ],
 }

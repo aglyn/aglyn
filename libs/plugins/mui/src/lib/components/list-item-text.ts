@@ -49,6 +49,14 @@ export const schema: Aglyn.ComponentSchema<ListItemTextProps> = {
       component: Aglyn.FieldComponentType.TEXTAREA,
       label: 'Secondary text',
     },
+    {
+      name: 'inset',
+      description:
+        'Indents the text to line up with rows that have an icon or ' +
+        'avatar, so a mixed list keeps one text column.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Inset?',
+    },
   ],
 }
 

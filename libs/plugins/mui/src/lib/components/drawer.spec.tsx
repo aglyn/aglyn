@@ -18,10 +18,12 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import DrawerElement, {
+  DRAWER_ANCHORS,
   drawerPresets,
   drawerSchema,
   DrawerToggle,
   drawerToggleSchema,
+  isSideAnchor,
   parseLeafNodeId,
 } from './drawer'
 
@@ -179,6 +181,71 @@ describe('Drawer element (AGL-562)', () => {
     // Enrolled in the command bus, so an interaction opens it.
     command('open', 'drawer-preview')
     expect(screen.getByText('Slide-in contents')).toBeTruthy()
+  })
+})
+
+describe('Drawer anchors (AGL-1201)', () => {
+  it('opens from any of MUI’s four edges', () => {
+    for (const anchor of DRAWER_ANCHORS) {
+      const { unmount } = render(
+        <DrawerElement anchor={anchor} {...{ 'data-aglyn': 'leaf:d' }}>
+          <span>{'Panel'}</span>
+        </DrawerElement>,
+      )
+      command('open', 'd')
+      // MUI v9 puts the anchor class on the Drawer ROOT
+      // (`MuiDrawer-anchorTop`); the v5-era `paperAnchor*` class the
+      // public docs still show is gone.
+      expect(
+        document.querySelector(
+          `.MuiDrawer-anchor${anchor[0].toUpperCase() + anchor.slice(1)}`,
+        ),
+      ).toBeTruthy()
+      unmount()
+    }
+  })
+
+  it('falls back to the left edge for an unknown persisted anchor', () => {
+    render(
+      <DrawerElement anchor={'sideways' as any} {...{ 'data-aglyn': 'leaf:d' }}>
+        <span>{'Panel'}</span>
+      </DrawerElement>,
+    )
+    command('open', 'd')
+    expect(document.querySelector('.MuiDrawer-anchorLeft')).toBeTruthy()
+  })
+
+  it('does not pin a top/bottom sheet to the side-drawer width', () => {
+    // A width on a top sheet leaves a narrow strip against the edge,
+    // which is never what "slides in from the top" meant.
+    expect(isSideAnchor('left')).toBe(true)
+    expect(isSideAnchor('right')).toBe(true)
+    expect(isSideAnchor('top')).toBe(false)
+    expect(isSideAnchor('bottom')).toBe(false)
+  })
+
+  it('hides the width control on the anchors that ignore it', () => {
+    const field = (drawerSchema.attributes ?? []).find(
+      (attr) => attr.name === 'width',
+    ) as any
+    expect(field.condition).toEqual({
+      when: 'anchor',
+      is: ['top', 'bottom'],
+      notMatch: true,
+    })
+  })
+
+  it('offers every anchor the renderer accepts', () => {
+    const field = (drawerSchema.attributes ?? []).find(
+      (attr) => attr.name === 'anchor',
+    ) as any
+    // '' is the Left default, so the four edges are '' plus three.
+    expect(field.options.map((option: any) => option.value)).toEqual([
+      '',
+      'right',
+      'top',
+      'bottom',
+    ])
   })
 })
 

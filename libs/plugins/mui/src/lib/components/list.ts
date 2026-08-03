@@ -19,7 +19,9 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   mdiFormatListBulletedSquare,
 } from '@aglyn/shared-data-mdi'
-import List, { type ListProps } from '@mui/material/List'
+import MuiList, { type ListProps } from '@mui/material/List'
+import ListSubheader from '@mui/material/ListSubheader'
+import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import {
@@ -30,16 +32,68 @@ import {
 // Component ids are persisted in screen documents; keep the legacy ids.
 export const ID: Aglyn.ComponentId = 'muiList'
 
-export const schema: Aglyn.ComponentSchema<ListProps> = {
+export interface ListElementProps extends Omit<ListProps, 'subheader'> {
+  /** Sticky heading above the items; omitted entirely when blank. */
+  subheader?: string
+}
+
+/**
+ * List (https://mui.com/material-ui/react-list/).
+ *
+ * Wraps MUI's List only to turn the authored `subheader` string into a
+ * real `ListSubheader`: MUI types the prop as a node, so a bare string
+ * renders as unstyled text outside the list's own heading treatment.
+ */
+const List = forwardRef<HTMLUListElement, ListElementProps>((props, ref) => {
+  const { subheader, ...rest } = props
+  return createElement(MuiList, {
+    ref,
+    // ListSubheader defaults to `li`, which is what belongs inside the
+    // `ul` List renders.
+    subheader: subheader
+      ? createElement(ListSubheader, null, subheader)
+      : undefined,
+    ...rest,
+  })
+})
+List.displayName = 'AglynList'
+
+export const schema: Aglyn.ComponentSchema<ListElementProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'List',
+  description: 'Vertical list of items, optionally under a sticky heading.',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: { path: mdiFormatListBulletedSquare.path },
   restrictChildren: [
     Aglyn.LinealDirectiveFlag.LIMIT_TO,
     {
       components: [listItemSchema.$id],
+    },
+  ],
+  // The list had NO attributes at all: density and padding were only
+  // reachable by hand-writing sx, which is not where authors look.
+  attributes: [
+    {
+      name: 'subheader',
+      label: 'Heading',
+      description:
+        'Sticky heading rendered above the items. Leave blank for none.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'dense',
+      label: 'Dense?',
+      description:
+        'If true, items are compacted vertically. Applies to every item ' +
+        'in the list.',
+      component: Aglyn.FieldComponentType.SWITCH,
+    },
+    {
+      name: 'disablePadding',
+      label: 'Disable padding?',
+      description: 'If true, the padding above and below the list is removed.',
+      component: Aglyn.FieldComponentType.SWITCH,
     },
   ],
 }
