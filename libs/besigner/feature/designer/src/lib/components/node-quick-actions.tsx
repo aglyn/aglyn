@@ -67,7 +67,12 @@ const LabelAction = forwardRef<any, LabelActionProps>((props, ref) => {
 
   return (
     <MuiTooltip ref={ref} {...rest}>
-      <ActionButton variant={'contained'} color={'primary'} {...ButtonProps}>
+      {/* Tertiary, not the accent (AGL-1186): this floating bar is EDITOR
+          chrome sitting on top of the user's canvas. `primary` used to be
+          the slate that reads as chrome; after the rotation it became the
+          cyan accent and the bar started competing with the design being
+          edited. Tertiary is where that slate now lives. */}
+      <ActionButton variant={'contained'} color={'tertiary'} {...ButtonProps}>
         <MdiIcon fontSize="inherit" {...icon} />
         <SrOnly {...SrOnlyProps}>{children}</SrOnly>
       </ActionButton>
