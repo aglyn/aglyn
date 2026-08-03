@@ -143,12 +143,11 @@ export function ThemePreview(props: ThemePreviewProps) {
             <Button variant="contained" color="tertiary">
               {'Tertiary'}
             </Button>
-            <Button variant="outlined" color="primary">
-              {'Outlined'}
-            </Button>
-            <Button variant="text" color="primary">
-              {'Text'}
-            </Button>
+            {/* Variant demos, so they keep the theme's default colour —
+                pinning them to primary made them near-invisible in dark
+                mode, where primary is a dark surface tone. */}
+            <Button variant="outlined">{'Outlined'}</Button>
+            <Button variant="text">{'Text'}</Button>
           </Stack>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Chip label="Primary" color="primary" />
@@ -171,7 +170,7 @@ export function ThemePreview(props: ThemePreviewProps) {
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Avatar>{'A'}</Avatar>
             <Tooltip title="Tooltips use the theme too">
-              <IconButton color="primary" aria-label="tooltip demo">
+              <IconButton aria-label="tooltip demo">
                 <Box
                   sx={{
                     width: 18,
