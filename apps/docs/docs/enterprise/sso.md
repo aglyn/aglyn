@@ -97,8 +97,21 @@ not returned by ordinary account lookups unless the lookup searches every pool.
 Staff surfaces label these accounts with the pool they belong to, so
 "can't find them" and "they're an SSO account" are distinguishable.
 
-**Social sign-in is not automatically linked.** An account in your pool is not
-the same identity as the same email address signing in with Google elsewhere.
+**Social sign-in cannot be linked to an SSO account at all.** Not automatically,
+and not by the user either — the option is not offered, and the account page
+says why. Your identity provider is the single gate you bought: you revoke
+there, you enforce MFA there, you offboard there. A personal Google account
+linked to a governed identity would be a way in that your directory can neither
+see nor revoke, so we do not allow one to be created.
+
+This holds whether or not you have turned enforcement on. Enforcement decides
+whether we **remove** sign-in methods that already exist; it was never a licence
+to keep handing out new ones in the meantime. Nothing about this can lock anyone
+out, because refusing to add a method never takes away a method someone already
+has.
+
+An account in your pool is also simply not the same identity as the same email
+address signing in with Google elsewhere, so the two never merge.
 
 ## Testing it
 
