@@ -54,13 +54,15 @@ plan-gated (noted where relevant).
   group components into curated categories, with the
   [**Sections & Blocks** library](../site-templates/overview.md#section--block-library)
   first — composed, ready-made sections ahead of the primitives. The groups, in order:
-  **Sections & Blocks**, **Layout** (containers, stacks, sections, layout slots),
-  **Navigation** (app bar, toolbar, screen links, language switcher, social links),
-  **Text**, **Forms** (forms, fields, search), **Input** (buttons, switches, widgets),
-  **Media** (images, video, icons), **Data Display** (lists, custom HTML, feeds),
-  **Commerce** (product grids, cart, checkout companions), **Members** (sign-in,
-  sign-up, password recovery), **Surface**, then any plugin-provided groups such as
-  **Marketplace** and **Your components**.
+  **Sections & Blocks**, **Layout** (boxes, containers, stacks, grids, sections, layout
+  slots), **Navigation** (app bar, toolbar, screen links, tabs, breadcrumbs, pagination,
+  drawers, language switcher, social links), **Text**, **Forms** (forms, fields, search),
+  **Input** (buttons, switches, widgets), **Media** (images, video, icons, image lists),
+  **Data Display** (lists, custom HTML, feeds), **Commerce** (product grids, cart,
+  checkout companions), **Members** (sign-in, sign-up, password recovery), **Surface**
+  (paper, cards, accordions), then any plugin-provided groups such as **Marketplace**
+  and **Your components**. Every built-in element is listed in the
+  [element catalog](element-catalog.md).
 - **Multi-select** across the hierarchy and canvas, then move the whole selection at once.
 - **Edit text inline** — double-click a text-capable element to type directly; opt-in
   elements support basic rich text.
@@ -108,6 +110,7 @@ See [AI Assist](../../marketing-and-automation/ai-assist/overview.md).
 
 ## Related
 
+- [Element catalog](element-catalog.md)
 - [Screens & layouts](../screens-and-layouts/overview.md)
 - [Bindings & variables](../bindings/overview.md)
 - [Section & block library](../site-templates/overview.md)

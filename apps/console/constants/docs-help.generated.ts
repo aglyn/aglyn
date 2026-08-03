@@ -203,6 +203,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Edit your theme',
     excerpt: 'Set colors, fonts, and light/dark schemes with a live preview.',
   },
+  elementCatalog: {
+    path: '/building-sites/besigner/element-catalog',
+    title: 'Element catalog',
+    excerpt: 'Every built-in element you can drop on the canvas, grouped by the categories in the ELEMENTS drawer.',
+  },
   emailCampaigns: {
     path: '/marketing-and-automation/email-campaigns/overview',
     title: 'Email Campaigns',
@@ -570,6 +575,7 @@ export const DOCS_HELP_ANCHORS = {
   downgradingAndCanceling: ['#downgrading-to-a-lower-plan', '#canceling-your-subscription', '#deleting-a-single-site', '#deleting-your-organization', '#related'],
   dragDropHierarchy: ['#where-you-can-drag', '#what-a-drag-does', '#drop-zones-edges-vs-center', '#containers-vs-leaf-elements', '#containers-accept-children', '#leaf-elements-dont--dropping-on-one-makes-a-sibling', '#adding-a-new-element', '#when-a-drop-is-rejected', '#multi-drag', '#tips', '#related'],
   editYourTheme: ['#open-the-editor', '#set-colors-and-fonts', '#it-follows-you-into-the-besigner', '#tips', '#related'],
+  elementCatalog: ['#layout', '#grid', '#surface', '#accordion', '#navigation', '#tabs', '#pagination', '#data-display', '#media', '#image-list', '#forms-input-commerce-members', '#related'],
   emailCampaigns: ['#send-a-campaign', '#personalize-with-merge-tags', '#schedule-a-send', '#email-lists', '#experiments', '#opens--clicks', '#compliance', '#related'],
   enterprise: ['#what-enterprise-does-not-change', '#getting-enterprise'],
   errorScreens: ['#the-error-screens', '#design-one', '#tips', '#related'],
