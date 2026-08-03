@@ -39,7 +39,7 @@ import type { ResolvedTokenLabel } from '../utils/token-segments'
 /** Pill colors by token family — stable theme-palette assignments. */
 const PILL_GROUP_STYLES: Record<string, { bgcolor: string; color: string }> = {
   variable: { bgcolor: 'primary.main', color: 'primary.contrastText' },
-  function: { bgcolor: 'secondary.main', color: 'secondary.contrastText' },
+  function: { bgcolor: 'primary.main', color: 'primary.contrastText' },
   entry: { bgcolor: 'info.main', color: 'info.contrastText' },
   collection: { bgcolor: 'success.main', color: 'success.contrastText' },
   dataset: { bgcolor: 'grey.700', color: 'common.white' },

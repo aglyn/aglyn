@@ -150,7 +150,7 @@ const ThemeColorTokenGrid = (props: {
               borderRadius: 1,
               border: 1,
               borderColor:
-                option.value === value ? 'secondary.main' : 'transparent',
+                option.value === value ? 'primary.main' : 'transparent',
               '&:hover': { backgroundColor: 'action.hover' },
             }}
           >

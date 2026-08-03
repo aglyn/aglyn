@@ -55,7 +55,7 @@ export function PresenceAvatars({ entries }: { entries: PresenceEntry[] }) {
           <Avatar
             src={entry.photoURL}
             alt={entry.displayName}
-            sx={{ bgcolor: entry.colour ?? 'secondary.main' }}
+            sx={{ bgcolor: entry.colour ?? 'primary.main' }}
           >
             {/* Initial as the fallback; Avatar's own default is a generic
                 glyph, which makes everyone look identical. */}

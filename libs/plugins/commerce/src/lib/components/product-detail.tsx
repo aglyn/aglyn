@@ -356,7 +356,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                     cursor: 'pointer',
                     border: 2,
                     borderColor:
-                      index === activeImage ? 'secondary.main' : 'transparent',
+                      index === activeImage ? 'primary.main' : 'transparent',
                   }}
                 />
               ))}

@@ -142,7 +142,7 @@ function Pricing() {
                   sx={{
                     height: '100%',
                     ...(plan === 'pro'
-                      ? { borderColor: 'secondary.main', borderWidth: 2 }
+                      ? { borderColor: 'primary.main', borderWidth: 2 }
                       : {}),
                   }}
                 >

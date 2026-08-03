@@ -110,8 +110,8 @@ export const Box = styled('div')(({ theme }) => {
       background: [
         'linear-gradient(',
         '65deg, ',
-        `rgba(${tv.palette.tertiary.mainChannel} / 0.12), `,
-        `rgba(${tv.palette.secondary.mainChannel} / 0.12)`,
+        `rgba(${tv.palette.secondary.mainChannel} / 0.12), `,
+        `rgba(${tv.palette.primary.mainChannel} / 0.12)`,
         ') content-box',
       ].join(''),
 

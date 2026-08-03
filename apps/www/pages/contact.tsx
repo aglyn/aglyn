@@ -180,7 +180,7 @@ function Contact(props: Record<string, unknown>) {
                         component={'h2'}
                         align="center"
                         sx={{
-                          color: 'secondary.main',
+                          color: 'primary.main',
                           mb: 4,
                         }}
                       >

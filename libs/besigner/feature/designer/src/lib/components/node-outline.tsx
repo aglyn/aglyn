@@ -54,19 +54,19 @@ const NodeOutlineRoot = styled('div', {
     [`&.${classKeys.selectedSelf}`]: {
       outlineWidth: 2,
       outlineStyle: 'solid',
-      outlineColor: tv.palette.tertiary.main,
+      outlineColor: tv.palette.secondary.main,
     },
     [`&.${classKeys.hoveringSelf}`]: {
-      outlineColor: tv.palette.secondary.main,
-      backgroundColor: `rgba(${tv.palette.secondary.mainChannel} / 0.12)`,
+      outlineColor: tv.palette.primary.main,
+      backgroundColor: `rgba(${tv.palette.primary.mainChannel} / 0.12)`,
     },
     [`&.${classKeys.draggingSelf}`]: {
       outlineColor: 'transparent',
-      backgroundColor: `rgba(${tv.palette.secondary.lightChannel} / 0.12)`,
+      backgroundColor: `rgba(${tv.palette.primary.lightChannel} / 0.12)`,
     },
     [`&.${classKeys.draggingOver}`]: {
-      outlineColor: tv.palette.tertiary.main,
-      backgroundColor: `rgba(${tv.palette.tertiary.darkChannel} / 0.12)`,
+      outlineColor: tv.palette.secondary.main,
+      backgroundColor: `rgba(${tv.palette.secondary.darkChannel} / 0.12)`,
     },
     [`&.${classKeys.draggingOver}.${classKeys.draggingSelf}`]: {
       outlineColor: tv.palette.grey['500'],

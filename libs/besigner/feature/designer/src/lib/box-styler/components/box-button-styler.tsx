@@ -81,7 +81,7 @@ const StyledWrapper = styled('div')(({ theme }) => {
   '.marginButton': {
     overflow: 'hidden',
     textAlign: 'center',
-    bgcolor: 'secondary.light',
+    bgcolor: 'primary.light',
     cursor: 'pointer',
     backfaceVisibility: 'hidden',
     backgroundColor: `rgba(${tv.palette.surface.mainChannel} / 0.96)`,
@@ -192,12 +192,12 @@ const StyledWrapper = styled('div')(({ theme }) => {
     background: [
       'linear-gradient(',
       '65deg, ',
-      `${lighten(theme.palette.tertiary.main, 0.76)}, `,
-      `${lighten(theme.palette.secondary.main, 0.76)}`,
+      `${lighten(theme.palette.secondary.main, 0.76)}, `,
+      `${lighten(theme.palette.primary.main, 0.76)}`,
       ') content-box',
     ].join(''),
     color: theme.palette.getContrastText(
-      lighten(theme.palette.tertiary.main, 0.76),
+      lighten(theme.palette.secondary.main, 0.76),
     ),
 
     '&.paddingTop': {

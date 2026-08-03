@@ -60,7 +60,7 @@ const Indicator = styled(motion.div, {
     zIndex: theme.zIndex.modal,
 
     [`& .${classes.line}`]: {
-      border: `${lineW / 2}px solid ${tv.palette.secondary.main}`,
+      border: `${lineW / 2}px solid ${tv.palette.primary.main}`,
       flexGrow: 1,
       width: !vertical ? undefined : lineW,
       height: !vertical ? lineW : undefined,
@@ -70,7 +70,7 @@ const Indicator = styled(motion.div, {
     [`& .${classes.handle}`]: {
       backgroundColor: tv.palette.surface.main,
       borderRadius: handleW,
-      border: `1px solid ${tv.palette.secondary.dark}`,
+      border: `1px solid ${tv.palette.primary.dark}`,
       width: handleW,
       height: handleW,
       display: 'block',

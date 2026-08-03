@@ -216,8 +216,8 @@ const ElementInfo = function ElementInfo({
                       (theme) => {
                         const tv = (theme as any).vars || theme
                         return {
-                          bgcolor: `rgba(${tv.palette.secondary.lightChannel} / 0.18)`,
-                          border: `1px solid rgba(${tv.palette.secondary.lightChannel} / 0.72)`,
+                          bgcolor: `rgba(${tv.palette.primary.lightChannel} / 0.18)`,
+                          border: `1px solid rgba(${tv.palette.primary.lightChannel} / 0.72)`,
                           borderRadius: '0.3em',
                           px: 0.5,
                           py: 0.15,
@@ -431,7 +431,7 @@ export const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
                   },
                   '& .MuiTabs-indicator': {
                     top: 0,
-                    backgroundColor: 'tertiary.main',
+                    backgroundColor: 'secondary.main',
                   },
                 }}
               >

@@ -46,8 +46,8 @@ const Card = styled(MuiCard)(({ theme }) => {
   return {
   [`&.${cardClasses.selected}`]: {
     [`.${cardClasses.actionArea}`]: {
-      backgroundColor: tv.palette.secondary.main,
-      color: tv.palette.secondary.contrastText,
+      backgroundColor: tv.palette.primary.main,
+      color: tv.palette.primary.contrastText,
     },
   },
   [`.${cardClasses.aspectContainer}`]: {

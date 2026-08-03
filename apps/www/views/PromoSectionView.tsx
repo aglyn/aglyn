@@ -32,7 +32,7 @@ const StyledBackgroundImage = styled(BackgroundImage, {
   marginBottom: theme.spacing(8),
   borderRadius: theme.shape.borderRadius,
   color: theme.palette.common.white,
-  backgroundColor: theme.palette.secondary.light,
+  backgroundColor: theme.palette.primary.light,
   padding: theme.spacing(4, 2),
   [theme.breakpoints.up('sm')]: {
     padding: theme.spacing(8, 4),

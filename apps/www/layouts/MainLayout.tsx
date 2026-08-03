@@ -56,7 +56,7 @@ const StyledLogo = styled(AglynSvgLogo, {
   name: 'AglynSvgLogo',
 })(({ theme }) => ({
   // color: '#36ca94', // Hulu
-  color: theme.palette.secondary.light,
+  color: theme.palette.primary.light,
   lineHeight: '22px',
   fontSize: theme.typography.pxToRem(50),
   height: 'auto',
@@ -165,7 +165,7 @@ const Tabs = styled(MuiTabs, {
       margin: '0 auto',
       width: '80%',
       height: '100%',
-      backgroundColor: theme.palette.secondary.light,
+      backgroundColor: theme.palette.primary.light,
     },
   },
 }))

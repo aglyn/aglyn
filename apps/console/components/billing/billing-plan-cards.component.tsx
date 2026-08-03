@@ -161,7 +161,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                 borderColor: isCurrent
                   ? 'success.main'
                   : isRecommended
-                    ? 'secondary.main'
+                    ? 'primary.main'
                     : 'divider',
                 borderWidth: isCurrent || isRecommended ? 2 : 1,
               }}

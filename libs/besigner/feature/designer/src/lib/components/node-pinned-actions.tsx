@@ -291,7 +291,7 @@ export const NodePinnedActions = observer(
                   placement === 'bottom' ? 'center top' : 'center bottom',
               }}
             >
-              <Paper sx={{ bgcolor: 'secondary.main' }}>
+              <Paper sx={{ bgcolor: 'primary.main' }}>
                 <ClickAwayListener onClickAway={closeMore}>
                   <MenuList
                     color="inherit"

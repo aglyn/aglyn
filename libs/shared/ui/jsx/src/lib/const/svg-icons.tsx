@@ -70,8 +70,8 @@ export const AglynLogoMark = styled(
       boundingBox = theme.palette.common.white
       break
     default:
-      compass = theme.palette.tertiary.main
-      boundingBox = theme.palette.secondary.main
+      compass = theme.palette.secondary.main
+      boundingBox = theme.palette.primary.main
       break
   }
 
@@ -128,7 +128,7 @@ export const AglynLogoText = styled(
     [`& .${aglynLogoClassKeys.textAglyn}`]: {
       fill:
         theme.palette.mode === 'light'
-          ? theme.palette.secondary.main
+          ? theme.palette.primary.main
           : theme.palette.common.white,
     },
   }
@@ -181,22 +181,22 @@ export const AglynLogoFull = styled(
       textAglyn = theme.palette.common.white
       break
     case 'light':
-      compass = theme.palette.secondary.main
-      boundingBox = theme.palette.tertiary.main
+      compass = theme.palette.primary.main
+      boundingBox = theme.palette.secondary.main
       textAglyn = theme.palette.common.white
       break
     case 'dark':
-      boundingBox = theme.palette.secondary.main
-      compass = theme.palette.tertiary.main
+      boundingBox = theme.palette.primary.main
+      compass = theme.palette.secondary.main
       textAglyn = theme.palette.common.black
       break
     default:
-      boundingBox = theme.palette.secondary.main
-      compass = theme.palette.tertiary.main
+      boundingBox = theme.palette.primary.main
+      compass = theme.palette.secondary.main
       textAglyn =
         theme.palette.mode === 'light'
-          ? theme.palette.secondary.main
-          : theme.palette.secondary.main
+          ? theme.palette.primary.main
+          : theme.palette.primary.main
       break
   }
 
@@ -277,22 +277,22 @@ export const AglynConsoleLogoFull = styled(
       textConsole = theme.palette.common.black
       break
     case 'light':
-      compass = theme.palette.secondary.main
-      boundingBox = theme.palette.tertiary.main
-      textAglyn = theme.palette.secondary.main
+      compass = theme.palette.primary.main
+      boundingBox = theme.palette.secondary.main
+      textAglyn = theme.palette.primary.main
       textConsole = theme.palette.common.white
       break
     case 'dark':
-      boundingBox = theme.palette.secondary.main
-      compass = theme.palette.tertiary.main
-      textAglyn = theme.palette.secondary.main
+      boundingBox = theme.palette.primary.main
+      compass = theme.palette.secondary.main
+      textAglyn = theme.palette.primary.main
       textConsole = theme.palette.common.black
       break
     default:
       // CSS var refs — update when .dark class toggles on <html>
-      boundingBox = tv.palette.secondary.main
-      compass = tv.palette.tertiary.main
-      textAglyn = tv.palette.secondary.main
+      boundingBox = tv.palette.primary.main
+      compass = tv.palette.secondary.main
+      textAglyn = tv.palette.primary.main
       // text.primary: rgba(0,0,0,0.87) in light, rgba(255,255,255,0.87) in dark
       textConsole = tv.palette.text.primary
       break
@@ -377,22 +377,22 @@ export const AglynBesignerLogoFull = styled(
       textConsole = theme.palette.common.black
       break
     case 'light':
-      compass = theme.palette.secondary.main
-      boundingBox = theme.palette.tertiary.main
-      textAglyn = theme.palette.secondary.main
+      compass = theme.palette.primary.main
+      boundingBox = theme.palette.secondary.main
+      textAglyn = theme.palette.primary.main
       textConsole = theme.palette.common.white
       break
     case 'dark':
-      boundingBox = theme.palette.secondary.main
-      compass = theme.palette.tertiary.main
-      textAglyn = theme.palette.secondary.main
+      boundingBox = theme.palette.primary.main
+      compass = theme.palette.secondary.main
+      textAglyn = theme.palette.primary.main
       textConsole = theme.palette.common.black
       break
     default:
       // CSS var refs — update when .dark class toggles on <html>
-      boundingBox = tv.palette.secondary.main
-      compass = tv.palette.tertiary.main
-      textAglyn = tv.palette.secondary.main
+      boundingBox = tv.palette.primary.main
+      compass = tv.palette.secondary.main
+      textAglyn = tv.palette.primary.main
       // text.primary: rgba(0,0,0,0.87) in light, rgba(255,255,255,0.87) in dark
       textConsole = tv.palette.text.primary
       break
@@ -582,11 +582,11 @@ export const AglynSvgIcon = styled(
       },
       [`& .${aglynSvgIconClassKey.a1}`]: {
         fill: 'currentColor',
-        color: a1Color || tv.palette.secondary.main,
+        color: a1Color || tv.palette.primary.main,
       },
       [`& .${aglynSvgIconClassKey.a2}`]: {
         fill: 'currentColor',
-        color: a2Color || tv.palette.tertiary.main,
+        color: a2Color || tv.palette.secondary.main,
       },
       [`& .${aglynSvgIconClassKey.a3}`]: {
         fill: 'currentColor',

@@ -251,7 +251,7 @@ export const BesignerDocumentSwitcherComponent = observer(
                   : ICON_VARIANT_DOCUMENT.path
               }
               fontSize="small"
-              sx={{ color: isCurrent ? 'secondary.main' : 'text.secondary' }}
+              sx={{ color: isCurrent ? 'primary.main' : 'text.secondary' }}
             />
           </ListItemIcon>
           <ListItemText

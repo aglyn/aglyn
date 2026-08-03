@@ -176,14 +176,16 @@ export function OrgSwitcherNav() {
     ) : (
       <Avatar
         variant="rounded"
-        // Pair the glyph with the background it sits on. Avatar's default
-        // fallback color is `background.default`, which against primary.main
-        // lands at ~1.4:1 in dark mode — the icon reads as dark-on-dark.
+        // Tertiary, not the accent: the workspace glyph is chrome, and
+        // leaving it on `primary` made it compete with every actionable blue
+        // in the bar. Pair the glyph with the background it sits on —
+        // Avatar's default fallback is `background.default`, which lands at
+        // ~1.4:1 against a filled swatch in dark mode and reads dark-on-dark.
         sx={{
           width: 22,
           height: 22,
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
+          bgcolor: 'tertiary.main',
+          color: 'tertiary.contrastText',
         }}
       >
         <MdiIcon path={ICON_VARIANT_ORGANIZATION.path} fontSize="small" />

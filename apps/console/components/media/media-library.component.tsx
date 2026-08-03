@@ -206,8 +206,8 @@ function CrumbDropZone(props: {
         borderRadius: 1,
         px: 0.5,
         transition: (theme) => theme.transitions.create(['background-color']),
-        bgcolor: isOver ? 'secondary.main' : undefined,
-        color: isOver ? 'secondary.contrastText' : undefined,
+        bgcolor: isOver ? 'primary.main' : undefined,
+        color: isOver ? 'primary.contrastText' : undefined,
       }}
     >
       {props.children}
@@ -3204,7 +3204,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             zIndex: (theme) => theme.zIndex.modal - 1,
             borderRadius: 1,
             border: '2px dashed',
-            borderColor: 'secondary.main',
+            borderColor: 'primary.main',
             bgcolor: (theme) =>
               alpha(theme.palette.background.paper, 0.9),
             display: 'flex',

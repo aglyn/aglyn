@@ -741,7 +741,7 @@ function ScreenDetails() {
                                 borderRadius: 1,
                                 minWidth: 'unset',
                                 marginRight: 2,
-                                color: 'tertiary.main',
+                                color: 'secondary.main',
                               }}
                             >
                               <MdiIcon {...icon} />

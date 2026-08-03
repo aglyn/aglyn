@@ -289,7 +289,7 @@ const pricingColumn = (
       alignItems: 'center',
       ...(highlighted && {
         border: '2px solid',
-        borderColor: 'secondary.main',
+        borderColor: 'primary.main',
         borderRadius: 2,
       }),
     },
@@ -502,8 +502,8 @@ export const blockPresets: Aglyn.PresetSchema[] = [
           px: 2,
           alignItems: 'center',
           justifyContent: 'center',
-          bgcolor: 'secondary.main',
-          color: 'secondary.contrastText',
+          bgcolor: 'primary.main',
+          color: 'primary.contrastText',
         },
       },
       nodes: [
