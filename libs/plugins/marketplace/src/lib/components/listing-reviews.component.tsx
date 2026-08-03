@@ -220,7 +220,7 @@ export function ListingReviews({
               <Button
                 size="small"
                 variant="contained"
-                color="secondary"
+                color="primary"
                 disabled={busy || (!rating && !comment.trim())}
                 onClick={() => void submit()}
               >
@@ -272,7 +272,7 @@ export function ListingReviews({
                           <Chip
                             size="small"
                             label="Installed"
-                            color="secondary"
+                            color="primary"
                           />
                         ) : null}
                         {review.updatedAtMs ? (

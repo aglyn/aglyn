@@ -908,7 +908,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         <Button onClick={onClose}>{'Cancel'}</Button>
         <Button
           variant="contained"
-          color="secondary"
+          color="primary"
           disabled={!current.name.trim() || Boolean(error)}
           onClick={handleSave}
         >

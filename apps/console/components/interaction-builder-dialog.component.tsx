@@ -150,7 +150,7 @@ function TargetPicker(props: {
           size="small"
           label={targetChipLabel(selector, defaultNodeId)}
           variant={isDefault ? 'outlined' : 'filled'}
-          color={isDefault ? 'default' : 'secondary'}
+          color={isDefault ? 'default' : 'primary'}
           sx={{ maxWidth: 260 }}
         />
       </Stack>
@@ -949,7 +949,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
         <Button onClick={onClose}>{'Cancel'}</Button>
         <Button
           variant="contained"
-          color="secondary"
+          color="primary"
           disabled={Boolean(problem) || !name.trim()}
           onClick={handleSave}
         >

@@ -290,7 +290,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
       <Stack spacing={1.5}>
         <Typography variant="caption" color="text.secondary">
           {'Site users are organization members scoped to this site — the '}
-          <AppLink href={buildRoute(Route.MANAGE_TEAM, { orgSlug })} color="secondary">
+          <AppLink href={buildRoute(Route.MANAGE_TEAM, { orgSlug })} color="primary">
             {'organization Team page'}
           </AppLink>
           {' manages everyone in one place.'}
@@ -320,7 +320,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
           <Button
             size="small"
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={busy || !email.trim() || !canManage}
             onClick={handleAdd}
           >
@@ -377,7 +377,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
                     size={28}
                   />
                   <span>{ownerLabel}</span>
-                  <Chip label="Owner" color="secondary" size="small" />
+                  <Chip label="Owner" color="primary" size="small" />
                   {ownerUid && ownerUid === user?.uid ? (
                     <Chip label="you" size="small" variant="outlined" />
                   ) : null}

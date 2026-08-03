@@ -398,7 +398,7 @@ export const BesignerDocumentSwitcherComponent = observer(
             </ListItemIcon>
             <ListItemText
               primary="View all screens"
-              slotProps={{ primary: { color: 'secondary' } }}
+              slotProps={{ primary: { color: 'primary' } }}
             />
           </MenuItem>
         </Menu>

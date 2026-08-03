@@ -273,7 +273,7 @@ export function PopupCard(props: PopupCardProps) {
           </Stack>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!dirty || (Boolean(draft.enabled) && !draft.body?.trim())}
             onClick={handleSave}
             sx={{ alignSelf: 'flex-start' }}

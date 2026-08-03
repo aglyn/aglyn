@@ -353,7 +353,7 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
         />
         <Button
           variant="contained"
-          color="secondary"
+          color="primary"
           size="small"
           disabled={!draft}
           onClick={handleSave}

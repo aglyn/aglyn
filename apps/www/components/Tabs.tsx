@@ -94,7 +94,7 @@ export default function Tabs() {
       <AppBar color="primary" elevation={1} position="static">
         <MuiTabs
           aria-label="simple tabs example"
-          indicatorColor="secondary"
+          indicatorColor="primary"
           scrollButtons="auto"
           textColor="inherit"
           value={value}
@@ -121,7 +121,7 @@ export default function Tabs() {
             {
               sx: { height: 1, width: 1 },
               variant: 'contained',
-              color: 'secondary',
+              color: 'primary',
               children: (
                 <Box sx={{ textAlign: 'center' }}>
                   <div>
@@ -144,7 +144,7 @@ export default function Tabs() {
             {
               sx: { height: 1, width: 1 },
               variant: 'contained',
-              color: 'secondary',
+              color: 'primary',
               children: (
                 <Box sx={{ textAlign: 'center' }}>
                   <div>
@@ -157,7 +157,7 @@ export default function Tabs() {
             {
               sx: { height: 1, width: 1 },
               variant: 'contained',
-              color: 'secondary',
+              color: 'primary',
               children: (
                 <Box sx={{ textAlign: 'center' }}>
                   <div>
@@ -170,7 +170,7 @@ export default function Tabs() {
             {
               sx: { height: 1, width: 1 },
               variant: 'contained',
-              color: 'secondary',
+              color: 'primary',
               children: (
                 <Box sx={{ textAlign: 'center' }}>
                   <div>

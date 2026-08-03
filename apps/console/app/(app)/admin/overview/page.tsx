@@ -465,7 +465,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                         />
                         <Button
                           variant="contained"
-                          color="secondary"
+                          color="primary"
                           disabled={broadcastBusy || !broadcast.title.trim()}
                           onClick={() => void handleBroadcast()}
                         >

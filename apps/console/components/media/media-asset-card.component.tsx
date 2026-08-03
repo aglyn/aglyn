@@ -164,7 +164,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
       ) : null}
       {picker && selected ? (
         <CheckCircleIcon
-          color="secondary"
+          color="primary"
           sx={{ position: 'absolute', top: 4, right: 4, zIndex: 2 }}
         />
       ) : null}

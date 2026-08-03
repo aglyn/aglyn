@@ -99,7 +99,7 @@ export function UsageMeter(props: {
           {warning ? (
             <>
               {' · '}
-              <Link href="#plans" color="secondary" underline="hover">
+              <Link href="#plans" color="primary" underline="hover">
                 {'Upgrade'}
               </Link>
             </>
@@ -110,7 +110,7 @@ export function UsageMeter(props: {
         <LinearProgress
           variant="determinate"
           value={pct}
-          color={pct >= 100 ? 'error' : warning ? 'warning' : 'secondary'}
+          color={pct >= 100 ? 'error' : warning ? 'warning' : 'primary'}
         />
       )}
     </Stack>

@@ -40,7 +40,7 @@ import {
 
 export const fieldSharedOptions = {
   size: 'small',
-  color: 'secondary',
+  color: 'primary',
 }
 
 export const FIELD_MAP_SELECT: FieldComponentMap = {

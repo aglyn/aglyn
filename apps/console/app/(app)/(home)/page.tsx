@@ -157,7 +157,7 @@ function OrgJump() {
                     <Stack direction="row" spacing={1.5}>
                       <Button
                         variant="contained"
-                        color="secondary"
+                        color="primary"
                         onClick={() => setCreatingSite(true)}
                       >
                         {'Create site'}
@@ -200,7 +200,7 @@ function OrgJump() {
                       HeaderProps={{
                         avatar: (
                           <MdiIcon
-                            color="secondary"
+                            color="primary"
                             fontSize="large"
                             path={ICON_VARIANT_ORGANIZATION.path}
                           />

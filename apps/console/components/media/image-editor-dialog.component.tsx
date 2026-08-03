@@ -387,7 +387,7 @@ export function ImageEditorDialog(props: ImageEditorDialogProps) {
         </Button>
         <Button
           variant="contained"
-          color="secondary"
+          color="primary"
           disabled={!image}
           onClick={() => exportImage(false)}
         >

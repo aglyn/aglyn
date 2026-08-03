@@ -364,14 +364,14 @@ export function OrgPublishPanel({
                 orgSlug,
               })}
             >
-              <Button variant="contained" color="secondary">
+              <Button variant="contained" color="primary">
                 {'Publish a plugin…'}
               </Button>
             </AppLink>
           ) : (
             <Button
               variant="contained"
-              color="secondary"
+              color="primary"
               disabled={!canPublish}
               onClick={openPublish}
             >

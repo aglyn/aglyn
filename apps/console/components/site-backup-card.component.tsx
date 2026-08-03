@@ -164,7 +164,7 @@ export function SiteBackupCard(props: { hostId: string }) {
         <Stack direction="row" spacing={1}>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             size="small"
             disabled={busy}
             onClick={handleExport}

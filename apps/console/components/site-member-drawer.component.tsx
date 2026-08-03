@@ -240,7 +240,7 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
             <Button
               size="small"
               variant="outlined"
-              color={suspended ? 'secondary' : 'error'}
+              color={suspended ? 'primary' : 'error'}
               disabled={busy}
               onClick={handleToggleSuspended}
             >

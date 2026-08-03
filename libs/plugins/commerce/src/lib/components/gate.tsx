@@ -91,7 +91,7 @@ const Gate = forwardRef<HTMLDivElement, GateProps>((props, ref) => {
           p: 1,
         }}
       >
-        <Typography variant="caption" color="secondary">
+        <Typography variant="caption" color="primary">
           {'🔒 Members only — visitors see the teaser'}
         </Typography>
         <Box>{children}</Box>

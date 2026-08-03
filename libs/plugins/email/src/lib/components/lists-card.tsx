@@ -208,7 +208,7 @@ export function OrgListsCard(props: OrgListsCardProps) {
           <Button
             size="small"
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!name.trim() || !scope}
             onClick={() => void handleCreate()}
           >

@@ -705,7 +705,7 @@ export const blockPresets: Aglyn.PresetSchema[] = [
           pluginId: BUNDLE_ID,
           props: {
             variant: 'contained',
-            color: 'secondary',
+            color: 'primary',
             size: 'large',
             children: 'Get started',
           },

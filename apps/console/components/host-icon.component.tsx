@@ -37,7 +37,7 @@ export interface HostIconProps {
   size?: number
   fontSize?: 'inherit' | 'small' | 'medium' | 'large'
   /** Tint for the fallback glyph — e.g. marking the current site. */
-  color?: 'inherit' | 'primary' | 'secondary'
+  color?: 'inherit' | 'primary' | 'primary'
 }
 
 /**

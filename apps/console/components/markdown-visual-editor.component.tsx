@@ -1942,7 +1942,7 @@ const MarkdownVisualEditor = forwardRef<
         <DialogActions>
           {urlDialog?.kind === 'image' && onPickImageFromMedia ? (
             <Button
-              color="secondary"
+              color="primary"
               sx={{ mr: 'auto' }}
               onClick={() => {
                 setUrlDialog(null)
@@ -1955,7 +1955,7 @@ const MarkdownVisualEditor = forwardRef<
           <Button onClick={() => setUrlDialog(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!urlDialogValid}
             onClick={handleUrlDialogConfirm}
           >

@@ -813,7 +813,7 @@ function ScreenDetails() {
                         <Button
                           size="small"
                           variant="contained"
-                          color="secondary"
+                          color="primary"
                           onClick={handlePublishRoute}
                         >
                           {isRoutePublished ? 'Update route' : 'Publish'}
@@ -829,7 +829,7 @@ function ScreenDetails() {
                           <span>
                             <Button
                               size="small"
-                              color="secondary"
+                              color="primary"
                               onClick={openScheduler('publish')}
                               startIcon={
                                 <MdiIcon
@@ -846,7 +846,7 @@ function ScreenDetails() {
                           <span>
                             <Button
                               size="small"
-                              color="secondary"
+                              color="primary"
                               disabled={!isRoutePublished}
                               onClick={openScheduler('unpublish')}
                               startIcon={
@@ -917,7 +917,7 @@ function ScreenDetails() {
                           <Button
                             size="small"
                             variant="outlined"
-                            color="secondary"
+                            color="primary"
                             onClick={handlePasswordSave}
                             sx={{ alignSelf: 'flex-start' }}
                             startIcon={
@@ -978,7 +978,7 @@ function ScreenDetails() {
                       <Button
                         size="small"
                         variant="outlined"
-                        color="secondary"
+                        color="primary"
                         disabled={!seoDraft}
                         onClick={handleSeoSave}
                         sx={{ alignSelf: 'flex-start' }}
@@ -1059,7 +1059,7 @@ function ScreenDetails() {
                               >
                                 <Button
                                   size="small"
-                                  color="secondary"
+                                  color="primary"
                                   disabled={isLive}
                                   onClick={handlePublishVersion(version.$id)}
                                 >
@@ -1075,7 +1075,7 @@ function ScreenDetails() {
                                   <span>
                                     <Button
                                       size="small"
-                                      color="secondary"
+                                      color="primary"
                                       disabled={isLive}
                                       onClick={openScheduler(
                                         'publish',
@@ -1186,7 +1186,7 @@ function ScreenDetails() {
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!editor?.displayName.trim()}
             onClick={handleEditSave}
           >
@@ -1252,7 +1252,7 @@ function ScreenDetails() {
           <Button onClick={() => setScheduler(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={
               !scheduler?.at ||
               (scheduler?.action === 'publish' && !scheduler?.versionId)

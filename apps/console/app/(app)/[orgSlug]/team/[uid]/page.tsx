@@ -312,7 +312,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                     </Typography>
                   </Stack>
                   {isOwnerRow ? (
-                    <Chip size="small" color="secondary" label="Owner" />
+                    <Chip size="small" color="primary" label="Owner" />
                   ) : null}
                 </Stack>
                 {canManage && !isOwnerRow ? (

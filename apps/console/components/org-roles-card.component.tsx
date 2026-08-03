@@ -169,7 +169,7 @@ export function OrgRolesCard() {
           ))}
           <Button
             size="small"
-            color="secondary"
+            color="primary"
             variant="contained"
             onClick={() => setEditor({ name: '', permissions: {} })}
           >
@@ -258,7 +258,7 @@ export function OrgRolesCard() {
           </Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={busy || !editor?.name?.trim()}
             onClick={() => void handleSave()}
           >

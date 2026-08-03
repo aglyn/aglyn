@@ -468,7 +468,7 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
                     (install.displayName ?? install.pluginId ?? install.$id)
                   )}
                 </Typography>
-                <Chip size="small" color="secondary" label="Organization" />
+                <Chip size="small" color="primary" label="Organization" />
                 <Chip size="small" label={`v${install.version}`} />
                 {shadowed ? (
                   <Tooltip title="This site has its own pin, which takes precedence here">

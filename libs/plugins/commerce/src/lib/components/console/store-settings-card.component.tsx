@@ -189,7 +189,7 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
         </Typography>
         <Button
           variant="contained"
-          color="secondary"
+          color="primary"
           size="small"
           disabled={!draft}
           onClick={handleSave}

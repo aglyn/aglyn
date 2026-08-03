@@ -750,7 +750,7 @@ function BesignerPage(props) {
             <Button
               size="small"
               variant={publishedPath ? 'outlined' : 'contained'}
-              color="secondary"
+              color="primary"
               onClick={handleTogglePublish}
               sx={{ mr: 1, whiteSpace: 'nowrap', flexShrink: 0 }}
             >

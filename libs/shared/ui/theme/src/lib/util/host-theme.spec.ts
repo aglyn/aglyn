@@ -145,9 +145,11 @@ describe('mergeThemeOptions (AGL-1180)', () => {
       hostThemeToThemeOptions({ spacing: 8 }, 'light'),
     )
     const palette = merged.palette as Record<string, { main?: string }>
-    expect(palette['primary']?.main).toBe('#404C5C')
-    expect(palette['secondary']?.main).toBe('#00b0ff')
-    expect(palette['tertiary']?.main).toBe('#e040fb')
+    // Pins the rotated palette (AGL-1186): primary IS the blue accent now,
+    // with the brand slate moved to tertiary.
+    expect(palette['primary']?.main).toBe('#00b0ff')
+    expect(palette['secondary']?.main).toBe('#e040fb')
+    expect(palette['tertiary']?.main).toBe('#404C5C')
   })
 
   it('applies the override without dropping its siblings', () => {
@@ -161,7 +163,7 @@ describe('mergeThemeOptions (AGL-1180)', () => {
     const palette = merged.palette as Record<string, { main?: string }>
     expect(palette['primary']?.main).toBe('#123456')
     // The whole point: overriding primary must not repaint secondary.
-    expect(palette['secondary']?.main).toBe('#00b0ff')
+    expect(palette['secondary']?.main).toBe('#e040fb')
   })
 
   // The reason components must merge deeply: the brand styles several of
@@ -231,7 +233,7 @@ describe('mergeThemeOptions (AGL-1180)', () => {
       hostThemeToThemeOptions(undefined, 'light'),
     )
     const palette = merged.palette as Record<string, { main?: string }>
-    expect(palette['primary']?.main).toBe('#404C5C')
+    expect(palette['primary']?.main).toBe('#00b0ff')
     expect(merged.shape).toEqual(consoleOptions.shape)
   })
 })

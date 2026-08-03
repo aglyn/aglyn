@@ -209,7 +209,7 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
         )}
         <Button
           variant="contained"
-          color="secondary"
+          color="primary"
           size="small"
           disabled={!draft}
           onClick={handleSave}

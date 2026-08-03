@@ -281,7 +281,7 @@ export function ArtifactUpdateDialog({
         </Button>
         <Button
           variant="contained"
-          color="secondary"
+          color="primary"
           disabled={
             loading || !preview?.mergeable || (destructive && !confirmDestructive)
           }

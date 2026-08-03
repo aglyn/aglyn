@@ -280,7 +280,7 @@ const ElementsTree = forwardRef<any, NodeTreeViewProps>((props, ref) => {
     <TabPanelInner sx={{ pl: 0.5 }}>
       <Box sx={{ px: 0.05, pb: 1, pt: 1 }}>
         <Button
-          color="secondary"
+          color="primary"
           startIcon={
             <MdiIcon fontSize="inherit" path={ICON_VARIANT_MODIFY_ADD.path} />
           }

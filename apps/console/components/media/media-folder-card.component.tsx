@@ -176,7 +176,7 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
             <Tooltip title={`Shared with ${scopeLabel}`} enterDelay={600}>
               <Typography
                 variant="caption"
-                color="secondary"
+                color="primary"
                 noWrap
                 component="div"
               >

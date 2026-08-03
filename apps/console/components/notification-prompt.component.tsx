@@ -154,7 +154,7 @@ export function NotificationPrompt() {
         <Button
           size="small"
           variant="contained"
-          color="secondary"
+          color="primary"
           onClick={() => void handleEnable()}
         >
           {'Enable'}

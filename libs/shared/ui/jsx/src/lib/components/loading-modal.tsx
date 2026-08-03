@@ -103,7 +103,7 @@ export const LoadingModal = forwardRef<any, LoadingModalProps>((props, ref) => {
             >
               <div className="wrapper">
                 <LinearProgress
-                  color="secondary"
+                  color="primary"
                   className="progress-bar-top"
                 />
                 <Stack
@@ -115,7 +115,7 @@ export const LoadingModal = forwardRef<any, LoadingModalProps>((props, ref) => {
                     flexGrow: 1
                   }}>
                   <div>
-                    <CircularProgress color="secondary" />
+                    <CircularProgress color="primary" />
                     <LoadingTextComponent
                       variant="overline"
                       className="status-text"

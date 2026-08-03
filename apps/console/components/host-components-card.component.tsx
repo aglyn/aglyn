@@ -463,7 +463,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!editor?.name.trim()}
             onClick={handleSave}
           >
@@ -547,7 +547,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           </Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!publisher?.name.trim() || publisher?.busy}
             onClick={handlePublishConfirm}
           >

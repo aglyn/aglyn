@@ -196,7 +196,7 @@ function SsoSignIn() {
         headingTop={'Signing in'}
         headingBottom={'One moment'}
         headingBottomProps={{ sx: { pb: 4 }, component: LoadingTextComponent }}
-        headingAfter={<CircularProgress color="secondary" />}
+        headingAfter={<CircularProgress color="primary" />}
       />
     )
   }

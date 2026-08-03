@@ -282,7 +282,7 @@ export function ReusableComponentsProvider(
           <Button onClick={() => setPromoteNode(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!name.trim()}
             onClick={handlePromoteConfirm}
           >

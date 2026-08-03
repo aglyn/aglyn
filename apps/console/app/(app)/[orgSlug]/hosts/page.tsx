@@ -110,7 +110,7 @@ function HostsContent() {
         permissions.createHosts ? (
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             onClick={() => setCreating(true)}
           >
             {'Create site'}
@@ -138,7 +138,7 @@ function HostsContent() {
               permissions.createHosts ? (
                 <Button
                   variant="contained"
-                  color="secondary"
+                  color="primary"
                   onClick={() => setCreating(true)}
                 >
                   {'Create site'}
@@ -171,7 +171,7 @@ function HostsContent() {
                         host={host}
                         size={28}
                         fontSize="large"
-                        color="secondary"
+                        color="primary"
                       />
                     ),
                     slotProps: {

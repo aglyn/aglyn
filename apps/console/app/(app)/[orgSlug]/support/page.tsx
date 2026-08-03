@@ -314,7 +314,7 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
                       {orgReady && supportWindow ? (
                         <Button
                           size="small"
-                          color="secondary"
+                          color="primary"
                           sx={{ alignSelf: 'flex-start' }}
                           onClick={() => setNewTicket({ subject: '', body: '' })}
                         >
@@ -403,7 +403,7 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
                       ))}
                       <Button
                         size="small"
-                        color="secondary"
+                        color="primary"
                         sx={{ alignSelf: 'flex-start' }}
                         onClick={() =>
                           setNewThread({
@@ -464,7 +464,7 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
           <Button onClick={() => setNewTicket(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!newTicket?.subject.trim() || !newTicket?.body.trim()}
             onClick={async () => {
               const payload = await request('/api/support/tickets', 'POST', {
@@ -600,7 +600,7 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
           <Button onClick={() => setNewThread(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!newThread?.title.trim() || !newThread?.body.trim()}
             onClick={async () => {
               const payload = await request('/api/support/forum', 'POST', {

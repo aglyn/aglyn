@@ -38,16 +38,20 @@ export type ActionRecord = Pick<PaletteOptions, ActionIdentifier>
 
 const colorScheme = {
   light: {
+    // Palette rotated 2026-08-03 (AGL-1186): the blue accent that every
+    // component was already opting into is now `primary`, so nothing has to
+    // opt out of a primary that was really a surface tone. Whole colour
+    // objects moved, so each keeps the contrastText it shipped with.
     primary: {
-      main: '#404C5C',
-      contrastText: '#FFFFFF',
-    },
-    secondary: {
       main: '#00b0ff',
       contrastText: '#FFFFFF',
     },
-    tertiary: {
+    secondary: {
       main: '#e040fb',
+      contrastText: '#FFFFFF',
+    },
+    tertiary: {
+      main: '#404C5C',
       contrastText: '#FFFFFF',
     },
     surface: {
@@ -111,16 +115,21 @@ const colorScheme = {
   },
   dark: {
     primary: {
-      main: `#2C3540`,
-      contrastText: '#FFFFFF',
-    },
-    secondary: {
       main: '#00b0ff',
       contrastText: '#FFFFFF',
     },
-    tertiary: {
+    secondary: {
       main: '#e040fb',
       contrastText: '#FFFFFF',
+    },
+    // Dark takes a LIFTED slate, not the brand `#404C5C`: that scores 1.38
+    // against this scheme's page and would just move the old invisibility
+    // bug from primary to tertiary. `#7C8CA3` measures 5.02 vs page and
+    // 3.63 vs a raised panel, and needs dark ink rather than white (6.14
+    // against black, 3.42 against white).
+    tertiary: {
+      main: '#7C8CA3',
+      contrastText: '#000000DE',
     },
     surface: {
       main: `#202934`,
@@ -212,7 +221,7 @@ const baseOptions: ThemeOptions = {
     },
     MuiButton: {
       defaultProps: {
-        color: 'secondary',
+        color: 'primary',
       },
       styleOverrides: {
         root: {
@@ -226,12 +235,12 @@ const baseOptions: ThemeOptions = {
     },
     MuiFab: {
       defaultProps: {
-        color: 'secondary',
+        color: 'primary',
       },
     },
     MuiIconButton: {
       defaultProps: {
-        color: 'secondary',
+        color: 'primary',
       },
       // color: 'inherit', // Default color to inherit
       styleOverrides: {
@@ -251,7 +260,7 @@ const baseOptions: ThemeOptions = {
     },
     MuiLink: {
       defaultProps: {
-        color: 'secondary',
+        color: 'primary',
       },
       styleOverrides: {
         root: {
@@ -268,28 +277,16 @@ const baseOptions: ThemeOptions = {
     // primary is #2C3540 — a SURFACE tone, not an accent — so the selected
     // tab rendered near-invisible against a dark background while the
     // unselected ones stayed at 87% white. Three call sites had already
-    // hand-set `textColor="secondary"` to work around it; making it the
+    // hand-set `textColor="primary"` to work around it; making it the
     // default fixes the ones that had not (the theme editor's own light/dark
     // switch) and matches MuiButton and MuiLink, which already default to
     // secondary.
-    MuiTabs: {
-      defaultProps: {
-        textColor: 'secondary',
-        indicatorColor: 'secondary',
-      },
-    },
-    // Everything else that paints an accent (AGL-1182). Same reason as the
-    // tabs above: these all default to `primary`, and the dark scheme's
-    // primary is #2C3540 — a surface tone — so a slider track, a spinner or
-    // a checked box rendered near-invisible on a dark page. Secondary is
-    // the accent in this palette, as MuiButton and MuiLink already assume.
-    MuiCheckbox: { defaultProps: { color: 'secondary' } },
-    MuiRadio: { defaultProps: { color: 'secondary' } },
-    MuiSwitch: { defaultProps: { color: 'secondary' } },
-    MuiSlider: { defaultProps: { color: 'secondary' } },
-    MuiCircularProgress: { defaultProps: { color: 'secondary' } },
-    MuiLinearProgress: { defaultProps: { color: 'secondary' } },
-    MuiBadge: { defaultProps: { color: 'secondary' } },
+    // No accent defaults live here any more (AGL-1186). Tabs, checkboxes,
+    // radios, switches, sliders, progress and badges each briefly carried
+    // `color: 'secondary'` to escape a `primary` that was a surface tone.
+    // Now that `primary` IS the accent they render correctly on MUI's own
+    // default, and a per-component default is exactly what the rotation
+    // exists to remove.
     MuiToolbar: {
       styleOverrides: {
         root: ({ theme }) => ({

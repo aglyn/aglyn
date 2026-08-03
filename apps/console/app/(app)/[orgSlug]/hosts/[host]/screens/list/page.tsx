@@ -770,7 +770,7 @@ function Screens(props) {
                   <Button
                     size="small"
                     variant="contained"
-                    color="secondary"
+                    color="primary"
                     onClick={handleFormOpen}
                   >
                     {'Create your first screen'}
@@ -871,7 +871,7 @@ function Screens(props) {
           <Button onClick={() => setTranslationsFor(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             onClick={handleSaveTranslations}
           >
             {'Save'}

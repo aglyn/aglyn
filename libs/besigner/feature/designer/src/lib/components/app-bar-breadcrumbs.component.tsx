@@ -247,7 +247,7 @@ const Breadcrumbs = observer((props: BreadcrumbsProps) => {
           label={`+${selectionCount - 1} selected`}
           size="small"
           variant="outlined"
-          color="secondary"
+          color="primary"
           sx={{ ml: 0.5, height: 18, fontSize: '0.65rem' }}
         />
       ) : null}

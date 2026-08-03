@@ -391,7 +391,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
             key={value}
             label={value}
             variant={category === value ? 'filled' : 'outlined'}
-            color={category === value ? 'secondary' : 'default'}
+            color={category === value ? 'primary' : 'default'}
             onClick={() =>
               setCategory((previous) => (previous === value ? null : value))
             }
@@ -555,7 +555,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                     {priceUsd > 0 ? (
                       <Chip
                         size="small"
-                        color="secondary"
+                        color="primary"
                         label={`$${priceUsd}`}
                       />
                     ) : null}
@@ -567,7 +567,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                         {' · by '}
                         <AppLink
                           href={publisherHref(listing.profileId)}
-                          color="secondary"
+                          color="primary"
                           underline="hover"
                         >
                           {`@${handles[listing.profileId]}`}
@@ -654,7 +654,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                     componentVariant="button"
                     size="small"
                     variant="outlined"
-                    color="secondary"
+                    color="primary"
                     href={detailHref ?? ''}
                     disabled={!detailHref}
                   >

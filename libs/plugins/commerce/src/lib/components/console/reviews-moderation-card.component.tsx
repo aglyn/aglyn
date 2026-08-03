@@ -147,7 +147,7 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
                   <Button
                     size="small"
                     variant="contained"
-                    color="secondary"
+                    color="primary"
                     onClick={async () => {
                       await updateDoc(
                         doc(firestore, 'hosts', hostId, 'reviews', review.$id),

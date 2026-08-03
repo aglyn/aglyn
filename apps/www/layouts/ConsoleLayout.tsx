@@ -138,7 +138,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
     if (isElement(icon)) {
       return icon
     }
-    return <MdiIcon color="secondary" fontSize="inherit" {...icon} />
+    return <MdiIcon color="primary" fontSize="inherit" {...icon} />
   }
 
   return (

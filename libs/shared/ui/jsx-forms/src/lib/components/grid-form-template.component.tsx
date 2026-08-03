@@ -56,7 +56,7 @@ export const GridFormTemplateComponent = forwardRef<any, GridFormTemplateProps>(
               </FormControl>
               <FormControl margin="normal" fullWidth>
                 <Button
-                  color="secondary"
+                  color="primary"
                   disabled={submitting || !valid || pristine}
                   startIcon={<MdiIcon path={mdiContentSave.path} />}
                   style={{ marginRight: 8 }}

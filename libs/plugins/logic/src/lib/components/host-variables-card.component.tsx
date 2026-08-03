@@ -349,7 +349,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
         )}
         <Button
           size="small"
-          color="secondary"
+          color="primary"
           sx={{ alignSelf: 'flex-start' }}
           onClick={() => {
             // Plan cap (AGL-99): dark-launch — plan-less workspaces uncapped.
@@ -490,7 +490,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!validName || nameTaken}
             onClick={handleSave}
           >

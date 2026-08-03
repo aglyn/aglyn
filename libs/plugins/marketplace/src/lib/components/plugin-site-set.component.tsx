@@ -214,7 +214,7 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
             <Button
               size="small"
               variant="outlined"
-              color="secondary"
+              color="primary"
               disabled={siteBusy}
               onClick={() =>
                 setPending({
@@ -261,7 +261,7 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
           <Button
             size="small"
             variant="outlined"
-            color="secondary"
+            color="primary"
             disabled={siteBusy}
             onClick={() =>
               setPending({
@@ -403,7 +403,7 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
           <Button
             size="small"
             variant="outlined"
-            color="secondary"
+            color="primary"
             disabled={siteBusy || !addHostIds.length}
             onClick={() =>
               void runSiteEdit(() =>
@@ -440,7 +440,7 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
           fullWidth
           size="small"
           variant="outlined"
-          color="secondary"
+          color="primary"
           disabled={siteBusy || !hosts.length}
           onClick={() =>
             void runSiteEdit(async () => {
@@ -480,7 +480,7 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
         fullWidth
         size="small"
         variant="outlined"
-        color="secondary"
+        color="primary"
         disabled={siteBusy}
         onClick={() =>
           void runSiteEdit(async () => {

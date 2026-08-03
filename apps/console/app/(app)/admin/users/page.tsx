@@ -324,7 +324,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                         {record.tenantId ? (
                           <Chip
                             size="small"
-                            color="secondary"
+                            color="primary"
                             variant="outlined"
                             label={`SSO · ${record.tenantId}`}
                             sx={{ ml: 1 }}

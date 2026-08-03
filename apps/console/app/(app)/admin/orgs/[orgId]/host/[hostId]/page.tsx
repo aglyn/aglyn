@@ -192,7 +192,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                           href={liveUrl}
                           target="_blank"
                           rel="noreferrer"
-                          color="secondary"
+                          color="primary"
                           underline="hover"
                         >
                           {liveUrl}

@@ -49,7 +49,7 @@ const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
             }}>
               <FormControl margin="normal" fullWidth>
                 <Button
-                  color="secondary"
+                  color="primary"
                   disabled={submitting /* || !valid || pristine*/ || isLoading}
                   style={{ marginRight: 8 }}
                   type="submit"

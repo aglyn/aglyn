@@ -311,7 +311,7 @@ const NodeTreeItem = observer(
                 border: 1,
                 borderColor: 'divider',
                 boxShadow: 1,
-                color: 'tertiary',
+                color: 'primary',
                 display: 'flex',
                 alignItems: 'center',
                 flexDirection: 'column',

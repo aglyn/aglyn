@@ -216,7 +216,7 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
               listingId,
             })}
           >
-            <Button variant="outlined" color="secondary" component="span">
+            <Button variant="outlined" color="primary" component="span">
               {'View listing'}
             </Button>
           </AppLink>

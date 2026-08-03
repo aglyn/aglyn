@@ -189,7 +189,7 @@ export function SaveAsTemplateDialog({
         <Button
           size="small"
           variant="contained"
-          color="secondary"
+          color="primary"
           onClick={() => void handleSave()}
           disabled={saving || !name.trim()}
         >

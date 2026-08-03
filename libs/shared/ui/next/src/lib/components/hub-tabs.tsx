@@ -103,8 +103,8 @@ export function HubTabs(props: HubTabsProps) {
                   orientation={stacked ? 'horizontal' : 'vertical'}
                   variant={stacked ? 'scrollable' : 'standard'}
                   allowScrollButtonsMobile
-                  textColor="secondary"
-                  indicatorColor="secondary"
+                  textColor="primary"
+                  indicatorColor="primary"
                   onChange={handleChange}
                   sx={{
                     ['.MuiTab-root']: {

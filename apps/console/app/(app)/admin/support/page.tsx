@@ -206,7 +206,7 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
                         key={value}
                         size="small"
                         label={value[0].toUpperCase() + value.slice(1)}
-                        color={filter === value ? 'secondary' : 'default'}
+                        color={filter === value ? 'primary' : 'default'}
                         variant={filter === value ? 'filled' : 'outlined'}
                         onClick={() => setFilter(value)}
                       />
@@ -316,7 +316,7 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'space-between' }}>
           <Button
-            color={thread?.ticket?.status === 'open' ? 'inherit' : 'secondary'}
+            color={thread?.ticket?.status === 'open' ? 'inherit' : 'primary'}
             disabled={busy || !thread}
             onClick={() =>
               void patchTicket({
@@ -331,7 +331,7 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
             <Button onClick={() => setThread(null)}>{'Done'}</Button>
             <Button
               variant="contained"
-              color="secondary"
+              color="primary"
               disabled={busy || !reply.trim()}
               onClick={async () => {
                 const ok = await patchTicket({

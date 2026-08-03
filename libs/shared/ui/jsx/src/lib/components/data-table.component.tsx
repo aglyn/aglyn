@@ -130,7 +130,7 @@ const AppLoaderOverlayView = (props: LoadingOverlayViewProps = {}) =>
     return (
       <GridOverlay>
         <div style={{ position: 'absolute', top: 0, width: '100%' }}>
-          <LinearProgress color="secondary" {...props.LinearProgressProps} />
+          <LinearProgress color="primary" {...props.LinearProgressProps} />
         </div>
       </GridOverlay>
     )

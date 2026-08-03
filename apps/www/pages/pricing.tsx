@@ -89,7 +89,7 @@ function Pricing() {
             />
             <Typography variant="body2">
               {'Annual '}
-              <Chip label="Save up to 36%" size="small" color="secondary" />
+              <Chip label="Save up to 36%" size="small" color="primary" />
             </Typography>
           </Stack>
         </Stack>
@@ -192,7 +192,7 @@ function Pricing() {
                       ))}
                       <Button
                         variant={plan === 'pro' ? 'contained' : 'outlined'}
-                        color="secondary"
+                        color="primary"
                         href="/auth/signup"
                         sx={{ mt: 1 }}
                       >

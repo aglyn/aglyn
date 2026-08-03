@@ -187,7 +187,7 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
           <Button onClick={() => setCouponDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={
               !couponDraft?.code.trim() ||
               !(Number(couponDraft?.percentOff) > 0) ||

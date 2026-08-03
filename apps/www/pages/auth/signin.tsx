@@ -128,7 +128,7 @@ export default withAppContext<Props>(function SignIn(props) {
             </Box>
           )}
           <Button
-            color="secondary"
+            color="primary"
             disabled={Boolean(submitting)}
             size="large"
             type="submit"
@@ -149,7 +149,7 @@ export default withAppContext<Props>(function SignIn(props) {
       >
         <b>{"Don't have an account?"}</b>
         <br />
-        <AppLink color="secondary" href="/auth/signup">
+        <AppLink color="primary" href="/auth/signup">
           Create an account
         </AppLink>
       </Typography>

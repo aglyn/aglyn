@@ -282,7 +282,7 @@ export function NotificationsMenu() {
           onClick={(event) => setAnchor(event.currentTarget)}
         >
           <Badge
-            color="secondary"
+            color="primary"
             badgeContent={unreadCount > 99 ? '99+' : unreadCount}
             invisible={unreadCount === 0}
           >
@@ -464,7 +464,7 @@ export function NotificationsMenu() {
           <Box sx={{ flex: 1 }} />
           <Button
             size="small"
-            color="secondary"
+            color="primary"
             onClick={() => goto(buildRoute(Route.MANAGE_NOTIFICATIONS))}
           >
             {'View all'}

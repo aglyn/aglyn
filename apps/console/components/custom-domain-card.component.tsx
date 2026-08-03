@@ -291,7 +291,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
               />
               <Button
                 variant="contained"
-                color="secondary"
+                color="primary"
                 disabled={!domain.trim() || checking}
                 onClick={handleConnect}
               >

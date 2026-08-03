@@ -129,11 +129,11 @@ export function ThemePreview(props: ThemePreviewProps) {
             {'Caption — disabled text, the smallest size in the ramp.'}
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-            {/* Every colour is named EXPLICITLY (AGL-1180). The theme sets
-                MuiButton.defaultProps.color = 'secondary', so the unlabelled
-                button that used to sit here rendered secondary under the
-                label "Primary" — two identical blue buttons, and no way to
-                tell which swatch you had just changed. */}
+            {/* Every colour is named EXPLICITLY: this kit DEMOS the palette,
+                so each control must show the slot it is labelled with. It is
+                also the one place the rotation sweep had to be undone by
+                hand — swept, the "Secondary" button would have rendered
+                primary. */}
             <Button variant="contained" color="primary">
               {'Primary'}
             </Button>
@@ -275,7 +275,7 @@ export function ThemePreview(props: ThemePreviewProps) {
             </AccordionDetails>
           </Accordion>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Badge badgeContent={4} color="secondary">
+            <Badge badgeContent={4} color="primary">
               <Box
                 sx={{
                   width: 24,

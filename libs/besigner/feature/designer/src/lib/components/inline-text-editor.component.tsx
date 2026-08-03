@@ -491,7 +491,7 @@ export const InlineTextEditorComponent = observer(
               {insertButton}
               <Button
                 size="small"
-                color="secondary"
+                color="primary"
                 onMouseDown={keepFocus}
                 onClick={commit}
               >
@@ -545,7 +545,7 @@ export const InlineTextEditorComponent = observer(
               {insertButton}
               <Button
                 size="small"
-                color="secondary"
+                color="primary"
                 onMouseDown={keepFocus}
                 onClick={commit}
               >

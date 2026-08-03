@@ -570,7 +570,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                                   : (org.plan ?? 'no plan')
                               }
                               size="small"
-                              color={org.plan ? 'secondary' : 'default'}
+                              color={org.plan ? 'primary' : 'default'}
                             />
                             {org.suspendedAt ? (
                               <Chip
@@ -870,7 +870,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             onClick={handleSave}
           >
             {'Save (audited)'}

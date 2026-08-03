@@ -117,7 +117,7 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(
         }
         appBarRight={
           <Button
-            color="secondary"
+            color="primary"
             disabled={loading}
             variant="contained"
             onClick={onSave}
@@ -134,7 +134,7 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(
             <Fragment>
               <LinearProgress
                 classes={{ root: classes.loadingBar }}
-                color="secondary"
+                color="primary"
               />
             </Fragment>
           )}

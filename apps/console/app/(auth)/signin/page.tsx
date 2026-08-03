@@ -157,7 +157,7 @@ function SignIn() {
           sx: { pb: 4 },
           component: LoadingTextComponent,
         }}
-        headingAfter={<CircularProgress color="secondary" />}
+        headingAfter={<CircularProgress color="primary" />}
       />
     )
   }
@@ -172,7 +172,7 @@ function SignIn() {
           sx: { pb: 4 },
           component: LoadingTextComponent,
         }}
-        headingAfter={<CircularProgress color="secondary" />}
+        headingAfter={<CircularProgress color="primary" />}
       />
     )
   }

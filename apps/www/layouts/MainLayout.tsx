@@ -379,7 +379,7 @@ export function MainLayout(props: MainLayoutProps) {
             <Container maxWidth={NAVIGATION_MAX_WIDTH}>
               <Tabs
                 aria-label="area navigation"
-                indicatorColor="secondary"
+                indicatorColor="primary"
                 scrollButtons="auto"
                 textColor="inherit"
                 value={tabValue ?? false}

@@ -280,7 +280,7 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
           <Stack direction="row" spacing={1}>
             <Button
               size="small"
-              color="secondary"
+              color="primary"
               variant="contained"
               onClick={() => setEditor({ ...EMPTY_BAR })}
             >
@@ -288,7 +288,7 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
             </Button>
             <Button
               size="small"
-              color="secondary"
+              color="primary"
               variant="contained"
               onClick={() => setEditor({ ...EMPTY_POPUP })}
             >
@@ -384,7 +384,7 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
                       />
                       <Button
                         size="small"
-                        color="secondary"
+                        color="primary"
                         onClick={() => setEditor({ ...overlay })}
                       >
                         {'Edit'}
@@ -601,7 +601,7 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
           <Button color="inherit" onClick={() => setEditor(null)}>
             {'Cancel'}
           </Button>
-          <Button variant="contained" color="secondary" onClick={handleSave}>
+          <Button variant="contained" color="primary" onClick={handleSave}>
             {'Save'}
           </Button>
         </DialogActions>

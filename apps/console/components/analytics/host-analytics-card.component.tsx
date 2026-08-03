@@ -160,7 +160,7 @@ export function HostAnalyticsCard(props: {
               {...({ componentVariant: 'naked', nativeButton: false } as any)}
               href={viewAllHref}
               size="small"
-              color="secondary"
+              color="primary"
             >
               {'View details'}
             </Button>

@@ -311,7 +311,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
           )}
           <Button
             size="small"
-            color="secondary"
+            color="primary"
             sx={{ alignSelf: 'flex-start' }}
             onClick={() =>
               setDraft({
@@ -449,7 +449,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
             <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
             <Button
               variant="contained"
-              color="secondary"
+              color="primary"
               disabled={!draft?.title.trim()}
               onClick={handleSave}
             >

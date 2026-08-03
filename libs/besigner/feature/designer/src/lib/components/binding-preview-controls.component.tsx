@@ -68,7 +68,7 @@ const BindingPreviewControlsComponent = forwardRef<
         ref={ref}
         aria-label="toggle binding resolution"
         size="small"
-        color={showingRaw ? 'secondary' : 'inherit'}
+        color={showingRaw ? 'primary' : 'inherit'}
         onClick={handleToggle}
         {...rest}
       >

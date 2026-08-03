@@ -210,7 +210,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                       >
                         <span>{submission.formName ?? 'Form'}</span>
                         {!submission.read ? (
-                          <Chip label="New" color="secondary" size="small" />
+                          <Chip label="New" color="primary" size="small" />
                         ) : null}
                       </Stack>
                     </TableCell>
@@ -301,7 +301,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                           ) : null}
                         </TableCell>
                         <TableCell>
-                          <Chip label="Member" color="secondary" size="small" />
+                          <Chip label="Member" color="primary" size="small" />
                         </TableCell>
                         <TableCell>
                           {member.createdAt?.toDate?.().toLocaleString() ??

@@ -403,7 +403,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           />
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!validHandle || !displayName.trim()}
             onClick={handleSave}
           >
@@ -474,7 +474,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           {agreementState === 'current' ? null : (
             <Button
               variant="contained"
-              color="secondary"
+              color="primary"
               disabled={agreementBusy}
               onClick={() => void handleAcceptAgreement()}
               sx={{ alignSelf: 'flex-start' }}
@@ -581,7 +581,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                     artifact type — while putting Unpublish at the end of the
                     row, the easiest place to hit by mistake. */}
                 <AppLink href={listingHref(listing)}>
-                  <Button size="small" color="secondary" component="span">
+                  <Button size="small" color="primary" component="span">
                     {'View'}
                   </Button>
                 </AppLink>
@@ -695,7 +695,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           </Typography>
           <Button
             variant={profile?.stripeChargesEnabled ? 'outlined' : 'contained'}
-            color="secondary"
+            color="primary"
             disabled={payoutsBusy}
             onClick={handlePayouts}
           >

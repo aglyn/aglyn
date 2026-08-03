@@ -255,7 +255,7 @@ export function OrgApiKeysCard() {
 
           <Button
             size="small"
-            color="secondary"
+            color="primary"
             variant="contained"
             sx={{ alignSelf: 'flex-start' }}
             onClick={() => setDraft({ name: '', scopes: ['datasets:read'] })}
@@ -305,7 +305,7 @@ export function OrgApiKeysCard() {
           </Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={busy || !draft || draft.scopes.length === 0}
             onClick={() => void handleCreate()}
           >
@@ -330,10 +330,10 @@ export function OrgApiKeysCard() {
           />
         </DialogContent>
         <DialogActions>
-          <Button color="secondary" onClick={copyToken}>
+          <Button color="primary" onClick={copyToken}>
             {'Copy'}
           </Button>
-          <Button variant="contained" color="secondary" onClick={() => setRevealed(null)}>
+          <Button variant="contained" color="primary" onClick={() => setRevealed(null)}>
             {'Done'}
           </Button>
         </DialogActions>

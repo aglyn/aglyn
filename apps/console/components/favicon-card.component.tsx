@@ -73,7 +73,7 @@ export function FaviconCard(props: FaviconCardProps) {
         )}
         <Button
           size="small"
-          color="secondary"
+          color="primary"
           onClick={() => setPickerOpen(true)}
         >
           {favicon ? 'Replace from media' : 'Choose from media'}

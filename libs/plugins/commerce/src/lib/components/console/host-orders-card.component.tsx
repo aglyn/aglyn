@@ -247,7 +247,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             <Button
               size="small"
               variant="contained"
-              color="secondary"
+              color="primary"
               onClick={() =>
                 setDraft({ productId: '', variantId: '', quantity: '1', email: '' })
               }
@@ -385,7 +385,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!draft?.productId || draft?.busy}
             onClick={handleDraftCreate}
           >

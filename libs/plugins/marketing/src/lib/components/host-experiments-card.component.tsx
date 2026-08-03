@@ -305,7 +305,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           <Button
             size="small"
             variant="contained"
-            color="secondary"
+            color="primary"
             sx={{ alignSelf: 'flex-start' }}
             onClick={() => setEditor(newExperiment())}
           >
@@ -347,7 +347,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
                       ) : experiment.status !== 'done' ? (
                         <Button
                           size="small"
-                          color="secondary"
+                          color="primary"
                           onClick={() => void setStatus(experiment, 'running')}
                         >
                           {'Start'}
@@ -623,7 +623,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           </Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             onClick={() => void handleSave()}
           >
             {'Save'}

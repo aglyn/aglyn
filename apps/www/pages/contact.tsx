@@ -108,13 +108,13 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
               <Box sx={{
                 mb: 1
               }}>
-                <LinearProgress color="secondary" />
+                <LinearProgress color="primary" />
               </Box>
             )}
             <Button
               disabled={submitting || !valid || pristine}
               type="submit"
-              color="secondary"
+              color="primary"
               variant="contained"
             >
               {submitting ? 'Please wait...' : 'Continue'}

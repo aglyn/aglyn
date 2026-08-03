@@ -314,7 +314,7 @@ export function MediaFolderRail(props: MediaFolderRailProps) {
           <Button onClick={() => setPrompt(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={promptBusy || !prompt?.value.trim()}
             onClick={handlePromptSave}
           >

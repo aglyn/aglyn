@@ -90,7 +90,7 @@ function sourceChip(
   if (source?.type === 'marketplace') {
     return {
       label: edited ? 'Marketplace · edited' : 'Marketplace',
-      color: 'secondary' as const,
+      color: 'primary' as const,
     }
   }
   if (source?.type === 'starter') {

@@ -75,7 +75,7 @@ export function HostGuard({ children }: { children?: ReactNode }) {
           </Typography>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             onClick={() => window.location.reload()}
           >
             {'Try again'}

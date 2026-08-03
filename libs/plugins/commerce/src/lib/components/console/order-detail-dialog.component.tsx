@@ -318,7 +318,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
               size="small"
               sx={{ flex: 1 }}
             />
-            <Button size="small" variant="contained" color="secondary" onClick={handleFulfill}>
+            <Button size="small" variant="contained" color="primary" onClick={handleFulfill}>
               {'Fulfill'}
             </Button>
           </Stack>
@@ -354,7 +354,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
         {(can('fulfilled') || can('partially_fulfilled')) && !tracking ? (
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             onClick={() => setTracking({ carrier: '', number: '' })}
           >
             {'Fulfill…'}

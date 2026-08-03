@@ -229,7 +229,7 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             disabled={!draft?.title.trim() || draft?.busy}
             onClick={handlePublish}
           >

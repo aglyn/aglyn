@@ -121,7 +121,7 @@ export function HostActivityCard(props: HostActivityCardProps) {
       )}
       {viewAllHref ? (
         <Typography variant="body2" sx={{ mt: 1 }}>
-          <Link href={viewAllHref} color="secondary" underline="hover">
+          <Link href={viewAllHref} color="primary" underline="hover">
             {'View all activity'}
           </Link>
         </Typography>

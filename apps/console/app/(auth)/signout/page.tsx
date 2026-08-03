@@ -54,7 +54,7 @@ function SignOut() {
         sx: { pb: 4 },
         component: LoadingTextComponent,
       }}
-      headingAfter={<CircularProgress color="secondary" />}
+      headingAfter={<CircularProgress color="primary" />}
     />
   )
 }
