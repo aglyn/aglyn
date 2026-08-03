@@ -94,7 +94,14 @@ export function UserMenu() {
   // as much as the tab strip is — leaving the rows here would send a site
   // collaborator to a page the guard immediately bounces them off.
   const { orgWide, ready: reachReady } = useOrgReach()
-  const showOrgLinks = !reachReady || orgWide
+  // …and a page that names no workspace has no org for them to act on. AGL-1130
+  // blanked `orgSlug` here so these rows stopped CLAIMING a workspace picked by
+  // a fallback, but it left them rendered and pointing at the jump page — so on
+  // the workspace chooser, Manage Account and the staff console, "Manage Team"
+  // and "Billing" were live rows that just bounced you to `/`. A row that
+  // cannot do what it says should not be offered; hidden here, and the
+  // account-scoped rows below cover what those pages can actually reach.
+  const showOrgLinks = namesOrg && (!reachReady || orgWide)
   const { mode, setMode } = useColorScheme()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
 
@@ -239,6 +246,17 @@ export function UserMenu() {
         </Box>
         <Divider />
 
+        {/* Account-scoped, so it works from ANY page including the org-less
+            ones where every row below is hidden — otherwise the workspace
+            chooser and the staff console offer nothing but Documentation and
+            Sign out. The header gear already links here; this is the same
+            destination as a labelled row, because a gear is not discoverable
+            as "Manage account". */}
+        {row(
+          Route.MANAGE_USER_SETTINGS,
+          'Manage account',
+          ICON_VARIANT_USER_SETTINGS.path,
+        )}
         {showOrgLinks ? (
           <>
             {row(orgLink(Route.MANAGE_TEAM), 'Manage Team', mdiAccountGroupOutline.path)}
