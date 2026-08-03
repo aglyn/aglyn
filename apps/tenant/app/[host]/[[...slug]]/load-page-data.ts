@@ -33,6 +33,7 @@ import { cache } from 'react'
 import { serverPluginLoader } from '../../../utils/server-plugin-loader'
 import getHost from '../../../utils/get-host'
 import getOrgBilling from '../../../utils/get-org-billing'
+import { startRenderTimer } from '../../../utils/render-timings'
 import type { LoadResult, Props } from './types'
 
 /**
@@ -48,6 +49,11 @@ export const loadPageData = cache(
   async (hostParam: string, slug: string[]): Promise<LoadResult> => {
     const context = { params: { host: hostParam, slug } }
   console.debug('!!!!!getStaticProps', context)
+
+  // AGL-1152: one structured timing line per render, reported in `finally` so
+  // every exit path (404, redirect, maintenance, throw) is measured, not just
+  // the happy one.
+  const timer = startRenderTimer()
 
   try {
     const { params } = context
@@ -69,6 +75,7 @@ export const loadPageData = cache(
      *=========================================*/
 
     const hostRes = await getHost({ host })
+    timer.mark('getHost')
     console.debug('hostRes', hostRes, params)
 
     if (hostRes.error || !hostRes.host) {
@@ -91,6 +98,7 @@ export const loadPageData = cache(
     // every path immediately (short revalidate bounds the lag). Loaded
     // once here and reused by the branding/overlay branches below.
     const orgRes = await getOrgBilling({ hostId })
+    timer.mark('getOrgBilling')
     if ((orgRes.org as any)?.suspendedAt) {
       return {
         props: JSON.parse(
@@ -152,6 +160,10 @@ export const loadPageData = cache(
     // Plugin site-page hooks (AGL-417/418) register through the tenant
     // server manifest; ensure they're loaded before any hook runs.
     await serverPluginLoader.ensureAll(['tenantApi'])
+    // Suspect #1 for the cold-start cost: this imports the server half of all
+    // seven first-party plugins, memoised once per instance. If that theory is
+    // right, this phase dominates the `cold: true` line and is ~0 on warm ones.
+    timer.mark('ensureAll')
 
     // Redirect rules (AGL-155) fire before any route resolution, so a
     // rule can move even a published screen (plugins-redirects' resolver;
@@ -163,6 +175,7 @@ export const loadPageData = cache(
       path,
       slugSegments: [...(slug ?? [])],
     })
+    timer.mark('resolveSiteRedirect')
     if (redirectRule) {
       return {
         redirect: {
@@ -401,6 +414,7 @@ export const loadPageData = cache(
 
     const screenId = screenEntry[0]
     const screenRes = await getScreen({ hostId, screenId })
+    timer.mark('getScreen')
     console.debug('screenRes', screenRes)
 
     if (screenRes.error || !screenRes.screen) {
@@ -483,6 +497,7 @@ export const loadPageData = cache(
       screenId,
       screen: screenRes.screen,
     })
+    timer.mark('composeScreenNodes')
     if (!denormalized) {
       return {
         notFound: true,
@@ -531,6 +546,7 @@ export const loadPageData = cache(
       // catalog instead of a skeleton.
       nodes: denormalized,
     })
+    timer.mark('runSitePageEnrichers')
 
     // Trusted-realm marketplace plugins (AGL-420): the workspace's install
     // pins joined server-side with the staff-only trust grants; the client
@@ -542,6 +558,7 @@ export const loadPageData = cache(
         return []
       },
     )
+    timer.mark('getRealmPluginInstalls')
 
     // Plugin release gate (AGL-422): flagged-off plugins vanish from the
     // published site too — the platform kill switch. Subject = the org, so
@@ -551,6 +568,7 @@ export const loadPageData = cache(
       Aglyn.resolveEnabledPlugins(orgRes.org as never),
       { subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId },
     )
+    timer.mark('filterEnabledPluginsByReleaseFlags')
 
     const props = {
       data: JSON.parse(
@@ -585,6 +603,8 @@ export const loadPageData = cache(
       notFound: true,
       revalidate: 60,
     }
+  } finally {
+    timer.report({ host: hostParam, path: (slug ?? []).join('/') || '/' })
   }
   },
 )
