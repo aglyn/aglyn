@@ -131,3 +131,45 @@ describe('ColorPickerComponent two-stage picking (AGL-588)', () => {
     expect(input().value).toBe('background.paper')
   })
 })
+
+/**
+ * Contextual help (AGL-601/1220). Every other field forwards `help` to
+ * `FormFieldGrid`, which renders the tip. The colour picker used to swallow
+ * it into `...rest`, so a colour field given a help tip rendered nothing at
+ * all — and gave no clue why. Found while putting tips on the styles panel:
+ * Border Color sat bare beside a tipped Border.
+ */
+describe('ColorPickerComponent help tip (AGL-1220)', () => {
+  const renderWithHelp = (help?: Record<string, string>) =>
+    render(
+      <ColorPickerTokensContext.Provider value={tokens}>
+        <FormRenderer
+          FormTemplate={FormTemplate}
+          componentMapper={{ 'color-picker': ColorPickerComponent }}
+          onSubmit={jest.fn()}
+          initialValues={{}}
+          schema={{
+            fields: [
+              { component: 'color-picker', name: 'fill', label: 'Fill', help },
+            ],
+          }}
+        />
+      </ColorPickerTokensContext.Provider>,
+    )
+
+  it('renders the tip a colour field was given', () => {
+    renderWithHelp({
+      title: 'Border Color',
+      excerpt: 'Colour for the border shorthand above.',
+    })
+    // getByRole throws when absent, so finding it is the assertion.
+    expect(screen.getByRole('button', { name: /border color/i })).toBeTruthy()
+  })
+
+  it('renders no tip affordance when the field has no help', () => {
+    // The negative control: without it, a test that only asserts presence
+    // would pass against a component that renders a tip unconditionally.
+    renderWithHelp(undefined)
+    expect(screen.queryByRole('button', { name: /border color/i })).toBeNull()
+  })
+})

@@ -23,6 +23,7 @@ import { styled } from '@aglyn/shared-ui-theme'
 import {
   type ExtendedFieldMeta,
   FormFieldGrid,
+  type FormFieldGridProps,
   validationError,
 } from '../mapper'
 import {
@@ -169,6 +170,8 @@ const ThemeColorTokenGrid = (props: {
 }
 
 type InternalColorPickerProps = Partial<TextFieldProps> & {
+  /** Contextual help tooltip, same contract as every other field. */
+  help?: FormFieldGridProps['help']
   FormFieldGridProps?: Partial<GridProps>
   ColorPickerProps?: Partial<AglynColorPickerProps>
   FormControlProps?: Partial<MuiFormControlProps>
@@ -204,6 +207,11 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
       label,
       helperText,
       description,
+      // Every other field forwards `help` to FormFieldGrid, which renders
+      // the tip. This one used to swallow it into `...rest`, so a colour
+      // field given a help tip rendered nothing at all and gave no clue
+      // why — found while adding tips to the styles panel (AGL-1220).
+      help,
       validateOnMount,
       meta,
       defaultValue,
@@ -304,7 +312,7 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
     )
 
     return (
-      <FormFieldGrid ref={ref} {...FormFieldGridProps}>
+      <FormFieldGrid ref={ref} help={help} {...FormFieldGridProps}>
         <ClickAwayListener onClickAway={handleClickAway}>
           <div>
             <MuiTextField
