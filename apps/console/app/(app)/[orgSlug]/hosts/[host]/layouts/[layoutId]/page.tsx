@@ -256,7 +256,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
     ],
   )
 
-  const listUrl = buildRoute(Route.LAYOUT_LIST, { orgSlug, host })
+  const listUrl = buildRoute(Route.HOST_LAYOUTS, { orgSlug, host })
   const dirty = name != null || description != null || parentLayoutId != null
 
   return (

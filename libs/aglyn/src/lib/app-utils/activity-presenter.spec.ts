@@ -104,7 +104,7 @@ describe('activityHref', () => {
         { target: { type: 'screen', id: 'scr1' } },
         { orgSlug, host },
       ),
-    ).toBe('/acme/hosts/shop/screens/list')
+    ).toBe('/acme/hosts/shop/screens')
   })
 
   it('links components, templates and layouts to their detail pages', () => {

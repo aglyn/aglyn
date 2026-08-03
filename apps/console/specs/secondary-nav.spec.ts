@@ -158,12 +158,16 @@ describe('resolveActiveTab', () => {
   })
 
   it('selects Screens from a screen detail path', () => {
-    // The regression this function exists for: the tab href is
-    // `…/screens/list`, so a longest-prefix match picks Dashboard — the only
-    // href still a prefix of a versions URL.
+    // The regression this function exists for. It was sharper when the tab
+    // href was `…/screens/list`: that is not a prefix of a versions URL, so a
+    // prefix match picked Dashboard — the only href that still was one. The
+    // list has since moved to the bare `…/screens`, so this case no longer
+    // discriminates prefix-matching from segment-matching on its own. Kept
+    // because a detail page must select its section's tab either way, and
+    // Dashboard remains a prefix of every host path.
     const pathname = `${hostBase}/screens/seed-home/versions/seed-home-v1/view`
     expect(resolveActiveTab(pathname, hostBase, hostTabs)).toBe(
-      buildRoute(Route.SCREEN_LIST, { orgSlug: ORG, host: HOST }),
+      buildRoute(Route.HOST_SCREENS, { orgSlug: ORG, host: HOST }),
     )
   })
 

@@ -389,7 +389,7 @@ export const BesignerDocumentSwitcherComponent = observer(
           <MenuItem
             onClick={() => {
               close()
-              void router.push(buildRoute(Route.SCREEN_LIST, { orgSlug, host }))
+              void router.push(buildRoute(Route.HOST_SCREENS, { orgSlug, host }))
             }}
             sx={{ gap: 1 }}
           >

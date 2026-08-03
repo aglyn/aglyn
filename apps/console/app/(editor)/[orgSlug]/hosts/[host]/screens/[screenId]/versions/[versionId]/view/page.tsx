@@ -263,7 +263,7 @@ function ScreenDetails() {
         id: screenId,
         name: displayName,
       })
-      router.push(buildRoute(Route.SCREEN_LIST, { orgSlug,  host }))
+      router.push(buildRoute(Route.HOST_SCREENS, { orgSlug,  host }))
     } catch (error) {
       console.error(error)
       enqueueSnackbar('An error has occurred', { variant: 'error' })
@@ -647,7 +647,7 @@ function ScreenDetails() {
           },
           {
             children: 'Screens',
-            href: buildRoute(Route.SCREEN_LIST, { orgSlug,  host }),
+            href: buildRoute(Route.HOST_SCREENS, { orgSlug,  host }),
           },
           {
             children: displayName,

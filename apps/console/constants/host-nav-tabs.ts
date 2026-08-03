@@ -49,12 +49,12 @@ export function hostNavTabItems(
     {
       id: 'nav-tab-screens',
       label: 'Screens',
-      href: buildRoute(Route.SCREEN_LIST, { orgSlug, host }),
+      href: buildRoute(Route.HOST_SCREENS, { orgSlug, host }),
     },
     {
       id: 'nav-tab-layouts',
       label: 'Layouts',
-      href: buildRoute(Route.LAYOUT_LIST, { orgSlug, host }),
+      href: buildRoute(Route.HOST_LAYOUTS, { orgSlug, host }),
     },
     // Dedicated pages for former dashboard cards (AGL-250).
     {

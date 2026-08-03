@@ -77,11 +77,18 @@ export function resolveNavSection(pathname: string | null): NavSection {
  * `AppLinkTabsComponent` compares against).
  *
  * Matches on the first route SEGMENT below the section base, not by longest
- * prefix: the Screens tab is `…/screens/list` while a screen detail page is
- * `…/screens/[screenId]/versions/[versionId]/view`, so a prefix test selects
- * the Dashboard tab (the only href that is still a prefix) or nothing at all.
- * A tab with no segment below the base — the host Dashboard — is the match
- * only when the path has none either.
+ * prefix. The host Dashboard's href IS the base, so it is a prefix of every
+ * host path — a prefix test always has a candidate and needs a longest-match
+ * tie-break to avoid selecting Dashboard everywhere. Comparing one segment
+ * says the intent outright: a tab with no segment below the base (Dashboard)
+ * matches only a path that has none either.
+ *
+ * This used to carry a sharper example — the Screens tab was `…/screens/list`,
+ * which is not a prefix of `…/screens/[screenId]/versions/[versionId]/view`,
+ * so a prefix test selected Dashboard outright. That `/list` segment is gone
+ * (the list moved to the bare `…/screens`), so prefix matching would now
+ * happen to work for screens. The Dashboard reason above still stands, and it
+ * is the one that always did.
  */
 export function resolveActiveTab(
   pathname: string | null,

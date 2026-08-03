@@ -108,7 +108,7 @@ function LayoutBesignerPage(props) {
   // layout at all, and the picker there had no installs to offer.
   usePluginDrawerRegistration(hostId)
   const handleAddElementClick = useAddElementDrawerCallback()
-  const listUrl = buildRoute(Route.LAYOUT_LIST, { orgSlug,  host })
+  const listUrl = buildRoute(Route.HOST_LAYOUTS, { orgSlug,  host })
   const { doc: hostResult } = useHost({ hostId })
   const { doc: layoutResult } = useLayout({ hostId, layoutId })
   const layoutPublishedVersionId = layoutResult?.data?.versionId
