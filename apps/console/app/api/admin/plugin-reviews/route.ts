@@ -16,6 +16,10 @@
  */
 
 import {
+  shouldStripVerifiedOnTakedown,
+  VERIFIED_STRIPPED_STATUS,
+} from '../../../../constants/plugin-review-status'
+import {
   checkPluginBundle,
   isPluginRevoked,
   isStoredVerdictCurrent,
@@ -585,6 +589,26 @@ async function handler(request: Request): Promise<Response> {
       if (!targetSnapshot.exists) {
         return Response.json({ error: 'Unknown target' }, { status: 404 })
       }
+      // A takedown strips the Verified badge (AGL-1121, decided 2026-08-03).
+      //
+      // Verified is OUR claim that a human vouched for this publisher. Taking
+      // the listing down is us saying the opposite out loud, so the two cannot
+      // both stand — a badge surviving a takedown would still be asserting the
+      // vouch on the listing page the moment it was restored.
+      //
+      // Demoted to `listed`, not to `rejected` or `submitted`: the takedown
+      // itself is what makes it non-browsable (`hiddenAt`), and rewriting the
+      // review verdict would destroy the record of a review that did happen.
+      //
+      // Restoring deliberately does NOT put the badge back. Re-granting is
+      // `verify`, which re-checks the review checklist server-side; an automatic
+      // regrant would hand back the badge without anyone re-forming the opinion
+      // behind it. Losing it to a takedown is meant to cost a re-review.
+      const stripVerified = shouldStripVerifiedOnTakedown({
+        action,
+        reviewStatus: targetSnapshot.get('reviewStatus'),
+        isListingTarget: !reviewUid,
+      })
       await target.set(
         reviewUid
           ? { hidden: action === 'hide' }
@@ -593,6 +617,9 @@ async function handler(request: Request): Promise<Response> {
                 hiddenAt: FieldValue.serverTimestamp(),
                 hiddenBy: decoded.uid,
                 hiddenReason: hideReason,
+                ...(stripVerified
+                  ? { reviewStatus: VERIFIED_STRIPPED_STATUS }
+                  : {}),
               }
             : {
                 hiddenAt: FieldValue.delete(),
@@ -654,12 +681,23 @@ async function handler(request: Request): Promise<Response> {
           hidden: action === 'hide',
           ...(hideReason ? { reason: hideReason } : {}),
           ...(isPlugin ? { revoked: action === 'hide' } : {}),
+          // Recorded because it is a side effect of the takedown rather than
+          // something the reviewer asked for, and because getting it back is a
+          // re-review rather than an undo.
+          ...(stripVerified ? { unverified: true } : {}),
         },
         at: FieldValue.serverTimestamp(),
       })
 
       return Response.json(
-        { ok: true, hidden: action === 'hide', revoked: isPlugin && action === 'hide' },
+        {
+          ok: true,
+          hidden: action === 'hide',
+          revoked: isPlugin && action === 'hide',
+          // The caller shows this — a badge silently disappearing would be
+          // worse than one that never existed.
+          unverified: stripVerified,
+        },
         { status: 200 },
       )
     }
@@ -909,6 +947,16 @@ async function handler(request: Request): Promise<Response> {
     // Rejection deliberately stays a verdict rather than a kill: most
     // rejections are a thin README, and an unannounced site outage is worse
     // than the gap. This is the deliberate, adjacent action.
+    //
+    // This does NOT strip the Verified badge, unlike a takedown (AGL-1121).
+    // The two claims are scoped differently and the split is the whole point:
+    // Verified says a human vouched for the PUBLISHER and survives version
+    // bumps, while the separate "Reviewed" chip speaks for THESE bytes and is
+    // re-earned per version. Revoking one version already withdraws the bytes
+    // claim through `latestVersionReviewState`; stripping the publisher claim
+    // as well would punish an honest bad release, and it is not reversible
+    // without a full re-review. A takedown is the action that contradicts the
+    // publisher claim, and that one does strip it.
     if (action === 'revoke-version' || action === 'unrevoke-version') {
       const version = String(body?.version ?? '')
       if (!listingId || !version) {

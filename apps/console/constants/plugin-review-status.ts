@@ -72,6 +72,45 @@ export const REVIEW_STATUS_MEANINGS: Record<string, ReviewStatusMeaning> = {
   },
 }
 
+/**
+ * Does this takedown strip the Verified badge? (AGL-1121, decided 2026-08-03.)
+ *
+ * Verified is our claim that a human vouched for the PUBLISHER. A listing-wide
+ * takedown is us saying the opposite, so the two cannot both stand.
+ *
+ * Lives here, beside the status meanings, because it is a statement about what
+ * the statuses mean rather than request handling — and it is extracted from the
+ * route so the policy is reachable from a test. The three conditions each rule
+ * out a real case:
+ *
+ * - `hide` only. A restore must NOT re-grant; regranting is `verify`, which
+ *   re-checks the checklist server-side. Getting the badge back is meant to
+ *   cost a re-review.
+ * - Listing target only. The same endpoint hides individual user REVIEWS
+ *   (`reviewUid`), which say nothing about the publisher.
+ * - Already `verified` only, so a takedown never rewrites some other verdict —
+ *   demoting a `rejected` listing to `listed` would be a promotion.
+ *
+ * Per-version revocation deliberately does not qualify: that withdraws the
+ * claim about THOSE BYTES, which the separate per-version "Reviewed" chip
+ * already carries.
+ */
+export function shouldStripVerifiedOnTakedown(options: {
+  action: string
+  reviewStatus: string | undefined
+  /** False when the target is an individual user review, not the listing. */
+  isListingTarget: boolean
+}): boolean {
+  return (
+    options.action === 'hide' &&
+    options.isListingTarget &&
+    options.reviewStatus === 'verified'
+  )
+}
+
+/** What a stripped listing becomes. Not `rejected` — see the note above. */
+export const VERIFIED_STRIPPED_STATUS = 'listed'
+
 export function reviewStatusMeaning(status: string): ReviewStatusMeaning {
   return (
     REVIEW_STATUS_MEANINGS[status] ?? {
