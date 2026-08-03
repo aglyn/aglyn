@@ -31,6 +31,8 @@
  */
 
 import {
+  REVOKED_VERSION_REVIEW_STATE,
+  revocationWithdrawsReviewedClaim,
   shouldStripVerifiedOnTakedown,
   VERIFIED_STRIPPED_STATUS,
 } from './plugin-review-status'
@@ -86,5 +88,47 @@ describe('stripping Verified on takedown (AGL-1121)', () => {
     expect(strip('unhide', 'verified', false)).toBe(false)
     expect(strip('hide', 'listed', false)).toBe(false)
     expect(strip('unhide', 'listed', true)).toBe(false)
+  })
+})
+
+/**
+ * The other half of the same policy, and the reason keeping the publisher badge
+ * through a per-version revocation is defensible at all.
+ *
+ * Before AGL-1121 this did not happen: `latestVersionReviewState` was written
+ * only by approve/reject and on publish, so a version approved and later revoked
+ * kept `'approved'`. A per-version revocation deliberately does not hide the
+ * listing, so the marketplace went on telling customers a human had read the
+ * exact bytes we had just stopped from executing.
+ */
+describe('withdrawing the Reviewed claim on revocation (AGL-1121)', () => {
+  const withdraws = (revokedVersion: string, latestVersion?: string) =>
+    revocationWithdrawsReviewedClaim({ revokedVersion, latestVersion })
+
+  it('withdraws when the revoked version is the one on offer', () => {
+    expect(withdraws('1.2.0', '1.2.0')).toBe(true)
+  })
+
+  it('leaves it alone when an older version is revoked', () => {
+    // Both consumers describe `latestVersion`. Revoking 1.0.0 while 1.2.0 is on
+    // offer says nothing about what a customer would install.
+    expect(withdraws('1.0.0', '1.2.0')).toBe(false)
+  })
+
+  it('does not fire on a listing with no latest version', () => {
+    // A listing mid-publish has no `latestVersion`; an empty-string match would
+    // withdraw a claim about nothing.
+    expect(withdraws('1.0.0', undefined)).toBe(false)
+    expect(withdraws('', undefined)).toBe(false)
+    expect(withdraws('', '')).toBe(false)
+  })
+
+  it('marks it revoked, not rejected', () => {
+    // It was not turned down in review, it was killed afterwards, and the audit
+    // trail should not blur those. Any non-approved value drops the chip, so
+    // naming it honestly is free.
+    expect(REVOKED_VERSION_REVIEW_STATE).toBe('revoked')
+    expect(REVOKED_VERSION_REVIEW_STATE).not.toBe('approved')
+    expect(REVOKED_VERSION_REVIEW_STATE).not.toBe('rejected')
   })
 })

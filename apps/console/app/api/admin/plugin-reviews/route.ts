@@ -16,6 +16,8 @@
  */
 
 import {
+  REVOKED_VERSION_REVIEW_STATE,
+  revocationWithdrawsReviewedClaim,
   shouldStripVerifiedOnTakedown,
   VERIFIED_STRIPPED_STATUS,
 } from '../../../../constants/plugin-review-status'
@@ -952,11 +954,14 @@ async function handler(request: Request): Promise<Response> {
     // The two claims are scoped differently and the split is the whole point:
     // Verified says a human vouched for the PUBLISHER and survives version
     // bumps, while the separate "Reviewed" chip speaks for THESE bytes and is
-    // re-earned per version. Revoking one version already withdraws the bytes
-    // claim through `latestVersionReviewState`; stripping the publisher claim
-    // as well would punish an honest bad release, and it is not reversible
-    // without a full re-review. A takedown is the action that contradicts the
-    // publisher claim, and that one does strip it.
+    // re-earned per version. Stripping the publisher claim for one bad release
+    // would punish an honest mistake, and is not reversible without a full
+    // re-review. A takedown is the action that contradicts the publisher claim,
+    // and that one does strip it.
+    //
+    // That reasoning only holds because the BYTES claim is withdrawn instead —
+    // which it now is, below. It was not before, and the gap is what made
+    // keeping the badge unsafe rather than merely debatable.
     if (action === 'revoke-version' || action === 'unrevoke-version') {
       const version = String(body?.version ?? '')
       if (!listingId || !version) {
@@ -990,11 +995,55 @@ async function handler(request: Request): Promise<Response> {
         await revocationRef.delete()
       }
 
+      // Withdraw the "Reviewed" chip when the bytes we just killed are the ones
+      // customers are being offered (AGL-1121).
+      //
+      // This was ASSUMED to happen already and did not. `latestVersionReviewState`
+      // is written only by approve/reject and on publish, so a version approved
+      // and later revoked kept `'approved'` — and since a per-version revocation
+      // deliberately does NOT hide the listing (that is the whole difference from
+      // a takedown), the marketplace went on showing "A human at Aglyn read these
+      // exact bytes" about bytes we had just stopped from executing. Revocation
+      // is not surfaced anywhere else in the browse or listing UI either, so
+      // nothing contradicted it.
+      //
+      // `revoked` rather than `rejected`: it was not turned down in review, it
+      // was killed afterwards, and the audit trail should not blur those. Both
+      // consumers test against `'approved'`, so this correctly drops the chip and
+      // raises the caution alert.
+      //
+      // Only when it is the LATEST version, because that is what both consumers
+      // describe. Revoking an old version says nothing about what is on offer.
+      const isLatest = revocationWithdrawsReviewedClaim({
+        revokedVersion: version,
+        latestVersion: String(listing['latestVersion'] ?? ''),
+      })
+      if (isLatest) {
+        const versionSnapshot = await listingRef
+          .collection('pluginVersions')
+          .doc(version)
+          .get()
+        await listingRef.set(
+          {
+            latestVersionReviewState: revoking
+              ? REVOKED_VERSION_REVIEW_STATE
+              : // Restoring returns it to whatever the version's own verdict
+                // says, rather than assuming `approved` — un-revoking a version
+                // that was never approved must not promote it.
+                String(versionSnapshot.get('reviewState') ?? 'pending'),
+          },
+          { merge: true },
+        )
+      }
+
       await firestore.collection('adminAudit').add({
         actorUid: decoded.uid,
         action: `plugins.revocation.${revoking ? 'revoke' : 'restore'}`,
         target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
-        after: { versions: next?.versions ?? null },
+        after: {
+          versions: next?.versions ?? null,
+          ...(isLatest ? { latestVersionReviewStateChanged: true } : {}),
+        },
         at: FieldValue.serverTimestamp(),
       })
 
