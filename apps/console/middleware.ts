@@ -17,6 +17,15 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { APEX_LABELS, WORKSPACE_DOMAIN } from './constants/workspace-domain'
+// One source of truth for the frame-ancestors allowlist, shared with
+// `with-aglyn.nextjs.config.js` so the two cannot drift (AGL-523).
+//
+// It lives at the repo root rather than in a lib because `next.config.js` —
+// plain CommonJS, and not an nx project — has to `require` it too. Routing it
+// through a lib would mean the config could not read it, and the two would
+// drift into disagreeing CSPs, which is the exact class of bug AGL-523 was.
+// eslint-disable-next-line @nx/enforce-module-boundaries
+import { baseCspDirectives } from '../../security-origins'
 
 /**
  * Workspace-subdomain gate (AGL-236): on `{slug}.<workspace domain>`
@@ -110,42 +119,74 @@ async function resolveOrgSlug(
 }
 
 export async function middleware(request: NextRequest) {
-  // Per-request CSP nonce (AGL-518). Next reads it from the request
-  // Content-Security-Policy header and stamps it on the scripts it emits;
-  // `strict-dynamic` then trusts the chunks those scripts load. Shipped
-  // REPORT-ONLY so the browser reports violations without blocking — flip to
-  // enforcing by renaming the response header to `Content-Security-Policy`
-  // (after confirming reports are clean and noncing any inline scripts, e.g.
-  // the GA snippet). Layers over the enforcing object-src/base-uri/
-  // frame-ancestors CSP already set in with-aglyn.nextjs.config.js.
+  // Per-request CSP nonce, ENFORCING (AGL-518, fixed in AGL-523).
+  //
+  // Next reads the nonce out of the `Content-Security-Policy` header on the
+  // request and stamps it on every script it emits; `strict-dynamic` then
+  // trusts the chunks those scripts load.
+  //
+  // It reached zero scripts in production for as long as this was report-only,
+  // and the cause is a mirroring rule worth stating plainly: **the response
+  // `Content-Security-Policy` is copied onto the request the renderer reads.**
+  // A static policy from `with-aglyn.nextjs.config.js` therefore shadowed this
+  // one — Next resolves with `content-security-policy || …-report-only`, so a
+  // 632-character policy carrying no `script-src` short-circuited the `||` and
+  // the nonce policy sitting in the report-only header was never read. Every
+  // script rendered `nonce="$undefined"`.
+  //
+  // That rule also means "enforce the base directives, rehearse script-src" is
+  // not a reachable state: any enforcing CSP shadows the nonce policy, and with
+  // no nonce `strict-dynamic` — which makes `'self'` inert — blocks everything.
+  // Enforcing the nonce'd script-src is what makes the nonce work at all.
   const nonce = crypto.randomUUID().replace(/-/g, '')
-  const csp = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
+  // ENFORCED policy. Deliberately NOT `strict-dynamic` yet.
+  //
+  // `strict-dynamic` makes `'self'`, `https:` and `blob:` inert — trust flows
+  // only from a nonced script to what it loads. That is the right destination,
+  // and it verifiably works on the sign-in page (React hydrates, reCAPTCHA and
+  // GA both execute). But the besigner canvas and the realm-plugin `blob:`
+  // imports are behind a login I cannot exercise here, and under
+  // `strict-dynamic` a single un-nonced inline script there is a blank page.
+  //
+  // So enforce the policy whose failure modes are known, and rehearse the
+  // strict one below. This still blocks the actual XSS vector — an injected
+  // inline `<script>` has no nonce and does not run — plus `http:` and `data:`
+  // sources. Same-origin chunks, https third parties (reCAPTCHA, GA) and
+  // `blob:` plugin imports all keep working without depending on trust
+  // propagation.
+  const scriptSrc = `script-src 'self' https: blob: 'nonce-${nonce}'`
+  // The destination policy, reported not enforced, so violations from the
+  // surfaces I could not sign into show up before it is switched on.
+  const strictScriptSrc = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
+  const baseDirectives = baseCspDirectives(
+    process.env.NODE_ENV === 'production',
+  )
+  // `x-nonce` is for our own inline scripts to read via `headers()`; Next's
+  // own scripts are nonced from the CSP header, not from this.
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
-  // BOTH names on the request (AGL-523). Next reads `content-security-policy`
-  // and falls back to `content-security-policy-report-only`, so setting both
-  // survives an intermediary that drops or sanitises one of them — which is the
-  // live suspect: this exact build nonces all 50 scripts under `next start`
-  // locally and none of them on Vercel, where an edge middleware and a Node
-  // function are separate hops.
-  //
-  // Same value in both, so Next's precedence cannot pick a policy that
-  // disagrees with the one the browser is sent. `/csp-check` reports which
-  // arrived.
-  requestHeaders.set('Content-Security-Policy', csp)
-  requestHeaders.set('Content-Security-Policy-Report-Only', csp)
-  const pass = () => {
-    const res = NextResponse.next({ request: { headers: requestHeaders } })
-    res.headers.set('Content-Security-Policy-Report-Only', csp)
+  // One policy, carrying script-src and the base directives together. Because
+  // the response header is mirrored onto the request, this is self-consistent
+  // by construction: the nonce Next stamps on scripts is read from this exact
+  // string, so it is always the nonce this header authorises.
+  const policy = `${scriptSrc}; ${baseDirectives}`
+  const applyCsp = (res: NextResponse) => {
+    res.headers.set('Content-Security-Policy', policy)
+    // Next reads the nonce from the ENFORCING header, which carries one — so
+    // adding this report-only header cannot shadow anything. It exists purely
+    // to collect violations against the stricter destination policy.
+    res.headers.set(
+      'Content-Security-Policy-Report-Only',
+      `${strictScriptSrc}; ${baseDirectives}`,
+    )
     return res
   }
-  const rewriteTo = (url: URL) => {
-    const res = NextResponse.rewrite(url, {
-      request: { headers: requestHeaders },
-    })
-    res.headers.set('Content-Security-Policy-Report-Only', csp)
-    return res
-  }
+  const pass = () =>
+    applyCsp(NextResponse.next({ request: { headers: requestHeaders } }))
+  const rewriteTo = (url: URL) =>
+    applyCsp(
+      NextResponse.rewrite(url, { request: { headers: requestHeaders } }),
+    )
 
   const hostname = (request.headers.get('host') ?? '').split(':')[0].toLowerCase()
   if (hostname === WORKSPACE_DOMAIN || !hostname.endsWith(`.${WORKSPACE_DOMAIN}`)) {

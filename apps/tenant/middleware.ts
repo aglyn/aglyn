@@ -17,6 +17,12 @@
 
 import type { NextMiddleware } from 'next/server'
 import { NextResponse } from 'next/server'
+// Shared with `with-aglyn.nextjs.config.js` so the frame-ancestors allowlist
+// has one definition (AGL-523). Root-level because the config is plain
+// CommonJS outside the nx graph and must `require` the same file — see the
+// console middleware for the full reasoning.
+// eslint-disable-next-line @nx/enforce-module-boundaries
+import { baseCspDirectives } from '../../security-origins'
 
 /**
  * The way you configure your matcher items depend on your route structure.
@@ -244,26 +250,36 @@ export const middleware: NextMiddleware = (req, event) => {
   // strict-dynamic). Layers over the enforcing frame-ancestors/object-src CSP
   // already set in with-aglyn.nextjs.config.js.
   const nonce = crypto.randomUUID().replace(/-/g, '')
-  const csp = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
+  const scriptSrc = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
+  const baseDirectives = baseCspDirectives(
+    process.env.NODE_ENV === 'production',
+  )
+  // Tenant does NOT enforce script-src, and this is deliberate (AGL-523).
+  //
+  // The console enforces a nonce'd script-src because its pages are dynamic, so
+  // Next can read the nonce per request. Tenant pages are ISR-cached: at
+  // revalidation they render outside any request, so there is no header to read
+  // and the payload carries `"nonce":"$undefined"`. Measured — two requests to
+  // one cached page returned BYTE-IDENTICAL HTML with a DIFFERENT nonce in each
+  // response header. A per-request nonce cannot match cached bytes, so
+  // enforcing `strict-dynamic` here would blank every published site.
+  //
+  // Dropping `strict-dynamic` for a plain `script-src 'self'` is not the escape
+  // either: Next emits ~12 INLINE scripts per page for RSC flight data, and
+  // `'self'` alone blocks inline. Making this enforceable needs a real design
+  // (a nonce baked into the cached bytes, or hashes), not a header change.
+  //
+  // So the base directives enforce exactly as they did when the shared config
+  // owned them, and script-src stays report-only. The base policy still shadows
+  // the nonce for `getScriptNonceFromHeader`, which changes nothing here: the
+  // nonce was already unavailable to a cached render.
   const cspHeaders = new Headers(req.headers)
   cspHeaders.set('x-nonce', nonce)
-  // Both names, for the same reason as the console (AGL-523): Next falls back
-  // from `content-security-policy` to the report-only name, so setting both
-  // survives an intermediary that drops one.
-  //
-  // NOTE this cannot be sufficient here. Tenant pages are ISR-cached, so they
-  // render outside any request — there is no request header to read at
-  // revalidation time, which is why the payload says `"nonce":"$undefined"`.
-  // Two requests to one cached page return byte-identical HTML with a
-  // DIFFERENT nonce in each response header, so a per-request nonce can never
-  // match the cached bytes. Enforcing `strict-dynamic` here needs a different
-  // design, not a fixed header.
-  cspHeaders.set('Content-Security-Policy', csp)
-  cspHeaders.set('Content-Security-Policy-Report-Only', csp)
   const response = NextResponse.rewrite(new URL(rewrite, req.url), {
     request: { headers: cspHeaders },
   })
-  response.headers.set('Content-Security-Policy-Report-Only', csp)
+  response.headers.set('Content-Security-Policy', baseDirectives)
+  response.headers.set('Content-Security-Policy-Report-Only', scriptSrc)
   const overrideParam = req.nextUrl.searchParams.get(TENANT_HOST_PARAM)
   if (overrideParam) {
     response.cookies.set(TENANT_HOST_COOKIE, overrideParam, { path: '/' })
