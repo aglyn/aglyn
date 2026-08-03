@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { getMdiIconFromId, mdiShapePlus } from '@aglyn/shared-data-mdi'
+import { getMdiIconPath, mdiShapePlus } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
 import { forwardRef } from 'react'
@@ -29,6 +29,11 @@ export const ID: Aglyn.ComponentId = 'icon'
 export interface IconProps {
   /** mdi icon id from the picker (AGL-146). */
   iconId?: string
+  /**
+   * Resolved SVG path for `iconId`, denormalized at author time (AGL-1212).
+   * Render surfaces read this and never load the icon catalog.
+   */
+  iconPath?: string
   /** Icon size in px; defaults to 24. */
   size?: number
   /** CSS color; defaults to the inherited text color. */
@@ -39,10 +44,18 @@ export interface IconProps {
  * Icon element (AGL-146): renders a picked mdi icon with size/color
  * controls; an empty pick shows a labeled placeholder so the element stays
  * selectable in the editor.
+ *
+ * Path resolution order (AGL-1212): the persisted `iconPath` first, then the
+ * in-memory catalog for documents authored before paths were stored. The
+ * catalog is ~2.9 MB and is only loaded by picker surfaces, so on the tenant
+ * site and in preview the second lookup misses — which is why it must NOT go
+ * through `getMdiIconFromId`, whose `DEFAULT_ICON` fallback carries a real
+ * path and rendered a "help" glyph on every published page.
  */
 const Icon = forwardRef<HTMLElement, IconProps>((props, ref) => {
-  const { iconId, size, color, ...rest } = props
-  const icon = iconId ? getMdiIconFromId(iconId) : undefined
+  const { iconId, iconPath, size, color, ...rest } = props
+  const path = iconPath || getMdiIconPath(iconId)
+  const icon = path ? { path } : undefined
   if (!icon?.path) {
     return (
       <Box
