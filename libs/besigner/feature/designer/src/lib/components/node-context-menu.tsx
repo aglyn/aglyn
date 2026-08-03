@@ -22,10 +22,12 @@ import {
   setBesignerPanels,
 } from '@aglyn/besigner'
 import {
+  ICON_VARIANT_MODIFY_COPY,
   ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_MODIFY_DUPLICATE,
   ICON_VARIANT_MODIFY_MOVE_DOWN,
   ICON_VARIANT_MODIFY_MOVE_UP,
+  ICON_VARIANT_MODIFY_PASTE,
 } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -42,6 +44,10 @@ import { observer } from 'mobx-react-lite'
 import { ChangeEvent, forwardRef, useCallback, useState } from 'react'
 import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 import useBesignerAppContext from '../hooks/use-besigner-app-context'
+import {
+  useCopyElementsCallback,
+  usePasteElementsCallback,
+} from '../hooks/use-clipboard-callbacks'
 import useDeleteElementCallback, {
   useDeleteElementsCallback,
 } from '../hooks/use-delete-element-callback'
@@ -138,6 +144,24 @@ export const NodeContextMenu = observer(
       [isRootNode],
     )
 
+    const copyElements = useCopyElementsCallback()
+    const pasteElements = usePasteElementsCallback()
+    const handleCopyClick = useCallback(() => {
+      if (isRootNode) return
+      onAction?.()
+      copyElements(multi ? Besigner.focus.getSelected() : [node])
+    }, [node, isRootNode, multi, onAction, copyElements])
+
+    const handlePasteClick = useCallback(() => {
+      onAction?.()
+      pasteElements(node)
+    }, [node, onAction, pasteElements])
+
+    // Observed, so the item enables the moment something is copied — even
+    // from another document, where the entry arrives via localStorage.
+    const canPaste = Besigner.clipboard.hasContent()
+    const clipboardLabels = Besigner.clipboard.getLabels()
+
     const deleteElementCallback = useDeleteElementCallback()
     const deleteElementsCallback = useDeleteElementsCallback()
     const handleDeleteClick = useCallback(() => {
@@ -229,6 +253,38 @@ export const NodeContextMenu = observer(
               <ListItemText inset>Edit JSON</ListItemText>
             </MenuItem>
           )}
+          <Divider />
+          <MenuItem disabled={isRootNode} onClick={handleCopyClick}>
+            <ListItemIcon>
+              <MdiIcon fontSize="inherit" path={ICON_VARIANT_MODIFY_COPY.path} />
+            </ListItemIcon>
+            <ListItemText>{multi ? 'Copy selection' : 'Copy'}</ListItemText>
+          </MenuItem>
+          <MenuItem disabled={!canPaste} onClick={handlePasteClick}>
+            <ListItemIcon>
+              <MdiIcon
+                fontSize="inherit"
+                path={ICON_VARIANT_MODIFY_PASTE.path}
+              />
+            </ListItemIcon>
+            <ListItemText
+              slotProps={{
+                primary: {
+                  sx: {
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  },
+                },
+              }}
+            >
+              {clipboardLabels.length === 1
+                ? `Paste ${clipboardLabels[0]}`
+                : clipboardLabels.length > 1
+                  ? `Paste ${clipboardLabels.length} elements`
+                  : 'Paste'}
+            </ListItemText>
+          </MenuItem>
           <Divider />
           <MenuItem disabled={isRootNode} onClick={handleDuplicateClick}>
             <ListItemIcon>

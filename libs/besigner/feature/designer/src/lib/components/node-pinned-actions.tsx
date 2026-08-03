@@ -23,12 +23,14 @@ import {
 } from '@aglyn/besigner'
 import { isRootElementId } from '@aglyn/besigner'
 import {
+  ICON_VARIANT_MODIFY_COPY,
   ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_MODIFY_DRAG,
   ICON_VARIANT_MODIFY_DUPLICATE,
   ICON_VARIANT_MODIFY_EDIT,
   ICON_VARIANT_MODIFY_MOVE_DOWN,
   ICON_VARIANT_MODIFY_MOVE_UP,
+  ICON_VARIANT_MODIFY_PASTE,
   ICON_VARIANT_SELECT_PARENT,
   ICON_VARIANT_SHOW_MORE,
 } from '@aglyn/shared-data-enums'
@@ -57,6 +59,10 @@ import {
 import { observer } from 'mobx-react-lite'
 import { type ChangeEvent, forwardRef, useCallback, useState } from 'react'
 import useBesignerAppContext from '../hooks/use-besigner-app-context'
+import {
+  useCopyElementsCallback,
+  usePasteElementsCallback,
+} from '../hooks/use-clipboard-callbacks'
 import useDeleteElementCallback, {
   useDeleteElementsCallback,
 } from '../hooks/use-delete-element-callback'
@@ -188,6 +194,22 @@ export const NodePinnedActions = observer(
       Besigner.focus.clearHover()
     }, [])
 
+    const copyElements = useCopyElementsCallback()
+    const pasteElements = usePasteElementsCallback()
+    const handleCopyClick = useCallback(() => {
+      closeMore()
+      copyElements(multi ? Besigner.focus.getSelected() : [node])
+    }, [node, multi, closeMore, copyElements])
+
+    const handlePasteClick = useCallback(() => {
+      closeMore()
+      pasteElements(node)
+    }, [node, closeMore, pasteElements])
+
+    // Observed, so the item enables the moment something is copied — even
+    // from another document, where the entry arrives via localStorage.
+    const canPaste = Besigner.clipboard.hasContent()
+
     const deleteElementCallback = useDeleteElementCallback()
     const deleteElementsCallback = useDeleteElementsCallback()
     const handleDeleteClick = useCallback(() => {
@@ -309,6 +331,24 @@ export const NodePinnedActions = observer(
                         <ListItemText>{'Modify'}</ListItemText>
                       </MenuItem>
                     )}
+
+                    {!isRootElementId($id) && (
+                      <MenuItem onClick={handleCopyClick}>
+                        <ListItemIcon>
+                          <MdiIcon path={ICON_VARIANT_MODIFY_COPY.path} />
+                        </ListItemIcon>
+                        <ListItemText>
+                          {multi ? 'Copy selection' : 'Copy'}
+                        </ListItemText>
+                      </MenuItem>
+                    )}
+
+                    <MenuItem disabled={!canPaste} onClick={handlePasteClick}>
+                      <ListItemIcon>
+                        <MdiIcon path={ICON_VARIANT_MODIFY_PASTE.path} />
+                      </ListItemIcon>
+                      <ListItemText>{'Paste'}</ListItemText>
+                    </MenuItem>
 
                     {!isRootElementId($id) && (
                       <MenuItem onClick={handleDeleteClick}>

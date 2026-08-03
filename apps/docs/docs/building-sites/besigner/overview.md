@@ -87,6 +87,8 @@ Every element on the canvas is a node in a tree. The hierarchy panel lets you:
   slot).
 - Select multiple nodes and act on them together.
 - See which nodes are layout-only vs. screen content.
+- **Copy** a node and its children and **paste** them elsewhere — including into a different
+  screen, layout or component. See [Copy & paste elements](copy-paste.md).
 
 ## Inline and rich text
 
@@ -111,6 +113,7 @@ See [AI Assist](../../marketing-and-automation/ai-assist/overview.md).
 ## Related
 
 - [Element catalog](element-catalog.md)
+- [Copy & paste elements](copy-paste.md)
 - [Screens & layouts](../screens-and-layouts/overview.md)
 - [Bindings & variables](../bindings/overview.md)
 - [Section & block library](../site-templates/overview.md)

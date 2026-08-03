@@ -346,6 +346,105 @@ describe('Aglyn: Screen Manager', () => {
       expect('nodes' in clickEvent).toBe(false)
       expect(collectOrphans(canvas)).toEqual([])
     })
+
+    describe('addNodeFromNested (AGL-1202)', () => {
+      /** A detached subtree, as the clipboard stores one — no ids at all. */
+      const clipping = (): NodeSchemaNested =>
+        ({
+          type: NodeType.NODE,
+          componentId: 'stack',
+          props: {},
+          sx: {},
+          nodes: [
+            {
+              type: NodeType.NODE,
+              componentId: 'screenlink',
+              props: { children: 'Besigner' },
+              sx: {},
+              nodes: [],
+            },
+          ],
+        }) as any
+
+      it('grafts a detached subtree under the target and mints fresh ids', () => {
+        const canvas = makeCanvas()
+        const container = canvas.getNode('child2')!
+
+        const node = canvas.addNodeFromNested(clipping(), container)
+
+        expect(node.parentId).toBe('child2')
+        expect(canvas.getNode('child2')!.nodes).toContain(node.$id)
+        expect(node.$id).toBeTruthy()
+        expect(node.nodes).toHaveLength(1)
+        const child = canvas.getNode(node.nodes![0])!
+        expect(child.parentId).toBe(node.$id)
+        expect(child.props).toEqual({ children: 'Besigner' })
+        expect(collectOrphans(canvas)).toEqual([])
+      })
+
+      it('mints new ids rather than colliding with the live node it came from', () => {
+        const canvas = makeCanvas()
+        // The shape that matters for paste-into-the-same-document: the
+        // subtree still carries the ids of nodes already on this canvas.
+        const carriesLiveIds = {
+          $id: 'child1',
+          type: NodeType.NODE,
+          componentId: 'div',
+          props: {},
+          sx: {},
+          nodes: [
+            {
+              $id: 'child1-1',
+              type: NodeType.NODE,
+              componentId: 'div',
+              props: {},
+              sx: {},
+              nodes: [],
+            },
+          ],
+        } as any
+
+        const node = canvas.addNodeFromNested(
+          carriesLiveIds,
+          canvas.getNode('child2')!,
+        )
+
+        expect(node.$id).not.toBe('child1')
+        expect(node.nodes![0]).not.toBe('child1-1')
+        // The originals are untouched and still hang off their own parent.
+        expect(canvas.getNode('child1')!.nodes).toEqual([
+          'child1-1',
+          'child1-2',
+        ])
+        expect(canvas.getNode('child1-1')!.parentId).toBe('child1')
+        expect(collectOrphans(canvas)).toEqual([])
+      })
+
+      it('honours an explicit index instead of appending', () => {
+        const canvas = makeCanvas()
+        const root = canvas.getNode(NODE_ROOT_ID)!
+
+        const node = canvas.addNodeFromNested(clipping(), root, 1)
+
+        expect(canvas.getNode(NODE_ROOT_ID)!.nodes).toEqual([
+          'child1',
+          node.$id,
+          'child2',
+        ])
+      })
+
+      it('refuses a parent that is not a live canvas node', () => {
+        const canvas = makeCanvas()
+        const before = canvas.nodes.size
+
+        expect(() =>
+          canvas.addNodeFromNested(clipping(), { $id: 'nope' } as any),
+        ).toThrow('Invalid parent node')
+
+        expect(canvas.nodes.size).toBe(before)
+        expect(collectOrphans(canvas)).toEqual([])
+      })
+    })
   })
 
   // AGL-763: the AGL-759 MobX defect — `const x = (observable.field ||= []);
