@@ -17,7 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { useContext } from 'react'
+import { useContext, type Context } from 'react'
 import ReusableComponentsProvider from './reusable-components-provider.component'
 
 /**
@@ -32,7 +32,20 @@ jest.mock('@aglyn/besigner-ui', () => ({
     '../../../libs/besigner/feature/designer/src/lib/contexts/component-promotion-context',
   ).ComponentPromotionContext,
 }))
-const { ComponentPromotionContext } = jest.requireMock('@aglyn/besigner-ui')
+// `requireMock` is typed `unknown`, so the context comes back untyped and
+// `useContext(...)` on it yields `unknown` — reading `.onPromote` off that is
+// a compile error even though the real context is properly typed. The shape
+// is restated here rather than imported: `@aglyn/besigner-ui` does not export
+// `ComponentPromotionContextValue`, and reaching past the barrel into the lib
+// for a type would cross a module boundary this app is not allowed to cross.
+const { ComponentPromotionContext } = jest.requireMock(
+  '@aglyn/besigner-ui',
+) as {
+  ComponentPromotionContext: Context<{
+    onPromote?: (node: Aglyn.NodeSchema<any>) => void
+    onDemote?: (node: Aglyn.NodeSchema<any>) => void
+  }>
+}
 
 /**
  * `canvas` is a mobx singleton with own non-configurable computeds, so it is
@@ -54,7 +67,20 @@ jest.mock('@aglyn/aglyn', () => {
   })
 })
 
-const mockCreateHostResource = jest.fn(async () => ({ id: 'cmp-new' }))
+/**
+ * Declared WITH its options parameter, mirroring `useHostResourceApi()`. A
+ * `jest.fn(async () => …)` taking no arguments infers `mock.calls` as an
+ * array of empty tuples, so reading `calls[0][0]` — which is the whole point
+ * of the assertions below — is a compile error.
+ */
+const mockCreateHostResource = jest.fn(
+  async (_options: {
+    hostId: string
+    resource: string
+    data: Record<string, unknown>
+    id?: string
+  }) => ({ id: 'cmp-new' }),
+)
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useHostResourceApi: () => mockCreateHostResource,
@@ -186,18 +212,22 @@ describe('ReusableComponentsProvider — promotion swaps the source for an insta
     await promoteNav()
 
     await waitFor(() => expect(mockCreateHostResource).toHaveBeenCalled())
-    const { resource, hostId, data } = mockCreateHostResource.mock.calls[0][0] as any
+    const { resource, hostId, data } = mockCreateHostResource.mock.calls[0][0]
     expect({ resource, hostId }).toEqual({
       resource: 'reusableComponent',
       hostId: 'h1',
     })
-    expect(data.rootId).toBe('nav')
-    expect(Object.keys(data.nodes).sort()).toEqual(['brand', 'nav'])
+    // The API takes `data` as `Record<string, unknown>` — it carries
+    // whatever the resource kind needs — so narrow it to the definition
+    // shape these assertions are actually about.
+    const definition = data as { rootId: string; nodes: Record<string, any> }
+    expect(definition.rootId).toBe('nav')
+    expect(Object.keys(definition.nodes).sort()).toEqual(['brand', 'nav'])
     // The definition root is parentless — it is grafted under whatever
     // parent each instance has.
-    expect(data.nodes.nav.parentId).toBeNull()
-    expect(data.nodes.nav.componentSchema).toBeUndefined()
-    expect(data.nodes.nav.resolvedProps).toBeUndefined()
+    expect(definition.nodes.nav.parentId).toBeNull()
+    expect(definition.nodes.nav.componentSchema).toBeUndefined()
+    expect(definition.nodes.nav.resolvedProps).toBeUndefined()
   })
 
   it('does not swap the canvas when creation is denied', async () => {
