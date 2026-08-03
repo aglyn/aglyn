@@ -28,11 +28,11 @@
     },
     {
       "kind": "hero",
-      "eyebrow": "MARKETING · REACH + CONVERT",
+      "eyebrow": "MARKETING · REACH + ENGAGE",
       "heading": "Reach your audience, right from your site.",
       "subheading": null,
       "body": [
-        "Send email campaigns to your lists, put announcement bars and popups on any page, and A/B test what converts — all built into the same platform your site runs on."
+        "Send email campaigns to your lists, put announcement bars and popups on any page, and A/B test which version performs better — all built into the same platform your site runs on."
       ],
       "actions": [
         { "label": "Start free", "variant": "contained" },
@@ -73,7 +73,7 @@
         },
         {
           "title": "Audience lists",
-          "body": "Build and segment lists from your contacts. Every plan includes an audience band — and contacts past it are always captured and metered, never silently dropped.",
+          "body": "Build and segment lists from your form submissions and subscribers. Every plan includes an audience band, and on paid plans contacts past it are metered rather than dropped.",
           "meta": null
         },
         {
@@ -117,7 +117,7 @@
         },
         {
           "title": "Smart triggers",
-          "body": "Show on delay, scroll depth, or exit intent, with per-visitor frequency caps.",
+          "body": "Show on delay, scroll depth, or exit intent, with per-session frequency caps.",
           "meta": null
         },
         {
@@ -219,7 +219,7 @@
       "kind": "footer",
       "eyebrow": "ARE YOU A DEVELOPER?",
       "heading": null,
-      "subheading": "Open source, self-hostable, API-first.",
+      "subheading": "Open source. Self-hostable. Yours to run.",
       "body": [
         "© 2026 Aglyn LLC. All rights reserved."
       ],

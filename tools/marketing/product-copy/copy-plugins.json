@@ -59,7 +59,7 @@
         },
         {
           "title": "Reviewed & sandboxed",
-          "body": "Every version is reviewed before it ships: an AST verifier checks each bundle against its declared network allowlist, and plugins run on a separate sandboxed origin with a per-plugin CSP.",
+          "body": "Every version is reviewed before it's listed: an AST verifier checks each bundle against its declared network allowlist, and plugins run on a separate sandboxed origin with a per-plugin CSP.",
           "meta": null
         },
         {

@@ -29,10 +29,10 @@
     {
       "kind": "hero",
       "eyebrow": "ANALYTICS · MEASURE EVERYTHING",
-      "heading": "See what’s working on every site you run.",
+      "heading": "See what’s working, site by site.",
       "subheading": null,
       "body": [
-        "Page views, top pages, referrers, and device split for every site — with per-screen trends and commerce revenue built in. Cookieless, no extra scripts."
+        "Page views, top pages, referrers, and device split, per site — with per-screen trends and commerce revenue built in. Cookieless, no extra scripts."
       ],
       "actions": [
         { "label": "Start free", "variant": "contained" },
@@ -68,7 +68,7 @@
       "items": [
         {
           "title": "Traffic & pageviews",
-          "body": "Page views, top pages, and referrers for every site — collected cookielessly.",
+          "body": "Page views, top pages, and referrers, per site — collected cookielessly.",
           "meta": null
         },
         {
@@ -78,7 +78,7 @@
         },
         {
           "title": "Device & referrers",
-          "body": "See what visitors browse on and where they come from — device split and top referrers.",
+          "body": "See which pages get traffic and where it comes from — device split and top referrers.",
           "meta": null
         },
         {
@@ -122,7 +122,7 @@
         },
         {
           "title": "Top referrers",
-          "body": "Find where each screen’s visitors are coming from.",
+          "body": "Find where each screen’s traffic is coming from.",
           "meta": null
         }
       ],
@@ -147,7 +147,7 @@
         },
         {
           "title": "See your traffic",
-          "body": "Track page views, top pages, referrers, and device split for every site you run.",
+          "body": "Track page views, top pages, referrers, and device split, one site at a time.",
           "meta": "02"
         },
         {
@@ -205,7 +205,7 @@
       "heading": "Measure it all on Aglyn.",
       "subheading": null,
       "body": [
-        "Free to start — see traffic on every site from day one."
+        "Free to start — see your site’s traffic from day one."
       ],
       "actions": [
         { "label": "Start free", "variant": "contained" },
@@ -219,7 +219,7 @@
       "kind": "footer",
       "eyebrow": "ARE YOU A DEVELOPER?",
       "heading": null,
-      "subheading": "Open source, self-hostable, API-first.",
+      "subheading": "Open source. Self-hostable. Yours to run.",
       "body": [
         "© 2026 Aglyn LLC. All rights reserved."
       ],
@@ -235,7 +235,7 @@
         { "title": "Beta notice", "body": "In early-access beta — features may change.", "meta": "badge 'Beta' + note" }
       ],
       "image": null,
-      "notes": "Shared Footer component instance (124:3298), byte-identical on all three frames. Dark background. The developer strapline 'Open source, self-hostable, API-first.' is a CLAIM — see claimsToVerify."
+      "notes": "Shared Footer component instance (124:3298), byte-identical on all three frames. Dark background. The developer strapline originally claimed open source, self-hostable and API-first; Zach confirmed the first two (public, Apache-2.0) and dropped API-first, which is a term of art for an API-primary product. See claimsToVerify for the original wording."
     }
   ],
   "claimsToVerify": [

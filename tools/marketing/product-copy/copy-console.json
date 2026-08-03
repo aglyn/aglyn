@@ -12,7 +12,7 @@
       "heading": "Run every site you own from one console.",
       "subheading": null,
       "body": [
-        "The Aglyn console is mission control for your whole web presence — sites, commerce, forms, media, workflows, and analytics across every host, with team roles, billing, and audit built in."
+        "The Aglyn console is mission control for your whole web presence — sites, commerce, forms, media, workflows, and per-site analytics, with team roles, billing, and audit built in."
       ],
       "actions": [
         { "label": "Start free", "variant": "contained" },
@@ -58,7 +58,7 @@
         },
         {
           "title": "Built-in analytics",
-          "body": "Privacy-first traffic, top pages, and store revenue for every site — no extra scripts.",
+          "body": "Privacy-first traffic, top pages, and store revenue, per site — no extra scripts.",
           "meta": null
         },
         {
@@ -134,7 +134,7 @@
         },
         {
           "title": "Run it all",
-          "body": "Manage content, commerce, billing, and analytics for every site from one place.",
+          "body": "Manage content, commerce, billing, and each site’s analytics from one place.",
           "meta": "03"
         }
       ],

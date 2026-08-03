@@ -68,7 +68,7 @@
         },
         {
           "title": "Spam protection",
-          "body": "A hidden honeypot field and per-visitor rate limits keep junk out — with no CAPTCHA for real people to solve.",
+          "body": "A hidden honeypot field and rate limits keep junk out — with no CAPTCHA for real people to solve.",
           "meta": null
         },
         {

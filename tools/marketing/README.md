@@ -28,11 +28,55 @@ Run it with `{dryRun: true}` first — it returns the before/after pairs.
 ## `claimsToVerify` is not decoration
 
 The build rules forbid claiming capabilities Aglyn does not have. Each copy
-file carries the phrases its extractor flagged. **These are unresolved.** The
-sharpest one: the Plugins page states *"Every version is reviewed before it
-ships"*, which contradicts the marketplace's deliberate design that a
-publisher can install their own unreviewed version. Resolve the list before
-any of this copy ships.
+file carries the phrases its extractor flagged. **The lists are kept as
+written** — they are the record of what was questioned, so a resolved claim is
+answered in the copy and in `notes`, never by editing the list.
+
+**26 are resolved** (Zach, 2026-08-03) and applied to the JSONs:
+
+- **Plugins** — *"reviewed before it **ships**"* → *"before it's **listed**"*.
+  Review gates the listing; a publisher installing their own unreviewed
+  version is deliberate design.
+- **Footer strapline** — *"Open source, self-hostable, API-first."* →
+  *"Open source. Self-hostable. Yours to run."* The first two are confirmed
+  (public, Apache-2.0; Docker + BYO-Firebase). **API-first is a term of art**
+  for an API-primary product, which Aglyn is not — it has a REST API beside a
+  console-first product.
+- **Cross-site rollup** — the nine `for every site` / `across every host`
+  metrics constructions are now per-site.
+- **Visitors / conversions** — dropped, per the banned-metric list.
+
+### "every site" is not automatically a rollup
+
+The banned claim is an aggregated **data** view. *"Manage every site, team, and
+setting in one place"* is management, it is true, and it is deliberately left
+alone on all seven pages that carry it — as are the media lines about reusing
+one asset across sites, which the `visibleTo` sharing model really does.
+Blanket-replacing the phrase would have removed four true claims.
+
+### Three the copy got wrong about our own plans
+
+Checked against `plan-entitlements.ts`, not asked:
+
+| Was | `plan-entitlements.ts` |
+| -- | -- |
+| gift cards, ungated | `giftCards` starts at **Business** |
+| versioning "roll back anytime" | `versioning` starts at **Pro** |
+| "every plan … contacts are always metered" | `PLAN_PRICING.free.extraContactsUsdPer1k` is **null** |
+
+All 12 price points in the pricing teaser, and the Pro/Business site and
+collaborator limits, **do** match the code.
+
+### Still open
+
+Four gates have no entitlement key to check against — `memberships`,
+`reviews`, `video`, `payouts` — so their "(Pro & up)" / "(Business & up)"
+labels are unverified. The Console and Forms **mockups** still show a Contacts
+entity and a Campaigns tab; those are inside the images and need fixing in
+Figma before re-export, not here. Product overview's `SHIPPING NEXT` roadmap
+band (five unshipped features) and its hero routing to Free while
+`customDomain` starts at Starter are structural, and that page needs its own
+build anyway.
 
 ## Chrome is not a page section
 

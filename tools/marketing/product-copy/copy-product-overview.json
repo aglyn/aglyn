@@ -100,7 +100,7 @@
       "heading": "Run every site from one console.",
       "subheading": null,
       "body": [
-        "Traffic, revenue, orders, forms, and content across every site — managed in one place with roles, permissions, and audit built in."
+        "Traffic, revenue, orders, forms, and content for each site — managed in one place with roles, permissions, and audit built in."
       ],
       "actions": [
         { "label": "Explore the console", "variant": "contained" }
@@ -108,7 +108,7 @@
       "items": [
         {
           "title": "Built-in analytics",
-          "body": "See traffic and revenue for every site you run.",
+          "body": "See traffic and revenue, site by site.",
           "meta": null
         },
         {
@@ -163,7 +163,7 @@
         },
         {
           "title": "Analytics",
-          "body": "See traffic, top pages, and store revenue for every site you run.",
+          "body": "See traffic, top pages, and store revenue, site by site.",
           "meta": null
         }
       ],
@@ -190,7 +190,7 @@
         },
         {
           "title": "Publish",
-          "body": "Ship to your domain in one click, with SSL, global delivery, and versioning to roll back anytime.",
+          "body": "Ship to your domain in one click, with SSL, global delivery, and versioning to roll back (Pro & up).",
           "meta": "03"
         }
       ],
@@ -200,7 +200,7 @@
     {
       "kind": "explore-each-product",
       "eyebrow": "EXPLORE THE PLATFORM",
-      "heading": "Eight products, one platform.",
+      "heading": "Nine products, one platform.",
       "subheading": "Each product has its own page — dive into any of them, or start free and get them all.",
       "body": [],
       "actions": [],
@@ -302,7 +302,7 @@
       "kind": "footer",
       "eyebrow": "ARE YOU A DEVELOPER?",
       "heading": null,
-      "subheading": "Open source, self-hostable, API-first.",
+      "subheading": "Open source. Self-hostable. Yours to run.",
       "body": [
         "© 2026 Aglyn LLC. All rights reserved."
       ],
