@@ -41,6 +41,28 @@ export interface BillingUsageProps {
   hosts: any[]
 }
 
+/**
+ * Screens that spend the plan's allowance, from the server (AGL-1177).
+ * Null on any failure so the meter shows "—" rather than a number that
+ * disagrees with what creation will actually allow.
+ */
+async function fetchBillableScreens(
+  hostId: string,
+  idToken: string | undefined,
+): Promise<number | null> {
+  try {
+    const response = await fetch(
+      `/api/hosts/usage?hostId=${encodeURIComponent(hostId)}`,
+      idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : undefined,
+    )
+    if (!response.ok) return null
+    const result = await response.json()
+    return typeof result?.screens === 'number' ? result.screens : null
+  } catch {
+    return null
+  }
+}
+
 function formatLimit(limit: number, unit?: string) {
   if (limit === UNLIMITED) return 'Unlimited'
   return unit ? `${limit} ${unit}` : String(limit)
@@ -131,9 +153,15 @@ function HostUsageMeters(props: {
   useEffect(() => {
     let active = true
     void Promise.all([
-      getCountFromServer(
-        collection(firestore, 'hosts', host.$id, 'screens'),
-      ).catch(() => null),
+      // Screens are counted server-side (AGL-1177): soft-deleted, email and
+      // collection-template screens don't spend the allowance, and the web
+      // SDK cannot express that — live screens have no `deletedAt` field at
+      // all, and Firestore cannot query for an absent field. Asking the API
+      // keeps this meter and the quota gate on one implementation.
+      (user as any)
+        ?.getIdToken?.()
+        .then((token: string) => fetchBillableScreens(host.$id, token))
+        .catch(() => null) ?? Promise.resolve(null),
       getCountFromServer(
         collection(firestore, 'hosts', host.$id, 'layouts'),
       ).catch(() => null),
@@ -160,7 +188,7 @@ function HostUsageMeters(props: {
       const bytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       const monthKey = new Date().toISOString().slice(0, 7)
       setCounts({
-        screens: screens?.data().count ?? null,
+        screens,
         layouts: layouts?.data().count ?? null,
         variables: variables?.data().count ?? null,
         functions: functions?.data().count ?? null,
@@ -174,7 +202,7 @@ function HostUsageMeters(props: {
     return () => {
       active = false
     }
-  }, [firestore, host.$id])
+  }, [firestore, host.$id, user])
 
   // Site size (published version payloads) and month bandwidth are summed
   // server-side — version node payloads aren't client-readable at a
