@@ -122,7 +122,18 @@ export async function middleware(request: NextRequest) {
   const csp = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
+  // BOTH names on the request (AGL-523). Next reads `content-security-policy`
+  // and falls back to `content-security-policy-report-only`, so setting both
+  // survives an intermediary that drops or sanitises one of them — which is the
+  // live suspect: this exact build nonces all 50 scripts under `next start`
+  // locally and none of them on Vercel, where an edge middleware and a Node
+  // function are separate hops.
+  //
+  // Same value in both, so Next's precedence cannot pick a policy that
+  // disagrees with the one the browser is sent. `/csp-check` reports which
+  // arrived.
   requestHeaders.set('Content-Security-Policy', csp)
+  requestHeaders.set('Content-Security-Policy-Report-Only', csp)
   const pass = () => {
     const res = NextResponse.next({ request: { headers: requestHeaders } })
     res.headers.set('Content-Security-Policy-Report-Only', csp)

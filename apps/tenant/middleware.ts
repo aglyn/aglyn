@@ -247,7 +247,19 @@ export const middleware: NextMiddleware = (req, event) => {
   const csp = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
   const cspHeaders = new Headers(req.headers)
   cspHeaders.set('x-nonce', nonce)
+  // Both names, for the same reason as the console (AGL-523): Next falls back
+  // from `content-security-policy` to the report-only name, so setting both
+  // survives an intermediary that drops one.
+  //
+  // NOTE this cannot be sufficient here. Tenant pages are ISR-cached, so they
+  // render outside any request — there is no request header to read at
+  // revalidation time, which is why the payload says `"nonce":"$undefined"`.
+  // Two requests to one cached page return byte-identical HTML with a
+  // DIFFERENT nonce in each response header, so a per-request nonce can never
+  // match the cached bytes. Enforcing `strict-dynamic` here needs a different
+  // design, not a fixed header.
   cspHeaders.set('Content-Security-Policy', csp)
+  cspHeaders.set('Content-Security-Policy-Report-Only', csp)
   const response = NextResponse.rewrite(new URL(rewrite, req.url), {
     request: { headers: cspHeaders },
   })
