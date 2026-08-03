@@ -29,17 +29,17 @@
  */
 
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { useFirestoreCollection } from './use-firestore-collection'
 
 type Handler = { onNext: (snap: unknown) => void; onError: () => void }
 let mockHandlers: Handler[] = []
 const mockGetDocsFromServer = jest.fn()
 
-// Spread the real module first: the `@aglyn/tenant-feature-instance` barrel
-// reaches `Timestamp`, which still `extends` the Firestore class, so a partial
-// mock makes the import itself throw.
+// A partial mock is enough now that the hook is imported directly. Through
+// the `@aglyn/tenant-feature-instance` barrel it would NOT be: that barrel
+// reaches `Timestamp`, which still `extends` the Firestore class, so the
+// import itself throws unless the real module is spread in first (AGL-1207).
 jest.mock('firebase/firestore', () => ({
-  ...jest.requireActual('firebase/firestore'),
   onSnapshot: (
     _q: unknown,
     onNext: (snap: unknown) => void,
@@ -147,5 +147,69 @@ describe('useFirestoreCollection confirmDisappearances (AGL-1196)', () => {
     await waitFor(() => expect(result.current.data).toHaveLength(1))
     expect(result.current.status).toBe('success')
     expect(result.current.error).toBeUndefined()
+  })
+})
+
+/**
+ * The retry/backoff, which had no test of its own until AGL-1206 gave this
+ * library a runner.
+ *
+ * It exists because of AGL-216/217: right after sign-in `useUser()` can report
+ * a signed-in user a beat before Firestore's credential provider has attached
+ * the ID token, so the first listen hits a transient `permission-denied`.
+ * reactfire's cached Observable terminates on that first error and replays it
+ * forever, even across remounts — which is why this hook opens a genuinely
+ * FRESH `onSnapshot` each attempt rather than resubscribing to anything.
+ */
+describe('useFirestoreCollection retry (AGL-216/217)', () => {
+  const RETRY_DELAY_MS = 400
+  const MAX_RETRIES = 5
+
+  beforeEach(() => {
+    mockHandlers = []
+    mockGetDocsFromServer.mockReset()
+    jest.useFakeTimers()
+  })
+  afterEach(() => jest.useRealTimers())
+
+  it('opens a FRESH listener per attempt, and recovers once the token lands', () => {
+    const { result } = renderHook(() =>
+      useFirestoreCollection(buildQuery, [], { idField: '$id' }),
+    )
+    expect(mockHandlers).toHaveLength(1)
+
+    // The post-sign-in denial.
+    act(() => {
+      mockHandlers[mockHandlers.length - 1].onError()
+      jest.advanceTimersByTime(RETRY_DELAY_MS)
+    })
+
+    // A NEW registration, not a resubscribe to the terminated one. This is the
+    // whole reason the hook does not use reactfire here.
+    expect(mockHandlers).toHaveLength(2)
+    expect(result.current.status).not.toBe('error')
+
+    emit(['a'])
+    expect(result.current.status).toBe('success')
+    expect(result.current.data).toHaveLength(1)
+  })
+
+  it('surfaces error only once the retry budget is spent', () => {
+    const { result } = renderHook(() =>
+      useFirestoreCollection(buildQuery, [], { idField: '$id' }),
+    )
+
+    act(() => {
+      for (let i = 0; i < MAX_RETRIES; i += 1) {
+        mockHandlers[mockHandlers.length - 1].onError()
+        jest.advanceTimersByTime(RETRY_DELAY_MS)
+      }
+    })
+    // Still trying at the budget boundary — a premature error here is what
+    // turns a token race into a broken page.
+    expect(result.current.status).not.toBe('error')
+
+    act(() => mockHandlers[mockHandlers.length - 1].onError())
+    expect(result.current.status).toBe('error')
   })
 })
