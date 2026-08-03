@@ -1,0 +1,248 @@
+{
+  "page": "Plugins",
+  "figmaNodeId": "123:2683",
+  "frameSize": { "width": 1440, "height": 5308 },
+  "notes": "Same 8-section skeleton as /product/besigner (93:31), with Deep-dive and Canvas/visual combined into ONE section (frame named 'Deep-dive · canvas'). NavBar (123:2684) and Footer (123:2909) are shared chrome, not recorded as sections. Eyebrow style: 13px SemiBold uppercase, tracking 1.04px, magenta #e040fb. Headings 44px ExtraBold; final CTA heading 56px Black. Deep-dive, Explore and Early access sit on #f8f9fa; the rest are white; CTA is a gradient. This page's Statement band is taller than the other two (248px vs 208px) because the statement runs to three lines, and its Capabilities grid is taller (504px) because three cards carry longer bodies. Several Capabilities frame names are STALE and contradict their text — 'Card Plugin SDK' holds 'Publish & sell', 'Card Sell & earn' holds 'Reviewed & sandboxed', 'Card Slots & blocks' holds 'Built from plugins', 'Card Permissions & jobs' holds 'Seller profile & payouts'. Trust the text nodes only.",
+  "sections": [
+    {
+      "kind": "hero",
+      "figmaNodeId": "123:2685",
+      "eyebrow": "PLUGINS · MARKETPLACE + OPEN SOURCE",
+      "heading": "Install, publish, and sell on an open platform.",
+      "subheading": null,
+      "body": [
+        "Install templates, layouts, email templates, and dataset schemas from the marketplace — then package and sell your own. Aglyn itself is built from plugins, and it’s open source."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "Watch the tour", "variant": "text" }
+      ],
+      "items": [],
+      "image": {
+        "describe": "Marketplace browse screen bleeding off the right edge. Top bar 'Marketplace' with tabs Browse (active) / Installed / Publish and a search field at the right. Filter chips: All (selected, dark) / Templates / Layouts / Email templates / Data schemas. A grid of listing cards, each with a flat colour cover, title, 'by <publisher>', a type chip, a star rating and a price at the right — 'Studio — Portfolio' by Northwind Studio (Template, Free, 4 stars); 'Commerce Starter' by Aglyn (Layout, Free, 5 stars); 'Welcome email pa…' by Postmark Co. (Email templates, 4 stars, cut off); 'Leads CRM schema' by DataWorks (Data schema, Free, 4 stars); 'Landing Page kit' by Bright Labs (Template, $29, 5 stars); 'Invoice emails' by Ledgerly (Email templates, 4 stars, cut off).",
+        "figmaNodeId": "123:2695"
+      },
+      "notes": "Two-column: 600px copy left, 920x580 mockup right overflowing the frame. Heading wraps to four lines ('Install, publish, / and sell on an / open platform.'). Eyebrow preceded by a 28x2px magenta rule; it is the longest eyebrow of the three pages. White background."
+    },
+    {
+      "kind": "statement",
+      "figmaNodeId": "123:2696",
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [
+        "A platform is only as flexible as what you can add to it. Aglyn is built from plugins and released under Apache-2.0 — install what you need, publish your own, and read the source anytime."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": "Single large left-aligned statement across the 1280px column, wrapping to three lines. White background, 248px band (taller than the other two pages)."
+    },
+    {
+      "kind": "capabilities",
+      "figmaNodeId": "123:2698",
+      "eyebrow": "WHAT PLUGINS INCLUDE",
+      "heading": "Install, publish, and sell.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Marketplace",
+          "body": "Browse and install templates, layouts, email templates, and dataset schemas in a click.",
+          "meta": null
+        },
+        {
+          "title": "Publish & sell",
+          "body": "Publish from a real editor with markdown READMEs and changelogs, watch your version move through review, and keep a plugin private to your own orgs until you’re ready.",
+          "meta": null
+        },
+        {
+          "title": "Reviewed & sandboxed",
+          "body": "Every version is reviewed before it ships: an AST verifier checks each bundle against its declared network allowlist, and plugins run on a separate sandboxed origin with a per-plugin CSP.",
+          "meta": null
+        },
+        {
+          "title": "Built from plugins",
+          "body": "Commerce, bookings, email, workflows and more are plugins on the same architecture you build against.",
+          "meta": null
+        },
+        {
+          "title": "Seller profile & payouts",
+          "body": "Publishers get a profile, listings, payouts, and sales — all in the console.",
+          "meta": null
+        },
+        {
+          "title": "Open source",
+          "body": "Aglyn is Apache-2.0 and public on GitHub — read the source and shape where it goes.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "3-column grid, 2 rows of 410px cards with 44x44 icon tiles. Cards are UNEVEN in height — 'Publish & sell' and 'Reviewed & sandboxed' are 255px, 'Built from plugins' 229px, the rest 203px; the row aligns to the top. Eyebrow + heading CENTRED. White background."
+    },
+    {
+      "kind": "deep-dive",
+      "figmaNodeId": "123:2750",
+      "eyebrow": "MARKETPLACE",
+      "heading": "Add a head start in a click.",
+      "subheading": null,
+      "body": [
+        "Install a template, layout, email pack, or dataset schema and it drops into your org as editable screens, layouts, or data — ready to rework in Besigner."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "title": "One-click install",
+          "body": "Install to the sites you choose, and update on your terms — every update shows the publisher’s changelog and a diff, and never overwrites your local edits.",
+          "meta": null
+        },
+        {
+          "title": "Ratings & reviews",
+          "body": "See ratings and reviews before you install.",
+          "meta": null
+        },
+        {
+          "title": "Publish & earn",
+          "body": "Publish your own listings and get paid through Stripe (Pro & up).",
+          "meta": null
+        }
+      ],
+      "image": {
+        "describe": "Marketplace listing detail. Breadcrumb 'Marketplace / Studio — Portfolio'. Left: large blue-to-indigo gradient cover image. Right panel: title 'Studio — Portfolio', 'by Northwind Studio', a 'Template' chip, 5 gold stars and '4.9 (32)', a green 'Free' price and a blue INSTALL button. Below a divider: description 'A clean, editorial portfolio for studios and freelancers. Installs as editable screens you can rework in Besigner.' Then a WHAT'S INCLUDED checklist with green ticks — '12 responsive screens', 'Light & dark theme tokens', 'Blog & work layouts', 'Contact form wired to the Inbox'.",
+        "figmaNodeId": "123:2777"
+      },
+      "notes": "Combined deep-dive + canvas/visual. 440px copy column left (eyebrow, 32px heading on ONE line, body, three check-icon bullets of uneven height — the first bullet runs to four lines, the second to one); 768x580 mockup right. LIGHT GREY background (#f8f9fa)."
+    },
+    {
+      "kind": "how-it-works",
+      "figmaNodeId": "123:2778",
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From marketplace to installed, in a click.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Browse",
+          "body": "Find templates, layouts, email templates, and dataset schemas built for Aglyn.",
+          "meta": "01"
+        },
+        {
+          "title": "Install in a click",
+          "body": "Add any listing to your org — it drops in as editable screens, layouts, or data you can rework.",
+          "meta": "02"
+        },
+        {
+          "title": "Publish & sell",
+          "body": "Package your own work, publish it to the marketplace, and get paid through Stripe (Pro and up).",
+          "meta": "03"
+        }
+      ],
+      "image": null,
+      "notes": "3 equal columns, each with a 3px top rule, 40px step number, title, body. Eyebrow + heading LEFT-aligned. White background. Note the inconsistency with the deep-dive bullet: step 03 says '(Pro and up)' spelled out while the deep-dive bullet says '(Pro & up)' — both are recorded verbatim; pick one before shipping."
+    },
+    {
+      "kind": "explore-the-platform",
+      "figmaNodeId": "123:2798",
+      "eyebrow": "ONE PLATFORM",
+      "heading": "Plugins work with the rest of Aglyn.",
+      "subheading": "Every product below runs on the same platform — explore what else is built in.",
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "meta": null
+        },
+        {
+          "title": "Commerce",
+          "body": "Storefronts, checkout, subscriptions & digital goods.",
+          "meta": null
+        },
+        {
+          "title": "Forms & Inbox",
+          "body": "Collect submissions in one Inbox and route them onward.",
+          "meta": null
+        },
+        {
+          "title": "Media",
+          "body": "A real DAM — folders, drag-and-drop, metadata.",
+          "meta": null
+        },
+        {
+          "title": "Workflows",
+          "body": "Automate the busywork with triggers & actions.",
+          "meta": null
+        },
+        {
+          "title": "Console",
+          "body": "Manage every site, team, and setting in one place.",
+          "meta": null
+        },
+        {
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages, and store revenue.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "3-column grid of 7 link cards; Analytics sits alone in the middle column of row 3. The Plugins card is omitted (self); Media and Workflows fill row 2. Centred eyebrow/heading/subheading. LIGHT GREY background."
+    },
+    {
+      "kind": "early-access",
+      "figmaNodeId": "123:2879",
+      "eyebrow": "Now in early access",
+      "heading": "Be among the first to build on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Aglyn is pre-release. Join early access to start building and shape the roadmap with us."
+      ],
+      "actions": [
+        { "label": "Join early access", "variant": "contained" },
+        { "label": "See what’s included", "variant": "outlined" }
+      ],
+      "items": [
+        { "title": "1", "body": "platform, not a stack", "meta": "stat" },
+        { "title": "9", "body": "products built in", "meta": "stat" },
+        { "title": "0", "body": "plugins to wire up", "meta": "stat" },
+        { "title": "1-click", "body": "to publish", "meta": "stat" }
+      ],
+      "image": null,
+      "notes": "Identical to the Media and Workflows pages. Eyebrow is a rounded pill badge with a dot (#f5f5f5 fill, #e0e0e0 border). 4-up stat row with 1px vertical dividers; figures 44px ExtraBold in #0090d9. Background #f8f9fa."
+    },
+    {
+      "kind": "cta",
+      "figmaNodeId": "123:2903",
+      "eyebrow": null,
+      "heading": "Extend Aglyn today.",
+      "subheading": "Free to start — install from the marketplace, or build your own with the SDK.",
+      "body": [],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "text" }
+      ],
+      "items": [],
+      "image": null,
+      "notes": "Full-bleed gradient band, 188.73deg #00b0ff → #7a5cf0 → #e040fb. White centred text; heading 56px Black. Primary is the white-on-dark button (Button/OnDark), secondary a white text button."
+    }
+  ],
+  "claimsToVerify": [
+    "Capabilities · 'Every version is reviewed before it ships' — HIGHEST RISK on this page. A publisher can install their own unreviewed version by design, so 'every version is reviewed before it ships' overstates the gate. Review lives on the version record; confirm the exact wording that is true.",
+    "Capabilities · 'an AST verifier checks each bundle against its declared network allowlist' — confirm the verifier is enforcing and not advisory (it is implemented as a lint), and that a failing bundle is actually blocked.",
+    "Capabilities · 'plugins run on a separate sandboxed origin with a per-plugin CSP' — confirm the sandbox origin and per-plugin CSP are wired for the paths this page implies; there is a realm-trust bypass to account for.",
+    "Statement, Capabilities and Hero · 'released under Apache-2.0', 'Aglyn is Apache-2.0 and public on GitHub — read the source and shape where it goes', 'Aglyn itself is built from plugins, and it’s open source' — confirm the licence is Apache-2.0 and the repo is public before this ships. Note this page makes NO self-hosting, npx create-aglyn, Kubernetes or 'no lock-in' claim, which is correct.",
+    "Capabilities · 'keep a plugin private to your own orgs until you’re ready' — confirm org-private plugin visibility exists.",
+    "Capabilities · 'Publish from a real editor with markdown READMEs and changelogs, watch your version move through review' — confirm markdown README + changelog authoring and a visible review status exist.",
+    "Capabilities · 'Seller profile & payouts — Publishers get a profile, listings, payouts, and sales — all in the console.' — confirm payouts and a sales view are actually in the console.",
+    "Deep-dive · 'every update shows the publisher’s changelog and a diff, and never overwrites your local edits' — confirm an update DIFF is shown and local edits are preserved.",
+    "Deep-dive · 'See ratings and reviews before you install.' — confirm ratings and written reviews both exist on listings.",
+    "Deep-dive and How it works · 'get paid through Stripe (Pro & up)' / '(Pro and up)' — plan-gate claim; verify the tier, and note the two spellings differ between sections.",
+    "CTA · 'build your own with the SDK' — an SDK is named only here (the capability card was renamed away from 'Plugin SDK'); confirm a documented plugin SDK exists to link to.",
+    "Hero, Capabilities and How it works · the four installable kinds 'templates, layouts, email templates, and dataset schemas' — confirm all four artifact kinds are installable today.",
+    "Capabilities · 'Commerce, bookings, email, workflows and more are plugins on the same architecture you build against.' — confirm bookings ships as a plugin and that third parties build against the same architecture.",
+    "Hero mockup (123:2695) shows a listing titled 'Leads CRM schema' — a dataset schema, not a product, but the words 'CRM schema' on a marketing page risk reading as a Contacts CRM. Consider renaming the sample listing.",
+    "Early access stats (shared across all three pages): '9 products built in' and '0 plugins to wire up' — confirm the product count."
+  ]
+}

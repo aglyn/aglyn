@@ -1,0 +1,313 @@
+{
+  "page": "Analytics",
+  "figmaNodeId": "124:3072",
+  "figmaFrameName": "Product — Analytics",
+  "frameSize": { "width": 1440, "height": 5201 },
+  "skeleton": "Matches the /product/besigner 8-section skeleton exactly: Hero · Statement · Capabilities · Deep-dive · How it works · Explore the platform · Early access · CTA. (There is no separate Canvas/visual section — the visual sits inside the Deep-dive, whose Figma layer is literally named 'Deep-dive · canvas'.)",
+  "sections": [
+    {
+      "kind": "navbar",
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [],
+      "actions": [
+        { "label": "Sign in", "variant": "text" },
+        { "label": "Start free", "variant": "contained" }
+      ],
+      "items": [
+        { "title": "Product", "body": null, "meta": "menu" },
+        { "title": "Solutions", "body": null, "meta": "menu" },
+        { "title": "Pricing", "body": null, "meta": "link" },
+        { "title": "Docs", "body": null, "meta": "link" },
+        { "title": "Blog", "body": null, "meta": "link" },
+        { "title": "Beta", "body": null, "meta": "pill badge next to the logo" }
+      ],
+      "image": null,
+      "notes": "Shared NavBar component instance (124:3073), byte-identical on all three frames. Do not rebuild per page."
+    },
+    {
+      "kind": "hero",
+      "eyebrow": "ANALYTICS · MEASURE EVERYTHING",
+      "heading": "See what’s working on every site you run.",
+      "subheading": null,
+      "body": [
+        "Page views, top pages, referrers, and device split for every site — with per-screen trends and commerce revenue built in. Cookieless, no extra scripts."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "Watch the tour", "variant": "text" }
+      ],
+      "items": [],
+      "image": {
+        "describe": "Analytics overview dashboard mockup, 920×580, drop-shadowed card, bleeding off the right edge. Contains: header 'Analytics'; four stat tiles — 'Page views 48,210 / +12% vs prior', 'Mobile / Desktop 61% / 39% / device split', 'Top page / / 18,240 views', 'Top referrer google.com / 9,120 views'; a chart titled 'Page views · last 30 days'; a 'Top pages' list (/ 18,240 · /pricing 7,120 · /blog/launch 4,860 · /features 3,910 · /contact 2,300); a 'Top referrers' list (google.com 9,120 · Direct 6,400 · x.com 2,880 · github.com 1,540 · news.ycombinator 980).",
+        "figmaNodeId": "124:3084"
+      },
+      "notes": "Two-column, left copy 600px wide / right mockup 920px overflowing the 1440 frame. Eyebrow is preceded by a 28×2px magenta rule (brand/secondary #e040fb); the eyebrow text itself is grey (text/secondary #5a6675). White background."
+    },
+    {
+      "kind": "statement",
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [
+        "Answers usually live in a separate analytics tool. Aglyn measures your site and your store in the same console — traffic, top pages, and revenue — without stitching data together or adding a tracker."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": "Single full-bleed paragraph, 1280px wide, 80px side gutters, 64px vertical padding. One text node, no heading. White background."
+    },
+    {
+      "kind": "capabilities",
+      "eyebrow": "WHAT ANALYTICS INCLUDE",
+      "heading": "The metrics that matter, built in.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Traffic & pageviews",
+          "body": "Page views, top pages, and referrers for every site — collected cookielessly.",
+          "meta": null
+        },
+        {
+          "title": "Per-screen analytics",
+          "body": "Drill into any screen’s 14-day traffic, device split, and referrers (Pro & up).",
+          "meta": "plan gate: Pro & up"
+        },
+        {
+          "title": "Device & referrers",
+          "body": "See what visitors browse on and where they come from — device split and top referrers.",
+          "meta": null
+        },
+        {
+          "title": "Commerce insights",
+          "body": "Revenue, orders, average order value, and top products from your store.",
+          "meta": null
+        },
+        {
+          "title": "Overlay stats",
+          "body": "See impressions and clicks on your announcement bars and popups.",
+          "meta": null
+        },
+        {
+          "title": "Privacy-friendly",
+          "body": "First-party, cookieless analytics you own — no third-party tracker, no extra scripts.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "3 columns × 2 rows of bordered white cards (410×203, 44px icon square top-left), 20px gutters, centred header. White background. WARNING for the builder: three Figma card FRAME names are stale and contradict their own text — frame 'Card Conversions & goals' actually holds 'Device & referrers', and frame 'Card Cross-site rollups' actually holds 'Overlay stats'. Use the text nodes, never the frame names."
+    },
+    {
+      "kind": "deep-dive",
+      "eyebrow": "PER-SCREEN",
+      "heading": "Zoom into any screen.",
+      "subheading": null,
+      "body": [
+        "Open any screen to see its own 14-day traffic, device split, and top referrers — so you know exactly which pages are working."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "title": "14-day trend",
+          "body": "Every screen keeps its own rolling 14-day view history.",
+          "meta": null
+        },
+        {
+          "title": "Device split",
+          "body": "See the mobile, desktop, and tablet mix for the screen.",
+          "meta": null
+        },
+        {
+          "title": "Top referrers",
+          "body": "Find where each screen’s visitors are coming from.",
+          "meta": null
+        }
+      ],
+      "image": {
+        "describe": "Per-screen analytics mockup, 768×580. Breadcrumb 'Analytics / Home'; three stat tiles — 'Screen views 22,410 / +9% vs prior', 'Avg. time 2m 04s / on this screen', 'Mobile 58% / of views'; a chart 'Views · last 14 days'; a 'Device split' block (Mobile 58% · Desktop 36% · Tablet 6%); a 'Top referrers' list (google.com 4,210 · Direct 3,180 · /pricing 1,940 · x.com 860).",
+        "figmaNodeId": "124:3166"
+      },
+      "notes": "Two-column: 440px copy column left with three icon+text bullets, 768px mockup right. Section background is grey (bg/default #f8f9fa). This is the 'Canvas/visual' beat of the skeleton — the Figma frame is named 'Deep-dive · canvas' and merges the two."
+    },
+    {
+      "kind": "how-it-works",
+      "eyebrow": "HOW IT WORKS",
+      "heading": "Insight without the tag soup.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Nothing to install",
+          "body": "Analytics is built in and cookieless — no tags and no extra scripts to bolt on.",
+          "meta": "01"
+        },
+        {
+          "title": "See your traffic",
+          "body": "Track page views, top pages, referrers, and device split for every site you run.",
+          "meta": "02"
+        },
+        {
+          "title": "Zoom into a screen",
+          "body": "Open any screen for its own 14-day trend, or watch revenue and orders from commerce.",
+          "meta": "03"
+        }
+      ],
+      "image": null,
+      "notes": "Left-aligned header (not centred, unlike Capabilities). Three equal columns, each topped by a 3px full-width rule above the step number. Step numbers are rendered as two-digit strings '01' '02' '03'. Eyebrow is magenta (brand/secondary #e040fb). White background (bg/paper)."
+    },
+    {
+      "kind": "explore-the-platform",
+      "eyebrow": "ONE PLATFORM",
+      "heading": "Analytics works with the rest of Aglyn.",
+      "subheading": "Every product below runs on the same platform — explore what else is built in.",
+      "body": [],
+      "actions": [],
+      "items": [
+        { "title": "Besigner", "body": "Design on a live canvas and publish in one click.", "meta": "links to /product/besigner" },
+        { "title": "Commerce", "body": "Storefronts, checkout, subscriptions & digital goods.", "meta": "links to /product/commerce" },
+        { "title": "Forms & Inbox", "body": "Collect submissions in one Inbox and route them onward.", "meta": "links to /product/forms" },
+        { "title": "Media", "body": "A real DAM — folders, drag-and-drop, metadata.", "meta": "links to /product/media" },
+        { "title": "Workflows", "body": "Automate the busywork with triggers & actions.", "meta": "links to /product/workflows" },
+        { "title": "Plugins", "body": "Install templates and layouts, or publish and sell your own.", "meta": "links to /product/plugins" },
+        { "title": "Console", "body": "Manage every site, team, and setting in one place.", "meta": "links to /product/console" }
+      ],
+      "image": null,
+      "notes": "SEVEN link cards in a 3-column grid; the 7th (Console) sits alone in the 2nd column of row 3, leaving col 1 and col 3 empty — an odd orphan the builder should be aware of. Analytics itself is (correctly) omitted; Marketing is ALSO missing, so this grid is one card short of the nine-product set the Product overview page shows. Each card is 410×159 with a 40px product icon top-left and a 20px arrow glyph top-right. Section background is grey (bg/default #f8f9fa)."
+    },
+    {
+      "kind": "early-access",
+      "eyebrow": "Now in early access",
+      "heading": "Be among the first to build on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Aglyn is pre-release. Join early access to start building and shape the roadmap with us."
+      ],
+      "actions": [
+        { "label": "Join early access", "variant": "contained" },
+        { "label": "See what’s included", "variant": "outlined" }
+      ],
+      "items": [
+        { "title": "1", "body": "platform, not a stack", "meta": "stat" },
+        { "title": "9", "body": "products built in", "meta": "stat" },
+        { "title": "0", "body": "plugins to wire up", "meta": "stat" },
+        { "title": "1-click", "body": "to publish", "meta": "stat" }
+      ],
+      "image": null,
+      "notes": "Centred. The eyebrow is a pill Badge/Pill component (dot + label), not a plain eyebrow. Below the CTAs sits a 4-up stat row separated by 1px × 56px vertical rules. Section background is grey (bg/default #f8f9fa). This block is identical across all three frames."
+    },
+    {
+      "kind": "cta",
+      "eyebrow": null,
+      "heading": "Measure it all on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — see traffic on every site from day one."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "text" }
+      ],
+      "items": [],
+      "image": null,
+      "notes": "DARK/BRAND SECTION. Full-bleed gradient background: linear-gradient(188.73deg, #00b0ff 36.6%, #7a5cf0 76.9%, #e040fb 109.8%). All text is white (text/on-inverse). Primary button is Button/OnDark (white fill, dark label); secondary is a white text button."
+    },
+    {
+      "kind": "footer",
+      "eyebrow": "ARE YOU A DEVELOPER?",
+      "heading": null,
+      "subheading": "Open source, self-hostable, API-first.",
+      "body": [
+        "© 2026 Aglyn LLC. All rights reserved."
+      ],
+      "actions": [],
+      "items": [
+        { "title": "Product", "body": "Besigner · Console · Commerce · Forms · Media · Workflows · Marketing", "meta": "column" },
+        { "title": "Solutions", "body": "Agencies · Startups · Creators · Developers · Enterprise · Small business", "meta": "column" },
+        { "title": "Use cases", "body": "Online stores · Portfolios · Blogs · SaaS websites · Documentation · Membership sites", "meta": "column" },
+        { "title": "Resources", "body": "Docs · Guides · Blog · Changelog · Newsroom", "meta": "column" },
+        { "title": "Company", "body": "About · Pricing · Careers · Press · Contact", "meta": "column" },
+        { "title": "Legal / utility bar", "body": "Privacy · Terms · Legal · Status", "meta": "row" },
+        { "title": "Social", "body": "X · LinkedIn · GitHub · Facebook · YouTube · Instagram", "meta": "row" },
+        { "title": "Beta notice", "body": "In early-access beta — features may change.", "meta": "badge 'Beta' + note" }
+      ],
+      "image": null,
+      "notes": "Shared Footer component instance (124:3298), byte-identical on all three frames. Dark background. The developer strapline 'Open source, self-hostable, API-first.' is a CLAIM — see claimsToVerify."
+    }
+  ],
+  "claimsToVerify": [
+    {
+      "phrase": "See what visitors browse on and where they come from — device split and top referrers.",
+      "where": "Capabilities → card 'Device & referrers' (124:3322)",
+      "why": "Uses a VISITORS metric. Aglyn measures page/screen views, not unique visitors. Banned-claim list: 'conversions/visitors metrics'."
+    },
+    {
+      "phrase": "Find where each screen’s visitors are coming from.",
+      "where": "Deep-dive → bullet 'Top referrers' (124:3165)",
+      "why": "Second VISITORS reference. Same concern as above."
+    },
+    {
+      "phrase": "See what’s working on every site you run.",
+      "where": "Hero heading (124:3079)",
+      "why": "Reads as a cross-site analytics rollup, which Aglyn does not have. Needs rewording to per-site if the console has no aggregate view."
+    },
+    {
+      "phrase": "Page views, top pages, referrers, and device split for every site — with per-screen trends and commerce revenue built in.",
+      "where": "Hero body (124:3080)",
+      "why": "'for every site' again implies a cross-site rollup."
+    },
+    {
+      "phrase": "Page views, top pages, and referrers for every site — collected cookielessly.",
+      "where": "Capabilities → card 'Traffic & pageviews' (124:3308)",
+      "why": "Third 'for every site' cross-site rollup implication."
+    },
+    {
+      "phrase": "Track page views, top pages, referrers, and device split for every site you run.",
+      "where": "How it works → step 02 (124:3181)",
+      "why": "Fourth 'for every site' cross-site rollup implication."
+    },
+    {
+      "phrase": "Free to start — see traffic on every site from day one.",
+      "where": "CTA body (124:3294)",
+      "why": "Fifth 'every site' cross-site rollup implication, and it promises the metric on the free tier — but the Capabilities grid gates per-screen analytics at 'Pro & up'. Verify what Free actually gets."
+    },
+    {
+      "phrase": "Drill into any screen’s 14-day traffic, device split, and referrers (Pro & up).",
+      "where": "Capabilities → card 'Per-screen analytics' (124:3315)",
+      "why": "Plan gate 'Pro & up' — confirm per-screen analytics really starts at Pro and not Starter."
+    },
+    {
+      "phrase": "See impressions and clicks on your announcement bars and popups.",
+      "where": "Capabilities → card 'Overlay stats' (124:3338)",
+      "why": "Overlay impression/click metrics — cross-check that these are actually recorded, since the Marketing page makes the same promise."
+    },
+    {
+      "phrase": "Revenue, orders, average order value, and top products from your store.",
+      "where": "Capabilities → card 'Commerce insights' (124:3329)",
+      "why": "'top products' is the one item here not evidenced anywhere else in the design. Verify the metric exists."
+    },
+    {
+      "phrase": "Avg. time 2m 04s / on this screen",
+      "where": "Deep-dive mockup 'Mockup/Analytics Screen' (150:188–150:190)",
+      "why": "An average-time-on-screen metric appears in the MOCKUP but in none of the copy. If Aglyn does not compute dwell time, the illustration is claiming a metric that doesn't exist."
+    },
+    {
+      "phrase": "+12% vs prior / +9% vs prior",
+      "where": "Both analytics mockups (150:86, 150:186)",
+      "why": "Period-over-period comparison deltas. Verify the product actually shows a comparison figure."
+    },
+    {
+      "phrase": "9 products built in",
+      "where": "Early access → stat 2 (124:3283)",
+      "why": "The Product overview page's heading says 'Eight products, one platform.' while showing nine cards, and this page's Explore grid shows only seven. Three different counts across the same design. Pick one."
+    },
+    {
+      "phrase": "Open source, self-hostable, API-first.",
+      "where": "Shared Footer, developer strapline (276:1188)",
+      "why": "SELF-HOSTING CLAIM. Only 'Docker + your own Firebase project' is supportable; 'self-hostable' unqualified plus 'Open source' overstates it. Appears on all three pages."
+    }
+  ]
+}

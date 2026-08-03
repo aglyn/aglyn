@@ -1,0 +1,249 @@
+{
+  "page": "Console",
+  "figmaNodeId": "111:371",
+  "frameName": "Product — Console",
+  "frameSize": { "width": 1440, "height": 5287 },
+  "notes": "8 content sections between a shared NavBar (111:372) and Footer (111:693), both shared instances not captured here. Section order matches the /product/besigner skeleton, with Deep-dive and Canvas/visual combined into a single section (Figma frame literally named 'Deep-dive · canvas').",
+  "sections": [
+    {
+      "kind": "hero",
+      "figmaNodeId": "111:373",
+      "eyebrow": "CONSOLE · RUN EVERYTHING",
+      "heading": "Run every site you own from one console.",
+      "subheading": null,
+      "body": [
+        "The Aglyn console is mission control for your whole web presence — sites, commerce, forms, media, workflows, and analytics across every host, with team roles, billing, and audit built in."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "Watch the tour", "variant": "text" }
+      ],
+      "items": [],
+      "image": {
+        "describe": "Console dashboard app mockup, 920×580, floating card with heavy hero shadow. Topbar: Aglyn mark, 'Console' wordmark, org chip 'Acme Studio ▾', a search field placeholder 'Search sites, orders, contacts…', avatar cluster right. Left sidebar nav: Dashboard (active), Sites, Commerce, Forms, Media, Analytics, Settings. Main area header 'Dashboard' / 'Acme Studio · acme.aglyn.app' with a primary 'Visit site' button. Four stat cards: Pageviews (30d) 48,210 +12.4%; Revenue $26,540 +8.1%; Orders 1,204 +5.6%; Avg order $22.04 +0.4%. Below: a 'Traffic & revenue / Last 12 weeks' gradient bar chart and a 'Recent activity' list (New order · $128 · 2m ago; Form: Contact request · 14m ago; Site published · Home · 1h ago; New contact added · 3h ago).",
+        "figmaNodeId": "111:383"
+      },
+      "notes": "Two columns: 600px text column left (80px left inset, no right padding — the mockup bleeds off the right edge), mockup right. Eyebrow is a 28×2px magenta (brand/secondary #E040FB) rule followed by uppercase tracked label in text/secondary. Heading is Display/XL 72px Black. White background."
+    },
+    {
+      "kind": "statement",
+      "figmaNodeId": "111:384",
+      "eyebrow": null,
+      "heading": "Running a web presence usually means a dozen logins and dashboards. Aglyn puts every site, store, and inbox in one place — with the roles, billing, and history to manage it all.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": "Single full-bleed 34px Bold pull-quote at text/muted (#757575), 80px side padding, 64px vertical. The phrase 'one place' is emphasised in text/primary (#212121) — the rest of the sentence stays muted. Left-aligned, full container width. White background."
+    },
+    {
+      "kind": "capabilities",
+      "figmaNodeId": "111:386",
+      "eyebrow": "WHAT THE CONSOLE DOES",
+      "heading": "One place to run everything you publish.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "All your sites, one place",
+          "body": "Every organization and site you touch, in one switcher — and the console installs as an app on desktop and mobile.",
+          "meta": null
+        },
+        {
+          "title": "Team roles & permissions",
+          "body": "Invite managers and members with granular, per-site access and full audit trails.",
+          "meta": null
+        },
+        {
+          "title": "Built-in analytics",
+          "body": "Privacy-first traffic, top pages, and store revenue for every site — no extra scripts.",
+          "meta": null
+        },
+        {
+          "title": "Billing & plans",
+          "body": "Manage subscriptions, seats, add-ons, and usage from one billing hub.",
+          "meta": null
+        },
+        {
+          "title": "Content & data",
+          "body": "Datasets, media, and forms for every site, organized per host.",
+          "meta": null
+        },
+        {
+          "title": "Activity & audit",
+          "body": "A live feed of publishes, orders, and changes — with who-did-what history.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "Centred eyebrow + centred heading. 3-column card grid, 2 rows, 410px cards with a 44px icon tile top-left. Cards are white with a 1px border on a white section. Reading order is left-to-right by row. Eyebrow renders in magenta/pink; heading is Heading/H1-scale centred."
+    },
+    {
+      "kind": "deep-dive",
+      "figmaNodeId": "111:435",
+      "eyebrow": "ONE CONSOLE",
+      "heading": "Manage every site, side by side.",
+      "subheading": null,
+      "body": [
+        "Switch between hosts, drill into any site’s content, commerce, forms, and analytics, and take action — all without leaving the console or juggling logins."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "title": "Org & host switcher",
+          "body": "Jump between organizations and their sites in a single click.",
+          "meta": null
+        },
+        {
+          "title": "Roles & audit",
+          "body": "See who changed what, with access controlled per site.",
+          "meta": null
+        },
+        {
+          "title": "Switch & search",
+          "body": "Find and jump to any site or document from the switcher’s search.",
+          "meta": null
+        }
+      ],
+      "image": {
+        "describe": "Console 'Sites' screen mockup, 768×580. Topbar: Aglyn mark, org chip 'Northwind Inc.', primary '+ NEW SITE' button right. Section header 'Sites' with right-aligned meta '6 of 10 hosts · Business plan'. Two-column grid of site cards, each with a coloured letter tile, a status pill (Live / Draft), site name, hostname, a plan chip and a 30-day views figure: Marketing Site / northwind.com / Pro / 24.1k views · 30d; Online Store / shop.northwind.com / Business / 38.6k views · 30d; Docs / docs.northwind.com / Pro / 9.2k views · 30d; Careers / jobs.northwind.com / Draft / Starter / No traffic yet; Events / events.northwind.com / Pro / 5.7k views · 30d; Summer Promo / promo.northwind.com / Starter / 12.9k views · 30d. The card grid is clipped at the bottom of the mockup frame.",
+        "figmaNodeId": "111:462"
+      },
+      "notes": "Combined deep-dive + canvas/visual section — this is the page's one big visual moment. Two columns: 440px text column left, 768px mockup right. Section sits on a tinted (very pale blue/lavender) background, unlike the white sections around it. Eyebrow is magenta/pink, left-aligned with no rule. The three items are checkmark-bulleted rows (26px check icon + title/body), not cards."
+    },
+    {
+      "kind": "how-it-works",
+      "figmaNodeId": "111:463",
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From one login to every site you run.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Create your org",
+          "body": "Spin up an organization, then add every site you run as a host underneath it.",
+          "meta": "01"
+        },
+        {
+          "title": "Invite your team",
+          "body": "Add members with roles and per-site permissions — owner, admin, editor, or viewer.",
+          "meta": "02"
+        },
+        {
+          "title": "Run it all",
+          "body": "Manage content, commerce, billing, and analytics for every site from one place.",
+          "meta": "03"
+        }
+      ],
+      "image": null,
+      "notes": "LEFT-aligned eyebrow and heading (unlike Capabilities/Explore which are centred). Three equal columns, each topped by a 3px horizontal rule, then a large 2-digit step numeral, then title, then body. White background."
+    },
+    {
+      "kind": "explore",
+      "figmaNodeId": "111:483",
+      "eyebrow": "ONE PLATFORM",
+      "heading": "The console works with the rest of Aglyn.",
+      "subheading": "Every product below runs in the same console — explore what else is built in.",
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "meta": null
+        },
+        {
+          "title": "Commerce",
+          "body": "Storefronts, checkout, subscriptions & digital goods.",
+          "meta": null
+        },
+        {
+          "title": "Forms & Inbox",
+          "body": "Collect submissions in one Inbox and route them onward.",
+          "meta": null
+        },
+        {
+          "title": "Media",
+          "body": "A real DAM — folders, drag-and-drop, metadata.",
+          "meta": null
+        },
+        {
+          "title": "Workflows",
+          "body": "Automate the busywork with triggers & actions.",
+          "meta": null
+        },
+        {
+          "title": "Plugins",
+          "body": "Install templates and layouts, or publish and sell your own.",
+          "meta": null
+        },
+        {
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages, and store revenue.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "SEVEN link-cards in a 3-column grid — the last row holds a single card sitting in the MIDDLE column (x=435), not the left, so the odd card is visually centred. Each card: 40px product icon top-left, a small arrow glyph top-right, then title and one-line body. The Console page omits a self-link (no 'Console' card); the sibling product pages substitute a Console card in the same slot. Section sits on a pale grey background. Eyebrow, heading and subheading all centred. Note the subheading wording is Console-specific: 'runs in the same console' (Commerce and Forms say 'runs on the same platform')."
+    },
+    {
+      "kind": "early-access",
+      "figmaNodeId": "111:562",
+      "eyebrow": null,
+      "heading": "Be among the first to build on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Aglyn is pre-release. Join early access to start building and shape the roadmap with us."
+      ],
+      "actions": [
+        { "label": "Join early access", "variant": "contained" },
+        { "label": "See what’s included", "variant": "outlined" }
+      ],
+      "items": [
+        { "title": "1", "body": "platform, not a stack", "meta": "stat" },
+        { "title": "9", "body": "products built in", "meta": "stat" },
+        { "title": "0", "body": "plugins to wire up", "meta": "stat" },
+        { "title": "1-click", "body": "to publish", "meta": "stat" }
+      ],
+      "image": null,
+      "notes": "Identical on all three product pages. Centred stack: a pill badge reading 'Now in early access' (rounded 999px, subtle grey fill, 1px border, 8px dot on the left), then heading, then body, then the two buttons. Below, a 4-up stat row separated by 1px vertical hairline dividers; the stat figures are 44px ExtraBold in brand/primary-strong (#0090D9) and the labels are 16px in text/secondary. Section background is bg/default (#F8F9FA)."
+    },
+    {
+      "kind": "cta",
+      "figmaNodeId": "111:687",
+      "eyebrow": null,
+      "heading": "Run your whole web presence from one place.",
+      "subheading": null,
+      "body": [
+        "Free to start — spin up your first site and manage everything from one console."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "text" }
+      ],
+      "items": [],
+      "image": null,
+      "notes": "Full-bleed gradient band, all text white and centred. Gradient is linear ~190deg: #00B0FF 36.6% → #7A5CF0 76.9% → #E040FB 109.8%. Heading is Display/L 56px Black on 900px max width, wrapping to two lines; body at 94% opacity on 620px. Primary button is the white-on-dark variant; secondary is a white text button. This CTA is taller than the Commerce/Forms ones (443px vs 383px) because its heading wraps to two lines."
+    }
+  ],
+  "claimsToVerify": [
+    {
+      "section": "capabilities",
+      "phrase": "Privacy-first traffic, top pages, and store revenue for every site — no extra scripts.",
+      "concern": "‘for every site’ reads as a cross-site analytics rollup, which is on the do-not-claim list. The sibling Explore card drops the phrase and says only ‘Privacy-first traffic, top pages, and store revenue.’ Confirm whether analytics is per-site only before shipping this wording."
+    },
+    {
+      "section": "hero",
+      "phrase": "sites, commerce, forms, media, workflows, and analytics across every host",
+      "concern": "Same cross-site analytics rollup concern — ‘analytics across every host’ implies an aggregated view. Verify or reword to per-host."
+    },
+    {
+      "section": "hero (mockup content, not prose)",
+      "phrase": "Search sites, orders, contacts… / Recent activity: ‘New contact added’",
+      "concern": "The console dashboard mockup shows a Contacts entity in both the global search placeholder and the activity feed. A Contacts CRM is on the do-not-claim list. Either the mockup needs those strings changed before it is rebuilt, or the CRM must be confirmed to exist."
+    }
+  ]
+}

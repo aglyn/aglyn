@@ -1,0 +1,249 @@
+{
+  "page": "Forms",
+  "figmaNodeId": "120:1516",
+  "frameName": "Product — Forms & Inbox",
+  "frameSize": { "width": 1440, "height": 5308 },
+  "notes": "8 content sections between a shared NavBar (120:1517) and Footer (120:1742), both shared instances not captured here. Same 8-section skeleton as Console and Commerce, with Deep-dive and Canvas/visual combined into one section (Figma frame named 'Deep-dive · canvas'). WARNING for the builder: several Capabilities card FRAMES on this page carry stale layer names that contradict their own text — 'Card Contacts & CRM' actually contains 'After-submit actions', 'Card Notifications & routing' contains 'Write to a dataset', 'Card Shared inbox' contains 'One Inbox', 'Card Email replies' contains 'Automate what’s next', and 'Card Drag-and-drop forms' contains 'Forms on the canvas'. Build from the text below, never from the layer names.",
+  "sections": [
+    {
+      "kind": "hero",
+      "figmaNodeId": "120:1518",
+      "eyebrow": "FORMS & INBOX · COLLECT + ROUTE",
+      "heading": "Every submission, in one Inbox.",
+      "subheading": null,
+      "body": [
+        "Build forms and surveys right on the canvas with Besigner, collect every submission in one Inbox, and route the data into datasets and automations — with spam protection built in."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "Watch the tour", "variant": "text" }
+      ],
+      "items": [],
+      "image": {
+        "describe": "Inbox app mockup, 920×580, floating card with heavy hero shadow. Header: Aglyn mark + 'Inbox'. Tab row: Submissions (active), Members & leads, Campaigns. Left list of submissions, each with a coloured initials avatar, sender name, form name and relative time, with an unread dot on the first three — Priya Nair / Contact form / 2m; Marcus Reyes / Contact form / 18m; Dana Lee / Newsletter signup / 1h; Sofia Marín / Contact form / 3h; Tom Becker / Quote request / 5h; Amara Okafor / Contact form / 1d. Right detail pane: 'Contact form', 'Received today, 2:04 PM', then labelled fields NAME (Priya Nair), EMAIL (priya@lumen.co), COMPANY (Lumen Studio), BUDGET ($5,000 – $10,000), MESSAGE (a multi-line enquiry about relaunching a site). Below the fields, three status chips: 'Saved to Inbox' (green), 'Added to “Leads” dataset' (blue), and a third pink chip beginning 'Automa…' that is clipped by the right edge of the mockup frame.",
+        "figmaNodeId": "120:1528"
+      },
+      "notes": "Two columns: 600px text column left (80px left inset, no right padding — the mockup bleeds off the right edge), mockup right. Eyebrow is a 28×2px magenta (brand/secondary #E040FB) rule followed by uppercase tracked label. Heading is Display/XL 72px Black, wrapping to three lines. White background."
+    },
+    {
+      "kind": "statement",
+      "figmaNodeId": "120:1529",
+      "eyebrow": null,
+      "heading": "Contact forms, surveys, signups — they usually scatter across a page builder, a separate form tool, and a spreadsheet. Aglyn keeps the form, the submission, and the data it creates in one place — captured, organized, and ready to use.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": "Single full-bleed 34px Bold pull-quote at text/muted (#757575), 80px side padding, 64px vertical, left-aligned, full container width. UNLIKE Console and Commerce, this statement has NO emphasised phrase — the whole sentence renders in the muted colour as one run. If the shared component takes a highlight prop, pass nothing here. White background."
+    },
+    {
+      "kind": "capabilities",
+      "figmaNodeId": "120:1531",
+      "eyebrow": "WHAT FORMS & INBOX INCLUDES",
+      "heading": "From form to organized data.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Forms on the canvas",
+          "body": "Drop a form onto any screen in Besigner and pick your fields — text, email, dropdowns, multiple choice, and star ratings — to build contact forms, surveys, and polls.",
+          "meta": null
+        },
+        {
+          "title": "One Inbox",
+          "body": "Every submission lands in a single Inbox you can read, mark read or unread, and clear out.",
+          "meta": null
+        },
+        {
+          "title": "After-submit actions",
+          "body": "Show a thank-you message, redirect to another page, or reveal hidden content the moment a form is sent.",
+          "meta": null
+        },
+        {
+          "title": "Write to a dataset",
+          "body": "Send submissions straight into a dataset, then export the records as CSV or JSON whenever you need them.",
+          "meta": null
+        },
+        {
+          "title": "Spam protection",
+          "body": "A hidden honeypot field and per-visitor rate limits keep junk out — with no CAPTCHA for real people to solve.",
+          "meta": null
+        },
+        {
+          "title": "Automate what’s next",
+          "body": "Trigger an email, a webhook, or an admin alert on every submission with an automation.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "Centred eyebrow + centred heading. 3-column card grid, 2 rows, 410px cards with a 44px icon tile top-left. This grid is taller than Console's and Commerce's (504px vs 452px) because the card bodies run longer — card heights are uneven, so top-align the cards. Reading order is left-to-right by row. White background. See the page-level note about stale layer names on these cards."
+    },
+    {
+      "kind": "deep-dive",
+      "figmaNodeId": "120:1583",
+      "eyebrow": "BUILD ON THE CANVAS",
+      "heading": "Build any form right on the page.",
+      "subheading": null,
+      "body": [
+        "Drop a Form element onto any screen in Besigner, add the fields you need, set what happens after submit, and point it at a dataset — all without code."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "title": "Pick your fields",
+          "body": "Text, email, dropdowns, multiple choice, and star ratings.",
+          "meta": null
+        },
+        {
+          "title": "After-submit actions",
+          "body": "Show a thank-you message, redirect, or reveal hidden content.",
+          "meta": null
+        },
+        {
+          "title": "Write to a dataset",
+          "body": "Send each submission into a dataset you can export as CSV or JSON.",
+          "meta": null
+        }
+      ],
+      "image": {
+        "describe": "Besigner editor mockup, 768×580. Top chrome: Aglyn mark, breadcrumb 'Besigner / Contact', primary 'PUBLISH' button right. Centre canvas shows a selected form card 'Get in touch' with Name, Email and Message fields and a full-width blue 'SEND MESSAGE' button, wrapped in a blue selection outline. Right-hand properties panel headed 'Form' with a FIELDS list — each row a field label and its type chip (Name/Text, Email/Email, Message/Textarea, Company/Text, Rating/Star) — then an AFTER SUBMIT setting reading 'Show a thank-you message', then a 'Write to dataset' row with an enabled toggle.",
+        "figmaNodeId": "120:1610"
+      },
+      "notes": "Combined deep-dive + canvas/visual section — the page's main visual moment. Two columns: 440px text column left, 768px mockup right. Section sits on a tinted (very pale blue/lavender) background, unlike the white sections around it. Eyebrow is magenta/pink, left-aligned with no rule. The three items are checkmark-bulleted rows, not cards. Note the deep-dive items deliberately restate the Capabilities cards in shorter form — keep both, they are different strings."
+    },
+    {
+      "kind": "how-it-works",
+      "figmaNodeId": "120:1611",
+      "eyebrow": "BUILD → COLLECT → ROUTE",
+      "heading": "From a form on the page to data you can use.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Build the form",
+          "body": "Drag a form or survey onto the page in Besigner and pick your fields — text, email, dropdowns, choices, and star ratings.",
+          "meta": "01"
+        },
+        {
+          "title": "Collect it",
+          "body": "Every submission lands in your Inbox — read it, mark it read, and keep it all in one place.",
+          "meta": "02"
+        },
+        {
+          "title": "Route it",
+          "body": "Send it onward — write rows to a dataset, or fire an email or webhook with an automation.",
+          "meta": "03"
+        }
+      ],
+      "image": null,
+      "notes": "LEFT-aligned eyebrow and heading. NOTE the eyebrow here is NOT 'HOW IT WORKS' as on the other two pages — it is 'BUILD → COLLECT → ROUTE' with literal arrow characters (→). Three equal columns, each topped by a 3px horizontal rule, then a large 2-digit step numeral, then title, then body. Step 01's body runs one line longer, so columns are unequal height — align at the top. White background."
+    },
+    {
+      "kind": "explore",
+      "figmaNodeId": "120:1631",
+      "eyebrow": "ONE PLATFORM",
+      "heading": "Forms & Inbox works with the rest of Aglyn.",
+      "subheading": "Every product below runs on the same platform — explore what else is built in.",
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "meta": null
+        },
+        {
+          "title": "Commerce",
+          "body": "Storefronts, checkout, subscriptions & digital goods.",
+          "meta": null
+        },
+        {
+          "title": "Console",
+          "body": "Manage every site, team, and setting in one place.",
+          "meta": null
+        },
+        {
+          "title": "Media",
+          "body": "A real DAM — folders, drag-and-drop, metadata.",
+          "meta": null
+        },
+        {
+          "title": "Workflows",
+          "body": "Automate the busywork with triggers & actions.",
+          "meta": null
+        },
+        {
+          "title": "Plugins",
+          "body": "Install templates and layouts, or publish and sell your own.",
+          "meta": null
+        },
+        {
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages, and store revenue.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "SEVEN link-cards in a 3-column grid — the last row holds a single card sitting in the MIDDLE column (x=435), so the odd card is visually centred. Each card: 40px product icon top-left, small arrow glyph top-right, title, one-line body. No self-link (no Forms & Inbox card); the Console card fills that slot. Section sits on a pale grey background. Eyebrow, heading and subheading all centred."
+    },
+    {
+      "kind": "early-access",
+      "figmaNodeId": "120:1712",
+      "eyebrow": null,
+      "heading": "Be among the first to build on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Aglyn is pre-release. Join early access to start building and shape the roadmap with us."
+      ],
+      "actions": [
+        { "label": "Join early access", "variant": "contained" },
+        { "label": "See what’s included", "variant": "outlined" }
+      ],
+      "items": [
+        { "title": "1", "body": "platform, not a stack", "meta": "stat" },
+        { "title": "9", "body": "products built in", "meta": "stat" },
+        { "title": "0", "body": "plugins to wire up", "meta": "stat" },
+        { "title": "1-click", "body": "to publish", "meta": "stat" }
+      ],
+      "image": null,
+      "notes": "Byte-identical to the Console and Commerce versions — build it once and share it. Centred stack: pill badge 'Now in early access' (rounded 999px, subtle grey fill, 1px border, 8px dot on the left), heading, body, two buttons. Below, a 4-up stat row separated by 1px vertical hairline dividers; figures are 44px ExtraBold in brand/primary-strong (#0090D9), labels 16px text/secondary. Section background is bg/default (#F8F9FA)."
+    },
+    {
+      "kind": "cta",
+      "figmaNodeId": "120:1736",
+      "eyebrow": null,
+      "heading": "Start collecting on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — build your first form and share it in minutes."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "text" }
+      ],
+      "items": [],
+      "image": null,
+      "notes": "Full-bleed gradient band, all text white and centred. Gradient is linear ~189deg: #00B0FF 36.6% → #7A5CF0 76.9% → #E040FB 109.8%. Heading is Display/L 56px Black on a single line. Body at 94% opacity on 620px. Primary is the white-on-dark button variant; secondary is a white text button."
+    }
+  ],
+  "claimsToVerify": [
+    {
+      "section": "hero (mockup content, not prose)",
+      "phrase": "Tabs: Submissions · Members & leads · Campaigns; detail-pane chip “Added to ‘Leads’ dataset”",
+      "concern": "The Inbox mockup advertises a 'Members & leads' tab and a 'Campaigns' tab. A Contacts CRM is on the do-not-claim list, and 'Campaigns' implies an email-marketing product that no section of copy on this page describes. Either strip those two tabs from the mockup before it is rebuilt, or confirm both features exist. The 'Leads dataset' chip is fine — a dataset named Leads is just a dataset."
+    },
+    {
+      "section": "hero + capabilities",
+      "phrase": "Every submission, in one Inbox. / Every submission lands in a single Inbox you can read, mark read or unread, and clear out.",
+      "concern": "Borderline against the 'shared team inbox' prohibition. As written it claims a single submissions Inbox with read/unread state, not a shared team mailbox with assignment or replies — that reads clean to me, but the mockup's 'Members & leads'/'Campaigns' tabs push it toward the forbidden reading. Verify the Inbox has no team-mailbox affordances before shipping."
+    },
+    {
+      "section": "capabilities + how-it-works",
+      "phrase": "Trigger an email, a webhook, or an admin alert on every submission with an automation. / fire an email or webhook with an automation",
+      "concern": "Automation claim is submission-triggered only, so it does not claim scheduled/cron triggers or a visual workflow canvas — but confirm outbound email and webhook actions both ship, since the Explore card on all three pages also sells 'Workflows — Automate the busywork with triggers & actions.'"
+    }
+  ]
+}

@@ -1,0 +1,249 @@
+{
+  "page": "Commerce",
+  "figmaNodeId": "114:763",
+  "frameName": "Product — Commerce",
+  "frameSize": { "width": 1440, "height": 5256 },
+  "notes": "8 content sections between a shared NavBar (114:764) and Footer (114:1090), both shared instances not captured here. Same 8-section skeleton as Console, with Deep-dive and Canvas/visual combined into one section (Figma frame named 'Deep-dive · canvas').",
+  "sections": [
+    {
+      "kind": "hero",
+      "figmaNodeId": "114:765",
+      "eyebrow": "COMMERCE · SELL ANYTHING",
+      "heading": "Sell anything, right where you build.",
+      "subheading": null,
+      "body": [
+        "A full storefront on the same platform as your site — products, checkout, subscriptions, POS, and digital goods, with no plugins to stitch together."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "Watch the tour", "variant": "text" }
+      ],
+      "items": [],
+      "image": {
+        "describe": "Storefront mockup, 920×580, floating card with heavy hero shadow. A published site header reading 'NORTHWIND' with nav links Shop, Collections, Journal, About. Below, an 'All products' heading and a product grid of colourful gradient tiles; each card shows a product name, a price and a small add-to-cart button — e.g. Maison Wool Throw $149, Ceramic Pour-Over $48, Field Notebook $18, Enamel Camp Mug $24, Canvas Tote $32, Wall Print · digital $12. The grid is clipped at the right and bottom edges of the mockup frame.",
+        "figmaNodeId": "114:775"
+      },
+      "notes": "Two columns: 600px text column left (80px left inset, no right padding — the mockup bleeds off the right edge), mockup right. Eyebrow is a 28×2px magenta (brand/secondary #E040FB) rule followed by uppercase tracked label. Heading is Display/XL 72px Black, wrapping to two lines. The hero lede is shorter than Console's (2 lines vs 3). White background."
+    },
+    {
+      "kind": "statement",
+      "figmaNodeId": "114:776",
+      "eyebrow": null,
+      "heading": "Bolting a store onto your site usually means a plugin maze. Aglyn commerce is part of the platform — your products, orders, and customers live next to your content, not in a separate app.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": "Single full-bleed 34px Bold pull-quote at text/muted (#757575), 80px side padding, 64px vertical. The phrase 'part of the platform' is emphasised in text/primary (#212121) — the rest stays muted. Left-aligned, full container width. White background."
+    },
+    {
+      "kind": "capabilities",
+      "figmaNodeId": "114:778",
+      "eyebrow": "WHAT COMMERCE INCLUDES",
+      "heading": "A complete store, built into your site.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Products & catalog",
+          "body": "Physical, digital, and service products with variants, options, and media.",
+          "meta": null
+        },
+        {
+          "title": "Checkout & payments",
+          "body": "Stripe-powered checkout with taxes, discounts, and gift cards.",
+          "meta": null
+        },
+        {
+          "title": "Subscriptions & memberships",
+          "body": "Recurring plans plus gated content and memberships (Business & up).",
+          "meta": null
+        },
+        {
+          "title": "POS & in-person",
+          "body": "Ring up sales at the counter with registers; inventory stays in sync.",
+          "meta": null
+        },
+        {
+          "title": "Digital goods & gating",
+          "body": "Sell downloads and gate content or memberships behind a purchase.",
+          "meta": null
+        },
+        {
+          "title": "Reviews, recovery & analytics",
+          "body": "Product reviews and abandoned-cart recovery (Pro & up), plus a built-in commerce analytics dashboard.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "Centred eyebrow + centred heading. 3-column card grid, 2 rows, 410px cards with a 44px icon tile top-left. Two cards carry inline plan gating in parentheses — '(Business & up)' and '(Pro & up)' — keep those verbatim, they are the only plan qualifiers on the page. Reading order is left-to-right by row. White background."
+    },
+    {
+      "kind": "deep-dive",
+      "figmaNodeId": "114:830",
+      "eyebrow": "ORDERS + CHANNELS",
+      "heading": "Every order, online and in person.",
+      "subheading": null,
+      "body": [
+        "Orders from your storefront and your POS land in one place — track status, issue refunds, and watch revenue, AOV, and top products update as sales come in."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "title": "One order stream",
+          "body": "Online and POS orders together, each with status and fulfillment.",
+          "meta": null
+        },
+        {
+          "title": "Refunds & fees",
+          "body": "Refund through Stripe, and platform fees adjust automatically.",
+          "meta": null
+        },
+        {
+          "title": "Commerce analytics",
+          "body": "Revenue, orders, average order value, and top products, built in.",
+          "meta": null
+        }
+      ],
+      "image": {
+        "describe": "Console 'Commerce › Orders' screen mockup, 768×580. Three stat tiles across the top — Revenue $12,480 (with a positive delta), Orders 142, Avg order value $88 (last 30 days). Below, an orders table with columns Order, Customer, Channel, Total, Status, Date; rows mix Online and POS channels and show status pills in different colours (Paid, Fulfilled, Refunded). Table is clipped at the bottom of the mockup frame.",
+        "figmaNodeId": "114:857"
+      },
+      "notes": "Combined deep-dive + canvas/visual section. Two columns: 440px text column left, 768px mockup right. Section sits on a tinted (very pale blue/lavender) background, unlike the white sections around it. Eyebrow is magenta/pink, left-aligned with no rule. The three items are checkmark-bulleted rows, not cards. Note 'fulfillment' is spelled US-style — keep verbatim."
+    },
+    {
+      "kind": "how-it-works",
+      "figmaNodeId": "114:858",
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From product to paid, on one platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Add your products",
+          "body": "Create physical, digital, or service products with variants, images, and inventory.",
+          "meta": "01"
+        },
+        {
+          "title": "Sell everywhere",
+          "body": "Publish a storefront on your site and ring up in-person sales at the POS — one catalog, one inventory.",
+          "meta": "02"
+        },
+        {
+          "title": "Get paid & fulfill",
+          "body": "Take payment through Stripe, then manage orders, refunds, and shipping right in the console.",
+          "meta": "03"
+        }
+      ],
+      "image": null,
+      "notes": "LEFT-aligned eyebrow and heading. Three equal columns, each topped by a 3px horizontal rule, then a large 2-digit step numeral, then title, then body. Step 02's body runs one line longer than the others, so the columns are unequal height — align the rules and numerals at the top, not the bodies at the bottom. White background."
+    },
+    {
+      "kind": "explore",
+      "figmaNodeId": "114:878",
+      "eyebrow": "ONE PLATFORM",
+      "heading": "Commerce works with the rest of Aglyn.",
+      "subheading": "Every product below runs on the same platform — explore what else is built in.",
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "meta": null
+        },
+        {
+          "title": "Console",
+          "body": "Manage every site, team, and setting in one place.",
+          "meta": null
+        },
+        {
+          "title": "Forms & Inbox",
+          "body": "Collect submissions in one Inbox and route them onward.",
+          "meta": null
+        },
+        {
+          "title": "Media",
+          "body": "A real DAM — folders, drag-and-drop, metadata.",
+          "meta": null
+        },
+        {
+          "title": "Workflows",
+          "body": "Automate the busywork with triggers & actions.",
+          "meta": null
+        },
+        {
+          "title": "Plugins",
+          "body": "Install templates and layouts, or publish and sell your own.",
+          "meta": null
+        },
+        {
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages, and store revenue.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "SEVEN link-cards in a 3-column grid — the last row holds a single card sitting in the MIDDLE column (x=435), so the odd card is visually centred. Each card: 40px product icon top-left, small arrow glyph top-right, title, one-line body. No self-link (no Commerce card); the Console card fills that slot. Section sits on a pale grey background. Eyebrow, heading and subheading all centred."
+    },
+    {
+      "kind": "early-access",
+      "figmaNodeId": "114:959",
+      "eyebrow": null,
+      "heading": "Be among the first to build on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Aglyn is pre-release. Join early access to start building and shape the roadmap with us."
+      ],
+      "actions": [
+        { "label": "Join early access", "variant": "contained" },
+        { "label": "See what’s included", "variant": "outlined" }
+      ],
+      "items": [
+        { "title": "1", "body": "platform, not a stack", "meta": "stat" },
+        { "title": "9", "body": "products built in", "meta": "stat" },
+        { "title": "0", "body": "plugins to wire up", "meta": "stat" },
+        { "title": "1-click", "body": "to publish", "meta": "stat" }
+      ],
+      "image": null,
+      "notes": "Byte-identical to the Console and Forms versions — build it once and share it. Centred stack: pill badge 'Now in early access' (rounded 999px, subtle grey fill, 1px border, 8px dot on the left), heading, body, two buttons. Below, a 4-up stat row separated by 1px vertical hairline dividers; figures are 44px ExtraBold in brand/primary-strong (#0090D9), labels 16px text/secondary. Section background is bg/default (#F8F9FA)."
+    },
+    {
+      "kind": "cta",
+      "figmaNodeId": "114:1084",
+      "eyebrow": null,
+      "heading": "Start selling on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — add products and open your store in minutes."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "text" }
+      ],
+      "items": [],
+      "image": null,
+      "notes": "Full-bleed gradient band, all text white and centred. Gradient is linear ~189deg: #00B0FF 36.6% → #7A5CF0 76.9% → #E040FB 109.8%. Heading is Display/L 56px Black on a single line. Body at 94% opacity on 620px. Primary is the white-on-dark button variant; secondary is a white text button."
+    }
+  ],
+  "claimsToVerify": [
+    {
+      "section": "capabilities",
+      "phrase": "Recurring plans plus gated content and memberships (Business & up).",
+      "concern": "Not on the forbidden list, but it is a hard plan-gating promise stated in marketing copy. Confirm memberships really start at Business before this ships."
+    },
+    {
+      "section": "capabilities",
+      "phrase": "Product reviews and abandoned-cart recovery (Pro & up), plus a built-in commerce analytics dashboard.",
+      "concern": "Same — verify the Pro-and-up gate for reviews and abandoned-cart recovery, and that both features exist today rather than being roadmap."
+    },
+    {
+      "section": "capabilities",
+      "phrase": "Stripe-powered checkout with taxes, discounts, and gift cards.",
+      "concern": "Gift cards are the one item here not corroborated elsewhere in the frames. Verify gift cards ship before claiming them."
+    }
+  ]
+}
