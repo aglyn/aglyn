@@ -208,6 +208,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Email Campaigns',
     excerpt: 'Send email to audiences built from your contacts, with tiered send caps and unsubscribe handling.',
   },
+  enterprise: {
+    path: '/enterprise/overview',
+    title: 'Enterprise overview',
+    excerpt: 'What the Enterprise plan adds — single sign-on, a dedicated support commitment, and the security material a procurement review asks for.',
+  },
   errorScreens: {
     path: '/building-sites/site-protection/error-screens',
     title: 'Design custom error screens',
@@ -423,6 +428,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Screens & Layouts',
     excerpt: 'Screen hierarchy and routing, shared layouts, reusable components, and versioning.',
   },
+  securityAndCompliance: {
+    path: '/enterprise/security-and-compliance',
+    title: 'Security & compliance',
+    excerpt: 'Where the security material for a procurement review lives, and what we do not have.',
+  },
   selfHosting: {
     path: '/developers/self-hosting',
     title: 'Self-hosting',
@@ -448,6 +458,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Site Search',
     excerpt: 'Let visitors search your site\'s pages, blog entries, and dataset records with a built-in search page.',
   },
+  sso: {
+    path: '/enterprise/sso',
+    title: 'Single sign-on (SAML)',
+    excerpt: 'How SAML SSO works on Aglyn, how it is provisioned, what enforcement does, and the consequences of SSO accounts living in their own identity pool.',
+  },
   staffConsole: {
     path: '/staff-console/overview',
     title: 'Staff Console (internal)',
@@ -462,6 +477,11 @@ export const DOCS_HELP_TOPICS = {
     path: '/staff-console/support-queue',
     title: 'Support queue (internal)',
     excerpt: 'Triage customer support tickets from the staff console — filter, reply as Aglyn, and close or reopen.',
+  },
+  supportTiers: {
+    path: '/enterprise/support-tiers',
+    title: 'Support commitments',
+    excerpt: 'The first-response commitment attached to each plan, why Enterprise is quoted in clock hours, and where ticket support starts.',
   },
   team: {
     path: '/workspace-and-billing/teams-and-roles/overview',
@@ -492,6 +512,11 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/custom-domains/troubleshooting',
     title: 'Troubleshoot verification',
     excerpt: 'Fix the common reasons a custom domain won\'t verify.',
+  },
+  uptimeAndStatus: {
+    path: '/enterprise/uptime-and-status',
+    title: 'Availability & status',
+    excerpt: 'The live status page, what it does and does not show, and why there is no committed uptime percentage yet.',
   },
   webhooks: {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
@@ -546,6 +571,7 @@ export const DOCS_HELP_ANCHORS = {
   dragDropHierarchy: ['#where-you-can-drag', '#what-a-drag-does', '#drop-zones-edges-vs-center', '#containers-vs-leaf-elements', '#containers-accept-children', '#leaf-elements-dont--dropping-on-one-makes-a-sibling', '#adding-a-new-element', '#when-a-drop-is-rejected', '#multi-drag', '#tips', '#related'],
   editYourTheme: ['#open-the-editor', '#set-colors-and-fonts', '#it-follows-you-into-the-besigner', '#tips', '#related'],
   emailCampaigns: ['#send-a-campaign', '#personalize-with-merge-tags', '#schedule-a-send', '#email-lists', '#experiments', '#opens--clicks', '#compliance', '#related'],
+  enterprise: ['#what-enterprise-does-not-change', '#getting-enterprise'],
   errorScreens: ['#the-error-screens', '#design-one', '#tips', '#related'],
   events: ['#manage-events', '#show-events-on-a-screen', '#search-engines', '#related'],
   featureFlags: ['#how-a-flag-is-evaluated', '#how-gating-behaves', '#managing-flags', '#under-the-hood', '#a-flag-is-not-always-sufficient-on-its-own'],
@@ -586,20 +612,24 @@ export const DOCS_HELP_ANCHORS = {
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#related'],
   saveATemplate: ['#start-from-a-template', '#where-to-find-it', '#save-your-site-as-a-template', '#tips', '#related'],
   screens: ['#screens--routing', '#layouts', '#nested-layouts', '#used-by', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],
+  securityAndCompliance: ['#what-it-covers', '#why-the-gaps-are-listed-first', '#reporting-a-vulnerability'],
   selfHosting: ['#the-short-version', '#the-full-runbook', '#honest-limits'],
   seo: ['#per-screen-seo', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
   serverApis: ['#an-api-route', '#webhooks-with-signature-verification', '#platform-billing-events', '#scheduled-jobs', '#troubleshooting'],
   siteProtection: ['#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#configure-it', '#related'],
+  sso: ['#how-it-works', '#enforcement', '#consequences-worth-knowing-before-you-switch', '#testing-it', '#related'],
   staffConsole: ['#whats-there', '#related'],
   supportAndCommunity: ['#support-tickets', '#ticket-status', '#what-to-include', '#community-forum', '#related'],
   supportQueue: ['#triage', '#notifications', '#related'],
+  supportTiers: ['#why-enterprise-is-in-hours-not-business-days', '#what-starts-and-stops-the-clock', '#where-to-see-it'],
   team: ['#team-roles', '#organizations', '#three-kinds-of-user', '#what-a-site-collaborator-sees', '#site-membership', '#seats', '#related'],
   templatesLibrary: ['#the-three-kinds', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#deleting', '#related'],
   termReference: ['#platform--accounts', '#organization-org', '#workspace', '#tenant', '#host', '#site', '#console', '#staff-console', '#member', '#custom-role', '#publisher', '#sites--content', '#screen', '#layout', '#slug', '#version', '#redirect', '#error-screens', '#maintenance-mode', '#locale', '#site-template', '#theme', '#custom-domain', '#subdomain', '#the-node-tree', '#node', '#tree', '#tree-root', '#trunk', '#stem', '#branch', '#leaf', '#component', '#component-bundle', '#preset', '#reusable-component', '#lineal-placement-rules', '#besigner-the-editor', '#besigner', '#canvas', '#hierarchy-panel', '#drawer', '#binding', '#plugins--marketplace', '#plugin', '#add-on', '#surface', '#console-extension', '#widget', '#injection-zone', '#plugin-manifest', '#enabled-plugins', '#feature-flag', '#release-flag', '#plugin-config', '#plugin-permission', '#plugin-job', '#listing', '#install', '#realm-bundle', '#sandbox', '#host-abi', '#review-queue', '#data--logic', '#dataset', '#record', '#field', '#relation', '#contact', '#segment', '#media-library', '#variable', '#function-fx', '#form', '#automation--marketing', '#event', '#workflow', '#action', '#automation', '#overlay', '#experiment', '#email-campaign', '#designed-email', '#merge-tag', '#commerce', '#product', '#order', '#pos', '#booking', '#billing--plans', '#plan', '#entitlement', '#quota', '#seat', '#metered-usage'],
   textEditing: ['#edit-inline', '#rich-text', '#the-text-attribute', '#bindings-in-text', '#related'],
   themeBuilder: ['#edit-your-theme', '#related'],
   troubleshooting: ['#checklist', '#still-stuck', '#related'],
+  uptimeAndStatus: ['#the-status-page', '#there-is-no-committed-uptime-percentage', '#where-the-platform-runs', '#reporting-an-outage'],
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
   workflows: ['#workflows', '#actions-builder', '#webhooks', '#related'],
 } as const satisfies Partial<

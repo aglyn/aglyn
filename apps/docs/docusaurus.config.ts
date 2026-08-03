@@ -222,6 +222,19 @@ const config: Config = {
             { label: 'Plugins', to: '/developers/plugins/overview' },
           ],
         },
+        // Trust and Status shipped with the enterprise readiness work but were
+        // reachable only by typing the URL — nothing in the navbar, footer or
+        // sidebar pointed at either. They are the two pages a procurement
+        // review looks for first, so they get their own column rather than
+        // being appended to "More".
+        {
+          title: 'Trust',
+          items: [
+            { label: 'Trust & security', to: '/trust' },
+            { label: 'Status', to: '/status' },
+            { label: 'Enterprise', to: '/enterprise' },
+          ],
+        },
         {
           title: 'More',
           items: [

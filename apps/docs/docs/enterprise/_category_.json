@@ -1,0 +1,12 @@
+{
+  "label": "Enterprise",
+  "position": 10,
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "generated-index",
+    "slug": "/enterprise",
+    "title": "Enterprise",
+    "description": "Single sign-on, support commitments, availability and the security posture behind an enterprise purchase."
+  }
+}

@@ -75,6 +75,12 @@ const ALLOWED = new Map<string, string>([
     'The forum’s own documentation page.',
   ],
   [
+    'apps/docs/docs/enterprise/support-tiers.md',
+    'Documents the SUPPORT ladder, whose weakest tier is literally labelled ' +
+      '“Community” in SUPPORT_BY_PLAN, and links to the forum page above. ' +
+      'Support naming, not marketplace naming.',
+  ],
+  [
     'apps/docs/docs/workspace-and-billing/teams-and-roles/invite-teammates.md',
     'Points at the forum for help.',
   ],
