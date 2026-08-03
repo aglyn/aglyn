@@ -126,6 +126,22 @@ interface MenuShellProps extends BoxProps {
   panelSx: SxProps
 }
 
+/**
+ * Trigger typography (AGL-1198). A menu label sits in a nav beside plain
+ * links, so it reads as navigation, not as a call to action — MUI's
+ * uppercase Button transform shouts "PRODUCT" next to "Pricing". The
+ * default lives on the WRAPPER and the Button inherits it, so an author
+ * who does want uppercase can set it in STYLES → Typography on the
+ * element and have it win; before this there was no way to change it at
+ * all, because the Button is internal to the element.
+ */
+const TRIGGER_SHELL_SX = {
+  position: 'relative',
+  display: 'inline-flex',
+  textTransform: 'none',
+} as const
+const TRIGGER_SX = { textTransform: 'inherit' } as const
+
 const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
   const { label, editorHint, panelSx, sx, children, ...rest } = props
   // Node styles ride the sx prop the renderer merges; keep them by
@@ -209,12 +225,13 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
         // toolbar's flow, shoving and overlapping the other nav items in a
         // horizontal app bar; positioning it like the live popup keeps the
         // bar intact while the panel stays selectable and editable in place.
-        sx={[{ position: 'relative', display: 'inline-flex' }, ...nodeSx]}
+        sx={[TRIGGER_SHELL_SX, ...nodeSx]}
       >
         <Button
           color="inherit"
           aria-expanded={authoring || undefined}
           endIcon={<MdiIcon path={mdiChevronDown.path} />}
+          sx={TRIGGER_SX}
         >
           {label}
         </Button>
@@ -266,13 +283,14 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
         onKeyDown={(event: KeyboardEvent) => {
           if (event.key === 'Escape') closeNow()
         }}
-        sx={[{ position: 'relative', display: 'inline-flex' }, ...nodeSx]}
+        sx={[TRIGGER_SHELL_SX, ...nodeSx]}
       >
         <Button
           color="inherit"
           aria-haspopup="true"
           aria-expanded={open || undefined}
           endIcon={<MdiIcon path={mdiChevronDown.path} />}
+          sx={TRIGGER_SX}
           onClick={() => {
             // Zero-config default: the trigger click-toggles its menu;
             // a click also "pins" a hover-opened menu.

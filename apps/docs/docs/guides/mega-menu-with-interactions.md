@@ -56,6 +56,11 @@ contents; click elsewhere and it collapses again.
 With the Mega Menu selected, set its **Label** in the inspector (for the
 demo it's *Explore*). Use the **Panel width** attribute to choose *Fit
 content*, *Wide* (720px), or *Full width*.
+
+The label renders in the case you type it, so it sits beside plain nav
+links without shouting. If you want it uppercase, set **Text transform**
+in **Styles → Typography** on the Mega Menu itself and the trigger
+follows.
 :::
 
 ## 2. Build the columns
