@@ -264,6 +264,20 @@ const baseOptions: ThemeOptions = {
       },
     },
     // MuiMenu: {},
+    // Tabs mark the selected tab with `primary`, but in the dark scheme
+    // primary is #2C3540 — a SURFACE tone, not an accent — so the selected
+    // tab rendered near-invisible against a dark background while the
+    // unselected ones stayed at 87% white. Three call sites had already
+    // hand-set `textColor="secondary"` to work around it; making it the
+    // default fixes the ones that had not (the theme editor's own light/dark
+    // switch) and matches MuiButton and MuiLink, which already default to
+    // secondary.
+    MuiTabs: {
+      defaultProps: {
+        textColor: 'secondary',
+        indicatorColor: 'secondary',
+      },
+    },
     MuiToolbar: {
       styleOverrides: {
         root: ({ theme }) => ({
