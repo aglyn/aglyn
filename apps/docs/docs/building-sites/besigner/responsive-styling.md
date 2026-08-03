@@ -57,8 +57,11 @@ properties:
 - **Typography** — font size, weight, family, line height, letter
   spacing, text transform, and text decoration.
 - **Borders & Shadows** — border shorthand, border color (with your
-  theme palette in the picker), corner radius, outline, and a shadow
-  preset menu (Subtle / Medium / Large / None).
+  theme palette in the picker), a border field per edge (top, right,
+  bottom, left) for dividers and accent rails, corner radius, outline,
+  and a shadow preset menu (Subtle / Medium / Large / None). The
+  shorthand draws all four edges; use the per-edge fields when you want
+  a rule under a header or a line between columns.
 - **Position & Overflow** — position scheme with top/right/bottom/left
   offsets, z-index, overflow, opacity, and cursor.
 - **Grid & Flex Child** — grid template columns/rows, auto-flow, and

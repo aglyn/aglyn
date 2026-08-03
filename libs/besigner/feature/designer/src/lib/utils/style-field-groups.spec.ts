@@ -93,6 +93,12 @@ describe('style field groups (AGL-540/587)', () => {
       'textDecoration',
       'border',
       'borderColor',
+      // Per-side borders (AGL-1199): a divider under a bar or a rule
+      // between columns cannot be written with the shorthand alone.
+      'borderTop',
+      'borderRight',
+      'borderBottom',
+      'borderLeft',
       'borderRadius',
       'outline',
       'boxShadow',
@@ -314,5 +320,40 @@ describe('style field groups (AGL-540/587)', () => {
     expect(readSxValue(sx, 'flexBasis', 'md')).toBeUndefined()
     expect(readSxValue(sx, 'flexBasis', 'lg')).toBe('30%')
     expect(readSxValue(sx, 'backgroundColor', 'sm')).toBe('#fff')
+  })
+})
+
+describe('per-side borders (AGL-1199)', () => {
+  const SIDES = ['borderTop', 'borderRight', 'borderBottom', 'borderLeft']
+
+  it('sits in Borders & Shadows beside the shorthand it complements', () => {
+    const group = buildStyleFieldGroups([]).find((g) => g.$id === 'borders')
+    const names = group!.fields.map((f) => f.name)
+    for (const side of SIDES) expect(names).toContain(side)
+    // Ordered after the shorthand and its colour, before radius, so the
+    // panel reads shorthand → sides → shape.
+    expect(names.indexOf('borderTop')).toBeGreaterThan(names.indexOf('border'))
+    expect(names.indexOf('borderLeft')).toBeLessThan(
+      names.indexOf('borderRadius'),
+    )
+  })
+
+  it('writes one side without touching the others', () => {
+    // The bug this fixes: `border` is the only control, so a bottom
+    // divider had to be drawn on all four edges.
+    const sx = applyStylePartialToSx(
+      undefined,
+      { borderBottom: '1px solid' },
+      null,
+    )
+    expect(sx).toEqual({ borderBottom: '1px solid' })
+    expect(sx['border']).toBeUndefined()
+  })
+
+  it('is scheme-agnostic — only the colour follows dark mode', () => {
+    // borderColor is scheme-scoped; the widths are not, so previewing
+    // dark must not fork a divider into the dark slice.
+    for (const side of SIDES) expect(isSchemeScopedStyleField(side)).toBe(false)
+    expect(isSchemeScopedStyleField('borderColor')).toBe(true)
   })
 })
