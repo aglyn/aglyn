@@ -146,3 +146,73 @@ describe('workspace host gate', () => {
     expect(fetchCalls).toHaveLength(2)
   })
 })
+
+/**
+ * The report-only policy shipped from AGL-518 with no reporting directive, so
+ * it detected violations and told nobody — which is why AGL-523's first
+ * "before flipping" item, reviewing the violations, was never done.
+ *
+ * These assert the wiring end to end, because every part of it fails SILENTLY:
+ * a `report-to` group with no `Reporting-Endpoints` header is ignored, a
+ * missing `report-uri` loses the browsers that only speak the old directive,
+ * and either way the symptom is an empty log that reads exactly like "no
+ * violations" — the same false all-clear the endpoint exists to end.
+ */
+describe('CSP violation reporting (AGL-523)', () => {
+  const REPORT_PATH = '/api/csp-report'
+
+  it('names the reporting group in a Reporting-Endpoints header', async () => {
+    const response = await middleware(request('app.aglyn.com'))
+    expect(response.headers.get('Reporting-Endpoints')).toBe(
+      `csp="${REPORT_PATH}"`,
+    )
+  })
+
+  it('sends BOTH directives on the report-only policy', async () => {
+    const response = await middleware(request('app.aglyn.com'))
+    const policy = response.headers.get('Content-Security-Policy-Report-Only')
+    // Both, not either: `report-uri` is deprecated but is what Safari and
+    // older Chrome actually send, and `report-to` is what the modern ones use.
+    expect(policy).toContain(`report-uri ${REPORT_PATH}`)
+    expect(policy).toContain('report-to csp')
+  })
+
+  it('reports on the ENFORCING policy too, not just report-only', async () => {
+    // Once enforcing is the default a violation is a script that did NOT run.
+    // That is the most urgent thing the log can carry, so it must not be the
+    // one case that reports nowhere.
+    const response = await middleware(
+      request('app.aglyn.com', '/signin?csp=enforce'),
+    )
+    const enforced = response.headers.get('Content-Security-Policy')
+    expect(enforced).toContain(`report-uri ${REPORT_PATH}`)
+    expect(enforced).toContain('report-to csp')
+    // The control: this only means anything if the policy is genuinely the
+    // enforcing one, carrying script-src and a nonce.
+    expect(enforced).toMatch(/script-src[^;]*'nonce-[a-f0-9]{32}'/)
+  })
+
+  it('reports in the DEFAULT state, which is the one production is in', async () => {
+    const response = await middleware(request('app.aglyn.com'))
+    // The default enforcing header carries no script-src — that is the
+    // documented shadowing tradeoff — but it still has base directives that
+    // can be violated, and those violations are worth seeing.
+    expect(response.headers.get('Content-Security-Policy')).toContain(
+      `report-uri ${REPORT_PATH}`,
+    )
+  })
+
+  it('points reporting at a same-origin path, never an absolute URL', async () => {
+    // An absolute URL here would ship violation reports — which name our
+    // internal paths and inline script samples — to whatever host the string
+    // carried. Asserted on the reporting DIRECTIVES specifically: the policy
+    // as a whole is full of absolute URLs by design, because `frame-ancestors`
+    // is an allowlist of our own origins, so a blanket "no https://" check
+    // would fail for a reason that has nothing to do with reporting.
+    const response = await middleware(request('app.aglyn.com'))
+    const policy = response.headers.get('Content-Security-Policy') ?? ''
+    const reportUri = /report-uri ([^;]+)/.exec(policy)?.[1]?.trim()
+    expect(reportUri).toBe(REPORT_PATH)
+    expect(response.headers.get('Reporting-Endpoints')).not.toMatch(/https?:\/\//)
+  })
+})

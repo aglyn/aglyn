@@ -36,6 +36,15 @@ import { baseCspDirectives } from '../../security-origins'
 const CSP_ENFORCE_COOKIE = 'aglyn-csp-enforce'
 
 /**
+ * Where violations are posted (AGL-523). Same-origin and outside the matcher
+ * below, so reporting cannot recurse through this middleware.
+ */
+const CSP_REPORT_PATH = '/api/csp-report'
+
+/** The `Reporting-Endpoints` group name `report-to` resolves against. */
+const CSP_REPORT_GROUP = 'csp'
+
+/**
  * Workspace-subdomain gate (AGL-236): on `{slug}.<workspace domain>`
  * requests, verifies the slug against the `orgSlugs` collection and bounces
  * unknown workspaces to the apex console. In-app org scoping stays
@@ -161,6 +170,20 @@ export async function middleware(request: NextRequest) {
   const scriptSrc = `script-src 'self' https: blob: 'nonce-${nonce}'`
   // The destination policy. Reported, never enforced, so violations from the
   // surfaces that have not been click-tested surface before the switch.
+  //
+  // "Surface" was aspirational until now: this policy shipped with NO reporting
+  // directive, so every violation it detected went to the devtools console of
+  // whoever happened to be looking and nowhere else. The evidence AGL-523 asked
+  // for before flipping has therefore never been collected, and the open
+  // `strict-dynamic` question is exactly what this policy is already testing.
+  //
+  // BOTH directives, because neither is universally supported: `report-uri` is
+  // deprecated but is what Safari and older Chrome actually send, while
+  // `report-to` is the modern one and needs the `Reporting-Endpoints` header
+  // below to resolve its group name. Sending one alone loses a browser family,
+  // and `csp-report.ts` reads both wire formats for the same reason.
+  const reportDirectives =
+    `report-uri ${CSP_REPORT_PATH}; report-to ${CSP_REPORT_GROUP}`
   const strictScriptSrc = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
   // `?csp=enforce` arms it for the session; `?csp=off` disarms. The cookie is
   // what the middleware reads, so a tester navigates normally afterwards.
@@ -174,21 +197,43 @@ export async function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
   const applyCsp = (res: NextResponse) => {
+    // Resolves the `report-to` group named in the policies below. Without this
+    // header `report-to` names a group the browser has never heard of and is
+    // silently ignored — which looks exactly like "no violations", the same
+    // false all-clear this whole endpoint exists to end.
+    res.headers.set(
+      'Reporting-Endpoints',
+      `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"`,
+    )
     if (enforcing) {
       // One policy carrying script-src and the base directives together, so it
       // is self-consistent by construction: the nonce Next stamps on scripts is
       // read from this exact string.
-      res.headers.set('Content-Security-Policy', `${scriptSrc}; ${baseDirectives}`)
+      // Reporting on the ENFORCING policy too, not just the report-only one:
+      // once this is the default, a violation is a script that did not run,
+      // and that is the most urgent thing the log can carry. Report-only
+      // violations say "this would break"; enforcing ones say "this is
+      // broken".
+      res.headers.set(
+        'Content-Security-Policy',
+        `${scriptSrc}; ${baseDirectives}; ${reportDirectives}`,
+      )
       res.headers.set(
         'Content-Security-Policy-Report-Only',
-        `${strictScriptSrc}; ${baseDirectives}`,
+        `${strictScriptSrc}; ${baseDirectives}; ${reportDirectives}`,
       )
     } else {
       // Default. The base directives enforce exactly as they always have; the
       // nonce is shadowed and script-src is not enforced, so nothing can be
       // blocked. Same behaviour as before AGL-523, now with one owner.
-      res.headers.set('Content-Security-Policy', baseDirectives)
-      res.headers.set('Content-Security-Policy-Report-Only', strictScriptSrc)
+      res.headers.set(
+        'Content-Security-Policy',
+        `${baseDirectives}; ${reportDirectives}`,
+      )
+      res.headers.set(
+        'Content-Security-Policy-Report-Only',
+        `${strictScriptSrc}; ${reportDirectives}`,
+      )
     }
     if (cspParam === 'enforce') {
       res.cookies.set(CSP_ENFORCE_COOKIE, '1', { path: '/', httpOnly: true })
