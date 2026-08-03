@@ -17,10 +17,12 @@
 'use client'
 
 import {
+  getDocsFromServer,
   onSnapshot,
   type DocumentData,
   type FirestoreError,
   type Query,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { useEffect, useRef, useState, type DependencyList } from 'react'
 
@@ -31,6 +33,22 @@ export type FirestoreCollectionStatus = 'loading' | 'success' | 'error'
 
 export interface UseFirestoreCollectionOptions {
   idField?: string
+  /**
+   * Confirm against the server when a document disappears from a NON-EMPTY
+   * result, instead of trusting the live snapshot (AGL-1196).
+   *
+   * OPT-IN, and only worth setting for a query whose `where` reads a MUTABLE
+   * field. Such a document can stop matching mid-session — a scope edit, an
+   * un/republish — leave the query target, and get cached as a `noDocument`
+   * tombstone at its own path, which is then served to every other reader of
+   * that path including single-document reads (AGL-827/929).
+   *
+   * A query with no predicate, or one keyed on `documentId()`, cannot produce
+   * this and must not pay for the extra read. Where the predicate can be
+   * dropped entirely, drop it — that removes the mechanism rather than
+   * repairing it after the fact (AGL-1190).
+   */
+  confirmDisappearances?: boolean
 }
 
 export interface UseFirestoreCollectionResult<T> {
@@ -64,6 +82,7 @@ export function useFirestoreCollection<T = DocumentData>(
   const buildQueryRef = useRef(buildQuery)
   buildQueryRef.current = buildQuery
   const idField = options.idField
+  const confirmDisappearances = options.confirmDisappearances
 
   useEffect(() => {
     setStatus('loading')
@@ -84,6 +103,21 @@ export function useFirestoreCollection<T = DocumentData>(
     let unsubscribe: (() => void) | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     let attempt = 0
+    // Disappearance tracking (AGL-1196); inert unless opted in.
+    const seen = new Set<string>()
+    const confirmedGone = new Set<string>()
+
+    const emit = (docs: QueryDocumentSnapshot<DocumentData>[]) => {
+      setStatus('success')
+      setError(undefined)
+      setData(
+        docs.map((docSnap) => {
+          const value = { ...docSnap.data() } as Record<string, unknown>
+          if (idField) value[idField] = docSnap.id
+          return value as T
+        }),
+      )
+    }
 
     const subscribe = () => {
       unsubscribe = onSnapshot(
@@ -91,15 +125,39 @@ export function useFirestoreCollection<T = DocumentData>(
         (snapshot) => {
           if (cancelled) return
           attempt = 0
-          setStatus('success')
-          setError(undefined)
-          setData(
-            snapshot.docs.map((docSnap) => {
-              const value = { ...docSnap.data() } as Record<string, unknown>
-              if (idField) value[idField] = docSnap.id
-              return value as T
-            }),
-          )
+
+          if (confirmDisappearances) {
+            const present = new Set(snapshot.docs.map((d) => d.id))
+            const vanished = [...seen].filter(
+              (id) => !present.has(id) && !confirmedGone.has(id),
+            )
+            if (vanished.length) {
+              // A fresh (non-resumed) read ignores the resume token, returns
+              // the true set and rewrites the cache, dropping any tombstone.
+              getDocsFromServer(q)
+                .then((fresh) => {
+                  if (cancelled) return
+                  const freshIds = new Set(fresh.docs.map((d) => d.id))
+                  // Only an absence the SERVER agrees with is real. One that
+                  // came back was a tombstone and must stay eligible to heal
+                  // if it vanishes again.
+                  vanished.forEach((id) => {
+                    if (!freshIds.has(id)) confirmedGone.add(id)
+                  })
+                  freshIds.forEach((id) => seen.add(id))
+                  emit(fresh.docs)
+                })
+                .catch(() => {
+                  // Couldn't confirm: show the live result rather than an
+                  // error. A possibly-short list beats an empty one.
+                  if (!cancelled) emit(snapshot.docs)
+                })
+              return
+            }
+            snapshot.docs.forEach((d) => seen.add(d.id))
+          }
+
+          emit(snapshot.docs)
         },
         (err) => {
           if (cancelled) return

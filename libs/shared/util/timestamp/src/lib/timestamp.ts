@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { Timestamp as FirestoreTimestamp } from 'firebase/firestore'
 
 /**
  * Scientific notation values for decimal precision of time equivalents for
@@ -56,7 +55,21 @@ export enum TimeExchange {
 }
 /* eslint-enable @typescript-eslint/no-duplicate-enum-values */
 
-export interface ITimestamp extends FirestoreTimestamp {}
+/**
+ * The timestamp shape, declared structurally (AGL-1207).
+ *
+ * It used to be `extends FirestoreTimestamp`, which dragged the Firestore
+ * client in through TYPE space as well as value space. Everything that
+ * consumes an `ITimestamp` wants these five members; nothing wanted the SDK
+ * class's identity.
+ */
+export interface ITimestamp {
+  readonly seconds: number
+  readonly nanoseconds: number
+  toDate(): Date
+  toMillis(): number
+  isEqual(other: ITimestamp): boolean
+}
 
 /**
  * A `Timestamp` represents a point in time independent of any time zone or
@@ -70,8 +83,46 @@ export interface ITimestamp extends FirestoreTimestamp {}
  * 9999-12-31T23:59:59.999999999Z.
  *
  * Model and logical flow inspired by `@firebase/firestore/lite/timestamp`
+ *
+ * ## Why it extends `Date` (AGL-1207)
+ *
+ * It used to extend the Firestore SDK's `Timestamp`. A class `extends` is a
+ * hard runtime dependency — not type-only, not tree-shakeable — so every
+ * module graph reaching this file loaded the whole Firestore client, and any
+ * spec that partially mocked `firebase/firestore` failed at IMPORT time.
+ *
+ * `Date` is a JS builtin, so extending it costs nothing. Crucially it also
+ * keeps every existing write working untouched: Firestore's client validates
+ * field values with `instanceof Date` and serialises them from the internal
+ * time slot via `getTime()`, so an instance of this class is still written as
+ * a real timestamp — not as a map. That was verified against the emulator
+ * before this change, including with `valueOf()` overridden below to return a
+ * string, which does NOT interfere: the SDK never consults it.
+ *
+ * A plain custom class would have been rejected outright with
+ * `invalid-argument: Unsupported field value`, which is why `Date` and not a
+ * bare object is the base.
  */
-export class Timestamp extends FirestoreTimestamp implements ITimestamp {
+/**
+ * `Date` at runtime, with two members hidden from its TYPE.
+ *
+ * `valueOf()` here returns a zero-padded ordering string, `toJSON()` returns
+ * `{seconds, nanoseconds, type}`, and `toString()` returns the
+ * `Timestamp(seconds=…, nanoseconds=…)` form — all three deliberate, all three
+ * predating this change, and all incompatible with `Date`'s own signatures.
+ * TypeScript is right to reject the override; the runtime is perfectly happy.
+ *
+ * Omitting them from the base type keeps every existing behaviour byte-for-byte
+ * rather than quietly changing what `JSON.stringify(timestamp)` or a `<`
+ * comparison produces — this change is about removing a dependency, not about
+ * altering semantics. `Timestamp` is still `Date` at runtime, so `instanceof
+ * Date` holds and Firestore serialises it as a timestamp.
+ */
+const TimestampBase = Date as unknown as {
+  new (milliseconds: number): Omit<Date, 'valueOf' | 'toJSON' | 'toString'>
+}
+
+export class Timestamp extends TimestampBase implements ITimestamp {
   /**
    * The earliest date supported by Google Firestore timestamps
    * (0001-01-01T00:00:00Z).
@@ -95,17 +146,28 @@ export class Timestamp extends FirestoreTimestamp implements ITimestamp {
    *     non-negative nanoseconds values that count forward in time. Must be
    *     from 0 to 999,999,999 inclusive.
    */
-  constructor(
-    /**
-     * The number of seconds of UTC time since Unix epoch 1970-01-01T00:00:00Z.
-     */
-    readonly seconds: number,
-    /**
-     * The fractions of a second at nanosecond resolution.*
-     */
-    readonly nanoseconds: number,
-  ) {
-    super(seconds, nanoseconds)
+  /**
+   * The number of seconds of UTC time since Unix epoch 1970-01-01T00:00:00Z.
+   */
+  readonly seconds: number
+  /**
+   * The fractions of a second at nanosecond resolution.
+   *
+   * Held as its own field rather than derived from `Date`, which is only
+   * millisecond-resolution. Reads coming back from Firestore carry real
+   * nanoseconds and are the SDK's own class, not this one; nothing in the repo
+   * constructs a sub-millisecond value (`new Timestamp(` has no call sites,
+   * and `now()`/`fromMillis()`/`fromDate()` are all millisecond-sourced), so
+   * the internal slot losing sub-millisecond precision is not reachable today.
+   * The field keeps the public shape exact regardless.
+   */
+  readonly nanoseconds: number
+
+  constructor(seconds: number, nanoseconds: number) {
+    // Validation runs BEFORE `super()`, which is legal because it reads only
+    // the parameters and never `this`. Order matters: seeding Date with an
+    // out-of-range value would otherwise produce an Invalid Date before the
+    // error that explains why.
     if (nanoseconds < 0) {
       throw new Error(
         'invalid-argument: timestamp nanoseconds out of range: ' + nanoseconds,
@@ -127,6 +189,9 @@ export class Timestamp extends FirestoreTimestamp implements ITimestamp {
         'invalid-argument: timestamp seconds out of range: ' + seconds,
       )
     }
+    super(seconds * TimeExchange.MILLI_TO_SEC + nanoseconds / TimeExchange.NANO_TO_MILLI)
+    this.seconds = seconds
+    this.nanoseconds = nanoseconds
   }
 
   /**

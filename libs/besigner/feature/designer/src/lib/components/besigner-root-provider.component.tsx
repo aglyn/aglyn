@@ -23,6 +23,7 @@ import { type ComponentType, Fragment } from 'react'
 import ComponentsDrawerContextProvider from '../contexts/components-drawer-context.provider'
 import RenderedCanvasElementsProvider from '../contexts/rendered-canvas-elements'
 import { BesignerAppProvider } from '../contexts/besigner-app-context'
+import useClipboardShortcuts from '../hooks/use-clipboard-shortcuts'
 import BesignerDndContext from './besigner-dnd-context.component'
 
 export interface BesignerComponentProps {
@@ -53,6 +54,11 @@ export const BesignerRootProviderComponent = (
  (props, ref) => {*/
   const { noSsr, appName, children } = props
   const Wrapper = noSsr ? NoSsr : Fragment
+
+  // Element copy/paste + select-all (AGL-1202). Bound once here so every
+  // besigner surface — screens, layouts, components, templates, emails —
+  // gets the same shortcuts.
+  useClipboardShortcuts()
 
   return (
     <Wrapper>

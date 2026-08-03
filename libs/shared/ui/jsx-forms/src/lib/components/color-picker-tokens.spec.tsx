@@ -57,14 +57,69 @@ describe('buildColorTokenOptions (AGL-588)', () => {
     expect(paper?.light).toBe('#fff')
     expect(paper?.dark).toBe('#121212')
 
-    // Every default token resolves in a stock MUI theme.
+    // The offered tokens are the default paths that the palette actually
+    // resolves, in order. A stock MUI theme has no `tertiary`/`surface`, so
+    // those brand-only slots drop out — see the brand-palette case below.
+    const stockPaths = COLOR_PICKER_TOKEN_PATHS.map((token) => token.path)
     expect(options.map((option) => option.value)).toEqual(
-      COLOR_PICKER_TOKEN_PATHS.map((token) => token.path),
+      stockPaths.filter((path) => !/^(tertiary|surface)\./.test(path)),
     )
     // The stored value is the token path, never a resolved color.
     for (const option of options) {
       expect(option.value).not.toMatch(/^#|^rgb/)
     }
+  })
+
+  // AGL-1206: all three "Secondary" entries pointed at `primary.*`, so
+  // choosing Secondary in the picker silently applied the PRIMARY colour —
+  // and the repeated `primary.main` path gave the grid two identical React
+  // keys, which is what AGL-1192 was seeing.
+  it('offers secondary tokens that actually resolve to secondary', () => {
+    const light = {
+      primary: { main: '#00b0ff' },
+      secondary: { main: '#e040fb' },
+    }
+    const options = buildColorTokenOptions(light, light)
+
+    const secondary = options.find((o) => o.label === 'Secondary')
+    expect(secondary?.value).toBe('secondary.main')
+    expect(secondary?.light).toBe('#e040fb')
+
+    const primary = options.find((o) => o.label === 'Primary')
+    expect(primary?.value).toBe('primary.main')
+    expect(primary?.light).toBe('#00b0ff')
+  })
+
+  it('never emits a duplicate token path', () => {
+    const palette = {
+      primary: { main: '#1', light: '#2', dark: '#3' },
+      secondary: { main: '#4', light: '#5', dark: '#6' },
+      tertiary: { main: '#7' },
+      surface: { main: '#8' },
+      grey: { 300: '#9', 600: '#a', 900: '#b' },
+      common: { white: '#fff', black: '#000' },
+      divider: '#c',
+    }
+    const values = buildColorTokenOptions(palette, palette).map((o) => o.value)
+    expect(new Set(values).size).toBe(values.length)
+  })
+
+  it('offers the brand-only slots when the palette defines them', () => {
+    const brand = {
+      tertiary: { main: '#404C5C' },
+      surface: { main: '#F8F9FA' },
+      grey: { 600: '#757575' },
+    }
+    const options = buildColorTokenOptions(brand, {
+      tertiary: { main: '#7C8CA3' },
+      surface: { main: '#202934' },
+      grey: { 600: '#757575' },
+    })
+    const tertiary = options.find((o) => o.value === 'tertiary.main')
+    // The swatch shows BOTH scheme resolutions — the slate lifts in dark.
+    expect(tertiary?.light).toBe('#404C5C')
+    expect(tertiary?.dark).toBe('#7C8CA3')
+    expect(options.find((o) => o.value === 'grey.600')?.light).toBe('#757575')
   })
 
   it('drops tokens that resolve in neither palette', () => {

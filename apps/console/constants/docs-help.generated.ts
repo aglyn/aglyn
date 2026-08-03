@@ -158,6 +158,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Copy assist',
     excerpt: 'Generate and rewrite text for any canvas text prop with AI.',
   },
+  copyPaste: {
+    path: '/building-sites/besigner/copy-paste',
+    title: 'Copy & paste elements',
+    excerpt: 'Copy any element — with its children — and paste it elsewhere, including into a different screen, layout or component.',
+  },
   createARedirect: {
     path: '/building-sites/redirects/create-a-redirect',
     title: 'Create a redirect',
@@ -566,6 +571,7 @@ export const DOCS_HELP_ANCHORS = {
   contacts: ['#unified-ingestion', '#the-contacts-page', '#segments', '#related'],
   content: ['#site-templates--starter-gallery', '#section--block-library', '#content-collections--blog', '#related'],
   copyAssist: ['#use-it', '#tips', '#related'],
+  copyPaste: ['#copy', '#paste', '#between-documents', '#copy--paste-vs-duplicate-vs-reusable-components', '#shortcuts', '#related'],
   createARedirect: ['#add-a-rule', '#read-hit-metrics', '#related'],
   customDomains: ['#connect-a-domain', '#related'],
   customRoles: ['#create-a-custom-role', '#effective-permissions', '#per-member-overrides', '#tips', '#related'],

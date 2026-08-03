@@ -64,6 +64,7 @@ import AuthenticatedLayout from '../../../../../../../../../../components/layout
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
 import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
+import useOpenPreview from '../../../../../../../../../../hooks/use-open-preview'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
@@ -194,6 +195,22 @@ function LayoutBesignerPage(props) {
   })
 
   const hostTheme = hostResult?.data?.theme
+
+  // Draft preview (AGL-1203). A layout previews as itself — its Layout Slot
+  // stays empty because there is no screen to fill it, which is the honest
+  // picture of the chrome being authored.
+  const handlePreview = useOpenPreview({
+    ids: hostId
+      ? { hostId, kind: 'layout', docId: layoutId, versionId }
+      : null,
+    href: buildRoute(Route.LAYOUT_PREVIEW, {
+      orgSlug,
+      host,
+      layoutId,
+      versionId,
+    }),
+    hostTheme,
+  })
   const hostFontsHref = useMemo(
     () => getGoogleFontsUrl(hostTheme?.fonts),
     [hostTheme?.fonts],
@@ -348,6 +365,7 @@ function LayoutBesignerPage(props) {
         ) : (
           <>
             <BesignerAppBarComponent
+              onPreview={handlePreview}
               detailsUrl={listUrl}
               onSave={handleSave}
               saveAvailable={saveAvailable}

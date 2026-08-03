@@ -38,7 +38,17 @@ export interface ColorPickerTokenOption {
   dark?: string
 }
 
-/** The palette token paths the picker offers, with display labels. */
+/**
+ * The palette token paths the picker offers, with display labels.
+ *
+ * `console.theme.ts` is the source of truth for brand colour — these are
+ * references INTO it, never copies of it, so a palette change lands here for
+ * free. Anything the active palette does not define is dropped by
+ * {@link buildColorTokenOptions}, so listing a brand-only slot (`tertiary`,
+ * `surface`) costs nothing on a theme that lacks it.
+ *
+ * Every `path` must be UNIQUE — the picker keys its grid by it (AGL-1192).
+ */
 export const COLOR_PICKER_TOKEN_PATHS: ReadonlyArray<{
   path: string
   label: string
@@ -46,19 +56,35 @@ export const COLOR_PICKER_TOKEN_PATHS: ReadonlyArray<{
   { path: 'primary.main', label: 'Primary' },
   { path: 'primary.light', label: 'Primary light' },
   { path: 'primary.dark', label: 'Primary dark' },
-  { path: 'primary.main', label: 'Secondary' },
-  { path: 'primary.light', label: 'Secondary light' },
-  { path: 'primary.dark', label: 'Secondary dark' },
+  // These three read `primary.*` until AGL-1206: picking "Secondary" handed
+  // back the PRIMARY colour, and the duplicate `primary.main` path also gave
+  // the grid two children with the same React key (AGL-1192).
+  { path: 'secondary.main', label: 'Secondary' },
+  { path: 'secondary.light', label: 'Secondary light' },
+  { path: 'secondary.dark', label: 'Secondary dark' },
+  // Brand slots beyond MUI's stock set. `tertiary` is the Aglyn slate after
+  // the AGL-1186 rotation; `surface` is a real palette entry, so "Surface"
+  // names it rather than `background.paper` (which is Paper).
+  { path: 'tertiary.main', label: 'Tertiary' },
+  { path: 'surface.main', label: 'Surface' },
   { path: 'error.main', label: 'Error' },
   { path: 'warning.main', label: 'Warning' },
   { path: 'info.main', label: 'Info' },
   { path: 'success.main', label: 'Success' },
   { path: 'background.default', label: 'Background' },
-  { path: 'background.paper', label: 'Surface' },
+  { path: 'background.paper', label: 'Paper' },
   { path: 'text.primary', label: 'Text' },
   { path: 'text.secondary', label: 'Text secondary' },
   { path: 'text.disabled', label: 'Text disabled' },
   { path: 'divider', label: 'Divider' },
+  // The neutral ramp the designs lean on for borders and muted copy, and the
+  // absolutes for on-inverse text. Without these an author had no token for
+  // "muted grey" and reached for a hardcoded hex, which then failed in dark.
+  { path: 'grey.300', label: 'Grey 300' },
+  { path: 'grey.600', label: 'Grey 600' },
+  { path: 'grey.900', label: 'Grey 900' },
+  { path: 'common.white', label: 'White' },
+  { path: 'common.black', label: 'Black' },
 ]
 
 /** Resolves a dot-separated palette token path to its color string. */
@@ -88,10 +114,17 @@ export function buildColorTokenOptions(
   darkPalette: Record<string, unknown> | undefined,
 ): ColorPickerTokenOption[] {
   const options: ColorPickerTokenOption[] = []
+  // The picker keys its grid by `value`, so a repeated path would render two
+  // children with the same React key (AGL-1192). The list above is curated to
+  // be unique; this makes that a property of the builder rather than a rule
+  // someone has to remember when adding a token.
+  const seen = new Set<string>()
   for (const { path, label } of COLOR_PICKER_TOKEN_PATHS) {
+    if (seen.has(path)) continue
     const light = resolvePaletteToken(lightPalette, path)
     const dark = resolvePaletteToken(darkPalette, path)
     if (!light && !dark) continue
+    seen.add(path)
     options.push({ value: path, label, light, dark })
   }
   return options
@@ -124,9 +157,12 @@ export function useColorPickerTokenOptions(): ColorPickerTokenOption[] {
     const palette = theme?.palette
     const scheme = palette?.mode === 'dark' ? 'dark' : 'light'
     const options: ColorPickerTokenOption[] = []
+    const seen = new Set<string>()
     for (const { path, label } of COLOR_PICKER_TOKEN_PATHS) {
+      if (seen.has(path)) continue
       const resolved = resolvePaletteToken(palette, path)
       if (!resolved) continue
+      seen.add(path)
       options.push({ value: path, label, [scheme]: resolved })
     }
     return options

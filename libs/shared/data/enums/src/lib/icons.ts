@@ -40,7 +40,9 @@ import {
   mdiCodeBracesBox,
   mdiCodeString,
   mdiCog,
+  mdiContentCopy,
   mdiContentDuplicate,
+  mdiContentPaste,
   mdiContentSave,
   mdiCubeOutline,
   mdiCursorDefault,
@@ -141,6 +143,7 @@ export const ICON_VARIANT_FILTER = mdiFilter
 export const ICON_VARIANT_LEFT = mdiArrowLeft
 export const ICON_VARIANT_MENU_DOWN = mdiMenuDown
 export const ICON_VARIANT_MODIFY_ADD = mdiPlus
+export const ICON_VARIANT_MODIFY_COPY = mdiContentCopy
 export const ICON_VARIANT_MODIFY_DELETE = mdiWindowClose
 export const ICON_VARIANT_MODIFY_DRAG = mdiDrag
 export const ICON_VARIANT_MODIFY_DUPLICATE = mdiContentDuplicate
@@ -149,6 +152,7 @@ export const ICON_VARIANT_MODIFY_MODE_REARRANGE = mdiCursorMove
 export const ICON_VARIANT_MODIFY_MODE_SELECT = mdiCursorDefault
 export const ICON_VARIANT_MODIFY_MOVE_DOWN = mdiArrowDown
 export const ICON_VARIANT_MODIFY_MOVE_UP = mdiArrowUp
+export const ICON_VARIANT_MODIFY_PASTE = mdiContentPaste
 export const ICON_VARIANT_MODIFY_REDO = mdiRedo
 export const ICON_VARIANT_MODIFY_SAVE = mdiContentSave
 export const ICON_VARIANT_MODIFY_UNDO = mdiUndo

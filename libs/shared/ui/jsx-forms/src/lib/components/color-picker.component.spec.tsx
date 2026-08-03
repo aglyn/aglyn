@@ -125,7 +125,9 @@ describe('ColorPickerComponent two-stage picking (AGL-588)', () => {
     // MUI theme — the enhancement lives inside the shared field.
     renderField(undefined, [])
     fireEvent.focus(input())
-    fireEvent.click(screen.getByRole('button', { name: 'Surface' }))
+    // `background.paper` is labelled Paper since AGL-1206 — the palette has a
+    // real `surface` entry, and calling paper "Surface" shadowed it.
+    fireEvent.click(screen.getByRole('button', { name: 'Paper' }))
     expect(input().value).toBe('background.paper')
   })
 })

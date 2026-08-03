@@ -10,7 +10,18 @@ description: The features Aglyn shipped most recently, grouped by area with link
 A huge wave of features shipped over the last few days. Here's the tour, grouped by area.
 Each links into its section for the how-to.
 
-## Scalable audience pricing (newest)
+## Besigner copy & paste (newest)
+
+- **[Copy and paste elements](building-sites/besigner/copy-paste.md)** — copy any element with
+  its children and paste it somewhere else, **including into a different screen, layout,
+  component or template**. Available from the **⋮** menu on the canvas and in the hierarchy,
+  or with <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + <kbd>C</kbd> / <kbd>V</kbd>. Multi-selections copy
+  in document order, and a paste that would bring in an element the target document doesn't
+  have is refused with a message instead of landing half-finished.
+- <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + <kbd>A</kbd> now selects every element at the same depth as
+  the current selection.
+
+## Scalable audience pricing
 
 - **[Unlimited member accounts on every plan](workspace-and-billing/teams-and-roles/overview.md#site-membership)** —
   visitors who sign up to your published site are never metered, capped, or charged per

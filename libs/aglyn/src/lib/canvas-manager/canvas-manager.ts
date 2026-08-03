@@ -643,12 +643,23 @@ export class CanvasManager {
     }
     return res
   }
-  public addNodeFromPreset(
-    preset: PresetSchema<any>,
+  /**
+   * Insert a *detached* nested subtree as a child of `parent`, minting a
+   * fresh id for every node in it (AGL-1202).
+   *
+   * The subtree is plain JSON with no ties to this canvas, so the source can
+   * be anything — an element preset, the besigner clipboard, or a subtree
+   * copied out of a different document altogether. Callers are responsible
+   * for checking that the root's component is registered and that the
+   * lineal relationship with `parent` is allowed; this method only does the
+   * structural work.
+   */
+  public addNodeFromNested(
+    nested: NodeSchemaNested<any>,
     parent: NodeSchema<any>,
     index = NaN,
   ): NodeSchema<any> {
-    if (!preset) throw new Error('Invalid preset')
+    if (!nested) throw new Error('Invalid node')
     // Attach to the live node in this canvas. A caller-supplied object
     // that is not in the node map (a stale reference — or historically the
     // console INSERT menu's click event) would otherwise get the child id
@@ -658,8 +669,7 @@ export class CanvasManager {
     const target = parent?.$id != null ? this.getNode(parent.$id) : undefined
     if (!target) throw new Error('Invalid parent node')
     this.saveHistory()
-    const presetJS = toJS(preset)
-    const duplicate = this.createDuplicateNode(presetJS.data)
+    const duplicate = this.createDuplicateNode(nested)
     duplicate.parentId = target.$id
     const parsed = this.processNodesToDenormalized(duplicate)
 
@@ -675,6 +685,15 @@ export class CanvasManager {
     })
 
     return this.getNode(duplicate.$id)!
+  }
+
+  public addNodeFromPreset(
+    preset: PresetSchema<any>,
+    parent: NodeSchema<any>,
+    index = NaN,
+  ): NodeSchema<any> {
+    if (!preset) throw new Error('Invalid preset')
+    return this.addNodeFromNested(toJS(preset).data, parent, index)
   }
   public updateNodeProps(
     node: NodeSchema<any>,
