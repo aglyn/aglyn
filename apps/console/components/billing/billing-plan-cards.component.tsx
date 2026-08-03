@@ -223,8 +223,11 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     onClick={() => onSelect(tier)}
                     sx={{ mb: 1.5 }}
                   >
+                    {/* AGL-1178: while pre-release, the Free card must not
+                        promise the price is permanent — no price locks, no
+                        grandfathering. Enforced by no-price-commitment.spec. */}
                     {tier === 'free'
-                      ? 'Free forever'
+                      ? 'No credit card required'
                       : currentIndex < 0 || index > currentIndex
                         ? 'Upgrade'
                         : 'Downgrade'}
