@@ -54,7 +54,7 @@ import { usePendingInvites } from '../../../hooks/use-pending-invites'
  * first site (which auto-provisions the workspace).
  */
 function OrgJump() {
-  const { orgs, loading } = useOrgScope()
+  const { orgs, loading, confirmed } = useOrgScope()
   // A first-time invitee has zero orgs and lands here; this is the only jump
   // surface, so it must offer the invite (AGL-851). Without it the invite was
   // reachable only from a hosts page, which needs an org you don't have yet.
@@ -64,11 +64,23 @@ function OrgJump() {
   const [creatingSite, setCreatingSite] = useState(false)
 
   // Single-org members never see a picker — go straight to their sites.
+  //
+  // Gated on `confirmed`, not merely `loading` (AGL-1149). The console runs a
+  // persistent multi-tab Firestore cache, and `loading` goes false on the
+  // FIRST snapshot — which is the CACHED one. A member who just accepted an
+  // invite to a second org still has a one-org list in cache, so this fired
+  // and replaced the chooser with their old org before the server snapshot
+  // arrived. They then looked at that org's sites and reasonably asked where
+  // the new org's sites had gone. Both halves of that report were this line.
+  //
+  // A redirect is the wrong thing to do on unconfirmed data: it is not a
+  // render you can correct a beat later, it is a navigation the user has to
+  // undo — and the chooser they wanted is exactly what it navigates away from.
   useEffect(() => {
-    if (loading || orgs.length !== 1) return
+    if (loading || !confirmed || orgs.length !== 1) return
     const slug = orgs[0]?.slug
     if (slug) router.replace(buildRoute(Route.HOST_LIST, { orgSlug: slug }))
-  }, [loading, orgs, router])
+  }, [loading, confirmed, orgs, router])
 
   return (
     <DashboardLayout

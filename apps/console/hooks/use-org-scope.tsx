@@ -77,6 +77,8 @@ export interface OrgScopeContextValue {
    * true. A positive hit never needs to wait on it.
    */
   confirmed: boolean
+  /** `false` only when `orgSlugs/{slug}` confirmed the slug does not exist. */
+  slugExists: boolean | null
 }
 
 const OrgScopeContext = createContext<OrgScopeContextValue>({
@@ -87,6 +89,7 @@ const OrgScopeContext = createContext<OrgScopeContextValue>({
   pathOrgSlug: null,
   loading: true,
   confirmed: false,
+  slugExists: null,
 })
 
 /**
@@ -108,6 +111,8 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
   const [orgs, setOrgs] = useState<UserOrgMembership[]>([])
   const [loading, setLoading] = useState(true)
   const [confirmed, setConfirmed] = useState(false)
+  /** `true` known, `false` CONFIRMED absent, `null` not yet answered. */
+  const [slugExists, setSlugExists] = useState<boolean | null>(null)
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
   const [subdomainOrgId, setSubdomainOrgId] = useState<string | null>(null)
   const orgSlug = useMemo(subdomainSlugFromLocation, [])
@@ -157,16 +162,31 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (!orgSlug) return
+    if (!orgSlug) {
+      setSlugExists(null)
+      return
+    }
     let active = true
+    setSlugExists(null)
     void getDoc(doc(firestore, 'orgSlugs', orgSlug))
       .then((snapshot) => {
-        if (active) {
-          setSubdomainOrgId((snapshot.data()?.['orgId'] as string) ?? null)
-        }
+        if (!active) return
+        setSubdomainOrgId((snapshot.data()?.['orgId'] as string) ?? null)
+        // TRI-STATE, deliberately (AGL-1149). This used to collapse "the slug
+        // does not exist" and "the read failed" into the same `null`, and they
+        // are opposite answers: the first is a definitive 404, the second is
+        // "ask again". `orgSlugs` is the only unconditionally public-read
+        // collection there is, which is what makes an absence here TRUSTWORTHY
+        // — no membership, no session freshness, nothing to deny.
+        setSlugExists(snapshot.exists())
       })
       .catch(() => {
-        if (active) setSubdomainOrgId(null)
+        if (!active) return
+        setSubdomainOrgId(null)
+        // NOT `false`. A failed read is not an absent org, and treating it as
+        // one would 404 a real workspace on a flaky network — the exact
+        // false-404 the guards elsewhere exist to prevent.
+        setSlugExists(null)
       })
     return () => {
       active = false
@@ -207,8 +227,9 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       pathOrgSlug,
       loading,
       confirmed,
+      slugExists,
     }),
-    [orgs, currentOrg, selectOrg, orgSlug, pathOrgSlug, loading, confirmed],
+    [orgs, currentOrg, selectOrg, orgSlug, pathOrgSlug, loading, confirmed, slugExists],
   )
 
   return (

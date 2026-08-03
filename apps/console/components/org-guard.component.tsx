@@ -46,7 +46,7 @@ function GuardSpinner() {
  * relied on for access control.
  */
 export function OrgGuard({ children }: { children?: ReactNode }) {
-  const { orgs, pathOrgSlug, loading, confirmed } = useOrgScope()
+  const { orgs, pathOrgSlug, loading, confirmed, slugExists } = useOrgScope()
   const known = !pathOrgSlug || orgs.some((org) => org.slug === pathOrgSlug)
   const pathname = usePathname()
   const router = useRouter()
@@ -67,6 +67,21 @@ export function OrgGuard({ children }: { children?: ReactNode }) {
     // history for Back to walk into, which is a bounce loop.
     if (target) router.replace(target)
   }, [target, router])
+
+  // A slug that DOES NOT EXIST is a 404 immediately, without waiting on
+  // memberships (AGL-1149).
+  //
+  // `orgSlugs` is the only unconditionally public-read collection, so its
+  // answer needs no membership and no fresh session — which is exactly why it
+  // is the right authority here. Everything below waits for the membership
+  // listener to be server-confirmed, and on a URL like `/orgs` that wait never
+  // ended: reading a NON-EXISTENT org returns `permission-denied` (a missing
+  // doc cannot satisfy a membership rule), the retry helper gave up after five
+  // attempts and logged "the session is stale: signing out and back in is the
+  // first thing to try", and the page span forever. The advice was wrong, the
+  // session was fine, and a mistyped URL looked like a broken account — it
+  // misdiagnosed the person reading the console AND the person debugging it.
+  if (pathOrgSlug && slugExists === false) notFound()
 
   // Hold the child tree until memberships resolve to avoid flashing the 404
   // (or a foreign org's shell) before the slug is confirmed.
