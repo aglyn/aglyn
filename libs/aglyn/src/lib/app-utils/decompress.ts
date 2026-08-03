@@ -29,7 +29,26 @@ export interface ByteSource {
   toUint8Array(): Uint8Array
 }
 
-export function decompress<T>(value: ByteSource): T {
-  return decode(value.toUint8Array()) as T
+/**
+ * Either form the bytes arrive in: a Firestore `Bytes` (client SDK) or a bare
+ * view (AGL-1223). The Admin SDK materialises a bytes field as a Node
+ * `Buffer`, which has no `toUint8Array`, so server readers had to hand-roll an
+ * adapter — and the obvious adapter is wrong (see below).
+ */
+export type CompressedValue = ByteSource | ArrayBufferView
+
+function toBytes(value: CompressedValue): Uint8Array {
+  if (ArrayBuffer.isView(value)) {
+    // Offset and length, ALWAYS. firebase-admin hands back POOLED Buffers —
+    // a 156-byte field is typically a view at some offset into a shared 8 KB
+    // ArrayBuffer — so `new Uint8Array(value.buffer)` decodes the whole pool
+    // and throws on the trailing garbage instead of returning the document.
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+  }
+  return value.toUint8Array()
+}
+
+export function decompress<T>(value: CompressedValue): T {
+  return decode(toBytes(value)) as T
 }
 export default decompress

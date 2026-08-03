@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   type BindingRefVia,
+  decodeStoredNodes,
   nodesReferenceBinding,
 } from '@aglyn/aglyn/server'
 import {
@@ -133,7 +134,11 @@ async function handler(request: Request): Promise<Response> {
             .doc(String(versionId))
             .get()
             .catch(() => null)
-          const nodes = version?.get('nodes')
+          // Version nodes are msgpack bytes for anything saved through the
+          // client converter — the majority (AGL-1223). Reading them raw
+          // hands `nodesReferenceBinding` a Buffer, which it walks without
+          // matching anything and reports as "used nowhere".
+          const nodes = decodeStoredNodes(version?.get('nodes'))
           if (!nodes) continue
           const via = nodesReferenceBinding(nodes, ref)
           if (via.length) {
@@ -191,6 +196,12 @@ async function handler(request: Request): Promise<Response> {
             const versionId = docSnapshot.get('versionId')
             // Components keep their tree on the document; screens and
             // layouts keep it on the published version.
+            //
+            // Only the VERSION read is decoded (AGL-1223). A component
+            // document's `nodes` is stored plainly on purpose, so the tenant
+            // runtime can read it without decoding — `decodeStoredNodes`
+            // would pass it through unchanged, but saying so here is cheaper
+            // than the next reader re-deriving it.
             const nodes =
               collectionName === 'components'
                 ? docSnapshot.get('nodes')
@@ -199,7 +210,7 @@ async function handler(request: Request): Promise<Response> {
                       .collection('versions')
                       .doc(String(versionId))
                       .get()
-                      .then((version) => version.get('nodes'))
+                      .then((version) => decodeStoredNodes(version.get('nodes')))
                       .catch(() => null)
                   : null
             return {

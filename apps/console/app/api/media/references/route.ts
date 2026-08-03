@@ -16,7 +16,7 @@
  */
 
 import {
-  decompress,
+  decodeStoredNodes,
   mediaRefPattern,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
@@ -35,33 +35,16 @@ import {
  * A version document's `nodes`, flattened to text the needles can be run
  * against.
  *
- * `nodes` is stored in TWO forms and both are live: a plain Firestore map,
- * and msgpack bytes (AGL-1151 compression at rest — `screenVersionConverter`
- * compresses on write, and decodes only binary payloads on read). The admin
- * SDK hands a bytes field back as a `Buffer`, and `JSON.stringify` of one
- * yields `{"type":"Buffer","data":[…]}` — a haystack containing none of the
+ * The decode is `decodeStoredNodes` (AGL-1223) — `nodes` is stored in TWO
+ * live forms, and `JSON.stringify` of the compressed one yields
+ * `{"type":"Buffer","data":[…]}`, a haystack containing none of the
  * document's strings, so EVERY needle misses and the scan answers "used
  * nowhere". That is the single worst answer this endpoint can give: it is
  * what the AGL-1045 scope confirmation quotes before telling an author it is
  * safe to restrict or delete an asset that is on a live page.
  */
 function nodesHaystack(raw: unknown): string {
-  if (ArrayBuffer.isView(raw)) {
-    const bytes = raw as ArrayBufferView
-    try {
-      return JSON.stringify(
-        decompress<Record<string, unknown>>({
-          toUint8Array: () =>
-            new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
-        }) ?? {},
-      )
-    } catch (error) {
-      // Undecodable nodes must not read as "no references" — say so.
-      console.error('media references: could not decode nodes', error)
-      return ''
-    }
-  }
-  return JSON.stringify(raw ?? {})
+  return JSON.stringify(decodeStoredNodes(raw) ?? {})
 }
 
 export interface MediaReference {
