@@ -78,7 +78,7 @@ import {
 } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import ScreenAnalyticsCard from '../../../../../../../../../../components/analytics/screen-analytics-card.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../../../../../components/layouts/dashboard.layout'
@@ -365,6 +365,38 @@ function ScreenDetails() {
     }
   }, [queueLoading, firestore, hostId, screenId, enqueueSnackbar, displayName, logActivity])
 
+  /**
+   * Drop the published page's cached HTML (AGL-1150).
+   *
+   * Publishing writes a pointer; the live page is ISR-cached, so without this
+   * the change waits out the revalidate window and then STILL serves stale to
+   * the next visitor while Next regenerates behind them. Publish, refresh, see
+   * nothing, refresh again, see it.
+   *
+   * Deliberately fire-and-forget AFTER the snackbar. The publish has already
+   * succeeded by this point — a cache hint that fails must not turn a
+   * successful publish into an error, and the revalidate window is still
+   * underneath as the backstop.
+   */
+  const { data: user } = useUser()
+  const revalidateLivePage = useCallback(async () => {
+    try {
+      const idToken = await (user as { getIdToken?: () => Promise<string> } | undefined)
+        ?.getIdToken?.()
+      if (!idToken) return
+      await fetch('/api/screens/revalidate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ hostId, screenId }),
+      })
+    } catch {
+      // Best effort by design — see above.
+    }
+  }, [user, hostId, screenId])
+
   // --- Version publish-now ----------------------------------------------
   const handlePublishVersion = useCallback(
     (id: string) => async () => {
@@ -379,12 +411,13 @@ function ScreenDetails() {
             id: screenId,
             name: displayName,
           })
+          void revalidateLivePage()
         })
         .catch(() =>
           enqueueSnackbar('An error has occurred', { variant: 'error' }),
         )
     },
-    [screenRef, enqueueSnackbar, displayName, logActivity, screenId],
+    [screenRef, enqueueSnackbar, displayName, logActivity, screenId, revalidateLivePage],
   )
 
   // --- Schedule publish / unpublish (AGL-113; Business tier like AGL-61) --
