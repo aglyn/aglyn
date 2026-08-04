@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { getSessionHealth } from '../../../../../../../../../../utils/session-health'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
@@ -222,6 +223,23 @@ function HostEmailBesignerPage() {
 
   const handlePropertiesSave = useCallback(async () => {
     if (!definition || !hostId) return
+    // Never write a subject seeded from a read we know is stale (AGL-1066).
+    // Both fields fall back to `template?.…` — the LISTENER read — whenever
+    // the author edited only one of them, and `persistentLocalCache` keeps
+    // serving listeners from IndexedDB after a session goes stale. Editing the
+    // subject would then write the cached preheader back over a newer one.
+    //
+    // The node save on this page needs no such guard: `use-besigner-document`
+    // stamps and compares `updatedAt` (AGL-674), so a save from a stale read
+    // is refused by the concurrency check before it can land.
+    if (getSessionHealth().staleSession) {
+      enqueueSnackbar(
+        'Your session went stale, so this email may be out of date — saving ' +
+          'now could overwrite newer changes. Sign in again and reload.',
+        { variant: 'error' },
+      )
+      return
+    }
     try {
       await setDoc(
         doc(firestore, 'hosts', hostId, TENANT_EMAIL_COLLECTION, templateKey),

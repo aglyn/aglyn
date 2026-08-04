@@ -17,6 +17,7 @@
 
 'use client'
 
+import { getSessionHealth } from '../../../../utils/session-health'
 import {
   canLinkSocialProvider,
   normalizeAddress,
@@ -244,6 +245,20 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         enqueueSnackbar(
           'Your profile could not be loaded, so it cannot be saved — that ' +
             'would overwrite it with blanks. Reload and try again.',
+          { variant: 'error' },
+        )
+        return
+      }
+      // And never write over one we could read but cannot TRUST (AGL-1066).
+      // The AGL-1143 guard above keys on a read that FAILED; a cache-served
+      // stale read succeeds and renders a populated, plausible form. This
+      // write is `{...fields}` — every field, seeded from that read — so
+      // `merge: true` protects nothing and saving one change reverts the rest
+      // to whatever IndexedDB last saw.
+      if (getSessionHealth().staleSession) {
+        enqueueSnackbar(
+          'Your session went stale, so this profile may be out of date — ' +
+            'saving now could overwrite newer values. Sign in again and reload.',
           { variant: 'error' },
         )
         return
