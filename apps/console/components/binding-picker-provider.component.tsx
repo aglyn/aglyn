@@ -20,11 +20,13 @@ import {
   formatFunctionIdToken,
   formatVariableIdToken,
 } from '@aglyn/aglyn'
+import { describeHostTokens } from '@aglyn/aglyn/app-utils/host-tokens'
 import { BindingPickerContext, type BindingOption } from '@aglyn/besigner-ui'
-import { collection, limit, query } from 'firebase/firestore'
+import { collection, doc, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useFirestoreDoc from '../hooks/use-firestore-doc'
 
 export interface BindingPickerProviderProps {
   hostId: string
@@ -46,6 +48,13 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
   )
   const { data: functionDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+  // The site itself, for `host.*` tokens (AGL-1023). One doc, already cached
+  // by every other surface on the page.
+  const { data: hostDoc } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
     { idField: '$id' },
   )
@@ -81,7 +90,33 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
           : 'Runs with no arguments',
       })
     }
-    // Live canvas resolution (AGL-97): id keys serve resolveBindings;
+    /**
+     * Host variables (AGL-1023), from the SAME registry that resolves them at
+     * render — so the list cannot go stale against what actually substitutes.
+     *
+     * Image-typed tokens are withheld here rather than offered and validated
+     * afterwards. This menu inserts into free text, and `{{host.logo}}` in a
+     * sentence is a URL sitting mid-paragraph — the wrong-slot mistake
+     * `validateHostTokens` exists to catch. Not offering it in a slot that
+     * cannot take it is the same rule enforced one step earlier, where the
+     * author never has to be corrected.
+     */
+    for (const token of describeHostTokens(hostDoc)) {
+      if (token.type === 'image') continue
+      options.push({
+        group: 'Site',
+        groupHint: 'Filled in from this site when the page renders or an email sends',
+        label: token.label,
+        token: token.token,
+        // The empty case, visible at the moment of choosing — "what does this
+        // look like for a site with no support email" is exactly what an
+        // author never checks otherwise.
+        preview: token.set
+          ? String(token.value).slice(0, 60)
+          : 'Not set on this site — renders as nothing',
+      })
+    }
+        // Live canvas resolution (AGL-97): id keys serve resolveBindings;
     // name keys stay ONLY for save-time typed-name normalization
     // (normalizeBindingTokens looks names up as map keys) — the retired
     // legacy pass (AGL-194) no longer reads them at render.
@@ -104,7 +139,7 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
       functions[definition.$id] = definition
     }
     return { options, variables, functions }
-  }, [variableDocs, functionDocs])
+  }, [variableDocs, functionDocs, hostDoc])
 
   return (
     <BindingPickerContext.Provider value={value}>
