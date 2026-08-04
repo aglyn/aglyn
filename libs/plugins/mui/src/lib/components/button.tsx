@@ -24,6 +24,7 @@ import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import Button, { type ButtonProps } from '@mui/material/Button'
 import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import {
   FIELD_COLOR,
   FIELD_DISABLED,
@@ -82,8 +83,12 @@ const LinkableButton = forwardRef<any, LinkableButtonProps>((props, ref) => {
     endIconId,
     startIconPath,
     endIconPath,
-    ...rest
+    ...spread
   } = props
+  // A CLEARED attribute persists as null, and null is not "use the default"
+  // in React — `color={null}` reaches MUI, which capitalizes it and throws
+  // error #7 during SSR, 500ing the page (AGL-1226).
+  const rest = dropClearedProps(spread)
   const iconProps = {
     startIcon: iconFromId(startIconId, startIconPath),
     endIcon: iconFromId(endIconId, endIconPath),
