@@ -53,6 +53,7 @@ import AuthScreensCard from '../../../../../../components/auth-screens-card.comp
 import CustomDomainCard from '../../../../../../components/custom-domain-card.component'
 import SiteEmailsCard from '../../../../../../components/site-emails-card.component'
 import FaviconCard from '../../../../../../components/favicon-card.component'
+import BusinessDetailsCard from '../../../../../../components/business-details-card.component'
 import LogoCard from '../../../../../../components/logo-card.component'
 import ErrorScreensCard from '../../../../../../components/error-screens-card.component'
 import LanguagesCard from '../../../../../../components/languages-card.component'
@@ -661,6 +662,13 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                                 tenant's navigation loader. */}
                             <div style={{ marginTop: 24 }}>
                               <LogoCard hostId={hostId} />
+                            </div>
+                            {/* Contact details `host.*` tokens read from
+                                (AGL-1022) — without these the tokens resolve
+                                empty forever and teach people the feature
+                                does not work. */}
+                            <div style={{ marginTop: 24 }}>
+                              <BusinessDetailsCard hostId={hostId} />
                             </div>
                             <div style={{ marginTop: 24 }}>
                               <ErrorScreensCard hostId={hostId} />
