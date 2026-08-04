@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>You're offline · Aglyn</title>
+    <!--
+      Offline fallback for the console (AGL-1056).
+
+      Lives under `/_static/` on purpose, and that one choice settles three
+      things at once: the path is already outside the middleware auth matcher,
+      it is already inside the service worker's cacheable allowlist, and being a
+      plain file it sidesteps the root layout's `force-dynamic`. A Next route
+      would have needed a new middleware exclusion and a new cache rule, both on
+      the security-critical paths this arc has been careful about.
+
+      Everything is inline. A fallback that fetches its own stylesheet is a
+      fallback that renders unstyled exactly when it is needed.
+
+      No auth, no data, no org context — nothing here is user-scoped, which is
+      what makes it safe for the worker to precache and serve to anyone.
+    -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #1b1b1f;
+        --muted: #5c5f6b;
+        --accent: #6c3ce9;
+        --border: #e3e3e8;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #16161a;
+          --fg: #ececf1;
+          --muted: #9d9fab;
+          --accent: #a78bfa;
+          --border: #2c2c33;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      main {
+        max-width: 26rem;
+        text-align: center;
+      }
+      .mark {
+        width: 44px;
+        height: 44px;
+        margin: 0 auto 20px;
+        border-radius: 12px;
+        background: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-weight: 700;
+        font-size: 20px;
+        line-height: 1;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.375rem;
+        font-weight: 600;
+      }
+      p {
+        margin: 0 0 24px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      button {
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--accent);
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 20px;
+        cursor: pointer;
+      }
+      button:hover {
+        filter: brightness(1.08);
+      }
+      .status {
+        margin-top: 20px;
+        font-size: 0.8125rem;
+        color: var(--muted);
+        min-height: 1.2em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <!-- The brand mark is drawn rather than linked: an <img> would be one
+           more request to fail on the page whose entire job is to work when
+           requests fail. -->
+      <div class="mark" aria-hidden="true">A</div>
+      <h1>You're offline</h1>
+      <p>
+        Aglyn can't reach the network right now. Your work isn't lost — this
+        page will reconnect as soon as you're back online.
+      </p>
+      <button type="button" id="retry">Try again</button>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+
+      <script>
+        var status = document.getElementById('status')
+        document.getElementById('retry').addEventListener('click', function () {
+          status.textContent = 'Reconnecting…'
+          location.reload()
+        })
+        // Reload automatically the moment connectivity returns, so someone who
+        // walked away comes back to the console rather than to this page.
+        window.addEventListener('online', function () {
+          status.textContent = 'Back online — reloading…'
+          location.reload()
+        })
+        if (!navigator.onLine) {
+          status.textContent = 'Waiting for a connection…'
+        }
+      </script>
+    </main>
+  </body>
+</html>

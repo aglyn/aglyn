@@ -67,13 +67,12 @@ const request = (url: string, init: FakeRequestInit = {}) => ({
   headers: { get: (name: string) => (name.toLowerCase() === 'authorization' ? (init.authorization ?? null) : null) },
 })
 
-/** Loads the shipped worker and returns a driver for its fetch listener. */
+/** Loads the shipped worker and returns drivers for its fetch listener. */
 function loadWorker() {
-  const source = readFileSync(
-    join(__dirname, '..', 'public', 'sw.js'),
-    'utf8',
-  )
+  const source = readFileSync(join(__dirname, '..', 'public', 'sw.js'), 'utf8')
   const listeners: Record<string, ((event: unknown) => void)[]> = {}
+  /** Every URL the worker asked the cache to STORE. */
+  const puts: string[] = []
   const self = {
     addEventListener: (type: string, fn: (event: unknown) => void) => {
       ;(listeners[type] ??= []).push(fn)
@@ -84,7 +83,17 @@ function loadWorker() {
   }
   const sandbox = {
     self,
-    caches: { keys: async () => [], delete: async () => true, match: async () => undefined, open: async () => ({ put: async () => undefined }) },
+    caches: {
+      keys: async () => [],
+      delete: async () => true,
+      match: async () => undefined,
+      open: async () => ({
+        put: async (req: { url?: string } | string) => {
+          puts.push(typeof req === 'string' ? req : (req?.url ?? '?'))
+        },
+        add: async () => undefined,
+      }),
+    },
     fetch: async () => ({ status: 200, type: 'basic', clone: () => ({}) }),
     URL,
     console,
@@ -92,22 +101,44 @@ function loadWorker() {
   vm.createContext(sandbox)
   vm.runInContext(source, sandbox)
 
-  /** True when the worker took over the request (i.e. it is cacheable). */
-  return (req: ReturnType<typeof request>): boolean => {
+  const fire = (req: ReturnType<typeof request>) => {
     let handled = false
+    let settled: Promise<unknown> = Promise.resolve()
     const event = {
       request: req,
-      respondWith: () => {
+      respondWith: (value: Promise<unknown>) => {
         handled = true
+        settled = Promise.resolve(value)
       },
     }
     for (const fn of listeners['fetch'] ?? []) fn(event)
-    return handled
+    return { handled, settled }
+  }
+
+  return {
+    /** Did the worker take over the request at all? */
+    handles: (req: ReturnType<typeof request>) => fire(req).handled,
+    /**
+     * Did the worker WRITE this request's response to the cache?
+     *
+     * The property that actually matters, and the one worth asserting
+     * directly: since AGL-1056 the worker DOES take over navigations (to serve
+     * an offline fallback when the network fails), so "was it handled" stopped
+     * being a proxy for "could it be stored".
+     */
+    writesToCache: async (req: ReturnType<typeof request>) => {
+      const before = puts.length
+      const { settled } = fire(req)
+      await settled.catch(() => undefined)
+      // Let the un-awaited `cache.put(...)` inside the handler run.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      return puts.length > before
+    },
   }
 }
 
 describe('service worker cache policy (AGL-1054)', () => {
-  const handles = loadWorker()
+  const { handles, writesToCache } = loadWorker()
 
   it('CONTROL — it really does cache the allowlisted assets', () => {
     // Without this the whole suite would pass against a worker that caches
@@ -116,47 +147,50 @@ describe('service worker cache policy (AGL-1054)', () => {
     expect(handles(request(`${ORIGIN}/_static/brand/logo.svg`))).toBe(true)
   })
 
-  it('never caches a navigation — the console is force-dynamic', () => {
-    // The single most important line in the worker. A cached HTML shell would
-    // hand one user's org context to the next person on the device.
+  it('never STORES a navigation — the console is force-dynamic', async () => {
+    // The single most important property in the worker. A cached HTML shell
+    // would hand one user's org context to the next person on the device.
     //
-    // The paths here are deliberately INSIDE the allowlist. Asserting against
-    // `/test-org/hosts` looked right and proved nothing: that path is denied
-    // by the allowlist anyway, so deleting the navigation guard entirely left
-    // the test green. Caught by mutation, and it is the reason this case is
-    // written the awkward-looking way — the guard is defence in depth, so it
-    // has to be tested where the other layer cannot cover for it.
-    //
-    // Not hypothetical either: navigating straight to an asset URL produces
-    // exactly this request.
-    expect(
-      handles(
-        request(`${ORIGIN}/_static/brand/logo.svg`, {
-          mode: 'navigate',
-          destination: 'document',
-        }),
-      ),
-    ).toBe(false)
-    expect(
-      handles(
-        request(`${ORIGIN}/_next/static/chunks/main-abc123.js`, {
-          destination: 'document',
-        }),
-      ),
-    ).toBe(false)
-  })
-
-  it('CONTROL — an ordinary page navigation is denied too', () => {
-    // The obvious case, kept for completeness. On its own it is satisfied by
-    // the allowlist rather than by the navigation guard — see above.
-    expect(
-      handles(
+    // Asserted as "was it written to the cache", not "was it handled". Since
+    // AGL-1056 the worker deliberately handles navigations, to serve an
+    // offline fallback when the network fails — so the old proxy assertion
+    // would now fail while the security property still held, and (worse) a
+    // future change that started CACHING those responses would not be caught
+    // by it at all.
+    await expect(
+      writesToCache(
         request(`${ORIGIN}/test-org/hosts`, {
           mode: 'navigate',
           destination: 'document',
         }),
       ),
-    ).toBe(false)
+    ).resolves.toBe(false)
+    // Inside the allowlist, where only the `navigate`/`document` guard can
+    // save it — a real request shape, since navigating straight to an asset
+    // URL produces exactly this.
+    await expect(
+      writesToCache(
+        request(`${ORIGIN}/_static/brand/logo.svg`, {
+          mode: 'navigate',
+          destination: 'document',
+        }),
+      ),
+    ).resolves.toBe(false)
+    await expect(
+      writesToCache(
+        request(`${ORIGIN}/_next/static/chunks/main-abc123.js`, {
+          destination: 'document',
+        }),
+      ),
+    ).resolves.toBe(false)
+  })
+
+  it('CONTROL — an allowlisted asset IS stored', async () => {
+    // Without this, "never stores a navigation" is satisfied by a worker that
+    // stores nothing at all.
+    await expect(
+      writesToCache(request(`${ORIGIN}/_next/static/chunks/main-abc123.js`)),
+    ).resolves.toBe(true)
   })
 
   it('never caches /api/*', () => {

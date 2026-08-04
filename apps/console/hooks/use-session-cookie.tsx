@@ -26,6 +26,7 @@ import {
   consumeInteractiveSignIn,
   consumeInteractiveSignOut,
 } from '../utils/interactive-signin'
+import clearServiceWorkerCaches from '../utils/clear-service-worker-caches'
 
 /**
  * Mints the shared `__session` cookie, and reports whether it worked
@@ -214,6 +215,17 @@ export function useSessionCookie(): void {
           await fetch('/api/auth/session', { method: 'DELETE' }).catch(
             () => undefined,
           )
+          // …and take the service worker's caches with it (AGL-1056), so
+          // nothing this session stored survives into the next one on a
+          // shared machine.
+          //
+          // HERE rather than at the sign-out buttons, because this is the one
+          // place every intentional sign-out converges — the /signout page and
+          // the staff impersonation exit both just mark the intent and let
+          // this branch act on it. Wiring it at the call sites would be two
+          // places to remember and a third to forget, and impersonation is
+          // precisely the path where forgetting matters most.
+          await clearServiceWorkerCaches()
           return
         }
         // The SDK dropped the user without anyone asking — typically a
