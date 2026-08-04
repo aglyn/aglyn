@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
@@ -262,7 +263,12 @@ function TemplateBesignerPage(props) {
   // from it until it is used to create a page, component or layout, so
   // there is no draft-versus-live distinction to maintain (AGL-681).
 
-  const hostTheme = hostResult?.data?.theme
+  // The site's theme with this site's overrides resolved over it
+  // (AGL-1021). The editor must render exactly what the tenant will.
+  const hostTheme = useMemo(
+    () => resolveSiteTheme(hostResult?.data),
+    [hostResult?.data],
+  )
 
   // Draft preview (AGL-1203). Templates version but never publish, so the
   // snapshot key and route carry no versionId.

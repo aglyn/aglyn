@@ -21,6 +21,15 @@ import type {
   HostThemeScheme,
   HostThemeSchemeColors,
 } from '@aglyn/shared-data-types'
+import {
+  diffOverride,
+  isEmptyOverride,
+  overrideConflicts,
+  overridePaths,
+  readArtifactOverride,
+  resolveOverride,
+  type ArtifactOverride,
+} from './marketplace-overrides'
 
 /**
  * Publish-time validation for themes as a marketplace artifact (AGL-1020).
@@ -450,4 +459,222 @@ export function describeTheme(theme: HostTheme | null | undefined): string[] {
     parts.push(`${components} component style${components === 1 ? '' : 's'}`)
   }
   return parts
+}
+
+/* ------------------------------------------------------------------------ *
+ * The override layer, applied to themes (AGL-1021)
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The field on a host document holding the site's theme override.
+ *
+ * A theme is a FIELD on the host, not a document of its own, so it cannot use
+ * `ARTIFACT_OVERRIDE_FIELD` — a host may one day override more than one thing,
+ * and a bare `overrides` would be the first to claim the name. The override
+ * layer is general precisely so a namespaced field works with it unchanged.
+ */
+export const THEME_OVERRIDE_FIELD = 'themeOverride'
+
+/** A host document, as far as the theme layer is concerned. */
+export interface ThemeHostDocument {
+  theme?: HostTheme | null
+  themeOverride?: unknown
+  themeInstalledFrom?: { sha256?: string | null; listingId?: string } | null
+}
+
+/** Reads the stored theme override off a host document, tolerating junk. */
+export function readThemeOverride(
+  host: ThemeHostDocument | null | undefined,
+): ArtifactOverride | undefined {
+  // The override layer's reader is keyed to its own field name, so hand it a
+  // shim rather than duplicating its validation — which is where the "a
+  // top-level null blanks the artifact" guard lives.
+  return readArtifactOverride({ overrides: host?.themeOverride })
+}
+
+/**
+ * The site's effective theme: the marketplace theme (or the site's own) with
+ * this site's overrides resolved over it.
+ *
+ * This is the MIDDLE and TOP of the three layers the issue describes. The
+ * bottom — the platform default — is applied further down by
+ * `HostThemeProvider`, which layers whatever this returns onto the brand base
+ * (AGL-1180) so a theme that omits a value still yields a complete theme
+ * rather than an undefined-shaped hole. Doing it there rather than here is not
+ * a detail: the default is a runtime MUI theme with FUNCTION style overrides
+ * that JSON cannot represent, so a "default" merged at this layer would be a
+ * lossy copy of the real one.
+ *
+ * Every surface that renders a site's appearance calls this — the tenant, all
+ * four besigner editors, and the document preview — because a theme that
+ * resolves differently in the editor than on the site is worse than one that
+ * does not resolve at all.
+ */
+export function resolveSiteTheme(
+  host: ThemeHostDocument | null | undefined,
+): HostTheme | undefined {
+  const base = host?.theme ?? undefined
+  const override = readThemeOverride(host)
+  if (!override) return base
+  return resolveOverride<HostTheme>(base ?? {}, override.patch)
+}
+
+/**
+ * Was this override authored against the theme currently installed?
+ *
+ * False after a theme swap, which is the whole reason `baseSha256` is recorded.
+ * Overrides deliberately SURVIVE a swap (the issue's call, and the right one —
+ * a brand colour still expresses intent when the theme underneath it changes)
+ * but surviving silently is what would surprise people, so every surface that
+ * shows an override can ask this and say so.
+ *
+ * True when there is no override, and when either side has no hash to compare:
+ * "we cannot tell" must not render as "these are stale".
+ */
+export function isOverrideForCurrentTheme(
+  host: ThemeHostDocument | null | undefined,
+): boolean {
+  const override = readThemeOverride(host)
+  if (!override?.baseSha256) return true
+  const installed = host?.themeInstalledFrom?.sha256
+  if (!installed) return true
+  return override.baseSha256 === installed
+}
+
+/** One row of the "what have I changed?" view. */
+export interface ThemeOverrideEntry {
+  /** Dotted path into the theme, e.g. `colorSchemes.dark.primary.main`. */
+  path: string
+  /** A human label for the path, for a UI that is not a JSON viewer. */
+  label: string
+  /** Which scheme this touches, when it touches one. */
+  scheme?: HostThemeScheme
+  /** The publisher's value, or undefined when the override adds the field. */
+  themeValue: unknown
+  /** What this site set it to, or undefined when the override removes it. */
+  overrideValue: unknown
+}
+
+const SEGMENT_LABELS: Record<string, string> = {
+  colorSchemes: 'Colour',
+  typography: 'Typography',
+  components: 'Component',
+  shape: 'Shape',
+  spacing: 'Spacing',
+  fonts: 'Fonts',
+  mixins: 'Layout',
+  variants: '',
+  background: 'background',
+  text: 'text',
+  main: '',
+  contrastText: 'label colour',
+  borderRadius: 'corner radius',
+  fontFamily: 'font',
+}
+
+/**
+ * A readable label for a theme path.
+ *
+ * "Colour · dark · primary" beats `colorSchemes.dark.primary.main`, and the
+ * difference matters because this list is the answer to "what have I changed?"
+ * — a question nobody asks wanting to read JSON paths.
+ */
+export function describeThemePath(path: string): string {
+  const segments = path.split('.').filter(Boolean)
+  const words: string[] = []
+  for (const segment of segments) {
+    const mapped = SEGMENT_LABELS[segment]
+    if (mapped === '') continue
+    words.push(mapped ?? segment)
+  }
+  return words.join(' · ') || 'the whole theme'
+}
+
+/**
+ * "What have I changed?" — the patch, rendered.
+ *
+ * Literally a read of the stored override rather than a diff computed at call
+ * time, which is the property the whole layer exists to provide: the answer is
+ * the thing that was saved, so it cannot disagree with what will be applied.
+ */
+export function describeThemeOverride(
+  host: ThemeHostDocument | null | undefined,
+): ThemeOverrideEntry[] {
+  const override = readThemeOverride(host)
+  if (!override) return []
+  const base = host?.theme ?? {}
+  const resolved = resolveOverride<HostTheme>(base, override.patch)
+  return overridePaths(override.patch).map((path) => {
+    const segments = path.split('.')
+    const scheme =
+      segments[0] === 'colorSchemes' &&
+      (segments[1] === 'light' || segments[1] === 'dark')
+        ? (segments[1] as HostThemeScheme)
+        : undefined
+    return {
+      path,
+      label: describeThemePath(path),
+      scheme,
+      themeValue: readThemePath(base, path),
+      overrideValue: readThemePath(resolved, path),
+    }
+  })
+}
+
+/** Reads a dotted path out of a theme. */
+function readThemePath(theme: unknown, path: string): unknown {
+  let cursor: unknown = theme
+  for (const segment of path.split('.')) {
+    if (cursor == null || typeof cursor !== 'object') return undefined
+    cursor = (cursor as Record<string, unknown>)[segment]
+  }
+  return cursor
+}
+
+/**
+ * The override this site should store after the theme editor produced `edited`.
+ *
+ * The editor edits the RESOLVED theme — that is what it renders and what the
+ * user sees — so the patch is the difference between the publisher's base and
+ * what came back. Diffing here rather than tracking per-field dirty state means
+ * a field the user set and then set back to the theme's value stops being an
+ * override, which is what "reset" means without needing a reset button to have
+ * been pressed.
+ */
+export function themeOverridePatch(
+  host: ThemeHostDocument | null | undefined,
+  edited: HostTheme,
+): unknown {
+  return diffOverride(host?.theme ?? {}, edited)
+}
+
+/**
+ * Where this site's overrides sit on top of values a theme update also changes
+ * — the only place a conflict can exist.
+ *
+ * Narrow by construction: an override touching four paths can conflict in at
+ * most four places however much of the theme the publisher rewrote. That is the
+ * difference between "the publisher also changed your heading colour, whose
+ * wins?" and "this update rewrites your theme, continue?".
+ */
+export function themeUpdateConflicts(
+  host: ThemeHostDocument | null | undefined,
+  incoming: HostTheme,
+): ThemeOverrideEntry[] {
+  const override = readThemeOverride(host)
+  if (!override || isEmptyOverride(override.patch)) return []
+  const base = host?.theme ?? {}
+  const resolved = resolveOverride<HostTheme>(base, override.patch)
+  return overrideConflicts(base, override.patch, incoming).map((path) => ({
+    path,
+    label: describeThemePath(path),
+    scheme:
+      path.startsWith('colorSchemes.light.')
+        ? ('light' as const)
+        : path.startsWith('colorSchemes.dark.')
+          ? ('dark' as const)
+          : undefined,
+    themeValue: readThemePath(incoming, path),
+    overrideValue: readThemePath(resolved, path),
+  }))
 }

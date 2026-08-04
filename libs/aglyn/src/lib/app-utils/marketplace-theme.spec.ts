@@ -20,10 +20,18 @@ import {
   CONTRAST_AA,
   contrastRatio,
   describeTheme,
+  describeThemeOverride,
+  describeThemePath,
+  isOverrideForCurrentTheme,
   parseColor,
+  readThemeOverride,
+  resolveSiteTheme,
   themeArtifactContent,
+  themeOverridePatch,
+  themeUpdateConflicts,
   validateThemeForPublish,
 } from './marketplace-theme'
+import { overrideWriteValue } from './marketplace-overrides'
 
 /** A complete, readable, publishable theme. */
 const goodTheme = (): HostTheme => ({
@@ -321,5 +329,219 @@ describe('describeTheme', () => {
   it('is empty for nothing', () => {
     expect(describeTheme(null)).toEqual([])
     expect(describeTheme({})).toEqual([])
+  })
+})
+
+/* ---- the override layer applied to themes (AGL-1021) ---- */
+
+/** A host running an installed theme, with the site's own changes on top. */
+const hostWith = (patch: unknown, sha = 'sha-v1') => ({
+  theme: goodTheme(),
+  themeInstalledFrom: { listingId: 'listing-1', version: '1', sha256: sha },
+  themeOverride: overrideWriteValue(patch, sha),
+})
+
+describe('resolveSiteTheme — theme ⊕ site overrides', () => {
+  it('returns the theme untouched when there is no override', () => {
+    const host = { theme: goodTheme() }
+    expect(resolveSiteTheme(host)).toBe(host.theme)
+  })
+
+  it('is undefined for a site with no theme at all', () => {
+    expect(resolveSiteTheme({})).toBeUndefined()
+    expect(resolveSiteTheme(null)).toBeUndefined()
+  })
+
+  it('applies one overridden colour and leaves the rest of the theme alone', () => {
+    const host = hostWith({
+      colorSchemes: { light: { primary: { main: '#e91e63' } } },
+    })
+    const resolved = resolveSiteTheme(host) as HostTheme
+    expect(resolved.colorSchemes?.light?.primary?.main).toBe('#e91e63')
+    expect(resolved.colorSchemes?.light?.background?.default).toBe('#ffffff')
+    expect(resolved.colorSchemes?.dark).toEqual(
+      goodTheme().colorSchemes?.dark,
+    )
+    expect(resolved.typography).toEqual(goodTheme().typography)
+  })
+
+  it('overrides light and dark independently', () => {
+    const host = hostWith({
+      colorSchemes: { dark: { primary: { main: '#00e5ff' } } },
+    })
+    const resolved = resolveSiteTheme(host) as HostTheme
+    expect(resolved.colorSchemes?.dark?.primary?.main).toBe('#00e5ff')
+    expect(resolved.colorSchemes?.light?.primary?.main).toBe('#1565c0')
+  })
+
+  it('ignores a junk override rather than rendering nothing', () => {
+    expect(
+      resolveSiteTheme({ theme: goodTheme(), themeOverride: 'nonsense' }),
+    ).toEqual(goodTheme())
+    expect(
+      resolveSiteTheme({ theme: goodTheme(), themeOverride: { patch: null } }),
+    ).toEqual(goodTheme())
+  })
+})
+
+describe('the patch survives a theme UPDATE — the point of the layer', () => {
+  it('re-applies to a version the site never saw', () => {
+    const v1 = goodTheme()
+    const customised = goodTheme()
+    customised.colorSchemes!.light!.primary = { main: '#e91e63' }
+    const patch = themeOverridePatch({ theme: v1 }, customised)
+
+    // v2: the publisher fixes dark contrast and adds a corner radius.
+    const v2 = goodTheme()
+    v2.colorSchemes!.dark!.text = { primary: '#ffffff', secondary: '#d0d0d0' }
+    v2.shape = { borderRadius: 20 }
+
+    const resolved = resolveSiteTheme({
+      theme: v2,
+      themeInstalledFrom: { listingId: 'l', sha256: 'sha-v2' },
+      themeOverride: overrideWriteValue(patch, 'sha-v1'),
+    }) as HostTheme
+    expect(resolved.colorSchemes?.light?.primary?.main).toBe('#e91e63')
+    expect(resolved.colorSchemes?.dark?.text?.primary).toBe('#ffffff')
+    expect(resolved.shape?.borderRadius).toBe(20)
+  })
+})
+
+describe('isOverrideForCurrentTheme — surviving a swap must not be silent', () => {
+  it('is true when the patch was authored against the installed theme', () => {
+    expect(isOverrideForCurrentTheme(hostWith({ spacing: 4 }))).toBe(true)
+  })
+
+  it('is false after a theme swap', () => {
+    const host = hostWith({ spacing: 4 }, 'sha-old')
+    host.themeInstalledFrom.sha256 = 'sha-new'
+    expect(isOverrideForCurrentTheme(host)).toBe(false)
+  })
+
+  it('is true when there is nothing to compare — "cannot tell" is not "stale"', () => {
+    expect(isOverrideForCurrentTheme({ theme: goodTheme() })).toBe(true)
+    expect(
+      isOverrideForCurrentTheme({
+        theme: goodTheme(),
+        themeOverride: overrideWriteValue({ spacing: 4 }, null),
+        themeInstalledFrom: { listingId: 'l', sha256: 'x' },
+      }),
+    ).toBe(true)
+  })
+})
+
+describe('describeThemeOverride — "what have I changed?"', () => {
+  it('is empty when nothing was changed', () => {
+    expect(describeThemeOverride({ theme: goodTheme() })).toEqual([])
+  })
+
+  it('names each change with its theme value and the site’s', () => {
+    const entries = describeThemeOverride(
+      hostWith({
+        colorSchemes: { dark: { primary: { main: '#00e5ff' } } },
+        spacing: 4,
+      }),
+    )
+    expect(entries).toHaveLength(2)
+    const colour = entries.find((entry) => entry.scheme === 'dark')
+    expect(colour).toMatchObject({
+      path: 'colorSchemes.dark.primary.main',
+      scheme: 'dark',
+      themeValue: '#90caf9',
+      overrideValue: '#00e5ff',
+    })
+    expect(entries.find((entry) => entry.path === 'spacing')).toMatchObject({
+      themeValue: 8,
+      overrideValue: 4,
+    })
+  })
+
+  it('reads the STORED patch, so it cannot disagree with what is applied', () => {
+    const host = hostWith({ spacing: 4 })
+    const entries = describeThemeOverride(host)
+    const resolved = resolveSiteTheme(host) as HostTheme
+    expect(entries[0].overrideValue).toBe(resolved.spacing)
+  })
+
+  it('labels a path for humans, not as a JSON path', () => {
+    expect(describeThemePath('colorSchemes.dark.primary.main')).toBe(
+      'Colour · dark · primary',
+    )
+    expect(describeThemePath('shape.borderRadius')).toBe('Shape · corner radius')
+    expect(describeThemePath('components.MuiButton.defaultProps.color')).toBe(
+      'Component · MuiButton · defaultProps · color',
+    )
+  })
+})
+
+describe('themeOverridePatch', () => {
+  it('is undefined when the editor returned the theme unchanged', () => {
+    expect(
+      themeOverridePatch({ theme: goodTheme() }, goodTheme()),
+    ).toBeUndefined()
+  })
+
+  it('stops being an override once a value is set back to the theme’s', () => {
+    const host = { theme: goodTheme() }
+    const edited = goodTheme()
+    edited.spacing = 4
+    expect(themeOverridePatch(host, edited)).toEqual({ spacing: 4 })
+    edited.spacing = 8
+    expect(themeOverridePatch(host, edited)).toBeUndefined()
+  })
+})
+
+describe('themeUpdateConflicts — the only place a conflict can exist', () => {
+  const host = hostWith({
+    colorSchemes: { light: { primary: { main: '#e91e63' } } },
+  })
+
+  it('is empty when the publisher changed everything EXCEPT the overridden path', () => {
+    const incoming = goodTheme()
+    incoming.spacing = 12
+    incoming.colorSchemes!.dark!.primary = { main: '#ffffff' }
+    expect(themeUpdateConflicts(host, incoming)).toEqual([])
+  })
+
+  it('names only the contested path', () => {
+    const incoming = goodTheme()
+    incoming.colorSchemes!.light!.primary = { main: '#4caf50' }
+    incoming.spacing = 12
+    const conflicts = themeUpdateConflicts(host, incoming)
+    expect(conflicts).toHaveLength(1)
+    expect(conflicts[0]).toMatchObject({
+      path: 'colorSchemes.light.primary.main',
+      scheme: 'light',
+      themeValue: '#4caf50',
+      overrideValue: '#e91e63',
+    })
+  })
+
+  it('is not a conflict when the publisher adopted the site’s value', () => {
+    const incoming = goodTheme()
+    incoming.colorSchemes!.light!.primary = { main: '#e91e63' }
+    expect(themeUpdateConflicts(host, incoming)).toEqual([])
+  })
+
+  it('is empty when the site overrode nothing', () => {
+    const plain = { theme: goodTheme() }
+    const incoming = goodTheme()
+    incoming.spacing = 99
+    expect(themeUpdateConflicts(plain, incoming)).toEqual([])
+  })
+})
+
+describe('readThemeOverride', () => {
+  it('reads a well-formed override', () => {
+    expect(readThemeOverride(hostWith({ spacing: 4 }))).toEqual({
+      patch: { spacing: 4 },
+      baseSha256: 'sha-v1',
+    })
+  })
+
+  it('treats junk as no override', () => {
+    expect(readThemeOverride({ themeOverride: 'x' } as any)).toBeUndefined()
+    expect(readThemeOverride(null)).toBeUndefined()
+    expect(readThemeOverride({})).toBeUndefined()
   })
 })

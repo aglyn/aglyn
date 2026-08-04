@@ -17,6 +17,11 @@
 
 'use client'
 
+import {
+  resolveSiteTheme,
+  themeOverridePatch,
+} from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { overrideWriteValue } from '@aglyn/aglyn/app-utils/marketplace-overrides'
 import * as Aglyn from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container, GridItems, useLoading } from '@aglyn/shared-ui-jsx'
@@ -34,7 +39,7 @@ import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { InputAdornment, Tab } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useAnalytics, useUser } from '@aglyn/tenant-feature-instance'
 import HostActivityTable from '../../../../../../components/host-activity-table.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -55,6 +60,7 @@ import SiteBackupCard from '../../../../../../components/site-backup-card.compon
 import SiteTemplateCard from '../../../../../../components/site-template-card.component'
 import DeleteSiteCard from '../../../../../../components/delete-site-card.component'
 import ThemeEditor from '../../../../../../components/theme-editor/theme-editor.component'
+import ThemeOverridesCard from '../../../../../../components/theme-editor/theme-overrides-card.component'
 import ThemeSourceCard from '../../../../../../components/theme-editor/theme-source-card.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
@@ -344,15 +350,59 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const [themeSaving, setThemeSaving] = useState(false)
   const logActivity = useHostActivityLogger(hostId)
 
+  /**
+   * A site running an INSTALLED theme owns the patch, not the copy (AGL-1021):
+   * the editor renders `theme ⊕ override`, so what comes back is the resolved
+   * view, and what is stored is its difference from the publisher's version.
+   * Editing `theme` directly instead would fork the theme on the first colour
+   * change and there would be nothing left to take an update against.
+   */
+  const themeIsInstalled = Boolean(data?.themeInstalledFrom?.listingId)
+  const resolvedTheme = useMemo(() => resolveSiteTheme(data), [data])
+
+  /**
+   * Writes `themeOverride` WHOLESALE.
+   *
+   * `mergeFields` and not `merge: true`: Firestore deep-merges maps, and a
+   * patch is a map, so merging a new patch onto the old one takes their union
+   * — every path ever overridden stays overridden and a per-field Reset
+   * silently does nothing.
+   */
+  const handleWriteOverride = useCallback(
+    async (value: unknown) => {
+      await setDoc(
+        { themeOverride: value },
+        { mergeFields: ['themeOverride'] },
+      )
+    },
+    [setDoc],
+  )
+
   const handleThemeSave = useCallback(
     async (theme: Aglyn.AglynHostTheme) => {
       setThemeSaving(true)
       const dequeueLoading = queueLoading()
-      // mergeFields replaces the theme atomically, so cleared colors do not
-      // linger from a deep merge with the previous document.
-      await setDoc({ theme }, { mergeFields: ['theme'] })
+      // mergeFields replaces the field atomically, so cleared colors do not
+      // linger from a deep merge with the previous document — and, for the
+      // override, so that removing one stops overriding rather than unioning
+      // with the patch already stored.
+      const write = themeIsInstalled
+        ? setDoc(
+            {
+              themeOverride: overrideWriteValue(
+                themeOverridePatch(data, theme),
+                data?.themeInstalledFrom?.sha256 ?? null,
+              ),
+            },
+            { mergeFields: ['themeOverride'] },
+          )
+        : setDoc({ theme }, { mergeFields: ['theme'] })
+      await write
         .then(() => {
-          enqueueSnackbar('Theme saved!', { variant: 'success' })
+          enqueueSnackbar(
+            themeIsInstalled ? 'Your changes are saved.' : 'Theme saved!',
+            { variant: 'success' },
+          )
           logActivity('Updated theme', { type: 'theme' })
         })
         .catch((e) => {
@@ -363,7 +413,7 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
           setThemeSaving(false)
         })
     },
-    [enqueueSnackbar, queueLoading, setDoc, logActivity],
+    [enqueueSnackbar, queueLoading, setDoc, logActivity, themeIsInstalled, data],
   )
 
   const handleBasicSave = useCallback(
@@ -655,8 +705,20 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                               replaced={data?.themeReplaced}
                             />
                           </div>
+                          {/* "What have I changed?" is a read of the stored
+                              patch (AGL-1021), so it cannot disagree with what
+                              is applied. Only meaningful for an installed
+                              theme — a site's own theme has no publisher's
+                              version to differ from. */}
+                          <div style={{ marginBottom: 24 }}>
+                            <ThemeOverridesCard
+                              hostId={hostId}
+                              host={data}
+                              onWriteOverride={handleWriteOverride}
+                            />
+                          </div>
                           <ThemeEditor
-                            theme={data?.theme}
+                            theme={resolvedTheme}
                             saving={themeSaving}
                             onSave={handleThemeSave}
                           />

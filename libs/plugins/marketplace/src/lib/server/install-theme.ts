@@ -52,8 +52,14 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' })
   }
   const hostId = String(req.body?.hostId ?? '')
-  const action = ['revert', 'reset', 'preview'].includes(req.body?.action)
-    ? (req.body.action as 'revert' | 'reset' | 'preview')
+  const action = ['revert', 'reset', 'preview', 'clear-overrides'].includes(
+    req.body?.action,
+  )
+    ? (req.body.action as
+        | 'revert'
+        | 'reset'
+        | 'preview'
+        | 'clear-overrides')
     : 'install'
   const listingId = String(req.body?.listingId ?? '')
   if (!hostId || (action === 'install' && !listingId)) {
@@ -103,6 +109,21 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
         { merge: true },
       )
       return res.status(200).json({ reset: true })
+    }
+
+    // ---- clear-overrides: drop this site's changes, keep the theme ----
+    // The third way back, and the narrowest: "reset to the publisher's
+    // version" is deleting the patch — the whole point of owning the patch
+    // rather than the copy (AGL-1019). The theme itself is untouched.
+    if (action === 'clear-overrides') {
+      await hostRef.set(
+        {
+          themeOverride: firebaseAdmin.firestore.FieldValue.delete(),
+          updatedAt: now,
+        },
+        { merge: true },
+      )
+      return res.status(200).json({ cleared: true })
     }
 
     // ---- revert: back to whatever this site had before the last swap ----
@@ -228,12 +249,16 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
             : {}),
           replacedAt: now,
         },
-        // Overrides are NOT carried across a theme swap here — they were
-        // authored against a different base, and silently reapplying a
-        // component override written for another theme is how a site ends up
-        // subtly wrong with no field to point at. AGL-1021 owns the offer to
-        // keep them deliberately.
-        themeOverride: firebaseAdmin.firestore.FieldValue.delete(),
+        // Overrides SURVIVE a theme swap (AGL-1021). A site that set its brand
+        // colour still means it under a new theme, and silently discarding
+        // that on install would be the more surprising of the two options.
+        //
+        // What must not happen is surviving *silently*: the override keeps the
+        // `baseSha256` it was authored against, which no longer matches the
+        // theme now installed, so `isOverrideForCurrentTheme` is false and the
+        // editor says so with an offer to clear them. Rewriting that hash here
+        // would launder a patch written for another theme into one that claims
+        // to belong to this one.
         updatedAt: now,
       },
       { merge: true },

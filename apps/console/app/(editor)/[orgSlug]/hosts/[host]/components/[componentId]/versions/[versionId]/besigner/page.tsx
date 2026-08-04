@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
@@ -295,7 +296,12 @@ function ComponentBesignerPage(props) {
     enqueueSnackbar,
   ])
 
-  const hostTheme = hostResult?.data?.theme
+  // The site's theme with this site's overrides resolved over it
+  // (AGL-1021). The editor must render exactly what the tenant will.
+  const hostTheme = useMemo(
+    () => resolveSiteTheme(hostResult?.data),
+    [hostResult?.data],
+  )
 
   // Draft preview (AGL-1203): a reusable component renders on its own, so the
   // canvas snapshot is the whole story — no layout chain to compose.
