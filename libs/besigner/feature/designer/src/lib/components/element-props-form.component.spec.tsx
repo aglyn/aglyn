@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { PLUGIN_SETTINGS_FIELD_COMPONENT } from './plugin-settings-field.component'
+import { TOKEN_TEXT_FIELD_COMPONENT } from './token-text-field.component'
 import { act, renderHook } from '@testing-library/react'
 
 import * as Aglyn from '@aglyn/aglyn'
@@ -134,4 +136,17 @@ describe('elementPropsComponentMapper coverage (AGL-584)', () => {
   ])('registers an editor for %s', (type) => {
     expect(elementPropsComponentMapper[type]).toBeDefined()
   })
+
+  // The list above is hand-maintained, so it only covers types a schema
+  // declares DIRECTLY. Two attribute types are rewritten to internal editor
+  // keys before render instead, and those keys are the ones that actually
+  // reach the mapper — a rewrite pointing at an unregistered key throws and
+  // blanks the panel exactly the same way AGL-584 did, while every test above
+  // stays green.
+  it.each([TOKEN_TEXT_FIELD_COMPONENT, PLUGIN_SETTINGS_FIELD_COMPONENT])(
+    'registers the internal editor %s that an attribute rewrites to',
+    (key) => {
+      expect(elementPropsComponentMapper[key]).toBeDefined()
+    },
+  )
 })
