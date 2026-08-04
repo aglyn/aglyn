@@ -73,6 +73,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
+import useConfirmedDoc from '../../../../../hooks/use-confirmed-doc'
 import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 
 /**
@@ -116,25 +117,37 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const isStaff = useIsStaff()
 
-  const { data: orgDoc } = useFirestoreDoc<any>(
-    () => doc(firestore, 'orgs', orgId || 'missing'),
-    [firestore, orgId],
-    { idField: '$id' },
+  /**
+   * `useConfirmedDoc`, not `useFirestoreDoc` (AGL-937/AGL-928).
+   *
+   * This is a rule-gated CLIENT read on a staff surface, and every field below
+   * renders as `org?.x ?? '—'`. A `noDocument` tombstone in the local cache
+   * therefore paints a full page of dashes and "no plan" that is
+   * indistinguishable from a real, empty org — reproduced locally, where the
+   * tombstone survived reloads and the page was blank every visit.
+   *
+   * `useConfirmedDoc` confirms a cache miss against the server before
+   * reporting absence, and exposes `ready` so "we do not know yet" is a state
+   * rather than a lie. The alert below renders instead of the summary when the
+   * read is confirmed-absent or failed, so nobody reads a cache artefact as a
+   * broken org.
+   */
+  const { data: orgDoc, ready: orgReady, error: orgError } = useConfirmedDoc<any>(
+    firestore,
+    orgId ? ['orgs', orgId] : null,
   )
   // `subscription` and `stripeCustomerId` moved to `orgs/{orgId}/billing/stripe`
   // (AGL-1028), whose rule is `isStaff() || canManageOrg()` — so staff read it
   // here. Merged over the org doc so the negotiated-price panel below and
   // `isEnterpriseOrg` keep seeing one object.
-  const { data: orgBilling } = useFirestoreDoc<any>(
-    () =>
-      doc(
-        firestore,
-        'orgs',
-        orgId || 'missing',
-        ORG_BILLING_SUBCOLLECTION,
-        ORG_BILLING_DOC_ID,
-      ),
-    [firestore, orgId],
+  //
+  // Confirmed for the same reason, and it matters MORE here: this
+  // subcollection is new, so an org that predates it legitimately has no
+  // billing doc. An unconfirmed read cannot tell that apart from a cached miss,
+  // and both would render the org as having never paid us.
+  const { data: orgBilling } = useConfirmedDoc<any>(
+    firestore,
+    orgId ? ['orgs', orgId, ORG_BILLING_SUBCOLLECTION, ORG_BILLING_DOC_ID] : null,
   )
   const org = useMemo(
     () => (orgDoc ? { ...orgDoc, ...(orgBilling ?? {}) } : orgDoc),
@@ -727,6 +740,17 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
           <>
+            {orgReady && !orgDoc ? (
+              <Alert severity="warning" sx={{ mb: 3 }}>
+                {orgError
+                  ? 'Could not read this organization. Everything below is ' +
+                    'blank because the read failed, not because the org is ' +
+                    'empty — do not act on it.'
+                  : `No organization document exists at orgs/${orgId}. ` +
+                    'Confirmed against the server, so this is a real absence ' +
+                    'rather than a stale local cache (AGL-937).'}
+              </Alert>
+            ) : null}
             <Alert severity="info" sx={{ mb: 3 }}>
               {'Plan/entitlement overrides happen on the Organizations ' +
                 'page; profile edits below are audited to the org ' +
