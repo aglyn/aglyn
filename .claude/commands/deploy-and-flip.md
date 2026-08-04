@@ -16,17 +16,27 @@ AGL-### on `main`. Standing permission to promote is granted.
 The reason it took so long is worth carrying forward, because it cost most of a
 session:
 
-> **`gh api .../commits/<sha>/status` is a FROZEN RECORD, not live state.**
-> Its `created_at` and `updated_at` never change after the deployment attempt
-> that wrote it. I re-read the same `20:06:37Z` "Deployment rate limited"
-> failure for four hours and reported "still rate limited, re-checked just now"
-> every time. **The window had in fact cleared.** Nothing had tested it because
-> no deployment had been attempted since.
+> **`gh api .../commits/<sha>/status` NEVER re-evaluates.** It is written once
+> by the attempt that produced it. That makes it valid for *that attempt* and
+> for nothing else — two ways to be fooled:
+>
+> 1. **Re-reading the same sha later.** I did this hourly for four hours off a
+>    `20:06:37Z` rate-limit failure and reported "still blocked, re-checked just
+>    now" every time. The window had cleared; nothing had tested it.
+> 2. **Checking the commit already ON production before merging.** It stays
+>    `success` forever once deployed, so it cannot distinguish "quota available"
+>    from "the last deploy worked". The concurrent session merged on exactly
+>    that green reading and was refused seconds later.
+>
+> **What IS valid:** the status your own merge writes moments after. Judge by
+> `created_at` relative to the event, not by the endpoint.
 
-**How to actually test the window:** attempt the deploy. There is no read-only
-probe. A rate-limited attempt is cheap — it fails the status and consumes no
-deployment slot. If you find yourself reporting "still blocked" more than once
-off the same sha, you are reading a fossil.
+**How to actually test the window:** attempt the deploy, then read the status
+your attempt just wrote. There is no read-only probe.
+
+**Capacity is genuinely tight.** The 3-record promotion at 00:06Z on 2026-08-04
+exhausted it; a second merge at 00:19Z was refused outright. One promotion per
+session is not superstition.
 
 Still true and still worth obeying: a promotion costs **3 deployment records**
 against a ~100/day cap, and **a merged production PR is not a deploy** — check
@@ -41,10 +51,17 @@ deployment** — rate limited, this time genuinely.
 
 Why it matters: a cleared colour dropdown persists as `null`, React's default
 prop only applies to `undefined`, so `capitalize(null)` throws during SSR and
-**500s the whole page**. Nine `/product/*` screens hit it. They are green right
-now only because the data was patched (`color: null` → `'inherit'` on each). The
-class is still open: **any author clearing a colour on any site reproduces it**
-until this deploys.
+**500s the whole page**. Nine `/product/*` screens hit it — one pair of CTA
+buttons, copy-pasted with the skeleton during the copy pour. They are green
+right now only because the data was patched (`color: null` → `'inherit'` on
+each). The class is still open: **any author clearing a colour on any site
+reproduces it** until this deploys.
+
+Worth knowing for triage: the pages appeared to fail *selectively*, which looked
+like a code boundary and is not. It was **ISR cache age** — screens whose cached
+bytes had expired re-rendered and threw; screens still serving warm bytes looked
+healthy. A partial outage across identical pages is a caching artefact until
+proven otherwise.
 
 So the first promotion of the next session ships an already-merged fix. Verify
 after:
