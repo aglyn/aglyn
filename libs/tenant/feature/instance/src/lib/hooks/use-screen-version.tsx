@@ -37,9 +37,15 @@ export const useScreenVersionRef = ({ hostId, screenId, versionId }: { hostId: s
   return ref.withConverter({
     toFirestore(data) {
       const { $id, ...rest } = data
-      const nodes = rest?.nodes instanceof Bytes
+      // Only emit `nodes` when the write actually carries them (AGL-1250).
+      // Compressing `rest?.nodes || {}` unconditionally meant a partial
+      // `setDoc(…, {merge: true})` — one that set some other field —
+      // shipped an EMPTY compressed map, and merge faithfully merged that
+      // emptiness over the real tree, silently destroying the document.
+      if (rest?.nodes === undefined) return { ...rest, updatedAt: Timestamp.now() }
+      const nodes = rest.nodes instanceof Bytes
         ? rest.nodes
-        : Bytes.fromUint8Array(compress(rest?.nodes || {}))
+        : Bytes.fromUint8Array(compress(rest.nodes))
       return { ...rest, nodes, updatedAt: Timestamp.now() }
     },
     fromFirestore(snapshot, options) {
