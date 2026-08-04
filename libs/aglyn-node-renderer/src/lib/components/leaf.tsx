@@ -22,6 +22,7 @@ import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, type HTMLAttributes, useContext } from 'react'
 import { isValidElementType } from 'react-is'
+import RendererComponents from '../contexts/renderer-components'
 import { LeafSxTransformContext } from '../contexts/leaf-sx-transform'
 import { resolveSchemeSx } from '../utils/scheme-sx'
 
@@ -104,8 +105,31 @@ export const Leaf = observer(
     // slice of `pageData` that belongs to IT — two grids on one page have
     // different queries and must not share a seed. Nothing is added to any
     // component's props, so no unknown attribute reaches the DOM.
+    // Positional children (AGL-1237): a component that splits its children
+    // by index — MUI's Accordion is `[summary, ...rest]` — must receive one
+    // React child per node child. The default single `<Branch>` element reads
+    // as ONE child to `Children.toArray`, so the first slot swallowed the
+    // whole subtree and every later slot got nothing.
+    const positional = Boolean(
+      (schema?.flags?.positionalChildren ?? 0) & Aglyn.FEATURE_FLAG.ENABLED,
+    )
+    const childNodes = positional ? (node?.children ?? []) : null
+
     const element = selfClosing ? (
       <Component {...leafProps} />
+    ) : positional ? (
+      <RendererComponents.Consumer>
+        {({ StemComponent }) => (
+          <Component {...leafProps}>
+            {childNodes!.map((child: any, key: number) => (
+              <StemComponent key={child?.$id ?? key} node={child} />
+            ))}
+            {textContent != null && (
+              <ShadowDom.AglynText>{textContent as any}</ShadowDom.AglynText>
+            )}
+          </Component>
+        )}
+      </RendererComponents.Consumer>
     ) : (
       <Component {...leafProps}>
         {children}

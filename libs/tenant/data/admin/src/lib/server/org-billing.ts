@@ -82,9 +82,17 @@ export async function readOrgBilling(orgId: string): Promise<OrgBillingDoc> {
  * 3. the `stripeCustomers` reverse index, so the webhook can still resolve an
  *    org from a Stripe customer id without a query.
  *
- * `writeInline` keeps the old org-doc fields updated as well. It is on during
- * the migration so a rollback loses nothing, and comes off in the same commit
- * that deletes those fields.
+ * `writeInline` mirrored the keys back onto the org doc as well. It was on
+ * during the migration so a rollback lost nothing, and is now OFF: writing them
+ * inline is what the whole issue exists to stop, and leaving it on would let the
+ * next Stripe webhook silently re-add the fields minutes after they were
+ * deleted, re-opening the exposure with nothing to show for it.
+ *
+ * The option survives for a deliberate one-off rollback, and nothing passes it.
+ *
+ * The READ fallback in `readOrgBilling` deliberately stays. It costs one get on
+ * a doc that no longer exists, and it is the only thing standing between an org
+ * the backfill somehow missed and a paying workspace rendering as Free.
  */
 export async function writeOrgBilling(
   orgId: string,
@@ -92,7 +100,7 @@ export async function writeOrgBilling(
   options: { writeInline?: boolean } = {},
 ): Promise<void> {
   if (!orgId) return
-  const { writeInline = true } = options
+  const { writeInline = false } = options
   const fields = pickOrgBillingFields(patch as never)
   const batch = db().batch()
   const orgRef = db().collection('orgs').doc(orgId)

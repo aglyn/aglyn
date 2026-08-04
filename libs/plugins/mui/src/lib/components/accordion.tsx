@@ -118,6 +118,12 @@ export const accordionSchema: Aglyn.ComponentSchema<AccordionElementProps> = {
     Aglyn.LinealDirectiveFlag.LIMIT_TO,
     { components: [ACCORDION_SUMMARY_ID, ACCORDION_DETAILS_ID] },
   ],
+  // …and it reads that structure BY INDEX, so the renderer has to hand it one
+  // React child per node child (AGL-1237). Without this the summary swallowed
+  // the details and every accordion on every published site expanded to reveal
+  // an empty panel, with its content rendering unconditionally inside the
+  // summary's heading.
+  flags: { positionalChildren: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
     {
       name: 'defaultExpanded',
