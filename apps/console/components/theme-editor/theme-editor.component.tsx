@@ -110,6 +110,15 @@ const TOOLBAR_SM_QUERY = `@media (min-width:${TOOLBAR_SM_MIN_WIDTH}px)`
 /** MUI's stock Toolbar heights, shown when the host has set none. */
 const DEFAULT_TOOLBAR_XS = 56
 const DEFAULT_TOOLBAR_SM = 64
+/**
+ * `createMixins` spreads `...mixins` AFTER its default, so anything we write
+ * REPLACES the stock toolbar wholesale — including its short-landscape rule.
+ * Carrying it forward keeps that behaviour instead of dropping it silently.
+ */
+const TOOLBAR_LANDSCAPE_QUERY = '@media (min-width:0px)'
+const TOOLBAR_LANDSCAPE_RULE = {
+  '@media (orientation: landscape)': { minHeight: 48 },
+}
 
 /** Reads a px `minHeight` out of `mixins.toolbar` for one breakpoint. */
 function readToolbarHeight(theme: HostTheme, breakpoint: 'xs' | 'sm') {
@@ -347,8 +356,19 @@ export function ThemeEditor(props: ThemeEditorProps) {
           delete toolbar[TOOLBAR_SM_QUERY]
         }
         const next = { ...prev }
-        if (Object.keys(toolbar).length) next.mixins = { toolbar }
-        else delete next.mixins
+        const heights = Object.keys(toolbar).filter(
+          (key) => key !== TOOLBAR_LANDSCAPE_QUERY,
+        )
+        if (heights.length) {
+          next.mixins = {
+            toolbar: {
+              ...toolbar,
+              [TOOLBAR_LANDSCAPE_QUERY]: TOOLBAR_LANDSCAPE_RULE,
+            },
+          }
+        } else {
+          delete next.mixins
+        }
         return next
       })
     },
