@@ -142,6 +142,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
     ...rest
   } = props
   const { hostId } = Aglyn.useSite()
+  const siteFetch = Aglyn.useSiteFetch()
   // Resolves the redirect screen like ScreenLink does (rename-safe) and
   // flags editing surfaces, where outcomes must never fire (AGL-557).
   const { href: redirectScreenHref, suppressNavigation } = Aglyn.useScreenLink(
@@ -158,7 +159,9 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
     !suppressNavigation
       ? `[data-aglyn="leaf:${revealNodeId}"]`
       : undefined
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>(
+  const [status, setStatus] = useState<
+    'idle' | 'sending' | 'sent' | 'error' | 'preview'
+  >(
     'idle',
   )
   const [alerts, setAlerts] = useState<
@@ -197,7 +200,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       }
       setStatus('sending')
       try {
-        const response = await fetch('/api/forms/submit', {
+        const response = await siteFetch('/api/forms/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -233,7 +236,16 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
             if (target) formNavigation.assign(target)
           }
         }
-        setStatus(response.ok ? 'sent' : 'error')
+        // A refusal is not a failure (AGL-1249). Preview declines writes on
+        // purpose, and "something went wrong — please try again" invites the
+        // author to retry something that is working exactly as intended.
+        setStatus(
+          response.ok
+            ? 'sent'
+            : Aglyn.isPreviewRefusal(response)
+              ? 'preview'
+              : 'error',
+        )
       } catch {
         setStatus('error')
       }
@@ -248,6 +260,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       redirectScreenHref,
       redirectUrl,
       suppressNavigation,
+      siteFetch,
     ],
   )
 
@@ -290,6 +303,14 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       {status === 'error' ? (
         <Alert severity="error">
           {'Something went wrong — please try again.'}
+        </Alert>
+      ) : null}
+      {status === 'preview' ? (
+        // Deliberately `info`, not `error`, and it does not say "try again":
+        // nothing failed, and the same submit works on the published site.
+        <Alert severity="info">
+          {'Preview does not send form submissions. This form works on your ' +
+            'published site.'}
         </Alert>
       ) : null}
       {alerts.map((alert, index) => (

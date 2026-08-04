@@ -43,17 +43,11 @@ const ROOT = join(__dirname, '..', '..', '..', '..', '..')
 const PLUGINS = join(ROOT, 'libs', 'plugins')
 
 /**
- * Not yet migrated, and each one is a real gap rather than an exemption.
- *
- * `libs/plugins/mui` is being actively edited in a parallel workstream, so
- * these were left alone rather than risk a conflicting edit. `form.tsx` is the
- * one that matters most — a form submitted from Preview is a real submission —
- * and is called out on the issue. **This list must only ever shrink.**
+ * Blocks that still write with a bare `fetch`, and each is a real gap rather
+ * than an exemption. **This list must only ever shrink** — it is now EMPTY
+ * (AGL-1249), which is the goal state.
  */
-const NOT_YET_MIGRATED = [
-  'mui/src/lib/components/form.tsx',
-  'mui/src/lib/components/product.tsx',
-]
+const NOT_YET_MIGRATED: string[] = []
 
 const UNSAFE = /method:\s*'(?!GET|HEAD|OPTIONS|get|head|options)\w+'/
 
@@ -78,9 +72,8 @@ function siteBlocks(): string[] {
     .map((p) => p.slice(PLUGINS.length + 1))
 }
 
-/** Mutating `fetch(` calls not routed through a site-aware fetch. */
-function bareWrites(relative: string): number {
-  const source = readFileSync(join(PLUGINS, relative), 'utf8')
+/** Mutating `fetch(` calls in SOURCE not routed through a site-aware fetch. */
+export function countBareWrites(source: string): number {
   let count = 0
   const pattern = /(\w*)\bfetch\(/g
   let match: RegExpExecArray | null
@@ -90,6 +83,11 @@ function bareWrites(relative: string): number {
     if (UNSAFE.test(source.slice(match.index, match.index + 400))) count += 1
   }
   return count
+}
+
+/** The same question, asked of a file. */
+function bareWrites(relative: string): number {
+  return countBareWrites(readFileSync(join(PLUGINS, relative), 'utf8'))
 }
 
 describe('preview write coverage (AGL-1139)', () => {
@@ -102,12 +100,24 @@ describe('preview write coverage (AGL-1139)', () => {
     expect(blocks).toContain('commerce/src/lib/components/cart.tsx')
   })
 
-  it('CONTROL — the scan can still see a bare mutating fetch', () => {
-    // The detector proved against the known-unmigrated files. If this ever
-    // goes green because `bareWrites` stopped matching rather than because
-    // those files were fixed, the whole guard would be silently dead.
-    const stillBare = NOT_YET_MIGRATED.filter((p) => bareWrites(p) > 0)
-    expect(stillBare).toEqual(NOT_YET_MIGRATED)
+  it('CONTROL — the detector can still see a bare mutating fetch', () => {
+    // This control used to run against the unmigrated files. They are all
+    // migrated now, so that version compared [] to [] and proved nothing —
+    // the exact way a coverage guard dies quietly. It runs against a
+    // SYNTHETIC source instead, which cannot be fixed out from under it.
+    const offending = `
+      const send = async () => {
+        await fetch('/api/commerce/cart', {
+          method: 'POST',
+          body: JSON.stringify({ hostId }),
+        })
+      }
+    `
+    const clean = offending.replace('await fetch(', 'await siteFetch(')
+    expect(countBareWrites(offending)).toBe(1)
+    // ...and the same source routed through `useSiteFetch` is NOT a finding,
+    // or the guard would flag every migrated block and get switched off.
+    expect(countBareWrites(clean)).toBe(0)
   })
 
   it('no site block writes with a bare fetch', () => {

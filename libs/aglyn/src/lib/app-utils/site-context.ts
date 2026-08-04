@@ -73,6 +73,19 @@ export function useSite(): SiteContextValue {
  */
 export const PREVIEW_WRITE_BLOCKED_EVENT = 'aglyn:preview-write-blocked'
 
+/**
+ * The status `useSiteFetch` answers a refused write with. Exported so a block
+ * can tell "Preview refused this" from "the server errored" — the two need
+ * opposite words, and a block that cannot tell them apart says "something went
+ * wrong" about a deliberate, correct refusal (AGL-1249).
+ */
+export const PREVIEW_REFUSED_STATUS = 423
+
+/** Was this response Preview declining to write, rather than a failure? */
+export function isPreviewRefusal(response: { status?: number } | null | undefined): boolean {
+  return response?.status === PREVIEW_REFUSED_STATUS
+}
+
 /** Methods that cannot change server state, so Preview lets them through. */
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
@@ -120,7 +133,7 @@ export function useSiteFetch(): typeof fetch {
         new Response(JSON.stringify(BLOCKED_BODY), {
           // 423 Locked: the request was understood and refused because of the
           // surface it came from, not because it was malformed or forbidden.
-          status: 423,
+          status: PREVIEW_REFUSED_STATUS,
           headers: { 'Content-Type': 'application/json' },
         }),
       )
