@@ -241,64 +241,51 @@ export const middleware: NextMiddleware = (req, event) => {
     'req.nextUrl.pathname=',
     req.nextUrl.pathname,
   )
-  // Per-request CSP nonce (AGL-518) on the rendered page. Next reads it from
-  // the request Content-Security-Policy header and stamps its scripts;
-  // `strict-dynamic` trusts the chunks they load. Shipped REPORT-ONLY so the
-  // browser reports violations without blocking — flip to enforcing by
-  // renaming the response header to `Content-Security-Policy` once reports are
-  // clean (in particular, confirm the realm-plugin blob-imports load under
-  // strict-dynamic). Layers over the enforcing frame-ancestors/object-src CSP
-  // already set in with-aglyn.nextjs.config.js.
-  const nonce = crypto.randomUUID().replace(/-/g, '')
-  const scriptSrc = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
   const baseDirectives = baseCspDirectives(
     process.env.NODE_ENV === 'production',
   )
-  // Tenant does NOT enforce script-src, and this is deliberate (AGL-523).
+  // The tenant sets NO `script-src`, in either header. Deliberate, and the
+  // reasoning is worth keeping because the obvious fix does not work
+  // (AGL-518 → AGL-523 → AGL-1228).
   //
-  // The console enforces a nonce'd script-src because its pages are dynamic, so
-  // Next can read the nonce per request. Tenant pages are ISR-cached: at
-  // revalidation they render outside any request, so there is no header to read
-  // and the payload carries `"nonce":"$undefined"`. Measured — two requests to
-  // one cached page returned BYTE-IDENTICAL HTML with a DIFFERENT nonce in each
-  // response header. A per-request nonce cannot match cached bytes, so
-  // enforcing `strict-dynamic` here would blank every published site.
+  // There used to be a report-only `script-src 'self' 'nonce-…'
+  // 'strict-dynamic'` here, described as gathering evidence before flipping to
+  // enforcing. It gathered nothing. Measured on two live sites: a published
+  // page carries **33 `<script>` tags and ZERO nonce attributes** while the
+  // header advertised a nonce. Under `strict-dynamic` nothing but the nonce can
+  // authorise a script, so all 33 violated the policy on every page load of
+  // every published site — a policy structurally guaranteed to report
+  // everything can never surface anything new. It was an experiment with no
+  // power, costing a `randomUUID` and a header on every response, so it is
+  // gone rather than left to look like evidence someone is waiting on.
   //
-  // Dropping `strict-dynamic` for a plain `script-src 'self'` is not the escape
+  // TWO independent causes, and fixing one alone changes nothing visible:
+  //
+  // 1. ISR. Tenant pages are cached: at revalidation they render outside any
+  //    request, so there is no header to read and the payload carries
+  //    `"nonce":"$undefined"`. Measured — two requests to one cached page
+  //    returned BYTE-IDENTICAL HTML with a DIFFERENT nonce in each response
+  //    header. A per-request nonce cannot match cached bytes. This is the one
+  //    that blocks enforcing.
+  // 2. Shadowing. The response CSP is mirrored onto the request, and Next
+  //    resolves the nonce as `content-security-policy || …-report-only`, so an
+  //    enforcing policy carrying no `script-src` short-circuits the `||`. Same
+  //    defect AGL-523 fixed on the console. Sufficient on its own: the nonce
+  //    would be `$undefined` here even with no caching at all.
+  //
+  // So someone who fixes only the shadowing will find the scripts still
+  // unnonced, and should not read that as the fix having failed.
+  //
+  // Dropping `strict-dynamic` for a plain `script-src 'self'` is not an escape
   // either: Next emits ~12 INLINE scripts per page for RSC flight data, and
-  // `'self'` alone blocks inline. Making this enforceable needs a real design
-  // (a nonce baked into the cached bytes, or hashes), not a header change.
+  // `'self'` alone blocks inline. Making this enforceable needs a real design —
+  // a nonce baked into the cached bytes (per-page-version, not per-visitor) or
+  // build-time hashes — not a header change. Tracked in AGL-1228.
   //
-  // So the base directives enforce exactly as they did when the shared config
-  // owned them, and script-src stays report-only. The base policy still shadows
-  // the nonce for `getScriptNonceFromHeader`, which changes nothing here: the
-  // nonce was already unavailable to a cached render.
-  //
-  // MEASURED CONSEQUENCE, and the reason this is not the harmless no-op it
-  // reads as (AGL-1228). A live published page carries 33 `<script>` tags and
-  // ZERO nonce attributes, while the header below advertises one. Under
-  // `strict-dynamic` nothing else can authorise a script, so every one of
-  // those 33 violates this policy on every page load of every site.
-  //
-  // That makes the report-only header useless AS AN EXPERIMENT — it is
-  // guaranteed to report everything, so it can never surface anything new —
-  // and it is why CSP violation reporting was wired to the console only
-  // (AGL-523). Pointing a collector at this would flood the log with one
-  // already-known defect.
-  //
-  // Note the ISR argument above is not the only cause, though it is the one
-  // that blocks enforcing. The shadowing is independently sufficient: it is
-  // the same defect AGL-523 fixed on the console, so the nonce would be
-  // `$undefined` here even with no caching at all. Someone who fixes only the
-  // shadowing will find the scripts still unnonced and should not read that as
-  // the fix having failed.
-  const cspHeaders = new Headers(req.headers)
-  cspHeaders.set('x-nonce', nonce)
-  const response = NextResponse.rewrite(new URL(rewrite, req.url), {
-    request: { headers: cspHeaders },
-  })
+  // What DOES enforce here, unchanged: the base directives below — `object-src
+  // 'none'`, `base-uri 'self'`, `frame-ancestors` — plus the plugin sandbox.
+  const response = NextResponse.rewrite(new URL(rewrite, req.url))
   response.headers.set('Content-Security-Policy', baseDirectives)
-  response.headers.set('Content-Security-Policy-Report-Only', scriptSrc)
   const overrideParam = req.nextUrl.searchParams.get(TENANT_HOST_PARAM)
   if (overrideParam) {
     response.cookies.set(TENANT_HOST_COOKIE, overrideParam, { path: '/' })

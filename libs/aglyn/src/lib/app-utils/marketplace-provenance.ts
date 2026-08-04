@@ -31,6 +31,7 @@ export type MarketplaceArtifactType =
   | 'layout'
   | 'datasetSchema'
   | 'emailTemplate'
+  | 'theme'
 
 /**
  * Install provenance (AGL-1015): where an installed artifact came from, at

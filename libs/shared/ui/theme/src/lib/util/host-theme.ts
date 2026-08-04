@@ -147,6 +147,13 @@ export function sanitizeHostTheme(theme: HostTheme | undefined): HostTheme {
   const components = sanitizeComponents(theme.components)
   if (components) sanitized.components = components
   else delete sanitized.components
+  // `mixins.toolbar` must be a CSS object; a scalar would reach
+  // `createTheme` and throw while building the Toolbar variant.
+  if (isPlainObject(theme.mixins?.toolbar)) {
+    sanitized.mixins = { toolbar: theme.mixins.toolbar }
+  } else {
+    delete sanitized.mixins
+  }
   return sanitized
 }
 
@@ -188,6 +195,13 @@ export function hostThemeToThemeOptions(
   if (sanitized.components) {
     options.components = sanitized.components as ThemeOptions['components']
   }
+  // Toolbar height is only reachable here (AGL-1242). MUI derives the
+  // Toolbar's `regular` variant style from `mixins.toolbar` and applies it
+  // AFTER `components.MuiToolbar.styleOverrides`, so the slot override loses
+  // every time — its nested media queries do not even emit.
+  if (sanitized.mixins?.toolbar) {
+    options.mixins = { toolbar: sanitized.mixins.toolbar }
+  }
 
   return options
 }
@@ -221,6 +235,9 @@ export function mergeThemeOptions(
   // `primary` still must not disturb `secondary`, hence the level.
   merged.palette = { ...base.palette, ...overrides.palette }
   merged.shape = { ...base.shape, ...overrides.shape }
+  // Same reasoning as `palette`: setting `toolbar` must not drop any other
+  // mixin the base defines.
+  merged.mixins = { ...base.mixins, ...overrides.mixins }
 
   // `typography` is an object in every base we ship, but MUI's type also
   // allows a function of the palette — merging into that would silently drop

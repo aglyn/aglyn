@@ -17,8 +17,8 @@
 
 import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
 import { resolveBrandingProfile } from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { renderHostEmail, sendEmail } from '@aglyn/shared-util-email'
+import { firebaseAdmin, getOrgForHost, renderHostEmailWithTokens } from '@aglyn/tenant-data-admin'
+import { sendEmail } from '@aglyn/shared-util-email'
 
 /**
  * Paid-booking section of the platform Stripe webhook (AGL-170/418):
@@ -69,7 +69,7 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             `confirmed for ${when}.\n\nReference: ${bookingId}`
           // Site-owner-designed template when published (AGL-770); null keeps
           // the built-in copy.
-          const designed = await renderHostEmail(
+          const designed = await renderHostEmailWithTokens(
             firebaseAdmin.app().firestore(),
             String(hostId),
             'booking-confirmed',

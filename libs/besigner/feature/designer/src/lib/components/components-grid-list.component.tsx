@@ -21,8 +21,8 @@ import {
   ICON_VARIANT_MENU_DOWN,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
-import { GridList, type GridListProps, Menu } from '@aglyn/shared-ui-jsx'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { GridList, type GridListProps } from '@aglyn/shared-ui-jsx/components/grid-list'
+import { MdiIcon, Menu } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { arrayFromLength } from '@aglyn/shared-util-tools'
 import { Box, Button, ButtonBase, Tooltip, Typography } from '@mui/material'

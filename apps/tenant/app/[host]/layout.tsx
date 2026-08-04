@@ -17,6 +17,7 @@
 
 // Deep import (not the barrel) so this Server Component doesn't pull the
 // theme lib's createContext HOCs into the RSC graph (AGL-405).
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
 import type { ReactNode } from 'react'
 import { getHostCached } from './host-data'
@@ -39,7 +40,9 @@ export default async function HostLayout({
 }) {
   const { host } = await params
   const hostRes = await getHostCached(host)
-  const hostTheme = hostRes.host?.theme
+  // default ⊕ marketplace theme ⊕ site overrides (AGL-1021). The default is
+  // applied below by HostThemeProvider; these are the upper two layers.
+  const hostTheme = resolveSiteTheme(hostRes.host)
   const fontsHref = getGoogleFontsUrl(hostTheme?.fonts)
   return (
     <HostThemeProviders

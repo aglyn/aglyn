@@ -34,6 +34,7 @@ import { installDatasetSchemaHandler } from './server/install-dataset-schema'
 import { installEmailTemplateHandler } from './server/install-email-template'
 import { installLayoutHandler } from './server/install-layout'
 import { installTemplateHandler } from './server/install-template'
+import { installThemeHandler } from './server/install-theme'
 import { previewImageHandler } from './server/preview-image'
 import { publishHandler } from './server/publish'
 import { reportHandler } from './server/report'
@@ -43,6 +44,7 @@ import { publishDatasetSchemaHandler } from './server/publish-dataset-schema'
 import { publishEmailTemplateHandler } from './server/publish-email-template'
 import { publishLayoutHandler } from './server/publish-layout'
 import { publishTemplateHandler } from './server/publish-template'
+import { publishThemeHandler } from './server/publish-theme'
 import { updateArtifactHandler } from './server/update-artifact'
 
 /**
@@ -68,6 +70,9 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginApiRoute('marketplace/install-plugin', installPluginHandler)
   registerPluginApiRoute('marketplace/install-layout', installLayoutHandler)
   registerPluginApiRoute('marketplace/install-template', installTemplateHandler)
+  // A theme install DOES change the running site (AGL-1020) — it is the site's
+  // appearance — so this route also owns the ways back: `revert` and `reset`.
+  registerPluginApiRoute('marketplace/install-theme', installThemeHandler)
   registerPluginApiRoute(
     'marketplace/install-dataset-schema',
     installDatasetSchemaHandler,
@@ -95,6 +100,7 @@ export function registerMarketplaceConsoleApi(): void {
   )
   registerPluginApiRoute('marketplace/publish-layout', publishLayoutHandler)
   registerPluginApiRoute('marketplace/publish-template', publishTemplateHandler)
+  registerPluginApiRoute('marketplace/publish-theme', publishThemeHandler)
   registerPluginApiRoute(
     'marketplace/publish-dataset-schema',
     publishDatasetSchemaHandler,

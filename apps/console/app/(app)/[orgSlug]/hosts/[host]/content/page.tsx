@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { getSessionHealth } from '../../../../../../utils/session-health'
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiFileDocumentMultipleOutline } from '@aglyn/shared-data-mdi'
 import {
@@ -512,6 +513,20 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   } | null>(null)
 
   const handleSaveEntry = useCallback(async () => {
+    // Never write an entry seeded from a read we know is stale (AGL-1066).
+    // The editor is populated from the entries LISTENER, and
+    // `persistentLocalCache` keeps serving listeners from IndexedDB after a
+    // session goes stale. This write carries every editor field — title, body,
+    // slug, category, tags — so `merge: true` protects none of them, and
+    // saving one edit reverts the rest to whatever the cache last saw.
+    if (getSessionHealth().staleSession) {
+      enqueueSnackbar(
+        'Your session went stale, so this entry may be out of date — saving ' +
+          'now could overwrite newer changes. Sign in again and reload.',
+        { variant: 'error' },
+      )
+      return
+    }
     if (!editor || !selected) return
     const title = editor.title.trim()
     if (!title) return

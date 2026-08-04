@@ -116,26 +116,65 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const isStaff = useIsStaff()
 
-  const { data: orgDoc } = useFirestoreDoc<any>(
-    () => doc(firestore, 'orgs', orgId || 'missing'),
-    [firestore, orgId],
-    { idField: '$id' },
-  )
-  // `subscription` and `stripeCustomerId` moved to `orgs/{orgId}/billing/stripe`
-  // (AGL-1028), whose rule is `isStaff() || canManageOrg()` — so staff read it
-  // here. Merged over the org doc so the negotiated-price panel below and
-  // `isEnterpriseOrg` keep seeing one object.
-  const { data: orgBilling } = useFirestoreDoc<any>(
-    () =>
-      doc(
-        firestore,
-        'orgs',
-        orgId || 'missing',
-        ORG_BILLING_SUBCOLLECTION,
-        ORG_BILLING_DOC_ID,
-      ),
-    [firestore, orgId],
-  )
+  /**
+   * The org, served by the Admin SDK (AGL-937).
+   *
+   * This used to be a rule-gated CLIENT read (`isStaff() || isOrgMember()`),
+   * which was wrong on a staff surface twice over. A `noDocument` tombstone in
+   * the local cache painted every field below as absent — plan, slug, owner,
+   * Stripe customer, created date, entitlements and the whole edit form —
+   * indistinguishable from a real empty org, and it survived reloads.
+   * `useConfirmedDoc` (AGL-928) made that state honest rather than silent, but
+   * it could not remove it. And a staff page must not depend on a rule the
+   * staff user's own membership can flip.
+   *
+   * `/api/admin/org-detail` bypasses both the cache and the rule, and merges
+   * the billing subcollection server-side, so a 404 here is a real absence.
+   */
+  const [orgDoc, setOrgDoc] = useState<any>(null)
+  const [orgReady, setOrgReady] = useState(false)
+  const [orgError, setOrgError] = useState(false)
+  const [orgNonce, setOrgNonce] = useState(0)
+  useEffect(() => {
+    if (!isStaff || !orgId) return undefined
+    let active = true
+    setOrgReady(false)
+    setOrgError(false)
+    void (async () => {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        if (!idToken) throw new Error('no token')
+        const response = await fetch(
+          `/api/admin/org-detail?orgId=${encodeURIComponent(orgId)}`,
+          { headers: { Authorization: `Bearer ${idToken}` } },
+        )
+        if (!active) return
+        if (response.status === 404) {
+          // A confirmed absence, which is the whole point of reading here.
+          setOrgDoc(null)
+          return
+        }
+        if (!response.ok) throw new Error(String(response.status))
+        const payload = await response.json()
+        if (active) setOrgDoc(payload?.org ?? null)
+      } catch {
+        // Failure is reported as failure, never as an empty org — the alert
+        // below tells staff not to act on what they are looking at.
+        if (active) {
+          setOrgDoc(null)
+          setOrgError(true)
+        }
+      } finally {
+        if (active) setOrgReady(true)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [isStaff, orgId, user, orgNonce])
+  // Billing is merged server-side now, so there is one source and one shape.
+  const orgBilling = null
+
   const org = useMemo(
     () => (orgDoc ? { ...orgDoc, ...(orgBilling ?? {}) } : orgDoc),
     [orgDoc, orgBilling],
@@ -426,6 +465,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         const payload = await response.json().catch(() => ({}))
         throw new Error(payload?.error ?? 'Save failed')
       }
+      // The org is read once from the server now, not through a live listener
+      // (AGL-937), so a successful write has to ask for it again — otherwise
+      // the card above keeps showing what staff just changed away from.
+      setOrgNonce((nonce) => nonce + 1)
     } catch (error) {
       console.error(error)
     } finally {
@@ -458,6 +501,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         throw new Error(payload?.error ?? 'Transfer failed')
       }
       setTransferTarget('')
+      setOrgNonce((nonce) => nonce + 1)
     } catch (error) {
       console.error(error)
     } finally {
@@ -727,6 +771,17 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
           <>
+            {orgReady && !orgDoc ? (
+              <Alert severity="warning" sx={{ mb: 3 }}>
+                {orgError
+                  ? 'Could not read this organization. Everything below is ' +
+                    'blank because the read failed, not because the org is ' +
+                    'empty — do not act on it.'
+                  : `No organization document exists at orgs/${orgId}. ` +
+                    'Confirmed against the server, so this is a real absence ' +
+                    'rather than a stale local cache (AGL-937).'}
+              </Alert>
+            ) : null}
             <Alert severity="info" sx={{ mb: 3 }}>
               {'Plan/entitlement overrides happen on the Organizations ' +
                 'page; profile edits below are audited to the org ' +

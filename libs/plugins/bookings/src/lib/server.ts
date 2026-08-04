@@ -69,12 +69,12 @@ import {
   upsertHostContact,
   getPluginConfig,
   resolveOrgIdForHost,
+  renderHostEmailWithTokens,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import {
   isEmailConfigured,
   loadHostEmail,
-  renderHostEmail,
   renderLoadedHostEmail,
   sendEmail,
   type LoadedHostEmail,
@@ -415,7 +415,7 @@ const bookHandler: PluginApiHandler = async (req, res) => {
         `Reference: ${bookingId}`
       // Site-owner-designed template when published (AGL-770); null keeps the
       // built-in copy above.
-      const designed = await renderHostEmail(
+      const designed = await renderHostEmailWithTokens(
         firestore,
         hostId,
         'booking-confirmed',

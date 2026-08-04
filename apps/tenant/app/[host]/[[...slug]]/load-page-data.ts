@@ -136,6 +136,7 @@ const loadPageDataCached = cache(
         })
         if (unavailable.screen) {
           const unavailableNodes = await composeScreenNodes({
+            host: hostRes.host as any,
             hostId,
             screenId: unavailableId,
             screen: unavailable.screen,
@@ -221,6 +222,7 @@ const loadPageDataCached = cache(
         })
         if (designated.screen) {
           const designatedNodes = await composeScreenNodes({
+            host: hostRes.host as any,
             hostId,
             screenId: designatedScreenId,
             screen: designated.screen,
@@ -391,6 +393,7 @@ const loadPageDataCached = cache(
         })
         if (fallbackScreen.screen) {
           const fallbackNodes = await composeScreenNodes({
+            host: hostRes.host as any,
             hostId,
             screenId: notFoundScreenId,
             screen: fallbackScreen.screen,
@@ -481,6 +484,7 @@ const loadPageDataCached = cache(
         })
         if (unauthorized.screen) {
           unauthorizedNodes = await composeScreenNodes({
+            host: hostRes.host as any,
             hostId,
             screenId: unauthorizedId,
             screen: unauthorized.screen,
@@ -504,6 +508,7 @@ const loadPageDataCached = cache(
     }
 
     const denormalized = await composeScreenNodes({
+      host: hostRes.host as any,
       hostId,
       screenId,
       screen: screenRes.screen,

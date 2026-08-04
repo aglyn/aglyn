@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { getSessionHealth } from '../utils/session-health'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { nodeElementSelector } from '@aglyn/besigner-ui'
@@ -408,6 +409,23 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
 
   const handleSave = useCallback(async () => {
     if (problem) return
+    // Never write an interaction seeded from a read we know is stale
+    // (AGL-1066). Every field of this dialog is seeded from `existing`, which
+    // comes from the provider's `hosts/{h}/actions` LISTENER — and
+    // `persistentLocalCache` keeps serving listeners from IndexedDB after a
+    // session goes stale. The save writes `{...candidate}`, the whole action:
+    // name, trigger and every step. `merge: true` protects nothing here,
+    // because the untouched fields are all present in the payload. Editing one
+    // step would revert the rest to whatever the cache last saw, over a
+    // colleague's newer version.
+    if (getSessionHealth().staleSession) {
+      enqueueSnackbar(
+        'Your session went stale, so this interaction may be out of date — ' +
+          'saving now could overwrite newer changes. Sign in again and reload.',
+        { variant: 'error' },
+      )
+      return
+    }
     const id = state.id ?? Aglyn.createResourceUid()
     try {
       // `candidate` is already pruned of `undefined` (AGL-570); wrap the

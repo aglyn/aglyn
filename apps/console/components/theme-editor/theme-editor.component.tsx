@@ -43,16 +43,23 @@ import {
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
+import { stableStringify } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import ColorField from './color-field.component'
 import {
+  buildToolbarMixin,
+  DEFAULT_TOOLBAR_SM,
+  DEFAULT_TOOLBAR_XS,
   fontFamilyStack,
   getSchemeColor,
   GOOGLE_FONT_OPTIONS,
+  orderSensitiveKey,
   PALETTE_COLOR_FIELDS,
+  readToolbarHeight,
   SURFACE_COLOR_FIELDS,
   type SurfaceColorPath,
+  TOOLBAR_SM_MIN_WIDTH,
 } from './theme-editor.constants'
 import ThemePreview from './theme-preview.component'
 
@@ -108,17 +115,47 @@ export function ThemeEditor(props: ThemeEditorProps) {
   const { theme, saving, onSave } = props
   const [draft, setDraft] = useState<HostTheme>(() => theme ?? {})
   const [scheme, setScheme] = useState<HostThemeScheme>('light')
+
+  /**
+   * Re-seed the draft when the saved theme changes underneath us (AGL-1021).
+   *
+   * The draft used to be seeded once, on mount, which was correct while this
+   * editor was the only writer. It is not any more: resetting one overridden
+   * field from the "What you have changed" card rewrites the theme this editor
+   * is showing, and a draft that ignored it kept rendering the old value — and
+   * would have written it straight back on the next Save, silently undoing the
+   * reset.
+   *
+   * Compared by CONTENT, not identity: the parent re-memoizes the resolved
+   * theme on every Firestore snapshot, so an identity check would re-seed (and
+   * discard in-progress edits) constantly. `stableStringify` and not
+   * `JSON.stringify` because the saved doc round-trips through Firestore with a
+   * different key order than the local draft — the same thing that left the
+   * save buttons enabled forever in AGL-56.
+   */
+  const themeKey = useMemo(() => stableStringify(theme ?? {}), [theme])
+  const [seededKey, setSeededKey] = useState(themeKey)
+  if (seededKey !== themeKey) {
+    // Adjusting state during render — React's documented alternative to an
+    // effect for "reset state when a prop changes". It re-renders immediately
+    // without painting the stale draft.
+    setSeededKey(themeKey)
+    setDraft(theme ?? {})
+  }
   // Sanitize both sides and compare order-insensitively (AGL-56): the saved
   // doc round-trips through Firestore with different key order than the local
   // draft, and the draft is only sanitized at save time — a string compare
   // left the save buttons enabled forever after the first save.
-  const dirty = useMemo(
-    () =>
-      !deepEqual(sanitizeHostTheme(draft), sanitizeHostTheme(theme ?? {}), {
-        strict: true,
-      }),
-    [draft, theme],
-  )
+  //
+  // …except where key order IS the meaning. See `orderSensitiveKey`.
+  const dirty = useMemo(() => {
+    const next = sanitizeHostTheme(draft)
+    const saved = sanitizeHostTheme(theme ?? {})
+    return (
+      !deepEqual(next, saved, { strict: true }) ||
+      orderSensitiveKey(next) !== orderSensitiveKey(saved)
+    )
+  }, [draft, theme])
   const schemeColors = draft.colorSchemes?.[scheme]
   const previewFontsHref = getGoogleFontsUrl(draft.fonts)
 
@@ -302,6 +339,31 @@ export function ThemeEditor(props: ThemeEditorProps) {
       return next
     })
   }, [])
+
+  // Nav height has to travel as `mixins.toolbar` (AGL-1242) — MUI builds the
+  // Toolbar's `regular` variant from it and applies that variant AFTER
+  // `components.MuiToolbar.styleOverrides`, so a slot override never wins.
+  // The `sm` query is MUI's own toolbar breakpoint, which is what these
+  // values have to outrank.
+  const handleToolbarHeightChange = useCallback(
+    (breakpoint: 'xs' | 'sm') => (event) => {
+      const value = Number(event.target.value)
+      const valid = Number.isFinite(value) && value > 0
+      setDraft((prev) => {
+        const edited = valid ? value : undefined
+        const xs = breakpoint === 'xs' ? edited : readToolbarHeight(prev, 'xs')
+        const sm = breakpoint === 'sm' ? edited : readToolbarHeight(prev, 'sm')
+        const next = { ...prev }
+        if (xs === undefined && sm === undefined) {
+          delete next.mixins
+          return next
+        }
+        next.mixins = { toolbar: buildToolbarMixin(xs, sm) }
+        return next
+      })
+    },
+    [],
+  )
 
   const [overridesOpen, setOverridesOpen] = useState(false)
   const handleOverridesSave = useCallback(
@@ -489,6 +551,27 @@ export function ThemeEditor(props: ThemeEditorProps) {
                 onChange={handleSpacingChange}
                 slotProps={{ htmlInput: { min: 2, max: 16 } }}
               />
+              <Stack direction="row" spacing={2}>
+                <TextField
+                  type="number"
+                  size="small"
+                  fullWidth
+                  label="Nav height, mobile (px)"
+                  value={readToolbarHeight(draft, 'xs') ?? DEFAULT_TOOLBAR_XS}
+                  onChange={handleToolbarHeightChange('xs')}
+                  slotProps={{ htmlInput: { min: 40, max: 160 } }}
+                />
+                <TextField
+                  type="number"
+                  size="small"
+                  fullWidth
+                  label="Nav height, desktop (px)"
+                  helperText={`Applies from ${TOOLBAR_SM_MIN_WIDTH}px up`}
+                  value={readToolbarHeight(draft, 'sm') ?? DEFAULT_TOOLBAR_SM}
+                  onChange={handleToolbarHeightChange('sm')}
+                  slotProps={{ htmlInput: { min: 40, max: 160 } }}
+                />
+              </Stack>
             </Stack>
           </CardDisplay>
 

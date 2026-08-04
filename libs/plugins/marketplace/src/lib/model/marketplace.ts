@@ -197,6 +197,7 @@ export const ARTIFACT_TYPE_LABELS: Record<MarketplaceArtifactType, string> = {
   layout: 'Layout',
   datasetSchema: 'Dataset schema',
   emailTemplate: 'Email template',
+  theme: 'Theme',
 }
 
 /** The friendly artifact-type label for a listing (AGL-864). */
@@ -236,6 +237,10 @@ export const INSTALL_TARGETS: Record<
   // scope — as a new empty dataset, not a pin (AGL-657).
   datasetSchema: ['org'],
   emailTemplate: ['host'],
+  // A theme is one site's visual identity, written to `hosts/{h}.theme`
+  // (AGL-1020). Applying one org-wide would repaint every site at once from a
+  // control that says "install".
+  theme: ['host'],
 }
 
 /** Targets a listing can be installed to, defaulting to host-only. */
@@ -374,6 +379,54 @@ export function resolveOrgInstallSummary(
     availableHostIds,
     installedAnywhere: orgWide || hostPinnedIds.length > 0,
   }
+}
+
+/** One site an uninstall would touch, and whether it really loses the plugin. */
+export interface UninstallTarget {
+  hostId: string
+  label: string
+  /**
+   * The plugin keeps running here. Removing a HOST pin while an org pin still
+   * covers the site, or the ORG pin while the site holds its own host pin,
+   * changes which pointer is in use and nothing a visitor can see.
+   */
+  stillCovered: boolean
+}
+
+/**
+ * Which sites an uninstall actually affects (AGL-1027).
+ *
+ * The shadowing case is the whole reason this is a function rather than a
+ * filter at the call site. A pin is not a boolean per site: an org pin covers
+ * everything, a host pin names one site, and where both exist the host pin
+ * wins. So "remove" means three different things depending on which pointer is
+ * being dropped and what is left underneath — and the one thing the dialog must
+ * never do is tell someone a plugin will stop working when it will not.
+ *
+ * Returns every site the operation touches, including the ones that keep the
+ * plugin, so the dialog can say so explicitly instead of omitting them and
+ * leaving the count unexplained.
+ */
+export function resolveUninstallTargets(
+  orgInstall: OrgInstallSummary,
+  scope: 'org' | 'host',
+  hostId?: string,
+): UninstallTarget[] {
+  if (scope === 'host') {
+    const site = orgInstall.sites.find((entry) => entry.hostId === hostId)
+    if (!site) return []
+    // Its own pin goes; the org pin, if there is one, still covers it.
+    return [
+      { hostId: site.hostId, label: site.label, stillCovered: orgInstall.orgWide },
+    ]
+  }
+  // Dropping the org pin: every site loses it EXCEPT those holding a host pin
+  // of their own, which were already shadowing the org pin anyway.
+  return orgInstall.sites.map((site) => ({
+    hostId: site.hostId,
+    label: site.label,
+    stillCovered: site.pinnedBy === 'host',
+  }))
 }
 
 /** How the admin chose to target an install from the org marketplace. */

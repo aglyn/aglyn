@@ -99,3 +99,29 @@ describe('Image src resolution (AGL-1215)', () => {
     expect(getByText(/choose a source/i)).toBeTruthy()
   })
 })
+
+describe('Image node styles (AGL-1238)', () => {
+  it('merges the node sx over the component defaults instead of dropping it', () => {
+    // The literals are composed AFTER `{...rest}`, so leaving `sx` in the
+    // spread REPLACED everything the author set from the Styles panel. Every
+    // hero mockup on the marketing site lost its 16px radius and drop shadow.
+    const { container } = render(
+      <Image
+        src="https://example.com/a.png"
+        alt="mockup"
+        {...({ sx: { borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,.2)', maxWidth: '920px' } } as any)}
+      />,
+    )
+    const style = getComputedStyle(container.querySelector('img')!)
+    expect(style.borderRadius).toBe('16px')
+    expect(style.boxShadow).toContain('rgba')
+    expect(style.maxWidth).toBe('920px')
+  })
+
+  it('still applies its own defaults where the node says nothing', () => {
+    const { container } = render(<Image src="https://example.com/b.png" alt="plain" />)
+    const style = getComputedStyle(container.querySelector('img')!)
+    expect(style.display).toBe('block')
+    expect(style.width).toBe('100%')
+  })
+})

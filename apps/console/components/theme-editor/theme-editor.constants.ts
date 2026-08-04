@@ -15,7 +15,80 @@
  * limitations under the License.
  */
 
-import type { HostThemeSchemeColors } from '@aglyn/shared-data-types'
+import type { HostTheme, HostThemeSchemeColors } from '@aglyn/shared-data-types'
+
+/**
+ * MUI's own toolbar breakpoint. `mixins.toolbar` has to carry this exact
+ * query, because the rule it competes with is MUI's `@media (min-width:600px)
+ * { min-height: 64px }` (AGL-1242).
+ */
+export const TOOLBAR_SM_MIN_WIDTH = 600
+export const TOOLBAR_SM_QUERY = `@media (min-width:${TOOLBAR_SM_MIN_WIDTH}px)`
+/** MUI's stock Toolbar heights, shown when the host has set none. */
+export const DEFAULT_TOOLBAR_XS = 56
+export const DEFAULT_TOOLBAR_SM = 64
+/**
+ * `createMixins` spreads `...mixins` AFTER its default, so anything we write
+ * REPLACES the stock toolbar wholesale — including its short-landscape rule.
+ * Carrying it forward keeps that behaviour instead of dropping it silently.
+ */
+export const TOOLBAR_LANDSCAPE_QUERY = '@media (min-width:0px)'
+export const TOOLBAR_LANDSCAPE_RULE = {
+  '@media (orientation: landscape)': { minHeight: 48 },
+}
+
+/** Reads a px `minHeight` out of `mixins.toolbar` for one breakpoint. */
+export function readToolbarHeight(theme: HostTheme, breakpoint: 'xs' | 'sm') {
+  const toolbar = theme.mixins?.toolbar
+  if (!toolbar) return undefined
+  const raw =
+    breakpoint === 'xs'
+      ? toolbar.minHeight
+      : (toolbar[TOOLBAR_SM_QUERY] as { minHeight?: unknown } | undefined)
+          ?.minHeight
+  const value = parseFloat(String(raw ?? ''))
+  return Number.isFinite(value) ? value : undefined
+}
+
+/**
+ * Builds a COMPLETE `mixins.toolbar`, in the order MUI emits it.
+ *
+ * Two things this exists to get right, both because `mixins.toolbar` replaces
+ * MUI's default wholesale rather than merging into it (AGL-1242):
+ *
+ * - **Completeness.** Anything omitted is simply gone. Writing only a desktop
+ *   height left portrait phones with no `min-height` at all, so unset
+ *   breakpoints fall back to MUI's own 56 / 64.
+ * - **Key order.** These land in one CSS rule, so the last matching
+ *   declaration wins. MUI emits the landscape clause BEFORE the sm height;
+ *   emitting it after makes a wide landscape window — i.e. every desktop —
+ *   48px tall.
+ */
+export function buildToolbarMixin(xs: number | undefined, sm: number | undefined) {
+  return {
+    minHeight: `${xs ?? DEFAULT_TOOLBAR_XS}px`,
+    [TOOLBAR_LANDSCAPE_QUERY]: TOOLBAR_LANDSCAPE_RULE,
+    [TOOLBAR_SM_QUERY]: { minHeight: `${sm ?? DEFAULT_TOOLBAR_SM}px` },
+  }
+}
+
+/**
+ * Serializes the branches whose KEY ORDER changes what renders.
+ *
+ * `deepEqual` is order-INsensitive on purpose (AGL-56: Firestore hands the
+ * palette back in a different key order than the editor builds it, and a
+ * string compare left Save enabled forever), so on its own it cannot see a
+ * reorder of `mixins.toolbar` — a change that really does alter the CSS.
+ *
+ * Deliberately narrow: only `mixins`. `components.*.styleOverrides` are CSS
+ * objects too, but widening this would re-expose the AGL-56 failure for every
+ * host with component overrides, and order-sensitivity has only actually been
+ * demonstrated here. (Verified that Firestore returns `mixins` in the written
+ * order, so this does not mark a freshly-loaded document dirty.)
+ */
+export function orderSensitiveKey(theme: HostTheme): string {
+  return JSON.stringify(theme.mixins ?? {})
+}
 
 export type PaletteColorKey =
   | 'primary'

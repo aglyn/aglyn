@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
@@ -194,7 +195,12 @@ function LayoutBesignerPage(props) {
       }),
   })
 
-  const hostTheme = hostResult?.data?.theme
+  // The site's theme with this site's overrides resolved over it
+  // (AGL-1021). The editor must render exactly what the tenant will.
+  const hostTheme = useMemo(
+    () => resolveSiteTheme(hostResult?.data),
+    [hostResult?.data],
+  )
 
   // Draft preview (AGL-1203). A layout previews as itself — its Layout Slot
   // stays empty because there is no screen to fill it, which is the honest

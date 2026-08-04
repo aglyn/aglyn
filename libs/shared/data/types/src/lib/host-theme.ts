@@ -105,6 +105,21 @@ export interface HostThemeComponentOverride {
   styleOverrides?: Record<string, unknown>
 }
 
+/**
+ * Plain-JSON theme mixins.
+ *
+ * `toolbar` is the only one a host can set, and it exists because it is the
+ * ONLY way to change toolbar height from data (AGL-1242). MUI builds the
+ * Toolbar's `regular` variant style FROM `theme.mixins.toolbar`, and applies
+ * that variant AFTER `components.MuiToolbar.styleOverrides` — so a slot
+ * override can never win, no matter how it is written. The value is a CSS
+ * object and may nest media queries, e.g.
+ * `{ minHeight: '56px', '@media (min-width:600px)': { minHeight: '72px' } }`.
+ */
+export interface HostThemeMixins {
+  toolbar?: Record<string, unknown>
+}
+
 export interface HostTheme {
   colorSchemes?: {
     [P in HostThemeScheme]?: HostThemeSchemeColors
@@ -115,6 +130,7 @@ export interface HostTheme {
     borderRadius?: number
   }
   spacing?: number
+  mixins?: HostThemeMixins
   /** Keyed by MUI component slot name (e.g. `MuiButton`). Consumers validate against a whitelist. */
   components?: Record<string, HostThemeComponentOverride>
 }

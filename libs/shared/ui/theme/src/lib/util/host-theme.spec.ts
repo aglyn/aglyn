@@ -109,6 +109,19 @@ describe('hostThemeToThemeOptions', () => {
       MuiButton: { defaultProps: { disableElevation: true } },
     })
   })
+
+  it('forwards mixins.toolbar, media queries and all (AGL-1242)', () => {
+    const toolbar = {
+      minHeight: '56px',
+      '@media (min-width:600px)': { minHeight: '72px' },
+    }
+    const options = hostThemeToThemeOptions({ mixins: { toolbar } }, 'light')
+    expect(options.mixins).toEqual({ toolbar })
+  })
+
+  it('omits mixins when the host sets none', () => {
+    expect(hostThemeToThemeOptions({ spacing: 8 }, 'light').mixins).toBeUndefined()
+  })
 })
 
 describe('sanitizeHostTheme', () => {
@@ -132,6 +145,15 @@ describe('sanitizeHostTheme', () => {
       components: { MuiDataGrid: { defaultProps: {} } },
     })
     expect(sanitized.components).toBeUndefined()
+  })
+
+  it('drops a mixins.toolbar that is not a CSS object (AGL-1242)', () => {
+    // A scalar would reach createTheme and throw while building the
+    // Toolbar's `regular` variant.
+    expect(
+      sanitizeHostTheme({ mixins: { toolbar: '72px' as never } }).mixins,
+    ).toBeUndefined()
+    expect(sanitizeHostTheme({ mixins: {} }).mixins).toBeUndefined()
   })
 })
 
@@ -253,6 +275,17 @@ describe('mergeThemeOptions (AGL-1180)', () => {
     expect(Object.keys(merged.components ?? {}).length).toBe(
       Object.keys(consoleOptions.components ?? {}).length,
     )
+  })
+
+  it('merges mixins one level so toolbar cannot drop a sibling (AGL-1242)', () => {
+    const merged = mergeThemeOptions(
+      { mixins: { denseToolbar: { minHeight: 40 } } as never },
+      { mixins: { toolbar: { minHeight: '72px' } } },
+    )
+    expect(merged.mixins).toEqual({
+      denseToolbar: { minHeight: 40 },
+      toolbar: { minHeight: '72px' },
+    })
   })
 
   it('carries the base through when the host customizes nothing', () => {

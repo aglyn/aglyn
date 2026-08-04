@@ -26,14 +26,47 @@
  */
 
 /** Capabilities a plugin declares; shown verbatim at install. */
+/**
+ * How a declared prop should be EDITED. Authoring metadata only (AGL-1049).
+ *
+ * Deliberately separate from `props`, which stays the security allowlist. A
+ * schema entry for a name that is not in `props` widens nothing — it is
+ * dropped, because the filter and the author disagreeing must resolve in the
+ * filter's favour. The point of this is to make them agree, never to let a
+ * publisher grant themselves a prop by describing it.
+ */
+export interface PluginPropSchema {
+  /** Must also appear in `capabilities.props`, or this entry is ignored. */
+  name: string
+  /**
+   * Which editor to render. Unknown values degrade to `string` rather than
+   * being rejected: this is publisher-authored data, and a manifest from a
+   * newer platform version must not make an older host refuse the plugin.
+   */
+  type?: 'string' | 'number' | 'boolean' | 'color' | 'date' | 'url' | 'select'
+  label?: string
+  description?: string
+  /** Shown as the field's initial value, so "leave it alone" is visible. */
+  default?: string | number | boolean
+  /** `select` only. */
+  options?: Array<{ value: string; label?: string }>
+}
+
 export interface PluginCapabilities {
   /**
    * Outbound origins the plugin may call (`connect-src`), each an exact
    * https origin (`https://api.example.com`). Empty = no network.
    */
   network?: string[]
-  /** Prop names the host passes IN through the bridge. */
+  /** Prop names the host passes IN through the bridge. THE allowlist. */
   props?: string[]
+  /**
+   * Optional editing metadata for the props above (AGL-1049). Absent on every
+   * plugin published before this existed, which is why the authoring surface
+   * falls back to a plain text field per declared name rather than requiring
+   * it.
+   */
+  propSchema?: PluginPropSchema[]
   /** Event names the plugin may emit OUT through the bridge. */
   events?: string[]
   /** Rendered iframe region size (host reserves this box). */
@@ -122,6 +155,17 @@ export const PLUGIN_ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/
 export const PLUGIN_VERSION_PATTERN = /^\d+\.\d+\.\d+$/
 export const PLUGIN_MAX_NETWORK_ORIGINS = 10
 export const PLUGIN_MAX_PROPS = 32
+/** Label/description/default text is publisher-authored; keep it bounded. */
+const PLUGIN_PROP_TEXT_MAX = 200
+const PROP_SCHEMA_TYPES = new Set([
+  'string',
+  'number',
+  'boolean',
+  'color',
+  'date',
+  'url',
+  'select',
+])
 export const PLUGIN_MAX_EVENTS = 32
 export const PLUGIN_MAX_SIZE_PX = 4096
 const HTTPS_ORIGIN_PATTERN = /^https:\/\/[a-z0-9.-]+(:\d+)?$/i
@@ -194,6 +238,82 @@ export function validatePluginManifest(
       }
     }
     if (list.length) capabilities[key] = [...new Set(list as string[])]
+  }
+
+  /**
+   * Editing metadata (AGL-1049). Sanitized, never trusted, and INTERSECTED
+   * with the allowlist above — an entry naming a prop that is not declared in
+   * `props` is dropped rather than rejected.
+   *
+   * Dropped and not rejected on purpose: a publisher who describes a prop they
+   * forgot to declare has made an authoring mistake, not an attack, and
+   * refusing the whole manifest for it would fail the publish over a label.
+   * The prop still does not cross the bridge, because `filterPluginProps`
+   * reads `props` and never this.
+   *
+   * An unknown `type` degrades to a text field rather than failing: a manifest
+   * written against a newer platform must not make an older host refuse a
+   * plugin that is otherwise fine.
+   */
+  const propSchemaInput = capabilitiesInput['propSchema']
+  if (propSchemaInput !== undefined) {
+    if (
+      !Array.isArray(propSchemaInput) ||
+      propSchemaInput.length > PLUGIN_MAX_PROPS
+    ) {
+      return { ok: false, error: 'Too many prop schemas declared' }
+    }
+    const declared = new Set(capabilities.props ?? [])
+    const propSchema: PluginPropSchema[] = []
+    const seen = new Set<string>()
+    for (const raw of propSchemaInput) {
+      if (!raw || typeof raw !== 'object') continue
+      const entry = raw as Record<string, unknown>
+      const name = entry['name']
+      if (typeof name !== 'string' || !IDENTIFIER_PATTERN.test(name)) continue
+      if (!declared.has(name) || seen.has(name)) continue
+      seen.add(name)
+      const type = PROP_SCHEMA_TYPES.has(String(entry['type']))
+        ? (entry['type'] as PluginPropSchema['type'])
+        : 'string'
+      const next: PluginPropSchema = { name, type }
+      for (const key of ['label', 'description'] as const) {
+        const value = entry[key]
+        if (typeof value === 'string' && value.trim()) {
+          next[key] = value.trim().slice(0, PLUGIN_PROP_TEXT_MAX)
+        }
+      }
+      const fallback = entry['default']
+      if (
+        typeof fallback === 'string' ||
+        typeof fallback === 'number' ||
+        typeof fallback === 'boolean'
+      ) {
+        next.default =
+          typeof fallback === 'string'
+            ? fallback.slice(0, PLUGIN_PROP_TEXT_MAX)
+            : fallback
+      }
+      if (type === 'select' && Array.isArray(entry['options'])) {
+        const options = (entry['options'] as unknown[])
+          .map((option) => {
+            const record = (option ?? {}) as Record<string, unknown>
+            const value = record['value']
+            if (typeof value !== 'string' || !value) return null
+            const label = record['label']
+            return {
+              value: value.slice(0, PLUGIN_PROP_TEXT_MAX),
+              ...(typeof label === 'string' && label.trim()
+                ? { label: label.trim().slice(0, PLUGIN_PROP_TEXT_MAX) }
+                : {}),
+            }
+          })
+          .filter(Boolean) as Array<{ value: string; label?: string }>
+        if (options.length) next.options = options.slice(0, PLUGIN_MAX_PROPS)
+      }
+      propSchema.push(next)
+    }
+    if (propSchema.length) capabilities.propSchema = propSchema
   }
 
   const size = capabilitiesInput['size'] as
@@ -441,4 +561,68 @@ export function attachPluginInstalls<T extends Record<string, any>>(
       : node
   }
   return next as T
+}
+
+/** One editable setting on a placed plugin, resolved for the attributes panel. */
+export interface PluginPropField {
+  name: string
+  type: NonNullable<PluginPropSchema['type']>
+  label: string
+  description?: string
+  default?: string | number | boolean
+  options?: Array<{ value: string; label?: string }>
+}
+
+/**
+ * The settings an author may edit on a placed plugin (AGL-1049).
+ *
+ * Driven by `capabilities.props` — THE allowlist — and decorated by
+ * `propSchema` where the publisher supplied one. That order is the whole
+ * security property: the list of editable settings can never be longer than
+ * the list of props that cross the bridge, whatever the schema says, so a
+ * publisher cannot describe their way into a prop they did not declare.
+ *
+ * A plugin published before `propSchema` existed still gets a field per
+ * declared prop, as plain text. That is the difference between guessing key
+ * names in a JSON textarea and being shown them, and it needs no manifest
+ * change to work — which matters, because every plugin installed today
+ * predates this.
+ */
+export function resolvePluginPropFields(
+  manifest: { capabilities?: PluginCapabilities } | null | undefined,
+): PluginPropField[] {
+  const props = manifest?.capabilities?.props ?? []
+  const schema = new Map(
+    (manifest?.capabilities?.propSchema ?? []).map((entry) => [
+      entry.name,
+      entry,
+    ]),
+  )
+  return props.map((name) => {
+    const declared = schema.get(name)
+    return {
+      name,
+      type: declared?.type ?? 'string',
+      label: declared?.label ?? name,
+      ...(declared?.description ? { description: declared.description } : {}),
+      ...(declared?.default !== undefined ? { default: declared.default } : {}),
+      ...(declared?.options ? { options: declared.options } : {}),
+    }
+  })
+}
+
+/**
+ * Keys an author has set that the plugin will silently ignore.
+ *
+ * The failure this exists to surface: `filterPluginProps` drops anything not
+ * in the allowlist, so a typo does not fail — it just quietly does nothing,
+ * which is the worst of the options. Naming the key is the whole fix.
+ */
+export function unknownPluginPropKeys(
+  manifest: { capabilities?: PluginCapabilities } | null | undefined,
+  values: Record<string, unknown> | null | undefined,
+): string[] {
+  if (!values) return []
+  const allowed = new Set(manifest?.capabilities?.props ?? [])
+  return Object.keys(values).filter((key) => !allowed.has(key))
 }

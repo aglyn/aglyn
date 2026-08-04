@@ -35,6 +35,7 @@ import {
   useConsoleHostRoute,
   useFirestore,
   useFirestoreCollection,
+  useFirestoreDoc,
   useHostOrgId,
   useUser,
   useScopeTokens,
@@ -269,6 +270,15 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  // A theme is not a document in a collection — it is a field on the site
+  // (AGL-1020) — so its install is read from the host doc rather than from a
+  // per-artifact query like the two above.
+  const { data: hostDoc } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+
   // listingId → the newest install of it. A schema install deliberately makes
   // a NEW dataset every time, so this is genuinely one-to-many; the highest
   // installed version is what the card should speak for.
@@ -289,8 +299,9 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
       if (template.deletedAt) continue
       note(template.installedFrom?.listingId, template.installedFrom?.version)
     }
+    note(hostDoc?.themeInstalledFrom?.listingId, hostDoc?.themeInstalledFrom?.version)
     return map
-  }, [datasetDocs, emailDocs])
+  }, [datasetDocs, emailDocs, hostDoc])
 
   const hostPins = useMemo(() => {
     const map: Record<string, any> = {}
@@ -465,7 +476,8 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
             // listing stamped on what they created (AGL-789).
             const artifactInstall =
               artifactType === 'datasetSchema' ||
-              artifactType === 'emailTemplate'
+              artifactType === 'emailTemplate' ||
+              artifactType === 'theme'
                 ? artifactInstalls[listing.$id]
                 : undefined
             const isInstalled = isPlugin

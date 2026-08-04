@@ -70,8 +70,15 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     // children value reaching a void element, which 500'd whole pages
     // when a renderer passed empty JSX children through (AGL-579).
     children: _children,
+    // Pull `sx` out of the spread: the literals below are composed AFTER
+    // `{...rest}`, so leaving it there REPLACED every style the author set
+    // from the Styles panel. The hero mockups' 16px radius and drop shadow
+    // were being discarded on every published page (AGL-1238).
+    sx: nodeSxProp,
     ...rest
-  } = props as ImageProps & { children?: unknown }
+  } = props as ImageProps & { children?: unknown; sx?: unknown }
+  // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+  const nodeSx = Array.isArray(nodeSxProp) ? nodeSxProp : nodeSxProp ? [nodeSxProp] : []
   // Optional link mode (AGL-339): screen id first (rename-safe), external
   // URL as fallback; suppressed in the besigner canvas like Screen Link.
   const { href: resolvedHref, suppressNavigation } =
@@ -111,7 +118,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       <Box
         ref={ref}
         {...rest}
-        sx={{
+        sx={[{
           width: width || '100%',
           height: height || 120,
           display: 'flex',
@@ -123,7 +130,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
           color: 'text.secondary',
           fontSize: 12,
           fontFamily: 'system-ui, sans-serif',
-        }}
+        }, ...nodeSx]}
       >
         {'Image — choose a source'}
       </Box>
@@ -151,13 +158,16 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       alt={alt ?? ''}
       loading="lazy"
       {...rest}
-      sx={{
-        display: 'block',
-        width: width || '100%',
-        height: height || 'auto',
-        objectFit: objectFit || 'cover',
-        borderRadius: radius != null ? `${radius}px` : undefined,
-      }}
+      sx={[
+        {
+          display: 'block',
+          width: width || '100%',
+          height: height || 'auto',
+          objectFit: objectFit || 'cover',
+          borderRadius: radius != null ? `${radius}px` : undefined,
+        },
+        ...nodeSx,
+      ]}
     />,
   )
 })

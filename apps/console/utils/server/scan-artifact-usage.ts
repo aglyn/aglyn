@@ -259,3 +259,120 @@ export function screenIdsUsingComponentDeep(
 
   return [...screenIds]
 }
+
+/**
+ * One document that places a plugin's elements (AGL-1027).
+ *
+ * `count` is how many of the plugin's nodes it holds, because "this page uses
+ * it once" and "this page is built out of it" are different sentences and the
+ * confirmation should be able to say which.
+ */
+export interface PluginPlacement {
+  type: 'screen' | 'layout' | 'component'
+  id: string
+  name: string
+  count: number
+  versionId?: string
+}
+
+export interface PluginPlacementScan {
+  /** Documents that directly place the plugin's elements. */
+  placements: PluginPlacement[]
+  /**
+   * Distinct PUBLISHED screens that would stop rendering it — the number the
+   * confirmation quotes.
+   *
+   * Not the same as `placements.length`, in both directions. One layout is one
+   * placement and can be every page on the site; one reusable component that no
+   * published screen uses is a placement that breaks nothing visitors can see.
+   */
+  affectedScreenIds: string[]
+}
+
+/** How many of `pluginId`'s nodes a tree holds. */
+export function countPluginNodes(
+  nodes: Record<string, any> | null | undefined,
+  pluginId: string,
+): number {
+  if (!nodes || !pluginId) return 0
+  let count = 0
+  for (const node of Object.values(nodes)) {
+    if (node?.pluginId === pluginId) count += 1
+  }
+  return count
+}
+
+/**
+ * Everything that would stop rendering if a plugin's pin went away (AGL-1027).
+ *
+ * A plugin is referenced differently from every other artifact this module
+ * scans: not by an instance node or an id pointer, but by `pluginId` on any
+ * node the plugin contributed. So the match is on the node itself, and one
+ * document can hold many.
+ *
+ * The three places are scanned for the same reason `scanComponentUsage` scans
+ * three: the renderer composes from all of them. And the screen closure matters
+ * more here than anywhere, because the two indirect cases are exactly the ones
+ * a person clicking Uninstall cannot see — a plugin in LAYOUT chrome is on
+ * every page under it, and a plugin inside a reusable component is on every
+ * page that places the component.
+ *
+ * ## What this deliberately does not see
+ *
+ * Screens and layouts are scanned on their PUBLISHED version, so a plugin
+ * placed on an unpublished draft is not reported. That is the right scope for
+ * "what stops working on live sites" — but it is a real limit, and the caller
+ * says so rather than presenting the count as everything.
+ */
+export function scanPluginPlacements(
+  pluginId: string,
+  sources: {
+    screens: UsageCandidate[]
+    layouts: UsageCandidate[]
+    components: UsageCandidate[]
+  },
+): PluginPlacementScan {
+  if (!pluginId) return { placements: [], affectedScreenIds: [] }
+  const placements: PluginPlacement[] = []
+  const screenIds = new Set<string>()
+
+  const collect = (
+    candidates: UsageCandidate[],
+    type: PluginPlacement['type'],
+  ) => {
+    for (const candidate of candidates) {
+      if (!isLive(candidate)) continue
+      const count = countPluginNodes(candidate.nodes, pluginId)
+      if (!count) continue
+      placements.push({
+        type,
+        id: candidate.id,
+        name: labelFor(candidate),
+        count,
+        ...(candidate.versionId ? { versionId: candidate.versionId } : {}),
+      })
+      if (type === 'screen') {
+        screenIds.add(candidate.id)
+      } else if (type === 'layout') {
+        // Page chrome: every screen under this layout, at any nesting depth.
+        for (const id of screenIdsUsingLayoutDeep(
+          candidate.id,
+          sources.screens,
+          sources.layouts,
+        )) {
+          screenIds.add(id)
+        }
+      } else {
+        // A definition renders nowhere on its own; the screens placing it do.
+        for (const id of screenIdsUsingComponentDeep(candidate.id, sources)) {
+          screenIds.add(id)
+        }
+      }
+    }
+  }
+  collect(sources.screens, 'screen')
+  collect(sources.layouts, 'layout')
+  collect(sources.components, 'component')
+
+  return { placements, affectedScreenIds: [...screenIds] }
+}

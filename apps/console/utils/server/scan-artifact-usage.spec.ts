@@ -16,8 +16,10 @@
  */
 
 import {
+  countPluginNodes,
   scanComponentUsage,
   scanLayoutUsage,
+  scanPluginPlacements,
   type UsageCandidate,
 } from './scan-artifact-usage'
 
@@ -220,5 +222,188 @@ describe('scanLayoutUsage', () => {
     expect(
       scanLayoutUsage('lay-main', screens).some((e) => e.id === 'scr-none'),
     ).toBe(false)
+  })
+})
+
+/* ---- plugin placements (AGL-1027) ---- */
+
+/** A tree holding `count` nodes contributed by `pluginId`. */
+const treeWithPlugin = (pluginId: string, count = 1) => {
+  const tree: Record<string, any> = {
+    root: {
+      $id: 'root',
+      componentId: 'div',
+      pluginId: 'mui',
+      nodes: Array.from({ length: count }, (_, index) => `p${index}`),
+    },
+  }
+  for (let index = 0; index < count; index += 1) {
+    tree[`p${index}`] = {
+      $id: `p${index}`,
+      componentId: 'countdown',
+      pluginId,
+      parentId: 'root',
+      nodes: [],
+    }
+  }
+  return tree
+}
+
+describe('scanPluginPlacements (AGL-1027)', () => {
+  const none = { screens: [], layouts: [], components: [] }
+
+  it('finds nothing for a plugin nobody placed', () => {
+    expect(
+      scanPluginPlacements('promo', {
+        ...none,
+        screens: [{ id: 's1', displayName: 'Home', nodes: emptyTree, versionId: 'v1' }],
+      }),
+    ).toEqual({ placements: [], affectedScreenIds: [] })
+  })
+
+  it('does not match a DIFFERENT plugin’s nodes', () => {
+    const screens = [
+      { id: 's1', displayName: 'Home', nodes: treeWithPlugin('promo'), versionId: 'v1' },
+    ]
+    expect(
+      scanPluginPlacements('countdown-pro', { ...none, screens }).placements,
+    ).toEqual([])
+  })
+
+  it('counts how many of the plugin’s nodes a page holds', () => {
+    const screens = [
+      {
+        id: 's1',
+        displayName: 'Home',
+        nodes: treeWithPlugin('promo', 3),
+        versionId: 'v1',
+      },
+    ]
+    const result = scanPluginPlacements('promo', { ...none, screens })
+    expect(result.placements).toEqual([
+      { type: 'screen', id: 's1', name: 'Home', count: 3, versionId: 'v1' },
+    ])
+    expect(result.affectedScreenIds).toEqual(['s1'])
+  })
+
+  it('skips a soft-deleted page', () => {
+    const screens = [
+      {
+        id: 's1',
+        displayName: 'Home',
+        nodes: treeWithPlugin('promo'),
+        versionId: 'v1',
+        deletedAt: 'yesterday',
+      },
+    ]
+    expect(scanPluginPlacements('promo', { ...none, screens }).placements).toEqual(
+      [],
+    )
+  })
+
+  it('a plugin in LAYOUT chrome affects every screen under it', () => {
+    const screens: UsageCandidate[] = [
+      { id: 's1', displayName: 'Home', nodes: emptyTree, layoutId: 'lay', versionId: 'v1' },
+      { id: 's2', displayName: 'Shop', nodes: emptyTree, layoutId: 'lay', versionId: 'v1' },
+      { id: 's3', displayName: 'Alone', nodes: emptyTree, versionId: 'v1' },
+    ]
+    const layouts: UsageCandidate[] = [
+      { id: 'lay', displayName: 'Main', nodes: treeWithPlugin('promo'), versionId: 'v1' },
+    ]
+    const result = scanPluginPlacements('promo', { ...none, screens, layouts })
+    expect(result.placements).toEqual([
+      { type: 'layout', id: 'lay', name: 'Main', count: 1, versionId: 'v1' },
+    ])
+    // One placement, two live pages — the number the confirmation must quote.
+    expect(result.affectedScreenIds.sort()).toEqual(['s1', 's2'])
+  })
+
+  it('follows a NESTED layout, so a parent’s chrome reaches the whole tree', () => {
+    const screens: UsageCandidate[] = [
+      { id: 's1', displayName: 'Home', nodes: emptyTree, layoutId: 'child', versionId: 'v1' },
+    ]
+    const layouts: UsageCandidate[] = [
+      { id: 'parent', displayName: 'Parent', nodes: treeWithPlugin('promo'), versionId: 'v1' },
+      { id: 'child', displayName: 'Child', nodes: emptyTree, layoutId: 'parent', versionId: 'v1' },
+    ]
+    expect(
+      scanPluginPlacements('promo', { ...none, screens, layouts })
+        .affectedScreenIds,
+    ).toEqual(['s1'])
+  })
+
+  it('a plugin inside a reusable component reaches the screens placing it', () => {
+    const screens: UsageCandidate[] = [
+      { id: 's1', displayName: 'Home', nodes: treeWithInstance('cmp'), versionId: 'v1' },
+      { id: 's2', displayName: 'Other', nodes: emptyTree, versionId: 'v1' },
+    ]
+    const components: UsageCandidate[] = [
+      { id: 'cmp', displayName: 'Hero', nodes: treeWithPlugin('promo') },
+    ]
+    const result = scanPluginPlacements('promo', { ...none, screens, components })
+    expect(result.placements).toEqual([
+      { type: 'component', id: 'cmp', name: 'Hero', count: 1 },
+    ])
+    expect(result.affectedScreenIds).toEqual(['s1'])
+  })
+
+  it('a component nobody publishes is a placement that breaks no live page', () => {
+    const components: UsageCandidate[] = [
+      { id: 'cmp', displayName: 'Unused hero', nodes: treeWithPlugin('promo') },
+    ]
+    const result = scanPluginPlacements('promo', { ...none, components })
+    expect(result.placements).toHaveLength(1)
+    // The distinction the issue asks for: something IS placed, but nothing a
+    // visitor can reach stops working.
+    expect(result.affectedScreenIds).toEqual([])
+  })
+
+  it('counts a screen once when it is reached two ways', () => {
+    const screens: UsageCandidate[] = [
+      {
+        id: 's1',
+        displayName: 'Home',
+        nodes: { ...treeWithInstance('cmp'), ...treeWithPlugin('promo') },
+        layoutId: 'lay',
+        versionId: 'v1',
+      },
+    ]
+    const layouts: UsageCandidate[] = [
+      { id: 'lay', displayName: 'Main', nodes: treeWithPlugin('promo'), versionId: 'v1' },
+    ]
+    const components: UsageCandidate[] = [
+      { id: 'cmp', displayName: 'Hero', nodes: treeWithPlugin('promo') },
+    ]
+    const result = scanPluginPlacements('promo', {
+      screens,
+      layouts,
+      components,
+    })
+    expect(result.placements).toHaveLength(3)
+    expect(result.affectedScreenIds).toEqual(['s1'])
+  })
+
+  it('is empty for a missing plugin id rather than matching everything', () => {
+    const screens = [
+      { id: 's1', displayName: 'Home', nodes: treeWithPlugin('promo'), versionId: 'v1' },
+    ]
+    expect(scanPluginPlacements('', { ...none, screens })).toEqual({
+      placements: [],
+      affectedScreenIds: [],
+    })
+  })
+})
+
+describe('countPluginNodes', () => {
+  it('counts only the named plugin’s nodes', () => {
+    expect(countPluginNodes(treeWithPlugin('promo', 2), 'promo')).toBe(2)
+    expect(countPluginNodes(treeWithPlugin('promo', 2), 'other')).toBe(0)
+  })
+
+  it('is zero for nothing', () => {
+    expect(countPluginNodes(null, 'promo')).toBe(0)
+    expect(countPluginNodes(undefined, 'promo')).toBe(0)
+    expect(countPluginNodes({}, 'promo')).toBe(0)
+    expect(countPluginNodes(treeWithPlugin('promo'), '')).toBe(0)
   })
 })

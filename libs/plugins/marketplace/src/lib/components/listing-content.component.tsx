@@ -26,8 +26,11 @@ import {
   resolveInstallPlan,
   resolveOrgInstallSummary,
   resolvePluginInstallState,
+  resolveUninstallTargets,
   type InstallTargeting,
+  type UninstallTarget,
 } from '../model/marketplace'
+import UninstallImpactDialog from './uninstall-impact-dialog.component'
 import {
   buildRoute,
   parseMarkdownLite,
@@ -375,6 +378,11 @@ export function MarketplaceListingContent({
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { install, installPlan, buy, uninstall } = useMarketplaceActions(hostId)
+  /** The uninstall awaiting its impact check and confirmation (AGL-1027). */
+  const [pendingUninstall, setPendingUninstall] = useState<{
+    scope: 'org' | 'host'
+    targets: UninstallTarget[]
+  } | null>(null)
   const [installScope, setInstallScope] = useState<'org' | 'host'>('org')
   // Confirm before writing install pins (AGL-867): the install is deliberate
   // and site-scoped, so it names its targets before committing.
@@ -550,6 +558,14 @@ export function MarketplaceListingContent({
     [firestore, hostId, listingId],
     { idField: '$id' },
   )
+  // A theme installs onto the host document itself (AGL-1020) rather than into
+  // a collection, so there is no per-listing query to scope — the site either
+  // runs this listing's theme or it does not.
+  const { data: themeHostDoc } = useFirestoreDoc<any>(
+    () => (artifactType === 'theme' ? doc(firestore, 'hosts', hostId) : null),
+    [firestore, hostId, artifactType],
+    { idField: '$id' },
+  )
   const artifactInstall = useMemo(() => {
     if (artifactType === 'datasetSchema') {
       const hit = (datasetInstalls ?? []).find((entry: any) => !entry.deletedAt)
@@ -559,8 +575,14 @@ export function MarketplaceListingContent({
       const hit = (emailInstalls ?? []).find((entry: any) => !entry.deletedAt)
       return hit ? { version: hit.installedFrom?.version ?? null } : undefined
     }
+    if (artifactType === 'theme') {
+      const stamp = themeHostDoc?.themeInstalledFrom
+      return stamp?.listingId === listingId
+        ? { version: stamp?.version ?? null }
+        : undefined
+    }
     return undefined
-  }, [artifactType, datasetInstalls, emailInstalls])
+  }, [artifactType, datasetInstalls, emailInstalls, themeHostDoc, listingId])
 
   /**
    * The version this listing actually offers (AGL-1016).
@@ -823,7 +845,11 @@ export function MarketplaceListingContent({
   const copiedUpdatable =
     !isPlugin &&
     installed &&
-    Boolean(componentInstall) &&
+    // A theme is a copied artifact like a component, just stored as a field on
+    // the site rather than as its own document (AGL-1020) — so it takes the
+    // same diff-first update path, and must not fall through to the plain
+    // install that would overwrite the site's edits.
+    Boolean(componentInstall || (artifactType === 'theme' && artifactInstall)) &&
     updateStatus.state !== 'current'
   const openUpdateReview = () => {
     setUpdatePreview(null)
@@ -1472,12 +1498,16 @@ export function MarketplaceListingContent({
                                   : 'Review this version'
                                 : artifactInstall
                                 ? // Re-adding makes another dataset / another
-                                  // draft, so this stays enabled (AGL-789).
-                                  `${
-                                    artifactType === 'emailTemplate'
-                                      ? 'Draft added'
-                                      : 'Added'
-                                  } (v${installedVersion}) · add again`
+                                  // draft, so this stays enabled (AGL-789). A
+                                  // theme has no "again" — there is one per
+                                  // site, and re-pressing this re-applies it.
+                                  artifactType === 'theme'
+                                  ? `Applied (v${installedVersion}) · re-apply`
+                                  : `${
+                                      artifactType === 'emailTemplate'
+                                        ? 'Draft added'
+                                        : 'Added'
+                                    } (v${installedVersion}) · add again`
                                 : installed
                                   ? `Update to v${offeredVersion}`
                                   : mustBuy
@@ -1502,10 +1532,15 @@ export function MarketplaceListingContent({
                             size="small"
                             color="inherit"
                             onClick={() =>
-                              void uninstall(
-                                listing,
-                                pluginState.scope ?? undefined,
-                              )
+                              setPendingUninstall({
+                                scope:
+                                  pluginState.scope === 'org' ? 'org' : 'host',
+                                targets: resolveUninstallTargets(
+                                  orgInstall,
+                                  pluginState.scope === 'org' ? 'org' : 'host',
+                                  hostId,
+                                ),
+                              })
                             }
                           >
                             {pluginState.scope === 'org'
@@ -1802,6 +1837,21 @@ export function MarketplaceListingContent({
               void runUpdate('merge', takePaths, confirmDestructive)
             }
             onApplyCopy={() => void runCopy()}
+          />
+          {/* What an uninstall would break, before it happens (AGL-1027). */}
+          <UninstallImpactDialog
+            open={pendingUninstall !== null}
+            listing={listing}
+            scope={pendingUninstall?.scope ?? 'host'}
+            targets={pendingUninstall?.targets ?? []}
+            onCancel={() => setPendingUninstall(null)}
+            onConfirm={async () => {
+              const target = pendingUninstall
+              setPendingUninstall(null)
+              if (!target) return
+              await uninstall(listing, target.scope)
+              setPinsNonce((nonce) => nonce + 1)
+            }}
           />
           {/* Screenshot lightbox (AGL-869). */}
           <Dialog
