@@ -143,13 +143,38 @@ describe('Drawer element (AGL-562)', () => {
       </DrawerElement>,
     )
     // The drawer is invisible on the live site until opened; the canvas
-    // shows a slim, selectable marker instead of the expanded contents.
-    expect(screen.getByText(/slides in on the live site/)).toBeTruthy()
+    // shows a compact, selectable marker instead of the expanded contents.
+    expect(screen.getByText('Drawer · left')).toBeTruthy()
     expect(screen.queryByText('Editable contents')).toBeNull()
     // Editor surfaces never enroll on the command bus.
     command('open', 'drawer-4')
     expect(screen.queryByRole('button', { name: 'Close menu' })).toBeNull()
     expect(screen.queryByText('Editable contents')).toBeNull()
+  })
+
+  it('takes no space in its parent while unselected (AGL-1236)', () => {
+    // A drawer is a portal: on the live site it contributes nothing to the
+    // row it sits in. A 280px in-flow placeholder made the canvas disagree
+    // with the page it renders — in the marketing nav it squeezed the row
+    // until the logo collapsed and overlapped the first link. "What you
+    // design is exactly what ships" has to hold for elements that ship
+    // invisible too.
+    const { container } = renderEditor(
+      <DrawerElement anchor="right" width={320} {...{ 'data-aglyn': 'leaf:drawer-6' }}>
+        <span>{'Editable contents'}</span>
+      </DrawerElement>,
+    )
+    const marker = container.firstElementChild as HTMLElement
+    expect(getComputedStyle(marker).position).toBe('absolute')
+    // No inset: it stays at its own static position, so the marker is where
+    // the element is — it just stops reserving a box.
+    for (const edge of ['top', 'right', 'bottom', 'left'] as const) {
+      // jsdom reports an unset inset as '' rather than 'auto'; either way
+      // the point is that nothing pins it away from its static position.
+      expect(['auto', '']).toContain(getComputedStyle(marker)[edge])
+    }
+    // And it must not carry the configured panel width into the row.
+    expect(getComputedStyle(marker).width).not.toBe('320px')
   })
 
   it('expands contents while the drawer subtree holds the selection (AGL-571)', () => {

@@ -158,8 +158,8 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
     }, [editorInert, nodeId])
 
     if (editorInert) {
-      // Editor affordance: a slim, selectable placeholder mirroring the
-      // live hidden-until-opened drawer (AGL-571). While the drawer or a
+      // Editor affordance: a selectable marker mirroring the live
+      // hidden-until-opened drawer (AGL-571). While the drawer or a
       // descendant is selected, the contents expand inline as a real
       // design surface sized to the configured width with the live
       // panel's padding (AGL-572), so links and headers render full size.
@@ -169,15 +169,40 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
           ref={ref}
           {...rest}
           sx={[
-            {
-              m: 0.5,
-              p: 2,
-              width: sideAnchored ? width || 280 : '100%',
-              maxWidth: '100%',
-              border: '1px dashed',
-              borderColor: 'divider',
-              borderRadius: 1,
-            },
+            authoring
+              ? {
+                  position: 'relative',
+                  m: 0.5,
+                  p: 2,
+                  width: sideAnchored ? width || 280 : '100%',
+                  maxWidth: '100%',
+                  border: '1px dashed',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                }
+              : // Unselected, the marker is OUT OF FLOW at its own static
+                // position (AGL-1236). A drawer is a portal: on the live
+                // site it contributes nothing to its parent's layout, so a
+                // placeholder that consumed 280px of the row made the
+                // canvas disagree with the page it renders — the nav's
+                // logo collapsed and overlapped the first link. "What you
+                // design is exactly what ships" has to hold for the
+                // elements that ship invisible too.
+                //
+                // `position: absolute` with no inset keeps it exactly where
+                // it would have been while removing it from flow.
+                {
+                  position: 'absolute',
+                  zIndex: 1,
+                  px: 0.75,
+                  py: 0.25,
+                  border: '1px dashed',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  backgroundColor: 'background.paper',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'auto',
+                },
             ...nodeSx,
           ]}
         >
@@ -186,7 +211,9 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
             color="text.secondary"
             sx={{ display: 'block', mb: authoring ? 0.5 : 0 }}
           >
-            {`Drawer (${resolvedAnchor}) — slides in on the live site`}
+            {authoring
+              ? `Drawer (${resolvedAnchor}) — slides in on the live site`
+              : `Drawer · ${resolvedAnchor}`}
           </Typography>
           {authoring ? children : null}
         </Box>
