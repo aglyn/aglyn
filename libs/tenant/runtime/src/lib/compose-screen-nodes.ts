@@ -150,44 +150,72 @@ export async function composeNodesWithChrome(options: {
    * the API, a script, or a restored backup can all write a layout
    * document directly, and a render must degrade rather than hang.
    */
-  const layoutNodesChain: Array<Record<string, any> | undefined> = []
-  const seen = new Set<string>()
-  let currentLayoutId = layoutId ? String(layoutId) : undefined
-  while (
-    currentLayoutId &&
-    !seen.has(currentLayoutId) &&
-    layoutNodesChain.length < Aglyn.MAX_LAYOUT_CHAIN_DEPTH
-  ) {
-    seen.add(currentLayoutId)
-    const layoutRes = await getPublishedLayoutVersion({
-      hostId,
-      layoutId: currentLayoutId,
-    })
-    layoutNodesChain.push(layoutRes?.version?.nodes as any)
-    const parentId = (layoutRes?.layout as any)?.layoutId
-    currentLayoutId = parentId ? String(parentId) : undefined
+  const walkLayoutChain = async () => {
+    const chain: Array<Record<string, any> | undefined> = []
+    const seen = new Set<string>()
+    let currentLayoutId = layoutId ? String(layoutId) : undefined
+    while (
+      currentLayoutId &&
+      !seen.has(currentLayoutId) &&
+      chain.length < Aglyn.MAX_LAYOUT_CHAIN_DEPTH
+    ) {
+      seen.add(currentLayoutId)
+      const layoutRes = await getPublishedLayoutVersion({
+        hostId,
+        layoutId: currentLayoutId,
+      })
+      chain.push(layoutRes?.version?.nodes as any)
+      const parentId = (layoutRes?.layout as any)?.layoutId
+      currentLayoutId = parentId ? String(parentId) : undefined
+    }
+    return chain
   }
 
-  const composedNodes = Aglyn.composeLayoutChainAndScreenNodes(
-    layoutNodesChain as any,
-    screenNodes as any,
-  )
-  const componentsRes = await getComponents({ hostId })
-  const grafted = Aglyn.composeReusableComponentNodes(
-    composedNodes as any,
-    componentsRes.definitions as any,
-  )
-  // Host variable + function bindings (AGL-91/93): {{name}} and
-  // {{fn:name(args)}} in string props resolve to values; unknown tokens
-  // and failed runs stay literal.
-  const [rawVariables, functions, datasets, workflows, pluginInstalls] =
-    await Promise.all([
+  /**
+   * ONE round-trip stage instead of three (AGL-1225).
+   *
+   * This used to be `await layout walk` → `await getComponents` → `await
+   * Promise.all([five reads])`: three sequential waits, where only the first
+   * has any reason to be sequential. Every one of the other six reads takes
+   * `hostId` and nothing else — none of them consumes the layout chain — so
+   * they were waiting on a walk whose result they never look at.
+   *
+   * The walk stays internally sequential because it genuinely is: each step's
+   * parent id is only known once the previous layout document is in hand. It
+   * just no longer gates anything else. The critical path becomes the walk
+   * alone rather than walk + components + bulk.
+   *
+   * Measured budget that motivated this (production, `/product/besigner`):
+   * `composeScreenNodes` was the largest single phase at 1577 ms cold and
+   * consistently ~1.4-1.6 s warm too, so this is not cold-start cost. The
+   * existing `AGL-1152:render` timing line reports `composeScreenNodes` as a
+   * phase, so the effect of this shows up there directly — no new
+   * instrumentation, and a regression would be visible in the same place.
+   */
+  const [layoutNodesChain, componentsRes, bulk] = await Promise.all([
+    walkLayoutChain(),
+    getComponents({ hostId }),
+    // Host variable + function bindings (AGL-91/93): {{name}} and
+    // {{fn:name(args)}} in string props resolve to values; unknown tokens
+    // and failed runs stay literal.
+    Promise.all([
       getVariables({ hostId }),
       getFunctions({ hostId }),
       getDatasets({ hostId }),
       getWorkflows({ hostId }),
       getPluginInstalls({ hostId }),
-    ])
+    ]),
+  ])
+  const [rawVariables, functions, datasets, workflows, pluginInstalls] = bulk
+
+  const composedNodes = Aglyn.composeLayoutChainAndScreenNodes(
+    layoutNodesChain as any,
+    screenNodes as any,
+  )
+  const grafted = Aglyn.composeReusableComponentNodes(
+    composedNodes as any,
+    componentsRes.definitions as any,
+  )
   // Computed variables (AGL-129): workflow-backed values resolve once per
   // compose; failures keep each variable's stored fallback.
   const variables = Aglyn.resolveComputedVariables(
