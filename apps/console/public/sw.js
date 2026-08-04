@@ -117,7 +117,23 @@ self.addEventListener('install', () => {
   // toolchain (serwist) is for. Runtime caching reaches the same steady state
   // after one visit without adding that machinery, and crucially it cannot
   // cache something the page did not already ask for.
-  self.skipWaiting()
+  //
+  // **No `skipWaiting()` here (AGL-1055).** A new worker stays in `waiting`
+  // until the user asks for it. Activating automatically swaps the worker out
+  // from under a live page — in an authoring tool, mid-edit, with unsaved work
+  // on screen — and a page that then lazy-loads a route chunk from the build
+  // it started on can find that chunk gone. Waiting is the whole point: the
+  // old build keeps working until someone chooses otherwise.
+})
+
+/**
+ * The user accepted the update (AGL-1055).
+ *
+ * The ONLY thing that promotes a waiting worker. The client posts this after a
+ * click on the reload prompt, never on its own.
+ */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
