@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { createResourceUid } from '@aglyn/aglyn'
+import {
+  createResourceUid,
+  resolveIdpDisplayName,
+  resolveIdpPhotoUrl,
+} from '@aglyn/aglyn'
 import {
   FIREBASE_AUTH_EMULATOR_ENABLED,
   FIREBASE_DATABASE_EMULATOR_ENABLED,
@@ -119,6 +123,39 @@ const PRESENCE_APP_NAME = 'AGLYN_PRESENCE'
 let presenceAppCheckStarted = false
 
 /**
+ * An SSO identity carries NO profile on the Firebase user object (AGL-675).
+ *
+ * A SAML user has `displayName: undefined`, `photoURL: undefined` and an
+ * empty `providerData` — GCIP puts the assertion's mapped attributes under
+ * `firebase.sign_in_attributes` and never promotes them to top-level claims.
+ * So presence listed an SSO colleague by their email address while listing
+ * everyone else by name, which is how Zach spotted it.
+ *
+ * The claims are already in hand: effect 1 fetches an ID token to call the
+ * broker. Decoding it locally costs nothing and needs no round trip. Only
+ * the payload is read — never verified here, and never trusted for
+ * authorization; the broker still verifies the same token server-side before
+ * it mints anything.
+ */
+export function readIdpProfile(idToken: string): {
+  displayName: string
+  photoURL: string
+} {
+  try {
+    const [, payload] = idToken.split('.')
+    if (!payload) return { displayName: '', photoURL: '' }
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
+    const claims = JSON.parse(json)
+    return {
+      displayName: resolveIdpDisplayName(claims),
+      photoURL: resolveIdpPhotoUrl(claims),
+    }
+  } catch {
+    return { displayName: '', photoURL: '' }
+  }
+}
+
+/**
  * App Check is per Firebase APP, not per project.
  *
  * `initializeAppCheck` only ever ran on the primary app, so the presence app
@@ -186,13 +223,20 @@ export function usePresence(options: {
   // writing it — presence wrote and un-wrote itself in a loop, which is
   // why the room looked empty with no error anywhere. Depend on
   // primitives only.
+  const [idp, setIdp] = useState<{ displayName: string; photoURL: string }>({
+    displayName: '',
+    photoURL: '',
+  })
+  // An SSO user has none of these on the user object, so the IdP claims are
+  // the fallback rather than the email address — see `readIdpProfile`.
   const displayName = String(
-    (user as { displayName?: string; email?: string } | undefined)
-      ?.displayName ??
-      (user as { email?: string } | undefined)?.email ??
+    (user as { displayName?: string } | undefined)?.displayName ||
+      idp.displayName ||
+      (user as { email?: string } | undefined)?.email ||
       'Someone',
   ).slice(0, 80)
-  const photoURL = (user as { photoURL?: string } | undefined)?.photoURL
+  const photoURL =
+    (user as { photoURL?: string } | undefined)?.photoURL || idp.photoURL
   // The token getter is called inside an effect that must NOT depend on
   // the user object; a ref keeps the latest without re-triggering.
   const getIdTokenRef = useRef<(() => Promise<string>) | undefined>(undefined)
@@ -216,6 +260,10 @@ export function usePresence(options: {
       try {
         const idToken = await getIdTokenRef.current?.()
         if (!idToken) return
+        const profile = readIdpProfile(idToken)
+        if (active && (profile.displayName || profile.photoURL)) {
+          setIdp(profile)
+        }
         const response = await fetch('/api/presence/token', {
           method: 'POST',
           headers: {
