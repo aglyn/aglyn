@@ -32,6 +32,29 @@ Still true and still worth obeying: a promotion costs **3 deployment records**
 against a ~100/day cap, and **a merged production PR is not a deploy** — check
 containment against the READY deployment's sha, never the branch.
 
+## 1b. FIRST ACTION NEXT SESSION: a fix is stranded and a real bug is still live
+
+**`d4b968094` (AGL-1226, `dropClearedProps`) is on `origin/production` but NOT in
+the live build.** Measured: the live tenant build is `dpl_8WYoBNwQTT…`, which is
+PR #760 (`d4855bbf3`). PR #761 merged at 00:19:50Z and produced **no tenant
+deployment** — rate limited, this time genuinely.
+
+Why it matters: a cleared colour dropdown persists as `null`, React's default
+prop only applies to `undefined`, so `capitalize(null)` throws during SSR and
+**500s the whole page**. Nine `/product/*` screens hit it. They are green right
+now only because the data was patched (`color: null` → `'inherit'` on each). The
+class is still open: **any author clearing a colour on any site reproduces it**
+until this deploys.
+
+So the first promotion of the next session ships an already-merged fix. Verify
+after:
+
+```bash
+for p in besigner console commerce forms media workflows plugins analytics marketing; do
+  printf "%-12s " "$p"; curl -s -o /dev/null -w "%{http_code}\n" \
+    "https://aglyn-marketing.aglyn.app/product/$p"; done
+```
+
 ## 2. AGL-523 — READY TO FLIP. Everything that gated it is cleared.
 
 **Do not re-derive any of this — it was all measured.** The canvas click-test
