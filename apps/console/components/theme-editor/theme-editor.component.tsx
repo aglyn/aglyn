@@ -372,30 +372,31 @@ export function ThemeEditor(props: ThemeEditorProps) {
   const handleToolbarHeightChange = useCallback(
     (breakpoint: 'xs' | 'sm') => (event) => {
       const value = Number(event.target.value)
+      const valid = Number.isFinite(value) && value > 0
       setDraft((prev) => {
-        const toolbar = { ...(prev.mixins?.toolbar ?? {}) }
-        const valid = Number.isFinite(value) && value > 0
-        if (breakpoint === 'xs') {
-          if (valid) toolbar.minHeight = `${value}px`
-          else delete toolbar.minHeight
-        } else if (valid) {
-          toolbar[TOOLBAR_SM_QUERY] = { minHeight: `${value}px` }
-        } else {
-          delete toolbar[TOOLBAR_SM_QUERY]
-        }
+        const edited = valid ? value : undefined
+        const xs = breakpoint === 'xs' ? edited : readToolbarHeight(prev, 'xs')
+        const sm = breakpoint === 'sm' ? edited : readToolbarHeight(prev, 'sm')
         const next = { ...prev }
-        const heights = Object.keys(toolbar).filter(
-          (key) => key !== TOOLBAR_LANDSCAPE_QUERY,
-        )
-        if (heights.length) {
-          next.mixins = {
-            toolbar: {
-              ...toolbar,
-              [TOOLBAR_LANDSCAPE_QUERY]: TOOLBAR_LANDSCAPE_RULE,
-            },
-          }
-        } else {
+        if (xs === undefined && sm === undefined) {
           delete next.mixins
+          return next
+        }
+        // Always emit a COMPLETE object. `mixins.toolbar` replaces MUI's
+        // default wholesale, so anything omitted is simply gone — setting
+        // only the desktop height left portrait phones with no `min-height`
+        // at all. Unset breakpoints fall back to MUI's own values.
+        //
+        // KEY ORDER IS LOAD-BEARING. These land in one CSS rule, so the last
+        // matching declaration wins, and MUI emits the landscape clause
+        // BEFORE the sm height for that reason — emitting it after makes a
+        // wide landscape window (i.e. every desktop) 48px tall.
+        next.mixins = {
+          toolbar: {
+            minHeight: `${xs ?? DEFAULT_TOOLBAR_XS}px`,
+            [TOOLBAR_LANDSCAPE_QUERY]: TOOLBAR_LANDSCAPE_RULE,
+            [TOOLBAR_SM_QUERY]: { minHeight: `${sm ?? DEFAULT_TOOLBAR_SM}px` },
+          },
         }
         return next
       })
