@@ -1,5 +1,5 @@
 ---
-description: The 36-commit backlog is DEPLOYED — click-test the besigner canvas under enforcing CSP and flip it on (AGL-523), verify the In Review issues, and finish AGL-1160's caching half
+description: The backlog is deployed and the CSP canvas click-test PASSED — flip enforcing on (AGL-523), verify the In Review issues against real data, and finish AGL-1160's caching half
 ---
 
 Pick up from `/promote-and-enforce` on 2026-08-03.
@@ -32,10 +32,10 @@ Still true and still worth obeying: a promotion costs **3 deployment records**
 against a ~100/day cap, and **a merged production PR is not a deploy** — check
 containment against the READY deployment's sha, never the branch.
 
-## 2. AGL-523 — the flip, and it now has evidence
+## 2. AGL-523 — READY TO FLIP. Everything that gated it is cleared.
 
-This is the highest-value thing waiting, and most of the work is done. **Do not
-re-derive the decision — it was measured.**
+**Do not re-derive any of this — it was all measured.** The canvas click-test
+that gated the flip is DONE and it passed.
 
 A local production build (worktree + emulators) ran the same signed-in flow
 under both policies:
@@ -54,9 +54,43 @@ The single enforcing violation is `script-src / eval`, and it is benign:
 function`'s feature probe. Blocked, it is caught and returns `false`. **No
 `'unsafe-eval'` is needed.**
 
-Also already verified locally, on a real production build: `nextWouldSeeNonce:
-true`, 52 scripts all carrying one nonce, zero `$undefined`, sign-in hydrating
-with no console errors.
+Also verified locally, on a real production build: `nextWouldSeeNonce: true`,
+52 scripts all carrying one nonce, zero `$undefined`, sign-in hydrating with no
+console errors.
+
+### The canvas click-test — DONE on production 2026-08-04 00:18–00:20Z, PASSED
+
+Armed a real signed-in session with `?csp=enforce`, drove the console, opened
+`/zgover/hosts/demo/screens/TyE-9na1Ku/versions/xBnkO4KyZC/besigner`, then
+disarmed with `?csp=off` and verified back to report-only.
+
+**The canvas renders fully.** Layout chrome, hierarchy tree,
+attributes/styles/info panels, version toolbar, and the screen's own MUI
+buttons, headings and form fields. `canvasNodes: 4`,
+`renderedElementCount: 18`, 149 resources. **The blank canvas did not happen.**
+The rest of the console — workspaces, org pages, screens list, notifications —
+is equally clean, with Firestore data loading, so App Check and the
+authenticated read path are unaffected.
+
+The collector caught exactly **one violation type across the whole session**:
+
+```
+"key":"script-src|eval|/zgover/hosts/demo/screens/…/besigner"
+"source":".../chunks/2r73hd1cjm4f2.js"   "disposition":"enforce"
+```
+
+Same chunk, same `eval` as the local run. It appears on `/zgover` and the
+screens list too, so it is **app-wide, not besigner-specific**. Nothing else —
+no `inline`, no blocked chunks. `disposition: enforce` proves the session was
+genuinely enforcing. Dedup gave one line per page rather than one per script,
+and filtering produced zero extension noise from a real browser.
+
+**The one gap: `blobResources: 0`.** No realm-trusted plugin loaded via a
+`blob:` import on that screen, so that specific mechanism was never exercised.
+It matters less than it would have — the risk was always `strict-dynamic`
+making `blob:` inert, and the policy being kept **allows `blob:` explicitly**.
+Low-risk, not unknown-risk. Still worth a deliberate pass on a host that has a
+realm-trusted plugin installed.
 
 ### What is left, in order
 
@@ -69,18 +103,19 @@ with no console errors.
    you have not proven is the exact false all-clear this endpoint exists to end.
    (One synthetic control entry was posted at `/__agl523-synthetic-control` on
    2026-08-04 00:09Z; ignore it, or use it as the proof the pipe works.)
-2. **Click-test the besigner canvas** with `?csp=enforce` (sets an httpOnly
-   cookie; `?csp=off` clears it). **This now works in production** — confirmed
-   post-deploy: `?csp=enforce` returns `nextWouldSeeNonce: true`, where all of
-   the previous session it returned `false` because the deploy was stranded.
-   **This is the one thing local could not reach** — both besigner routes 404'd in the production-mode local setup even
-   with fixtures seeded and both route files present. Realm-plugin `blob:`
-   imports are the risk; note the enforcing policy allows `blob:` explicitly
-   while `strict-dynamic` would make it inert. Also worth a pass: marketplace,
-   admin, a checkout.
+2. **Optionally widen the click-test.** The canvas is done. Not yet armed and
+   walked: marketplace, admin, a checkout, and — the one that would close the
+   last gap — a host with a **realm-trusted plugin** installed, to exercise the
+   `blob:` import path. `?csp=enforce` arms an httpOnly cookie, `?csp=off`
+   clears it; **always disarm**, and verify with `/csp-check` that
+   `nextWouldSeeNonce` is back to `false`.
 3. **Flip the default to enforcing** in `apps/console/middleware.ts` — one line,
-   `enforcing` currently defaults to the cookie check.
+   `enforcing` currently defaults to the cookie check. Keep
+   `script-src 'self' https: blob: 'nonce-…'`; do NOT adopt `strict-dynamic`.
 4. **Delete `/csp-check` and the `?csp=` opt-in** once it is on for everyone.
+5. **Cheap follow-up worth filing:** `is-generator-function` is a transitive
+   dependency and is the sole remaining violation. If whatever pulls it in can
+   be dropped or updated, the log goes completely quiet.
 
 **Do not extend the collector to the tenant.** See AGL-1228 — measured: a live
 tenant page has 33 `<script>` tags and **zero** nonces, so under its report-only
@@ -183,6 +218,17 @@ of them were my own shipped work:
 came from a log file that was empty because the server was piped through `tail`,
 which buffers to EOF. Prove a zero with a positive control before trusting it,
 and pair it with a negative one so it can fail in both directions.
+
+**`read_console_messages` starts capturing when first CALLED, not at page load.**
+Asking it for errors after a navigation returns "no console errors" whether or
+not any occurred — another zero that looks like a clean run. Either reload with
+tracking already active, or do what worked here: read the **server-side**
+collector instead, which is an independent witness and does not depend on
+browser tooling at all.
+
+**Arm, test, DISARM.** `?csp=enforce` sets an httpOnly cookie on a real session.
+Leaving it set would degrade the console for whoever owns that browser. Disarm
+with `?csp=off` and verify `nextWouldSeeNonce: false` before walking away.
 
 **Check the module boundary before designing.** `scope:app` may not depend on
 `aglyn:addons`, so AGL-1217's policy had to go in core. Confirmed by making the
