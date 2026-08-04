@@ -50,6 +50,7 @@ import * as DrawerComponents from './components/drawer'
 import * as NavMenuComponents from './components/nav-menu'
 import * as ReusableInstance from './components/reusable-instance'
 import * as SearchBox from './components/search-box'
+import * as LinkBox from './components/link-box'
 import * as ScreenLink from './components/screen-link'
 import * as Section from './components/section'
 import * as Stack from './components/stack'
@@ -100,6 +101,10 @@ export const MUI_BUNDLE: Array<{
     { component: LanguageSwitcher.default, schema: LanguageSwitcher.schema, presets: LanguageSwitcher.presets },
     { component: ReusableInstance.default, schema: ReusableInstance.schema, presets: ReusableInstance.presets },
     { component: ScreenLink.default, schema: ScreenLink.schema, presets: ScreenLink.presets },
+    // The linking container (AGL-1231): every other link element is a leaf,
+    // so a tile whose icon and description also belong to the target had no
+    // way to be authored.
+    { component: LinkBox.default, schema: LinkBox.schema, presets: LinkBox.presets },
     // Nav menu system (AGL-562): dropdown, mega menu, drawer + menu button.
     { component: NavMenuComponents.default, schema: NavMenuComponents.navMenuSchema, presets: NavMenuComponents.navMenuPresets },
     { component: NavMenuComponents.MegaMenu, schema: NavMenuComponents.megaMenuSchema },
