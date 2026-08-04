@@ -45,6 +45,7 @@ type PublishKind =
   | 'site'
   | 'datasetSchema'
   | 'emailTemplate'
+  | 'theme'
   | 'plugin'
 
 const artifactName = (artifact: any): string | undefined =>
@@ -84,6 +85,9 @@ const PICKERS: Record<
     optionLabel: (entry) => emailLabel(entry.$id),
   },
   site: { label: 'Site', empty: '', optionLabel: () => '' },
+  // A theme is a field on the site, so like `site` there is nothing to pick —
+  // choosing the source site has already chosen the theme.
+  theme: { label: 'Theme', empty: '', optionLabel: () => '' },
   // Plugins don't pick an existing artifact — they're uploaded (AGL-868).
   plugin: { label: 'Plugin', empty: '', optionLabel: () => '' },
 }
@@ -232,6 +236,14 @@ export function OrgPublishPanel({
         noun: 'dataset schema',
       })
     }
+    if (kind === 'theme') {
+      return setTarget({
+        endpoint: 'marketplace/publish-theme',
+        payload: { hostId },
+        displayName: hostLabel ? `${hostLabel} theme` : undefined,
+        noun: 'theme',
+      })
+    }
     if (kind === 'emailTemplate') {
       return setTarget({
         endpoint: 'marketplace/publish-email-template',
@@ -254,7 +266,7 @@ export function OrgPublishPanel({
   const canPublish =
     kind === 'datasetSchema'
       ? Boolean(orgId && selectedId)
-      : Boolean(hostId && (kind === 'site' || selectedId))
+      : Boolean(hostId && (kind === 'site' || kind === 'theme' || selectedId))
 
   // A publisher profile (with a handle) is required server-side; guide the
   // user there rather than letting the publish 412.
@@ -313,6 +325,7 @@ export function OrgPublishPanel({
           <MenuItem value="layout">{'A layout'}</MenuItem>
           <MenuItem value="datasetSchema">{'A dataset schema'}</MenuItem>
           <MenuItem value="emailTemplate">{'An email template'}</MenuItem>
+          <MenuItem value="theme">{'This site’s theme'}</MenuItem>
           <MenuItem value="site">{'This entire site (as a template)'}</MenuItem>
           <MenuItem value="plugin">{'A plugin (upload a bundle)'}</MenuItem>
         </TextField>
@@ -327,6 +340,13 @@ export function OrgPublishPanel({
           <Typography variant="body2" color="text.secondary">
             {'Publishes this site’s current published screens and theme as an ' +
               'installable starting point.'}
+          </Typography>
+        ) : kind === 'theme' ? (
+          <Typography variant="body2" color="text.secondary">
+            {'Publishes this site’s colours, typography, shape and component ' +
+              'styles on their own. Both light and dark schemes are required, ' +
+              'and text has to be readable against its background — you will ' +
+              'be told before anything is published if not.'}
           </Typography>
         ) : activeList.length ? (
           <TextField

@@ -55,6 +55,7 @@ import SiteBackupCard from '../../../../../../components/site-backup-card.compon
 import SiteTemplateCard from '../../../../../../components/site-template-card.component'
 import DeleteSiteCard from '../../../../../../components/delete-site-card.component'
 import ThemeEditor from '../../../../../../components/theme-editor/theme-editor.component'
+import ThemeSourceCard from '../../../../../../components/theme-editor/theme-source-card.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
@@ -641,11 +642,25 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                     ))}
                     <TabPanel value={THEME_TAB_ID} sx={{ padding: 'unset' }}>
                       {status === 'success' ? (
-                        <ThemeEditor
-                          theme={data?.theme}
-                          saving={themeSaving}
-                          onSave={handleThemeSave}
-                        />
+                        <>
+                          {/* Where the theme came from, and the ways back
+                              (AGL-1020). Above the editor because "am I
+                              editing my own theme or a publisher's" changes
+                              what every control below it means. */}
+                          <div style={{ marginBottom: 24 }}>
+                            <ThemeSourceCard
+                              hostId={hostId}
+                              theme={data?.theme}
+                              installedFrom={data?.themeInstalledFrom}
+                              replaced={data?.themeReplaced}
+                            />
+                          </div>
+                          <ThemeEditor
+                            theme={data?.theme}
+                            saving={themeSaving}
+                            onSave={handleThemeSave}
+                          />
+                        </>
                       ) : null}
                     </TabPanel>
                     <TabPanel value={DOMAIN_TAB_ID} sx={{ padding: 'unset' }}>

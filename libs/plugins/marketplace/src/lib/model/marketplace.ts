@@ -197,6 +197,7 @@ export const ARTIFACT_TYPE_LABELS: Record<MarketplaceArtifactType, string> = {
   layout: 'Layout',
   datasetSchema: 'Dataset schema',
   emailTemplate: 'Email template',
+  theme: 'Theme',
 }
 
 /** The friendly artifact-type label for a listing (AGL-864). */
@@ -236,6 +237,10 @@ export const INSTALL_TARGETS: Record<
   // scope — as a new empty dataset, not a pin (AGL-657).
   datasetSchema: ['org'],
   emailTemplate: ['host'],
+  // A theme is one site's visual identity, written to `hosts/{h}.theme`
+  // (AGL-1020). Applying one org-wide would repaint every site at once from a
+  // control that says "install".
+  theme: ['host'],
 }
 
 /** Targets a listing can be installed to, defaulting to host-only. */

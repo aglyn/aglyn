@@ -284,6 +284,25 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
           fields: content?.order ?? [],
         }),
       }
+    } else if (artifactType === 'theme') {
+      // A theme lives on the host document itself, so there is no artifact doc
+      // to look up and no "not installed on this site" — the site either runs
+      // this listing's theme or it does not.
+      if (hostSnapshot.get('themeInstalledFrom.listingId') !== listingId) {
+        return res.status(404).json({ error: 'Not installed on this site' })
+      }
+      incoming = versionSnapshot.get('theme') ?? {}
+      installedVersion =
+        String(hostSnapshot.get('themeInstalledFrom.version') ?? '') || null
+      baseSha = hostSnapshot.get('themeInstalledFrom.sha256') ?? null
+      target = {
+        ref: hostRef,
+        current: hostSnapshot.get('theme') ?? {},
+        write: (content) => ({ theme: content ?? {} }),
+        // No `detach`: a site has exactly one theme, so "install as a separate
+        // copy" has nowhere to put the second one. Merge is the only safe way
+        // to take a theme update, and the preview says so.
+      }
     } else if (artifactType === 'template') {
       // A published template bundle's screens carry no stable identity — only a
       // displayName and a slug — so there is nothing to pair an old screen to a
@@ -398,22 +417,31 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       await target.ref.set(
         {
           ...target.write(merged.content),
-          installedFrom: provenance.installedFrom,
-          // The legacy per-type version fields the console still reads.
-          ...(artifactType === 'component'
-            ? {
-                marketplace: {
-                  listingId,
-                  profileId: listing.profileId ?? null,
-                  version: listing.latestVersion ?? null,
-                },
-              }
+          // A theme is a FIELD on the host document, not a document of its own,
+          // so it namespaces its provenance (`themeInstalledFrom`) and has no
+          // legacy `source`/`marketplace` pair — writing those here would put a
+          // stray marketplace stamp on the host itself, where `resolveProvenance`
+          // would later read it as the host being an installed artifact.
+          ...(artifactType === 'theme'
+            ? { themeInstalledFrom: provenance.installedFrom }
             : {
-                source: {
-                  type: 'marketplace' as const,
-                  listingId,
-                  version: listing.latestVersion ?? null,
-                },
+                installedFrom: provenance.installedFrom,
+                // The legacy per-type version fields the console still reads.
+                ...(artifactType === 'component'
+                  ? {
+                      marketplace: {
+                        listingId,
+                        profileId: listing.profileId ?? null,
+                        version: listing.latestVersion ?? null,
+                      },
+                    }
+                  : {
+                      source: {
+                        type: 'marketplace' as const,
+                        listingId,
+                        version: listing.latestVersion ?? null,
+                      },
+                    }),
               }),
           updatedAt: now,
         },
@@ -446,7 +474,14 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       // empty — exactly what the install route already does, with the quota
       // check this one does not have.
       return res.status(400).json({
-        error: 'Install a fresh copy of this from the listing instead',
+        error:
+          artifactType === 'theme'
+            ? // A site has one theme, so there is no second place to put a
+              // copy. Merging keeps this site's edits; the way back to the
+              // previous theme is the install route's `revert`.
+              'A site has only one theme, so this update can only be merged. ' +
+              'Your edits to fields the publisher did not touch are kept.'
+            : 'Install a fresh copy of this from the listing instead',
       })
     }
     // The customised copy is detached rather than deleted or overwritten: it

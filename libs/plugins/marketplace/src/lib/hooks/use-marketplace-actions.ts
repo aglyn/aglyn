@@ -43,6 +43,8 @@ function endpointForArtifact(artifactType: string): string {
       return 'marketplace/install-dataset-schema'
     case 'emailTemplate':
       return 'marketplace/install-email-template'
+    case 'theme':
+      return 'marketplace/install-theme'
     default:
       return 'marketplace/install'
   }
@@ -72,6 +74,14 @@ function landingMessage(
       )
     case 'datasetSchema':
       return `Created "${displayName}" as a new, empty dataset.`
+    case 'theme':
+      // The one type that DOES change the running site on install, so it gets
+      // the opposite of the reassurance the others get — plus the way back,
+      // because a repainted site is alarming if you cannot see how to undo it.
+      return (
+        `Applied "${displayName}" to this site. Setup → Theme has a way back ` +
+        'to your previous theme.'
+      )
     default:
       return null
   }
