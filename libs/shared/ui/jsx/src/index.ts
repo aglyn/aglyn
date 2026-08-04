@@ -44,7 +44,12 @@ export type { EmotionCacheProps } from './lib/components/emotion-cache-provider'
 export * from './lib/components/error-boundary.component'
 export * from './lib/components/grid-buttons'
 export * from './lib/components/grid-items'
-export * from './lib/components/grid-list'
+// `grid-list` is deliberately NOT re-exported (AGL-1151). It is the only
+// consumer of `react-virtuoso`, and the tenant runtime imports this barrel —
+// so exporting it here put a virtualizer into every published customer page to
+// render a list those pages never contain. Exactly what `DataTable` did with
+// MUI X DataGrid in 828c43939. Import it from
+// `@aglyn/shared-ui-jsx/components/grid-list` instead.
 export * from './lib/components/help-tip.component'
 export * from './lib/components/loading-layout.component'
 export * from './lib/components/loading-modal'
