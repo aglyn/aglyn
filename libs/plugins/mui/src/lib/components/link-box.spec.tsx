@@ -100,6 +100,21 @@ describe('LinkBox (AGL-1231)', () => {
     expect(screen.getByRole('link').getAttribute('target')).toBeNull()
   })
 
+  it('merges node styles over the baseline instead of replacing it', () => {
+    // The renderer passes the node's `sx` through, so spreading it after the
+    // baseline would REPLACE it — every styled tile would silently lose
+    // `textDecoration: none` and render as an underlined blue anchor.
+    render(
+      <LinkBox href="/product/besigner" sx={{ display: 'flex', gap: '12px' }}>
+        {tile}
+      </LinkBox>,
+    )
+    const style = getComputedStyle(screen.getByRole('link'))
+    expect(style.display).toBe('flex')
+    expect(style.gap).toBe('12px')
+    expect(style.textDecoration).toContain('none')
+  })
+
   it('keeps its persisted component id', () => {
     // Ids are stored in screen documents; renaming orphans every instance.
     expect(ID).toBe('muiLinkBox')

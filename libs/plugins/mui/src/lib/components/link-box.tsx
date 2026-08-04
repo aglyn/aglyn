@@ -58,7 +58,19 @@ const LEAVES_SITE = /^(https?:\/\/|mailto:|tel:)/i
  * wrap it in one of these.
  */
 const LinkBox = forwardRef<HTMLElement, LinkBoxProps>((props, ref) => {
-  const { screenId, href: externalHref, newTab, children, ...rest } = props
+  const {
+    screenId,
+    href: externalHref,
+    newTab,
+    children,
+    sx,
+    ...rest
+  } = props as LinkBoxProps & { sx?: unknown }
+  // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+  // Spreading `rest` with `sx` still inside it would REPLACE the baseline
+  // below rather than merge with it, so every styled tile would quietly lose
+  // `textDecoration: none` and get the browser's underlined-blue anchor.
+  const nodeSx = Array.isArray(sx) ? sx : sx ? [sx] : []
   const { href: resolvedHref, suppressNavigation } = Aglyn.useScreenLink(screenId)
   const safeExternalHref =
     externalHref && SAFE_HREF.test(externalHref.trim())
@@ -75,7 +87,7 @@ const LinkBox = forwardRef<HTMLElement, LinkBoxProps>((props, ref) => {
   // unresolved and suppressed cases keep the same box, minus the anchor.
   if (!href || suppressNavigation) {
     return (
-      <MuiBox ref={ref} {...rest}>
+      <MuiBox ref={ref} {...rest} sx={nodeSx}>
         {children}
       </MuiBox>
     )
@@ -83,16 +95,23 @@ const LinkBox = forwardRef<HTMLElement, LinkBoxProps>((props, ref) => {
   return (
     <AppLink
       ref={ref}
-      componentVariant="naked"
+      // NOT `componentVariant="naked"`: that branch renders a bare NextLink,
+      // which does not process `sx` — it lands on the DOM as a literal `sx=""`
+      // attribute and every style is silently dropped. The default branch is
+      // MUI's Link, which does. The anchor chrome it brings is neutralised by
+      // the baseline below.
       href={href}
-      // `display: block` so the anchor takes the tile's box; authors then
-      // style it from the styles panel exactly as they would a Box. Anything
-      // the author sets wins — this is only the floor.
-      sx={{ display: 'block', color: 'inherit', textDecoration: 'none' }}
       {...(newTab && external
         ? { target: '_blank', rel: 'noopener noreferrer' }
         : {})}
       {...rest}
+      // `display: block` so the anchor takes the tile's box, and no anchor
+      // chrome — authors then style it exactly as they would a Box. This is
+      // only the floor: node styles come after it and win.
+      sx={[
+        { display: 'block', color: 'inherit', textDecoration: 'none' },
+        ...nodeSx,
+      ]}
     >
       {children}
     </AppLink>
