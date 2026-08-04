@@ -564,7 +564,7 @@ export const DOCS_HELP_ANCHORS = {
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#categories-and-tags', '#collections', '#slugs', '#related'],
   commerce: ['#products-hub', '#inventory', '#orders', '#shipping--taxes', '#dropshipping', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
-  components: ['#promote', '#insert-instances', '#manage', '#used-by', '#tips', '#related'],
+  components: ['#promote', '#insert-instances', '#properties', '#manage', '#used-by', '#tips', '#related'],
   connectADomain: ['#steps', '#registrar-quick-reference', '#related'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
