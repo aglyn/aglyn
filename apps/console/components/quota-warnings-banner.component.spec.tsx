@@ -71,6 +71,13 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useScopeTokens: () => scope,
+  // The seat count is fetched from `/api/orgs/members?counts=1` now
+  // (AGL-1253) rather than read from Firestore, so the banner asks for an ID
+  // token. These suites assert which FIRESTORE queries are issued and what
+  // renders; the seat row is not among their assertions, and `fetch` is
+  // stubbed in `beforeEach` so the new call cannot reach the network or throw
+  // into the noise.
+  useUser: () => ({ data: { uid: 'viewer', getIdToken: async () => 'tok' } }),
 }))
 
 // Small enough that the mocked count of 3 breaches every host row, so the
@@ -106,12 +113,26 @@ import QuotaWarningsBanner from './quota-warnings-banner.component'
 
 const orgPaths = () => countedPaths.filter((p) => p.startsWith('orgs/'))
 
+/** Seat-count fetches made by the banner (AGL-1253). */
+const seatFetches: string[] = []
+
 beforeEach(() => {
   countedPaths.length = 0
+  seatFetches.length = 0
   scope.orgWide = true
   scope.loaded = false
   currentOrg.org = { plan: 'business' }
   sessionStorage.clear()
+  // The seat count is a server call now. Stubbed rather than left undefined
+  // so a scope-gating regression shows up as an unexpected ENTRY here, not as
+  // an unhandled rejection buried in the output.
+  global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+    seatFetches.push(String(input))
+    return new Response(JSON.stringify({ managerSeats: 1, memberCount: 1 }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }) as unknown as typeof fetch
 })
 
 describe('QuotaWarningsBanner org-wide counts (AGL-1068)', () => {
@@ -135,10 +156,36 @@ describe('QuotaWarningsBanner org-wide counts (AGL-1068)', () => {
     scope.loaded = true
     scope.orgWide = true
     render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(orgPaths()).toContain('orgs/org-1/datasets'))
+    // Seats come from the SERVER now (AGL-1253), not from a Firestore list.
+    // The client list was denied for readers this component had already
+    // decided were org-wide, because the client and the rules disagree about
+    // what org-wide means for a legacy member doc.
     await waitFor(() =>
-      expect(orgPaths()).toContain('orgs/org-1/datasets'),
+      expect(seatFetches.join('\n')).toContain(
+        '/api/orgs/members?orgId=org-1&counts=1',
+      ),
     )
-    await waitFor(() => expect(orgPaths()).toContain('orgs/org-1/members'))
+  })
+
+  it('never lists the org roster from the client (AGL-1253)', async () => {
+    // The regression guard. `orgs/{orgId}/members` is a LIST, evaluated
+    // against the query, so the rule's own-document clause can never satisfy
+    // it — asking at all is the bug, whatever the viewer's scope looks like
+    // from here.
+    scope.loaded = true
+    scope.orgWide = true
+    render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(orgPaths()).toContain('orgs/org-1/datasets'))
+    expect(orgPaths()).not.toContain('orgs/org-1/members')
+  })
+
+  it('asks for no seat count while the viewer scope is still loading', async () => {
+    // The AGL-1068 gate must still hold for the server call, or a scoped
+    // collaborator gets a 403 per mount instead of a denied read.
+    render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(countedPaths).toContain('hosts/host-1/screens'))
+    expect(seatFetches).toEqual([])
   })
 
   it('never addresses the removed host datasets path (AGL-1050)', async () => {

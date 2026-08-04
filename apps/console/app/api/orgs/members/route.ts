@@ -95,6 +95,35 @@ async function handler(request: Request): Promise<Response> {
 
     if (method === 'GET') {
       const members = await listOrgMembers(orgId)
+      // `?counts=1` — the seat total WITHOUT the roster (AGL-1253).
+      //
+      // The quota banner used to count seats itself, with an unconstrained
+      // `getDocs` on `orgs/{orgId}/members`. A list is evaluated against the
+      // QUERY, so the rule's `memberUid == request.auth.uid` clause can never
+      // satisfy it and the read resolves only through `isStaff()` or
+      // `isOrgWideMember()` — measured denied on production 2026-08-04 for an
+      // account the CLIENT had already decided was org-wide.
+      //
+      // The two predicates genuinely disagree: the client's
+      // `isOrgWideMember` treats a legacy doc with no `allHosts` and no
+      // `hostAccess` as org-wide, while the rules read
+      // `get('allHosts', false)` and get `false`. Gating the query on the
+      // client's answer therefore cannot be made reliable — so the banner
+      // stops asking Firestore directly and asks here, where the Admin SDK
+      // re-derives membership without a rule in the path.
+      //
+      // Counts only, deliberately: the banner needs one number, and shipping
+      // the roster to satisfy it would hand every caller the names and emails
+      // AGL-1026 restricted.
+      if (String(query.counts ?? '') === '1') {
+        return Response.json(
+          {
+            managerSeats: countManagerSeats(members as never),
+            memberCount: members.length,
+          },
+          { status: 200 },
+        )
+      }
       return Response.json({ members }, { status: 200 })
     }
 

@@ -18,22 +18,15 @@
 
 import {
   checkSeatQuota,
-  countManagerSeats,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Alert, Button } from '@mui/material'
-import {
-  collection,
-  doc,
-  getCountFromServer,
-  getDoc,
-  getDocs,
-} from 'firebase/firestore'
+import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { useFirestore, useScopeTokens } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useScopeTokens, useUser } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostId } from '../components/host-id-provider'
 import { useOrgSlug } from '../hooks/use-org-scope'
@@ -47,6 +40,23 @@ const DISMISS_KEY = 'aglyn-quota-banner-dismissed'
 // that number — and its false "out of team seats" banner — from every session
 // that already has it, making the fix look like it did not land.
 const SEATS_KEY = 'aglyn-quota-banner-manager-seats-v2'
+
+/**
+ * Forget a cached seat count (AGL-1253).
+ *
+ * A read that failed must not leave the PREVIOUS answer standing. The cache
+ * is consulted before the fetch, so a stale entry survives every later render
+ * and keeps rendering a number nothing has confirmed — which is how an
+ * account whose seat read was being denied ended up looking at "You've
+ * reached your team seats limit", an upgrade prompt on false pretences.
+ */
+function clearSeatCache(cacheKey: string): void {
+  try {
+    sessionStorage.removeItem(cacheKey)
+  } catch {
+    // Private-mode storage failures are not worth a broken banner.
+  }
+}
 
 export interface QuotaWarningsBannerProps {
   /** Overrides the route param; the banner resolves `[hostId]` itself. */
@@ -92,6 +102,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // a second async source resolving on its own clock could show the Upgrade
   // button for a beat after the counts had already decided the viewer is
   // scoped.
+  const { data: user } = useUser()
   const { orgWide: viewerOrgWide, loaded: scopeLoaded } = useScopeTokens(orgId)
   const orgWideViewer = scopeLoaded && viewerOrgWide
   // The two are NOT complements, and the loading window is why. An action
@@ -201,27 +212,46 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       apply(Number(cached))
       return
     }
+    // Counted SERVER-side (AGL-1253). This used to be an unconstrained
+    // `getDocs` on `orgs/{orgId}/members` — a list, so the rule's
+    // `memberUid == request.auth.uid` clause could never satisfy it, and it
+    // was measured denied on production for an account this component had
+    // already decided was org-wide. Gating on `orgWideViewer` cannot fix
+    // that: the client predicate and the rules predicate disagree about
+    // legacy member docs, so the guard passes and the query still fails.
+    //
     // MANAGERS only (AGL-1113) — the roster also holds site-scoped
     // collaborators, metered per host against membersPerHost. Counting the
     // whole collection is what put an "out of team seats" banner in front of
-    // orgs that had only spent collaborator seats. `countManagerSeats` needs
-    // the docs, so this reads them; the roster is capped by the plan.
-    void getDocs(collection(firestore, 'orgs', orgId, 'members'))
-      .then((snapshot) => {
-        const seats = countManagerSeats(
-          snapshot.docs.map((doc) => doc.data() as never),
+    // orgs that had only spent collaborator seats.
+    void (async () => {
+      try {
+        const idToken = await (user as { getIdToken?: () => Promise<string> })
+          ?.getIdToken?.()
+        if (!idToken) return
+        const response = await fetch(
+          `/api/orgs/members?orgId=${encodeURIComponent(orgId)}&counts=1`,
+          { headers: { Authorization: `Bearer ${idToken}` } },
         )
+        if (!response.ok) return void clearSeatCache(cacheKey)
+        const payload = await response.json().catch(() => null)
+        const seats = Number(payload?.managerSeats)
+        // A number we could not read is not zero. `?? 0` here would render
+        // "0 of 2 seats used" — a confident wrong answer, and the same trap
+        // the datasets row above was fixed for.
+        if (!Number.isFinite(seats)) return void clearSeatCache(cacheKey)
         sessionStorage.setItem(cacheKey, String(seats))
         apply(seats)
-      })
-      .catch(() => {
-        // No seats row on failure; host quotas still render.
-      })
+      } catch {
+        // Network trouble: no seats row, and no stale one either.
+        clearSeatCache(cacheKey)
+      }
+    })()
     return () => {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, orgId, plan, orgWideViewer])
+  }, [firestore, orgId, plan, orgWideViewer, user])
 
   // Suspension (AGL-202) outranks everything — not dismissible, shown
   // regardless of plan so pre-billing workspaces see it too.
