@@ -96,12 +96,18 @@ const applyPageCopy = (COPY, { dryRun = true } = {}) => {
     {
       kind: 'earlyaccess',
       slots: 13,
+      // The stat items read `{title: '1', body: 'platform, not a stack',
+      // meta: 'stat'}` — `meta` is the extractor's TYPE TAG, not display copy,
+      // unlike how-it-works where `meta` is the step numeral "01". Flattening
+      // `[meta, title]` here published the literal word "stat" as the figure and
+      // the figure as the label on all eight poured pages (AGL-1233). The slot
+      // count is 13 either way, so the applier's own guard could not see it.
       flatten: (s) => [
         s.eyebrow ?? null,
         s.heading,
         intro(s),
         ...s.actions.map((a) => a.label),
-        ...s.items.flatMap((i) => [i.meta, i.title]),
+        ...s.items.flatMap((i) => [i.title, i.body]),
       ],
     },
     {

@@ -89,19 +89,53 @@ async function loadDevRealmBundles(): Promise<void> {
  * throws: a missing artifacts origin, a failed fetch, or a bad bundle
  * leaves the console exactly as it was — realm plugins are additive.
  */
+/**
+ * Say why realm plugins are OFF, once per session (AGL-1184).
+ *
+ * The early return below is correct — without an origin there is nowhere to
+ * fetch a bundle from — but doing it SILENTLY is what turned "realm plugins do
+ * not work on my machine" into an investigation. There is no error, no failed
+ * request, and no call to `/api/orgs/realm-plugins` to notice the absence of.
+ *
+ * Never in production: the variable is set there, so this cannot fire, and a
+ * warning in a user's console would be noise rather than a hint.
+ */
+let originWarned = false
+function warnMissingPluginOrigin(): void {
+  if (originWarned || process.env.NODE_ENV === 'production') return
+  originWarned = true
+  console.info(
+    'Realm plugins are OFF locally: NEXT_PUBLIC_PLUGIN_ORIGIN is unset, so ' +
+      'installed marketplace plugins are never fetched (this is not a failure).\n' +
+      '  · to load INSTALLED plugins   set NEXT_PUBLIC_PLUGIN_ORIGIN=https://plugins.aglyn.com\n' +
+      '  · to iterate on YOUR plugin   set NEXT_PUBLIC_PLUGIN_DEV=enabled plus ' +
+      'NEXT_PUBLIC_PLUGIN_DEV_BUNDLES=<id>=http://localhost:5173/plugin.bundle.mjs\n' +
+      '  see apps/console/.env.development.local.example',
+  )
+}
+
 export async function loadOrgRealmPlugins(
   orgId: string,
   idToken?: string,
 ): Promise<void> {
   await loadDevRealmBundles()
   const artifactsBase = process.env.NEXT_PUBLIC_PLUGIN_ORIGIN ?? ''
-  if (!artifactsBase) return
+  if (!artifactsBase) {
+    warnMissingPluginOrigin()
+    return
+  }
   try {
     const response = await fetch(
       `/api/orgs/realm-plugins?orgId=${encodeURIComponent(orgId)}`,
       idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : undefined,
     )
-    if (!response.ok) return
+    if (!response.ok) {
+      // Was silent, and indistinguishable from "this org has none" (AGL-1184).
+      console.warn(
+        `realm plugins skipped: /api/orgs/realm-plugins returned ${response.status}`,
+      )
+      return
+    }
     const payload = (await response.json()) as {
       installs?: Aglyn.RealmPluginInstall[]
     }

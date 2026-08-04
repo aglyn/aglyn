@@ -45,6 +45,26 @@ models the replace semantics and asserts the authored props survive; run it
 after touching the applier. Its negative control is the real bug — reverting
 the spread fails 8 authored props on all eight pages.
 
+## `meta` is a step numeral in one section and a type tag in another (AGL-1233)
+
+How-it-works items carry `meta: "01"`, which is display copy. Early-access stat
+items carry `meta: "stat"`, which is **not** — the figure is in `title` and its
+label is in `body`. Flattening early-access as `[meta, title]` published
+
+```
+stat        stat        stat        stat
+1           9           0           1-click
+```
+
+on all eight poured pages. `/product/besigner` was hand-built, so the reference
+page looked right while every page derived from it was wrong.
+
+**The slot count is 13 under either flatten**, so the applier's own guard — the
+thing designed to catch a positional shift — was structurally unable to see it.
+Counting slots proves the arity, never the meaning. `verify-applier.mjs` now
+asserts the eight stat values themselves; reverting the flatten fails exactly
+those eight checks and leaves the write count at 74.
+
 ## Explore link cards are not bound by the skeleton
 
 The seven `muiScreenLink` cards carry `children`, `renderAs`, `color` and

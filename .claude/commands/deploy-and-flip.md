@@ -1,42 +1,113 @@
 ---
-description: Promote the 36-commit backlog the moment Vercel's window clears, then flip CSP to enforcing (AGL-523) with the evidence already gathered, and verify the four In Review issues in production
+description: Deploy the stranded AGL-1226 fix first, then flip CSP to enforcing (AGL-523) — the canvas click-test passed and strict-dynamic is ruled out; AGL-1161 and AGL-1217 still need production verification
 ---
 
-Pick up from `/promote-and-enforce` on 2026-08-03. **The whole session was
-blocked on one deploy that never became available.** Nothing here is stuck on
-research — it is stuck on a deployment slot.
+Pick up from `/promote-and-enforce` on 2026-08-03.
 
 Work issues in Linear: **In Progress** when you start, **In Review** when it
 lands, **Done** once verified in production. One conventional commit per
 AGL-### on `main`. Standing permission to promote is granted.
 
-## 1. The promotion — check first, it may still be closed
+## 1. The promotion LANDED — read this first
 
-`main` was **36 commits** ahead at handoff and the window was rate-limited for
-the entire session (~4 h of checks, `failure` every time).
+**Deployed at 2026-08-04 00:06Z as `d4855bbf3` (PR #760). All three projects
+`success`.** 36 commits, everything from the previous two sessions.
+
+The reason it took so long is worth carrying forward, because it cost most of a
+session:
+
+> **`gh api .../commits/<sha>/status` NEVER re-evaluates.** It is written once
+> by the attempt that produced it. That makes it valid for *that attempt* and
+> for nothing else — two ways to be fooled:
+>
+> 1. **Re-reading the same sha later.** I did this hourly for four hours off a
+>    `20:06:37Z` rate-limit failure and reported "still blocked, re-checked just
+>    now" every time. The window had cleared; nothing had tested it.
+> 2. **Checking the commit already ON production before merging.** It stays
+>    `success` forever once deployed, so it cannot distinguish "quota available"
+>    from "the last deploy worked". The concurrent session merged on exactly
+>    that green reading and was refused seconds later.
+>
+> **What IS valid:** the status your own merge writes moments after. Judge by
+> `created_at` relative to the event, not by the endpoint.
+
+**How to actually test the window:** attempt the deploy, then read the status
+your attempt just wrote. There is no read-only probe.
+
+**Capacity is genuinely tight.** The 3-record promotion at 00:06Z on 2026-08-04
+exhausted it; a second merge at 00:19Z was refused outright. One promotion per
+session is not superstition.
+
+Still true and still worth obeying: a promotion costs **3 deployment records**
+against a ~100/day cap, and **a merged production PR is not a deploy** — check
+containment against the READY deployment's sha, never the branch.
+
+## 1b. FIRST ACTION NEXT SESSION: a fix is stranded and a real bug is still live
+
+**`d4b968094` (AGL-1226, `dropClearedProps`) is on `origin/production` but NOT in
+the live build.** Measured: the live tenant build is `dpl_8WYoBNwQTT…`, which is
+PR #760 (`d4855bbf3`). PR #761 merged at 00:19:50Z and produced **no tenant
+deployment** — rate limited, this time genuinely.
+
+Why it matters: a cleared colour dropdown persists as `null`, React's default
+prop only applies to `undefined`, so `capitalize(null)` throws during SSR and
+**500s the whole page**. Nine `/product/*` screens hit it — one pair of CTA
+buttons, copy-pasted with the skeleton during the copy pour. They are green
+right now only because the data was patched (`color: null` → `'inherit'` on
+each). The class is still open: **any author clearing a colour on any site
+reproduces it** until this deploys.
+
+Worth knowing for triage: the pages appeared to fail *selectively*, which looked
+like a code boundary and is not. It was **ISR cache age** — screens whose cached
+bytes had expired re-rendered and threw; screens still serving warm bytes looked
+healthy. A partial outage across identical pages is a caching artefact until
+proven otherwise.
+
+So the first promotion of the next session ships an already-merged fix. Verify
+after:
 
 ```bash
-gh api repos/aglyn/aglyn/commits/$(git rev-parse origin/production)/status --jq '.state'
+for p in besigner console commerce forms media workflows plugins analytics marketing; do
+  printf "%-12s " "$p"; curl -s -o /dev/null -w "%{http_code}\n" \
+    "https://aglyn-marketing.aglyn.app/product/$p"; done
 ```
 
-If that is still `failure` with "Deployment rate limited", **wait — do not
-merge more.** Merging while limited is what stranded the CSP work in the first
-place: `origin/production` sat 5 commits ahead of the live build all day, which
-is why `?csp=enforce` read as a no-op on production and looked like a bug.
+## 1c. Confirm the deploy-quota fix held (AGL-1187) — one command
 
-**A merged production PR is not a deploy.** Always check containment against the
-sha of the **READY** deployment, never the branch. The last READY console
-deployment at handoff was `b021ddf0e` (2026-08-03 19:22Z) while
-`origin/production` was `5238127dc`.
+The 24 h window before 2026-08-04 02:00Z had **94 deployments, only 33 of which
+built**, and we were rate-limited. `aglyn-plugins` alone was **52 of them, all
+CANCELED** — 55% of the daily allowance producing nothing. It was missing from
+the original audit entirely, which counted four projects when there are five.
 
-The burst that caused this ran 15:21–20:06Z on 2026-08-03, with deployments
-starting ~03:26Z. Expect headroom some time after that on the 4th. One
-promotion, then stop.
+That settled the issue's open question: **CANCELED deployments DO count**. If
+they did not, 33 builds could not have hit any limit.
 
-## 2. AGL-523 — the flip, and it now has evidence
+Fixed in `6d21d5a3c` / `18c583362` plus a dashboard change. Expected steady
+state is ~36/day. Verify with:
 
-This is the highest-value thing waiting, and most of the work is done. **Do not
-re-derive the decision — it was measured.**
+```bash
+TOKEN=$(grep '^VERCEL_TOKEN=' apps/console/.env.production.local | sed 's/^VERCEL_TOKEN=//' | tr -d '"')
+SINCE=$(python3 -c "import time; print(int(time.time()*1000)-86400000)")
+for P in prj_gEzxEXc0Lhs81rmaXIg2a1GbsDfl:console \
+         QmVstR8xiYtabTkVo2t9NNsiYY72nSTbNr1MGDLffzZeLn:tenant \
+         prj_UiyUa88GW3qpzOrtEUCcJYSL3doA:docs \
+         prj_M8L61z2z7P7157vGq0AaFbG1BZCg:plugins; do
+  id=${P%%:*}; n=${P##*:}
+  printf "%-8s " "$n"
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    "https://api.vercel.com/v6/deployments?projectId=$id&teamId=team_JFfQodGE8VhCAZM6usYTu54M&since=$SINCE&limit=100" \
+    | python3 -c "import sys,json;from collections import Counter;d=json.load(sys.stdin)['deployments'];print(len(d),dict(Counter(x['state'] for x in d)))"
+done
+```
+
+**plugins should be at or near zero.** If it is not, the dashboard Production
+Branch has probably been set back to `main` — see the note in
+`tools/scripts/vercel-ignore-build.sh`, the two settings must move together.
+
+## 2. AGL-523 — READY TO FLIP. Everything that gated it is cleared.
+
+**Do not re-derive any of this — it was all measured.** The canvas click-test
+that gated the flip is DONE and it passed.
 
 A local production build (worktree + emulators) ran the same signed-in flow
 under both policies:
@@ -55,41 +126,88 @@ The single enforcing violation is `script-src / eval`, and it is benign:
 function`'s feature probe. Blocked, it is caught and returns `false`. **No
 `'unsafe-eval'` is needed.**
 
-Also already verified locally, on a real production build: `nextWouldSeeNonce:
-true`, 52 scripts all carrying one nonce, zero `$undefined`, sign-in hydrating
-with no console errors.
+Also verified locally, on a real production build: `nextWouldSeeNonce: true`,
+52 scripts all carrying one nonce, zero `$undefined`, sign-in hydrating with no
+console errors.
+
+### The canvas click-test — DONE on production 2026-08-04 00:18–00:20Z, PASSED
+
+Armed a real signed-in session with `?csp=enforce`, drove the console, opened
+`/zgover/hosts/demo/screens/TyE-9na1Ku/versions/xBnkO4KyZC/besigner`, then
+disarmed with `?csp=off` and verified back to report-only.
+
+**The canvas renders fully.** Layout chrome, hierarchy tree,
+attributes/styles/info panels, version toolbar, and the screen's own MUI
+buttons, headings and form fields. `canvasNodes: 4`,
+`renderedElementCount: 18`, 149 resources. **The blank canvas did not happen.**
+The rest of the console — workspaces, org pages, screens list, notifications —
+is equally clean, with Firestore data loading, so App Check and the
+authenticated read path are unaffected.
+
+The collector caught exactly **one violation type across the whole session**:
+
+```
+"key":"script-src|eval|/zgover/hosts/demo/screens/…/besigner"
+"source":".../chunks/2r73hd1cjm4f2.js"   "disposition":"enforce"
+```
+
+Same chunk, same `eval` as the local run. It appears on `/zgover` and the
+screens list too, so it is **app-wide, not besigner-specific**. Nothing else —
+no `inline`, no blocked chunks. `disposition: enforce` proves the session was
+genuinely enforcing. Dedup gave one line per page rather than one per script,
+and filtering produced zero extension noise from a real browser.
+
+**The one gap: `blobResources: 0`.** No realm-trusted plugin loaded via a
+`blob:` import on that screen, so that specific mechanism was never exercised.
+It matters less than it would have — the risk was always `strict-dynamic`
+making `blob:` inert, and the policy being kept **allows `blob:` explicitly**.
+Low-risk, not unknown-risk. Still worth a deliberate pass on a host that has a
+realm-trusted plugin installed.
 
 ### What is left, in order
 
-1. **Deploy, then read the collector.** New this session:
-   `/api/csp-report` plus `report-uri` + `report-to` + a `Reporting-Endpoints`
-   header, on both policies. Read it with a Vercel runtime-log query for
-   `AGL-523:csp-violation`. Before trusting a low count, **post a synthetic
-   report and confirm it appears** — a zero from a collector you have not
-   proven is the exact false all-clear this endpoint exists to end.
-2. **Click-test the besigner canvas** with `?csp=enforce` (sets an httpOnly
-   cookie; `?csp=off` clears it). **This is the one thing local could not
-   reach** — both besigner routes 404'd in the production-mode local setup even
-   with fixtures seeded and both route files present. Realm-plugin `blob:`
-   imports are the risk; note the enforcing policy allows `blob:` explicitly
-   while `strict-dynamic` would make it inert. Also worth a pass: marketplace,
-   admin, a checkout.
+1. **Read the collector — it is LIVE and already verified in production.**
+   `Reporting-Endpoints: csp="/api/csp-report"` and
+   `report-uri /api/csp-report; report-to csp` are on the deployed responses,
+   and the endpoint returns 204 to both wire formats. Read it with a Vercel
+   runtime-log query for `AGL-523:csp-violation`. Before trusting a low count,
+   **post a synthetic report and confirm it appears** — a zero from a collector
+   you have not proven is the exact false all-clear this endpoint exists to end.
+   (One synthetic control entry was posted at `/__agl523-synthetic-control` on
+   2026-08-04 00:09Z; ignore it, or use it as the proof the pipe works.)
+2. **Optionally widen the click-test.** The canvas is done. Not yet armed and
+   walked: marketplace, admin, a checkout, and — the one that would close the
+   last gap — a host with a **realm-trusted plugin** installed, to exercise the
+   `blob:` import path. `?csp=enforce` arms an httpOnly cookie, `?csp=off`
+   clears it; **always disarm**, and verify with `/csp-check` that
+   `nextWouldSeeNonce` is back to `false`.
 3. **Flip the default to enforcing** in `apps/console/middleware.ts` — one line,
-   `enforcing` currently defaults to the cookie check.
+   `enforcing` currently defaults to the cookie check. Keep
+   `script-src 'self' https: blob: 'nonce-…'`; do NOT adopt `strict-dynamic`.
 4. **Delete `/csp-check` and the `?csp=` opt-in** once it is on for everyone.
+5. **Cheap follow-up worth filing:** `is-generator-function` is a transitive
+   dependency and is the sole remaining violation. If whatever pulls it in can
+   be dropped or updated, the log goes completely quiet.
 
 **Do not extend the collector to the tenant.** See AGL-1228 — measured: a live
 tenant page has 33 `<script>` tags and **zero** nonces, so under its report-only
 `strict-dynamic` policy every script violates on every page load of every
 published site. Pointing a collector there floods the log with one known defect.
 
-## 3. Verify the four In Review issues in production
+## 3. Verify the In Review issues against real data
 
-All four land on the same deploy and none has been exercised against real data.
+Deployed but NOT yet exercised in production.
 
-- **AGL-1160** — sitemap/RSS. Confirm `<loc>` uses the site's own origin, not
-  the requesting host, and that `Cache-Control` is `s-maxage=60,
-  stale-while-revalidate=60`. Check a custom-domain site and a `.aglyn.app` one.
+- **AGL-1160 — DONE, closed by measurement.** No action. Recording the outcome
+  because it is instructive: the issue was filed on the belief that a
+  hand-written `s-maxage=3600` made sitemaps an hour stale. Polling `age` on
+  production showed the real TTL is **60 s** — Vercel's own revalidation, the
+  same window every page uses — and the hand-written header is **overridden and
+  inert** (`robots`, left on the old value, returns the identical header as
+  everything else). There was never an hour of staleness and nothing for
+  `revalidateTag` to fix. The `<loc>` origin fix (`a08bcf75f`) was the only real
+  defect and it shipped. See `bc7d6c1dd` for the measurement, left in the code
+  so nobody files it a third time.
 - **AGL-1161** — publish a component used through a layout and through another
   component; confirm both sets of screens drop. Watch for
   `AGL-1161:component-scan-truncated`.
@@ -144,7 +262,8 @@ using `apps/console/.next`.
 
 ## Lessons this session paid for
 
-**Every confident inference was wrong until measured.** Six times:
+**Every confident inference was wrong until measured.** Eight times, and two
+of them were my own shipped work:
 
 - `preLoadBootMs` was going to be ~7.8 s of lambda init. It is **1.8 s** — most
   of the "missing" time was the doubled render, already fixed.
@@ -159,11 +278,28 @@ using `apps/console/.next`.
 - Enforcing CSP looked like it blanked the besigner canvas. **The control blanked
   identically** — a 404, not CSP. That one was ninety seconds from being written
   up as fact.
+- The deploy window looked closed for four hours. **It was open.** The status I
+  kept re-reading was a fossil (see section 1).
+- AGL-1160's `s-maxage=60` looked shipped because a unit test proved the route
+  SETS the header. **Production replaces it.** I tested the declaration and
+  never checked the effect — with a standing note in this repo warning about
+  exactly that.
 
 **A control that cannot fail is not a control.** A "0 CSP violations" reading
 came from a log file that was empty because the server was piped through `tail`,
 which buffers to EOF. Prove a zero with a positive control before trusting it,
 and pair it with a negative one so it can fail in both directions.
+
+**`read_console_messages` starts capturing when first CALLED, not at page load.**
+Asking it for errors after a navigation returns "no console errors" whether or
+not any occurred — another zero that looks like a clean run. Either reload with
+tracking already active, or do what worked here: read the **server-side**
+collector instead, which is an independent witness and does not depend on
+browser tooling at all.
+
+**Arm, test, DISARM.** `?csp=enforce` sets an httpOnly cookie on a real session.
+Leaving it set would degrade the console for whoever owns that browser. Disarm
+with `?csp=off` and verify `nextWouldSeeNonce: false` before walking away.
 
 **Check the module boundary before designing.** `scope:app` may not depend on
 `aglyn:addons`, so AGL-1217's policy had to go in core. Confirmed by making the

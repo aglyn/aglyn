@@ -2,13 +2,14 @@
   "version": 2,
   "git": {
     "deploymentEnabled": {
-      "main": true,
+      "production": true,
+      "main": false,
       "**": false,
       "*": false,
       "*/**": false
     }
   },
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- .",
+  "ignoreCommand": "bash ../../scripts/vercel-ignore-build.sh plugins",
   "functions": {
     "api/load.mjs": {
       "includeFiles": "**/load.html"

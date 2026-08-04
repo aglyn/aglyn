@@ -32,12 +32,39 @@ import * as jsxRuntime from 'react/jsx-runtime'
  * blocking the published site's first paint on a marketplace CDN would
  * invert the reliability contract.
  */
+/**
+ * Say why realm plugins are OFF, once per session (AGL-1184).
+ *
+ * Same reasoning as the console copy: the early return is right, but doing it
+ * silently is what made this cost an investigation. Never fires in production,
+ * where the variable is set.
+ *
+ * Distinguished from "this page has no realm plugins", which is the far more
+ * common reason nothing loads and is NOT worth a message.
+ */
+let originWarned = false
+function warnMissingPluginOrigin(): void {
+  if (originWarned || process.env.NODE_ENV === 'production') return
+  originWarned = true
+  console.info(
+    'Realm plugins are OFF locally: NEXT_PUBLIC_PLUGIN_ORIGIN is unset, so a ' +
+      'published site never fetches installed plugin bundles (not a failure). ' +
+      'Set NEXT_PUBLIC_PLUGIN_ORIGIN=https://plugins.aglyn.com to load them.',
+  )
+}
+
 export async function loadSiteRealmPlugins(
   installs: readonly Aglyn.RealmPluginInstall[] | undefined,
 ): Promise<void> {
   await loadDevRealmBundles()
   const artifactsBase = process.env.NEXT_PUBLIC_PLUGIN_ORIGIN ?? ''
-  if (!installs?.length || !artifactsBase) return
+  // Order matters: "no plugins installed" is the ordinary case and stays
+  // quiet; a MISSING ORIGIN with plugins to load is the one worth explaining.
+  if (!installs?.length) return
+  if (!artifactsBase) {
+    warnMissingPluginOrigin()
+    return
+  }
   try {
     Aglyn.setRealmPluginHost({ React, jsxRuntime, aglyn: Aglyn })
     await Aglyn.loadRealmPlugins(installs, {

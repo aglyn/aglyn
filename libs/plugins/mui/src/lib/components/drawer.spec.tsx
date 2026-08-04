@@ -143,13 +143,46 @@ describe('Drawer element (AGL-562)', () => {
       </DrawerElement>,
     )
     // The drawer is invisible on the live site until opened; the canvas
-    // shows a slim, selectable marker instead of the expanded contents.
-    expect(screen.getByText(/slides in on the live site/)).toBeTruthy()
+    // shows a compact, selectable marker instead of the expanded contents.
+    expect(screen.getByText('Drawer · left')).toBeTruthy()
     expect(screen.queryByText('Editable contents')).toBeNull()
     // Editor surfaces never enroll on the command bus.
     command('open', 'drawer-4')
     expect(screen.queryByRole('button', { name: 'Close menu' })).toBeNull()
     expect(screen.queryByText('Editable contents')).toBeNull()
+  })
+
+  it('takes no space in its parent while unselected (AGL-1236)', () => {
+    // A drawer is a portal: on the live site it contributes nothing to the
+    // row it sits in. A 280px in-flow placeholder made the canvas disagree
+    // with the page it renders — in the marketing nav it squeezed the row
+    // until the logo collapsed and overlapped the first link. "What you
+    // design is exactly what ships" has to hold for elements that ship
+    // invisible too.
+    const { container } = renderEditor(
+      <DrawerElement anchor="right" width={320} {...{ 'data-aglyn': 'leaf:drawer-6' }}>
+        <span>{'Editable contents'}</span>
+      </DrawerElement>,
+    )
+    const marker = container.firstElementChild as HTMLElement
+    const style = getComputedStyle(marker)
+    // Zero-size and zero-margin: the row lays out exactly as it ships.
+    expect(style.width).toBe('0px')
+    expect(style.height).toBe('0px')
+    expect(style.margin).toBe('0px')
+    // Out of flow entirely. Zero-sizing alone was not enough: a zero-width
+    // flex child is still a flex child, so `justify-content: space-between`
+    // kept it as a distribution point and the row's `gap` still applied on
+    // both sides — which pushed the nav's START FREE button in off the
+    // right edge for an element that renders nowhere near it.
+    expect(style.position).toBe('absolute')
+    expect(style.overflow).toBe('visible')
+    // The chip is lifted clear of the design surface to the canvas's
+    // top-right, so it cannot sit on top of the content either.
+    const chip = marker.firstElementChild as HTMLElement
+    expect(getComputedStyle(chip).position).toBe('fixed')
+    // And the configured panel width must not reach the row.
+    expect(style.width).not.toBe('320px')
   })
 
   it('expands contents while the drawer subtree holds the selection (AGL-571)', () => {
@@ -166,7 +199,17 @@ describe('Drawer element (AGL-562)', () => {
       </DrawerElement>,
     )
     expect(screen.getByText('Editable contents')).toBeTruthy()
-    expect(screen.getByText(/slides in on the live site/)).toBeTruthy()
+    // It renders the way it actually opens: an overlay pinned to its anchor
+    // edge with the live panel's close row, not an inline block that shoves
+    // the surrounding row apart (AGL-1236).
+    const panel = screen
+      .getByRole('button', { name: 'Close menu' })
+      .closest('[class*="MuiBox"], div') as HTMLElement
+    const overlay = [...document.querySelectorAll('div')].find(
+      (el) => getComputedStyle(el).position === 'fixed' && el.contains(panel),
+    )
+    expect(overlay).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close menu' })).toBeTruthy()
   })
 
   it('runs live on the Preview surface, not the affordance (AGL-830)', () => {
