@@ -193,10 +193,13 @@ export const schema: Aglyn.ComponentSchema<MarketplacePluginProps> = {
     {
       name: 'pluginPropsJson',
       description:
-        'Optional settings as JSON, e.g. {"city":"NYC"}. Keys the plugin ' +
-        'did not declare in its manifest are ignored.',
-      component: Aglyn.FieldComponentType.TEXTAREA,
-      label: 'Plugin settings (JSON)',
+        'Only what this plugin declares in its manifest is offered here, so ' +
+        'what you set is what it receives. "Edit as JSON" covers anything a ' +
+        'declaration does not.',
+      // Was a raw JSON textarea (AGL-1049): authors guessed key names, and a
+      // typo did not fail — `filterPluginProps` silently dropped it.
+      component: Aglyn.FieldComponentType.PLUGIN_SETTINGS,
+      label: 'Plugin settings',
     },
   ],
 }

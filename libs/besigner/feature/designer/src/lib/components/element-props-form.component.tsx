@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import PluginSettingsField, {
+  PLUGIN_SETTINGS_FIELD_COMPONENT,
+} from './plugin-settings-field.component'
 import * as Aglyn from '@aglyn/aglyn'
 import {
   FormRenderer,
@@ -239,6 +242,9 @@ export const elementPropsComponentMapper = {
   // Pill-rendering editor for token-capable free-text attributes
   // (AGL-586); the attributes memo rewrites TEXT_FIELD/TEXTAREA to it.
   [TOKEN_TEXT_FIELD_COMPONENT]: TokenTextField,
+  // A placed plugin's declared settings as real fields (AGL-1049); the
+  // attributes memo rewrites the plugin's JSON attribute to it.
+  [PLUGIN_SETTINGS_FIELD_COMPONENT]: PluginSettingsField,
 }
 
 const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
@@ -377,6 +383,18 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                   })`,
                 })),
             ],
+          }
+        }
+        if (field.component === Aglyn.FieldComponentType.PLUGIN_SETTINGS) {
+          // Rendered by a bespoke editor rather than expanded into N fields
+          // here: the settings live in ONE stored JSON attribute, and the
+          // editor reads the sibling `listingId` to know which manifest's
+          // props to offer. Expanding in this memo would need the field list
+          // to change identity whenever the selection did, which is exactly
+          // the render-loop shape the panel avoids elsewhere.
+          return {
+            ...field,
+            component: PLUGIN_SETTINGS_FIELD_COMPONENT,
           }
         }
         if (field.component === Aglyn.FieldComponentType.PLUGIN_SELECT) {

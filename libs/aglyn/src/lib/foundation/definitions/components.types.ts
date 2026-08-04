@@ -237,6 +237,11 @@ export enum FieldComponentType {
    * "is this installed?" question by construction.
    */
   PLUGIN_SELECT = 'plugin-select',
+  /**
+   * A placed plugin's declared settings, rendered as real fields (AGL-1049).
+   * Reads the sibling plugin selection to know which manifest to offer.
+   */
+  PLUGIN_SETTINGS = 'plugin-settings',
   PRODUCT_SELECT = 'product-select',
   COLLECTION_SELECT = 'collection-select',
   CATEGORY_SELECT = 'category-select',
