@@ -26,8 +26,11 @@ import {
   resolveInstallPlan,
   resolveOrgInstallSummary,
   resolvePluginInstallState,
+  resolveUninstallTargets,
   type InstallTargeting,
+  type UninstallTarget,
 } from '../model/marketplace'
+import UninstallImpactDialog from './uninstall-impact-dialog.component'
 import {
   buildRoute,
   parseMarkdownLite,
@@ -375,6 +378,11 @@ export function MarketplaceListingContent({
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { install, installPlan, buy, uninstall } = useMarketplaceActions(hostId)
+  /** The uninstall awaiting its impact check and confirmation (AGL-1027). */
+  const [pendingUninstall, setPendingUninstall] = useState<{
+    scope: 'org' | 'host'
+    targets: UninstallTarget[]
+  } | null>(null)
   const [installScope, setInstallScope] = useState<'org' | 'host'>('org')
   // Confirm before writing install pins (AGL-867): the install is deliberate
   // and site-scoped, so it names its targets before committing.
@@ -1524,10 +1532,15 @@ export function MarketplaceListingContent({
                             size="small"
                             color="inherit"
                             onClick={() =>
-                              void uninstall(
-                                listing,
-                                pluginState.scope ?? undefined,
-                              )
+                              setPendingUninstall({
+                                scope:
+                                  pluginState.scope === 'org' ? 'org' : 'host',
+                                targets: resolveUninstallTargets(
+                                  orgInstall,
+                                  pluginState.scope === 'org' ? 'org' : 'host',
+                                  hostId,
+                                ),
+                              })
                             }
                           >
                             {pluginState.scope === 'org'
@@ -1824,6 +1837,21 @@ export function MarketplaceListingContent({
               void runUpdate('merge', takePaths, confirmDestructive)
             }
             onApplyCopy={() => void runCopy()}
+          />
+          {/* What an uninstall would break, before it happens (AGL-1027). */}
+          <UninstallImpactDialog
+            open={pendingUninstall !== null}
+            listing={listing}
+            scope={pendingUninstall?.scope ?? 'host'}
+            targets={pendingUninstall?.targets ?? []}
+            onCancel={() => setPendingUninstall(null)}
+            onConfirm={async () => {
+              const target = pendingUninstall
+              setPendingUninstall(null)
+              if (!target) return
+              await uninstall(listing, target.scope)
+              setPinsNonce((nonce) => nonce + 1)
+            }}
           />
           {/* Screenshot lightbox (AGL-869). */}
           <Dialog

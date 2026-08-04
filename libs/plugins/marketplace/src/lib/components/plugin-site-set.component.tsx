@@ -36,7 +36,12 @@ import {
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import { compareArtifactVersions } from '@aglyn/aglyn'
-import type { OrgInstallSummary } from '../model/marketplace'
+import {
+  resolveUninstallTargets,
+  type OrgInstallSummary,
+  type UninstallTarget,
+} from '../model/marketplace'
+import UninstallImpactDialog from './uninstall-impact-dialog.component'
 
 export interface PluginSiteSetProps {
   /** The listing/installation these pins belong to. */
@@ -86,6 +91,16 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
     onChanged,
   } = props
   const [addHostIds, setAddHostIds] = useState<string[]>([])
+  /**
+   * The uninstall awaiting confirmation (AGL-1027). Uninstalling used to be a
+   * bare click; nothing said which sites lost the plugin or which published
+   * pages stopped rendering it.
+   */
+  const [pendingUninstall, setPendingUninstall] = useState<{
+    scope: 'org' | 'host'
+    hostId?: string
+    targets: UninstallTarget[]
+  } | null>(null)
   const [siteBusy, setSiteBusy] = useState(false)
   /**
    * A site is behind only when its pin is genuinely OLDER (AGL-1017). "Not
@@ -232,9 +247,15 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
               color="inherit"
               disabled={siteBusy}
               onClick={() =>
-                void runSiteEdit(() =>
-                  uninstall(listing, 'host', site.hostId),
-                )
+                setPendingUninstall({
+                  scope: 'host',
+                  hostId: site.hostId,
+                  targets: resolveUninstallTargets(
+                    orgInstall,
+                    'host',
+                    site.hostId,
+                  ),
+                })
               }
             >
               {'Remove'}
@@ -467,9 +488,10 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
           color="inherit"
           disabled={siteBusy}
           onClick={() =>
-            void runSiteEdit(() =>
-              uninstall(listing, 'org'),
-            )
+            setPendingUninstall({
+              scope: 'org',
+              targets: resolveUninstallTargets(orgInstall, 'org'),
+            })
           }
         >
           {'Uninstall org-wide'}
@@ -505,6 +527,26 @@ export function PluginSiteSet(props: PluginSiteSetProps) {
         {'Install for the whole organization'}
       </Button>
     )}
+
+    {/* Only the two DIRECT uninstalls are confirmed. The promote and split
+        flows above also call `uninstall`, but there the removal is one half of
+        a move that leaves the plugin installed everywhere it already was —
+        confirming "this will stop working" would be false. */}
+    <UninstallImpactDialog
+      open={pendingUninstall !== null}
+      listing={listing}
+      scope={pendingUninstall?.scope ?? 'host'}
+      targets={pendingUninstall?.targets ?? []}
+      onCancel={() => setPendingUninstall(null)}
+      onConfirm={async () => {
+        const target = pendingUninstall
+        setPendingUninstall(null)
+        if (!target) return
+        await runSiteEdit(() =>
+          uninstall(listing, target.scope, target.hostId),
+        )
+      }}
+    />
   </Stack>
   )
 }

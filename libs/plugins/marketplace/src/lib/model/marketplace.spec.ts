@@ -35,6 +35,7 @@ import {
   resolvePluginInstallState,
   sanitizeMarketplaceDefinition,
   sanitizeDatasetSchema,
+  resolveUninstallTargets,
 } from './marketplace'
 
 const nodes = {
@@ -1023,5 +1024,59 @@ describe('verificationRequestBlock (AGL-1217)', () => {
     expect(Object.keys(VERIFICATION_BLOCK_MESSAGES).sort()).toEqual(
       [...reasons].sort(),
     )
+  })
+})
+
+/* ---- uninstall targets and the shadowing case (AGL-1027) ---- */
+
+describe('resolveUninstallTargets', () => {
+  const hosts = [
+    { id: 'h1', label: 'Main' },
+    { id: 'h2', label: 'Shop' },
+  ]
+  const pin = (version: string) => ({ version })
+
+  it('a host uninstall with no org pin loses the plugin on that site', () => {
+    const summary = resolveOrgInstallSummary(hosts, { h1: pin('1') }, null)
+    expect(resolveUninstallTargets(summary, 'host', 'h1')).toEqual([
+      { hostId: 'h1', label: 'Main', stillCovered: false },
+    ])
+  })
+
+  it('a host uninstall UNDER an org pin keeps the plugin running', () => {
+    // The case that would otherwise read as a lie: the host pin was shadowing
+    // the org pin, so removing it changes the version, not the behaviour.
+    const summary = resolveOrgInstallSummary(hosts, { h1: pin('2') }, pin('1'))
+    expect(resolveUninstallTargets(summary, 'host', 'h1')).toEqual([
+      { hostId: 'h1', label: 'Main', stillCovered: true },
+    ])
+  })
+
+  it('an org uninstall names every site the org pin covered', () => {
+    const summary = resolveOrgInstallSummary(hosts, {}, pin('1'))
+    expect(resolveUninstallTargets(summary, 'org')).toEqual([
+      { hostId: 'h1', label: 'Main', stillCovered: false },
+      { hostId: 'h2', label: 'Shop', stillCovered: false },
+    ])
+  })
+
+  it('an org uninstall spares sites holding their own host pin', () => {
+    const summary = resolveOrgInstallSummary(hosts, { h2: pin('2') }, pin('1'))
+    expect(resolveUninstallTargets(summary, 'org')).toEqual([
+      { hostId: 'h1', label: 'Main', stillCovered: false },
+      // h2 pinned itself, so dropping the org pin takes nothing from it.
+      { hostId: 'h2', label: 'Shop', stillCovered: true },
+    ])
+  })
+
+  it('is empty for a site the plugin was never installed on', () => {
+    const summary = resolveOrgInstallSummary(hosts, { h1: pin('1') }, null)
+    expect(resolveUninstallTargets(summary, 'host', 'h2')).toEqual([])
+    expect(resolveUninstallTargets(summary, 'host', 'nope')).toEqual([])
+  })
+
+  it('is empty for an org uninstall when nothing is installed anywhere', () => {
+    const summary = resolveOrgInstallSummary(hosts, {}, null)
+    expect(resolveUninstallTargets(summary, 'org')).toEqual([])
   })
 })
