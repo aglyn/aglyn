@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { docsHelp } from '../../constants/docs-links'
 import { describeTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -124,7 +125,16 @@ export function ThemeSourceCard(props: {
 
   return (
     <>
-      <CardDisplay header={'Theme source'} contentGutterX contentGutterY>
+      <CardDisplay
+        header={'Theme source'}
+        help={docsHelp('themeBuilder', {
+          excerpt:
+            'Where this site’s theme came from, and the two ways back — the ' +
+            'theme it replaced, or the platform default.',
+        })}
+        contentGutterX
+        contentGutterY
+      >
         <Stack spacing={2}>
           <Stack
             direction="row"

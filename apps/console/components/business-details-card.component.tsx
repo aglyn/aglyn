@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { docsHelp } from '../constants/docs-links'
 import { describeHostTokens } from '@aglyn/aglyn/app-utils/host-tokens'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -148,6 +149,11 @@ export function BusinessDetailsCard(props: { hostId: string }) {
   return (
     <CardDisplay
       header={'Business details'}
+      help={docsHelp('bindings', {
+        excerpt:
+          'Contact details that installed templates can reference with ' +
+          'host variables, so their branding is right without editing.',
+      })}
       contentGutterX
       contentGutterY
     >

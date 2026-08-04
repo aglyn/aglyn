@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { docsHelp } from '../../constants/docs-links'
 import {
   diffOverride,
   overrideWriteValue,
@@ -199,7 +200,16 @@ export function ThemeOverridesCard(props: {
   if (!installed) return null
 
   return (
-    <CardDisplay header={'What you have changed'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'What you have changed'}
+      help={docsHelp('themeBuilder', {
+        excerpt:
+          'Your changes on top of an installed theme, stored separately so ' +
+          'taking an update keeps them.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2}>
         {stale ? (
           <Alert severity="warning">
