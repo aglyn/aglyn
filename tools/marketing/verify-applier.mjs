@@ -16,6 +16,15 @@ import { readFileSync } from 'node:fs'
 
 const SLOTS = [5, 1, 14, 9, 11, 17, 13, 4]
 const PAGES = ['console','commerce','forms','media','workflows','plugins','analytics','marketing']
+
+/** Early-access is section 6; its 4 stat pairs start after eyebrow+heading+intro+2 actions. */
+const SLOT_INDEX = { earlyaccess: { section: 6, first: 5 } }
+const EXPECTED_STATS = [
+  '1', 'platform, not a stack',
+  '9', 'products built in',
+  '0', 'plugins to wire up',
+  '1-click', 'to publish',
+]
 const src = readFileSync('tools/marketing/apply-page-copy.js', 'utf8')
 
 /**
@@ -80,6 +89,18 @@ for (const page of PAGES) {
   check(lost.length === 0, `authored props survive the write (lost: ${lost.join(', ') || 'none'})`)
   const blank = [...canvas._nodes.values()].filter((n) => n.componentId === 'muiTypography' && !String(n.props.children ?? '').trim())
   check(blank.length === 0, `no node left blank (${blank.length} blank)`)
+
+  // AGL-1233: the early-access band is figure-then-label, four times over. The
+  // applier used to flatten `[meta, title]`, and `meta` on a stat item is the
+  // extractor's type tag "stat" — so the band published "stat" as the figure on
+  // every poured page. A slot COUNT of 13 is satisfied by either flatten, which
+  // is precisely why nothing caught it; assert the values, not the arity.
+  const stats = SLOT_INDEX.earlyaccess
+  const got = Array.from({ length: 8 }, (_, k) => canvas._nodes.get(`${stats.section}:${stats.first + k}`).props.children)
+  check(
+    got.every((v, k) => v === EXPECTED_STATS[k]),
+    `stat band is figure-then-label (got ${JSON.stringify(got.slice(0, 4))}…)`,
+  )
 }
 
 // The guard itself must still refuse a positional shift.
