@@ -1,37 +1,36 @@
 ---
-description: Promote the 36-commit backlog the moment Vercel's window clears, then flip CSP to enforcing (AGL-523) with the evidence already gathered, and verify the four In Review issues in production
+description: The 36-commit backlog is DEPLOYED — click-test the besigner canvas under enforcing CSP and flip it on (AGL-523), verify the In Review issues, and finish AGL-1160's caching half
 ---
 
-Pick up from `/promote-and-enforce` on 2026-08-03. **The whole session was
-blocked on one deploy that never became available.** Nothing here is stuck on
-research — it is stuck on a deployment slot.
+Pick up from `/promote-and-enforce` on 2026-08-03.
 
 Work issues in Linear: **In Progress** when you start, **In Review** when it
 lands, **Done** once verified in production. One conventional commit per
 AGL-### on `main`. Standing permission to promote is granted.
 
-## 1. The promotion — check first, it may still be closed
+## 1. The promotion LANDED — read this first
 
-`main` was **36 commits** ahead at handoff and the window was rate-limited for
-the entire session (~4 h of checks, `failure` every time).
+**Deployed at 2026-08-04 00:06Z as `d4855bbf3` (PR #760). All three projects
+`success`.** 36 commits, everything from the previous two sessions.
 
-```bash
-gh api repos/aglyn/aglyn/commits/$(git rev-parse origin/production)/status --jq '.state'
-```
+The reason it took so long is worth carrying forward, because it cost most of a
+session:
 
-If that is still `failure` with "Deployment rate limited", **wait — do not
-merge more.** Merging while limited is what stranded the CSP work in the first
-place: `origin/production` sat 5 commits ahead of the live build all day, which
-is why `?csp=enforce` read as a no-op on production and looked like a bug.
+> **`gh api .../commits/<sha>/status` is a FROZEN RECORD, not live state.**
+> Its `created_at` and `updated_at` never change after the deployment attempt
+> that wrote it. I re-read the same `20:06:37Z` "Deployment rate limited"
+> failure for four hours and reported "still rate limited, re-checked just now"
+> every time. **The window had in fact cleared.** Nothing had tested it because
+> no deployment had been attempted since.
 
-**A merged production PR is not a deploy.** Always check containment against the
-sha of the **READY** deployment, never the branch. The last READY console
-deployment at handoff was `b021ddf0e` (2026-08-03 19:22Z) while
-`origin/production` was `5238127dc`.
+**How to actually test the window:** attempt the deploy. There is no read-only
+probe. A rate-limited attempt is cheap — it fails the status and consumes no
+deployment slot. If you find yourself reporting "still blocked" more than once
+off the same sha, you are reading a fossil.
 
-The burst that caused this ran 15:21–20:06Z on 2026-08-03, with deployments
-starting ~03:26Z. Expect headroom some time after that on the 4th. One
-promotion, then stop.
+Still true and still worth obeying: a promotion costs **3 deployment records**
+against a ~100/day cap, and **a merged production PR is not a deploy** — check
+containment against the READY deployment's sha, never the branch.
 
 ## 2. AGL-523 — the flip, and it now has evidence
 
@@ -61,15 +60,20 @@ with no console errors.
 
 ### What is left, in order
 
-1. **Deploy, then read the collector.** New this session:
-   `/api/csp-report` plus `report-uri` + `report-to` + a `Reporting-Endpoints`
-   header, on both policies. Read it with a Vercel runtime-log query for
-   `AGL-523:csp-violation`. Before trusting a low count, **post a synthetic
-   report and confirm it appears** — a zero from a collector you have not
-   proven is the exact false all-clear this endpoint exists to end.
+1. **Read the collector — it is LIVE and already verified in production.**
+   `Reporting-Endpoints: csp="/api/csp-report"` and
+   `report-uri /api/csp-report; report-to csp` are on the deployed responses,
+   and the endpoint returns 204 to both wire formats. Read it with a Vercel
+   runtime-log query for `AGL-523:csp-violation`. Before trusting a low count,
+   **post a synthetic report and confirm it appears** — a zero from a collector
+   you have not proven is the exact false all-clear this endpoint exists to end.
+   (One synthetic control entry was posted at `/__agl523-synthetic-control` on
+   2026-08-04 00:09Z; ignore it, or use it as the proof the pipe works.)
 2. **Click-test the besigner canvas** with `?csp=enforce` (sets an httpOnly
-   cookie; `?csp=off` clears it). **This is the one thing local could not
-   reach** — both besigner routes 404'd in the production-mode local setup even
+   cookie; `?csp=off` clears it). **This now works in production** — confirmed
+   post-deploy: `?csp=enforce` returns `nextWouldSeeNonce: true`, where all of
+   the previous session it returned `false` because the deploy was stranded.
+   **This is the one thing local could not reach** — both besigner routes 404'd in the production-mode local setup even
    with fixtures seeded and both route files present. Realm-plugin `blob:`
    imports are the risk; note the enforcing policy allows `blob:` explicitly
    while `strict-dynamic` would make it inert. Also worth a pass: marketplace,
@@ -83,13 +87,21 @@ tenant page has 33 `<script>` tags and **zero** nonces, so under its report-only
 `strict-dynamic` policy every script violates on every page load of every
 published site. Pointing a collector there floods the log with one known defect.
 
-## 3. Verify the four In Review issues in production
+## 3. Verify the In Review issues against real data
 
-All four land on the same deploy and none has been exercised against real data.
+Deployed but NOT yet exercised in production.
 
-- **AGL-1160** — sitemap/RSS. Confirm `<loc>` uses the site's own origin, not
-  the requesting host, and that `Cache-Control` is `s-maxage=60,
-  stale-while-revalidate=60`. Check a custom-domain site and a `.aglyn.app` one.
+- **AGL-1160 — back to In Progress, half of it was wrong.** Measured after the
+  deploy: Next/Vercel **overrides the hand-written `Cache-Control`** on these
+  routes. `robots` is the control — left deliberately on the old
+  `s-maxage=3600`, it returns the same `public, max-age=0, must-revalidate` as
+  everything else. So the header never reached a CDN, the issue's "cached for an
+  hour" premise is false, and my `s-maxage=60` change (`10b813343`) is a no-op.
+  The `<loc>` origin fix (`a08bcf75f`) is real and stands. **What remains: find
+  what actually caches these routes** (`x-vercel-cache: HIT` says something
+  does) and measure publish-to-visible directly rather than reading a header.
+  I could not get a production control for the origin fix — it needs a custom
+  domain or a tenant `*.vercel.app` alias, and neither guessed alias resolves.
 - **AGL-1161** — publish a component used through a layout and through another
   component; confirm both sets of screens drop. Watch for
   `AGL-1161:component-scan-truncated`.
@@ -144,7 +156,8 @@ using `apps/console/.next`.
 
 ## Lessons this session paid for
 
-**Every confident inference was wrong until measured.** Six times:
+**Every confident inference was wrong until measured.** Eight times, and two
+of them were my own shipped work:
 
 - `preLoadBootMs` was going to be ~7.8 s of lambda init. It is **1.8 s** — most
   of the "missing" time was the doubled render, already fixed.
@@ -159,6 +172,12 @@ using `apps/console/.next`.
 - Enforcing CSP looked like it blanked the besigner canvas. **The control blanked
   identically** — a 404, not CSP. That one was ninety seconds from being written
   up as fact.
+- The deploy window looked closed for four hours. **It was open.** The status I
+  kept re-reading was a fossil (see section 1).
+- AGL-1160's `s-maxage=60` looked shipped because a unit test proved the route
+  SETS the header. **Production replaces it.** I tested the declaration and
+  never checked the effect — with a standing note in this repo warning about
+  exactly that.
 
 **A control that cannot fail is not a control.** A "0 CSP violations" reading
 came from a log file that was empty because the server was piped through `tail`,
