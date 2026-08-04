@@ -91,11 +91,10 @@ export async function GET(request: Request): Promise<Response> {
     status: 200,
     headers: {
       'Content-Type': 'application/rss+xml',
-      // Matches the page ISR window, and gives `stale-while-revalidate` the
-      // delta-seconds RFC 5861 requires — see the longer note in
-      // `../sitemap/route.ts` for why a cache tag does not help here
-      // (AGL-1160). Publishing a post and waiting an hour for the feed to
-      // mention it is the case this exists to end.
+      // OVERRIDDEN and inert — see the measured note in `../sitemap/route.ts`
+      // (AGL-1160). Production replaces this with
+      // `public, max-age=0, must-revalidate`; the real TTL is Vercel's own
+      // 60 s revalidation, which is what a feed reader actually experiences.
       'Cache-Control': 's-maxage=60, stale-while-revalidate=60',
     },
   })

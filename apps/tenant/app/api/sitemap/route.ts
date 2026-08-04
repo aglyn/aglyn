@@ -152,22 +152,22 @@ export async function GET(request: Request): Promise<Response> {
     status: 200,
     headers: {
       'Content-Type': 'application/xml',
-      // 60 s, matching the ISR window every page uses, so the platform has ONE
-      // staleness number rather than a page answer and a sitemap answer 60×
-      // apart (AGL-1160).
+      // MEASURED 2026-08-04: this header is OVERRIDDEN and has no effect.
+      // Production returns `public, max-age=0, must-revalidate` here, on
+      // `collections-rss`, on `robots` (which still carries the old
+      // `s-maxage=3600`) and on ordinary pages alike — so the value below has
+      // never reached a CDN, and neither did the `s-maxage=3600` it replaced.
       //
-      // Why not a cache tag, which is what the issue proposed: the CDN is the
-      // only layer a visitor sees here, and `revalidateTag` cannot reach it.
-      // `force-dynamic` already keeps this route out of Next's cache, and it
-      // has to stay that way — the host is resolved per request. So a tag would
-      // only ever save origin work, never shorten what a crawler is served.
-      // Bounding the header is the whole fix; anything else is decoration on
-      // top of it.
+      // What actually caches this route is Vercel's own revalidation, at
+      // **60 s**, measured by polling `age`: it climbs to ~60, flips to
+      // `x-vercel-cache: STALE`, then resets — twice, exactly 60 s apart.
+      // Which is the same window every page uses, so a sitemap is never more
+      // stale than the site it describes.
       //
-      // `stale-while-revalidate` carried no delta-seconds before. RFC 5861
-      // requires one, so the old value was malformed and a CDN was free to
-      // treat it as unbounded — that is the "worst case is longer than an hour"
-      // the issue suspected. Bounded now, so worst case is 60 + 60 s.
+      // Kept rather than deleted because it states the intent correctly and
+      // costs nothing; do NOT treat it as the thing producing the 60 s.
+      // AGL-1160 was filed believing this header made the sitemap an HOUR
+      // stale. It never did.
       'Cache-Control': 's-maxage=60, stale-while-revalidate=60',
     },
   })
