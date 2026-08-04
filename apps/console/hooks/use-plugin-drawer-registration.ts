@@ -82,6 +82,9 @@ export function usePluginDrawerRegistration(hostId: string): void {
         listingId: install.listingId ?? install.$id,
         displayName: install.displayName ?? install.manifest?.name,
         scope: install.scope,
+        // The declared props (and, where a publisher supplied one, how to edit
+        // them) so the attributes panel can render real fields — AGL-1049.
+        capabilities: install.manifest?.capabilities,
       })),
     )
     return () => setKnownPluginInstalls(undefined)

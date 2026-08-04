@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { PluginCapabilities } from '../app-utils/plugin-manifest'
 import type { PresetSchema } from '../types/nodes'
 
 /**
@@ -63,6 +64,15 @@ export interface KnownPluginInstall {
   displayName?: string
   /** 'org' when the pin covers every site in the workspace. */
   scope?: 'org' | 'host'
+  /**
+   * The pinned manifest's capabilities (AGL-1049).
+   *
+   * Carried so the attributes panel can render a plugin's declared settings as
+   * real fields instead of a JSON textarea. The install document already holds
+   * the whole manifest — only the part the editor needs is published here, so
+   * the canvas cannot come to depend on anything the bridge does not honour.
+   */
+  capabilities?: PluginCapabilities
 }
 
 let knownInstalls: Map<string, KnownPluginInstall> | undefined
