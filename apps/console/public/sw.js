@@ -16,43 +16,144 @@
  */
 
 /**
- * The console's service worker (AGL-1053) — deliberately does NOTHING.
+ * The console's service worker (AGL-1053 baseline, AGL-1054 caching).
  *
- * This is the foundation issue's whole point: prove registration, scope and
- * serving work before anything depends on them, so the issues that add real
- * caching (AGL-1054) and update prompting (AGL-1055) are small diffs against a
- * known-good baseline rather than a debugging session with three variables.
+ * A cache is a second storage layer with **no security rules in front of it**,
+ * on an origin that serves one workspace's data to one signed-in user. So the
+ * question this file has to answer is not "is it fast" but *can any bytes
+ * belonging to user A be replayed to user B on this device* — which on a
+ * shared or kiosk machine is a real question.
  *
- * **No `fetch` handler on purpose.** A service worker with a fetch handler is
- * in the request path for every navigation and asset on the origin, including
- * the authenticated console. Registering one that only logs would still change
- * how failures present, and this file exists to change nothing at all.
- *
- * ## Why a static file and not a toolchain
- *
- * `serwist` was the default the issue proposed, and it is very likely right —
- * for AGL-1054, where its job (generating a precache manifest from the build's
- * output) begins. There is no manifest to generate here, so adopting it now
- * would mean taking on nx + Turbopack build wiring to emit ten lines that a
- * static file in `public/` already serves at the correct scope.
- *
- * The repo-specific risks this baseline actually retires are the routing and
- * lifecycle ones — the middleware matcher swallowing `/sw.js`, the scope, the
- * production-only registration, the teardown incantation. Those are settled
- * independently of the toolchain, so swapping serwist in later is a change of
- * how this file is PRODUCED, not of whether any of the above works.
- *
- * Recorded on AGL-1053 so the decision is reviewable rather than implied.
+ * The answer here is structural rather than careful: **nothing user-scoped can
+ * enter the cache**, because the only things that may enter are build-hashed
+ * static assets that are byte-identical for every user on every org. There is
+ * no A-scoped response to replay because there is no path by which one is
+ * stored.
  */
 
-// Take over as the active worker without waiting for every tab to close.
-// Safe precisely because this worker does nothing — there is no old cache to
-// serve and no fetch handler whose behaviour could change mid-session. Once
-// AGL-1055 adds an update prompt, this becomes its decision to make, not ours.
+/**
+ * Bumped whenever the caching rules change, so an old worker's cache is
+ * dropped rather than inherited under new rules it was not written for.
+ */
+const CACHE_NAME = 'aglyn-console-static-v1'
+
+/**
+ * The ONLY things that may be cached.
+ *
+ * * `/_next/static/*` — build-hashed and immutable. A new build produces new
+ *   URLs, so a stale entry can never shadow a fresh asset.
+ * * `/_static/*` — brand assets, styles, icons. Already outside the middleware
+ *   auth matcher, i.e. already established as not user-scoped.
+ *
+ * Both are identical for every user, which is the property doing the security
+ * work — not the fact that they happen to be assets.
+ */
+const CACHEABLE_PREFIXES = ['/_next/static/', '/_static/']
+
+/**
+ * Hosts whose requests this worker must never touch.
+ *
+ * Firebase's SDKs run their own offline persistence through IndexedDB and
+ * their own long-poll/streaming transports. Intercepting those risks both
+ * corruption and cross-org bleed, and buys nothing — they are not assets.
+ */
+const FORBIDDEN_HOSTS = [
+  'firestore.googleapis.com',
+  'firebasestorage.googleapis.com',
+  'identitytoolkit.googleapis.com',
+  'securetoken.googleapis.com',
+  'firebaseappcheck.googleapis.com',
+]
+
+/**
+ * May this request be served from, or written to, the cache?
+ *
+ * **Deny-first, and every deny is explicit rather than implied by the
+ * allowlist.** The allowlist alone would already exclude everything below, but
+ * an allowlist is one edit away from being widened by someone who has not read
+ * this comment, and these denials are the ones that would turn that edit into
+ * a security bug rather than a performance regression. They are asserted in
+ * `service-worker-cache-policy.spec.ts` against this exact file.
+ */
+function isCacheable(request) {
+  // Only GET. A cached response to a mutation is meaningless and a replayed
+  // one is dangerous.
+  if (request.method !== 'GET') return false
+
+  // NEVER a document. The console is `force-dynamic` and its HTML carries the
+  // signed-in user's org context — a cached shell would hand one user's
+  // context to the next person on the device. This is the single most
+  // important line in the file.
+  if (request.mode === 'navigate') return false
+  if (request.destination === 'document') return false
+
+  // A request the browser attaches credentials to is by definition not a
+  // shared asset.
+  if (request.credentials === 'include') return false
+  if (request.headers && request.headers.get('authorization')) return false
+
+  let url
+  try {
+    url = new URL(request.url)
+  } catch {
+    return false
+  }
+
+  // Same-origin only, and never the Firebase hosts even if that ever changes.
+  if (FORBIDDEN_HOSTS.includes(url.hostname)) return false
+  if (url.origin !== self.location.origin) return false
+
+  // The API surface, in its entirety. Redundant against the allowlist below,
+  // and stated anyway: this is the rule a future edit is most likely to
+  // violate by accident.
+  if (url.pathname.startsWith('/api/')) return false
+
+  return CACHEABLE_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))
+}
+
 self.addEventListener('install', () => {
+  // No precache list. The assets worth caching are build-hashed, so their URLs
+  // are only knowable from a build manifest — and generating one is what a
+  // toolchain (serwist) is for. Runtime caching reaches the same steady state
+  // after one visit without adding that machinery, and crucially it cannot
+  // cache something the page did not already ask for.
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim())
+  event.waitUntil(
+    (async () => {
+      // Drop caches from earlier rule-sets. A cache written under different
+      // rules is exactly the invisible layer this file is trying not to be.
+      const names = await caches.keys()
+      await Promise.all(
+        names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)),
+      )
+      await self.clients.claim()
+    })(),
+  )
+})
+
+self.addEventListener('fetch', (event) => {
+  // Not `respondWith` at all for anything not cacheable — the request goes to
+  // the network exactly as if this worker did not exist. Falling through is
+  // safer than proxying it, because a bug in the proxy path cannot then break
+  // or observe an authenticated request.
+  if (!isCacheable(event.request)) return
+
+  event.respondWith(
+    (async () => {
+      const cached = await caches.match(event.request)
+      if (cached) return cached
+      const response = await fetch(event.request)
+      // Only store a genuinely successful, same-origin response. An opaque
+      // response has an unreadable status, so caching one would mean storing
+      // something this worker cannot inspect.
+      if (response && response.status === 200 && response.type === 'basic') {
+        const cache = await caches.open(CACHE_NAME)
+        cache.put(event.request, response.clone())
+      }
+      return response
+    })(),
+  )
 })
