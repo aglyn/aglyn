@@ -23,11 +23,11 @@ import {
   getOrgForHost,
   notifyHostManagers,
   upsertHostContact,
+  renderHostEmailWithTokens,
 } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
 import {
   isEmailConfigured,
-  renderHostEmail,
   sendEmail,
 } from '@aglyn/shared-util-email'
 import * as CommerceModel from '../model'
@@ -249,7 +249,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               `Paid today: ${paid}\n` +
               `Reference: ${reservationId}`
             // Site-owner-designed template when published (AGL-771).
-            const designed = await renderHostEmail(
+            const designed = await renderHostEmailWithTokens(
               firebaseAdmin.app().firestore(),
               String(hostId),
               'reservation-confirmed',
@@ -475,7 +475,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             (receiptFooter ? `\n\n${receiptFooter}` : '')
           // Site-owner-designed template when published (AGL-771). The
           // license keys and download links ride in {{order.summary}}.
-          const designed = await renderHostEmail(
+          const designed = await renderHostEmailWithTokens(
             firebaseAdmin.app().firestore(),
             String(hostId),
             'order-receipt',
@@ -622,7 +622,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 `Value: ${giftValue}\n\n` +
                 'Enter it at checkout to apply the balance.'
               // Site-owner-designed template when published (AGL-771).
-              const designed = await renderHostEmail(
+              const designed = await renderHostEmailWithTokens(
                 firebaseAdmin.app().firestore(),
                 String(hostId),
                 'gift-card',
@@ -1003,7 +1003,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               `Thanks for your purchase!\n\n${productName} — $${amount}` +
               `\nOrder reference: ${object.id}`
             // Site-owner-designed template when published (AGL-771).
-            const designed = await renderHostEmail(
+            const designed = await renderHostEmailWithTokens(
               firebaseAdmin.app().firestore(),
               String(hostId),
               'order-receipt',
@@ -1050,7 +1050,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 (buyerEmail ? `\nBuyer: ${buyerEmail}` : '') +
                 `\nOrder reference: ${object.id}`
               // Site-owner-designed template when published (AGL-771).
-              const designed = await renderHostEmail(
+              const designed = await renderHostEmailWithTokens(
                 firebaseAdmin.app().firestore(),
                 String(hostId),
                 'sale-notification',
