@@ -24,6 +24,7 @@ import { forwardRef, useContext, useMemo } from 'react'
 import BindingPickerContext from '../contexts/binding-picker-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import DraggableDroppable from './dnd/draggable-droppable'
+import EmptyDocumentSlot from './empty-document-slot'
 
 export interface NodeLeafProps extends LeafProps {}
 
@@ -81,6 +82,16 @@ export const NodeLeaf = observer(
     const showSlotMarker =
       node?.componentId === Aglyn.LAYOUT_SLOT_COMPONENT_ID &&
       viewType === Aglyn.HostViewType.LAYOUT
+    // A document with no nodes has nothing to aim at. Wrapped in a shared
+    // layout it is worse than empty — the slot passes its children straight
+    // through, so the root collapses to a zero-height strip between locked
+    // chrome and the nav renders directly into the footer. Hung off the ROOT
+    // leaf, which is already inside `DraggableDroppable`, so giving it height
+    // is all a drop needs to resolve against the document root.
+    const showEmptyDocumentSlot =
+      node?.$id === Aglyn.NODE_ROOT_ID &&
+      !node?.nodes?.length &&
+      viewType !== Aglyn.HostViewType.LAYOUT
 
     // WYSIWYG bindings (AGL-97): resolve variable/function tokens
     // live on the rendered copy (selection/dnd keep the original node).
@@ -151,6 +162,7 @@ export const NodeLeaf = observer(
           {showSlotMarker ? (
             <SlotMarker caption={node?.props?.['caption'] as string | undefined} />
           ) : null}
+          {showEmptyDocumentSlot ? <EmptyDocumentSlot /> : null}
         </Leaf>
       </DraggableDroppable>
     )

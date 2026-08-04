@@ -27,6 +27,7 @@ import {
   validatePluginManifest,
   resolvePluginPropFields,
   unknownPluginPropKeys,
+  resolvePluginElements,
 } from './plugin-manifest'
 
 const base = {
@@ -484,5 +485,220 @@ describe('unknownPluginPropKeys — name the key that does nothing', () => {
 
   it('is empty for no values', () => {
     expect(unknownPluginPropKeys(manifest, null)).toEqual([])
+  })
+})
+
+/* ---- declared canvas elements (AGL-1031) ---- */
+
+describe('manifest.elements — publisher data the HOST renders', () => {
+  const manifest = (extra: Record<string, unknown>) => ({
+    id: 'promo',
+    name: 'Promo',
+    version: '1.0.0',
+    entry: 'index.js',
+    ...extra,
+  })
+  const elementsOf = (result: unknown) => (result as any).manifest.elements
+
+  it('keeps a well-formed element', () => {
+    const result = validatePluginManifest(
+      manifest({
+        capabilities: { props: ['title'] },
+        elements: [
+          {
+            id: 'countdown',
+            displayName: 'Promo Countdown',
+            description: 'A sale timer.',
+            category: 'Data Display',
+            icon: 'mdiTimerOutline',
+            attributes: [{ name: 'title', type: 'string', label: 'Headline' }],
+          },
+        ],
+      }),
+    )
+    expect(result.ok).toBe(true)
+    expect(elementsOf(result)).toEqual([
+      {
+        id: 'countdown',
+        displayName: 'Promo Countdown',
+        description: 'A sale timer.',
+        category: 'Data Display',
+        icon: 'mdiTimerOutline',
+        attributes: [{ name: 'title', type: 'string', label: 'Headline' }],
+      },
+    ])
+  })
+
+  it('DROPS an attribute the plugin never declared as a prop', () => {
+    // The same intersection the top-level schema gets. A declared element must
+    // not be a second way to widen what crosses the bridge.
+    const result = validatePluginManifest(
+      manifest({
+        capabilities: { props: ['title'] },
+        elements: [
+          {
+            id: 'countdown',
+            displayName: 'Countdown',
+            attributes: [{ name: 'title' }, { name: 'secretToken' }],
+          },
+        ],
+      }),
+    )
+    expect(elementsOf(result)[0].attributes.map((a: any) => a.name)).toEqual([
+      'title',
+    ])
+  })
+
+  it('refuses a structural category rather than granting it', () => {
+    // LAYOUT/NAVIGATION are withheld: a third-party element among the
+    // containers a page is built from invites placements the sandbox cannot
+    // honour. Dropped, not failed — the element is still usable.
+    const result = validatePluginManifest(
+      manifest({
+        elements: [
+          { id: 'a', displayName: 'A', category: 'Layout' },
+          { id: 'b', displayName: 'B', category: 'Navigation' },
+        ],
+      }),
+    )
+    expect(elementsOf(result)[0].category).toBeUndefined()
+    expect(elementsOf(result)[1].category).toBeUndefined()
+  })
+
+  it('accepts only an mdi icon NAME, never a path or markup', () => {
+    const result = validatePluginManifest(
+      manifest({
+        elements: [
+          { id: 'a', displayName: 'A', icon: 'mdiTimerOutline' },
+          { id: 'b', displayName: 'B', icon: 'M12 2L2 7l10 5 10-5-10-5z' },
+          { id: 'c', displayName: 'C', icon: '<svg onload=alert(1)>' },
+          { id: 'd', displayName: 'D', icon: 'https://evil.example/x.svg' },
+        ],
+      }),
+    )
+    const icons = elementsOf(result).map((element: any) => element.icon)
+    expect(icons).toEqual(['mdiTimerOutline', undefined, undefined, undefined])
+  })
+
+  it('drops a junk entry rather than failing the whole release', () => {
+    const result = validatePluginManifest(
+      manifest({
+        elements: [
+          null,
+          'nope',
+          { displayName: 'No id' },
+          { id: 'no-hyphens-allowed!', displayName: 'Bad id' },
+          { id: 'ok', displayName: '   ' },
+          { id: 'ok', displayName: 'Fine' },
+        ],
+      }),
+    )
+    expect(result.ok).toBe(true)
+    expect(elementsOf(result).map((e: any) => e.id)).toEqual(['ok'])
+  })
+
+  it('deduplicates repeated ids, keeping the first', () => {
+    const result = validatePluginManifest(
+      manifest({
+        elements: [
+          { id: 'a', displayName: 'First' },
+          { id: 'a', displayName: 'Second' },
+        ],
+      }),
+    )
+    expect(elementsOf(result)).toHaveLength(1)
+    expect(elementsOf(result)[0].displayName).toBe('First')
+  })
+
+  it('REFUSES an absurd number of elements', () => {
+    // A malformed array is a build error the publisher can see and fix.
+    const result = validatePluginManifest(
+      manifest({
+        elements: Array.from({ length: 200 }, (_, i) => ({
+          id: `e${i}`,
+          displayName: `E${i}`,
+        })),
+      }),
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  it('bounds publisher-authored text', () => {
+    const result = validatePluginManifest(
+      manifest({
+        elements: [{ id: 'a', displayName: 'x'.repeat(5000) }],
+      }),
+    )
+    expect(elementsOf(result)[0].displayName.length).toBeLessThanOrEqual(200)
+  })
+
+  it('leaves a manifest with no elements untouched', () => {
+    const result = validatePluginManifest(manifest({}))
+    expect(result.ok).toBe(true)
+    expect(elementsOf(result)).toBeUndefined()
+  })
+})
+
+describe('resolvePluginElements — palette entries from the PINNED install', () => {
+  const install = {
+    listingId: 'listing-1',
+    capabilities: { props: ['title', 'accent'] },
+    manifest: {
+      elements: [
+        {
+          id: 'countdown',
+          displayName: 'Promo Countdown',
+          category: 'Data Display',
+          icon: 'mdiTimerOutline',
+          attributes: [
+            { name: 'title', type: 'string' as const, label: 'Headline' },
+          ],
+        },
+      ],
+    },
+  }
+
+  it('resolves a declared element with its own attributes', () => {
+    expect(resolvePluginElements(install)).toEqual([
+      {
+        listingId: 'listing-1',
+        elementId: 'countdown',
+        displayName: 'Promo Countdown',
+        category: 'Data Display',
+        icon: 'mdiTimerOutline',
+        fields: [{ name: 'title', type: 'string', label: 'Headline' }],
+      },
+    ])
+  })
+
+  it('falls back to the plugin’s whole declared prop set', () => {
+    const noAttributes = {
+      ...install,
+      manifest: { elements: [{ id: 'x', displayName: 'X' }] },
+    }
+    expect(resolvePluginElements(noAttributes)[0].fields.map((f) => f.name)).toEqual(
+      ['title', 'accent'],
+    )
+  })
+
+  it('defaults an undeclared category rather than leaving it blank', () => {
+    const noCategory = {
+      ...install,
+      manifest: { elements: [{ id: 'x', displayName: 'X' }] },
+    }
+    expect(resolvePluginElements(noCategory)[0].category).toBe('Data Display')
+  })
+
+  it('is empty without a listing id — nothing to place', () => {
+    expect(resolvePluginElements({ ...install, listingId: undefined })).toEqual(
+      [],
+    )
+    expect(resolvePluginElements(null)).toEqual([])
+  })
+
+  it('is empty for a plugin that declares no elements', () => {
+    expect(
+      resolvePluginElements({ listingId: 'l', capabilities: { props: ['a'] } }),
+    ).toEqual([])
   })
 })

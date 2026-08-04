@@ -16,6 +16,7 @@
  */
 'use client'
 
+import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
 import { getSessionHealth } from '../../../../../../../../../../utils/session-health'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
@@ -301,7 +302,11 @@ function HostEmailBesignerPage() {
   ) : null
 
   return (
-    <>
+    <BindingPickerProvider hostId={hostId}>
+      {/* Host variables in the email designer (AGL-1023). This surface had no
+          binding picker at all, which is the one where it matters most: a
+          publisher's email template is exactly the artifact that needs to name
+          the installing site rather than hard-code it. */}
       <MainLayout
         enableAppBarElevation
         besigner
@@ -495,7 +500,7 @@ function HostEmailBesignerPage() {
           defaultValue={Aglyn.canvas.nestedNodes as any}
         />
       )}
-    </>
+    </BindingPickerProvider>
   )
 }
 

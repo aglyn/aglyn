@@ -50,6 +50,16 @@ export interface PluginFrameProps {
   /** Host id, for scoping host-mediated fetch (AGL-191). */
   hostId?: string
   listingId: string
+  /**
+   * Which DECLARED element of the plugin to render (AGL-1031).
+   *
+   * A FRAME prop, never a member of `pluginProps`: those are filtered against
+   * the manifest allowlist, so an element id routed through them would be
+   * dropped for every plugin that had not thought to declare `elementId` as a
+   * settable prop — silently, and only for declared elements. It is host
+   * metadata like `version` and `sha256`, and travels with them.
+   */
+  elementId?: string
   version: string
   sha256: string
   /** Manifest capabilities (event allowlist, declared size). */
@@ -110,6 +120,7 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
       pluginOrigin,
       hostId,
       listingId,
+      elementId,
       version,
       sha256,
       capabilities,
@@ -148,12 +159,13 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
       url.searchParams.set('listing', listingId)
       url.searchParams.set('v', version)
       url.searchParams.set('sha', sha256)
+      if (elementId) url.searchParams.set('element', elementId)
       // The framing host (AGL-884): the origin resolves this to the site's
       // VERIFIED custom domain and widens frame-ancestors to exactly that —
       // never to caller-supplied origins.
       if (hostId) url.searchParams.set('host', hostId)
       return url.toString()
-    }, [originUsable, pluginOrigin, hostId, listingId, version, sha256])
+    }, [originUsable, pluginOrigin, hostId, listingId, elementId, version, sha256])
 
     // Bridge: validate every inbound message by origin + source + schema,
     // then honor resize / surface events / flag errors. Never eval or graft
