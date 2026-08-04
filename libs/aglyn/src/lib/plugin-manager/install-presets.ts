@@ -36,6 +36,38 @@ export function registerPluginInstallPresetMapper(
   mapper = fn
 }
 
+/**
+ * Many presets per install (AGL-1031): the generic Plugin element, plus one
+ * per element the pinned version DECLARES.
+ *
+ * A separate seam rather than a widened return type on the singular one — the
+ * singular mapper is the AGL-419 contract and several call sites still want
+ * exactly one preset. Registering the plural is what turns declared elements
+ * into palette entries; without it a plugin's elements simply do not appear,
+ * which is the correct behaviour for a host that predates the declaration.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type PluginInstallPresetsMapper = (install: any) => PresetSchema[]
+
+let presetsMapper: PluginInstallPresetsMapper | undefined
+
+export function registerPluginInstallPresetsMapper(
+  fn: PluginInstallPresetsMapper,
+): void {
+  presetsMapper = fn
+}
+
+/**
+ * Every drawer preset an install contributes. Falls back to the singular
+ * mapper so a surface that registered only that keeps working unchanged.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function pluginInstallToPresets(install: any): PresetSchema[] {
+  if (presetsMapper) return presetsMapper(install)
+  const single = pluginInstallToPreset(install)
+  return single ? [single] : []
+}
+
 /** Maps an install doc to a drawer preset; null until a mapper registers. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function pluginInstallToPreset(install: any): PresetSchema | null {

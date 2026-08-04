@@ -15,8 +15,14 @@
  * limitations under the License.
  */
 
-import { registerPluginInstallPresetMapper } from '@aglyn/aglyn'
-import { muiPluginInstallToPreset } from './components/plugin'
+import {
+  registerPluginInstallPresetMapper,
+  registerPluginInstallPresetsMapper,
+} from '@aglyn/aglyn'
+import {
+  muiPluginInstallToPreset,
+  muiPluginInstallToPresets,
+} from './components/plugin'
 import * as Aglyn from '@aglyn/aglyn'
 import { runInAction } from 'mobx'
 import * as AccordionComponents from './components/accordion'
@@ -147,6 +153,8 @@ export function registerMuiPlugin(): void {
   // Install→preset mapper (AGL-419): the console's drawer registration
   // consumes it through core, never importing this plugin.
   registerPluginInstallPresetMapper(muiPluginInstallToPreset)
+  // Declared canvas elements become their own palette entries (AGL-1031).
+  registerPluginInstallPresetsMapper(muiPluginInstallToPresets)
   if (Aglyn.plugins.getDependency(BUNDLE_ID)) return
 
   Aglyn.plugins.addDependency({

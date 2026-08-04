@@ -17,7 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { pluginInstallToPreset, setKnownPluginInstalls } from '@aglyn/aglyn'
+import { pluginInstallToPresets, setKnownPluginInstalls } from '@aglyn/aglyn'
 import { collection, limit, query } from 'firebase/firestore'
 import { runInAction } from 'mobx'
 import { useEffect, useMemo, useRef } from 'react'
@@ -98,8 +98,11 @@ export function usePluginDrawerRegistration(hostId: string): void {
         Aglyn.components.unregisterPreset(registeredIds.current)
         registeredIds.current = []
       }
+      // One preset per install PLUS one per element the pinned version
+      // declares (AGL-1031). Built from the pin, so a declared element appears
+      // only where the plugin is installed and leaves with a revoked version.
       const presets = installs
-        .map((install) => pluginInstallToPreset(install))
+        .flatMap((install) => pluginInstallToPresets(install))
         .filter(
           (preset): preset is NonNullable<typeof preset> => Boolean(preset),
         )

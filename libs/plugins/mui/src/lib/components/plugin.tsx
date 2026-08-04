@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { MdiIcons } from '@aglyn/shared-data-mdi'
 import { registerPluginInstallPresetMapper } from '@aglyn/aglyn'
 import { mdiPuzzle } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
@@ -31,6 +32,13 @@ export const ID: Aglyn.ComponentId = Aglyn.PLUGIN_COMPONENT_ID
 export interface MarketplacePluginProps {
   /** Installed listing id; the only prop authors set. */
   listingId?: string
+  /**
+   * Which DECLARED element of the plugin this node is (AGL-1031). Set by the
+   * palette preset; absent for the generic Plugin element. Passed through to
+   * the sandboxed frame as an ordinary prop, so one node type and one compose
+   * path serve both.
+   */
+  elementId?: string
   /** Injected at compose by `attachPluginInstalls` (AGL-45). */
   version?: string
   sha256?: string
@@ -106,6 +114,7 @@ const MarketplacePlugin = forwardRef<HTMLElement, MarketplacePluginProps>(
   (props, ref) => {
     const {
       listingId,
+      elementId,
       version,
       sha256,
       capabilities,
@@ -159,6 +168,7 @@ const MarketplacePlugin = forwardRef<HTMLElement, MarketplacePluginProps>(
         pluginOrigin={pluginOrigin}
         hostId={hostId}
         listingId={listingId}
+        elementId={elementId}
         version={version}
         sha256={sha256}
         capabilities={capabilities}
@@ -273,6 +283,64 @@ export function muiPluginInstallToPreset(
         : {}),
     } as any,
   }
+}
+
+/**
+ * Every drawer preset an installed plugin contributes (AGL-1031).
+ *
+ * The generic Plugin element, plus one per element the PINNED version
+ * declares. Declared elements save as the same node with an `elementId`
+ * alongside the listing id — the issue's preferred answer, and the one that
+ * keeps a single compose path and a single sandbox. What changes is the
+ * palette entry and the label, not what executes.
+ *
+ * Resolved from the pin, so an element appears only where the plugin is
+ * installed and disappears with a revoked or downgraded version.
+ */
+export function muiPluginInstallToPresets(
+  install: PluginInstallLike,
+): Aglyn.PresetSchema[] {
+  const generic = muiPluginInstallToPreset(install)
+  const presets = generic ? [generic] : []
+  const listingId = install.listingId ?? install.$id
+  if (!listingId) return presets
+
+  for (const element of Aglyn.resolvePluginElements({
+    listingId,
+    capabilities: (install as any).manifest?.capabilities,
+    manifest: (install as any).manifest,
+  })) {
+    // The declared icon is an mdi NAME; look it up in the set the host already
+    // ships. An unresolved name falls back to the puzzle mark rather than
+    // rendering nothing — the entry is still placeable, which matters more
+    // than the glyph.
+    const declared = element.icon ? MdiIcons.get(element.icon as never) : undefined
+    presets.push({
+      $id: `plugin__${listingId}__${element.elementId}`,
+      type: Aglyn.NodeType.PRESET,
+      displayName: element.displayName,
+      pluginId: BUNDLE_ID,
+      description: element.description ?? 'Installed marketplace plugin',
+      category: element.category,
+      icon: {
+        path: (declared as { path?: string } | undefined)?.path ?? mdiPuzzle.path,
+        sx: { color: '#5e35b1' },
+      },
+      data: {
+        $id: null,
+        componentId: ID,
+        pluginId: BUNDLE_ID,
+        props: { listingId, elementId: element.elementId },
+        ...(install.manifest?.restrictParent
+          ? { restrictParent: install.manifest.restrictParent }
+          : {}),
+        ...(install.manifest?.restrictChildren
+          ? { restrictChildren: install.manifest.restrictChildren }
+          : {}),
+      } as any,
+    })
+  }
+  return presets
 }
 
 export default MarketplacePlugin
