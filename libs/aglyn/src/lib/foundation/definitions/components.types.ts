@@ -151,6 +151,22 @@ export interface AglynComponentSchema<P = any> {
      * `html` prop with `children` as the plain-text fallback.
      */
     richTextEditable?: FEATURE_FLAG
+    /**
+     * Component reads its children POSITIONALLY (AGL-1237), so the renderer
+     * must hand it one React child per node child instead of the single
+     * `<Branch>` element it normally passes.
+     *
+     * MUI's Accordion does `const [summary, ...rest] = Children.toArray(children)`,
+     * and `toArray` does not traverse into an element — so with the default
+     * wrapping the summary swallowed the whole subtree and the Collapse got
+     * nothing. Every accordion on every published site expanded to reveal an
+     * empty panel while its content rendered unconditionally inside the
+     * summary's `<h3>`.
+     *
+     * Opt in only for components with this contract; the wrapper is what
+     * keeps the Branch/Stem/Leaf seam swappable for everything else.
+     */
+    positionalChildren?: FEATURE_FLAG
   }
 
   /**

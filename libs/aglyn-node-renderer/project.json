@@ -3,21 +3,40 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/aglyn-node-renderer/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:feature", "scope:aglyn"],
+  "tags": [
+    "scope:lib",
+    "scope:feature",
+    "scope:aglyn"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "outputPath": "dist/libs/aglyn-node-renderer",
         "main": "libs/aglyn-node-renderer/src/index.ts",
         "tsConfig": "libs/aglyn-node-renderer/tsconfig.lib.json",
-        "assets": ["libs/aglyn-node-renderer/*.md"]
+        "assets": [
+          "libs/aglyn-node-renderer/*.md"
+        ]
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
+      "outputs": [
+        "{options.outputFile}"
+      ]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/aglyn-node-renderer"
+      ],
+      "options": {
+        "jestConfig": "libs/aglyn-node-renderer/jest.config.ts"
+      }
     }
   }
 }
