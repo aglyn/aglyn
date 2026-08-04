@@ -72,6 +72,38 @@ for p in besigner console commerce forms media workflows plugins analytics marke
     "https://aglyn-marketing.aglyn.app/product/$p"; done
 ```
 
+## 1c. Confirm the deploy-quota fix held (AGL-1187) — one command
+
+The 24 h window before 2026-08-04 02:00Z had **94 deployments, only 33 of which
+built**, and we were rate-limited. `aglyn-plugins` alone was **52 of them, all
+CANCELED** — 55% of the daily allowance producing nothing. It was missing from
+the original audit entirely, which counted four projects when there are five.
+
+That settled the issue's open question: **CANCELED deployments DO count**. If
+they did not, 33 builds could not have hit any limit.
+
+Fixed in `6d21d5a3c` / `18c583362` plus a dashboard change. Expected steady
+state is ~36/day. Verify with:
+
+```bash
+TOKEN=$(grep '^VERCEL_TOKEN=' apps/console/.env.production.local | sed 's/^VERCEL_TOKEN=//' | tr -d '"')
+SINCE=$(python3 -c "import time; print(int(time.time()*1000)-86400000)")
+for P in prj_gEzxEXc0Lhs81rmaXIg2a1GbsDfl:console \
+         QmVstR8xiYtabTkVo2t9NNsiYY72nSTbNr1MGDLffzZeLn:tenant \
+         prj_UiyUa88GW3qpzOrtEUCcJYSL3doA:docs \
+         prj_M8L61z2z7P7157vGq0AaFbG1BZCg:plugins; do
+  id=${P%%:*}; n=${P##*:}
+  printf "%-8s " "$n"
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    "https://api.vercel.com/v6/deployments?projectId=$id&teamId=team_JFfQodGE8VhCAZM6usYTu54M&since=$SINCE&limit=100" \
+    | python3 -c "import sys,json;from collections import Counter;d=json.load(sys.stdin)['deployments'];print(len(d),dict(Counter(x['state'] for x in d)))"
+done
+```
+
+**plugins should be at or near zero.** If it is not, the dashboard Production
+Branch has probably been set back to `main` — see the note in
+`tools/scripts/vercel-ignore-build.sh`, the two settings must move together.
+
 ## 2. AGL-523 — READY TO FLIP. Everything that gated it is cleared.
 
 **Do not re-derive any of this — it was all measured.** The canvas click-test
