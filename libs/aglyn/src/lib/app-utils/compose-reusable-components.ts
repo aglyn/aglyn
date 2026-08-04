@@ -15,13 +15,36 @@
  * limitations under the License.
  */
 
-import type { AglynNodeSchema, NodeId } from '../foundation'
+import type {
+  AglynNodeSchema,
+  NodeId,
+  ReusableComponentProp,
+} from '../foundation'
+import { resolveNamedTokens } from './resolve-named-tokens'
 
 /**
  * Persisted component id of a reusable-component instance node. Persisted in
  * screen documents — never rename (cf. `layoutSlot`, legacy `muiXxx` ids).
  */
 export const REUSABLE_INSTANCE_COMPONENT_ID = 'reusableInstance'
+
+/**
+ * Prop key on an instance node holding its per-instance prop values, keyed
+ * by declared prop name (AGL-1247).
+ *
+ * Nested under one key rather than spread across the instance's own props
+ * so a prop named `refId` or `name` cannot shadow the reference itself, and
+ * so the string-prop walkers (`resolveNodesBindings`, the sanitizers) skip
+ * the whole object — values reach a page only through the graft below.
+ */
+export const REUSABLE_INSTANCE_PROP_VALUES_KEY = 'propValues'
+
+/**
+ * Token namespace a definition uses to reference its own declared props:
+ * `{{prop.headline}}`. Mirrors `{{entry.*}}` and `{{host.*}}` so authors
+ * meet one token syntax, not a second one invented for components.
+ */
+export const COMPONENT_PROP_TOKEN_PREFIX = 'prop.'
 
 /**
  * Prefix namespacing a grafted definition's node ids per instance, so the
@@ -43,10 +66,41 @@ export interface ReusableComponentTree<
 > {
   rootId: NodeId
   nodes: NormalizedNodes<N>
+  /** Props this definition declares (AGL-1247); absent = unparameterised. */
+  props?: ReusableComponentProp[]
 }
 
 function instancePrefix(instanceId: NodeId) {
   return `${COMPONENT_NODE_ID_PREFIX}${instanceId}__`
+}
+
+/**
+ * Token map for one instance: each declared prop resolved to that
+ * instance's override, or to the definition's default where it set none.
+ *
+ * An override of `''` counts as unset, not as "render nothing" — an empty
+ * Attributes field shows the placeholder, so clearing one restores the
+ * component's own copy rather than silently collapsing a section on a live
+ * page. `false` and `0` are real values and survive.
+ */
+function buildPropTokens(
+  declared: ReusableComponentProp[] | undefined,
+  instanceProps: unknown,
+): Record<string, string> {
+  if (!declared?.length) return {}
+  const values = (instanceProps as Record<string, unknown> | undefined)?.[
+    REUSABLE_INSTANCE_PROP_VALUES_KEY
+  ] as Record<string, unknown> | undefined
+  const tokens: Record<string, string> = {}
+  for (const prop of declared) {
+    if (!prop?.name) continue
+    const override = values?.[prop.name]
+    const value =
+      override == null || override === '' ? prop.defaultValue : override
+    tokens[`${COMPONENT_PROP_TOKEN_PREFIX}${prop.name}`] =
+      value == null ? '' : String(value)
+  }
+  return tokens
 }
 
 /**
@@ -62,6 +116,10 @@ function instancePrefix(instanceId: NodeId) {
  * - Definitions may contain instances of other definitions; expansion
  *   repeats up to {@link MAX_COMPONENT_DEPTH} passes, which also bounds
  *   accidental self-reference.
+ * - A definition's declared props (AGL-1247) resolve per instance as the
+ *   subtree is grafted: `{{prop.name}}` tokens take that instance's
+ *   override, falling back to the prop's default. This is what lets one
+ *   hero serve eleven pages instead of being copied onto each.
  * - Inputs are never mutated.
  */
 export function composeReusableComponentNodes<
@@ -97,9 +155,10 @@ export function composeReusableComponentNodes<
       const prefix = instancePrefix(instanceId)
       const prefixId = (id: NodeId) => `${prefix}${id}`
 
+      const grafted: NormalizedNodes<N> = {}
       for (const [defId, defNode] of Object.entries(definition.nodes)) {
         if (!defNode) continue
-        next[prefixId(defId)] = {
+        grafted[prefixId(defId)] = {
           ...defNode,
           $id: prefixId(defNode.$id ?? defId),
           parentId:
@@ -115,6 +174,21 @@ export function composeReusableComponentNodes<
           }),
         }
       }
+      // Declared props (AGL-1247) substitute HERE, on this instance's copy
+      // of the subtree — the only point in the pipeline where per-instance
+      // scope exists, since after the merge every grafted node is just
+      // another entry in one flat map.
+      //
+      // The value lands in a real string prop and compose runs graft →
+      // repeatables → `resolveNodesBindings`, so a `{{var:id}}` typed into
+      // an override still resolves downstream for free.
+      Object.assign(
+        next,
+        resolveNamedTokens(
+          grafted,
+          buildPropTokens(definition.props, instanceNode.props),
+        ),
+      )
       next[instanceId] = {
         ...instanceNode,
         nodes: [prefixId(definition.rootId)],

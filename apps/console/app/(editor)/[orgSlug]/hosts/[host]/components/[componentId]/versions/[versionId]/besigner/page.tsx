@@ -262,9 +262,16 @@ function ComponentBesignerPage(props) {
       }
       const publishedNodes = definition.nodes
       const rootId = definition.rootId ?? componentResult?.data?.rootId
+      // Declared props publish with the tree (AGL-1247), for the same
+      // reason `rootId` does: the tenant reads the parent doc, so props
+      // left behind on the version would graft every `{{prop.*}}` token
+      // unresolved on the live site while the editor looked correct.
+      const declaredProps = (data as { props?: Aglyn.ReusableComponentProp[] })
+        ?.props
       await updateDoc(doc(firestore, 'hosts', hostId, 'components', componentId), {
         nodes: publishedNodes,
         ...(rootId ? { rootId } : {}),
+        props: declaredProps ?? [],
         versionId,
         updatedAt: Timestamp.now(),
       })
@@ -293,6 +300,7 @@ function ComponentBesignerPage(props) {
     componentId,
     versionId,
     componentResult?.data?.rootId,
+    data,
     enqueueSnackbar,
   ])
 

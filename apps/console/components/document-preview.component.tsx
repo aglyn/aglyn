@@ -110,6 +110,9 @@ export function DocumentPreview(props: DocumentPreviewProps) {
           next[docSnapshot.id] = {
             rootId: value.rootId,
             nodes: value.nodes as Aglyn.ReusableComponentTree['nodes'],
+            // Preview is a third render surface (AGL-1247): it must agree
+            // with the tenant about each instance's prop values.
+            ...(value.props?.length && { props: value.props }),
           }
         }
         setDefinitions(next)
