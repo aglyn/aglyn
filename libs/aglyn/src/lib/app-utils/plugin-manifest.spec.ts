@@ -25,6 +25,8 @@ import {
   type PluginRevocation,
   pluginArtifactPath,
   validatePluginManifest,
+  resolvePluginPropFields,
+  unknownPluginPropKeys,
 } from './plugin-manifest'
 
 const base = {
@@ -273,5 +275,214 @@ describe('nextRevocationState (AGL-1085)', () => {
     state = nextRevocationState(state, { type: 'restore' })
     expect(revoked(state, '1.0.0')).toBe(true)
     expect(revoked(state, '2.0.0')).toBe(false)
+  })
+})
+
+/* ---- declared prop schema (AGL-1049) ---- */
+
+describe('capabilities.propSchema — authoring metadata, never a second allowlist', () => {
+  const manifest = (capabilities: Record<string, unknown>) => ({
+    id: 'promo',
+    name: 'Promo',
+    version: '1.0.0',
+    entry: 'index.js',
+    capabilities,
+  })
+
+  it('keeps a schema entry for a declared prop', () => {
+    const result = validatePluginManifest(
+      manifest({
+        props: ['title'],
+        propSchema: [
+          { name: 'title', type: 'string', label: 'Headline', default: 'Sale' },
+        ],
+      }),
+    )
+    expect(result.ok).toBe(true)
+    expect((result as any).manifest.capabilities.propSchema).toEqual([
+      { name: 'title', type: 'string', label: 'Headline', default: 'Sale' },
+    ])
+  })
+
+  it('DROPS a schema entry for a prop that was never declared', () => {
+    // The security property: describing a prop must not grant it. Dropped
+    // rather than rejected — a publisher who forgot to declare it made an
+    // authoring mistake, and failing the whole publish over a label is worse.
+    const result = validatePluginManifest(
+      manifest({
+        props: ['title'],
+        propSchema: [
+          { name: 'title', type: 'string' },
+          { name: 'secretToken', type: 'string', label: 'Token' },
+        ],
+      }),
+    )
+    expect(result.ok).toBe(true)
+    const schema = (result as any).manifest.capabilities.propSchema
+    expect(schema.map((entry: any) => entry.name)).toEqual(['title'])
+  })
+
+  it('never widens what crosses the bridge', () => {
+    const result = validatePluginManifest(
+      manifest({
+        props: ['title'],
+        propSchema: [{ name: 'secretToken', type: 'string' }],
+      }),
+    )
+    // props is untouched, and an all-dropped schema is simply absent.
+    expect((result as any).manifest.capabilities.props).toEqual(['title'])
+    expect((result as any).manifest.capabilities.propSchema).toBeUndefined()
+  })
+
+  it('degrades an unknown type to text rather than refusing the plugin', () => {
+    // A manifest written against a newer platform must still install.
+    const result = validatePluginManifest(
+      manifest({ props: ['title'], propSchema: [{ name: 'title', type: 'quantum' }] }),
+    )
+    expect(result.ok).toBe(true)
+    expect((result as any).manifest.capabilities.propSchema[0].type).toBe(
+      'string',
+    )
+  })
+
+  it('rejects a name that is not an identifier, and junk entries', () => {
+    const result = validatePluginManifest(
+      manifest({
+        props: ['title'],
+        propSchema: [
+          { name: 'no-hyphens' },
+          null,
+          'not an object',
+          { type: 'string' },
+          { name: 'title' },
+        ],
+      }),
+    )
+    expect(result.ok).toBe(true)
+    expect(
+      (result as any).manifest.capabilities.propSchema.map((e: any) => e.name),
+    ).toEqual(['title'])
+  })
+
+  it('deduplicates repeated names', () => {
+    const result = validatePluginManifest(
+      manifest({
+        props: ['title'],
+        propSchema: [
+          { name: 'title', label: 'First' },
+          { name: 'title', label: 'Second' },
+        ],
+      }),
+    )
+    expect(
+      (result as any).manifest.capabilities.propSchema,
+    ).toHaveLength(1)
+    expect((result as any).manifest.capabilities.propSchema[0].label).toBe(
+      'First',
+    )
+  })
+
+  it('bounds publisher-authored text', () => {
+    const result = validatePluginManifest(
+      manifest({
+        props: ['title'],
+        propSchema: [{ name: 'title', label: 'x'.repeat(5000) }],
+      }),
+    )
+    expect(
+      (result as any).manifest.capabilities.propSchema[0].label.length,
+    ).toBeLessThanOrEqual(200)
+  })
+
+  it('refuses an absurd number of schema entries', () => {
+    const result = validatePluginManifest(
+      manifest({
+        props: ['title'],
+        propSchema: Array.from({ length: 500 }, (_, i) => ({ name: `p${i}` })),
+      }),
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  it('keeps select options, dropping unusable ones', () => {
+    const result = validatePluginManifest(
+      manifest({
+        props: ['size'],
+        propSchema: [
+          {
+            name: 'size',
+            type: 'select',
+            options: [{ value: 'sm', label: 'Small' }, { label: 'no value' }, {}],
+          },
+        ],
+      }),
+    )
+    expect((result as any).manifest.capabilities.propSchema[0].options).toEqual([
+      { value: 'sm', label: 'Small' },
+    ])
+  })
+})
+
+describe('resolvePluginPropFields', () => {
+  it('is driven by the ALLOWLIST, decorated by the schema', () => {
+    expect(
+      resolvePluginPropFields({
+        capabilities: {
+          props: ['title', 'accent'],
+          propSchema: [{ name: 'title', type: 'string', label: 'Headline' }],
+        },
+      }),
+    ).toEqual([
+      { name: 'title', type: 'string', label: 'Headline' },
+      // No schema entry: still editable, as plain text named by its key.
+      { name: 'accent', type: 'string', label: 'accent' },
+    ])
+  })
+
+  it('gives a pre-propSchema plugin a field per declared prop', () => {
+    // Every plugin installed today predates this, so this is the common case.
+    expect(
+      resolvePluginPropFields({ capabilities: { props: ['city'] } }),
+    ).toEqual([{ name: 'city', type: 'string', label: 'city' }])
+  })
+
+  it('cannot be longer than the allowlist, whatever the schema says', () => {
+    const fields = resolvePluginPropFields({
+      capabilities: {
+        props: ['title'],
+        propSchema: [
+          { name: 'title' },
+          { name: 'sneaky', type: 'string', label: 'Sneaky' },
+        ],
+      },
+    })
+    expect(fields.map((field) => field.name)).toEqual(['title'])
+  })
+
+  it('is empty for a plugin declaring no props', () => {
+    expect(resolvePluginPropFields({ capabilities: {} })).toEqual([])
+    expect(resolvePluginPropFields(null)).toEqual([])
+  })
+})
+
+describe('unknownPluginPropKeys — name the key that does nothing', () => {
+  const manifest = { capabilities: { props: ['title'] } }
+
+  it('names a key the plugin will silently ignore', () => {
+    expect(unknownPluginPropKeys(manifest, { title: 'a', titel: 'typo' })).toEqual(
+      ['titel'],
+    )
+  })
+
+  it('says nothing when every key is declared', () => {
+    expect(unknownPluginPropKeys(manifest, { title: 'a' })).toEqual([])
+  })
+
+  it('treats a plugin with no declared props as ignoring everything', () => {
+    expect(unknownPluginPropKeys({ capabilities: {} }, { a: 1 })).toEqual(['a'])
+  })
+
+  it('is empty for no values', () => {
+    expect(unknownPluginPropKeys(manifest, null)).toEqual([])
   })
 })
