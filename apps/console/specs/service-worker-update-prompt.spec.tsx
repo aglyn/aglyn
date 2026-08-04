@@ -33,7 +33,7 @@
  *    and prompting there trains people to dismiss the thing that matters.
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // `mock`-prefixed because a jest.mock factory is hoisted above the file and
 // may not close over an ordinary out-of-scope variable.
@@ -48,6 +48,7 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 
 import ServiceWorkerRegistrar, {
+  resetUpdatePromptGuard,
   createReloadOnce,
 } from '../components/service-worker-registrar.component'
 
@@ -59,10 +60,24 @@ function installFakeServiceWorker(opts: {
   const postMessage = jest.fn()
   const waiting = { postMessage, state: 'installed' }
   const controllerListeners: (() => void)[] = []
+  // `updatefound` → the installing worker reaching `installed` is how a
+  // deploy that lands WHILE the page is open surfaces. Modelled properly
+  // because that is now the only path that prompts (AGL-1258).
+  const updateFoundListeners: (() => void)[] = []
+  const installingStateListeners: (() => void)[] = []
+  const installing = {
+    postMessage,
+    state: 'installing',
+    addEventListener: jest.fn((type: string, fn: () => void) => {
+      if (type === 'statechange') installingStateListeners.push(fn)
+    }),
+  }
   const registration = {
     waiting: opts.waiting ? waiting : null,
-    installing: null,
-    addEventListener: jest.fn(),
+    installing: null as typeof installing | null,
+    addEventListener: jest.fn((type: string, fn: () => void) => {
+      if (type === 'updatefound') updateFoundListeners.push(fn)
+    }),
   }
   const container = {
     register: jest.fn(async () => registration),
@@ -78,6 +93,14 @@ function installFakeServiceWorker(opts: {
   return {
     postMessage,
     waiting,
+    registration,
+    /** A new build arrives while the page is open. */
+    emitUpdateFound: () => {
+      registration.installing = installing
+      for (const fn of [...updateFoundListeners]) fn()
+      installing.state = 'installed'
+      for (const fn of [...installingStateListeners]) fn()
+    },
     /** Fire controllerchange n times, as a real browser may. */
     fireControllerChange: (times = 1) => {
       for (let i = 0; i < times; i += 1) {
@@ -92,6 +115,9 @@ describe('service worker update prompt (AGL-1055)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    // The prompt guard is module scope by design (AGL-1258), so it survives
+    // remounts — and would otherwise survive between these cases too.
+    resetUpdatePromptGuard()
     // The component is production-gated; a dev-mode run would pass every
     // assertion below by doing nothing at all.
     Object.defineProperty(process.env, 'NODE_ENV', {
@@ -107,15 +133,52 @@ describe('service worker update prompt (AGL-1055)', () => {
     })
   })
 
-  it('offers a reload when a worker is already waiting', async () => {
-    installFakeServiceWorker({ waiting: true, controller: true })
+  /**
+   * Changed in AGL-1258, deliberately. This used to prompt, and that was a
+   * trap: a worker already waiting when the page LOADS is adopted silently
+   * instead.
+   *
+   * AGL-1055's rule is "never swap the build out from under a live page", and
+   * a page that has only just loaded is not a live page — no unsaved work,
+   * nothing mid-edit, and the HTML in front of you already came from the
+   * network, so it is already the new build. Left as a prompt, someone who
+   * reloads without clicking Reload saw the same notice on every load
+   * forever, which is how a toast teaches people to ignore it. Observed in
+   * production as `active: true, waiting: true` surviving repeated reloads.
+   */
+  it('adopts a worker that was already waiting, without prompting', async () => {
+    const sw = installFakeServiceWorker({ waiting: true, controller: true })
     render(<ServiceWorkerRegistrar />)
+    await waitFor(() =>
+      expect(sw.postMessage).toHaveBeenCalledWith({ type: 'SKIP_WAITING' }),
+    )
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+  })
+
+  it('offers a reload for a build that arrives WHILE the page is open', async () => {
+    // The case AGL-1055 actually exists for: you are mid-edit and a deploy
+    // lands. This one still asks, and still never auto-hides.
+    const sw = installFakeServiceWorker({ waiting: false, controller: true })
+    render(<ServiceWorkerRegistrar />)
+    // `register()` resolves asynchronously, and the `updatefound` listener is
+    // only attached in its `.then` — emitting before that lands silently
+    // proves nothing.
+    await waitFor(() =>
+      expect(sw.registration.addEventListener).toHaveBeenCalledWith(
+        'updatefound',
+        expect.any(Function),
+      ),
+    )
+    await act(async () => {
+      sw.emitUpdateFound()
+    })
     await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
     const [message, options] = mockEnqueueSnackbar.mock.calls[0]
     expect(String(message)).toMatch(/new version/i)
-    // Persist: the old build keeps working, so this must never auto-hide or
-    // hurry someone who is mid-edit.
     expect(options.persist).toBe(true)
+    // Suppresses a second copy of the same toast (AGL-1258) — two stacked
+    // prompts is what was seen in production.
+    expect(options.allowDuplicate).toBe(true)
   })
 
   it('does NOT prompt on a first install (no controller)', async () => {
@@ -128,8 +191,19 @@ describe('service worker update prompt (AGL-1055)', () => {
   })
 
   it('promotes the worker only on the click', async () => {
-    const sw = installFakeServiceWorker({ waiting: true, controller: true })
+    // Must be the mid-session path: a worker already waiting at load is now
+    // adopted without asking, so it could never prove "only on the click".
+    const sw = installFakeServiceWorker({ waiting: false, controller: true })
     render(<ServiceWorkerRegistrar />)
+    await waitFor(() =>
+      expect(sw.registration.addEventListener).toHaveBeenCalledWith(
+        'updatefound',
+        expect.any(Function),
+      ),
+    )
+    await act(async () => {
+      sw.emitUpdateFound()
+    })
     await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
 
     // Nothing happens until the user asks — the old build keeps working.
