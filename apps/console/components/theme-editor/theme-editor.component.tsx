@@ -101,6 +101,30 @@ function setSchemeValue(
 }
 
 /**
+ * MUI's own toolbar breakpoint. `mixins.toolbar` has to carry this exact
+ * query, because the rule it competes with is MUI's `@media (min-width:600px)
+ * { min-height: 64px }` (AGL-1242).
+ */
+const TOOLBAR_SM_MIN_WIDTH = 600
+const TOOLBAR_SM_QUERY = `@media (min-width:${TOOLBAR_SM_MIN_WIDTH}px)`
+/** MUI's stock Toolbar heights, shown when the host has set none. */
+const DEFAULT_TOOLBAR_XS = 56
+const DEFAULT_TOOLBAR_SM = 64
+
+/** Reads a px `minHeight` out of `mixins.toolbar` for one breakpoint. */
+function readToolbarHeight(theme: HostTheme, breakpoint: 'xs' | 'sm') {
+  const toolbar = theme.mixins?.toolbar
+  if (!toolbar) return undefined
+  const raw =
+    breakpoint === 'xs'
+      ? toolbar.minHeight
+      : (toolbar[TOOLBAR_SM_QUERY] as { minHeight?: unknown } | undefined)
+          ?.minHeight
+  const value = parseFloat(String(raw ?? ''))
+  return Number.isFinite(value) ? value : undefined
+}
+
+/**
  * Host theme editor: palette, typography, shape/spacing controls with a live
  * preview per color scheme. All edits stay in local draft state until Save.
  */
@@ -303,6 +327,34 @@ export function ThemeEditor(props: ThemeEditorProps) {
     })
   }, [])
 
+  // Nav height has to travel as `mixins.toolbar` (AGL-1242) — MUI builds the
+  // Toolbar's `regular` variant from it and applies that variant AFTER
+  // `components.MuiToolbar.styleOverrides`, so a slot override never wins.
+  // The `sm` query is MUI's own toolbar breakpoint, which is what these
+  // values have to outrank.
+  const handleToolbarHeightChange = useCallback(
+    (breakpoint: 'xs' | 'sm') => (event) => {
+      const value = Number(event.target.value)
+      setDraft((prev) => {
+        const toolbar = { ...(prev.mixins?.toolbar ?? {}) }
+        const valid = Number.isFinite(value) && value > 0
+        if (breakpoint === 'xs') {
+          if (valid) toolbar.minHeight = `${value}px`
+          else delete toolbar.minHeight
+        } else if (valid) {
+          toolbar[TOOLBAR_SM_QUERY] = { minHeight: `${value}px` }
+        } else {
+          delete toolbar[TOOLBAR_SM_QUERY]
+        }
+        const next = { ...prev }
+        if (Object.keys(toolbar).length) next.mixins = { toolbar }
+        else delete next.mixins
+        return next
+      })
+    },
+    [],
+  )
+
   const [overridesOpen, setOverridesOpen] = useState(false)
   const handleOverridesSave = useCallback(
     (_, value) => {
@@ -489,6 +541,27 @@ export function ThemeEditor(props: ThemeEditorProps) {
                 onChange={handleSpacingChange}
                 slotProps={{ htmlInput: { min: 2, max: 16 } }}
               />
+              <Stack direction="row" spacing={2}>
+                <TextField
+                  type="number"
+                  size="small"
+                  fullWidth
+                  label="Nav height, mobile (px)"
+                  value={readToolbarHeight(draft, 'xs') ?? DEFAULT_TOOLBAR_XS}
+                  onChange={handleToolbarHeightChange('xs')}
+                  slotProps={{ htmlInput: { min: 40, max: 160 } }}
+                />
+                <TextField
+                  type="number"
+                  size="small"
+                  fullWidth
+                  label="Nav height, desktop (px)"
+                  helperText={`Applies from ${TOOLBAR_SM_MIN_WIDTH}px up`}
+                  value={readToolbarHeight(draft, 'sm') ?? DEFAULT_TOOLBAR_SM}
+                  onChange={handleToolbarHeightChange('sm')}
+                  slotProps={{ htmlInput: { min: 40, max: 160 } }}
+                />
+              </Stack>
             </Stack>
           </CardDisplay>
 
