@@ -43,6 +43,7 @@ import {
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
+import { stableStringify } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import ColorField from './color-field.component'
@@ -141,6 +142,33 @@ export function ThemeEditor(props: ThemeEditorProps) {
   const { theme, saving, onSave } = props
   const [draft, setDraft] = useState<HostTheme>(() => theme ?? {})
   const [scheme, setScheme] = useState<HostThemeScheme>('light')
+
+  /**
+   * Re-seed the draft when the saved theme changes underneath us (AGL-1021).
+   *
+   * The draft used to be seeded once, on mount, which was correct while this
+   * editor was the only writer. It is not any more: resetting one overridden
+   * field from the "What you have changed" card rewrites the theme this editor
+   * is showing, and a draft that ignored it kept rendering the old value — and
+   * would have written it straight back on the next Save, silently undoing the
+   * reset.
+   *
+   * Compared by CONTENT, not identity: the parent re-memoizes the resolved
+   * theme on every Firestore snapshot, so an identity check would re-seed (and
+   * discard in-progress edits) constantly. `stableStringify` and not
+   * `JSON.stringify` because the saved doc round-trips through Firestore with a
+   * different key order than the local draft — the same thing that left the
+   * save buttons enabled forever in AGL-56.
+   */
+  const themeKey = useMemo(() => stableStringify(theme ?? {}), [theme])
+  const [seededKey, setSeededKey] = useState(themeKey)
+  if (seededKey !== themeKey) {
+    // Adjusting state during render — React's documented alternative to an
+    // effect for "reset state when a prop changes". It re-renders immediately
+    // without painting the stale draft.
+    setSeededKey(themeKey)
+    setDraft(theme ?? {})
+  }
   // Sanitize both sides and compare order-insensitively (AGL-56): the saved
   // doc round-trips through Firestore with different key order than the local
   // draft, and the draft is only sanitized at save time — a string compare

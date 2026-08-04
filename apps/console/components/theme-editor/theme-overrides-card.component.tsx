@@ -220,8 +220,9 @@ export function ThemeOverridesCard(props: {
           <>
             <Typography variant="body2" color="text.secondary">
               {`${entries.length} value${entries.length === 1 ? '' : 's'} ` +
-                'differ from the published theme. Taking an update keeps ' +
-                'these and applies the rest.'}
+                `${entries.length === 1 ? 'differs' : 'differ'} from the ` +
+                'published theme. Taking an update keeps these and applies ' +
+                'the rest.'}
             </Typography>
             <Box sx={{ overflowX: 'auto' }}>
               <Table size="small">
