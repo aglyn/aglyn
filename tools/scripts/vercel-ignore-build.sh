@@ -42,6 +42,23 @@
 # Use the first to pick which branches deploy at all; the second to skip work
 # within a branch that does.
 #
+# OUT-OF-REPO DEPENDENCY, and the reason this paragraph exists: the plugins
+# project's `deploymentEnabled: {production: true, main: false}` is only correct
+# because its Vercel **Production Branch** is `production`. That setting is
+# dashboard state, not repo state, and it was `main` until 2026-08-04 — while it
+# was, `main: false` would have meant the project serving `plugins.aglyn.com`
+# received NO production deployments at all, silently, since a push to
+# `production` would have been a preview.
+#
+# So the two must move together. If anyone sets the branch back, set
+# `main: true` in the same change or the origin quietly stops updating.
+#
+# The setting is NOT on the Git settings page any more (that cost a search):
+#   Project -> Settings -> Environments -> Production -> Branch Tracking
+# Verify it from outside the UI, which is what actually caught a missed click:
+#   curl -H "Authorization: Bearer $VERCEL_TOKEN" \
+#     "https://api.vercel.com/v9/projects/<id>?teamId=<team>" | jq .link.productionBranch
+#
 # Usage:  tools/scripts/vercel-ignore-build.sh <app> [base] [head]
 #
 # EXIT CODES ARE VERCEL'S, AND THEY READ BACKWARDS:
