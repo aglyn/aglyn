@@ -168,38 +168,59 @@ describe('CSP violation reporting (AGL-523)', () => {
     )
   })
 
-  it('sends BOTH directives on the report-only policy', async () => {
+  it('sends BOTH directives on the enforcing policy', async () => {
     const response = await middleware(request('app.aglyn.com'))
-    const policy = response.headers.get('Content-Security-Policy-Report-Only')
+    const policy = response.headers.get('Content-Security-Policy')
     // Both, not either: `report-uri` is deprecated but is what Safari and
     // older Chrome actually send, and `report-to` is what the modern ones use.
     expect(policy).toContain(`report-uri ${REPORT_PATH}`)
     expect(policy).toContain('report-to csp')
   })
 
-  it('reports on the ENFORCING policy too, not just report-only', async () => {
-    // Once enforcing is the default a violation is a script that did NOT run.
-    // That is the most urgent thing the log can carry, so it must not be the
-    // one case that reports nowhere.
-    const response = await middleware(
-      request('app.aglyn.com', '/signin?csp=enforce'),
-    )
+  it('enforces script-src with a nonce by DEFAULT, with no opt-in', async () => {
+    // The AGL-523 flip. There was a `?csp=enforce` cookie that armed this for
+    // one session; it is gone, so a plain request must already be enforcing.
+    const response = await middleware(request('app.aglyn.com'))
     const enforced = response.headers.get('Content-Security-Policy')
-    expect(enforced).toContain(`report-uri ${REPORT_PATH}`)
-    expect(enforced).toContain('report-to csp')
-    // The control: this only means anything if the policy is genuinely the
-    // enforcing one, carrying script-src and a nonce.
     expect(enforced).toMatch(/script-src[^;]*'nonce-[a-f0-9]{32}'/)
+    // A violation here is a script that did NOT run — the most urgent thing
+    // the log can carry, so it must not be the one case reporting nowhere.
+    expect(enforced).toContain(`report-uri ${REPORT_PATH}`)
   })
 
-  it('reports in the DEFAULT state, which is the one production is in', async () => {
+  it('emits exactly ONE policy header, never a report-only twin', async () => {
+    // This is the regression guard for the bug that cost AGL-523 months. Next
+    // resolves the nonce as `content-security-policy || …-report-only`, so a
+    // second header does not add a policy — it SHADOWS the nonce, and every
+    // script renders `nonce="$undefined"` while a valid nonce sits unused.
+    // One header carrying script-src is what makes the nonce real.
     const response = await middleware(request('app.aglyn.com'))
-    // The default enforcing header carries no script-src — that is the
-    // documented shadowing tradeoff — but it still has base directives that
-    // can be violated, and those violations are worth seeing.
-    expect(response.headers.get('Content-Security-Policy')).toContain(
-      `report-uri ${REPORT_PATH}`,
+    expect(response.headers.get('Content-Security-Policy-Report-Only')).toBeNull()
+    expect(response.headers.get('Content-Security-Policy')).toContain('script-src')
+  })
+
+  it('does not honour the retired ?csp= opt-in', async () => {
+    // `?csp=off` used to disarm enforcement for a session. If that still
+    // worked it would be a way for a link to WEAKEN the policy, which is the
+    // opposite of what the affordance was for.
+    const response = await middleware(
+      request('app.aglyn.com', '/signin?csp=off'),
     )
+    expect(response.headers.get('Content-Security-Policy')).toMatch(
+      /script-src[^;]*'nonce-[a-f0-9]{32}'/,
+    )
+    expect(response.cookies.get('aglyn-csp-enforce')).toBeUndefined()
+  })
+
+  it('keeps `strict-dynamic` OUT of the enforcing policy', async () => {
+    // Measured, not assumed: the same signed-in flow produced 1 violation
+    // under `'self' https: blob:` and 70 under `'strict-dynamic'`, because
+    // nonce propagation does not reach Next's chunk loads — so `'self'` going
+    // inert takes the whole bundle with it. Re-adopting it blanks the console.
+    const response = await middleware(request('app.aglyn.com'))
+    const policy = response.headers.get('Content-Security-Policy') ?? ''
+    expect(policy).not.toContain('strict-dynamic')
+    expect(policy).toContain("script-src 'self' https: blob:")
   })
 
   it('points reporting at a same-origin path, never an absolute URL', async () => {
