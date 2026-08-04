@@ -22,6 +22,7 @@ import { act, renderHook } from '@testing-library/react'
 import * as Aglyn from '@aglyn/aglyn'
 import {
   ATTRIBUTE_COMMIT_DEBOUNCE_MS,
+  buildInstancePropFields,
   elementPropsComponentMapper,
   useDebouncedCommit,
 } from './element-props-form.component'
@@ -149,4 +150,87 @@ describe('elementPropsComponentMapper coverage (AGL-584)', () => {
       expect(elementPropsComponentMapper[key]).toBeDefined()
     },
   )
+})
+
+// A reusable component's declared props become Attributes fields (AGL-1247).
+// The contract that matters is that the field NAME addresses the same place
+// `composeReusableComponentNodes` reads its overrides from — a field that
+// saved somewhere else would look like it worked and change nothing.
+describe('buildInstancePropFields (AGL-1247)', () => {
+  const declared = [
+    { name: 'headline', type: 'text' as const, defaultValue: 'Headline here' },
+    { name: 'image', type: 'image' as const, label: 'Hero image' },
+    { name: 'body', type: 'richText' as const },
+    { name: 'count', type: 'number' as const },
+    { name: 'boxed', type: 'boolean' as const },
+  ]
+
+  it('names each field for the path the graft reads overrides from', () => {
+    const fields = buildInstancePropFields(declared)
+    expect(fields.map((field) => field.name)).toEqual([
+      'propValues.headline',
+      'propValues.image',
+      'propValues.body',
+      'propValues.count',
+      'propValues.boxed',
+    ])
+    // Not a hardcoded string on either side: the panel and the graft must
+    // agree through the same constant, or overrides save into a key the
+    // renderer never looks at.
+    for (const field of fields) {
+      expect(String(field.name).split('.')[0]).toBe(
+        Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY,
+      )
+    }
+  })
+
+  it('picks a registered editor for every declared type', () => {
+    const fields = buildInstancePropFields(declared)
+    // AGL-584: an unregistered editor throws and blanks the whole panel.
+    for (const field of fields) {
+      expect(String(field.component) in elementPropsComponentMapper).toBe(true)
+    }
+    expect(fields[0].component).toBe(TOKEN_TEXT_FIELD_COMPONENT)
+    expect(fields[2]).toMatchObject({ multiline: true })
+    expect(fields[3]).toMatchObject({ type: 'number' })
+    expect(fields[4].component).toBe(Aglyn.FieldComponentType.CHECKBOX)
+  })
+
+  it('shows the definition default as the placeholder, and labels', () => {
+    const fields = buildInstancePropFields(declared)
+    // Literally true: leave it empty and the default is what renders.
+    expect(fields[0]).toMatchObject({
+      placeholder: 'Headline here',
+      label: 'headline',
+    })
+    expect(fields[1].label).toBe('Hero image')
+    // No default declared → no misleading "Defaults to" helper text.
+    expect(fields[1].description).toBeUndefined()
+  })
+
+  it('passes token options through so an override can carry a binding', () => {
+    const options = [{ value: '{{var:abc}}', label: 'Brand' }]
+    const fields = buildInstancePropFields(declared, options, { a: 1 })
+    expect(fields[0]).toMatchObject({
+      tokenOptions: options,
+      tokenLabelContext: { a: 1 },
+    })
+  })
+
+  it('skips a name that is not an identifier rather than rendering a dead field', () => {
+    // `hero.title` would address a nested level that does not exist, so the
+    // value would silently never reach the node.
+    const fields = buildInstancePropFields([
+      { name: 'hero.title', type: 'text' as const },
+      { name: '2cols', type: 'text' as const },
+      { name: '', type: 'text' as const },
+      { name: 'ok_name', type: 'text' as const },
+    ])
+    expect(fields.map((field) => field.name)).toEqual(['propValues.ok_name'])
+  })
+
+  it('negative control: an unparameterised definition adds no fields', () => {
+    expect(buildInstancePropFields(undefined)).toEqual([])
+    expect(buildInstancePropFields([])).toEqual([])
+  })
 })

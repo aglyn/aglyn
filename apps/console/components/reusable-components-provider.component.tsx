@@ -259,9 +259,27 @@ export function ReusableComponentsProvider(
     [firestore, hostId, queueLoading, enqueueSnackbar],
   )
 
+  // Declared props per definition (AGL-1247), so the Attributes panel can
+  // offer a selected instance one field per prop. Read off the same listener
+  // the drawer presets and the canvas graft use — one query, one answer.
+  const declaredProps = useMemo(() => {
+    const next: Record<string, Aglyn.ReusableComponentProp[] | undefined> = {}
+    for (const definition of componentDocs ?? []) {
+      const id = (definition as { $id?: string })?.$id
+      const props = (definition as { props?: Aglyn.ReusableComponentProp[] })
+        ?.props
+      if (id && props?.length) next[id] = props
+    }
+    return next
+  }, [componentDocs])
+
   const contextValue = useMemo(
-    () => ({ onPromote: handlePromote, onDemote: handleDemote }),
-    [handlePromote, handleDemote],
+    () => ({
+      onPromote: handlePromote,
+      onDemote: handleDemote,
+      declaredProps,
+    }),
+    [handlePromote, handleDemote, declaredProps],
   )
 
   return (
