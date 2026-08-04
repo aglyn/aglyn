@@ -86,12 +86,34 @@ async function handler(request: Request): Promise<Response> {
 
     // Presence is a read/write of your own name and selection — every role
     // that can open the editor can be seen in it, viewers included.
+    //
+    // Live co-editing (AGL-677) is not that. It lets one person mutate the
+    // document another person is looking at, so it needs the same gate the
+    // media routes use for a write — host `memberRoles` admin/editor, or an
+    // org roster role above viewer — and it is scoped to the ONE host proven
+    // here, not to the whole org. A viewer gets presence and no `coeditHost`
+    // claim at all, so the RTDB rules refuse their writes outright rather
+    // than relying on the client to keep them read-only.
+    const hostRole = ((host.get('memberRoles') ?? {}) as Record<string, string>)[
+      decoded.uid
+    ]
+    const orgRole = membership.get('role') as string | undefined
+    const canEdit =
+      hostRole === 'admin' ||
+      hostRole === 'editor' ||
+      orgRole === 'owner' ||
+      orgRole === 'admin' ||
+      orgRole === 'editor'
+
     const token = await firebaseAdmin
       .app()
       .auth()
-      .createCustomToken(decoded.uid, { presenceOrg: orgId })
+      .createCustomToken(decoded.uid, {
+        presenceOrg: orgId,
+        ...(canEdit ? { coeditHost: hostId } : {}),
+      })
 
-    return Response.json({ token, orgId }, { status: 200 })
+    return Response.json({ token, orgId, canEdit }, { status: 200 })
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Could not start presence' }, { status: 500 })

@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { createResourceUid } from '@aglyn/aglyn'
+import {
+  createResourceUid,
+  resolveIdpDisplayName,
+  resolveIdpPhotoUrl,
+} from '@aglyn/aglyn'
 import {
   FIREBASE_AUTH_EMULATOR_ENABLED,
   FIREBASE_DATABASE_EMULATOR_ENABLED,
@@ -33,6 +37,7 @@ import {
   connectAuthEmulator,
 } from 'firebase/auth'
 import {
+  type Database,
   connectDatabaseEmulator,
   getDatabase,
   onDisconnect,
@@ -52,6 +57,9 @@ export interface PresenceEntry {
   colour?: string
   selectedNodeId?: string
   lastSeenAt?: number
+  /** Pointer position, normalised 0..1 against the canvas root's box. */
+  cursorX?: number
+  cursorY?: number
   /**
    * How many places this person has the document open. Usually 1; more than
    * that means they are in two tabs or two browsers, which is worth knowing
@@ -75,6 +83,25 @@ export interface PresenceState {
    * own uid is filtered out of the room.
    */
   ownOtherSessions: number
+  /**
+   * The brokered RTDB session, once it exists — the co-editing engine rides
+   * the SAME authenticated app rather than brokering a second token
+   * (AGL-677). Null until presence has signed in.
+   */
+  session: PresenceSession | null
+}
+
+export interface PresenceSession {
+  orgId: string
+  /** The one host the broker proved the caller against. */
+  hostId: string
+  /**
+   * Whether the broker granted a `coeditHost` claim. False for viewers, and
+   * the RTDB rules refuse their co-editing writes regardless — this is for
+   * the UI, not the gate.
+   */
+  canEdit: boolean
+  database: Database
 }
 
 /**
@@ -89,7 +116,7 @@ export interface PresenceState {
  * Module scope, not a ref: navigating between documents in one tab should
  * stay one session, and a remount should not mint a second.
  */
-const TAB_SESSION_ID =
+export const TAB_SESSION_ID =
   typeof window === 'undefined' ? 'ssr' : createResourceUid()
 
 /**
@@ -115,8 +142,44 @@ function colourFor(uid: string): string {
 /** Secondary Firebase app holding the presence-scoped session. */
 const PRESENCE_APP_NAME = 'AGLYN_PRESENCE'
 
+/** Pointer moves are cheap to generate and expensive to broadcast. */
+const CURSOR_THROTTLE_MS = 60
+
 /** `initializeAppCheck` throws if it runs twice for one app. */
 let presenceAppCheckStarted = false
+
+/**
+ * An SSO identity carries NO profile on the Firebase user object (AGL-675).
+ *
+ * A SAML user has `displayName: undefined`, `photoURL: undefined` and an
+ * empty `providerData` — GCIP puts the assertion's mapped attributes under
+ * `firebase.sign_in_attributes` and never promotes them to top-level claims.
+ * So presence listed an SSO colleague by their email address while listing
+ * everyone else by name, which is how Zach spotted it.
+ *
+ * The claims are already in hand: effect 1 fetches an ID token to call the
+ * broker. Decoding it locally costs nothing and needs no round trip. Only
+ * the payload is read — never verified here, and never trusted for
+ * authorization; the broker still verifies the same token server-side before
+ * it mints anything.
+ */
+export function readIdpProfile(idToken: string): {
+  displayName: string
+  photoURL: string
+} {
+  try {
+    const [, payload] = idToken.split('.')
+    if (!payload) return { displayName: '', photoURL: '' }
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
+    const claims = JSON.parse(json)
+    return {
+      displayName: resolveIdpDisplayName(claims),
+      photoURL: resolveIdpPhotoUrl(claims),
+    }
+  } catch {
+    return { displayName: '', photoURL: '' }
+  }
+}
 
 /**
  * App Check is per Firebase APP, not per project.
@@ -176,8 +239,28 @@ export function usePresence(options: {
   docId: string | undefined
   /** Currently selected node, broadcast so others can see where you are. */
   selectedNodeId?: string
+  /**
+   * Broadcast pointer position over the canvas (AGL-677). Off by default:
+   * it is the highest-frequency thing in the room, and only the editing
+   * surfaces want it.
+   */
+  broadcastCursor?: boolean
+  /**
+   * Resolves the canvas root element, which the pointer position is measured
+   * against. Supplied by the caller because it comes from the besigner's
+   * `RenderedCanvasElements` registry — the canvas renders into shadow roots
+   * and emits no id attribute a document query could find.
+   */
+  getCanvasRoot?: () => Element | null | undefined
 }): PresenceState {
-  const { hostId, docType, docId, selectedNodeId } = options
+  const {
+    hostId,
+    docType,
+    docId,
+    selectedNodeId,
+    broadcastCursor,
+    getCanvasRoot,
+  } = options
   const { data: user } = useUser()
   const uid = (user as { uid?: string } | undefined)?.uid
   // `user` is a NEW OBJECT on every render, so depending on it re-runs
@@ -186,13 +269,20 @@ export function usePresence(options: {
   // writing it — presence wrote and un-wrote itself in a loop, which is
   // why the room looked empty with no error anywhere. Depend on
   // primitives only.
+  const [idp, setIdp] = useState<{ displayName: string; photoURL: string }>({
+    displayName: '',
+    photoURL: '',
+  })
+  // An SSO user has none of these on the user object, so the IdP claims are
+  // the fallback rather than the email address — see `readIdpProfile`.
   const displayName = String(
-    (user as { displayName?: string; email?: string } | undefined)
-      ?.displayName ??
-      (user as { email?: string } | undefined)?.email ??
+    (user as { displayName?: string } | undefined)?.displayName ||
+      idp.displayName ||
+      (user as { email?: string } | undefined)?.email ||
       'Someone',
   ).slice(0, 80)
-  const photoURL = (user as { photoURL?: string } | undefined)?.photoURL
+  const photoURL =
+    (user as { photoURL?: string } | undefined)?.photoURL || idp.photoURL
   // The token getter is called inside an effect that must NOT depend on
   // the user object; a ref keeps the latest without re-triggering.
   const getIdTokenRef = useRef<(() => Promise<string>) | undefined>(undefined)
@@ -201,12 +291,15 @@ export function usePresence(options: {
   )?.getIdToken?.bind(user)
   const [entries, setEntries] = useState<PresenceEntry[]>([])
   const [ownOtherSessions, setOwnOtherSessions] = useState(0)
-  const [session, setSession] = useState<{ orgId: string } | null>(null)
+  const [session, setSession] = useState<PresenceSession | null>(null)
   /** Latest selection, read by the announce effect without depending on it. */
   const selectedNodeIdRef = useRef(selectedNodeId)
   selectedNodeIdRef.current = selectedNodeId
   /** This tab's node while it is announced; null between rooms. */
   const meRefHolder = useRef<ReturnType<typeof ref> | null>(null)
+  /** Latest root resolver, so the pointer listener is not re-bound per render. */
+  const getCanvasRootRef = useRef(getCanvasRoot)
+  getCanvasRootRef.current = getCanvasRoot
 
   // 1. Exchange the console session for a presence-scoped one.
   useEffect(() => {
@@ -216,6 +309,10 @@ export function usePresence(options: {
       try {
         const idToken = await getIdTokenRef.current?.()
         if (!idToken) return
+        const profile = readIdpProfile(idToken)
+        if (active && (profile.displayName || profile.photoURL)) {
+          setIdp(profile)
+        }
         const response = await fetch('/api/presence/token', {
           method: 'POST',
           headers: {
@@ -225,7 +322,7 @@ export function usePresence(options: {
           body: JSON.stringify({ hostId }),
         })
         if (!response.ok) return
-        const { token, orgId } = await response.json()
+        const { token, orgId, canEdit } = await response.json()
         if (!active || !token) return
 
         // The shared constant, not a literal: the primary app is
@@ -251,7 +348,21 @@ export function usePresence(options: {
           }
         }
         await signInWithCustomToken(auth, token)
-        if (active) setSession({ orgId })
+        // The database handle is built HERE, once, and carried on the
+        // session: co-editing must talk to the same authenticated app
+        // instance the presence write used, and re-deriving it in each
+        // consumer is how two channels end up on two connections.
+        const database = getDatabase(presenceApp)
+        if (FIREBASE_DATABASE_EMULATOR_ENABLED) {
+          try {
+            connectDatabaseEmulator(database, 'localhost', 9000)
+          } catch {
+            // Already connected on a previous mount.
+          }
+        }
+        if (active) {
+          setSession({ orgId, hostId, canEdit: Boolean(canEdit), database })
+        }
       } catch (error) {
         // Quiet for the USER — an editor that will not open because nobody
         // could be listed is far worse than an empty avatar stack. Not
@@ -269,21 +380,7 @@ export function usePresence(options: {
   // 2. Announce ourselves and watch the room.
   useEffect(() => {
     if (!session || !uid || !docId) return
-    let database
-    try {
-      const presenceApp = getApp(PRESENCE_APP_NAME)
-      database = getDatabase(presenceApp)
-      if (FIREBASE_DATABASE_EMULATOR_ENABLED) {
-        try {
-          connectDatabaseEmulator(database, 'localhost', 9000)
-        } catch {
-          // Already connected.
-        }
-      }
-    } catch (error) {
-      console.warn('[presence] no database handle', error)
-      return
-    }
+    const database = session.database
 
     const roomPath = `presence/${session.orgId}/${docType}/${docId}`
     // One node per TAB, nested under the uid so the write rule is unchanged.
@@ -364,9 +461,51 @@ export function usePresence(options: {
     }).catch(() => undefined)
   }, [selectedNodeId])
 
+  // 4. Where the pointer is, in canvas-relative terms.
+  //
+  // Normalised 0..1 against the canvas root's box rather than sent as client
+  // pixels: two editors have different window sizes, scroll offsets and zoom
+  // levels, and a raw clientX would put their cursor somewhere else entirely
+  // on the document. Throttled hard — this is the highest-frequency write in
+  // the room and nobody needs sub-frame fidelity to follow someone.
+  useEffect(() => {
+    if (!broadcastCursor || !session) return undefined
+    let frame: number | null = null
+    let last = 0
+    const onMove = (event: PointerEvent) => {
+      const meRef = meRefHolder.current
+      if (!meRef) return
+      const now = Date.now()
+      if (now - last < CURSOR_THROTTLE_MS) return
+      const root = getCanvasRootRef.current?.()
+      if (!root) return
+      const box = root.getBoundingClientRect()
+      if (!box.width || !box.height) return
+      const x = (event.clientX - box.left) / box.width
+      const y = (event.clientY - box.top) / box.height
+      // Outside the document is not a position worth sending.
+      if (x < 0 || x > 1 || y < 0 || y > 1) return
+      last = now
+      if (frame) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        frame = null
+        void update(meRef, {
+          cursorX: Math.round(x * 10_000) / 10_000,
+          cursorY: Math.round(y * 10_000) / 10_000,
+          lastSeenAt: Date.now(),
+        }).catch(() => undefined)
+      })
+    }
+    window.addEventListener('pointermove', onMove, { passive: true })
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      if (frame) cancelAnimationFrame(frame)
+    }
+  }, [broadcastCursor, session])
+
   return useMemo(
-    () => ({ entries, ownOtherSessions }),
-    [entries, ownOtherSessions],
+    () => ({ entries, ownOtherSessions, session }),
+    [entries, ownOtherSessions, session],
   )
 }
 

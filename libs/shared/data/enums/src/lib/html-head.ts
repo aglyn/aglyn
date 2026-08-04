@@ -64,7 +64,6 @@ export const LINK_PREF: MakeLinkElementsConfig = [
     '/_static/images/favicons/favicon.png',
     { type: 'image/png', id: 'icon-favicon-png' },
   ],
-  ['manifest', '/_static/_pwa/manifest.json', { id: 'manifest-pwa' }],
   [
     'stylesheet',
     'https://fonts.googleapis.com/css2?family=Roboto+Flex:wght@300;400;500;700;900&display=swap',
