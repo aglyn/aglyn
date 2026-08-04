@@ -18,7 +18,11 @@
 // One-command Stripe bootstrap for Aglyn subscriptions:
 //
 //   STRIPE_SECRET_KEY=sk_... node tools/scripts/setup-stripe.mjs \
-//     [--webhook-url https://app.aglyn.com/api/billing/webhook]
+//     [--webhook-url https://app.aglyn.com/api/billing/webhook] [--dry-run]
+//
+// --dry-run resolves every lookup key and prints the env block WITHOUT
+// creating anything. Use it against a LIVE key: a Stripe price cannot be
+// deleted, only archived, so an accidental create is permanent (AGL-1137).
 //
 // Idempotent: prices are keyed by lookup_key (aglyn_{plan}), so re-running
 // finds the existing ones instead of duplicating. Prints the env block the
@@ -36,6 +40,23 @@ const args = process.argv.slice(2)
 const webhookUrlIndex = args.indexOf('--webhook-url')
 const webhookUrl =
   webhookUrlIndex !== -1 ? args[webhookUrlIndex + 1] : undefined
+
+/**
+ * Resolve and report; create nothing (AGL-1137).
+ *
+ * This script is idempotent by `lookup_key`, which makes it look safe to run
+ * anywhere. It is not, against LIVE: a lookup key that does not match creates
+ * a real product and price, and a Stripe price cannot be deleted afterwards —
+ * only archived. So "just re-run it to refresh the env block" is a one-way
+ * door on the live account.
+ *
+ * `--dry-run` makes the refresh safe: every price is looked up, none is
+ * created, and anything missing is reported as MISSING rather than minted.
+ * The printed env block is then exactly what the account already has.
+ */
+const DRY_RUN = args.includes('--dry-run')
+/** Set when a dry run finds a lookup key with no price behind it. */
+let dryRunMissing = 0
 
 // Mirrors PLAN_PRICING (AGL-278/306/307). The v2 lookup keys leave the
 // original aglyn_{plan} prices untouched, so existing subscriptions are
@@ -87,6 +108,14 @@ async function ensurePrice({
   if (existing) {
     console.log(`= ${lookupKey} already exists (${existing.id})`)
     return existing
+  }
+  if (DRY_RUN) {
+    // A placeholder id rather than a throw, so one missing key does not hide
+    // the state of every key after it — the whole point of a dry run is the
+    // complete picture.
+    dryRunMissing += 1
+    console.log(`! ${lookupKey} MISSING (would be created)`)
+    return { id: `<MISSING:${lookupKey}>` }
   }
   const product = productId
     ? { id: productId }
@@ -197,15 +226,19 @@ if (webhookUrl) {
       'invoice.paid',
       'invoice.payment_failed',
     ]
-    const endpoint = await stripe(
-      'webhook_endpoints',
-      Object.fromEntries([
-        ['url', webhookUrl],
-        ...events.map((event, index) => [`enabled_events[${index}]`, event]),
-      ]),
-    )
-    env['STRIPE_WEBHOOK_SECRET'] = endpoint.secret
-    console.log(`+ webhook endpoint ${endpoint.id} → ${webhookUrl}`)
+    if (DRY_RUN) {
+      console.log(`! webhook endpoint for ${webhookUrl} MISSING (would be created)`)
+    } else {
+      const endpoint = await stripe(
+        'webhook_endpoints',
+        Object.fromEntries([
+          ['url', webhookUrl],
+          ...events.map((event, index) => [`enabled_events[${index}]`, event]),
+        ]),
+      )
+      env['STRIPE_WEBHOOK_SECRET'] = endpoint.secret
+      console.log(`+ webhook endpoint ${endpoint.id} → ${webhookUrl}`)
+    }
   }
 } else {
   console.log(
@@ -252,6 +285,11 @@ async function ensureMeter() {
     console.log(`= meter ${METER_EVENT_NAME} already exists (${existing.id})`)
     return existing
   }
+  if (DRY_RUN) {
+    dryRunMissing += 1
+    console.log(`! meter ${METER_EVENT_NAME} MISSING (would be created)`)
+    return { id: '<MISSING:meter>' }
+  }
   const meter = await stripe('billing/meters', {
     display_name: 'Aglyn metered usage',
     event_name: METER_EVENT_NAME,
@@ -271,7 +309,11 @@ env['STRIPE_METER_EVENT_NAME'] = METER_EVENT_NAME
 // 1¢ per aggregated unit reproduces the billed amount exactly.
 const meteredExisting = await findPriceByLookupKey('aglyn_metered_usage')
 let meteredPrice = meteredExisting
-if (!meteredPrice) {
+if (!meteredPrice && DRY_RUN) {
+  dryRunMissing += 1
+  console.log('! aglyn_metered_usage MISSING (would be created)')
+  meteredPrice = { id: '<MISSING:aglyn_metered_usage>' }
+} else if (!meteredPrice) {
   const product = await stripe('products', {
     name: 'Aglyn metered usage',
     'metadata[plan]': 'metered',
@@ -292,9 +334,28 @@ if (!meteredPrice) {
 }
 env['STRIPE_PRICE_METERED'] = meteredPrice.id
 
-console.log('\nAdd these to the console app environment:\n')
+console.log(
+  DRY_RUN
+    ? '\nResolved from the account (DRY RUN — nothing created):\n'
+    : '\nAdd these to the console app environment:\n',
+)
 for (const [key, value] of Object.entries(env)) {
   console.log(`${key}=${value}`)
+}
+if (DRY_RUN) {
+  // Loud, because the failure mode is quiet: a block containing
+  // `<MISSING:…>` looks like a usable env block at a glance, and pasting it
+  // swaps a dead id for a placeholder that is equally dead.
+  console.log(
+    dryRunMissing
+      ? `\n${dryRunMissing} lookup key(s) MISSING — the block above is NOT ` +
+          'safe to paste. Re-run without --dry-run to create them, ' +
+          'understanding that a live Stripe price cannot be deleted, only ' +
+          'archived.'
+      : '\nEvery lookup key resolved. The block above is what this account ' +
+          'already has, so it is safe to paste.',
+  )
+  process.exit(dryRunMissing ? 1 : 0)
 }
 console.log(
   '\nSTRIPE_SECRET_KEY=(the key you used)\n' +
