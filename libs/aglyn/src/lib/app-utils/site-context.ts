@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-import { createContext, useContext } from 'react'
+import { createContext, useCallback, useContext } from 'react'
 
 /**
  * Identity of the published site a node tree renders inside. Provided by
- * the tenant page; absent in the besigner/preview, which is how components
- * with side effects (forms) know to stay inert.
+ * the tenant page and by the console's Preview; absent in the besigner
+ * canvas, which is how components with side effects (forms) know to stay
+ * inert.
  *
  * Lives banner-free in @aglyn/aglyn for the same reason as
  * ScreenLinkContext: a 'use client' banner in this module graph duplicates
@@ -29,6 +30,21 @@ import { createContext, useContext } from 'react'
 export interface SiteContextValue {
   /** Host document id of the rendered site. */
   hostId?: string
+  /**
+   * True on the console's Preview surface (AGL-1139).
+   *
+   * Preview now supplies a real `hostId`, because without one every plugin
+   * block took its `if (!hostId)` placeholder branch — thirty of them — and
+   * someone laying out a shop saw dashed boxes instead of their products.
+   * A `hostId` is what makes those blocks resolve real data.
+   *
+   * The same `hostId` is what would let them WRITE it. Preview exists to
+   * answer "what will this look like and do", not to place an order, post a
+   * review or book a table, so this flag is how a block tells the difference.
+   * Read through `useSiteFetch`, which refuses unsafe methods rather than
+   * asking each block to remember.
+   */
+  preview?: boolean
   /**
    * Data a site-page resolver already loaded on the server for THIS page,
    * keyed by plugin (AGL-659).
@@ -46,7 +62,69 @@ export interface SiteContextValue {
 export const SiteContext = createContext<SiteContextValue>({})
 SiteContext.displayName = 'AglynSiteContext'
 
-/** The rendered site's identity; empty in the editor and preview. */
+/** The rendered site's identity; empty in the besigner canvas. */
 export function useSite(): SiteContextValue {
   return useContext(SiteContext)
+}
+
+/**
+ * Dispatched when Preview refuses a write (AGL-1139). The preview surface
+ * listens once and says so; blocks do not each need their own message.
+ */
+export const PREVIEW_WRITE_BLOCKED_EVENT = 'aglyn:preview-write-blocked'
+
+/** Methods that cannot change server state, so Preview lets them through. */
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/** What a blocked call resolves to. */
+const BLOCKED_BODY = {
+  error: 'Preview does not change real data.',
+  preview: true,
+}
+
+/**
+ * `fetch` for a site block, aware of which surface it is rendering on.
+ *
+ * Once Preview supplies a real `hostId` every block's data call starts
+ * working — including the ones that book a table, post a review, register a
+ * member or place an order. Those are not previews of anything; they are the
+ * thing itself, triggered by someone checking their layout.
+ *
+ * So the boundary is drawn once, HERE, by method rather than by endpoint:
+ * reads pass through, anything that can change state resolves to a 423
+ * without a request being made. Drawing it per block would mean thirteen
+ * files each remembering, and the fourteenth block silently not — the same
+ * shape as the revalidate omission in AGL-1150.
+ *
+ * Deliberately resolves rather than rejects. Every caller already branches on
+ * `response.ok`, so a refusal travels down the path they already have for a
+ * server that said no, and no block needs a new `catch`.
+ */
+export function useSiteFetch(): typeof fetch {
+  const { preview } = useSite()
+  return useCallback(
+    (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = String(
+        init?.method ??
+          (typeof Request !== 'undefined' && input instanceof Request
+            ? input.method
+            : 'GET'),
+      ).toUpperCase()
+      if (!preview || READ_METHODS.has(method)) return fetch(input, init)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent(PREVIEW_WRITE_BLOCKED_EVENT, { detail: { method } }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify(BLOCKED_BODY), {
+          // 423 Locked: the request was understood and refused because of the
+          // surface it came from, not because it was malformed or forbidden.
+          status: 423,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    },
+    [preview],
+  )
 }

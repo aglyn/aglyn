@@ -76,6 +76,7 @@ function CartLines(props: {
 }) {
   const { hostId, cart, showCoupon, checkoutLabel, emptyText, onMutate } =
     props
+  const siteFetch = Aglyn.useSiteFetch()
   const [coupon, setCoupon] = useState('')
   const [email, setEmail] = useState('')
   const [optIn, setOptIn] = useState(false)
@@ -88,7 +89,7 @@ function CartLines(props: {
     setStatus('sending')
     setMessage('')
     try {
-      const response = await fetch('/api/commerce/cart-checkout', {
+      const response = await siteFetch('/api/commerce/cart-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -113,7 +114,7 @@ function CartLines(props: {
     } catch {
       setStatus('error')
     }
-  }, [hostId, coupon, email, optIn, giftCard, status])
+  }, [hostId, coupon, email, optIn, giftCard, status, siteFetch])
 
   if (!cart || cart.lines.length === 0) {
     return (
@@ -268,6 +269,7 @@ function CartLines(props: {
 const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   const { variant, checkoutLabel, showCoupon, emptyText, ...rest } = props
   const { hostId } = Aglyn.useSite()
+  const siteFetch = Aglyn.useSiteFetch()
   const [cart, setCart] = useState<CartView | null>(null)
   const [open, setOpen] = useState(false)
 
@@ -293,7 +295,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   const mutate = useCallback(
     async (body: Record<string, unknown>) => {
       if (!hostId) return
-      const response = await fetch('/api/commerce/cart', {
+      const response = await siteFetch('/api/commerce/cart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId, ...body }),
@@ -303,7 +305,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
         window.dispatchEvent(new Event(CART_UPDATED_EVENT))
       }
     },
-    [hostId],
+    [hostId, siteFetch],
   )
 
   if (!hostId) {

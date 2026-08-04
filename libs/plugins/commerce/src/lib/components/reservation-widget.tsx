@@ -54,6 +54,7 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
   (props, ref) => {
     const { resourceId, reserveLabel, ...rest } = props
     const { hostId } = Aglyn.useSite()
+    const siteFetch = Aglyn.useSiteFetch()
     const [availability, setAvailability] = useState<Availability | null>(null)
     const [checkIn, setCheckIn] = useState('')
     const [checkOut, setCheckOut] = useState('')
@@ -110,7 +111,7 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
       setStatus('sending')
       setMessage('')
       try {
-        const response = await fetch('/api/commerce/reserve', {
+        const response = await siteFetch('/api/commerce/reserve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

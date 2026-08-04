@@ -69,6 +69,7 @@ const ProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
   (props, ref) => {
     const { productId: productIdProp, heading, ...rest } = props
     const { hostId } = Aglyn.useSite()
+    const siteFetch = Aglyn.useSiteFetch()
     const [productId, setProductId] = useState(productIdProp ?? '')
     const [reviews, setReviews] = useState<ReviewView[] | null>(null)
     const [aggregate, setAggregate] = useState({ count: 0, average: 0 })
@@ -108,7 +109,7 @@ const ProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
       if (!hostId || !productId || state === 'busy') return
       setState('busy')
       try {
-        const response = await fetch('/api/commerce/reviews', {
+        const response = await siteFetch('/api/commerce/reviews', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, productId, ...form }),

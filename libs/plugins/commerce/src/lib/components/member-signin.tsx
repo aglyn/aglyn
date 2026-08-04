@@ -50,6 +50,7 @@ const MemberSignin = forwardRef<HTMLDivElement, MemberSigninProps>(
     const { heading, signupPath, recoveryPath, continueFallback, ...rest } =
       props
     const { hostId } = Aglyn.useSite()
+    const siteFetch = Aglyn.useSiteFetch()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
@@ -60,7 +61,7 @@ const MemberSignin = forwardRef<HTMLDivElement, MemberSigninProps>(
       setBusy(true)
       setError('')
       try {
-        const response = await fetch('/api/membership/login', {
+        const response = await siteFetch('/api/membership/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, email, password }),
@@ -76,7 +77,7 @@ const MemberSignin = forwardRef<HTMLDivElement, MemberSigninProps>(
       } finally {
         setBusy(false)
       }
-    }, [hostId, busy, email, password, continueFallback])
+    }, [hostId, busy, email, password, continueFallback, siteFetch])
 
     if (!hostId) {
       return (

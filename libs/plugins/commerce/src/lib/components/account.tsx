@@ -81,6 +81,7 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
   (props, ref) => {
     const { signedOutHeading, ...rest } = props
     const { hostId } = Aglyn.useSite()
+    const siteFetch = Aglyn.useSiteFetch()
     const [account, setAccount] = useState<AccountData | null | 'anonymous'>(
       null,
     )
@@ -119,7 +120,7 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
       try {
         const endpoint =
           tab === 0 ? '/api/membership/login' : '/api/membership/register'
-        const response = await fetch(endpoint, {
+        const response = await siteFetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -137,7 +138,7 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
         if (tab === 1) {
           // Register does not set the cookie on every deployment; sign in
           // right after to be safe.
-          await fetch('/api/membership/login', {
+          await siteFetch('/api/membership/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ hostId, email, password }),
@@ -147,31 +148,31 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
       } finally {
         setBusy(false)
       }
-    }, [hostId, busy, tab, email, password, displayName, refresh])
+    }, [hostId, busy, tab, email, password, displayName, refresh, siteFetch])
 
     const handleSignOut = useCallback(async () => {
       if (!hostId) return
-      await fetch('/api/membership/logout', {
+      await siteFetch('/api/membership/logout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId }),
       }).catch(() => undefined)
       setAccount('anonymous')
-    }, [hostId])
+    }, [hostId, siteFetch])
 
     const handleAddressSave = useCallback(async () => {
       if (!hostId || account === 'anonymous' || !account || !addressDraft) {
         return
       }
       const addresses = [...account.member.addresses, addressDraft].slice(-5)
-      await fetch('/api/membership/account', {
+      await siteFetch('/api/membership/account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId, addresses }),
       }).catch(() => undefined)
       setAddressDraft(null)
       await refresh()
-    }, [hostId, account, addressDraft, refresh])
+    }, [hostId, account, addressDraft, refresh, siteFetch])
 
     if (!hostId) {
       return (
@@ -320,7 +321,7 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
                 <Button
                   size="small"
                   onClick={async () => {
-                    const response = await fetch(
+                    const response = await siteFetch(
                       '/api/commerce/subscription-portal',
                       {
                         method: 'POST',

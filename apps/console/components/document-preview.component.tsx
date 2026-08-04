@@ -25,10 +25,16 @@ import {
   useThemeModeState,
 } from '@aglyn/shared-ui-theme'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { CssBaseline, Stack, Typography } from '@mui/material'
+import {
+  Alert,
+  CssBaseline,
+  Snackbar,
+  Stack,
+  Typography,
+} from '@mui/material'
 import { collection, getDocs, limit, query } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   type PreviewKind,
   type PreviewStateIds,
@@ -186,6 +192,31 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     }
   }, [hostId, firestore])
 
+  // The site identity every plugin block reads (AGL-1139). Memoised because
+  // it is a context value: a fresh object each render would re-render every
+  // block on every keystroke elsewhere on the page.
+  const siteContext = useMemo(
+    () => ({ hostId, preview: true }),
+    [hostId],
+  )
+
+  // One message for every refused write, rather than thirteen blocks each
+  // inventing their own. `useSiteFetch` announces the refusal; this is the
+  // only thing listening, so a block that has not migrated cannot produce a
+  // half-answer here — it simply does nothing, which is the pre-existing
+  // behaviour rather than a new lie.
+  const [blocked, setBlocked] = useState<string | null>(null)
+  useEffect(() => {
+    const handler = () =>
+      setBlocked(
+        'That works on the published site. Preview shows your real content ' +
+          'but never changes it.',
+      )
+    window.addEventListener(Aglyn.PREVIEW_WRITE_BLOCKED_EVENT, handler)
+    return () =>
+      window.removeEventListener(Aglyn.PREVIEW_WRITE_BLOCKED_EVENT, handler)
+  }, [])
+
   const root = Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)
   // Style like the live site: the snapshot carries the host theme, and the
   // scheme resolves from the shared cookie + prefers-color-scheme state so
@@ -239,9 +270,28 @@ export function DocumentPreview(props: DocumentPreviewProps) {
         // suppressNavigation only — NOT editorInert — so interactions run for
         // real and hover-to-open menus behave like the live site (AGL-830).
         <Aglyn.ScreenLinkContext.Provider value={SUPPRESSED_SCREEN_LINKS}>
-          <AglynNodeRenderer node={root} />
+          {/* The site's identity, which Preview knew all along and never
+              passed on (AGL-1139). Thirty `if (!hostId)` guards across the
+              plugin blocks took their placeholder branch without it, so a
+              shop previewed as a grid of dashed boxes — and the cart, being
+              inert markup rather than a broken button, had nothing to click.
+              `preview` rides alongside so `useSiteFetch` can refuse the
+              writes that same hostId now makes possible. */}
+          <Aglyn.SiteContext.Provider value={siteContext}>
+            <AglynNodeRenderer node={root} />
+          </Aglyn.SiteContext.Provider>
         </Aglyn.ScreenLinkContext.Provider>
       ) : null}
+      <Snackbar
+        open={Boolean(blocked)}
+        autoHideDuration={5000}
+        onClose={() => setBlocked(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="info" onClose={() => setBlocked(null)}>
+          {blocked}
+        </Alert>
+      </Snackbar>
       {/* Site runtimes (AGL-419/830): the marketing automations engine arms
           the authored hover/click triggers and drives the menu/drawer command
           buses — the same components the tenant catch-all mounts. */}
