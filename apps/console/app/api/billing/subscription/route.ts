@@ -27,7 +27,9 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   memberHasOrgPermission,
+  readOrgBilling,
   resolveOrgMembership,
+  writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import {
   addonKindFromPriceId,
@@ -153,7 +155,10 @@ async function handler(request: Request): Promise<Response> {
       .collection('orgs')
       .doc(orgId)
       .get()
-    const customerId = org.get('stripeCustomerId')
+    // `stripeCustomerId` moved to `orgs/{orgId}/billing/stripe` (AGL-1028).
+    // `readOrgBilling` falls back to the org doc, so this keeps working for orgs
+    // the backfill has not reached.
+    const customerId = (await readOrgBilling(orgId)).stripeCustomerId
     if (!customerId) {
       return Response.json({ error: 'No billing account yet' }, { status: 409 })
     }
@@ -193,17 +198,17 @@ async function handler(request: Request): Promise<Response> {
           cancel_at_period_end: action === 'cancel' ? 'true' : 'false',
         }),
       )
-      // Mirror onto the org doc so the plan card reflects it immediately
-      // (the webhook confirms on the next event).
-      await org.ref.set(
-        {
-          subscription: {
-            status: updated.status ?? subscription.status,
-            cancelAtPeriodEnd: updated.cancel_at_period_end === true,
-          },
+      // Mirror onto the billing doc so the plan card reflects it immediately
+      // (the webhook confirms on the next event). Writes through
+      // `writeOrgBilling` (AGL-1028) — writing `subscription` straight onto the
+      // org doc here would leave the manager-gated copy stale, which a backfill
+      // cannot fix because it only repairs history.
+      await writeOrgBilling(org.ref.id, {
+        subscription: {
+          status: updated.status ?? subscription.status,
+          cancelAtPeriodEnd: updated.cancel_at_period_end === true,
         },
-        { merge: true },
-      )
+      } as never)
       return Response.json({
         ok: true,
         cancelAtPeriodEnd: updated.cancel_at_period_end === true,
@@ -299,19 +304,18 @@ async function handler(request: Request): Promise<Response> {
         `subscriptions/${subscription.id}`,
         params,
       )
-      // Mirror immediately; the webhook confirms on the next event.
-      await org.ref.set(
-        {
-          plan: targetPlan,
-          seatAddons: addonQuantitiesFromItems(updated?.items?.data ?? []),
-          subscription: {
-            status: updated.status ?? subscription.status,
-            priceId: targetPrice,
-            interval: targetInterval,
-          },
+      // Mirror immediately; the webhook confirms on the next event. `plan`
+      // stays on the org doc (feature gating reads it); the commercial keys go
+      // to the manager-gated billing doc (AGL-1028).
+      await org.ref.set({ plan: targetPlan }, { merge: true })
+      await writeOrgBilling(org.ref.id, {
+        seatAddons: addonQuantitiesFromItems(updated?.items?.data ?? []),
+        subscription: {
+          status: updated.status ?? subscription.status,
+          priceId: targetPrice,
+          interval: targetInterval,
         },
-        { merge: true },
-      )
+      } as never)
       return Response.json({
         ok: true,
         plan: targetPlan,

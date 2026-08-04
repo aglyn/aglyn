@@ -16,7 +16,12 @@
  */
 
 import { buildRoute, Route, runBillingWebhookHandlers } from '@aglyn/aglyn/server'
-import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
+import {
+  findOrgIdByStripeCustomer,
+  firebaseAdmin,
+  notifyOrgAdmins,
+  writeOrgBilling,
+} from '@aglyn/tenant-data-admin'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import {
@@ -243,14 +248,27 @@ async function handler(request: Request): Promise<Response> {
           unitAmount > 0
             ? Math.round((unitAmount / 100 / (isYearly ? 12 : 1)) * 100) / 100
             : del2
-        const billing = {
-          plan,
-          stripeCustomerId: object?.customer ?? null,
+        // Normalized to a string id: Stripe sends `customer` as an id here,
+        // but an expanded object would otherwise be stored verbatim — and the
+        // `stripeCustomers` reverse index below is keyed by the id, so an
+        // object would silently produce no index entry (AGL-1028).
+        const stripeCustomerId =
+          typeof object?.customer === 'string'
+            ? object.customer
+            : ((object?.customer as { id?: string } | null)?.id ?? null)
+        // What stays on the org doc: the plan every console surface gates
+        // features on, and the discount the MRR roll-up reads.
+        await orgRef.set({ plan, discount: discountField }, { merge: true })
+        // What moved behind `canManageOrg()` (AGL-1028). This also mirrors a
+        // bare `billingStatus` string back onto the org doc for the dunning
+        // banner, and maintains the customer -> org index the
+        // `invoice.payment_failed` branch below resolves through.
+        await writeOrgBilling(String(orgId), {
+          stripeCustomerId,
           // Add-on quantities sync from the items (AGL-527): Stripe is
           // the source of truth; explicit zeros make removals, dashboard
           // edits, and full cancellations all converge.
           seatAddons: addonQuantitiesFromItems(canceled ? [] : items),
-          discount: discountField,
           subscription: {
             status: canceled ? 'canceled' : (object?.status ?? 'active'),
             priceId: priceId ?? null,
@@ -262,8 +280,7 @@ async function handler(request: Request): Promise<Response> {
               ? new Date(object.current_period_end * 1000)
               : null,
           },
-        }
-        await orgRef.set(billing, { merge: true })
+        } as never)
       }
     }
 
@@ -277,21 +294,22 @@ async function handler(request: Request): Promise<Response> {
     ) {
       const customerId = String(object?.customer ?? '')
       if (customerId) {
-        const orgs = await firebaseAdmin
-          .app()
-          .firestore()
-          .collection('orgs')
-          .where('stripeCustomerId', '==', customerId)
-          .limit(1)
-          .get()
-        const orgId = orgs.docs[0]?.id
+        // Was `.where('stripeCustomerId', '==', …)` on the orgs collection.
+        // That field lives in a subcollection now (AGL-1028), where the same
+        // query would need a collection-group index — one the emulator never
+        // asks for and production does. This resolves through the
+        // `stripeCustomers` mapping doc instead: an O(1) get, no index, and it
+        // stops the webhook scanning `orgs` at all.
+        const orgId = await findOrgIdByStripeCustomer(customerId)
         if (orgId) {
           const amount = Number(object?.amount_due ?? object?.amount_paid ?? 0)
           const dollars = (amount / 100).toFixed(2)
           // Billing is org-scoped now (AGL-621/644). Links are frozen at write
           // time, so emit the canonical path; the reader normalizes anything
           // legacy that predates this.
-          const orgSlug = orgs.docs[0]?.get('slug') as string | undefined
+          const orgSlug = (
+            await firebaseAdmin.app().firestore().collection('orgs').doc(orgId).get()
+          ).get('slug') as string | undefined
           void notifyOrgAdmins(orgId, {
             type:
               type === 'invoice.payment_failed'

@@ -59,14 +59,21 @@ service cloud.firestore {
         return orgMember().get('orgSuspended', false) != true;
       }
 
-      // Deliberately still ANY member, including a scoped collaborator
-      // (AGL-1026): this doc carries `plan` and `entitlements`, which every
-      // console surface gates features on, so denying it would lock a
-      // collaborator out of the site they were invited to. It also carries
-      // `stripeCustomerId` and `subscription` — Firestore has no field-level
-      // reads, so narrowing that means moving the billing keys to their own
-      // manager-gated document. Tracked separately rather than pretended
-      // about here.
+      // Still ANY member, including a scoped collaborator (AGL-1026): this doc
+      // carries `plan` and `entitlements`, which every console surface gates
+      // features on, so denying it would lock a collaborator out of the site
+      // they were invited to.
+      //
+      // It no longer carries the commercial keys. `stripeCustomerId`,
+      // `subscription` and `seatAddons` moved to `billing/stripe` below, gated
+      // on `canManageOrg()` (AGL-1028) — Firestore has no field-level reads, so
+      // moving them was the only way to narrow this without locking anyone out.
+      // What stays is deliberate: `plan`/`entitlements` because that is the
+      // whole reason this doc is readable, `suspendedAt`/`suspendedReason`
+      // because the tenant runtime reads suspension on every published page
+      // render and moving it would buy no confidentiality (this doc is member-
+      // readable regardless), and `billingStatus` because the dunning banner is
+      // shown to every member on purpose.
       allow read: if isStaff() || isOrgMember();
       // Org creation/deletion and the slug/owner/billing keys are
       // Admin-SDK-only (org APIs, Stripe webhook, staff tooling), with
@@ -89,7 +96,27 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
              'enabledPlugins', 'seatAddons', 'stripeCustomerId', 'subscription',
+             'billingStatus',
              'suspendedAt', 'suspendedReason', 'erasureRequestedAt']));
+
+      /**
+       * The commercial keys, moved off the org doc so a scoped site
+       * collaborator stops reading them (AGL-1028): `stripeCustomerId`,
+       * `subscription`, `seatAddons`.
+       *
+       * Managers and staff only. Written exclusively by the Stripe webhook and
+       * the billing/staff APIs through the Admin SDK, which rules never
+       * applied to — so `write: false` costs nothing and keeps the client out.
+       *
+       * The org doc keeps a derived `billingStatus` string for the AGL-275
+       * dunning banner, which is shown to every member on purpose. That is the
+       * only thing about a subscription a non-manager can still see, and it
+       * carries no amount, price id or customer id.
+       */
+      match /billing/{billingDocId} {
+        allow read: if isStaff() || canManageOrg();
+        allow write: if false;
+      }
 
       // The roster carries names and emails, denormalized for the team page,
       // so it is visible to the org — not to a site collaborator, who has no
@@ -431,6 +458,19 @@ service cloud.firestore {
     // defeats the whole point, and one that could read them could enumerate
     // which buckets are near their cap.
     match /rateLimits/{bucketId} {
+      allow read, write: if false;
+    }
+
+    // Stripe customer -> org reverse index (AGL-1028), written by the webhook
+    // beside `orgs/{orgId}/billing/stripe`. It exists because moving
+    // `stripeCustomerId` into a subcollection broke the webhook's
+    // `where('stripeCustomerId', '==', …)` lookup, and a mapping doc is an
+    // O(1) get where the alternative is a collection-group index.
+    //
+    // Deny ALL client access. Readable, it would map a Stripe customer id back
+    // to an org for anyone who obtained one — the exact correlation this issue
+    // moved the field to prevent.
+    match /stripeCustomers/{stripeCustomerId} {
       allow read, write: if false;
     }
 

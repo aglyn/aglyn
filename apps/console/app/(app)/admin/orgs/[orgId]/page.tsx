@@ -18,6 +18,8 @@
 
 import {
   checkDiscountMargin,
+  ORG_BILLING_DOC_ID,
+  ORG_BILLING_SUBCOLLECTION,
   orgMonthlyCogsUsd,
   netOfProcessorFee,
   orgSiteCount,
@@ -114,10 +116,29 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const isStaff = useIsStaff()
 
-  const { data: org } = useFirestoreDoc<any>(
+  const { data: orgDoc } = useFirestoreDoc<any>(
     () => doc(firestore, 'orgs', orgId || 'missing'),
     [firestore, orgId],
     { idField: '$id' },
+  )
+  // `subscription` and `stripeCustomerId` moved to `orgs/{orgId}/billing/stripe`
+  // (AGL-1028), whose rule is `isStaff() || canManageOrg()` — so staff read it
+  // here. Merged over the org doc so the negotiated-price panel below and
+  // `isEnterpriseOrg` keep seeing one object.
+  const { data: orgBilling } = useFirestoreDoc<any>(
+    () =>
+      doc(
+        firestore,
+        'orgs',
+        orgId || 'missing',
+        ORG_BILLING_SUBCOLLECTION,
+        ORG_BILLING_DOC_ID,
+      ),
+    [firestore, orgId],
+  )
+  const org = useMemo(
+    () => (orgDoc ? { ...orgDoc, ...(orgBilling ?? {}) } : orgDoc),
+    [orgDoc, orgBilling],
   )
   // This month's usage rollup, for the real cost model (AGL-1134). The
   // enterprise pricing preview below used the flat per-site estimate, which

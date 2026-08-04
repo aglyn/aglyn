@@ -20,6 +20,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  readOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import {
   describeStripePaymentMethod,
@@ -64,7 +65,10 @@ async function handler(request: Request): Promise<Response> {
       .collection('orgs')
       .doc(orgId)
       .get()
-    const customerId = org.get('stripeCustomerId')
+    // `stripeCustomerId` moved to `orgs/{orgId}/billing/stripe` (AGL-1028).
+    // `readOrgBilling` falls back to the org doc, so this keeps working for orgs
+    // the backfill has not reached.
+    const customerId = (await readOrgBilling(orgId)).stripeCustomerId
     if (!customerId) {
       // Never subscribed — distinct from "lookup failed" (AGL-940), which the
       // UI has to be able to tell apart.

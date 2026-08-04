@@ -28,13 +28,14 @@ import {
   normalizePhone,
 } from '@aglyn/aglyn/server'
 import {
+  OrgSlugTakenError,
   changeOrgSlug,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
   listOrgMembers,
   logOrgActivity,
-  OrgSlugTakenError,
+  readOrgBilling,
   resolveOrgMembership,
   transferOrgOwnership,
 } from '@aglyn/tenant-data-admin'
@@ -251,7 +252,8 @@ async function handler(request: Request): Promise<Response> {
       // correct so a missed sync self-heals on the next save.
       after(async () => {
         const secretKey = process.env.STRIPE_SECRET_KEY
-        const customerId = (await orgDocRef.get()).get('stripeCustomerId') as
+        // AGL-1028: moved to `orgs/{orgId}/billing/stripe`, org doc as fallback.
+        const customerId = (await readOrgBilling(orgDocRef.id)).stripeCustomerId as
           | string
           | undefined
         if (!secretKey || !customerId) return

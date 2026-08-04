@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  ORG_BILLING_SUBCOLLECTION,
   isBillingSubscription,
   isEnterpriseOrg,
   orgMonthlyCogsUsd,
@@ -116,6 +117,21 @@ async function handler(request: Request): Promise<Response> {
     let signups30d = 0
     const planCounts: Record<string, number> = {}
     const newestOrgs: any[] = []
+    // `subscription` moved to `orgs/{orgId}/billing/stripe` (AGL-1028), so the
+    // revenue signal is no longer on the org doc. One unfiltered collection-
+    // group read fetches every billing doc at once — the alternative, a get per
+    // org inside the loop, is an N+1 across the whole orgs collection. Needs no
+    // composite index: the query has no filter or ordering.
+    const billingByOrgId = new Map<string, Record<string, unknown>>()
+    const billingSnapshot = await firebaseAdmin
+      .app()
+      .firestore()
+      .collectionGroup(ORG_BILLING_SUBCOLLECTION)
+      .get()
+    for (const billingDoc of billingSnapshot.docs) {
+      const parentOrgId = billingDoc.ref.parent.parent?.id
+      if (parentOrgId) billingByOrgId.set(parentOrgId, billingDoc.data())
+    }
     for (const doc of orgsSnapshot.docs) {
       const data = doc.data()
       const plan = (data['plan'] ?? '') as OrgPlan | ''
@@ -123,7 +139,15 @@ async function handler(request: Request): Promise<Response> {
       // MRR follows the Stripe subscription mirror, not the plan field: a
       // staff override sets `plan` and never writes `subscription`, so
       // billing state is the only honest signal of revenue (AGL-925).
-      const billing = data as { plan?: OrgPlan; subscription?: any }
+      //
+      // Merged org doc + billing doc: `plan`, `seatAddons` and `discount` are
+      // still inline, `subscription` is not, and the revenue helpers need all
+      // of them. Org doc first so a stale inline `subscription` left over from
+      // before the backfill loses to the authoritative one.
+      const billing = {
+        ...data,
+        ...(billingByOrgId.get(doc.id) ?? {}),
+      } as { plan?: OrgPlan; subscription?: any }
       if (isBillingSubscription(billing)) {
         payingOrgs += 1
         mrrUsd += orgMonthlyRevenueUsd(billing)

@@ -21,6 +21,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  readOrgBilling,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -162,7 +163,10 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'No such org' }, { status: 404 })
     }
     const orgData = orgSnap.data() as any
-    const customerId = orgData?.stripeCustomerId as string | undefined
+    // AGL-1028: moved to `orgs/{orgId}/billing/stripe`, org doc as fallback.
+    const customerId = (await readOrgBilling(orgId)).stripeCustomerId as
+      | string
+      | undefined
 
     if (action === 'remove') {
       const before = orgData?.discount ?? null

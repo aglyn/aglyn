@@ -21,6 +21,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   memberHasOrgPermission,
+  readOrgBilling,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 
@@ -68,7 +69,10 @@ async function handler(request: Request): Promise<Response> {
       .collection('orgs')
       .doc(orgId)
       .get()
-    const customerId = org.get('stripeCustomerId')
+    // `stripeCustomerId` moved to `orgs/{orgId}/billing/stripe` (AGL-1028).
+    // `readOrgBilling` falls back to the org doc, so this keeps working for orgs
+    // the backfill has not reached.
+    const customerId = (await readOrgBilling(orgId)).stripeCustomerId
     if (!customerId) {
       return Response.json({ invoices: [], hasMore: false }, { status: 200 })
     }

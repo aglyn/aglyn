@@ -19,10 +19,13 @@
 import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
+  ORG_BILLING_DOC_ID,
+  ORG_BILLING_SUBCOLLECTION,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   resolveOrgEntitlements,
   UNLIMITED,
+  type AglynOrgBilling,
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
@@ -52,7 +55,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, getCountFromServer } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import BillingAddonsCardComponent, {
   ADDON_LABELS,
@@ -73,6 +76,7 @@ import { useOrgSlug } from '../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
 import useCurrentOrg from '../../../../hooks/use-current-org'
+import useConfirmedDoc from '../../../../hooks/use-confirmed-doc'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
 
 
@@ -80,7 +84,20 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const { data: user } = useUser()
   const firestore = useFirestore()
-  const { org, orgId } = useCurrentOrg()
+  const { org: orgDoc, orgId } = useCurrentOrg()
+  // `stripeCustomerId` and `subscription` moved to `orgs/{orgId}/billing/stripe`
+  // behind `canManageOrg()` (AGL-1028). This page is billing.manage-gated, so
+  // its reader can see that doc; merging it over the org doc keeps every
+  // `org.subscription…` reference below working unchanged, and the org doc
+  // still supplies `plan`, `entitlements` and `seatAddons`.
+  const { data: orgBilling } = useConfirmedDoc<Partial<AglynOrgBilling>>(
+    firestore,
+    orgId ? ['orgs', orgId, ORG_BILLING_SUBCOLLECTION, ORG_BILLING_DOC_ID] : null,
+  )
+  const org = useMemo(
+    () => ({ ...(orgDoc ?? {}), ...(orgBilling ?? {}) }),
+    [orgDoc, orgBilling],
+  )
   const { permissions, can, loaded: permissionsLoaded } =
     useOrgPermissions()
   const { enqueueSnackbar } = useSnackbar()
