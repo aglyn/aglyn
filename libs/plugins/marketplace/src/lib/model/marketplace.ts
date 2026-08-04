@@ -26,6 +26,7 @@
 // Server Component) while `@aglyn/aglyn/server` carries `node:fs` (illegal in
 // the browser). Neither is safe from here; the deep path has no dependencies.
 import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
+import type { ListingVerificationRequest } from '@aglyn/aglyn/app-utils/marketplace-verification'
 
 /**
  * `profiles/{uid}` — a person's public identity.
@@ -141,6 +142,16 @@ export interface MarketplaceListing {
    * listings appear in browse for non-owners.
    */
   reviewStatus?: ListingReviewStatus
+  /**
+   * The publisher's standing ask for the Verified badge (AGL-1217).
+   *
+   * Its own field, never a `reviewStatus` member — see
+   * {@link ListingVerificationRequest}. Server-owned: the publisher route only
+   * moves it to `pending`/`withdrawn`, and only staff can decide it. Asking
+   * never grants anything; the checklist gate on `verify` stays the one route
+   * to the badge.
+   */
+  verificationRequest?: ListingVerificationRequest
   // Server-managed. These were written by the publish/install/review paths
   // but never declared, so callers reached for `as any` (AGL-654).
   /** Publishing org id — the publisher profile's doc id (AGL-652). */
@@ -437,6 +448,27 @@ export type ListingReviewStatus =
   | 'listed'
   | 'verified'
   | 'rejected'
+
+/**
+ * Verification requests live in core (AGL-1217), for the same reason
+ * `MarketplaceArtifactType` does (AGL-1016): the console's staff review route
+ * needs the policy, and `scope:app` may not depend on `aglyn:addons`.
+ * Re-exported here so publishing code keeps one import site.
+ */
+export {
+  VERIFICATION_BLOCK_MESSAGES,
+  VERIFICATION_DECLINE_COOLDOWN_DAYS,
+  timestampMs,
+  verificationRequestBlock,
+} from '@aglyn/aglyn/app-utils/marketplace-verification'
+export type {
+  ListingVerificationRequest,
+  TimestampLike,
+  VerifiableListing,
+  VerificationRequestBlock,
+  VerificationRequestState,
+} from '@aglyn/aglyn/app-utils/marketplace-verification'
+
 
 /**
  * Per-VERSION review state (AGL-966).

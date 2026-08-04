@@ -130,11 +130,9 @@ function buildMetadata(props: Props): Metadata {
     screen?.seo?.image || host?.seo?.image || undefined
   const unlisted = screen?.visibility === Aglyn.HostScreenVisibility.UNLISTED
   const noindex = unlisted || props.notFoundFallback || props.protectedScreen
-  const canonicalBase = host?.cname
-    ? `https://${host.cname}`
-    : host?.subdomain
-      ? `https://${host.subdomain}.aglyn.app`
-      : undefined
+  // Shared with the client twin and the email renderer (AGL-1224) — three
+  // copies of "which name does this site answer to" would drift.
+  const canonicalBase = Aglyn.hostPublicOrigin(host)
   const screenPath = screen?.$id ? host?.screens?.[screen.$id] : undefined
   const canonical =
     canonicalBase && screenPath != null

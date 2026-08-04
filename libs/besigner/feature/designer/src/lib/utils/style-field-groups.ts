@@ -39,23 +39,73 @@ export interface StyleFieldGroup {
   fields: Array<Record<string, unknown> & { name: string }>
 }
 
-/** Give every described style field a help tooltip (AGL-600): the field's
- * own description plus a deep link into the responsive-styling docs. */
+/**
+ * Fields that earn a per-field help tip (AGL-600, wired in AGL-1220).
+ *
+ * Deliberately NOT every described field. Every field's `description`
+ * already renders as helper text UNDER its control, so a tooltip whose
+ * excerpt IS that description is ~40 question marks that say nothing new
+ * — and `FormFieldGrid` pins the icon at `top: -6, right: 0`, i.e. ON
+ * the field's top border, where on a length field it lands right beside
+ * the unit menu's caret and on a full-width select it floats detached
+ * above the box. (Colour pickers do not forward `help` at all, so the
+ * full set also left three ragged gaps.) Checked in the panel at its
+ * real ~340px width before narrowing to this list.
+ *
+ * What a tip can say that the inline line cannot is the panel's one
+ * genuine footgun: a bare NUMBER in these five fields is not pixels.
+ * `borderRadius: 2` renders 8px (× `shape.borderRadius`), `gap: 2`
+ * renders 16px (× the spacing unit), and `lineHeight: 1.5` is a ratio —
+ * a silent 8× surprise no one-line example can warn about, and the exact
+ * reason these five stayed free text while every other length became a
+ * number box + unit picker (AGL-1219). All five are plain text boxes, so
+ * the icon has the field's top-right corner to itself.
+ */
+const STYLE_FIELD_HELP: Record<string, { title: string; excerpt: string }> = {
+  borderRadius: {
+    title: 'Corner Radius',
+    excerpt:
+      'A bare number is a theme multiple, not pixels — 2 renders 8px (2 × the theme corner radius). Add a unit (8px, 50%) for an exact radius.',
+  },
+  gap: {
+    title: 'Gap',
+    excerpt:
+      'A bare number is a theme multiple, not pixels — 2 renders 16px (2 × the theme spacing unit). Add a unit (16px, 1rem) for an exact gutter.',
+  },
+  rowGap: {
+    title: 'Row Gap',
+    excerpt:
+      'A bare number is a theme multiple, not pixels — 2 renders 16px (2 × the theme spacing unit). Add a unit (16px, 1rem) for an exact gutter.',
+  },
+  columnGap: {
+    title: 'Column Gap',
+    excerpt:
+      'A bare number is a theme multiple, not pixels — 2 renders 16px (2 × the theme spacing unit). Add a unit (16px, 1rem) for an exact gutter.',
+  },
+  lineHeight: {
+    title: 'Line Height',
+    excerpt:
+      'A bare number is a ratio of the font size, not pixels — 1.5 renders one-and-a-half times the text size, and stays right when the font size changes. Add a unit (28px) to pin the line box.',
+  },
+}
+
+/** Attaches {@link STYLE_FIELD_HELP} to a group's fields, each with a
+ * deep link into the responsive-styling docs. */
 function withStyleFieldHelp(group: StyleFieldGroup): StyleFieldGroup {
   return {
     ...group,
-    fields: group.fields.map((field) =>
-      field['description'] && !field['help']
+    fields: group.fields.map((field) => {
+      const help = STYLE_FIELD_HELP[field.name]
+      return help && !field['help']
         ? {
             ...field,
             help: {
-              title: field['label'] ?? field.name,
-              excerpt: field['description'],
+              ...help,
               href: besignerDocsUrl('responsiveStyling', '#style-groups'),
             },
           }
-        : field,
-    ),
+        : field
+    }),
   }
 }
 
@@ -73,6 +123,42 @@ const textField = (
 })
 
 const half = { FormFieldGridProps: { size: { xs: 12, sm: 6 } } }
+
+/**
+ * A length field: number box + unit picker (AGL-1219) instead of a
+ * free-text box the author has to type `px` into. The PERSISTED value is
+ * unchanged — still one CSS string in `sx` — so this is purely an input
+ * affordance and nothing downstream has to know about it. Anything the
+ * control cannot model (`calc(100% - 2rem)`, `min-content`, MUI's
+ * `maxWidth: 'sm'` breakpoint key) falls back to a text box holding the
+ * raw string, so no existing value is destroyed.
+ *
+ * Not every length is one of these. Fields whose NUMBER means a theme
+ * multiple — `borderRadius` (× `shape.borderRadius`), `gap`/`rowGap`/
+ * `columnGap` (× the spacing unit) — stay free text: a stored `gap: 2` is
+ * 16px, and a px picker would show "2" and turn the next nudge into 3px.
+ * `lineHeight` stays free text for the same reason (a unitless 1.5 is the
+ * normal value, and a unit picker would push `px` onto it).
+ */
+const dimensionField = (
+  name: string,
+  label: string,
+  description: string,
+  extra?: Record<string, unknown>,
+) => ({
+  component: FieldComponentType.CSS_DIMENSION,
+  name,
+  label,
+  description,
+  ...extra,
+})
+
+/**
+ * Sizing keys read their bare numbers through MUI's `sizingTransform`,
+ * where a number in (0, 1] is a FRACTION of the parent — `width: 0.5`
+ * renders 50%, not 0.5px (AGL-1219).
+ */
+const muiSizing = { numberAs: 'mui-sizing' as const }
 
 const selectField = (
   name: string,
@@ -97,6 +183,10 @@ const selectField = (
 export function buildStyleFieldGroups(
   presetColors: string[],
 ): StyleFieldGroup[] {
+  return styleFieldGroups(presetColors).map(withStyleFieldHelp)
+}
+
+function styleFieldGroups(presetColors: string[]): StyleFieldGroup[] {
   return [
     {
       $id: 'layout',
@@ -145,8 +235,7 @@ export function buildStyleFieldGroups(
             {
               value: 'inherit',
               label: 'Inherit',
-              description:
-                'The element inherits the float value of its parent',
+              description: 'The element inherits the float value of its parent',
             },
             {
               value: 'none',
@@ -162,8 +251,7 @@ export function buildStyleFieldGroups(
             {
               value: 'right',
               label: 'Right',
-              description:
-                'The element floats to the right of its container',
+              description: 'The element floats to the right of its container',
             },
           ],
         },
@@ -195,31 +283,37 @@ export function buildStyleFieldGroups(
       $id: 'sizing',
       label: 'Sizing',
       fields: [
-        textField('width', 'Width', 'CSS width, e.g. 320px, 50%, 20rem.', half),
-        textField('height', 'Height', 'CSS height, e.g. 240px or 100vh.', half),
-        textField(
+        dimensionField('width', 'Width', 'CSS width, e.g. 320px, 50%, 20rem.', {
+          ...muiSizing,
+          ...half,
+        }),
+        dimensionField('height', 'Height', 'CSS height, e.g. 240px or 100vh.', {
+          ...muiSizing,
+          ...half,
+        }),
+        dimensionField(
           'minWidth',
           'Min Width',
           'Lower bound for the element width.',
-          half,
+          { ...muiSizing, ...half },
         ),
-        textField(
+        dimensionField(
           'maxWidth',
           'Max Width',
           'Upper bound for the element width.',
-          half,
+          { ...muiSizing, ...half },
         ),
-        textField(
+        dimensionField(
           'minHeight',
           'Min Height',
           'Lower bound for the element height.',
-          half,
+          { ...muiSizing, ...half },
         ),
-        textField(
+        dimensionField(
           'maxHeight',
           'Max Height',
           'Upper bound for the element height.',
-          half,
+          { ...muiSizing, ...half },
         ),
       ],
     },
@@ -227,7 +321,7 @@ export function buildStyleFieldGroups(
       $id: 'typography',
       label: 'Typography',
       fields: [
-        textField(
+        dimensionField(
           'fontSize',
           'Font Size',
           'CSS font size, e.g. 18px, 1.25rem.',
@@ -250,7 +344,7 @@ export function buildStyleFieldGroups(
           'Line box height, e.g. 1.5 or 28px.',
           half,
         ),
-        textField(
+        dimensionField(
           'letterSpacing',
           'Letter Spacing',
           'Tracking between characters, e.g. 0.5px or 0.02em.',
@@ -355,10 +449,15 @@ export function buildStyleFieldGroups(
           'Positioning scheme; offsets below apply to non-static elements.',
           ['static', 'relative', 'absolute', 'fixed', 'sticky'],
         ),
-        textField('top', 'Top', 'Offset from the top edge.', half),
-        textField('right', 'Right', 'Offset from the right edge.', half),
-        textField('bottom', 'Bottom', 'Offset from the bottom edge.', half),
-        textField('left', 'Left', 'Offset from the left edge.', half),
+        dimensionField('top', 'Top', 'Offset from the top edge.', half),
+        dimensionField('right', 'Right', 'Offset from the right edge.', half),
+        dimensionField(
+          'bottom',
+          'Bottom',
+          'Offset from the bottom edge.',
+          half,
+        ),
+        dimensionField('left', 'Left', 'Offset from the left edge.', half),
         textField(
           'zIndex',
           'Z-Index',
@@ -431,7 +530,7 @@ export function buildStyleFieldGroups(
           'How much this flex item shrinks when space is tight.',
           { type: 'number', ...half },
         ),
-        textField(
+        dimensionField(
           'flexBasis',
           'Flex Basis',
           'Initial main size of this flex item, e.g. 200px or 30%.',
@@ -455,7 +554,7 @@ export function buildStyleFieldGroups(
  * responsive-sx pipeline as every other group.
  */
 export function buildFlexGapGroup(): StyleFieldGroup {
-  return {
+  return withStyleFieldHelp({
     $id: 'flex-gaps',
     label: 'Gaps',
     fields: [
@@ -477,7 +576,7 @@ export function buildFlexGapGroup(): StyleFieldGroup {
         half,
       ),
     ],
-  }
+  })
 }
 
 /** Field names owned by a group — the only keys its save may touch. */
@@ -595,7 +694,12 @@ export function computeEffectiveStyleValues(
   }
   const out: Record<string, any> = {}
   for (const key of keys) {
-    const value = readSxValue(source, key, breakpoint, fieldSxScheme(key, scheme))
+    const value = readSxValue(
+      source,
+      key,
+      breakpoint,
+      fieldSxScheme(key, scheme),
+    )
     if (value !== undefined && typeof value !== 'object') out[key] = value
   }
   return out

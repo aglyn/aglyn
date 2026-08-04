@@ -44,9 +44,41 @@ export async function applyDuePublishSchedule(options: {
   // Plan gate (AGL-471): the console gates *writing* a schedule on the
   // scheduledPublishing entitlement, but this executor is the authority —
   // a schedule written directly to Firestore must not auto-publish on an
-  // unentitled plan. Left pending, it applies if the org later upgrades.
+  // unentitled plan.
   const org = (await getOrgForHost(hostId))?.org ?? {}
   if (!checkEntitlement(org, 'scheduledPublishing')) {
+    // Record the refusal instead of leaving it pending (AGL-1185).
+    //
+    // The refusal itself is correct and unchanged. What was wrong is that it
+    // left no trace: the schedule stayed `pending` and permanently due, so the
+    // moment the org upgraded to Business the next beat — every minute since
+    // AGL-1159 — published it. Content scheduled on a plan that could not
+    // honour it, and forgotten, would surface during an upgrade, which is
+    // exactly when nobody is looking for it.
+    //
+    // Safe to write here because the dueness check above has already passed, so
+    // this can only ever mark a schedule that came due and was declined. A
+    // future-dated schedule is returned long before this point and is untouched.
+    //
+    // Terminal on purpose: upgrading does not resurrect it. A schedule whose
+    // time passed while unentitled is stale by the time the plan changes, and
+    // re-running it is the surprise this removes. Rescheduling is a deliberate
+    // act, and the console can now say why the original never ran.
+    //
+    // Fail-open like every other write here — a failure leaves it pending,
+    // which is today's behaviour, and the next beat retries.
+    try {
+      await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('hosts')
+        .doc(hostId)
+        .collection(collectionName)
+        .doc(docId)
+        .update({ 'publishSchedule.status': 'skipped-unentitled' })
+    } catch (error) {
+      console.error(error)
+    }
     return parent.versionId
   }
 

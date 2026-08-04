@@ -548,6 +548,28 @@ export const TokenTextField = (props: TokenTextFieldProps) => {
           inputLabel: { shrink: true },
           input: {
             readOnly: isReadOnly,
+            // The surface is a contentEditable that WRAPS, but MUI's
+            // single-line input root is a fixed-height flex row (AGL-1214).
+            // A long unbroken value — a media URL is the common case —
+            // painted straight through the outline and over the next
+            // field's label. Let the root grow, and keep the token-insert
+            // adornment pinned to the first line rather than centred
+            // against a now-tall box.
+            sx: {
+              height: 'auto',
+              alignItems: 'flex-start',
+              // The contentEditable IS `.MuiInputBase-input`, and MUI pins
+              // that to one line's height for a non-multiline field. The
+              // surface wraps regardless, so the content just painted
+              // outside the outline. Cap it and scroll instead of letting a
+              // long URL push the panel around.
+              '& .MuiInputBase-input': {
+                height: 'auto',
+                maxHeight: '8.5em',
+                overflowY: 'auto',
+              },
+              '& .MuiInputAdornment-root': { mt: '4px' },
+            },
             inputComponent: TokenEditableInput as never,
             inputProps: {
               tokenValue: value,

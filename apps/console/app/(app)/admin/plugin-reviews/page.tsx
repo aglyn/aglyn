@@ -50,6 +50,8 @@ interface QueueRow {
   hidden: boolean
   /** Private plugin (AGL-968): reviewed identically, never listed. */
   private: boolean
+  /** The publisher's standing ask for the Verified badge (AGL-1217). */
+  verificationRequest?: { state?: string; requestedAt?: unknown } | null
 }
 
 interface ListedRow {
@@ -87,6 +89,9 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const [queue, setQueue] = useState<QueueRow[]>([])
   const [listed, setListed] = useState<ListedRow[]>([])
+  const [verificationRequests, setVerificationRequests] = useState<QueueRow[]>(
+    [],
+  )
   const [publishers, setPublishers] = useState<Record<string, string>>({})
   const [loaded, setLoaded] = useState(false)
   const [search, setSearch] = useState('')
@@ -108,6 +113,7 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
       const payload = await response.json()
       setQueue(payload?.queue ?? [])
       setListed(payload?.listed ?? [])
+      setVerificationRequests(payload?.verificationRequests ?? [])
       setPublishers(payload?.publishers ?? {})
     }
     setLoaded(true)
@@ -143,6 +149,10 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
 
   const visibleQueue = useMemo(() => queue.filter(matches), [queue, matches])
   const visibleListed = useMemo(() => listed.filter(matches), [listed, matches])
+  const visibleVerification = useMemo(
+    () => verificationRequests.filter(matches),
+    [verificationRequests, matches],
+  )
   const filtering = search.trim().length > 0 || status !== 'all'
 
   const row = (
@@ -235,6 +245,59 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
               </Stack>
             ) : (
               <>
+                {/* Its own card, above the review queue (AGL-1217). A
+                    verification request is a different question from
+                    "have these bytes been read" — it is about the
+                    publisher, and it is answered by a different action.
+                    Folded into Awaiting review it would be invisible: a
+                    listing whose bytes are already approved does not
+                    appear there at all. Hidden when empty, so it costs
+                    nothing on the common day. */}
+                {visibleVerification.length ? (
+                  <CardDisplay
+                    header={`Verification requested (${visibleVerification.length})`}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mb: 1 }}
+                    >
+                      {'These plugins are already live. The publisher has ' +
+                        'asked us to vouch for who they are — granting adds ' +
+                        'the badge and changes nothing about installability.'}
+                    </Typography>
+                    <Stack>
+                      {visibleVerification.map((entry) =>
+                        row(
+                          `verify-${entry.listingId}`,
+                          entry.listingId,
+                          entry.displayName,
+                          entry.profileId,
+                          <>
+                            <Chip
+                              size="small"
+                              color="info"
+                              label="Verification requested"
+                            />
+                            <Chip
+                              size="small"
+                              color={reviewStatusMeaning(entry.reviewStatus).color}
+                              label={reviewStatusMeaning(entry.reviewStatus).label}
+                            />
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label={`v${entry.version || '—'}`}
+                            />
+                          </>,
+                          'Awaiting a verification decision',
+                        ),
+                      )}
+                    </Stack>
+                  </CardDisplay>
+                ) : null}
                 <CardDisplay
                   header={`Awaiting review (${visibleQueue.length})`}
                   help={docsHelp('manifestAndEnvs', {

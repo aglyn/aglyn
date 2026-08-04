@@ -56,12 +56,15 @@ const Product = forwardRef<HTMLDivElement, ProductProps>((props, ref) => {
     name,
     priceUsd,
     description,
-    imageUrl,
+    imageUrl: storedImageUrl,
     buyLabel,
     showCoupon,
     ...rest
   } = props
   const { hostId } = Aglyn.useSite()
+  // A media-picker target, so it can hold a media reference (AGL-1215) as
+  // well as any URL form that predates it.
+  const imageUrl = Aglyn.resolveMediaSrc(storedImageUrl, { hostId })
   const [status, setStatus] = useState<'idle' | 'sending' | 'error'>('idle')
   const [coupon, setCoupon] = useState('')
   const [message, setMessage] = useState('')

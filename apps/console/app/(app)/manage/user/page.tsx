@@ -183,10 +183,19 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
   const firestore = useFirestore()
   const { currentOrg } = useOrgScope()
   const userRef = doc(firestore, 'users', user.uid)
-  const { data } = useFirestoreDoc(
-    () => userRef,
-    [firestore, user.uid],
-  )
+  // `status` is not optional here (AGL-1143). A DENIED read and an EMPTY
+  // document both arrive as `data === undefined`, and this form seeds itself
+  // from `data` — so on a denied read it painted blank over a populated
+  // document and a save would have written those blanks back. SSO accounts hit
+  // exactly that on every client-side Firestore read, and the page reported
+  // "up to date" while doing it.
+  const {
+    data,
+    status: profileStatus,
+    error: profileError,
+  } = useFirestoreDoc(() => userRef, [firestore, user.uid])
+  /** The read failed — as opposed to succeeding and finding nothing. */
+  const profileUnreadable = profileStatus === 'error'
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const firebaseAuth = useAuth()
@@ -227,6 +236,18 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
 
   const handleBasicSave = useCallback(
     async (fields: any) => {
+      // Never write over a document we could not read (AGL-1143). The form is
+      // already hidden in this state, so reaching here means something rendered
+      // it anyway — and this is a destructive write with `merge: true`, so a
+      // blank field is a deletion, not a no-op. Refuse rather than trust the UI.
+      if (profileUnreadable) {
+        enqueueSnackbar(
+          'Your profile could not be loaded, so it cannot be saved — that ' +
+            'would overwrite it with blanks. Reload and try again.',
+          { variant: 'error' },
+        )
+        return
+      }
       const dequeueLoading = queueLoading()
       try {
         // Normalize before storing, not after reading (AGL-1133). Production
@@ -277,7 +298,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         dequeueLoading()
       }
     },
-    [enqueueSnackbar, queueLoading, userRef, user],
+    [enqueueSnackbar, profileUnreadable, queueLoading, userRef, user],
   )
   // Profile image (AGL-365): mirrors to the auth photoURL (app bar,
   // comments) and the users doc (team lists, activity).
@@ -637,16 +658,38 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     </CardDisplay>
   )
 
-  const formPanel = (schema: FormSchema, onSubmit: (fields: any) => void) => (
-    <FormRenderer
-      FormTemplate={CardDisplayFormTemplate}
-      componentMapper={simpleComponentMapper}
-      onSubmit={onSubmit}
-      schema={schema}
-      subscription={{ values: true }}
-      initialValues={schema.id === 'basic' ? data : undefined}
-    />
-  )
+  const formPanel = (schema: FormSchema, onSubmit: (fields: any) => void) => {
+    // Show the failure instead of an empty form (AGL-1143). Rendering the form
+    // would invite the user to retype fields we simply could not read, and
+    // saving merges — so a blank field deletes the real value.
+    if (schema.id === 'basic' && profileUnreadable) {
+      return (
+        <CardDisplay header="Basic info" contentGutterX contentGutterY>
+          <Alert severity="error" sx={{ maxWidth: 560 }}>
+            {'We could not load your profile, so it is not shown here — the ' +
+              'form is hidden rather than blank, because saving a blank form ' +
+              'would overwrite what is stored. Nothing has been changed. ' +
+              'Reload the page to try again.'}
+            {profileError?.code ? (
+              <Typography variant="caption" component="div" sx={{ mt: 1 }}>
+                {`Reason: ${profileError.code}`}
+              </Typography>
+            ) : null}
+          </Alert>
+        </CardDisplay>
+      )
+    }
+    return (
+      <FormRenderer
+        FormTemplate={CardDisplayFormTemplate}
+        componentMapper={simpleComponentMapper}
+        onSubmit={onSubmit}
+        schema={schema}
+        subscription={{ values: true }}
+        initialValues={schema.id === 'basic' ? data : undefined}
+      />
+    )
+  }
 
   // Every account area is a tab now (AGL-859) — the standalone Account and
   // Profile cards moved into the nav. Security only when there's a password

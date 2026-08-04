@@ -51,6 +51,21 @@
  *   `load-page-data.ts`). Doubling a 5 s render is what crossed the 10 s
  *   function limit and produced the post-deploy 502.
  *
+ * What the SECOND production read settled (2026-08-03, after that fix):
+ *
+ * - The 502 is gone. A cold render is now ~5–5.9 s end to end, under the limit.
+ * - `preLoadBootMs` is ~1.8 s, not the ~7.8 s it was added to confirm. See the
+ *   field's own comment — the guess it was built to test turned out wrong.
+ * - The loader, not boot, is now the larger half. On a cold `/product/besigner`:
+ *   `composeScreenNodes` 1577, `getRealmPluginInstalls` 628,
+ *   `runSitePageEnrichers` 456, `filterEnabledPluginsByReleaseFlags` 412,
+ *   `getHost` 378, `getOrgBilling` 303, `resolveSiteRedirect` 183,
+ *   `getScreen` 111, `ensureAll` 17. Phases are per-phase deltas and sum to
+ *   `totalMs`, so they can be read as a budget directly.
+ * - Those phases stay expensive WARM: the same path at `sinceBootMs` ~343 s
+ *   still reported `totalMs` 3410. So this is query fan-out, not warm-up, and
+ *   it will not be fixed by anything that only targets cold starts.
+ *
  * Timings go through `console.log` as one line of JSON so a Vercel runtime-log
  * query can pull them without a log drain. Overhead is a `Date.now()` per
  * phase, so this can stay on in production — the shape it measures only ever
@@ -77,6 +92,32 @@ const MODULE_LOADED_AT = Date.now()
  * evaluation (a bundle problem, overlapping AGL-1151), time after it is ours.
  * Captured at module scope, never per request — it is a property of the
  * instance, and reading it later would measure the request instead.
+ *
+ * **Only meaningful on a serverless instance.** A lambda boots and serves its
+ * first request immediately, so uptime-at-load IS the pre-render cost. On a
+ * long-lived local server it also counts however long the process sat idle
+ * before the first request, which is not a cost anyone pays — a local run
+ * reported 7.3 s and 8.8 s for the same build purely because of when the
+ * request was issued. Do not read a local value as a boot measurement.
+ *
+ * Local runs did settle one thing by another route: with the server already
+ * warm, a page request took 3.33 s against a loader reporting 2.83 s, so module
+ * loading plus the React render beyond the loader is only ~0.5 s.
+ *
+ * The production read (2026-08-03, two independent cold lambdas) then measured
+ * this field directly and **falsified the guess it was added to test**. The
+ * ~7.8 s was NOT lambda initialisation:
+ *
+ * ```
+ * cold:true preLoadBootMs:1770 sinceBootMs:23 totalMs:4065  /product/besigner
+ * cold:true preLoadBootMs:1834 sinceBootMs:39 totalMs:3188  /
+ * ```
+ *
+ * Lambda init is ~1.8 s — a third of a ~5–5.9 s cold render, not the bulk of an
+ * 11.5 s one. The 11.5 s reading predated the doubled-render fix, so most of the
+ * "missing" time was the second render, not boot. What remains splits as ~1.8 s
+ * of init (a module-graph cost, so AGL-1151's problem) against ~3.2–4.1 s inside
+ * the loader, which is the larger half and belongs to nobody yet.
  */
 const PROCESS_UPTIME_AT_LOAD_MS = Math.round(process.uptime() * 1000)
 

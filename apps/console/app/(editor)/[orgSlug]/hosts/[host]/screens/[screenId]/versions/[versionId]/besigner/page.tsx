@@ -68,7 +68,7 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // Dynamic site-plugin activation (AGL-417): canvas components register
 // via the org-gated loader; the page gates the canvas on readiness.
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
@@ -79,7 +79,9 @@ import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use
 import BesignerMediaPickerProvider from '../../../../../../../../../../components/besigner-media-picker-provider.component'
 import BesignerAppBarComponent from '../../../../../../../../../../components/besigner-app-bar.component'
 import BesignerDocumentSwitcherComponent from '../../../../../../../../../../components/besigner-document-switcher.component'
-import BesignerVersionsComponent from '../../../../../../../../../../components/besigner-versions.component'
+import BesignerVersionsComponent, {
+  type BesignerVersionsActions,
+} from '../../../../../../../../../../components/besigner-versions.component'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
@@ -98,6 +100,7 @@ import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
 import { buildScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
+import useHostComponentDefinitions from '../../../../../../../../../../hooks/use-host-component-definitions'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 
@@ -146,6 +149,9 @@ function BesignerPage(props) {
   // Screen password protection (AGL-87); null = untouched.
   const [protectPassword, setProtectPassword] = useState<string | null>(null)
   const handleAddElementClick = useAddElementDrawerCallback()
+  // File ▸ New version drives the versions panel's own create flow (AGL-1218)
+  // rather than re-implementing the entitlement gate and the save-first rule.
+  const versionsActions = useRef<BesignerVersionsActions>(null)
   // Installed plugins appear as named drawer entries (AGL-190).
   usePluginDrawerRegistration(hostId)
   const detailUrl = buildRoute(Route.SCREEN_DETAILS, {
@@ -170,8 +176,18 @@ function BesignerPage(props) {
     layoutId: layoutId ?? '-no-layout-',
     versionId: layoutVersionId ?? '-no-version-',
   })
+  // Layout chrome renders the host's reusable components for real (AGL-1217)
+  // — the same graft the tenant runtime and Preview (AGL-1211) run. Held back
+  // until the definitions settle: building the chrome canvas without them
+  // paints the dashed "SITE NAV" placeholder and swaps it for the nav a beat
+  // later, and the canvas is rebuilt wholesale per node map anyway.
+  const { definitions: componentDefinitions } =
+    useHostComponentDefinitions(hostId)
   const chromeCanvas = useLayoutChromeCanvas(
-    layoutId ? layoutVersionResult?.data?.nodes : undefined,
+    layoutId && componentDefinitions
+      ? layoutVersionResult?.data?.nodes
+      : undefined,
+    componentDefinitions,
   )
   const {doc: result, setDoc: updateScreen} = useScreenVersion({
     hostId: hostId as string,
@@ -768,6 +784,7 @@ function BesignerPage(props) {
             parent={{ kind: 'screen', id: screenId }}
             versionId={versionId}
             publishedVersionId={screenResult?.data?.versionId}
+            actionsRef={versionsActions}
           />
           </>
         }
@@ -810,17 +827,12 @@ function BesignerPage(props) {
               },
               {
                 id: 'center-nav-file-new-version',
-                children: (
-                  <Typography component="div">
-                    {'New Version'}{' '}
-                    <Typography variant="caption" component="sup">
-                      {'Coming Soon'}
-                    </Typography>
-                  </Typography>
-                ),
-                onClick: () =>
-                  handleAddElementClick(Besigner.focus.getLastSelected()),
-                disabled: true,
+                children: 'New version',
+                // Deferred to the versions panel (AGL-1218): it owns the
+                // `versioning` entitlement check, the refusal to snapshot a
+                // dirty canvas, and the name dialog. Read at click time, so
+                // the mount order of the app bar does not matter.
+                onClick: () => versionsActions.current?.createVersion(),
                 ListItemTextProps: {inset: true},
               },
               {

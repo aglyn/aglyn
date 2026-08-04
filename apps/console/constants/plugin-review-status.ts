@@ -72,6 +72,82 @@ export const REVIEW_STATUS_MEANINGS: Record<string, ReviewStatusMeaning> = {
   },
 }
 
+/**
+ * Does this takedown strip the Verified badge? (AGL-1121, decided 2026-08-03.)
+ *
+ * Verified is our claim that a human vouched for the PUBLISHER. A listing-wide
+ * takedown is us saying the opposite, so the two cannot both stand.
+ *
+ * Lives here, beside the status meanings, because it is a statement about what
+ * the statuses mean rather than request handling — and it is extracted from the
+ * route so the policy is reachable from a test. The three conditions each rule
+ * out a real case:
+ *
+ * - `hide` only. A restore must NOT re-grant; regranting is `verify`, which
+ *   re-checks the checklist server-side. Getting the badge back is meant to
+ *   cost a re-review.
+ * - Listing target only. The same endpoint hides individual user REVIEWS
+ *   (`reviewUid`), which say nothing about the publisher.
+ * - Already `verified` only, so a takedown never rewrites some other verdict —
+ *   demoting a `rejected` listing to `listed` would be a promotion.
+ *
+ * Per-version revocation deliberately does not qualify: that withdraws the
+ * claim about THOSE BYTES, which the separate per-version "Reviewed" chip
+ * already carries.
+ */
+export function shouldStripVerifiedOnTakedown(options: {
+  action: string
+  reviewStatus: string | undefined
+  /** False when the target is an individual user review, not the listing. */
+  isListingTarget: boolean
+}): boolean {
+  return (
+    options.action === 'hide' &&
+    options.isListingTarget &&
+    options.reviewStatus === 'verified'
+  )
+}
+
+/** What a stripped listing becomes. Not `rejected` — see the note above. */
+export const VERIFIED_STRIPPED_STATUS = 'listed'
+
+/**
+ * What `latestVersionReviewState` becomes when the offered version is revoked
+ * (AGL-1121).
+ *
+ * `revoked`, not `rejected`: it was not turned down in review, it was killed
+ * afterwards, and the two should not blur in the audit trail. Both consumers —
+ * the browse card's "Reviewed" chip and the listing page's caution alert — test
+ * against `'approved'`, so any non-approved value behaves correctly; naming it
+ * honestly costs nothing.
+ */
+export const REVOKED_VERSION_REVIEW_STATE = 'revoked'
+
+/**
+ * Does revoking this version withdraw the "Reviewed" claim on the listing?
+ *
+ * Only when it is the version customers are actually being offered. Both
+ * consumers describe `latestVersion`, so revoking an older version says nothing
+ * about what is on offer and must not touch the chip.
+ *
+ * This exists because keeping the Verified badge through a per-version
+ * revocation is only defensible if the BYTES claim withdraws instead. That did
+ * not happen before AGL-1121: `latestVersionReviewState` was written solely by
+ * approve/reject and on publish, so a version approved and later revoked kept
+ * `'approved'` — and because a per-version revocation deliberately does not hide
+ * the listing, the marketplace kept telling customers a human had read the exact
+ * bytes we had just stopped from executing.
+ */
+export function revocationWithdrawsReviewedClaim(options: {
+  revokedVersion: string
+  latestVersion: string | undefined
+}): boolean {
+  return (
+    Boolean(options.revokedVersion) &&
+    options.revokedVersion === options.latestVersion
+  )
+}
+
 export function reviewStatusMeaning(status: string): ReviewStatusMeaning {
   return (
     REVIEW_STATUS_MEANINGS[status] ?? {

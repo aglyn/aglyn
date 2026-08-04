@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { hostCollectionKind, screenRoutePathToUrl } from '@aglyn/aglyn/server'
+import {
+  hostCollectionKind,
+  hostPublicOrigin,
+  screenRoutePathToUrl,
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import getHost from '../../../utils/get-host'
 
@@ -47,8 +51,26 @@ export async function GET(request: Request): Promise<Response> {
     return new Response('Not found', { status: 404 })
   }
 
-  const requestHost = String(request.headers.get('host') ?? host)
-  const base = `https://${requestHost}`
+  // The `<loc>` base is the site's PUBLIC origin, not the domain this request
+  // happened to arrive on (AGL-1160). Deriving it from the `Host` header meant
+  // the sitemap contradicted the page's own `<link rel="canonical">`, which
+  // `[host]/[[...slug]]/page.tsx` already builds from `hostPublicOrigin` — so a
+  // site reachable on both its custom domain and `.aglyn.app` published two
+  // different answers about where it lives. A preview deployment was worse
+  // still: it emitted a sitemap full of `*.vercel.app` URLs.
+  //
+  // It is also what lets this response be cached at all. A cache keys on the
+  // URL, never the `Host` header, and `demo.aglyn.app`, `app.aglyn.com` and
+  // every preview host all rewrite to `/api/sitemap?host=demo` — one key, three
+  // bases. Reading the origin from the host record removes the header from the
+  // output, so the response becomes a pure function of the URL.
+  //
+  // The header stays as a fallback only for a host record carrying neither a
+  // cname nor a subdomain; `hostPublicOrigin` returns undefined there rather
+  // than inventing a half-built URL.
+  const base =
+    hostPublicOrigin(hostRes.host) ??
+    `https://${String(request.headers.get('host') ?? host)}`
   const urls = Object.values(hostRes.host.screens ?? {})
     .map((path) => `${base}${screenRoutePathToUrl(path)}`)
     .sort()
@@ -130,7 +152,23 @@ export async function GET(request: Request): Promise<Response> {
     status: 200,
     headers: {
       'Content-Type': 'application/xml',
-      'Cache-Control': 's-maxage=3600, stale-while-revalidate',
+      // 60 s, matching the ISR window every page uses, so the platform has ONE
+      // staleness number rather than a page answer and a sitemap answer 60×
+      // apart (AGL-1160).
+      //
+      // Why not a cache tag, which is what the issue proposed: the CDN is the
+      // only layer a visitor sees here, and `revalidateTag` cannot reach it.
+      // `force-dynamic` already keeps this route out of Next's cache, and it
+      // has to stay that way — the host is resolved per request. So a tag would
+      // only ever save origin work, never shorten what a crawler is served.
+      // Bounding the header is the whole fix; anything else is decoration on
+      // top of it.
+      //
+      // `stale-while-revalidate` carried no delta-seconds before. RFC 5861
+      // requires one, so the old value was malformed and a CDN was free to
+      // treat it as unbounded — that is the "worst case is longer than an hour"
+      // the issue suspected. Bounded now, so worst case is 60 + 60 s.
+      'Cache-Control': 's-maxage=60, stale-while-revalidate=60',
     },
   })
 }

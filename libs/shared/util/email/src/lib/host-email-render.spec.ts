@@ -35,7 +35,8 @@ function snapshot(data: Record<string, unknown> | null) {
 function fakeFirestore(
   template: Record<string, unknown> | null,
   version: Record<string, unknown> | null,
-  reads: { templates: number; versions: number },
+  reads: { templates: number; versions: number; hosts?: number },
+  host: Record<string, unknown> | null = null,
 ): AdminFirestoreLike {
   const templateRef = {
     get: async () => {
@@ -55,7 +56,11 @@ function fakeFirestore(
   return {
     collection: () => ({
       doc: () => ({
-        get: async () => snapshot(null),
+        // The host document itself — read for the site's origin (AGL-1224).
+        get: async () => {
+          reads.hosts = (reads.hosts ?? 0) + 1
+          return snapshot(host)
+        },
         collection: () => ({ doc: () => templateRef }),
       }),
     }),
@@ -131,6 +136,94 @@ describe('renderHostEmail (AGL-770)', () => {
     // Rendering touched Firestore no further.
     expect(reads.templates).toBe(1)
     expect(reads.versions).toBe(1)
+  })
+
+  /**
+   * AGL-1224. The origin has to come from the SITE, not a constant: the CDN
+   * route is mounted in both the console and the tenant app, and a customer's
+   * booking confirmation must fetch its images from the customer's own site.
+   */
+  describe('picked media resolves against the site (AGL-1224)', () => {
+    const IMAGE_NODES = {
+      '_@_': { $id: '_@_', componentId: 'div', nodes: ['i1'] },
+      i1: {
+        $id: 'i1',
+        componentId: 'emailImage',
+        pluginId: 'email',
+        parentId: '_@_',
+        props: { src: 'media:org:o1/med7', alt: 'Logo' },
+      },
+    }
+    const published = { versionId: 'v1', subject: 'Hi' }
+
+    it('uses a custom domain over the platform subdomain', async () => {
+      const reads = { templates: 0, versions: 0 }
+      const fs = fakeFirestore(published, { nodes: IMAGE_NODES }, reads, {
+        subdomain: 'acme',
+        cname: 'shop.acme.com',
+      })
+      const result = await renderHostEmail(fs, 'h1', 'booking-confirmed')
+      expect(result?.html).toContain(
+        'src="https://shop.acme.com/api/media/cdn/org:o1:h1/med7"',
+      )
+    })
+
+    it('falls back to the platform subdomain', async () => {
+      const reads = { templates: 0, versions: 0 }
+      const fs = fakeFirestore(published, { nodes: IMAGE_NODES }, reads, {
+        subdomain: 'acme',
+      })
+      const result = await renderHostEmail(fs, 'h1', 'booking-confirmed')
+      expect(result?.html).toContain(
+        'src="https://acme.aglyn.app/api/media/cdn/org:o1:h1/med7"',
+      )
+    })
+
+    it('drops the image when the host has no origin at all', async () => {
+      const reads = { templates: 0, versions: 0 }
+      const fs = fakeFirestore(published, { nodes: IMAGE_NODES }, reads, {})
+      const result = await renderHostEmail(fs, 'h1', 'booking-confirmed')
+      expect(result?.html).not.toContain('media:org')
+      expect(result?.html).not.toContain('src="/api/media/cdn')
+    })
+
+    it('skips the host read when the caller already knows the origin', async () => {
+      const reads = { templates: 0, versions: 0, hosts: 0 }
+      const fs = fakeFirestore(published, { nodes: IMAGE_NODES }, reads, {
+        subdomain: 'acme',
+      })
+      const result = await renderHostEmail(
+        fs,
+        'h1',
+        'booking-confirmed',
+        {},
+        { origin: 'https://passed.test' },
+      )
+      expect(result?.html).toContain('src="https://passed.test/api/media/cdn/')
+      expect(reads.hosts).toBe(0)
+    })
+
+    it('reads the host once per LOAD, not once per recipient', async () => {
+      const reads = { templates: 0, versions: 0, hosts: 0 }
+      const fs = fakeFirestore(published, { nodes: IMAGE_NODES }, reads, {
+        subdomain: 'acme',
+      })
+      const loaded = await loadHostEmail(fs, 'h1', 'booking-reminder')
+      renderLoadedHostEmail(loaded!, { name: 'Alex' })
+      renderLoadedHostEmail(loaded!, { name: 'Sam' })
+      expect(reads.hosts).toBe(1)
+    })
+
+    it('costs no host read when nothing is published', async () => {
+      // The origin is only needed for something to render, so an unpublished
+      // template still settles in a single read (AGL-770).
+      const reads = { templates: 0, versions: 0, hosts: 0 }
+      const fs = fakeFirestore({ versionId: null }, null, reads, {
+        subdomain: 'acme',
+      })
+      expect(await renderHostEmail(fs, 'h1', 'booking-confirmed')).toBeNull()
+      expect(reads.hosts).toBe(0)
+    })
   })
 
   it('never leaves an unresolved token in the output', async () => {

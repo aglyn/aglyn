@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { FieldComponentType } from '@aglyn/aglyn'
 import { SX_SCHEME_DARK_KEY } from '@aglyn/aglyn-node-renderer'
 import { readSxValue, writeSxValue } from './responsive-sx'
 import {
@@ -146,6 +147,110 @@ describe('style field groups (AGL-540/587)', () => {
     }
   })
 
+  // Number box + unit picker for lengths (AGL-1219). Asserted at the
+  // DECLARATION end so a field that quietly reverts to free text — or a
+  // theme-multiple field that gets swept into the dimension editor — fails
+  // here rather than in a screenshot.
+  describe('length editors', () => {
+    const componentOf = (name: string) =>
+      [...groups.flatMap((group) => group.fields), ...gapGroup.fields].find(
+        (field) => field.name === name,
+      )?.['component']
+
+    it.each([
+      'width',
+      'height',
+      'minWidth',
+      'maxWidth',
+      'minHeight',
+      'maxHeight',
+      'fontSize',
+      'letterSpacing',
+      'top',
+      'right',
+      'bottom',
+      'left',
+      'flexBasis',
+    ])('gives %s a number box and a unit picker', (name) => {
+      expect(componentOf(name)).toBe(FieldComponentType.CSS_DIMENSION)
+    })
+
+    it.each([
+      // A NUMBER in these means a theme multiple, not pixels: `gap: 2` is
+      // 16px (× the spacing unit) and `borderRadius: 2` is 8px (×
+      // shape.borderRadius). A px picker would show "2" and turn the next
+      // nudge into 3px — a silent 8× shrink.
+      'gap',
+      'rowGap',
+      'columnGap',
+      'borderRadius',
+      // Unitless by convention; a unit picker would push px onto 1.5.
+      'lineHeight',
+    ])('keeps %s free text — its bare number is not pixels', (name) => {
+      expect(componentOf(name)).toBe(FieldComponentType.TEXT_FIELD)
+    })
+
+    it('tells the sizing keys that a fraction is a percentage', () => {
+      // MUI's sizingTransform: width: 0.5 renders 50%, not 0.5px.
+      const sizing = groups.find((group) => group.$id === 'sizing')!
+      for (const field of sizing.fields) {
+        expect(field['numberAs']).toBe('mui-sizing')
+      }
+      // Everything else is plain CSS, where a number IS pixels.
+      const fontSize = groups
+        .flatMap((group) => group.fields)
+        .find((field) => field.name === 'fontSize')
+      expect(fontSize?.['numberAs']).toBeUndefined()
+    })
+  })
+
+  // Per-field help tips (AGL-600, wired in AGL-1220). Asserted at the
+  // DECLARATION end: the panel's accordion copy promises a ? on exactly
+  // these fields, and for years there was none anywhere because
+  // withStyleFieldHelp was never called.
+  describe('help tips', () => {
+    const allFields = [
+      ...groups.flatMap((group) => group.fields),
+      ...gapGroup.fields,
+    ]
+    const helpOf = (name: string) =>
+      allFields.find((field) => field.name === name)?.['help'] as
+        { title: string; excerpt: string; href: string } | undefined
+
+    it.each(['borderRadius', 'gap', 'rowGap', 'columnGap', 'lineHeight'])(
+      'warns on %s that its bare number is not pixels',
+      (name) => {
+        const help = helpOf(name)
+        expect(help).toBeDefined()
+        expect(help!.excerpt).toMatch(/not pixels/)
+        expect(help!.title).toBeTruthy()
+        // Clicking the tip must land on the style-groups docs section.
+        expect(help!.href).toContain('#style-groups')
+      },
+    )
+
+    it('leaves every other field to its inline description', () => {
+      // The tip's value is saying what the helper line CANNOT. Tipping
+      // all ~40 described fields duplicates the visible text and drops a
+      // ? onto each field's top border — deliberately not shipped.
+      const tipped = allFields
+        .filter((field) => field['help'])
+        .map((field) => field.name)
+        .sort()
+      expect(tipped).toEqual([
+        'borderRadius',
+        'columnGap',
+        'gap',
+        'lineHeight',
+        'rowGap',
+      ])
+      // …and every untipped field still explains itself inline.
+      for (const field of allFields) {
+        if (!field['help']) expect(field['description']).toBeTruthy()
+      }
+    })
+  })
+
   it('feeds the theme palette into every color picker', () => {
     for (const fieldName of ['borderColor', 'color', 'backgroundColor']) {
       const field = groups
@@ -176,9 +281,7 @@ describe('style field groups (AGL-540/587)', () => {
     it('clears fields the user emptied', () => {
       const partial = computeStylePartial(names, { height: undefined })
       expect(partial['height']).toBeUndefined()
-      expect(Object.prototype.hasOwnProperty.call(partial, 'height')).toBe(
-        true,
-      )
+      expect(Object.prototype.hasOwnProperty.call(partial, 'height')).toBe(true)
     })
   })
 

@@ -1,0 +1,240 @@
+{
+  "page": "Media",
+  "figmaNodeId": "121:1905",
+  "frameSize": { "width": 1440, "height": 5216 },
+  "notes": "Same 8-section skeleton as /product/besigner (93:31), with Deep-dive and Canvas/visual combined into ONE section (Figma frame is literally named 'Deep-dive · canvas'). Shared chrome NavBar (121:1906) and Footer (121:2131) sit outside the 8 sections and are not recorded here. Eyebrow style throughout: 13px Roboto Flex SemiBold, letter-spacing 1.04px, uppercase, colour #e040fb (magenta). Section headings are 44px ExtraBold; the final CTA heading is 56px Black. Section backgrounds alternate white / #f8f9fa (Deep-dive, Explore, Early access are the grey ones); the CTA is a diagonal gradient.",
+  "sections": [
+    {
+      "kind": "hero",
+      "figmaNodeId": "121:1907",
+      "eyebrow": "MEDIA · DIGITAL-ASSET MANAGER",
+      "heading": "A real home for every asset.",
+      "subheading": null,
+      "body": [
+        "Aglyn’s media library is a full DAM — folders, drag-and-drop uploads, custom metadata, and CDN delivery — shared across every site and product."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "Watch the tour", "variant": "text" }
+      ],
+      "items": [],
+      "image": {
+        "describe": "Media library console screenshot, bleeding off the right edge of the viewport. Left rail headed FOLDERS with counts: All assets 248, Brand 32, Photos 96, Products 74, Icons 28, Documents 18. Main pane headed 'All assets' — a 3-column grid: first row three folder tiles (Brand 32 items, Photos 96 items, Products 74 items), then asset cards with coloured thumbnails and file size: team-photo.jpg 840 KB, product-01.png 420 KB, logo-mark.svg 12 KB, icon-set.png 96 KB, about.jpg 1.6 MB, pattern.svg 8 KB. Breadcrumb 'Media / All assets'.",
+        "figmaNodeId": "121:1917"
+      },
+      "notes": "Two-column: 600px copy block left at 80px gutter, 920x580 mockup right, overflowing the frame edge. Eyebrow is preceded by a 28x2px magenta rule. White background. Hero copy block is vertically centred-ish (starts y=181)."
+    },
+    {
+      "kind": "statement",
+      "figmaNodeId": "121:1918",
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [
+        "Most site builders bury your files in a flat uploads list. Aglyn gives you a real digital-asset manager — organized, searchable, and reusable everywhere."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": "Single full-bleed statement paragraph set large (~28px bold) across the 1280px content column, left-aligned, wrapping to two lines. White background, 64px top padding, 208px tall band."
+    },
+    {
+      "kind": "capabilities",
+      "figmaNodeId": "121:1920",
+      "eyebrow": "WHAT MEDIA INCLUDES",
+      "heading": "Organized, reusable, and fast.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Folders & organization",
+          "body": "Nest folders, drag to reorganize, and keep large libraries tidy.",
+          "meta": null
+        },
+        {
+          "title": "Private & per-site sharing",
+          "body": "Choose which sites can use each asset or folder — and mark sensitive files private, served only through short-lived signed URLs.",
+          "meta": null
+        },
+        {
+          "title": "Custom metadata",
+          "body": "Add your own fields to any asset — alt text, credits, usage, and tags.",
+          "meta": null
+        },
+        {
+          "title": "CDN & responsive",
+          "body": "Images serve from a global CDN, resized and optimized automatically.",
+          "meta": null
+        },
+        {
+          "title": "Video & large files",
+          "body": "Upload video and large files (Pro & up) and embed them anywhere.",
+          "meta": null
+        },
+        {
+          "title": "Reusable everywhere",
+          "body": "One library powers Besigner, commerce, forms, and every product.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "3-column card grid, 2 rows, 410px cards with 20px gap. Each card has a 44x44 rounded icon tile above the title. Eyebrow + heading are CENTRED; cards left-aligned. White background. NOTE: several Figma card frame names are stale and do not match their text — frame 'Card Drag-and-drop upload' actually holds 'Private & per-site sharing'. Trust the text nodes."
+    },
+    {
+      "kind": "deep-dive",
+      "figmaNodeId": "121:1972",
+      "eyebrow": "ONE LIBRARY",
+      "heading": "Folders in the grid, drag to organize.",
+      "subheading": null,
+      "body": [
+        "Reorganize by dragging assets and folders right in the grid, add custom metadata to anything, and reuse the same asset across every site — no re-uploading."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "title": "Folders in the grid",
+          "body": "Nest folders and drag assets between them to keep large libraries tidy.",
+          "meta": null
+        },
+        {
+          "title": "Custom metadata",
+          "body": "Add your own fields to any asset — alt text, credits, usage, and tags.",
+          "meta": null
+        },
+        {
+          "title": "Reuse everywhere",
+          "body": "One library powers Besigner, commerce, and forms — no duplicate uploads.",
+          "meta": null
+        }
+      ],
+      "image": {
+        "describe": "Asset detail screen. Breadcrumb 'Media / Photos / hero-bg.jpg'. Left: large blue-to-indigo gradient image preview. Right panel: title 'hero-bg.jpg', meta line '2400 × 1600 · JPEG · 1.2 MB', buttons REPLACE (outlined) and DOWNLOAD (outlined primary). DETAILS section with an 'Alt text' field containing 'Homepage hero background' and tag chips brand / hero / homepage. CUSTOM METADATA rows: Photographer → Jordan Lee, License → Internal use, Campaign → Summer ’26. Footer status line with a green dot: 'CDN · variants 320 / 640 / 1280'.",
+        "figmaNodeId": "121:1999"
+      },
+      "notes": "This is the combined deep-dive + canvas/visual section. Two-column: 440px copy column left (eyebrow, 32px heading, body, then three check-icon bullets), 768x580 mockup right. LIGHT GREY background (#f8f9fa). The three bullets use a small 26px check icon, not the 44px tile used in Capabilities."
+    },
+    {
+      "kind": "how-it-works",
+      "figmaNodeId": "121:2000",
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From upload to global delivery, automatically.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Upload",
+          "body": "Drag files straight into the library — images, video, and documents, uploaded in bulk.",
+          "meta": "01"
+        },
+        {
+          "title": "Organize",
+          "body": "Sort assets into folders with drag-and-drop, and tag them with custom metadata so everything stays findable.",
+          "meta": "02"
+        },
+        {
+          "title": "Deliver",
+          "body": "Every image is served responsive over a global CDN — the right size, the right format, fast everywhere.",
+          "meta": "03"
+        }
+      ],
+      "image": null,
+      "notes": "3 equal columns, each topped by a 3px full-width rule, then the large step number (01/02/03, 40px), then the step title, then body. Eyebrow + heading LEFT-aligned (unlike Capabilities). White background."
+    },
+    {
+      "kind": "explore-the-platform",
+      "figmaNodeId": "121:2020",
+      "eyebrow": "ONE PLATFORM",
+      "heading": "Media works with the rest of Aglyn.",
+      "subheading": "Every product below runs on the same platform — explore what else is built in.",
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "meta": null
+        },
+        {
+          "title": "Commerce",
+          "body": "Storefronts, checkout, subscriptions & digital goods.",
+          "meta": null
+        },
+        {
+          "title": "Forms & Inbox",
+          "body": "Collect submissions in one Inbox and route them onward.",
+          "meta": null
+        },
+        {
+          "title": "Console",
+          "body": "Manage every site, team, and setting in one place.",
+          "meta": null
+        },
+        {
+          "title": "Workflows",
+          "body": "Automate the busywork with triggers & actions.",
+          "meta": null
+        },
+        {
+          "title": "Plugins",
+          "body": "Install templates and layouts, or publish and sell your own.",
+          "meta": null
+        },
+        {
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages, and store revenue.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "3-column grid of 7 link cards; the 7th (Analytics) sits alone in the middle column of row 3. Each card: 40px product icon top-left, arrow glyph top-right, then title, then one-line body. The Media card is omitted (self). Centred eyebrow/heading/subheading. LIGHT GREY background."
+    },
+    {
+      "kind": "early-access",
+      "figmaNodeId": "121:2101",
+      "eyebrow": "Now in early access",
+      "heading": "Be among the first to build on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Aglyn is pre-release. Join early access to start building and shape the roadmap with us."
+      ],
+      "actions": [
+        { "label": "Join early access", "variant": "contained" },
+        { "label": "See what’s included", "variant": "outlined" }
+      ],
+      "items": [
+        { "title": "1", "body": "platform, not a stack", "meta": "stat" },
+        { "title": "9", "body": "products built in", "meta": "stat" },
+        { "title": "0", "body": "plugins to wire up", "meta": "stat" },
+        { "title": "1-click", "body": "to publish", "meta": "stat" }
+      ],
+      "image": null,
+      "notes": "The eyebrow is a rounded PILL badge (Badge/Pill) with a small dot, not the magenta eyebrow style: 1px #e0e0e0 border, #f5f5f5 fill, 14px secondary text. Everything centred. Below the CTA pair, a 4-up stat row separated by 1px vertical rules; figures are 44px ExtraBold in brand blue #0090d9, labels 16px secondary. Background #f8f9fa. This section is IDENTICAL on all three pages."
+    },
+    {
+      "kind": "cta",
+      "figmaNodeId": "121:2125",
+      "eyebrow": null,
+      "heading": "Bring your media to Aglyn.",
+      "subheading": "Free to start — upload, organize, and reuse across every site.",
+      "body": [],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "text" }
+      ],
+      "items": [],
+      "image": null,
+      "notes": "Full-bleed GRADIENT band, 188.73deg: #00b0ff 36.6% → #7a5cf0 76.9% → #e040fb 109.8%. All text white and centred; heading 56px Black at 900px max width, sub 18px at 620px, 94% opacity. Primary button is the white-on-dark variant (Button/OnDark, white fill, dark label); secondary is a white text button."
+    }
+  ],
+  "claimsToVerify": [
+    "Capabilities · 'Upload video and large files (Pro & up) and embed them anywhere.' — plan-gate claim; confirm video/large-file upload really starts at Pro and that video embeds work anywhere.",
+    "Capabilities · 'Images serve from a global CDN, resized and optimized automatically.' and How it works step 03 'Every image is served responsive over a global CDN — the right size, the right format, fast everywhere.' — confirm automatic resize AND format conversion, not just CDN passthrough.",
+    "Capabilities · 'mark sensitive files private, served only through short-lived signed URLs' — confirm private assets are actually delivered via short-lived signed URLs.",
+    "Deep-dive mockup (121:1999) shows a delivery status line 'CDN · variants 320 / 640 / 1280' — verify those exact variant widths before shipping the mockup.",
+    "Hero · 'shared across every site and product' and Deep-dive · 'reuse the same asset across every site — no re-uploading' — cross-site reuse is a scoping claim; confirm it matches the visibleTo sharing model.",
+    "Early access stats (shared across all three pages): '9 products built in' and '0 plugins to wire up' — factual counts, confirm the current product count.",
+    "Explore card · Analytics 'Privacy-first traffic, top pages, and store revenue.' — safe as written (no visitors/conversions metric and no cross-site rollup), but confirm 'store revenue' appears in Analytics."
+  ]
+}

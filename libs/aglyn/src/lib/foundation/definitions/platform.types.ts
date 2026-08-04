@@ -323,7 +323,21 @@ export interface PublishSchedule {
    */
   action?: 'publish' | 'unpublish'
   publishAt: ITimestamp
-  status: 'pending' | 'applied' | 'canceled'
+  /**
+   * `skipped-unentitled` is a terminal refusal (AGL-1185): the schedule came
+   * due on a plan without `scheduledPublishing`, so the executor declined it
+   * and will not reconsider.
+   *
+   * It exists because leaving it `pending` meant the refusal was not recorded
+   * anywhere — the schedule stayed due forever, and the moment the org upgraded
+   * to Business the next beat published it. Content someone scheduled and
+   * forgot, months later, surfacing during an upgrade. Recording the refusal is
+   * what makes it stop being due.
+   *
+   * Every reader tests `=== 'pending'`, so adding a member here degrades
+   * correctly rather than needing each one updated — checked, not assumed.
+   */
+  status: 'pending' | 'applied' | 'canceled' | 'skipped-unentitled'
   createdAt?: ITimestamp
 }
 

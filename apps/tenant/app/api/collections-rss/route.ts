@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { resolveEntryCategoryName } from '@aglyn/aglyn/server'
+import { hostPublicOrigin, resolveEntryCategoryName } from '@aglyn/aglyn/server'
 import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
 import getHost from '../../../utils/get-host'
 
@@ -46,7 +46,13 @@ export async function GET(request: Request): Promise<Response> {
   })
   if (!content.collection) return new Response('Not found', { status: 404 })
 
-  const base = `https://${request.headers.get('host') ?? host}`
+  // The site's public origin, not the domain the request arrived on — see the
+  // longer note in `../sitemap/route.ts` (AGL-1160). It matters more here: a
+  // feed's `<guid>` is the identity a reader stores, so a URL that changes with
+  // the requesting domain re-announces every old entry as new.
+  const base =
+    hostPublicOrigin(hostRes.host) ??
+    `https://${request.headers.get('host') ?? host}`
   const categories = content.collection.categories
   const items = content.entries
     .map(
@@ -85,7 +91,12 @@ export async function GET(request: Request): Promise<Response> {
     status: 200,
     headers: {
       'Content-Type': 'application/rss+xml',
-      'Cache-Control': 's-maxage=3600, stale-while-revalidate',
+      // Matches the page ISR window, and gives `stale-while-revalidate` the
+      // delta-seconds RFC 5861 requires — see the longer note in
+      // `../sitemap/route.ts` for why a cache tag does not help here
+      // (AGL-1160). Publishing a post and waiting an hour for the feed to
+      // mention it is the case this exists to end.
+      'Cache-Control': 's-maxage=60, stale-while-revalidate=60',
     },
   })
 }

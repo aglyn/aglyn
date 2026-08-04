@@ -24,7 +24,15 @@ import { createContext } from 'react'
  * the designer stays storage-agnostic and hides the control otherwise.
  */
 export interface MediaPickerContextValue {
-  onPickMedia?: (onPick: (url: string) => void) => void
+  /**
+   * `onPick` receives the value the attribute should STORE, which is not
+   * necessarily a URL: the console hands back a `media:{scope}/{mediaId}`
+   * reference for library assets (AGL-1215) and a raw URL only for assets
+   * that have no CDN path. The designer writes it through verbatim — what
+   * the persisted form means is the host app's and the renderer's business,
+   * which is the same reason this context exists at all.
+   */
+  onPickMedia?: (onPick: (value: string) => void) => void
 }
 
 export const MediaPickerContext = createContext<MediaPickerContextValue>({})

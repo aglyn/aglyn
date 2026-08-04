@@ -133,6 +133,12 @@ interface ListingDetail {
   /** The version the checklist and verifier verdict above refer to. */
   reviewVersion: string
   private: boolean
+  /** The publisher's standing ask for the Verified badge (AGL-1217). */
+  verificationRequest?: {
+    state?: string
+    requestedAt?: string | null
+    declineReason?: string | null
+  } | null
 }
 
 /** Verifier findings read as a wall of text otherwise; group by severity. */
@@ -1289,6 +1295,38 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                             </Button>
                           </span>
                         </Tooltip>
+                      ) : null}
+                      {/* Only when something is actually waiting (AGL-1217).
+                          Declining is a refusal of a request, not a verdict
+                          on the plugin — offering it with nothing pending
+                          would invite staff to refuse something nobody
+                          asked for. Verify is already on this bar and is
+                          how a request is GRANTED, so there is no second
+                          grant button. */}
+                      {detail.verificationRequest?.state === 'pending' ? (
+                        <Button
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          disabled={busy}
+                          onClick={() => {
+                            const reason = window.prompt(
+                              'Why is verification declined? The publisher is ' +
+                                'told this, and cannot ask again for 30 days.',
+                            )
+                            // `prompt` returns null on cancel and '' on an
+                            // empty submit. Neither is a decline — the server
+                            // requires a reason, and sending one anyway would
+                            // surface as an error the reviewer did not cause.
+                            if (!reason?.trim()) return
+                            void post(
+                              { action: 'decline-verification', reason },
+                              'Verification declined',
+                            )
+                          }}
+                        >
+                          {'Decline verification'}
+                        </Button>
                       ) : null}
                       {detail.private ? (
                         <Chip size="small" label="Private — never listed" />

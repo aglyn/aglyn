@@ -180,6 +180,15 @@ export enum FieldComponentType {
   BUTTON_GROUP = 'button-group',
   CHECKBOX = 'checkbox',
   COLOR_PICKER = 'color-picker',
+  /**
+   * CSS length editor (AGL-1219): a number box plus a unit picker sharing
+   * the styles panel's unit list. The persisted prop is still ONE CSS
+   * string (`"920px"`, `"100%"`, `"auto"`, `""`) — this is an input
+   * affordance, not a shape change, so renderers stay untouched. Values
+   * the picker can't model (`calc(…)`, a binding token) fall back to free
+   * text rather than being clobbered.
+   */
+  CSS_DIMENSION = 'css-dimension',
   DATE_PICKER = 'date-picker',
   DUAL_LIST_SELECT = 'dual-list-select',
   FIELD_ARRAY = 'field-array',

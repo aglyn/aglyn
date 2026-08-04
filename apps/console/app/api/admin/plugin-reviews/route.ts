@@ -16,6 +16,12 @@
  */
 
 import {
+  REVOKED_VERSION_REVIEW_STATE,
+  revocationWithdrawsReviewedClaim,
+  shouldStripVerifiedOnTakedown,
+  VERIFIED_STRIPPED_STATUS,
+} from '../../../../constants/plugin-review-status'
+import {
   checkPluginBundle,
   isPluginRevoked,
   isStoredVerdictCurrent,
@@ -48,6 +54,7 @@ import {
   rejectionInputError,
 } from '../../../../constants/plugin-rejection-categories'
 import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import { VERIFICATION_DECLINE_COOLDOWN_DAYS } from '@aglyn/aglyn/app-utils/marketplace-verification'
 import {
   PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementState,
@@ -321,6 +328,18 @@ async function listingDetail(
       listingId,
       displayName: listing.displayName ?? listingId,
       description: listing.description ?? '',
+      // The publisher's ask, so the page can offer Decline beside Verify
+      // (AGL-1217). Serialized: `decidedAt`/`requestedAt` are Timestamps and
+      // this payload crosses JSON.
+      verificationRequest: listing.verificationRequest
+        ? {
+            state: String(listing.verificationRequest.state ?? ''),
+            requestedAt:
+              listing.verificationRequest.requestedAt?.toDate?.()?.toISOString() ??
+              null,
+            declineReason: listing.verificationRequest.declineReason ?? null,
+          }
+        : null,
       readme: listing.readme ?? '',
       license: listing.license ?? '',
       categories: listing.categories ?? [],
@@ -480,12 +499,24 @@ async function handler(request: Request): Promise<Response> {
               private: listing.visibility === 'private',
               latestReviewState: String(latest?.get('reviewState') ?? 'pending'),
               grandfathered: Boolean(latest?.get('grandfathered')),
+              // The publisher's standing ask for the badge (AGL-1217).
+              verificationRequest: listing.verificationRequest ?? null,
             }
           }),
       )
       // Awaiting review = the newest bytes have no approval, whatever the
       // listing says. That is what puts an update in front of staff.
       const queue = rows.filter((row) => row.latestReviewState !== 'approved')
+      // A THIRD bucket, deliberately not folded into `queue` (AGL-1217).
+      // `queue` means "these bytes have not been read"; a verification request
+      // means "this publisher asked us to vouch for who they are". They are
+      // different questions with different work attached, and a listing can
+      // sit in both at once — an update pending review from a publisher who
+      // has also asked for the badge. Merging them would hide one behind the
+      // other and make the count meaningless.
+      const verificationRequests = rows.filter(
+        (row) => row.verificationRequest?.state === 'pending',
+      )
       // Listed/verified plugins with per-version trust (AGL-885): once a
       // listing leaves the queue the Grant/Revoke realm-trust actions used
       // to leave with it — revoking a live plugin's trust required a
@@ -552,7 +583,10 @@ async function handler(request: Request): Promise<Response> {
           if (doc.exists) publishers[doc.id] = String(doc.get('name') ?? doc.id)
         }
       }
-      return Response.json({ queue, listed, publishers }, { status: 200 })
+      return Response.json(
+        { queue, listed, publishers, verificationRequests },
+        { status: 200 },
+      )
     }
 
     if (method !== 'POST') {
@@ -585,6 +619,26 @@ async function handler(request: Request): Promise<Response> {
       if (!targetSnapshot.exists) {
         return Response.json({ error: 'Unknown target' }, { status: 404 })
       }
+      // A takedown strips the Verified badge (AGL-1121, decided 2026-08-03).
+      //
+      // Verified is OUR claim that a human vouched for this publisher. Taking
+      // the listing down is us saying the opposite out loud, so the two cannot
+      // both stand — a badge surviving a takedown would still be asserting the
+      // vouch on the listing page the moment it was restored.
+      //
+      // Demoted to `listed`, not to `rejected` or `submitted`: the takedown
+      // itself is what makes it non-browsable (`hiddenAt`), and rewriting the
+      // review verdict would destroy the record of a review that did happen.
+      //
+      // Restoring deliberately does NOT put the badge back. Re-granting is
+      // `verify`, which re-checks the review checklist server-side; an automatic
+      // regrant would hand back the badge without anyone re-forming the opinion
+      // behind it. Losing it to a takedown is meant to cost a re-review.
+      const stripVerified = shouldStripVerifiedOnTakedown({
+        action,
+        reviewStatus: targetSnapshot.get('reviewStatus'),
+        isListingTarget: !reviewUid,
+      })
       await target.set(
         reviewUid
           ? { hidden: action === 'hide' }
@@ -593,6 +647,9 @@ async function handler(request: Request): Promise<Response> {
                 hiddenAt: FieldValue.serverTimestamp(),
                 hiddenBy: decoded.uid,
                 hiddenReason: hideReason,
+                ...(stripVerified
+                  ? { reviewStatus: VERIFIED_STRIPPED_STATUS }
+                  : {}),
               }
             : {
                 hiddenAt: FieldValue.delete(),
@@ -654,12 +711,23 @@ async function handler(request: Request): Promise<Response> {
           hidden: action === 'hide',
           ...(hideReason ? { reason: hideReason } : {}),
           ...(isPlugin ? { revoked: action === 'hide' } : {}),
+          // Recorded because it is a side effect of the takedown rather than
+          // something the reviewer asked for, and because getting it back is a
+          // re-review rather than an undo.
+          ...(stripVerified ? { unverified: true } : {}),
         },
         at: FieldValue.serverTimestamp(),
       })
 
       return Response.json(
-        { ok: true, hidden: action === 'hide', revoked: isPlugin && action === 'hide' },
+        {
+          ok: true,
+          hidden: action === 'hide',
+          revoked: isPlugin && action === 'hide',
+          // The caller shows this — a badge silently disappearing would be
+          // worse than one that never existed.
+          unverified: stripVerified,
+        },
         { status: 200 },
       )
     }
@@ -909,6 +977,19 @@ async function handler(request: Request): Promise<Response> {
     // Rejection deliberately stays a verdict rather than a kill: most
     // rejections are a thin README, and an unannounced site outage is worse
     // than the gap. This is the deliberate, adjacent action.
+    //
+    // This does NOT strip the Verified badge, unlike a takedown (AGL-1121).
+    // The two claims are scoped differently and the split is the whole point:
+    // Verified says a human vouched for the PUBLISHER and survives version
+    // bumps, while the separate "Reviewed" chip speaks for THESE bytes and is
+    // re-earned per version. Stripping the publisher claim for one bad release
+    // would punish an honest mistake, and is not reversible without a full
+    // re-review. A takedown is the action that contradicts the publisher claim,
+    // and that one does strip it.
+    //
+    // That reasoning only holds because the BYTES claim is withdrawn instead —
+    // which it now is, below. It was not before, and the gap is what made
+    // keeping the badge unsafe rather than merely debatable.
     if (action === 'revoke-version' || action === 'unrevoke-version') {
       const version = String(body?.version ?? '')
       if (!listingId || !version) {
@@ -942,11 +1023,55 @@ async function handler(request: Request): Promise<Response> {
         await revocationRef.delete()
       }
 
+      // Withdraw the "Reviewed" chip when the bytes we just killed are the ones
+      // customers are being offered (AGL-1121).
+      //
+      // This was ASSUMED to happen already and did not. `latestVersionReviewState`
+      // is written only by approve/reject and on publish, so a version approved
+      // and later revoked kept `'approved'` — and since a per-version revocation
+      // deliberately does NOT hide the listing (that is the whole difference from
+      // a takedown), the marketplace went on showing "A human at Aglyn read these
+      // exact bytes" about bytes we had just stopped from executing. Revocation
+      // is not surfaced anywhere else in the browse or listing UI either, so
+      // nothing contradicted it.
+      //
+      // `revoked` rather than `rejected`: it was not turned down in review, it
+      // was killed afterwards, and the audit trail should not blur those. Both
+      // consumers test against `'approved'`, so this correctly drops the chip and
+      // raises the caution alert.
+      //
+      // Only when it is the LATEST version, because that is what both consumers
+      // describe. Revoking an old version says nothing about what is on offer.
+      const isLatest = revocationWithdrawsReviewedClaim({
+        revokedVersion: version,
+        latestVersion: String(listing['latestVersion'] ?? ''),
+      })
+      if (isLatest) {
+        const versionSnapshot = await listingRef
+          .collection('pluginVersions')
+          .doc(version)
+          .get()
+        await listingRef.set(
+          {
+            latestVersionReviewState: revoking
+              ? REVOKED_VERSION_REVIEW_STATE
+              : // Restoring returns it to whatever the version's own verdict
+                // says, rather than assuming `approved` — un-revoking a version
+                // that was never approved must not promote it.
+                String(versionSnapshot.get('reviewState') ?? 'pending'),
+          },
+          { merge: true },
+        )
+      }
+
       await firestore.collection('adminAudit').add({
         actorUid: decoded.uid,
         action: `plugins.revocation.${revoking ? 'revoke' : 'restore'}`,
         target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
-        after: { versions: next?.versions ?? null },
+        after: {
+          versions: next?.versions ?? null,
+          ...(isLatest ? { latestVersionReviewStateChanged: true } : {}),
+        },
         at: FieldValue.serverTimestamp(),
       })
 
@@ -969,6 +1094,68 @@ async function handler(request: Request): Promise<Response> {
         { ok: true, version, revoked: revoking },
         { status: 200 },
       )
+    }
+
+    // Declining a verification request (AGL-1217). Handled before the ACTIONS
+    // lookup because it deliberately has NO `reviewStatus` to move to: the
+    // listing stays exactly as live as it was. Refusing a badge is not a
+    // verdict on the code, and routing it through the status ladder would
+    // make it one.
+    if (action === 'decline-verification') {
+      const declineReason = String(body?.reason ?? '').trim().slice(0, 500)
+      if (!listingId) {
+        return Response.json({ error: 'Unknown action' }, { status: 400 })
+      }
+      // Required, unlike most fields here. The publisher is notified of this
+      // and then has to wait out a cooldown before asking again; "no, and we
+      // will not say why, try in a month" is not a usable answer.
+      if (!declineReason) {
+        return Response.json(
+          { error: 'A reason is required — the publisher is told it' },
+          { status: 400 },
+        )
+      }
+      const listingRef = firestore
+        .collection('marketplaceListings')
+        .doc(listingId)
+      const listing = (await listingRef.get()).data()
+      if (!listing) {
+        return Response.json({ error: 'Unknown listing' }, { status: 404 })
+      }
+      if (listing.verificationRequest?.state !== 'pending') {
+        return Response.json(
+          { error: 'No verification request is waiting' },
+          { status: 409 },
+        )
+      }
+      await listingRef.set(
+        {
+          verificationRequest: {
+            ...listing.verificationRequest,
+            state: 'declined',
+            decidedAt: FieldValue.serverTimestamp(),
+            decidedBy: decoded.uid,
+            declineReason,
+          },
+        },
+        { merge: true },
+      )
+      const publisherOrgId = String(listing.profileId ?? '')
+      if (publisherOrgId) {
+        await notifyOrgAdmins(publisherOrgId, {
+          type: 'marketplace.review',
+          title: `Verification declined for "${listing.displayName}"`,
+          // Says plainly that nothing about the listing changed. Without it a
+          // publisher reads "declined" as a takedown of the plugin itself.
+          body:
+            `${declineReason}\n\nYour plugin is unaffected and stays listed. ` +
+            `You can request verification again in ` +
+            `${VERIFICATION_DECLINE_COOLDOWN_DAYS} days.`,
+          orgId: publisherOrgId,
+          link: '/',
+        }).catch(() => undefined)
+      }
+      return Response.json({ ok: true, state: 'declined' }, { status: 200 })
     }
 
     const nextStatus = ACTIONS[action]
@@ -1024,6 +1211,25 @@ async function handler(request: Request): Promise<Response> {
         reviewStatus: nextStatus,
         reviewedBy: decoded.uid,
         reviewedAt: FieldValue.serverTimestamp(),
+        // Granting the badge answers any request that was waiting (AGL-1217).
+        // Left alone it would sit `pending` forever, so the staff queue would
+        // keep offering a decision on a listing that already has the badge,
+        // and the publisher's button would stay disabled as "already pending"
+        // with nothing to wait for.
+        //
+        // Only when something is actually waiting: a `verify` on a listing
+        // nobody asked about must not invent a request that was never made.
+        ...(action === 'verify' &&
+        listing.verificationRequest?.state === 'pending'
+          ? {
+              verificationRequest: {
+                ...listing.verificationRequest,
+                state: 'granted',
+                decidedAt: FieldValue.serverTimestamp(),
+                decidedBy: decoded.uid,
+              },
+            }
+          : {}),
         ...(action === 'reject'
           ? { rejectionReason: reason, rejectionCategory: category }
           : {

@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   type BindingRefVia,
+  decodeStoredNodes,
   nodesReferenceBinding,
 } from '@aglyn/aglyn/server'
 import {
@@ -30,6 +31,7 @@ import {
   scanLayoutUsage,
   type UsageCandidate,
 } from '../../../../utils/server/scan-artifact-usage'
+import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
 
 export interface WhereUsedDependent {
   /** Resource collection the dependent lives in. */
@@ -133,7 +135,11 @@ async function handler(request: Request): Promise<Response> {
             .doc(String(versionId))
             .get()
             .catch(() => null)
-          const nodes = version?.get('nodes')
+          // Version nodes are msgpack bytes for anything saved through the
+          // client converter — the majority (AGL-1223). Reading them raw
+          // hands `nodesReferenceBinding` a Buffer, which it walks without
+          // matching anything and reports as "used nowhere".
+          const nodes = decodeStoredNodes(version?.get('nodes'))
           if (!nodes) continue
           const via = nodesReferenceBinding(nodes, ref)
           if (via.length) {
@@ -180,42 +186,24 @@ async function handler(request: Request): Promise<Response> {
     }
 
     if (kind === 'component' || kind === 'layout') {
-      /** Documents plus, for screens/layouts, their published nodes. */
+      /**
+       * Documents plus, for screens/layouts, their published nodes.
+       *
+       * Shared with the publish-time cache drop (AGL-1161) so there is one
+       * reader and one node-decode. Advisory here, so the 200 cap stands and
+       * a truncated answer is acceptable — this endpoint answers "what would
+       * I break", not "which caches must be dropped".
+       */
       const readCandidates = async (
         collectionName: 'screens' | 'layouts' | 'components',
         withNodes: boolean,
-      ): Promise<UsageCandidate[]> => {
-        const docs = await hostRef.collection(collectionName).limit(200).get()
-        return Promise.all(
-          docs.docs.map(async (docSnapshot) => {
-            const versionId = docSnapshot.get('versionId')
-            // Components keep their tree on the document; screens and
-            // layouts keep it on the published version.
-            const nodes =
-              collectionName === 'components'
-                ? docSnapshot.get('nodes')
-                : withNodes && versionId
-                  ? await docSnapshot.ref
-                      .collection('versions')
-                      .doc(String(versionId))
-                      .get()
-                      .then((version) => version.get('nodes'))
-                      .catch(() => null)
-                  : null
-            return {
-              id: docSnapshot.id,
-              displayName: docSnapshot.get('displayName'),
-              name: docSnapshot.get('name'),
-              deletedAt: docSnapshot.get('deletedAt'),
-              nodes,
-              ...(versionId ? { versionId: String(versionId) } : {}),
-              ...(docSnapshot.get('layoutId')
-                ? { layoutId: String(docSnapshot.get('layoutId')) }
-                : {}),
-            }
-          }),
-        )
-      }
+      ): Promise<UsageCandidate[]> =>
+        (
+          await readUsageCandidates(hostRef, collectionName, {
+            withNodes,
+            limit: 200,
+          })
+        ).candidates
 
       if (kind === 'layout') {
         // No node search needed: the reference is a `layoutId` field, on

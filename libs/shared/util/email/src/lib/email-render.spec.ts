@@ -111,6 +111,108 @@ describe('renderEmailHtml', () => {
     expect(html).not.toContain('onclick')
   })
 
+  /**
+   * AGL-1224. The besigner's media picker stores a `media:` reference, and
+   * before it an `/api/media/cdn/…` path — both site-relative once resolved.
+   * A browser has a page to resolve them against; an inbox does not, so
+   * without an origin every picked image was a broken-image box in the
+   * delivered mail while looking perfect on the besigner canvas.
+   */
+  describe('picked media (AGL-1224)', () => {
+    const imageNodes = (src: string) =>
+      ({
+        root: { componentId: 'div', nodes: ['i'] },
+        i: { componentId: 'emailImage', props: { src, alt: 'Hero' } },
+      }) as any
+
+    const render = (src: string, options = {}) =>
+      renderEmailHtml({ nodes: imageNodes(src), ...options }).html
+
+    it('absolutizes a media reference against the origin', () => {
+      expect(
+        render('media:h1/med123', { mediaOrigin: 'https://acme.test' }),
+      ).toContain('src="https://acme.test/api/media/cdn/h1/med123"')
+    })
+
+    it('host-qualifies an org-scoped reference', () => {
+      // The CDN is unauthenticated and decides from the URL alone, so an org
+      // asset restricted to some sites only serves through the qualified form.
+      expect(
+        render('media:org:o1/med123', {
+          mediaOrigin: 'https://acme.test',
+          mediaHostId: 'h1',
+        }),
+      ).toContain('src="https://acme.test/api/media/cdn/org:o1:h1/med123"')
+    })
+
+    it('absolutizes the legacy relative CDN path too', () => {
+      expect(
+        render('/api/media/cdn/h1/med123', {
+          mediaOrigin: 'https://acme.test',
+        }),
+      ).toContain('src="https://acme.test/api/media/cdn/h1/med123"')
+    })
+
+    it('does not double the slash when the origin has a trailing one', () => {
+      const html = render('media:h1/med123', {
+        mediaOrigin: 'https://acme.test/',
+      })
+      expect(html).toContain('src="https://acme.test/api/media/cdn/h1/med123"')
+      expect(html).not.toContain('.test//api')
+    })
+
+    it('passes an author-typed absolute URL through untouched', () => {
+      expect(
+        render('https://cdn.other.test/x.png', {
+          mediaOrigin: 'https://acme.test',
+        }),
+      ).toContain('src="https://cdn.other.test/x.png"')
+    })
+
+    it('passes a protocol-relative URL through rather than corrupting it', () => {
+      expect(
+        render('//cdn.other.test/x.png', { mediaOrigin: 'https://acme.test' }),
+      ).toContain('src="//cdn.other.test/x.png"')
+    })
+
+    it('drops the image rather than emitting an unfetchable src', () => {
+      // The regression guard: BOTH broken forms must be absent from the HTML
+      // that actually goes out, not merely "handled somewhere".
+      for (const stored of ['media:h1/med123', '/api/media/cdn/h1/med123']) {
+        const html = render(stored)
+        expect(html).not.toContain('media:h1')
+        expect(html).not.toContain('src="/api/media/cdn')
+        expect(html).not.toContain('<img')
+      }
+    })
+
+    it('applies the same resolution to a product image', () => {
+      const { html } = renderEmailHtml({
+        nodes: {
+          root: { componentId: 'div', nodes: ['p'] },
+          p: { componentId: 'emailProduct', props: { productId: 'p1' } },
+        } as any,
+        products: { p1: { name: 'Widget', imageUrl: 'media:h1/med9' } },
+        mediaOrigin: 'https://acme.test',
+      })
+      expect(html).toContain('src="https://acme.test/api/media/cdn/h1/med9"')
+      // The card itself still renders — only the image is conditional.
+      expect(html).toContain('Widget')
+    })
+
+    it('keeps the product card when its image cannot be absolutized', () => {
+      const { html } = renderEmailHtml({
+        nodes: {
+          root: { componentId: 'div', nodes: ['p'] },
+          p: { componentId: 'emailProduct', props: { productId: 'p1' } },
+        } as any,
+        products: { p1: { name: 'Widget', imageUrl: 'media:h1/med9' } },
+      })
+      expect(html).toContain('Widget')
+      expect(html).not.toContain('<img')
+    })
+  })
+
   it('renders children of unknown components instead of dropping them', () => {
     const { html } = renderEmailHtml({
       nodes: {

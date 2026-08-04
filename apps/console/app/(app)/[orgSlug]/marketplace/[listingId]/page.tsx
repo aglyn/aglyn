@@ -31,6 +31,7 @@ import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import ListingDetailEditor from '../../../../../components/marketplace/listing-detail-editor.component'
 import ListingReviewStatus from '../../../../../components/marketplace/listing-review-status.component'
+import ListingVerificationRequest from '../../../../../components/marketplace/listing-verification-request.component'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { buildRoute, Route } from '../../../../../constants/route-links'
@@ -175,6 +176,17 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
             <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
               <ListingReviewStatus
                 listingId={listingId}
+                isPlugin={(listing?.artifactType ?? listing?.type) === 'plugin'}
+              />
+              {/* The door to the Verified badge (AGL-1217). Below the review
+                  card on purpose: "where is my submission" is the more urgent
+                  question, and asking for a badge only makes sense once the
+                  listing is live. */}
+              <ListingVerificationRequest
+                listingId={listingId}
+                listing={listing}
+                viewerOrgId={currentOrg?.$id}
+                user={user}
                 isPlugin={(listing?.artifactType ?? listing?.type) === 'plugin'}
               />
             </Container>

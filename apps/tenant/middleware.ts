@@ -273,6 +273,25 @@ export const middleware: NextMiddleware = (req, event) => {
   // owned them, and script-src stays report-only. The base policy still shadows
   // the nonce for `getScriptNonceFromHeader`, which changes nothing here: the
   // nonce was already unavailable to a cached render.
+  //
+  // MEASURED CONSEQUENCE, and the reason this is not the harmless no-op it
+  // reads as (AGL-1228). A live published page carries 33 `<script>` tags and
+  // ZERO nonce attributes, while the header below advertises one. Under
+  // `strict-dynamic` nothing else can authorise a script, so every one of
+  // those 33 violates this policy on every page load of every site.
+  //
+  // That makes the report-only header useless AS AN EXPERIMENT — it is
+  // guaranteed to report everything, so it can never surface anything new —
+  // and it is why CSP violation reporting was wired to the console only
+  // (AGL-523). Pointing a collector at this would flood the log with one
+  // already-known defect.
+  //
+  // Note the ISR argument above is not the only cause, though it is the one
+  // that blocks enforcing. The shadowing is independently sufficient: it is
+  // the same defect AGL-523 fixed on the console, so the nonce would be
+  // `$undefined` here even with no caching at all. Someone who fixes only the
+  // shadowing will find the scripts still unnonced and should not read that as
+  // the fix having failed.
   const cspHeaders = new Headers(req.headers)
   cspHeaders.set('x-nonce', nonce)
   const response = NextResponse.rewrite(new URL(rewrite, req.url), {

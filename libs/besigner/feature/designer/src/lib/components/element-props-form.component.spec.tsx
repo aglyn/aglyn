@@ -130,6 +130,7 @@ describe('elementPropsComponentMapper coverage (AGL-584)', () => {
     Aglyn.FieldComponentType.CHECKBOX,
     Aglyn.FieldComponentType.ICON_PICKER,
     Aglyn.FieldComponentType.COLOR_PICKER,
+    Aglyn.FieldComponentType.CSS_DIMENSION,
   ])('registers an editor for %s', (type) => {
     expect(elementPropsComponentMapper[type]).toBeDefined()
   })

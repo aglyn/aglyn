@@ -186,3 +186,76 @@ export function screenIdsUsingLayoutDeep(
 
   return [...screenIds]
 }
+
+/**
+ * Every live screen whose rendered output contains `componentId`, however
+ * indirectly (AGL-1161).
+ *
+ * `scanComponentUsage` answers one level and returns three kinds of dependent.
+ * Only one of them is a screen, and the other two both reach screens by routes
+ * a single-level scan cannot see:
+ *
+ * - a **component** dependent nests the target inside itself, and that outer
+ *   component may itself only be used inside a third — so component→component
+ *   edges have to be followed to a fixed point;
+ * - a **layout** dependent puts the component in page chrome, which every
+ *   screen under that layout renders. Layouts nest, so that is
+ *   `screenIdsUsingLayoutDeep`, not a direct `layoutId` match.
+ *
+ * Miss either and a publish reports success while some pages keep serving the
+ * old component for the full revalidate window — the failure this whole arc
+ * exists to remove, and the one that is hardest to notice because the pages
+ * that ARE dropped update instantly.
+ *
+ * Pure, and separate from the Firestore read, so the closure is testable
+ * without a database — the same split `screenIdsUsingLayoutDeep` uses.
+ *
+ * Cycle-safe. `composeReusableComponentNodes` would not survive a cycle, but a
+ * document written straight to Firestore is not bound by what the editor
+ * allows, and a cycle here would hang a publish rather than surface anything.
+ */
+export function screenIdsUsingComponentDeep(
+  componentId: string,
+  sources: {
+    screens: UsageCandidate[]
+    layouts: UsageCandidate[]
+    components: UsageCandidate[]
+  },
+): string[] {
+  if (!componentId) return []
+  const screenIds = new Set<string>()
+  const seenComponents = new Set<string>([componentId])
+  // Layouts are resolved through their own deep walk, so remember which ones
+  // have already been expanded: two components in the same layout would
+  // otherwise re-walk the whole layout tree once each.
+  const seenLayouts = new Set<string>()
+  let frontier = [componentId]
+
+  while (frontier.length) {
+    const next: string[] = []
+    for (const id of frontier) {
+      for (const dependent of scanComponentUsage(id, sources)) {
+        if (dependent.type === 'screen') {
+          screenIds.add(dependent.id)
+        } else if (dependent.type === 'layout') {
+          if (seenLayouts.has(dependent.id)) continue
+          seenLayouts.add(dependent.id)
+          // The layout itself renders no URL; the screens beneath it do.
+          for (const screenId of screenIdsUsingLayoutDeep(
+            dependent.id,
+            sources.screens,
+            sources.layouts,
+          )) {
+            screenIds.add(screenId)
+          }
+        } else if (!seenComponents.has(dependent.id)) {
+          seenComponents.add(dependent.id)
+          next.push(dependent.id)
+        }
+      }
+    }
+    frontier = next
+  }
+
+  return [...screenIds]
+}

@@ -119,3 +119,30 @@ export function suggestSubdomains(base: string, year = new Date().getFullYear())
     ),
   ]
 }
+
+/** The apex tenant sites are served from. Console lives on `app.aglyn.com`. */
+export const TENANT_APEX = 'aglyn.app'
+
+/**
+ * The absolute origin a published site is reachable at (AGL-1224).
+ *
+ * A custom domain wins over the platform subdomain, matching what the tenant
+ * renderer already emits as `<link rel="canonical">` — a site on a custom
+ * domain that advertised its `.aglyn.app` origin would be describing itself
+ * by a name its visitors never see.
+ *
+ * Returns undefined rather than a half-built URL when a host has neither, so
+ * a caller that needs an absolute URL can tell it does not have one. Emails
+ * are the sharp case: an image `src` that is site-relative resolves against
+ * nothing in an inbox, so "no origin" has to be answerable.
+ */
+export function hostPublicOrigin(
+  host:
+    | { cname?: string | null; subdomain?: string | null }
+    | null
+    | undefined,
+): string | undefined {
+  if (host?.cname) return `https://${host.cname}`
+  if (host?.subdomain) return `https://${host.subdomain}.${TENANT_APEX}`
+  return undefined
+}

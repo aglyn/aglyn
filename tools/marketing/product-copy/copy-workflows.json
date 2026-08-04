@@ -1,0 +1,245 @@
+{
+  "page": "Workflows",
+  "figmaNodeId": "122:2294",
+  "frameSize": { "width": 1440, "height": 5190 },
+  "notes": "Same 8-section skeleton as /product/besigner (93:31), with Deep-dive and Canvas/visual combined into ONE section (frame named 'Deep-dive · canvas'). NavBar (122:2295) and Footer (122:2520) are shared chrome, not recorded as sections. Eyebrow style: 13px SemiBold uppercase, tracking 1.04px, magenta #e040fb. Headings 44px ExtraBold; final CTA heading 56px Black. Deep-dive, Explore and Early access sit on #f8f9fa; the rest are white; CTA is a gradient. IMPORTANT for the builder: the Capabilities frame at 122:2544 is NAMED 'Card Scheduled runs' but its text says 'Test runs' — the scheduled/cron concept was removed from the copy. Do not resurrect it from the layer name.",
+  "sections": [
+    {
+      "kind": "hero",
+      "figmaNodeId": "122:2296",
+      "eyebrow": "WORKFLOWS · AUTOMATE",
+      "heading": "Automate the busywork, no code.",
+      "subheading": null,
+      "body": [
+        "Build workflows with triggers, conditions, and actions — send emails, update data, notify your team, and connect your site’s events, all without code."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "Watch the tour", "variant": "text" }
+      ],
+      "items": [],
+      "image": {
+        "describe": "Workflow editor screenshot bleeding off the right edge. Breadcrumb 'Workflows / Actions / Contact form → notify + save'. A single vertical column of connected step cards, each with an icon tile and a small coloured label: WHEN 'A form is submitted' (sub: Contact form); ONLY IF 'Budget is not empty' (amber-tinted card); DO 'Send an email' (sub: Notify the team); DO 'Add a row to a dataset' (sub: Leads); DO 'Send a webhook' (sub: POST to Slack); then a dashed '+ Add step' button. A right-hand rail is cut off by the frame edge.",
+        "figmaNodeId": "122:2306"
+      },
+      "notes": "Two-column: 600px copy left, 920x580 mockup right overflowing the frame. Heading wraps to three lines ('Automate the / busywork, no / code.'). Eyebrow preceded by a 28x2px magenta rule. White background. The mockup is a LINEAR step list, NOT a node-graph canvas — keep it that way (see claimsToVerify)."
+    },
+    {
+      "kind": "statement",
+      "figmaNodeId": "122:2307",
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [
+        "Every site accumulates repetitive tasks. Aglyn workflows turn events into automated actions — so the routine runs itself while you focus on what matters."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": "Single large left-aligned statement paragraph across the 1280px column, wrapping to two lines. White background, 208px band."
+    },
+    {
+      "kind": "capabilities",
+      "figmaNodeId": "122:2309",
+      "eyebrow": "WHAT WORKFLOWS INCLUDE",
+      "heading": "Triggers in, actions out.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Event triggers",
+          "body": "Start on form submissions, bookings, sign-ups, page views, or an inbound webhook.",
+          "meta": null
+        },
+        {
+          "title": "Conditions & logic",
+          "body": "Gate steps with conditions on field values — combine rules with and / or.",
+          "meta": null
+        },
+        {
+          "title": "Built-in actions",
+          "body": "Send email, update datasets, notify your team, and post webhooks.",
+          "meta": null
+        },
+        {
+          "title": "Test runs",
+          "body": "Dry-run a workflow with sample input and check each step before it goes live.",
+          "meta": null
+        },
+        {
+          "title": "Webhooks & API",
+          "body": "Call external services and receive webhooks (Business & up).",
+          "meta": null
+        },
+        {
+          "title": "Run history",
+          "body": "Every run is logged with inputs, outputs, and status for debugging.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "3-column grid, 2 rows of 410px cards, 44x44 icon tile per card. Eyebrow + heading CENTRED, cards left-aligned. White background. There is NO scheduled/cron capability card in the copy."
+    },
+    {
+      "kind": "deep-dive",
+      "figmaNodeId": "122:2361",
+      "eyebrow": "TRIGGER → ACTION",
+      "heading": "Connect your site’s events to actions.",
+      "subheading": null,
+      "body": [
+        "Pick a trigger, add conditions, and chain actions — Aglyn runs it automatically and logs every run so you can see exactly what happened."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "title": "Triggers & conditions",
+          "body": "Start on form submissions, bookings, sign-ups, or page views, then gate with conditions.",
+          "meta": null
+        },
+        {
+          "title": "Built-in actions",
+          "body": "Send email, update datasets, notify your team, and post webhooks.",
+          "meta": null
+        },
+        {
+          "title": "Run history",
+          "body": "Every run is logged with inputs, outputs, and status for debugging.",
+          "meta": null
+        }
+      ],
+      "image": {
+        "describe": "Run history table. Breadcrumb 'Workflows / Run history'; top-right meta '1,284 runs this month · 500,000 included'. Columns: Time | Trigger | Result | What happened. Rows — 2m ago / Form submitted / Succeeded / 'Sent email · saved to Leads · webhook 200'; 18m ago / Form submitted / Succeeded / 'Sent email · saved to Leads'; 1h ago / New booking / Succeeded / 'Notified admins · confirmation email'; 3h ago / Form submitted / Skipped (amber pill) / 'Condition \"Budget is not empty\" not met'; 5h ago / Member signed up / Succeeded / 'Enrolled in \"Newsletter\" list'; 6h ago / Form submitted / Succeeded / 'Sent email · saved to Leads'.",
+        "figmaNodeId": "122:2388"
+      },
+      "notes": "Combined deep-dive + canvas/visual. 440px copy column left with eyebrow, 32px heading, body and three check-icon bullets; 768x580 mockup right. LIGHT GREY background (#f8f9fa). The eyebrow uses a literal arrow character: 'TRIGGER → ACTION'."
+    },
+    {
+      "kind": "how-it-works",
+      "figmaNodeId": "122:2389",
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From an event to done, automatically.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Pick a trigger",
+          "body": "Start from a real event — a form submission, a new booking, a page view, a sign-up, or a webhook.",
+          "meta": "01"
+        },
+        {
+          "title": "Add your steps",
+          "body": "Chain actions like send email, add to a dataset, notify admins, or post a webhook — with conditions to gate them.",
+          "meta": "02"
+        },
+        {
+          "title": "Let it run",
+          "body": "Every matching event runs on its own, and the run history shows exactly what happened.",
+          "meta": "03"
+        }
+      ],
+      "image": null,
+      "notes": "3 equal columns, each with a 3px top rule, 40px step number, title, body. Eyebrow + heading LEFT-aligned. White background."
+    },
+    {
+      "kind": "explore-the-platform",
+      "figmaNodeId": "122:2409",
+      "eyebrow": "ONE PLATFORM",
+      "heading": "Workflows work with the rest of Aglyn.",
+      "subheading": "Every product below runs on the same platform — explore what else is built in.",
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "meta": null
+        },
+        {
+          "title": "Commerce",
+          "body": "Storefronts, checkout, subscriptions & digital goods.",
+          "meta": null
+        },
+        {
+          "title": "Forms & Inbox",
+          "body": "Collect submissions in one Inbox and route them onward.",
+          "meta": null
+        },
+        {
+          "title": "Media",
+          "body": "A real DAM — folders, drag-and-drop, metadata.",
+          "meta": null
+        },
+        {
+          "title": "Console",
+          "body": "Manage every site, team, and setting in one place.",
+          "meta": null
+        },
+        {
+          "title": "Plugins",
+          "body": "Install templates and layouts, or publish and sell your own.",
+          "meta": null
+        },
+        {
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages, and store revenue.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "3-column grid of 7 link cards; Analytics sits alone in the middle column of row 3. The Workflows card is omitted (self) and Media takes its slot. Centred eyebrow/heading/subheading. LIGHT GREY background."
+    },
+    {
+      "kind": "early-access",
+      "figmaNodeId": "122:2490",
+      "eyebrow": "Now in early access",
+      "heading": "Be among the first to build on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Aglyn is pre-release. Join early access to start building and shape the roadmap with us."
+      ],
+      "actions": [
+        { "label": "Join early access", "variant": "contained" },
+        { "label": "See what’s included", "variant": "outlined" }
+      ],
+      "items": [
+        { "title": "1", "body": "platform, not a stack", "meta": "stat" },
+        { "title": "9", "body": "products built in", "meta": "stat" },
+        { "title": "0", "body": "plugins to wire up", "meta": "stat" },
+        { "title": "1-click", "body": "to publish", "meta": "stat" }
+      ],
+      "image": null,
+      "notes": "Identical to the Media and Plugins pages. Eyebrow is a rounded pill badge with a dot (#f5f5f5 fill, #e0e0e0 border), not the magenta eyebrow. 4-up stat row with 1px vertical dividers; figures 44px ExtraBold in #0090d9. Background #f8f9fa."
+    },
+    {
+      "kind": "cta",
+      "figmaNodeId": "122:2514",
+      "eyebrow": null,
+      "heading": "Automate your site on Aglyn.",
+      "subheading": "Start free — add workflows on Starter and up.",
+      "body": [],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "text" }
+      ],
+      "items": [],
+      "image": null,
+      "notes": "Full-bleed gradient band, 188.73deg #00b0ff → #7a5cf0 → #e040fb. White centred text; heading 56px Black. Primary is the white-on-dark button (Button/OnDark), secondary a white text button."
+    }
+  ],
+  "claimsToVerify": [
+    "NO visual workflow canvas is claimed anywhere in the copy, and the hero mockup (122:2306) is a LINEAR vertical step list, not a node graph — keep it linear when the mockup is rebuilt; a drag-connect canvas would be a false claim.",
+    "NO scheduled/cron trigger appears in the copy — but the Figma frame 122:2544 is still NAMED 'Card Scheduled runs' while its text reads 'Test runs'. Anyone building from layer names could reintroduce a scheduled-runs claim. Verify the built page ships 'Test runs'.",
+    "Capabilities · 'Start on form submissions, bookings, sign-ups, page views, or an inbound webhook.' — PAGE VIEWS as a workflow trigger and INBOUND WEBHOOKS as a trigger are both high-risk. Repeated in Deep-dive ('...or page views, then gate with conditions.') and How it works step 01 ('a page view, a sign-up, or a webhook').",
+    "Capabilities · 'Test runs — Dry-run a workflow with sample input and check each step before it goes live.' — confirm a dry-run/test-run mode with sample input actually exists.",
+    "Capabilities · 'Webhooks & API — Call external services and receive webhooks (Business & up).' — plan gate AND inbound webhook receipt; verify both the capability and the Business tier boundary.",
+    "Capabilities · 'Conditions & logic — Gate steps with conditions on field values — combine rules with and / or.' — confirm both AND and OR combination are supported.",
+    "Capabilities and Deep-dive · 'Run history — Every run is logged with inputs, outputs, and status for debugging.' — confirm inputs AND outputs are persisted per run, not just status.",
+    "Hero and Built-in actions · 'notify your team' — verify this means admin notification and not a shared team inbox (a shared team inbox must never be claimed). The mockup and How it works step 02 both say 'notify admins', which is the safer wording.",
+    "Deep-dive mockup (122:2388) shows a quota line '1,284 runs this month · 500,000 included' — a 500,000-run included allowance is a concrete pricing claim; verify before shipping the mockup.",
+    "CTA · 'Start free — add workflows on Starter and up.' — plan-gate claim; confirm workflows begin at Starter (note this conflicts in tone with the hero's 'Start free' if workflows are not on the free tier).",
+    "Built-in actions · 'update datasets' / 'Add a row to a dataset' — confirm a dataset-write action exists; the mockup writes to a 'Leads' dataset, which reads close to a CRM. Aglyn must not claim a Contacts CRM.",
+    "Early access stats (shared across all three pages): '9 products built in' and '0 plugins to wire up' — confirm the product count."
+  ]
+}

@@ -49,6 +49,53 @@ describe('Image element (AGL-579 SSR hardening)', () => {
 
   it('renders the placeholder when src is empty', () => {
     const { getByText } = render(<Image />)
-    expect(getByText(/set a source URL/i)).toBeTruthy()
+    expect(getByText(/choose a source/i)).toBeTruthy()
+  })
+})
+
+describe('Image src resolution (AGL-1215)', () => {
+  const img = (element: JSX.Element) =>
+    render(element).container.querySelector('img') as HTMLImageElement
+
+  it('resolves a stored media reference to a CDN url with variants', () => {
+    const element = img(<Image src="media:site-a/med123" alt="a" />)
+    expect(element.getAttribute('src')).toBe('/api/media/cdn/site-a/med123')
+    expect(element.getAttribute('srcset')).toContain(
+      '/api/media/cdn/site-a/med123?w=320 320w',
+    )
+  })
+
+  it('names the rendering site in an org reference', () => {
+    const element = img(
+      <Aglyn.SiteContext.Provider value={{ hostId: 'site-b' }}>
+        <Image src="media:org:acme:site-a/med123" alt="a" />
+      </Aglyn.SiteContext.Provider>,
+    )
+    expect(element.getAttribute('src')).toBe(
+      '/api/media/cdn/org:acme:site-b/med123',
+    )
+  })
+
+  it('renders a legacy raw storage URL unchanged, without a srcSet', () => {
+    const legacy =
+      'https://firebasestorage.googleapis.com/v0/b/x/o/y?alt=media&token=t'
+    const element = img(
+      <Aglyn.SiteContext.Provider value={{ hostId: 'site-a' }}>
+        <Image src={legacy} alt="a" />
+      </Aglyn.SiteContext.Provider>,
+    )
+    expect(element.getAttribute('src')).toBe(legacy)
+    expect(element.getAttribute('srcset')).toBeNull()
+  })
+
+  it('renders a legacy CDN path unchanged, keeping its variants', () => {
+    const element = img(<Image src="/api/media/cdn/org:acme/med123" alt="a" />)
+    expect(element.getAttribute('src')).toBe('/api/media/cdn/org:acme/med123')
+    expect(element.getAttribute('srcset')).toContain('?w=1280 1280w')
+  })
+
+  it('falls back to the placeholder for an unparseable reference', () => {
+    const { getByText } = render(<Image src="media:nonsense" />)
+    expect(getByText(/choose a source/i)).toBeTruthy()
   })
 })

@@ -79,8 +79,18 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'no paths' }, { status: 400 })
   }
 
+  // Say when the cap bites (AGL-1161). `slice` silently discarded the
+  // overflow: a caller sending 80 paths got `count: 50` back and nothing to
+  // distinguish that from having sent 50. The dropped pages then stayed stale
+  // for the full revalidate window while the editor reported a successful
+  // publish — the same "reported fast, still slow" confusion AGL-1150 set out
+  // to remove. A widely-used component is exactly the case that overflows.
+  const requested = paths.length
+  const accepted = paths.slice(0, MAX_PATHS)
+  const truncated = requested - accepted.length
+
   const revalidated: string[] = []
-  for (const raw of paths.slice(0, MAX_PATHS)) {
+  for (const raw of accepted) {
     const path = String(raw ?? '')
     // Only absolute, same-host paths. `..` in a cache key is not a traversal
     // in the filesystem sense, but it is a way to name a page on a DIFFERENT
@@ -93,8 +103,30 @@ export async function POST(request: Request): Promise<Response> {
     revalidated.push(target)
   }
 
+  if (truncated > 0) {
+    // Logged as well as returned: the caller may not surface it, and this is
+    // the only record that some pages were left stale on purpose.
+    console.warn(
+      JSON.stringify({
+        tag: 'AGL-1161:revalidate-truncated',
+        host,
+        requested,
+        cap: MAX_PATHS,
+        dropped: truncated,
+      }),
+    )
+  }
+
   return Response.json(
-    { revalidated, count: revalidated.length },
+    {
+      revalidated,
+      count: revalidated.length,
+      // `requested` and `truncated` are what let a caller tell "everything you
+      // asked for" apart from "as much as I would take".
+      requested,
+      truncated,
+      ...(truncated > 0 ? { cap: MAX_PATHS } : {}),
+    },
     { status: 200, headers: { 'Cache-Control': 'no-store' } },
   )
 }

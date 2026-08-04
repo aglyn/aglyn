@@ -42,7 +42,11 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
-import { screenIdsUsingLayoutDeep } from '../../../../utils/server/scan-artifact-usage'
+import {
+  screenIdsUsingComponentDeep,
+  screenIdsUsingLayoutDeep,
+} from '../../../../utils/server/scan-artifact-usage'
+import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,6 +93,61 @@ async function screenIdsUsingLayout(
   )
 }
 
+/**
+ * Every live screen whose output contains `componentId` (AGL-1161).
+ *
+ * Unlike the layout walk, which matches a `layoutId` POINTER on small docs,
+ * this searches node trees — so it has to load the published version body of
+ * every screen and layout on the site. That is the cost the issue flagged, and
+ * why the caller fires this without awaiting: nobody is staring at one URL
+ * waiting for a component publish the way they are for a screen publish.
+ *
+ * The walk itself is `screenIdsUsingComponentDeep`, kept pure and tested; this
+ * only does the Firestore read it needs, through the same reader
+ * `/api/hosts/where-used` uses so there is one node-decode implementation.
+ */
+async function screenIdsUsingComponent(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  componentId: string,
+): Promise<{ screenIds: string[]; truncated: boolean }> {
+  const hostRef = firestore.collection('hosts').doc(hostId)
+  // Each collection ONCE, walked in memory — a query per level would multiply
+  // round trips by the nesting depth of the component graph.
+  const [screens, layouts, components] = await Promise.all([
+    readUsageCandidates(hostRef, 'screens', { withNodes: true, limit: SCAN_LIMIT }),
+    readUsageCandidates(hostRef, 'layouts', { withNodes: true, limit: SCAN_LIMIT }),
+    readUsageCandidates(hostRef, 'components', {
+      withNodes: true,
+      limit: SCAN_LIMIT,
+    }),
+  ])
+  return {
+    screenIds: screenIdsUsingComponentDeep(componentId, {
+      screens: screens.candidates,
+      layouts: layouts.candidates,
+      components: components.candidates,
+    }),
+    truncated: screens.truncated || layouts.truncated || components.truncated,
+  }
+}
+
+/**
+ * How many documents per collection the component scan will read (AGL-1161).
+ *
+ * Far above the 200 `/api/hosts/where-used` uses, because the two are asked
+ * different questions. That endpoint is advisory — a partial "what would I
+ * break" is still useful. This one decides which caches get dropped, so a
+ * prefix scan reports a successful publish and leaves real pages serving the
+ * old component for the full revalidate window.
+ *
+ * Still bounded, because unbounded is its own failure: a site with tens of
+ * thousands of screens would hold the request open reading version bodies.
+ * When the bound bites we SAY so rather than quietly returning a short list —
+ * the same choice `4b1120649` made for the tenant route's path cap.
+ */
+const SCAN_LIMIT = 2000
+
 const TENANT_DOMAIN =
   process.env['NEXT_PUBLIC_TENANT_DOMAIN'] ?? 'aglyn.app'
 
@@ -121,9 +180,17 @@ export async function POST(request: Request): Promise<Response> {
     // is this route's job, because it is the only side holding both the
     // layout→screen graph and the tenant's cache keys.
     const layoutId = String((payload as { layoutId?: unknown })?.layoutId ?? '')
-    if (!hostId || (!screenId && !layoutId)) {
+    // Publishing a COMPONENT changes every screen that renders it, directly,
+    // nested inside another component, or through a layout (AGL-1161).
+    const componentId = String(
+      (payload as { componentId?: unknown })?.componentId ?? '',
+    )
+    if (!hostId || (!screenId && !layoutId && !componentId)) {
       return Response.json(
-        { error: 'Missing hostId, and one of screenId or layoutId' },
+        {
+          error:
+            'Missing hostId, and one of screenId, layoutId or componentId',
+        },
         { status: 400 },
       )
     }
@@ -154,18 +221,45 @@ export async function POST(request: Request): Promise<Response> {
     // routable — nothing to invalidate, which is a success, not an error.
     const screens = (hostSnapshot.get('screens') ?? {}) as Record<string, string>
 
-    const affectedScreenIds = layoutId
-      ? await screenIdsUsingLayout(firestore, hostId, layoutId)
-      : [screenId]
+    let scanTruncated = false
+    let affectedScreenIds: string[]
+    if (componentId) {
+      const scan = await screenIdsUsingComponent(firestore, hostId, componentId)
+      affectedScreenIds = scan.screenIds
+      scanTruncated = scan.truncated
+    } else if (layoutId) {
+      affectedScreenIds = await screenIdsUsingLayout(firestore, hostId, layoutId)
+    } else {
+      affectedScreenIds = [screenId]
+    }
 
     const routePaths = affectedScreenIds
       .map((id) => screens[id])
       .filter((path): path is string => Boolean(path))
 
+    if (scanTruncated) {
+      // Say it, in the log and in the response. A publish that scanned a
+      // prefix of the site and reported success is the failure this whole
+      // arc exists to remove — it looks identical to a complete drop, and
+      // the pages it missed sit stale for the full window with nothing
+      // anywhere recording that they were skipped.
+      console.warn(
+        JSON.stringify({
+          tag: 'AGL-1161:component-scan-truncated',
+          hostId,
+          componentId,
+          limit: SCAN_LIMIT,
+        }),
+      )
+    }
+
     if (!routePaths.length) {
-      // A layout no live screen renders inside, or an unrouted screen. Nothing
-      // to invalidate is a success, not an error.
-      return Response.json({ revalidated: [], reason: 'not-routed' }, { status: 200 })
+      // A layout no live screen renders inside, an unused component, or an
+      // unrouted screen. Nothing to invalidate is a success, not an error.
+      return Response.json(
+        { revalidated: [], reason: 'not-routed', truncated: scanTruncated },
+        { status: 200 },
+      )
     }
 
     const secret = process.env['REVALIDATE_SECRET']
@@ -201,7 +295,16 @@ export async function POST(request: Request): Promise<Response> {
       )
     }
     return Response.json(
-      { revalidated: result?.revalidated ?? [], reason: 'ok' },
+      {
+        revalidated: result?.revalidated ?? [],
+        reason: 'ok',
+        // Carried through so a caller can tell a complete drop from one that
+        // only covered part of the site.
+        truncated: scanTruncated,
+        // The tenant route caps paths too, and says when it drops some
+        // (AGL-1161). Pass that on rather than absorbing it here.
+        ...(result?.truncated ? { pathsDropped: result.truncated } : {}),
+      },
       { status: 200 },
     )
   } catch (error) {

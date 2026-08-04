@@ -44,6 +44,10 @@ const NodeOutlineRoot = styled('div', {
   // verified against the running console's computed custom properties.
   const slate = tv.palette.tertiary.main
   const slateChannel = tv.palette.tertiary.mainChannel
+  // The ONE accent left on the canvas (AGL-1221). See the selection rule
+  // below for why selection — and only selection — is exempt from the
+  // slate; `canvas-chrome-palette.spec.ts` pins the exemption to this line.
+  const selectionAccent = tv.palette.secondary.main
   return {
     pointerEvents: 'none',
     position: 'absolute',
@@ -57,16 +61,21 @@ const NodeOutlineRoot = styled('div', {
     outlineStyle: 'dashed',
     content: '""',
 
-    // Canvas chrome is the SLATE (AGL-1194). Selected used to be
-    // `secondary` and hover `primary` — two different accent hues on the
-    // same control, both competing with the design being edited. The four
-    // states now differ by STYLE and WEIGHT on one hue, which is what
-    // distinguishes them anyway: dashed hover, solid selection, a fill for
-    // the node in flight, and the heaviest treatment for the drop target.
+    // Canvas chrome is the SLATE (AGL-1194): hover, drag and drop-over are
+    // transient feedback, so they differ by STYLE and WEIGHT on one hue —
+    // dashed hover, a fill for the node in flight, and the heaviest
+    // treatment for the drop target.
+    //
+    // Selection is the exception (AGL-1221). It is not transient feedback:
+    // it is a persistent statement about what the panels on the right are
+    // editing, it has to survive against an arbitrary subscriber palette,
+    // and pink is the one hue on this canvas that never competes with the
+    // design being edited. So selection alone carries `secondary`, and it
+    // still differs from hover by weight as well as hue.
     [`&.${classKeys.selectedSelf}`]: {
       outlineWidth: 2,
       outlineStyle: 'solid',
-      outlineColor: slate,
+      outlineColor: selectionAccent,
     },
     [`&.${classKeys.hoveringSelf}`]: {
       outlineColor: slate,
@@ -91,8 +100,9 @@ const NodeOutlineRoot = styled('div', {
   }
 })
 
-export interface NodeOutlineProps
-  extends ComponentProps<typeof NodeOutlineRoot> {
+export interface NodeOutlineProps extends ComponentProps<
+  typeof NodeOutlineRoot
+> {
   node: Aglyn.NodeSchema<any>
 }
 

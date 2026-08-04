@@ -856,7 +856,7 @@ const ElementStylesForm = observer(
               help={{
                 title: `${group.label} styles`,
                 excerpt:
-                  'Every field edits the selected element at the active breakpoint and scheme scope; hover a field’s ? for what it does.',
+                  'Every field edits the selected element at the active breakpoint and scheme scope; the line under each field says what it does, and a ? marks the few whose bare number is not pixels.',
                 href: besignerDocsUrl('responsiveStyling', '#style-groups'),
               }}
             >

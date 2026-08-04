@@ -200,6 +200,61 @@ describe('layout-namespace-insensitive id matching (AGL-573)', () => {
     })
   })
 
+  /**
+   * AGL-1229. A reusable component grafted into a layout namespaces its
+   * nodes `cmp__{instanceId}__`, which — unlike the layout prefixes — cannot
+   * be enumerated, so the AGL-573 fix never reached it. Every interaction
+   * authored inside the Site nav component compiled fine and then matched
+   * nothing on the live page: zero listeners, a mega menu that never opened.
+   */
+  describe('reusable-component grafts (AGL-1229)', () => {
+    const GRAFTED = `cmp__inst01__${RAW}`
+    const NESTED = `cmp__outer1__cmp__inner1__${RAW}`
+
+    it('matches an authored raw id to its grafted live id', () => {
+      expect(leafIdsMatch(RAW, GRAFTED)).toBe(true)
+      expect(leafIdsMatch(GRAFTED, RAW)).toBe(true)
+      expect(leafIdsMatch(RAW, NESTED)).toBe(true)
+    })
+
+    it('matches a component graft inside a layout', () => {
+      expect(leafIdsMatch(RAW, `layout__cmp__inst01__${RAW}`)).toBe(true)
+    })
+
+    /**
+     * Read off the LIVE aglyn-marketing page, not invented: the Site nav
+     * component placed in a layout ships this exact id shape. The instance
+     * id is itself layout-composed (`layout__52Ef-3t6yd`), so the namespace
+     * CONTAINS `__` — which is why the graft is matched by suffix rather
+     * than parsed off. Parsing splits `___R91yATrXH` two ways and both are
+     * structurally valid.
+     */
+    it('matches the id shape the live nav actually ships', () => {
+      expect(
+        leafIdsMatch('_R91yATrXH', 'cmp__layout__52Ef-3t6yd___R91yATrXH'),
+      ).toBe(true)
+      expect(
+        leafIdsMatch('88Mg1SKiQ1', 'cmp__layout__52Ef-3t6yd__88Mg1SKiQ1'),
+      ).toBe(true)
+    })
+
+    it('leaves a graft id alone when normalizing (it is unparseable)', () => {
+      // Documented non-goal: normalizeLeafId handles layout prefixes only.
+      expect(normalizeLeafId(GRAFTED)).toBe(GRAFTED)
+    })
+
+    it('refuses an unrelated id that merely embeds the raw one', () => {
+      expect(leafIdsMatch(RAW, `cmp__inst01__X${RAW}Y`)).toBe(false)
+      expect(leafIdsMatch(RAW, `cmp__inst01__${RAW}zz`)).toBe(false)
+    })
+
+    it('refuses a suffix match on a NON-graft id', () => {
+      // Only a `cmp__`-prefixed id may match by suffix; an arbitrary id that
+      // happens to end in `__<raw>` must not be reachable.
+      expect(leafIdsMatch(RAW, `somethingElse__${RAW}`)).toBe(false)
+    })
+  })
+
   describe('leafIdsMatch', () => {
     it('matches a raw command id to a namespaced live id and back', () => {
       expect(leafIdsMatch(RAW, NAMESPACED)).toBe(true)
@@ -239,11 +294,15 @@ describe('layout-namespace-insensitive id matching (AGL-573)', () => {
     // One alternative per layout-chain depth (AGL-703): a node in a layout
     // nested inside another carries `layout2__`, and an interaction
     // authored on it has to match there too.
+    // Plus one SUFFIX alternative (AGL-1229) — the only way to reach a
+    // reusable-component graft, whose `cmp__{instanceId}__` namespace is
+    // per-placement and therefore not enumerable.
     const allForms = [
       `[data-aglyn="leaf:${RAW}"]`,
       ...LAYOUT_NODE_ID_PREFIXES.map(
         (prefix) => `[data-aglyn="leaf:${prefix}${RAW}"]`,
       ),
+      `[data-aglyn$="__${RAW}"]`,
     ].join(', ')
 
     it('adds a layout-namespaced alternative per chain depth', () => {
@@ -264,6 +323,32 @@ describe('layout-namespace-insensitive id matching (AGL-573)', () => {
       document.body.innerHTML = `<div data-aglyn="leaf:layout2__${RAW}">Shop</div>`
       const expanded = expandLeafSelector(`[data-aglyn="leaf:${RAW}"]`)
       expect(document.querySelector(expanded)).not.toBeNull()
+    })
+
+    // The regression itself (AGL-1229), against real DOM rather than string
+    // equality: this is the shape the live nav ships.
+    it('matches a node grafted from a reusable component', () => {
+      document.body.innerHTML = `<div data-aglyn="leaf:cmp__inst01__${RAW}">Panel</div>`
+      const expanded = expandLeafSelector(`[data-aglyn="leaf:${RAW}"]`)
+      expect(document.querySelector(expanded)).not.toBeNull()
+    })
+
+    it('matches a component grafted inside a layout, and nested grafts', () => {
+      document.body.innerHTML =
+        `<div data-aglyn="leaf:layout__cmp__inst01__${RAW}">A</div>` +
+        `<div data-aglyn="leaf:cmp__outer1__cmp__inner1__${RAW}">B</div>`
+      const expanded = expandLeafSelector(`[data-aglyn="leaf:${RAW}"]`)
+      expect(document.querySelectorAll(expanded)).toHaveLength(2)
+    })
+
+    it('does NOT match an unrelated node that merely embeds the id', () => {
+      // The suffix is anchored to `__` + the exact id, so a longer id that
+      // happens to contain this one cannot be reached.
+      document.body.innerHTML =
+        `<div data-aglyn="leaf:cmp__inst01__X${RAW}Y">nope</div>` +
+        `<div data-aglyn="leaf:${RAW}zz">nope</div>`
+      const expanded = expandLeafSelector(`[data-aglyn="leaf:${RAW}"]`)
+      expect(document.querySelector(expanded)).toBeNull()
     })
 
     it('passes hand-typed CSS selectors through unchanged', () => {
