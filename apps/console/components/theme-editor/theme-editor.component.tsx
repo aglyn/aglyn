@@ -48,12 +48,18 @@ import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import ColorField from './color-field.component'
 import {
+  buildToolbarMixin,
+  DEFAULT_TOOLBAR_SM,
+  DEFAULT_TOOLBAR_XS,
   fontFamilyStack,
   getSchemeColor,
   GOOGLE_FONT_OPTIONS,
+  orderSensitiveKey,
   PALETTE_COLOR_FIELDS,
+  readToolbarHeight,
   SURFACE_COLOR_FIELDS,
   type SurfaceColorPath,
+  TOOLBAR_SM_MIN_WIDTH,
 } from './theme-editor.constants'
 import ThemePreview from './theme-preview.component'
 
@@ -102,39 +108,6 @@ function setSchemeValue(
 }
 
 /**
- * MUI's own toolbar breakpoint. `mixins.toolbar` has to carry this exact
- * query, because the rule it competes with is MUI's `@media (min-width:600px)
- * { min-height: 64px }` (AGL-1242).
- */
-const TOOLBAR_SM_MIN_WIDTH = 600
-const TOOLBAR_SM_QUERY = `@media (min-width:${TOOLBAR_SM_MIN_WIDTH}px)`
-/** MUI's stock Toolbar heights, shown when the host has set none. */
-const DEFAULT_TOOLBAR_XS = 56
-const DEFAULT_TOOLBAR_SM = 64
-/**
- * `createMixins` spreads `...mixins` AFTER its default, so anything we write
- * REPLACES the stock toolbar wholesale — including its short-landscape rule.
- * Carrying it forward keeps that behaviour instead of dropping it silently.
- */
-const TOOLBAR_LANDSCAPE_QUERY = '@media (min-width:0px)'
-const TOOLBAR_LANDSCAPE_RULE = {
-  '@media (orientation: landscape)': { minHeight: 48 },
-}
-
-/** Reads a px `minHeight` out of `mixins.toolbar` for one breakpoint. */
-function readToolbarHeight(theme: HostTheme, breakpoint: 'xs' | 'sm') {
-  const toolbar = theme.mixins?.toolbar
-  if (!toolbar) return undefined
-  const raw =
-    breakpoint === 'xs'
-      ? toolbar.minHeight
-      : (toolbar[TOOLBAR_SM_QUERY] as { minHeight?: unknown } | undefined)
-          ?.minHeight
-  const value = parseFloat(String(raw ?? ''))
-  return Number.isFinite(value) ? value : undefined
-}
-
-/**
  * Host theme editor: palette, typography, shape/spacing controls with a live
  * preview per color scheme. All edits stay in local draft state until Save.
  */
@@ -173,13 +146,16 @@ export function ThemeEditor(props: ThemeEditorProps) {
   // doc round-trips through Firestore with different key order than the local
   // draft, and the draft is only sanitized at save time — a string compare
   // left the save buttons enabled forever after the first save.
-  const dirty = useMemo(
-    () =>
-      !deepEqual(sanitizeHostTheme(draft), sanitizeHostTheme(theme ?? {}), {
-        strict: true,
-      }),
-    [draft, theme],
-  )
+  //
+  // …except where key order IS the meaning. See `orderSensitiveKey`.
+  const dirty = useMemo(() => {
+    const next = sanitizeHostTheme(draft)
+    const saved = sanitizeHostTheme(theme ?? {})
+    return (
+      !deepEqual(next, saved, { strict: true }) ||
+      orderSensitiveKey(next) !== orderSensitiveKey(saved)
+    )
+  }, [draft, theme])
   const schemeColors = draft.colorSchemes?.[scheme]
   const previewFontsHref = getGoogleFontsUrl(draft.fonts)
 
@@ -382,22 +358,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
           delete next.mixins
           return next
         }
-        // Always emit a COMPLETE object. `mixins.toolbar` replaces MUI's
-        // default wholesale, so anything omitted is simply gone — setting
-        // only the desktop height left portrait phones with no `min-height`
-        // at all. Unset breakpoints fall back to MUI's own values.
-        //
-        // KEY ORDER IS LOAD-BEARING. These land in one CSS rule, so the last
-        // matching declaration wins, and MUI emits the landscape clause
-        // BEFORE the sm height for that reason — emitting it after makes a
-        // wide landscape window (i.e. every desktop) 48px tall.
-        next.mixins = {
-          toolbar: {
-            minHeight: `${xs ?? DEFAULT_TOOLBAR_XS}px`,
-            [TOOLBAR_LANDSCAPE_QUERY]: TOOLBAR_LANDSCAPE_RULE,
-            [TOOLBAR_SM_QUERY]: { minHeight: `${sm ?? DEFAULT_TOOLBAR_SM}px` },
-          },
-        }
+        next.mixins = { toolbar: buildToolbarMixin(xs, sm) }
         return next
       })
     },
