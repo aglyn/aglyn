@@ -1,5 +1,5 @@
 ---
-description: The backlog is deployed and the CSP canvas click-test PASSED — flip enforcing on (AGL-523), verify the In Review issues against real data, and finish AGL-1160's caching half
+description: Deploy the stranded AGL-1226 fix first, then flip CSP to enforcing (AGL-523) — the canvas click-test passed and strict-dynamic is ruled out; AGL-1161 and AGL-1217 still need production verification
 ---
 
 Pick up from `/promote-and-enforce` on 2026-08-03.
@@ -166,17 +166,16 @@ published site. Pointing a collector there floods the log with one known defect.
 
 Deployed but NOT yet exercised in production.
 
-- **AGL-1160 — back to In Progress, half of it was wrong.** Measured after the
-  deploy: Next/Vercel **overrides the hand-written `Cache-Control`** on these
-  routes. `robots` is the control — left deliberately on the old
-  `s-maxage=3600`, it returns the same `public, max-age=0, must-revalidate` as
-  everything else. So the header never reached a CDN, the issue's "cached for an
-  hour" premise is false, and my `s-maxage=60` change (`10b813343`) is a no-op.
-  The `<loc>` origin fix (`a08bcf75f`) is real and stands. **What remains: find
-  what actually caches these routes** (`x-vercel-cache: HIT` says something
-  does) and measure publish-to-visible directly rather than reading a header.
-  I could not get a production control for the origin fix — it needs a custom
-  domain or a tenant `*.vercel.app` alias, and neither guessed alias resolves.
+- **AGL-1160 — DONE, closed by measurement.** No action. Recording the outcome
+  because it is instructive: the issue was filed on the belief that a
+  hand-written `s-maxage=3600` made sitemaps an hour stale. Polling `age` on
+  production showed the real TTL is **60 s** — Vercel's own revalidation, the
+  same window every page uses — and the hand-written header is **overridden and
+  inert** (`robots`, left on the old value, returns the identical header as
+  everything else). There was never an hour of staleness and nothing for
+  `revalidateTag` to fix. The `<loc>` origin fix (`a08bcf75f`) was the only real
+  defect and it shipped. See `bc7d6c1dd` for the measurement, left in the code
+  so nobody files it a third time.
 - **AGL-1161** — publish a component used through a layout and through another
   component; confirm both sets of screens drop. Watch for
   `AGL-1161:component-scan-truncated`.
