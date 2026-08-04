@@ -21,6 +21,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
+  BesignerDraftAlertComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
   withBesignerContext,
@@ -206,6 +207,7 @@ function TemplateBesignerPage(props) {
   const {
     saveAvailable,
     remoteChanged,
+    draft,
     handleSave,
     jsonOpen,
     openJsonEditor,
@@ -222,6 +224,11 @@ function TemplateBesignerPage(props) {
     noun: 'template',
     savedMessage: 'Template saved',
     documentKey: `${hostId}:${templateId}`,
+    draft: {
+      scope: hostId,
+      kind: 'template',
+      docId: templateId,
+    },
     notify: enqueueSnackbar,
     queueLoading,
     // A page template holds a screen's canvas tree (already rooted at the
@@ -321,6 +328,7 @@ function TemplateBesignerPage(props) {
         actionsPrefix={
           <>
             <BesignerFunctionsButton hostId={hostId} />
+            <BesignerDraftAlertComponent draft={draft} noun="template" />
             {/* No version switcher here, on purpose (AGL-688). Templates
                 have versions but no publish step, so TEMPLATE_BESIGNER
                 carries no versionId segment — there is no per-version URL

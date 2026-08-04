@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
+  BesignerDraftAlertComponent,
   CloseableDrawerComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
@@ -222,6 +223,7 @@ function SystemEmailBesignerPage() {
   const {
     saveAvailable,
     remoteChanged,
+    draft,
     handleSave,
     jsonOpen,
     openJsonEditor,
@@ -245,7 +247,13 @@ function SystemEmailBesignerPage() {
     // offers email-safe blocks only, because this output goes through a mail
     // client, not a browser.
     viewType: Aglyn.HostViewType.EMAIL,
-    documentKey: `${templateKey}:${versionId}`,
+    documentKey: `platform:${templateKey}:${versionId}`,
+    draft: {
+      scope: 'platform',
+      kind: 'email',
+      docId: templateKey,
+      versionId,
+    },
     notify: enqueueSnackbar,
     queueLoading,
   })
@@ -413,7 +421,8 @@ function SystemEmailBesignerPage() {
                 saveAvailable={saveAvailable}
                 onPropertiesEdit={() => setPropertiesOpen(true)}
               />
-              {remoteChanged ? (
+              <BesignerDraftAlertComponent draft={draft} noun="email" />
+            {remoteChanged ? (
                 <Alert
                   severity="warning"
                   sx={{

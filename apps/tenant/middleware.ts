@@ -65,6 +65,7 @@ export const config = {
     // tenant host (SEO Toolkit).
     '/sitemap.xml',
     '/robots.txt',
+    '/manifest.webmanifest',
   ],
 }
 
@@ -209,13 +210,19 @@ export const middleware: NextMiddleware = (req, event) => {
 
   // Per-host SEO files resolve through api routes (SEO Toolkit). Clone the
   // request URL so the host query survives the rewrite.
-  if (
-    req.nextUrl.pathname === '/sitemap.xml' ||
-    req.nextUrl.pathname === '/robots.txt'
-  ) {
+  //
+  // `manifest.webmanifest` joins them for the same reason (AGL-1252): the
+  // matcher above excludes anything matching `[\w-]+\.\w+`, so a manifest
+  // served from a `[host]/…` route would never be rewritten and would 404 on
+  // every site.
+  const SEO_REWRITES: Record<string, string> = {
+    '/sitemap.xml': '/api/sitemap',
+    '/robots.txt': '/api/robots',
+    '/manifest.webmanifest': '/api/manifest',
+  }
+  if (SEO_REWRITES[req.nextUrl.pathname]) {
     const seoUrl = req.nextUrl.clone()
-    seoUrl.pathname =
-      req.nextUrl.pathname === '/sitemap.xml' ? '/api/sitemap' : '/api/robots'
+    seoUrl.pathname = SEO_REWRITES[req.nextUrl.pathname]
     seoUrl.searchParams.set('host', tenantHost)
     // The query can be dropped across dev rewrites, so the resolved tenant
     // host also travels as a request header the api routes prefer.

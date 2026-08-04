@@ -45,6 +45,14 @@ export interface BesignerAppBarProps extends SecondaryAppBarProps {
   saveAvailable?: boolean
   /** Current-document indicator/switcher (see BesignerDocumentSwitcher). */
   documentSwitcher?: JSX.Children
+  /**
+   * Who else is in this document (AGL-675). Rendered inside the toolbar
+   * rather than beside it: the screen editor passed `<PresenceAvatars />` as
+   * a SIBLING of this app bar, so on the first day presence ever produced an
+   * entry the avatars turned up as their own block under the toolbar, at the
+   * far left. Nobody had seen it because presence had never rendered.
+   */
+  presence?: JSX.Children
 }
 
 export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
@@ -52,6 +60,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
     const {
       documentSwitcher,
       liveUrl,
+      presence,
       onPreview,
       onPropertiesEdit,
       onSave,
@@ -92,6 +101,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
           <DevicePreviewControlsComponent />
           {/*<InteractControlsComponent />*/}
           <PanelControlsComponent />
+          {presence}
           <Divider
             orientation="vertical"
             sx={(theme) => ({

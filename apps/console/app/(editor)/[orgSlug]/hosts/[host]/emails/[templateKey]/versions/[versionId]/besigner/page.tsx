@@ -21,6 +21,7 @@ import { getSessionHealth } from '../../../../../../../../../../utils/session-he
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
+  BesignerDraftAlertComponent,
   CloseableDrawerComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
@@ -202,6 +203,7 @@ function HostEmailBesignerPage() {
   const {
     saveAvailable,
     remoteChanged,
+    draft,
     handleSave,
     jsonOpen,
     openJsonEditor,
@@ -217,7 +219,13 @@ function HostEmailBesignerPage() {
     save: saveVersion,
     noun: 'email',
     viewType: Aglyn.HostViewType.EMAIL,
-    documentKey: `${templateKey}:${versionId}`,
+    documentKey: `${hostId}:${templateKey}:${versionId}`,
+    draft: {
+      scope: hostId,
+      kind: 'email',
+      docId: templateKey,
+      versionId,
+    },
     notify: enqueueSnackbar,
     queueLoading,
   })
@@ -398,7 +406,8 @@ function HostEmailBesignerPage() {
                 saveAvailable={saveAvailable}
                 onPropertiesEdit={() => setPropertiesOpen(true)}
               />
-              {remoteChanged ? (
+              <BesignerDraftAlertComponent draft={draft} noun="email" />
+            {remoteChanged ? (
                 <Alert
                   severity="warning"
                   sx={{

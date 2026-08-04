@@ -16,8 +16,10 @@
  */
 'use client'
 
-import { Avatar, AvatarGroup, Tooltip } from '@mui/material'
-import type { PresenceEntry } from '../hooks/use-presence'
+import { mdiMonitorMultiple } from '@aglyn/shared-data-mdi'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { Avatar, AvatarGroup, Stack, Tooltip } from '@mui/material'
+import type { PresenceState } from '../hooks/use-presence'
 
 /**
  * Who else is in this document (AGL-675).
@@ -31,9 +33,57 @@ import type { PresenceEntry } from '../hooks/use-presence'
  * that actually protects their work is the concurrent-edit guard
  * (AGL-674), which shipped first for exactly this reason.
  */
-export function PresenceAvatars({ entries }: { entries: PresenceEntry[] }) {
-  if (!entries.length) return null
+export function PresenceAvatars({ presence }: { presence: PresenceState }) {
+  const { entries, ownOtherSessions } = presence
+  if (!entries.length && !ownOtherSessions) return null
 
+  return (
+    <Stack direction="row" sx={{ alignItems: 'center' }}>
+      {ownOtherSessions ? <OwnSessionsBadge count={ownOtherSessions} /> : null}
+      {entries.length ? <RoomAvatars entries={entries} /> : null}
+    </Stack>
+  )
+}
+
+/**
+ * You, somewhere else (AGL-675).
+ *
+ * The avatar stack filters your own uid out of the room, so without this
+ * the most dangerous case in the whole feature is the one nobody is shown:
+ * the same person editing one document in two tabs. Two tabs are two
+ * `CanvasManager`s, so the second save quietly replaces the first — and the
+ * concurrent-edit guard does not fire, because the stamp moved on *your*
+ * write, not a colleague's. They also share one local draft key
+ * (AGL-1256), last writer wins.
+ *
+ * Warning-coloured because it is a hazard rather than company.
+ */
+function OwnSessionsBadge({ count }: { count: number }) {
+  return (
+    <Tooltip
+      title={
+        `You have this open in ${count === 1 ? 'one other place' : `${count} other places`} — ` +
+        'another tab, or this account signed in elsewhere. Nothing merges ' +
+        'between them: whichever one saves last wins, and it will not warn ' +
+        'you, because both are you.'
+      }
+    >
+      <Avatar
+        sx={{
+          width: 28,
+          height: 28,
+          mr: 1,
+          bgcolor: 'warning.main',
+          color: 'warning.contrastText',
+        }}
+      >
+        <MdiIcon path={mdiMonitorMultiple.path} size={0.7} />
+      </Avatar>
+    </Tooltip>
+  )
+}
+
+function RoomAvatars({ entries }: { entries: PresenceState['entries'] }) {
   return (
     <AvatarGroup
       max={4}
@@ -50,7 +100,12 @@ export function PresenceAvatars({ entries }: { entries: PresenceEntry[] }) {
       {entries.map((entry) => (
         <Tooltip
           key={entry.uid}
-          title={`${entry.displayName} is editing this too — saves are not merged`}
+          title={
+            `${entry.displayName} is editing this too — saves are not merged` +
+            ((entry.sessions ?? 1) > 1
+              ? ` (in ${entry.sessions} places)`
+              : '')
+          }
         >
           <Avatar
             src={entry.photoURL}

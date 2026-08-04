@@ -50,6 +50,11 @@ export default async function HostLayout({
       brandLogoUrl={hostRes.host?.logoUrl}
       brandName={hostRes.host?.displayName}
     >
+      {/* Per-host manifest (AGL-1252). A relative href on purpose: the
+          browser resolves it against the site's own origin, so one link tag
+          serves every customer domain and every aglyn.app subdomain without
+          the layout needing to know which it is on. */}
+      <link rel="manifest" href="/manifest.webmanifest" />
       {fontsHref ? (
         <>
           <link

@@ -18,6 +18,14 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Besigner from '@aglyn/besigner'
+import {
+  type BesignerDraftIds,
+  clearBesignerDraft,
+} from '../drafts/besigner-draft-store'
+import {
+  type BesignerDraftState,
+  useBesignerDraft,
+} from './use-besigner-draft'
 
 /**
  * How the host application surfaces a message. Deliberately a plain
@@ -73,6 +81,16 @@ export interface UseBesignerDocumentOptions<TData = unknown>
    * which is what stops one document's nodes leaking into the next.
    */
   documentKey?: string
+  /**
+   * Identity for the local crash-recovery draft (AGL-1256). Omit and drafts
+   * are simply off for this editor.
+   *
+   * Deliberately separate from `documentKey`, which is not unique enough to
+   * key storage on: both email editors build it as
+   * `${templateKey}:${versionId}`, so a platform template and every host's
+   * override of the same key produce the same string.
+   */
+  draft?: BesignerDraftIds
   notify?: BesignerNotify
   queueLoading?: BesignerQueueLoading
   /** Called after a successful save, for activity logging. */
@@ -125,6 +143,12 @@ export interface UseBesignerDocumentResult {
    * editor accuses you of being someone else.
    */
   markOwnWrite: () => void
+  /**
+   * Unsaved work recovered from local storage after a crash or reload, and
+   * the two things the author can do about it (AGL-1256). Always present;
+   * `available` is false when there is nothing to offer.
+   */
+  draft: BesignerDraftState
   /** JSON editor plumbing, identical in every editor. */
   jsonOpen: boolean
   openJsonEditor: () => void
@@ -180,6 +204,7 @@ export function useBesignerDocument<TData = unknown>(
     noun,
     viewType,
     documentKey,
+    draft: draftIds,
     notify = noopNotify,
     queueLoading = noopQueueLoading,
     onSaved,
@@ -252,6 +277,16 @@ export function useBesignerDocument<TData = unknown>(
     setRemoteChanged(true)
   }, [updatedAt])
 
+  // Crash net (AGL-1256). Shares the conflict guard's stamp so the restore
+  // prompt can tell "your unsaved work" from "your unsaved work, and someone
+  // else has saved since".
+  const draft = useBesignerDraft({
+    ids: draftIds,
+    loaded: Aglyn.canvas.didSetInitial,
+    dirty: saveAvailable,
+    storedStamp: Aglyn.versionStamp(updatedAt),
+  })
+
   const handleSave = useCallback(async () => {
     if (!saveAvailable) {
       return notify('Already saved', { variant: 'info', persist: false })
@@ -309,6 +344,12 @@ export function useBesignerDocument<TData = unknown>(
     try {
       await save(nextNodes)
       Aglyn.canvas.updateInitialNodes(nextNodes as never)
+      // The draft dies with the save that made it redundant (AGL-1256). This
+      // is the rule that keeps a crash net from quietly becoming free version
+      // history: a draft can only ever hold work that was never saved, so it
+      // can never be used to roll a document back to an earlier saved state.
+      // That is what the `versioning` entitlement sells.
+      if (draftIds) clearBesignerDraft(draftIds)
       // Fire-and-forget attribution (AGL-676) — an audit miss must not break
       // the edit that triggered it.
       onSaved?.()
@@ -340,6 +381,7 @@ export function useBesignerDocument<TData = unknown>(
     onSaved,
     savedMessage,
     fromCanvasNodes,
+    draftIds,
   ])
 
   // Same flag `handleSave` sets, for writes that do not go through it.
@@ -360,6 +402,7 @@ export function useBesignerDocument<TData = unknown>(
     remoteChanged,
     handleSave,
     markOwnWrite,
+    draft,
     jsonOpen,
     openJsonEditor,
     closeJsonEditor,

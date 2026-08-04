@@ -17,6 +17,10 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { act, renderHook } from '@testing-library/react'
+import {
+  besignerDraftKey,
+  writeBesignerDraft,
+} from '../drafts/besigner-draft-store'
 import useBesignerDocument from './use-besigner-document'
 
 /**
@@ -345,6 +349,89 @@ describe('useBesignerDocument', () => {
       }
       setup({ nodes: rooted as never })
       expect(mockCanvas.setNodes).toHaveBeenLastCalledWith(rooted)
+    })
+  })
+
+  /**
+   * Local drafts (AGL-1256) are a crash net, and the line between a crash net
+   * and a free stand-in for the paid `versioning` feature is exactly this: a
+   * draft may only ever hold work that was never saved. The moment it can
+   * outlive a save, it becomes "put this document back how it was" — which is
+   * rollback, which is what the Pro entitlement sells.
+   */
+  describe('drafts vs the paid versioning feature', () => {
+    const DRAFT = {
+      scope: 'host-1',
+      kind: 'screen',
+      docId: 'screen-1',
+      versionId: 'v1',
+    } as const
+
+    beforeEach(() => window.localStorage.clear())
+
+    it('destroys the draft when a save succeeds', async () => {
+      writeBesignerDraft(DRAFT, { nodes: NODES, baseStamp: null })
+      expect(window.localStorage.getItem(besignerDraftKey(DRAFT))).not.toBeNull()
+
+      setCanvasDirty(true)
+      const { result, save } = setup({ draft: DRAFT })
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(save).toHaveBeenCalled()
+      expect(window.localStorage.getItem(besignerDraftKey(DRAFT))).toBeNull()
+    })
+
+    // The other half of the rule: a *refused* save must leave the draft
+    // standing, because the unsaved work it is protecting is exactly what
+    // the refusal has stranded (AGL-674).
+    it('leaves the draft alone when a concurrent edit refuses the save', async () => {
+      writeBesignerDraft(DRAFT, { nodes: NODES, baseStamp: 'ms:1' })
+      setCanvasDirty(true)
+
+      const { result, save, rerender } = setup({
+        draft: DRAFT,
+        updatedAt: stamp(1),
+      })
+      act(() => {
+        rerender({ updatedAt: stamp(2) } as never)
+      })
+      expect(result.current.remoteChanged).toBe(true)
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(save).not.toHaveBeenCalled()
+      expect(
+        window.localStorage.getItem(besignerDraftKey(DRAFT)),
+      ).not.toBeNull()
+    })
+
+    // …and it says so, rather than offering a silent overwrite.
+    it('flags a draft the document has moved past', () => {
+      writeBesignerDraft(DRAFT, { nodes: NODES, baseStamp: 'ms:1' })
+      mockCanvas.didSetInitial = true
+
+      const { result } = setup({ draft: DRAFT, updatedAt: stamp(2) })
+
+      expect(result.current.draft.available).toBe(true)
+      expect(result.current.draft.staleAgainstDocument).toBe(true)
+    })
+
+    it('does not touch storage when no draft identity is given', async () => {
+      setCanvasDirty(true)
+      const { result } = setup()
+      await act(async () => {
+        await result.current.handleSave()
+      })
+      expect(Object.keys(window.localStorage)).toHaveLength(0)
+    })
+
+    it('reports no offer when there is no draft on disk', () => {
+      const { result } = setup({ draft: DRAFT })
+      expect(result.current.draft.available).toBe(false)
     })
   })
 })

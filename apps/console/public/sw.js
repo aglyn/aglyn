@@ -51,6 +51,15 @@ const CACHE_NAME = 'aglyn-console-static-v1'
 const CACHEABLE_PREFIXES = ['/_next/static/', '/_static/']
 
 /**
+ * The offline fallback (AGL-1056).
+ *
+ * Under `/_static/` deliberately: that path is already outside the middleware
+ * auth matcher AND already inside the allowlist above, so the fallback needs
+ * no new exception on either of the two paths this arc has been careful about.
+ */
+const OFFLINE_URL = '/_static/offline.html'
+
+/**
  * Hosts whose requests this worker must never touch.
  *
  * Firebase's SDKs run their own offline persistence through IndexedDB and
@@ -111,13 +120,21 @@ function isCacheable(request) {
   return CACHEABLE_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))
 }
 
-self.addEventListener('install', () => {
+self.addEventListener('install', (event) => {
   // No precache list. The assets worth caching are build-hashed, so their URLs
   // are only knowable from a build manifest — and generating one is what a
   // toolchain (serwist) is for. Runtime caching reaches the same steady state
   // after one visit without adding that machinery, and crucially it cannot
   // cache something the page did not already ask for.
   //
+  // The ONE thing precached (AGL-1056): the offline page cannot be fetched
+  // at the moment it is needed, so it has to already be there. Everything
+  // else is still runtime-cached — this is a single known URL, not a build
+  // manifest, so it needs no toolchain.
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.add(OFFLINE_URL)),
+  )
+
   // **No `skipWaiting()` here (AGL-1055).** A new worker stays in `waiting`
   // until the user asks for it. Activating automatically swaps the worker out
   // from under a live page — in an authoring tool, mid-edit, with unsaved work
@@ -151,6 +168,25 @@ self.addEventListener('activate', (event) => {
 })
 
 self.addEventListener('fetch', (event) => {
+  // Navigations: pass straight through, and fall back ONLY when the network
+  // itself fails (AGL-1056).
+  //
+  // Three properties this shape gets for free, each of which the issue calls
+  // out and each of which is easy to lose:
+  //
+  // * **A real HTTP error stays a real HTTP error.** `fetch` RESOLVES for a
+  //   500, so `.catch` never runs — the fallback cannot mask a server error.
+  //   Only a network-level failure (a rejected promise) reaches it.
+  // * **Nothing is cached.** The response is returned, never stored, so the
+  //   AGL-1054 rule that no navigation may enter the cache still holds.
+  // * **`/api/*` is untouched**, because it is not a navigation.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(OFFLINE_URL)),
+    )
+    return
+  }
+
   // Not `respondWith` at all for anything not cacheable — the request goes to
   // the network exactly as if this worker did not exist. Falling through is
   // safer than proxying it, because a bug in the proxy path cannot then break

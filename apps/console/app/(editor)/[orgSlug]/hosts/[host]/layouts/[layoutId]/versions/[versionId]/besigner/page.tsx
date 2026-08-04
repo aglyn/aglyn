@@ -21,6 +21,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
+  BesignerDraftAlertComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
   withBesignerContext,
@@ -167,6 +168,7 @@ function LayoutBesignerPage(props) {
   const {
     saveAvailable,
     remoteChanged,
+    draft,
     handleSave,
     jsonOpen,
     openJsonEditor,
@@ -183,6 +185,12 @@ function LayoutBesignerPage(props) {
     noun: 'layout',
     viewType: Aglyn.HostViewType.LAYOUT,
     documentKey: `${hostId}:${layoutId}:${versionId}`,
+    draft: {
+      scope: hostId,
+      kind: 'layout',
+      docId: layoutId,
+      versionId,
+    },
     notify: enqueueSnackbar,
     queueLoading,
     // Attribution (AGL-676): `updatedAt` carries no actor, so without this
@@ -376,6 +384,7 @@ function LayoutBesignerPage(props) {
               onSave={handleSave}
               saveAvailable={saveAvailable}
             />
+            <BesignerDraftAlertComponent draft={draft} noun="layout" />
             {/* Shown as soon as their save lands, not on Save — finding out
                 after twenty more minutes of editing is the bad version of
                 this (AGL-674). */}
