@@ -73,7 +73,6 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
-import useConfirmedDoc from '../../../../../hooks/use-confirmed-doc'
 import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 
 /**
@@ -118,37 +117,64 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const isStaff = useIsStaff()
 
   /**
-   * `useConfirmedDoc`, not `useFirestoreDoc` (AGL-937/AGL-928).
+   * The org, served by the Admin SDK (AGL-937).
    *
-   * This is a rule-gated CLIENT read on a staff surface, and every field below
-   * renders as `org?.x ?? '—'`. A `noDocument` tombstone in the local cache
-   * therefore paints a full page of dashes and "no plan" that is
-   * indistinguishable from a real, empty org — reproduced locally, where the
-   * tombstone survived reloads and the page was blank every visit.
+   * This used to be a rule-gated CLIENT read (`isStaff() || isOrgMember()`),
+   * which was wrong on a staff surface twice over. A `noDocument` tombstone in
+   * the local cache painted every field below as absent — plan, slug, owner,
+   * Stripe customer, created date, entitlements and the whole edit form —
+   * indistinguishable from a real empty org, and it survived reloads.
+   * `useConfirmedDoc` (AGL-928) made that state honest rather than silent, but
+   * it could not remove it. And a staff page must not depend on a rule the
+   * staff user's own membership can flip.
    *
-   * `useConfirmedDoc` confirms a cache miss against the server before
-   * reporting absence, and exposes `ready` so "we do not know yet" is a state
-   * rather than a lie. The alert below renders instead of the summary when the
-   * read is confirmed-absent or failed, so nobody reads a cache artefact as a
-   * broken org.
+   * `/api/admin/org-detail` bypasses both the cache and the rule, and merges
+   * the billing subcollection server-side, so a 404 here is a real absence.
    */
-  const { data: orgDoc, ready: orgReady, error: orgError } = useConfirmedDoc<any>(
-    firestore,
-    orgId ? ['orgs', orgId] : null,
-  )
-  // `subscription` and `stripeCustomerId` moved to `orgs/{orgId}/billing/stripe`
-  // (AGL-1028), whose rule is `isStaff() || canManageOrg()` — so staff read it
-  // here. Merged over the org doc so the negotiated-price panel below and
-  // `isEnterpriseOrg` keep seeing one object.
-  //
-  // Confirmed for the same reason, and it matters MORE here: this
-  // subcollection is new, so an org that predates it legitimately has no
-  // billing doc. An unconfirmed read cannot tell that apart from a cached miss,
-  // and both would render the org as having never paid us.
-  const { data: orgBilling } = useConfirmedDoc<any>(
-    firestore,
-    orgId ? ['orgs', orgId, ORG_BILLING_SUBCOLLECTION, ORG_BILLING_DOC_ID] : null,
-  )
+  const [orgDoc, setOrgDoc] = useState<any>(null)
+  const [orgReady, setOrgReady] = useState(false)
+  const [orgError, setOrgError] = useState(false)
+  const [orgNonce, setOrgNonce] = useState(0)
+  useEffect(() => {
+    if (!isStaff || !orgId) return undefined
+    let active = true
+    setOrgReady(false)
+    setOrgError(false)
+    void (async () => {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        if (!idToken) throw new Error('no token')
+        const response = await fetch(
+          `/api/admin/org-detail?orgId=${encodeURIComponent(orgId)}`,
+          { headers: { Authorization: `Bearer ${idToken}` } },
+        )
+        if (!active) return
+        if (response.status === 404) {
+          // A confirmed absence, which is the whole point of reading here.
+          setOrgDoc(null)
+          return
+        }
+        if (!response.ok) throw new Error(String(response.status))
+        const payload = await response.json()
+        if (active) setOrgDoc(payload?.org ?? null)
+      } catch {
+        // Failure is reported as failure, never as an empty org — the alert
+        // below tells staff not to act on what they are looking at.
+        if (active) {
+          setOrgDoc(null)
+          setOrgError(true)
+        }
+      } finally {
+        if (active) setOrgReady(true)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [isStaff, orgId, user, orgNonce])
+  // Billing is merged server-side now, so there is one source and one shape.
+  const orgBilling = null
+
   const org = useMemo(
     () => (orgDoc ? { ...orgDoc, ...(orgBilling ?? {}) } : orgDoc),
     [orgDoc, orgBilling],
@@ -439,6 +465,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         const payload = await response.json().catch(() => ({}))
         throw new Error(payload?.error ?? 'Save failed')
       }
+      // The org is read once from the server now, not through a live listener
+      // (AGL-937), so a successful write has to ask for it again — otherwise
+      // the card above keeps showing what staff just changed away from.
+      setOrgNonce((nonce) => nonce + 1)
     } catch (error) {
       console.error(error)
     } finally {
@@ -471,6 +501,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         throw new Error(payload?.error ?? 'Transfer failed')
       }
       setTransferTarget('')
+      setOrgNonce((nonce) => nonce + 1)
     } catch (error) {
       console.error(error)
     } finally {
