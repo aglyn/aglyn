@@ -38,8 +38,20 @@ const VARIABLE = { kind: 'variable' as const, id: 'aB3xK9m2Qw' }
  * What firebase-admin actually hands back for a bytes field: a Node `Buffer`
  * carved out of the shared 8 KB allocation pool, so `byteOffset` is non-zero
  * and `buffer.byteLength` is the whole pool rather than the field.
+ *
+ * Carve it from a slab of our own rather than reaching for `Buffer.from` or
+ * `Buffer.allocUnsafe`: those DO draw on the real pool, but the offset they
+ * land at is whatever the rest of the process left behind — 0 whenever the
+ * pool has just been replaced — so the premise guard below would pass or fail
+ * by luck. A dedicated slab reproduces the same shape deterministically.
  */
-const pooledBuffer = () => Buffer.from(compress(NODES))
+const pooledBuffer = () => {
+  const bytes = compress(NODES)
+  const pool = Buffer.allocUnsafeSlow(Buffer.poolSize)
+  const packed = pool.subarray(64, 64 + bytes.byteLength)
+  packed.set(bytes)
+  return packed
+}
 
 describe('decodeStoredNodes', () => {
   it('passes a plain Firestore map through unchanged', () => {
