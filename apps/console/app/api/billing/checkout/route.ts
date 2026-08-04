@@ -31,6 +31,7 @@ import {
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { configuredPriceFault } from '../../../../utils/stripe-price-fault'
 
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
@@ -50,6 +51,8 @@ const YEARLY_PRICE_ENV: Record<string, string | undefined> = {
   advanced: process.env.STRIPE_PRICE_ADVANCED_YEARLY,
   agency: process.env.STRIPE_PRICE_AGENCY_YEARLY,
 }
+
+
 
 /**
  * Creates a Stripe Checkout session for a plan upgrade. Uses Stripe's REST
@@ -246,6 +249,19 @@ async function handler(request: Request): Promise<Response> {
     const token = embedded ? session.client_secret : session.url
     if (!response.ok || !token) {
       console.error('Stripe checkout error', session.error)
+      // A price id that is SET but does not exist in this Stripe mode is a
+      // configuration fault, not a Stripe outage, and it used to read as
+      // "Stripe checkout failed" (AGL-1137). The guard above only catches an
+      // ABSENT env var; a stale id — the shape you get when the secret key is
+      // switched from test to live and the price ids are not — sails past it
+      // and dies here, indistinguishable from a network blip.
+      //
+      // Stripe names the offending parameter, so map it back to the env var
+      // that supplied it rather than making someone guess which of ~60 it was.
+      const missing = configuredPriceFault(session.error, plan, interval)
+      if (missing) {
+        return Response.json({ error: missing }, { status: 501 })
+      }
       return Response.json({ error: 'Stripe checkout failed' }, { status: 502 })
     }
     // Never both: the client picks its path by which key is present, so

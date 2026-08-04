@@ -22,6 +22,8 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  readOrgBilling,
+  writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -149,7 +151,10 @@ async function handler(request: Request): Promise<Response> {
     }
     const orgData = orgSnap.data() as any
     const orgName = String(orgData?.displayName ?? orgId)
-    let customerId = orgData?.stripeCustomerId as string | undefined
+    // AGL-1028: moved to `orgs/{orgId}/billing/stripe`, org doc as fallback.
+    let customerId = (await readOrgBilling(orgId)).stripeCustomerId as
+      | string
+      | undefined
 
     // A Stripe customer is required to invoice or check out. Mint one if the
     // org has never billed (enterprise orgs often start on free).
@@ -165,7 +170,10 @@ async function handler(request: Request): Promise<Response> {
         )
       }
       customerId = customer.body.id as string
-      await orgRef.set({ stripeCustomerId: customerId }, { merge: true })
+      // AGL-1028: the customer id lives on the manager-gated billing doc,
+      // and `writeOrgBilling` also stamps the `stripeCustomers` reverse index
+      // the webhook resolves through.
+      await writeOrgBilling(orgId, { stripeCustomerId: customerId })
     }
 
     // Per-org product + ad-hoc recurring price. Annual bills 12× the monthly
@@ -245,21 +253,20 @@ async function handler(request: Request): Promise<Response> {
       const sub = subscription.body
       // Optimistic mirror so staff see capability without waiting for the
       // webhook; the webhook reconciles from Stripe as the source of truth.
-      await orgRef.set(
-        {
-          plan,
-          subscription: {
-            status: sub.status ?? 'active',
-            priceId,
-            interval,
-            customMonthlyUsd: Math.round(amountMonthlyUsd * 100) / 100,
-            currentPeriodEnd: sub.current_period_end
-              ? new Date(sub.current_period_end * 1000)
-              : null,
-          },
+      // `plan` stays on the org doc (feature gating reads it); the negotiated
+      // rate and price id go to the manager-gated billing doc (AGL-1028).
+      await orgRef.set({ plan }, { merge: true })
+      await writeOrgBilling(orgId, {
+        subscription: {
+          status: sub.status ?? 'active',
+          priceId,
+          interval,
+          customMonthlyUsd: Math.round(amountMonthlyUsd * 100) / 100,
+          currentPeriodEnd: sub.current_period_end
+            ? new Date(sub.current_period_end * 1000)
+            : null,
         },
-        { merge: true },
-      )
+      } as never)
       result = {
         ...result,
         subscriptionId: sub.id,

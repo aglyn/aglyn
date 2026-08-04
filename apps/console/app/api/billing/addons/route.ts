@@ -26,6 +26,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   memberHasOrgPermission,
+  readOrgBilling,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import {
@@ -168,7 +169,10 @@ async function handler(request: Request): Promise<Response> {
     // bought quantity never raises its own cap.
     const baseline = resolveOrgEntitlements({ ...org, seatAddons: {} })
 
-    const customerId = org?.stripeCustomerId
+    // AGL-1028: moved to `orgs/{orgId}/billing/stripe`, org doc as fallback.
+    // `seatAddons` stays inline on `org` — it is an entitlement input, so
+    // `resolveOrgEntitlements` above still reads it straight off the org doc.
+    const customerId = (await readOrgBilling(orgId)).stripeCustomerId
     let subscription: any = null
     if (customerId) {
       try {

@@ -74,6 +74,56 @@ async function vercel(path, init) {
   return { ok: response.ok, status: response.status, payload }
 }
 
+
+/**
+ * Domain headroom, reported beside drift (AGL-1146).
+ *
+ * Every workspace subdomain is a real attached domain, so **org count and
+ * Vercel domain count grow together** — and the growth rate is orgs PLUS
+ * renames, since a renamed-away slug keeps its domain to serve the 308.
+ *
+ * The ceiling is a PLAN limit and is not in any API response
+ * (https://vercel.com/docs/limits — "Domains per Project"):
+ *
+ *     Hobby       50
+ *     Pro         unlimited (soft 100,000)
+ *     Enterprise  unlimited (soft 1,000,000)
+ *
+ * The aglyn team is on **Hobby**, so the real number is 50 — which is close
+ * enough to matter, not the comfortable distance it looks from 12.
+ *
+ * Why report it here rather than leave it to be discovered: the attach is
+ * deliberately best-effort. Past the ceiling an org still gets a working
+ * workspace on its path route, with a subdomain that silently never resolves
+ * — the exact failure AGL-1136 existed to fix, arriving as a wall instead of
+ * a missing integration. A number printed every run is what turns that into a
+ * thing someone sees coming.
+ */
+const DOMAIN_LIMIT_HOBBY = 50
+const WARN_AT_FRACTION = 0.7
+
+function reportHeadroom(count) {
+  const remaining = DOMAIN_LIMIT_HOBBY - count
+  console.log(
+    `domain headroom    : ${count}/${DOMAIN_LIMIT_HOBBY} on the Hobby plan ` +
+      `(${remaining} left; grows by orgs AND renames)`,
+  )
+  if (count >= DOMAIN_LIMIT_HOBBY * WARN_AT_FRACTION) {
+    console.log(
+      `\n  WARNING: past ${Math.round(WARN_AT_FRACTION * 100)}% of the Hobby ` +
+        `domain limit.\n` +
+        `  At the ceiling, new orgs get a working workspace with a subdomain ` +
+        `that never resolves,\n` +
+        `  and the attach fails quietly. Upgrading to Pro removes the limit ` +
+        `entirely; the alternative\n` +
+        `  is a wildcard on a DEDICATED project (see AGL-1146 — not the console ` +
+        `project, because\n` +
+        `  AGL-1135 removed *.aglyn.com from it so unregistered hostnames stop ` +
+        `serving a sign-in page).`,
+    )
+  }
+}
+
 async function main() {
   const { initializeApp, applicationDefault, getApps } = await import(
     'firebase-admin/app'
@@ -116,6 +166,7 @@ async function main() {
   console.log(`orgSlugs docs      : ${expected.length}`)
   console.log(`attached domains   : ${attached.size}`)
   console.log(`missing            : ${missing.length}`)
+  reportHeadroom(attached.size)
   for (const entry of missing) {
     console.log(
       `  - ${entry.domain}${entry.movedTo ? `  (tombstone → ${entry.movedTo})` : ''}`,

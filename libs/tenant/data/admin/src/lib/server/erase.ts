@@ -22,6 +22,7 @@ import { detachWorkspaceDomain } from './workspace-domains'
 import { authForPool, findUserByUidAcrossPools } from './auth-pools'
 import { removeOrgMember } from './organizations'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
+import { readOrgBilling } from './org-billing'
 
 /** The reversible hold before a requested erasure is executed (AGL-485). */
 export const ERASURE_HOLD_MS = 7 * 24 * 60 * 60 * 1000
@@ -179,7 +180,9 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
     .get()
   const members = await orgRef.collection('members').get()
   const slug = orgSnapshot.get('slug') as string | undefined
-  const stripeCustomerId = orgSnapshot.get('stripeCustomerId') as
+  // AGL-1028: moved to `orgs/{orgId}/billing/stripe`; the helper falls back
+  // to the org doc for orgs the backfill has not reached.
+  const stripeCustomerId = (await readOrgBilling(orgId)).stripeCustomerId as
     | string
     | undefined
 

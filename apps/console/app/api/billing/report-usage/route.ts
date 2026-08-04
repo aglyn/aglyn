@@ -26,7 +26,10 @@ import {
   estimateMonthlyUsageCost,
   type HostUsageSnapshot,
 } from '../../../../utils/usage-metering'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  readOrgBilling,
+} from '@aglyn/tenant-data-admin'
 import { CRON_CHUNK_SIZE, selectCronChunk } from '../../../../utils/cron-chunk'
 
 /** Previous calendar month as YYYY-MM (the default rollup target). */
@@ -288,7 +291,8 @@ async function handler(request: Request): Promise<Response> {
 
       let reported = false
       if (stripeKey && billedCents > 0) {
-        const customerId = orgSnapshot.get('stripeCustomerId')
+        // AGL-1028: reads the manager-gated billing doc, org doc as fallback.
+        const customerId = (await readOrgBilling(orgId)).stripeCustomerId
         if (customerId) {
           const response = await fetch(
             'https://api.stripe.com/v1/billing/meter_events',

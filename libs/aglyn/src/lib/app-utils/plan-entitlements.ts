@@ -848,6 +848,30 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
 const DEAD_SUBSCRIPTION_STATUSES = new Set(['canceled', 'unpaid', 'incomplete'])
 
 /**
+ * The subscription status entitlement resolution runs on (AGL-1028).
+ *
+ * `subscription` moved to `orgs/{orgId}/billing/stripe`, behind
+ * `canManageOrg()` — but the status word is an ENTITLEMENT input, not a
+ * commercial secret: `resolveEffectivePlan` downgrades a paid plan to free on a
+ * dead subscription, and `resolvePurchasedAddons` stops counting add-ons on
+ * one. Both resolve in the tenant runtime and in console components belonging
+ * to members who cannot read a manager-gated doc, so the webhook mirrors the
+ * bare status string back onto the org doc as `billingStatus`.
+ *
+ * Reads the mirror first, then the inline `subscription` — the fallback is what
+ * keeps entitlements correct for orgs the backfill has not reached yet, and for
+ * any caller still passing a whole billing doc rather than an org doc.
+ */
+function subscriptionStatusOf(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): string | undefined {
+  const mirrored = (org as { billingStatus?: unknown } | null | undefined)
+    ?.billingStatus
+  if (typeof mirrored === 'string' && mirrored) return mirrored
+  return org?.subscription?.status
+}
+
+/**
  * Whether the org is actually being charged for its plan right now.
  *
  * This is deliberately stricter than `resolveEffectivePlan`: entitlement
@@ -864,7 +888,7 @@ export function isBillingSubscription(
 ): boolean {
   const plan = org?.plan
   if (!plan || plan === 'free' || !(plan in PLAN_ENTITLEMENTS)) return false
-  const status = org?.subscription?.status
+  const status = subscriptionStatusOf(org)
   if (!status) return false
   return !DEAD_SUBSCRIPTION_STATUSES.has(status)
 }
@@ -1366,7 +1390,7 @@ export function resolveEffectivePlan(
 ): OrgPlan {
   const plan = org?.plan
   if (!plan || !(plan in PLAN_ENTITLEMENTS)) return 'free'
-  const status = org?.subscription?.status
+  const status = subscriptionStatusOf(org)
   if (plan !== 'free' && status && DEAD_SUBSCRIPTION_STATUSES.has(status)) {
     return 'free'
   }
@@ -1387,7 +1411,7 @@ function resolvePlan(org: Partial<AglynOrgBilling> | null | undefined) {
 function resolvePurchasedAddons(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): OrgSeatAddons {
-  const status = org?.subscription?.status
+  const status = subscriptionStatusOf(org)
   if (status && DEAD_SUBSCRIPTION_STATUSES.has(status)) return {}
   return org?.seatAddons ?? {}
 }

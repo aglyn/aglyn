@@ -289,12 +289,20 @@ const baseOptions: ThemeOptions = {
     // exists to remove.
     MuiToolbar: {
       styleOverrides: {
-        root: ({ theme }) => ({
-          [theme.breakpoints.up('sm')]: {
-            paddingLeft: theme.spacing(3),
-            paddingRight: theme.spacing(3),
-          },
-        }),
+        // Honour `disableGutters` (AGL-1230). This override targets the ROOT
+        // slot, and `disableGutters` only drops the `gutters` slot — so the
+        // padding survived the prop, app-wide, and the prop silently did
+        // nothing at ≥sm. It cost the marketing nav a 24px offset against the
+        // page container at every width below the container's clamp.
+        root: ({ theme, ownerState }) =>
+          ownerState?.disableGutters
+            ? {}
+            : {
+                [theme.breakpoints.up('sm')]: {
+                  paddingLeft: theme.spacing(3),
+                  paddingRight: theme.spacing(3),
+                },
+              },
       },
     },
     MuiTooltip: {

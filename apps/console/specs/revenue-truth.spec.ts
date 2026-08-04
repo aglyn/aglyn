@@ -75,6 +75,8 @@ const EXCEPTIONS: Record<string, string> = {
     'Renders metrics.mrrUsd straight from /api/admin/overview; its `plan` references are the broadcast-audience selector and a per-org label, not a computation.',
   'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx':
     'Enterprise custom-billing card (AGL-1110) provisions ONE org\'s custom price and shows its net margin from the entered amount; the "MRR" mention is a doc comment. It reads the truthful subscription.customMonthlyUsd, never sums PLAN_PRICING[plan] across orgs.',
+  'libs/aglyn/src/lib/app-utils/org-billing-doc.ts':
+    'Path constants, types and field pickers for the manager-gated billing doc (AGL-1028). It computes no figure at all — the `plan` mentions are prose explaining WHY plan/entitlements stayed on the org doc while the Stripe keys moved.',
 }
 
 function walk(dir: string, out: string[] = []): string[] {

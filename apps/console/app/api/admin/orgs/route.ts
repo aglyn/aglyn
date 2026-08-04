@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  ORG_BILLING_DOC_ID,
+  ORG_BILLING_SUBCOLLECTION,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -75,8 +79,26 @@ async function handler(request: Request): Promise<Response> {
       value && typeof (value as { seconds?: unknown }).seconds === 'number'
         ? { seconds: (value as { seconds: number }).seconds }
         : null
+    // `subscription` moved to `orgs/{orgId}/billing/stripe` (AGL-1028). One
+    // `getAll` for the page rather than a get per row — the list is paginated,
+    // so this is a single bounded round trip. Missing docs come back as
+    // non-existent snapshots, which is exactly the pre-backfill case; the org
+    // doc's own inline `subscription` is the fallback below.
+    const billingSnaps = pageDocs.length
+      ? await db.getAll(
+          ...pageDocs.map((docSnap) =>
+            docSnap.ref.collection(ORG_BILLING_SUBCOLLECTION).doc(ORG_BILLING_DOC_ID),
+          ),
+        )
+      : []
+    const billingByOrgId = new Map<string, any>()
+    billingSnaps.forEach((snap, index) => {
+      if (snap.exists) billingByOrgId.set(pageDocs[index].id, snap.data())
+    })
     const orgs = pageDocs.map((docSnap) => {
       const data = docSnap.data()
+      const subscription =
+        billingByOrgId.get(docSnap.id)?.subscription ?? data['subscription']
       return {
         $id: docSnap.id,
         name: data['name'] ?? null,
@@ -88,11 +110,10 @@ async function handler(request: Request): Promise<Response> {
         // the staff list could only ever see the base plan and the table said
         // "agency" for an org whose own Billing page said "Enterprise".
         enterprise: data['enterprise'] === true,
-        subscription: data['subscription']
+        subscription: subscription
           ? {
-              status: data['subscription']?.status ?? null,
-              customMonthlyUsd:
-                data['subscription']?.customMonthlyUsd ?? null,
+              status: subscription?.status ?? null,
+              customMonthlyUsd: subscription?.customMonthlyUsd ?? null,
             }
           : null,
         createdAt: ts(data['createdAt']),

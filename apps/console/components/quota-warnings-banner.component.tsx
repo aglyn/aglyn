@@ -240,7 +240,15 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // Dunning (AGL-275): past_due is the grace window — entitlements keep
   // working, but the card needs fixing before the subscription dies.
   // Deliberately not dismissible; it clears when Stripe retries succeed.
-  if ((org?.subscription as any)?.status === 'past_due') {
+  // Reads `billingStatus`, the bare status string the webhook mirrors onto the
+  // org doc (AGL-1028). `subscription` itself moved to a manager-gated
+  // subcollection, and this banner is shown to EVERY member on purpose — a
+  // collaborator who cannot see the invoice still benefits from knowing the
+  // workspace is about to lapse. Falls back to the inline object for orgs the
+  // backfill has not reached.
+  const billingStatus =
+    (org as any)?.billingStatus ?? (org?.subscription as any)?.status
+  if (billingStatus === 'past_due') {
     return (
       <Alert
         severity="warning"
