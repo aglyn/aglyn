@@ -58,6 +58,15 @@ const OTHER_SESSION = 'tab-two'
 /** A session holding a presence token for `orgId`. */
 const scoped = (uid, orgId) =>
   env.authenticatedContext(uid, { presenceOrg: orgId }).database()
+/**
+ * A session that may also CO-EDIT one host (AGL-677). The broker only adds
+ * `coeditHost` for a caller it proved can write that host — a viewer gets a
+ * presence token and nothing else — so these two contexts are the whole
+ * difference between watching and mutating somebody's document.
+ */
+const editor = (uid, orgId, hostId) =>
+  env.authenticatedContext(uid, { presenceOrg: orgId, coeditHost: hostId })
+    .database()
 /** A signed-in session with NO presence claim — an ordinary console token. */
 const plain = (uid) => env.authenticatedContext(uid).database()
 const anon = () => env.unauthenticatedContext().database()
@@ -231,6 +240,76 @@ describe('one person in more than one place', () => {
         ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}/${'s'.repeat(60)}`),
         validEntry(),
       ),
+    )
+  })
+})
+
+describe('co-editing channel (AGL-677)', () => {
+  const HOST = 'host-1'
+  const ROOM = `coedit/${ORG}/${HOST}/screen/screen-1/v1/nodes`
+  const node = (json = '{"$id":"n1","componentId":"div"}') => ({
+    by: 'tab-one',
+    at: 1_700_000_000_000,
+    json,
+  })
+
+  it('an editor publishes a node and everyone in the org reads it', async () => {
+    await assertSucceeds(set(ref(editor(MEMBER, ORG, HOST), `${ROOM}/n1`), node()))
+    // A viewer still SEES the live document — they just cannot change it.
+    await assertSucceeds(get(ref(scoped(OTHER_MEMBER, ORG), ROOM)))
+  })
+
+  /**
+   * The point of the separate claim. A presence token alone means "can be
+   * seen in the room"; without `coeditHost` it must not be able to rewrite
+   * a node in somebody else's canvas.
+   */
+  it('a presence-only token cannot write — that is the viewer gate', async () => {
+    await assertFails(set(ref(scoped(MEMBER, ORG), `${ROOM}/n1`), node()))
+  })
+
+  it('a claim for another host does not carry to this one', async () => {
+    await assertFails(
+      set(ref(editor(MEMBER, ORG, 'host-2'), `${ROOM}/n1`), node()),
+    )
+  })
+
+  it('a token for another org sees and writes nothing here', async () => {
+    await assertFails(get(ref(scoped(OUTSIDER, OTHER_ORG), ROOM)))
+    await assertFails(
+      set(ref(editor(OUTSIDER, OTHER_ORG, HOST), `${ROOM}/n1`), node()),
+    )
+  })
+
+  it('records a deletion without a payload', async () => {
+    await assertSucceeds(
+      set(ref(editor(MEMBER, ORG, HOST), `${ROOM}/n1`), {
+        by: 'tab-one',
+        at: 1_700_000_000_000,
+        deleted: true,
+      }),
+    )
+  })
+
+  it('requires provenance on every entry', async () => {
+    await assertFails(
+      set(ref(editor(MEMBER, ORG, HOST), `${ROOM}/n1`), { json: '{}' }),
+    )
+  })
+
+  /** One node's payload, not somewhere to park a document. */
+  it('bounds the node payload', async () => {
+    await assertFails(
+      set(ref(editor(MEMBER, ORG, HOST), `${ROOM}/n1`), node('x'.repeat(40_001))),
+    )
+  })
+
+  it('rejects fields nobody declared', async () => {
+    await assertFails(
+      set(ref(editor(MEMBER, ORG, HOST), `${ROOM}/n1`), {
+        ...node(),
+        smuggled: 'anything',
+      }),
     )
   })
 })

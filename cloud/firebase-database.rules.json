@@ -32,9 +32,54 @@
                 "colour": {
                   ".validate": "newData.isString() && newData.val().length <= 16"
                 },
+                "cursorX": {
+                  ".validate": "newData.isNumber()"
+                },
+                "cursorY": {
+                  ".validate": "newData.isNumber()"
+                },
 
                 "$other": {
                   ".validate": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "coedit": {
+      "$orgId": {
+        "$hostId": {
+          ".read": "auth != null && auth.token.presenceOrg === $orgId",
+
+          "$docType": {
+            "$docId": {
+              "$versionId": {
+                "nodes": {
+                  "$nodeId": {
+                    ".write": "auth != null && auth.token.presenceOrg === $orgId && auth.token.coeditHost === $hostId",
+
+                    ".validate": "$nodeId.matches(/^[A-Za-z0-9_@-]{1,64}$/) && newData.hasChildren(['by', 'at'])",
+
+                    "by": {
+                      ".validate": "newData.isString() && newData.val().length <= 48"
+                    },
+                    "at": {
+                      ".validate": "newData.isNumber()"
+                    },
+                    "json": {
+                      ".validate": "newData.isString() && newData.val().length <= 40000"
+                    },
+                    "deleted": {
+                      ".validate": "newData.isBoolean()"
+                    },
+
+                    "$other": {
+                      ".validate": false
+                    }
+                  }
                 }
               }
             }

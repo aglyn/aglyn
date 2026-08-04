@@ -26,6 +26,7 @@ import {
   PropertiesDialogComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
+  useRenderedCanvasElements,
   useLayoutChromeCanvas,
   withBesignerContext,
   type WorkspaceEditorComponentProps,
@@ -104,7 +105,9 @@ import { buildScreenLiveUrl } from '../../../../../../../../../../constants/tena
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import useHostComponentDefinitions from '../../../../../../../../../../hooks/use-host-component-definitions'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
+import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
+import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -143,7 +146,27 @@ function BesignerPage(props) {
   // Who else is in this document (AGL-675). Fails quiet — an editor that
   // will not open because nobody could be listed is far worse than an
   // empty avatar stack.
-  const presence = usePresence({ hostId, docType: 'screen', docId: screenId })
+  // Selection rides presence so collaborators can see what you have picked;
+  // `Besigner.focus` is a mobx store and this page is an observer, so this
+  // re-renders (and re-broadcasts) as the selection moves.
+  const selectedNodeId = Besigner.focus.getLastSelected()?.$id
+  const clearMirrorRef = useRef<(() => void) | undefined>(undefined)
+  // The canvas element registry is how presence anchors a cursor and the
+  // overlays anchor a selection box — the canvas renders into shadow roots,
+  // so nothing here can be found with a document query.
+  const { elements: canvasElements } = useRenderedCanvasElements()
+  const getCanvasRoot = useCallback(
+    () => canvasElements.current?.[Aglyn.CANVAS_ROOT_ELEMENT_ID]?.node,
+    [canvasElements],
+  )
+  const presence = usePresence({
+    hostId,
+    docType: 'screen',
+    docId: screenId,
+    selectedNodeId,
+    broadcastCursor: true,
+    getCanvasRoot,
+  })
   const [screenDialog, setScreenDialog] = useState(false)
   // Screen SEO fields (SEO Toolkit); null = untouched, falls back to doc.
   const [seoTitle, setSeoTitle] = useState<string | null>(null)
@@ -253,14 +276,33 @@ function BesignerPage(props) {
     },
     notify: enqueueSnackbar,
     queueLoading,
-    onSaved: () =>
-      logActivity('Saved the screen', {
+    onSaved: () => {
+      // A save makes Firestore authoritative again, so the live mirror of
+      // unsaved work has to go — otherwise the next person to join replays
+      // edits that are already in the document. Via a ref because the
+      // co-editing engine is created below this hook: it needs the stamp
+      // this hook resolves.
+      clearMirrorRef.current?.()
+      return logActivity('Saved the screen', {
         type: 'screen',
         id: screenId,
         name: screenResult?.data?.displayName,
         versionId,
-      }),
+      })
+    },
   })
+
+  // Live co-editing (AGL-677). Rides the presence session's authenticated
+  // RTDB app rather than brokering a second token.
+  const coediting = useCoEditing({
+    session: presence.session,
+    docType: 'screen',
+    docId: screenId,
+    versionId,
+    storedStamp: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
+    loaded: Aglyn.canvas.didSetInitial,
+  })
+  clearMirrorRef.current = coediting.clearMirror
 
   const liveUrl = useMemo(
     () => buildScreenLiveUrl(hostResult?.data, screenId),
@@ -928,6 +970,7 @@ function BesignerPage(props) {
           LOADING_OVERLAY_ELEMENT
         ) : (
           <>
+            <CollaboratorOverlays entries={presence.entries} />
             <BesignerAppBarComponent
               detailsUrl={detailUrl}
               presence={<PresenceAvatars presence={presence} />}
