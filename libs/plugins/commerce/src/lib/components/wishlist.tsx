@@ -62,10 +62,17 @@ function writeLocalWishlist(hostId: string, productIds: string[]): void {
  * Toggles a product on the wishlist (AGL-297): members persist on their
  * doc (guest list merges in on first signed-in call); guests persist in
  * localStorage. Returns whether the product is on the list afterward.
+ *
+ * Takes its own `fetch` (AGL-1139). This is a plain module function, not a
+ * component, so it cannot read the site context that says whether it is
+ * running in Preview — and both callers are components that can. Defaulting
+ * to the global keeps every other caller unchanged; passing `useSiteFetch()`
+ * is what stops a preview click from writing to a real member's wishlist.
  */
 export async function toggleWishlist(
   hostId: string,
   productId: string,
+  siteFetch: typeof fetch = fetch,
 ): Promise<boolean> {
   const local = readLocalWishlist(hostId)
   const has = local.includes(productId)
@@ -74,7 +81,7 @@ export async function toggleWishlist(
     : [...local, productId]
   writeLocalWishlist(hostId, next)
   // Best-effort member sync — 401 just means guest.
-  void fetch('/api/membership/wishlist', {
+  void siteFetch('/api/membership/wishlist', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -109,6 +116,7 @@ interface CatalogItem {
 const Wishlist = forwardRef<HTMLDivElement, WishlistProps>((props, ref) => {
   const { heading, emptyText, ...rest } = props
   const { hostId } = Aglyn.useSite()
+  const siteFetch = Aglyn.useSiteFetch()
   const [items, setItems] = useState<CatalogItem[] | null>(null)
 
   const refresh = useCallback(async () => {
@@ -116,7 +124,7 @@ const Wishlist = forwardRef<HTMLDivElement, WishlistProps>((props, ref) => {
     let productIds = readLocalWishlist(hostId)
     try {
       // Merge the guest list into the member doc; response is canonical.
-      const response = await fetch('/api/membership/wishlist', {
+      const response = await siteFetch('/api/membership/wishlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId, action: 'merge', productIds }),
@@ -140,7 +148,7 @@ const Wishlist = forwardRef<HTMLDivElement, WishlistProps>((props, ref) => {
     } catch {
       setItems([])
     }
-  }, [hostId])
+  }, [hostId, siteFetch])
 
   useEffect(() => {
     void refresh()
@@ -217,7 +225,7 @@ const Wishlist = forwardRef<HTMLDivElement, WishlistProps>((props, ref) => {
                 size="small"
                 color="error"
                 fullWidth
-                onClick={() => void toggleWishlist(hostId, item.id)}
+                onClick={() => void toggleWishlist(hostId, item.id, siteFetch)}
               >
                 {'Remove'}
               </Button>

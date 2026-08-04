@@ -46,9 +46,13 @@ export const useLayoutVersionRef = ({
   return ref.withConverter({
     toFirestore(data) {
       const { $id, ...rest } = data
-      const nodes = rest?.nodes instanceof Bytes
+      // Only emit `nodes` when the write carries them — see the note in
+      // use-screen-version (AGL-1250). A partial merge write otherwise
+      // ships an empty compressed map and wipes the document's tree.
+      if (rest?.nodes === undefined) return { ...rest, updatedAt: Timestamp.now() }
+      const nodes = rest.nodes instanceof Bytes
         ? rest.nodes
-        : Bytes.fromUint8Array(compress(rest?.nodes || {}))
+        : Bytes.fromUint8Array(compress(rest.nodes))
       return { ...rest, nodes, updatedAt: Timestamp.now() }
     },
     fromFirestore(snapshot, options) {

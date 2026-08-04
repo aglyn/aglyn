@@ -244,3 +244,142 @@ describe('nodesReferenceComponent', () => {
     )
   })
 })
+
+describe('declared props (AGL-1247)', () => {
+  /** A hero whose headline and image are parameterised. */
+  const hero = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'muiStack', nodes: ['h', 'img'] },
+      h: {
+        $id: 'h',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        props: { children: '{{prop.headline}}' },
+      },
+      img: {
+        $id: 'img',
+        componentId: 'muiImage',
+        parentId: 'root',
+        props: { src: '{{prop.image}}', alt: 'Hero — {{prop.headline}}' },
+      },
+    },
+    props: [
+      { name: 'headline', type: 'text', defaultValue: 'Headline goes here' },
+      { name: 'image', type: 'image', defaultValue: '/placeholder.png' },
+    ],
+  } as any
+
+  const heroInstance = (id: string, propValues?: Record<string, unknown>) => ({
+    $id: id,
+    componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+    props: { refId: 'hero', ...(propValues && { propValues }) },
+    nodes: [] as string[],
+  })
+
+  it('substitutes each instance\'s own values into its grafted copy', () => {
+    const nodes = {
+      a: heroInstance('a', { headline: 'Ship faster', image: '/a.png' }),
+      b: heroInstance('b', { headline: 'Design once', image: '/b.png' }),
+    } as any
+    const composed = composeReusableComponentNodes(nodes, { hero })
+
+    expect(composed['cmp__a__h'].props.children).toBe('Ship faster')
+    expect(composed['cmp__a__img'].props.src).toBe('/a.png')
+    expect(composed['cmp__a__img'].props.alt).toBe('Hero — Ship faster')
+    // The same definition, a different instance, different values — the
+    // whole point of the feature.
+    expect(composed['cmp__b__h'].props.children).toBe('Design once')
+    expect(composed['cmp__b__img'].props.src).toBe('/b.png')
+    // Inputs untouched.
+    expect(hero.nodes.h.props.children).toBe('{{prop.headline}}')
+  })
+
+  it('falls back to the declared default where an instance sets nothing', () => {
+    const composed = composeReusableComponentNodes(
+      { a: heroInstance('a') } as any,
+      { hero },
+    )
+    expect(composed['cmp__a__h'].props.children).toBe('Headline goes here')
+    expect(composed['cmp__a__img'].props.src).toBe('/placeholder.png')
+  })
+
+  it('treats an empty override as unset, but keeps false and 0', () => {
+    const withFlags = {
+      rootId: 'root',
+      nodes: {
+        root: {
+          $id: 'root',
+          componentId: 'muiStack',
+          props: { a: '{{prop.headline}}', b: '{{prop.count}}', c: '{{prop.on}}' },
+        },
+      },
+      props: [
+        { name: 'headline', defaultValue: 'Default copy' },
+        { name: 'count', defaultValue: '9' },
+        { name: 'on', defaultValue: 'true' },
+      ],
+    } as any
+    const composed = composeReusableComponentNodes(
+      {
+        a: {
+          $id: 'a',
+          componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+          props: { refId: 'x', propValues: { headline: '', count: 0, on: false } },
+          nodes: [],
+        },
+      } as any,
+      { x: withFlags },
+    )
+    // Cleared field → the component's own copy, never an empty section.
+    expect(composed['cmp__a__root'].props.a).toBe('Default copy')
+    // Real values, not "unset".
+    expect(composed['cmp__a__root'].props.b).toBe('0')
+    expect(composed['cmp__a__root'].props.c).toBe('false')
+  })
+
+  it('leaves other token namespaces for the resolvers downstream', () => {
+    const definition = {
+      rootId: 'root',
+      nodes: {
+        root: {
+          $id: 'root',
+          componentId: 'muiTypography',
+          props: { children: '{{prop.headline}} — {{var:abc}} {{host.name}}' },
+        },
+      },
+      props: [{ name: 'headline', defaultValue: 'Hi' }],
+    } as any
+    const composed = composeReusableComponentNodes(
+      { a: heroInstance('a') } as any,
+      { hero: definition },
+    )
+    // Only `prop.*` is consumed here; compose runs graft → repeatables →
+    // resolveNodesBindings, so these must still be intact.
+    expect(composed['cmp__a__root'].props.children).toBe(
+      'Hi — {{var:abc}} {{host.name}}',
+    )
+  })
+
+  it('negative control: an undeclared prop is not substituted', () => {
+    const definition = {
+      rootId: 'root',
+      nodes: {
+        root: {
+          $id: 'root',
+          componentId: 'muiTypography',
+          props: { children: '{{prop.headline}}' },
+        },
+      },
+      // No `props` — an unparameterised definition, as every component
+      // built before AGL-1247 is.
+    } as any
+    const composed = composeReusableComponentNodes(
+      { a: heroInstance('a', { headline: 'ignored' }) } as any,
+      { hero: definition },
+    )
+    // Untouched: substitution is driven by the DECLARATION, not by whatever
+    // an instance happens to carry.
+    expect(composed['cmp__a__root'].props.children).toBe('{{prop.headline}}')
+  })
+})

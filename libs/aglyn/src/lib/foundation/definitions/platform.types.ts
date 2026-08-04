@@ -425,6 +425,48 @@ export interface AglynScreenVersion<N = AglynNodeSchema>
 export type ComponentDefUid = string
 
 /**
+ * Value kind of a declared component prop (AGL-1247), which decides only
+ * how the Attributes panel edits it — every kind substitutes as text, so
+ * the graft stays a string replacement over the definition's props.
+ */
+export type ReusableComponentPropType =
+  | 'text'
+  | 'richText'
+  | 'image'
+  | 'href'
+  | 'number'
+  | 'boolean'
+
+/**
+ * A prop a reusable component declares (AGL-1247), so one definition can
+ * render different content per instance instead of being copied per page.
+ *
+ * Inside the definition the author binds a node prop to it with the
+ * existing token syntax — `{{prop.headline}}`, the same mechanism behind
+ * `{{entry.*}}` and `{{host.*}}` — and `composeReusableComponentNodes`
+ * substitutes each instance's own values as it grafts.
+ */
+export interface ReusableComponentProp {
+  /**
+   * Token name: `{{prop.<name>}}`. This is the STABLE key instances store
+   * their overrides under, so renaming one orphans every existing value —
+   * the editor must rename in place rather than remove-and-add.
+   */
+  name: string
+  type?: ReusableComponentPropType
+  /** Field label in the Attributes panel; falls back to `name`. */
+  label?: string
+  /**
+   * Rendered wherever an instance leaves this prop unset, and shown as the
+   * Attributes field's placeholder. One field serving both is deliberate:
+   * a component that renders its own sensible copy until overridden is the
+   * "shows the placeholder from the component" behaviour, and it means an
+   * unset prop can never collapse a section to empty on a live page.
+   */
+  defaultValue?: string
+}
+
+/**
  * Reusable component definition: a node subtree promoted from a screen,
  * inserted anywhere as an instance node (`componentId: 'reusableInstance'`,
  * `props.refId`) and grafted at render time (see
@@ -449,6 +491,13 @@ export interface AglynHostComponent<N = AglynNodeSchema>
    */
   rootId?: NodeId
   nodes?: Record<NodeId, N>
+  /**
+   * Declared props (AGL-1247), published alongside `rootId`/`nodes` and for
+   * the same reason: the tenant reads this doc, so a definition whose props
+   * stayed on the version doc would graft with every `{{prop.*}}` token
+   * unresolved on the live site.
+   */
+  props?: ReusableComponentProp[]
   /**
    * Working version pointer (AGL-679). Absent on components that predate
    * the standalone editor — those still render from the fields above, and
@@ -477,6 +526,8 @@ export interface AglynHostComponentVersion<N = AglynNodeSchema>
   displayName?: string
   rootId?: NodeId
   nodes?: Record<NodeId, N>
+  /** Declared props being edited; published onto the parent (AGL-1247). */
+  props?: ReusableComponentProp[]
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
 }

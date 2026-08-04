@@ -68,6 +68,9 @@ export function useHostComponentDefinitions(
       next[value.$id] = {
         rootId: value.rootId,
         nodes: value.nodes as Aglyn.ReusableComponentTree['nodes'],
+        // Declared props ride along (AGL-1247) so the editor's graft
+        // substitutes the same values the live site will.
+        ...(value.props?.length && { props: value.props }),
       }
     }
     return next

@@ -42,8 +42,23 @@ import { revalidatePath } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
 
-/** Bound the blast radius of one call, and of a malformed one. */
-const MAX_PATHS = 50
+/**
+ * Bound the blast radius of one call, and of a malformed one (AGL-1239).
+ *
+ * Was 50, which was picked to be *a* bound rather than from anything measured —
+ * and 50 turned out to be roughly the size of a real site. `aglyn-marketing`'s
+ * nav component fans out to 48 screens: two more pages carrying the nav and
+ * every component publish there would leave the overflow stale for the whole
+ * revalidate window. A cap should not be reachable by ordinary use.
+ *
+ * 250 is chosen the same way a cap should be: from what it costs. Each accepted
+ * path is one `revalidatePath` — a cache-key delete, no render, no network — so
+ * the work here is linear and small. The expensive half of a publish drop is the
+ * console-side dependent scan, and that is bounded separately by its own
+ * `SCAN_LIMIT` of 2000. This number therefore only has to be larger than any
+ * plausible site and smaller than a payload worth refusing.
+ */
+const MAX_PATHS = 250
 
 function unauthorized(): Response {
   return Response.json({ error: 'unauthorized' }, { status: 401 })

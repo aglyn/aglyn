@@ -24,7 +24,9 @@ import {
   createDevicePinnedTheme,
   resolveSxForDeviceWidth,
 } from '../utils/device-preview-styles'
-import ElementLeafComponent from './node-leaf'
+import ElementLeafComponent, { denormalizeTree } from './node-leaf'
+import * as Aglyn from '@aglyn/aglyn'
+import ComponentPromotionContext from '../contexts/component-promotion-context'
 
 /**
  * Collects the emotion-generated CSS rules scoped to the element's classes,
@@ -360,5 +362,114 @@ describe('artboard device preview pinning (AGL-581)', () => {
     const css = emotionCssFor(leaf)
     // The md slice is gated behind a >=100000px query no window reaches.
     expect(css).toMatch(/@media\(min-width:100\d{3}px\)\{[^}]*display:flex/)
+  })
+})
+
+/**
+ * A component instance renders its definition on the canvas (AGL-1251)
+ * instead of the named dashed box, with `{{prop.*}}` resolved per instance.
+ *
+ * The definition's nodes are RENDERED, never grafted into the canvas — which
+ * is what makes it safe. The last two cases are the ones that matter: an
+ * already-expanded instance must not draw twice, and nothing here may reach
+ * the canvas store.
+ */
+describe('component instance preview (AGL-1251)', () => {
+  const definition = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'div', nodes: ['h'] },
+      h: {
+        $id: 'h',
+        componentId: 'div',
+        parentId: 'root',
+        props: { children: '{{prop.headline}}' },
+      },
+    },
+    props: [{ name: 'headline', type: 'text', defaultValue: 'Default copy' }],
+  } as any
+
+  const instanceNode = (propValues?: Record<string, unknown>, nodes: string[] = []) =>
+    ({
+      $id: 'inst1',
+      type: 'node',
+      componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+      props: { refId: 'hero', ...(propValues && { propValues }) },
+      sx: {},
+      nodes,
+    }) as any
+
+  // Leaf renders text into an `<aglyn-text>` shadow root, so `textContent`
+  // on the host element is always empty (that is not a bug — see the note
+  // on AglynText). Read through the shadow root instead.
+  const shadowText = (root: HTMLElement) =>
+    Array.from(root.querySelectorAll('aglyn-text'))
+      .map((element) => (element as any).shadowRoot?.textContent ?? '')
+      .join(' ')
+
+  const renderInstance = (node: any, definitions: any = { hero: definition }) =>
+    render(
+      <ComponentPromotionContext.Provider value={{ definitions }}>
+        <ElementLeafComponent node={node} />
+      </ComponentPromotionContext.Provider>,
+    )
+
+  it("renders the definition with this instance's own value", () => {
+    const { baseElement } = renderInstance(
+      instanceNode({ headline: 'Ship faster' }),
+    )
+    expect(shadowText(baseElement)).toContain('Ship faster')
+    // The raw token must never reach the canvas.
+    expect(shadowText(baseElement)).not.toContain('{{prop.headline}}')
+    // Grafted ids are namespaced per instance, so two placements of one
+    // definition can never collide in the DOM either.
+    expect(baseElement.querySelector('[data-aglyn="leaf:cmp__inst1__h"]')).toBeTruthy()
+  })
+
+  it('falls back to the declared default, which is what the page renders', () => {
+    const { baseElement } = renderInstance(instanceNode())
+    expect(shadowText(baseElement)).toContain('Default copy')
+  })
+
+  it('marks the preview non-interactive so clicks select the instance', () => {
+    const { baseElement } = renderInstance(instanceNode())
+    const preview = baseElement.querySelector('[data-aglyn-component-preview]')
+    expect(preview).toBeTruthy()
+    expect(emotionCssFor(preview as HTMLElement)).toContain('pointer-events:none')
+  })
+
+  it('does NOT draw twice when the instance is already expanded', () => {
+    // Layout chrome grafts before loading its canvas (AGL-1218), so its
+    // instances arrive with children and NodeLeaf must stay out of the way.
+    const { baseElement } = renderInstance(instanceNode(undefined, ['cmp__inst1__root']))
+    expect(baseElement.querySelector('[data-aglyn-component-preview]')).toBeNull()
+  })
+
+  it('negative control: no definitions, no preview', () => {
+    const { baseElement } = renderInstance(instanceNode(), {})
+    expect(baseElement.querySelector('[data-aglyn-component-preview]')).toBeNull()
+    // Unresolvable also means unchanged — the instance keeps its own
+    // placeholder rather than rendering empty.
+    expect(shadowText(baseElement)).not.toContain('Default copy')
+  })
+
+  it('never puts the definition into the canvas store', () => {
+    renderInstance(instanceNode({ headline: 'Ship faster' }))
+    const canvasIds = Object.keys(Aglyn.canvas.toJSON()?.nodes ?? {})
+    expect(canvasIds.some((id) => id.startsWith('cmp__'))).toBe(false)
+  })
+})
+
+describe('denormalizeTree', () => {
+  it('nests children and survives a cycle', () => {
+    const nodes = {
+      a: { $id: 'a', nodes: ['b'] },
+      b: { $id: 'b', nodes: ['a'] },
+    }
+    const tree = denormalizeTree(nodes as any, 'a')
+    expect(tree.$id).toBe('a')
+    expect(tree.children[0].$id).toBe('b')
+    // `a` is already seen, so the cycle terminates instead of blowing the stack.
+    expect(tree.children[0].children).toEqual([])
   })
 })

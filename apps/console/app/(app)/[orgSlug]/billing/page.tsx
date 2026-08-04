@@ -57,6 +57,7 @@ import {
 import { collection, getCountFromServer } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import fetchSeatCounts from '../../../../utils/fetch-seat-counts'
 import BillingAddonsCardComponent, {
   ADDON_LABELS,
 } from '../../../../components/billing/billing-addons-card.component'
@@ -182,32 +183,55 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     async (targetPlan: OrgPlan): Promise<string[]> => {
       const target = PLAN_ENTITLEMENTS[targetPlan]
       if (!target || !orgId) return []
-      const [memberCount, datasetCount] = await Promise.all([
-        getCountFromServer(collection(firestore, 'orgs', orgId, 'members'))
-          .then((snapshot) => snapshot.data().count)
-          .catch(() => 0),
+      // Seats from the server (AGL-1255). Two things were wrong here.
+      //
+      // The read was an unconstrained `orgs/{orgId}/members` list, denied for
+      // any reader the RULES do not call org-wide — and `.catch(() => 0)`
+      // turned that denial into "0 team members", which is under every plan's
+      // limit, so the warning that this downgrade would strand the org simply
+      // did not appear. The reassuring direction is the dangerous one here.
+      //
+      // It also counted EVERY member against `managersPerOrg`. Site-scoped
+      // collaborators meter per host against `membersPerHost` (AGL-1113), so
+      // this over-reported the number that decides whether you are warned.
+      const [seatCounts, datasetCount] = await Promise.all([
+        fetchSeatCounts(user, orgId),
         getCountFromServer(collection(firestore, 'orgs', orgId, 'datasets'))
           .then((snapshot) => snapshot.data().count)
-          .catch(() => 0),
+          .catch(() => null),
       ])
       const over: string[] = []
       const siteCount = hosts?.length ?? 0
       if (siteCount > target.hostLimit) {
         over.push(`${siteCount} sites (${targetPlan} includes ${target.hostLimit})`)
       }
-      if (memberCount > target.managersPerOrg) {
+      // An unanswerable count is NOT "you are under the limit" — say so
+      // rather than omit the row, so the confirmation cannot read as a
+      // clean bill of health it never earned.
+      if (seatCounts == null) {
         over.push(
-          `${memberCount} team members (${targetPlan} includes ${target.managersPerOrg})`,
+          `team seats — could not be checked (${targetPlan} includes ` +
+            `${target.managersPerOrg})`,
+        )
+      } else if (seatCounts.managerSeats > target.managersPerOrg) {
+        over.push(
+          `${seatCounts.managerSeats} team members (${targetPlan} includes ${target.managersPerOrg})`,
         )
       }
-      if (datasetCount > target.maxDatasetsPerOrg) {
+      // Same rule for datasets, now that its failure is `null` too.
+      if (datasetCount == null) {
+        over.push(
+          `datasets — could not be checked (${targetPlan} includes ` +
+            `${target.maxDatasetsPerOrg})`,
+        )
+      } else if (datasetCount > target.maxDatasetsPerOrg) {
         over.push(
           `${datasetCount} datasets (${targetPlan} includes ${target.maxDatasetsPerOrg})`,
         )
       }
       return over
     },
-    [firestore, orgId, hosts],
+    [firestore, orgId, hosts, user],
   )
 
   // Stripe Billing Portal (AGL-275): payment methods, receipts, tax ids.

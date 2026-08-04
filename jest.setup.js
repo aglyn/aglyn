@@ -46,6 +46,11 @@ if (typeof global.TextDecoder === 'undefined') {
 // fetch is not defined` before any test code runs. Node's own built-in
 // fetch (available as a bare global in this setup script's realm, same as
 // TextEncoder above) covers it without pulling in extra web-platform deps.
+//
+// NOTE (AGL-1139): under `testEnvironment: 'jsdom'` this block does nothing —
+// `globalThis.fetch` is undefined inside the jsdom sandbox too, so it assigns
+// undefined over undefined. A jsdom spec that needs `Response` has to bring
+// its own; a spec that can run on `node` already has the real ones.
 if (typeof global.fetch === 'undefined') {
   global.fetch = globalThis.fetch
   global.Headers = globalThis.Headers

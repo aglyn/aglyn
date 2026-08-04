@@ -48,6 +48,7 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
   (props, ref) => {
     const { heading, signinPath, continueFallback, ...rest } = props
     const { hostId } = Aglyn.useSite()
+    const siteFetch = Aglyn.useSiteFetch()
     const [displayName, setDisplayName] = useState('')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
@@ -59,7 +60,7 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
       setBusy(true)
       setError('')
       try {
-        const response = await fetch('/api/membership/register', {
+        const response = await siteFetch('/api/membership/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -76,7 +77,7 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
         }
         // Register does not set the cookie on every deployment; sign in
         // right after to be safe (same as the customer-account block).
-        await fetch('/api/membership/login', {
+        await siteFetch('/api/membership/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, email, password }),
@@ -87,7 +88,7 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
       } finally {
         setBusy(false)
       }
-    }, [hostId, busy, displayName, email, password, continueFallback])
+    }, [hostId, busy, displayName, email, password, continueFallback, siteFetch])
 
     if (!hostId) {
       return (

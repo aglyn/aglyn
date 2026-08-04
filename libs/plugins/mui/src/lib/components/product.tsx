@@ -62,6 +62,7 @@ const Product = forwardRef<HTMLDivElement, ProductProps>((props, ref) => {
     ...rest
   } = props
   const { hostId } = Aglyn.useSite()
+  const siteFetch = Aglyn.useSiteFetch()
   // A media-picker target, so it can hold a media reference (AGL-1215) as
   // well as any URL form that predates it.
   const imageUrl = Aglyn.resolveMediaSrc(storedImageUrl, { hostId })
@@ -75,7 +76,7 @@ const Product = forwardRef<HTMLDivElement, ProductProps>((props, ref) => {
     setStatus('sending')
     setMessage('')
     try {
-      const response = await fetch('/api/commerce/checkout', {
+      const response = await siteFetch('/api/commerce/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -96,7 +97,7 @@ const Product = forwardRef<HTMLDivElement, ProductProps>((props, ref) => {
     } catch {
       setStatus('error')
     }
-  }, [hostId, productId, status, coupon])
+  }, [hostId, productId, status, coupon, siteFetch])
 
   return (
     <Card ref={ref} variant="outlined" sx={{ maxWidth: 360 }} {...rest}>

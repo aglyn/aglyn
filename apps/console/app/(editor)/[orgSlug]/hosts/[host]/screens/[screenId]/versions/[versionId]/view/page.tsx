@@ -391,6 +391,11 @@ function ScreenDetails() {
   // Shared with the besigner's versions panel (AGL-1150). This was the only
   // publish site that dropped a cache; keeping the call in one helper is what
   // stops the next publish surface from quietly forgetting it.
+  //
+  // No shortfall snackbar here, unlike that panel (AGL-1239): publishing a
+  // SCREEN fans out to exactly one path, so neither the tenant's path cap nor
+  // the console's dependent scan can bite. A warning that cannot fire is worse
+  // than none — it reads as coverage.
   const revalidateLivePage = useCallback(
     () => revalidateLivePages({ user, hostId, screenId }),
     [user, hostId, screenId],

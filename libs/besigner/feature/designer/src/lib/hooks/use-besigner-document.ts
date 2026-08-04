@@ -116,6 +116,15 @@ export interface UseBesignerDocumentResult {
   /** True when someone else wrote this document since we loaded it. */
   remoteChanged: boolean
   handleSave: () => Promise<void> | void
+  /**
+   * Announce a write this editor is about to make to the SAME document
+   * outside `handleSave` — component properties are the first (AGL-1247).
+   *
+   * Without it the write's own echo is indistinguishable from a colleague's
+   * and trips the conflict guard, which pauses saving until reload: the
+   * editor accuses you of being someone else.
+   */
+  markOwnWrite: () => void
   /** JSON editor plumbing, identical in every editor. */
   jsonOpen: boolean
   openJsonEditor: () => void
@@ -333,6 +342,11 @@ export function useBesignerDocument<TData = unknown>(
     fromCanvasNodes,
   ])
 
+  // Same flag `handleSave` sets, for writes that do not go through it.
+  const markOwnWrite = useCallback(() => {
+    expectOwnWriteRef.current = true
+  }, [])
+
   const [jsonOpen, setJsonOpen] = useState(false)
   const openJsonEditor = useCallback(() => setJsonOpen(true), [])
   const closeJsonEditor = useCallback(() => setJsonOpen(false), [])
@@ -345,6 +359,7 @@ export function useBesignerDocument<TData = unknown>(
     saveAvailable,
     remoteChanged,
     handleSave,
+    markOwnWrite,
     jsonOpen,
     openJsonEditor,
     closeJsonEditor,

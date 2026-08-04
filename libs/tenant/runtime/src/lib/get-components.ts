@@ -45,6 +45,9 @@ export async function getComponents(options: { hostId: Aglyn.HostUid }) {
         data.definitions[docSnapshot.id] = {
           rootId: value.rootId,
           nodes: value.nodes as Aglyn.ReusableComponentTree['nodes'],
+          // Declared props (AGL-1247): without these the graft leaves every
+          // `{{prop.*}}` token unresolved on the published page.
+          ...(value.props?.length && { props: value.props }),
         }
       }
     })

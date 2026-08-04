@@ -44,6 +44,7 @@ const GatedVideo = forwardRef<HTMLDivElement, GatedVideoProps>(
   (props, ref) => {
     const { productId, videoIndex, lockedText, ...rest } = props
     const { hostId } = Aglyn.useSite()
+    const siteFetch = Aglyn.useSiteFetch()
     const [src, setSrc] = useState<string | null>(null)
     const [state, setState] = useState<'loading' | 'locked' | 'ready'>(
       'loading',
@@ -54,7 +55,7 @@ const GatedVideo = forwardRef<HTMLDivElement, GatedVideoProps>(
     useEffect(() => {
       if (!hostId || !productId) return
       let active = true
-      void fetch('/api/commerce/stream', {
+      void siteFetch('/api/commerce/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,7 +77,7 @@ const GatedVideo = forwardRef<HTMLDivElement, GatedVideoProps>(
       return () => {
         active = false
       }
-    }, [hostId, productId, videoIndex])
+    }, [hostId, productId, videoIndex, siteFetch])
 
     if (!hostId) {
       return (

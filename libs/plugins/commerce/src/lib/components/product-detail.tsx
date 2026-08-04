@@ -101,6 +101,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
   (props, ref) => {
     const { slug: slugProp, buyLabel, hideDescription, ...rest } = props
     const site = Aglyn.useSite()
+    const siteFetch = Aglyn.useSiteFetch()
     const { hostId } = site
     // Seeded from the server-resolved page data (AGL-659) so the PDP renders
     // its real content in the SSR HTML. Starting at null meant the server
@@ -193,7 +194,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const handleAddToCart = async () => {
       if (!hostId || !resolved || !variant) return
       setAdded(false)
-      const response = await fetch('/api/commerce/cart', {
+      const response = await siteFetch('/api/commerce/cart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -218,7 +219,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       setStatus('sending')
       setMessage('')
       try {
-        const response = await fetch('/api/commerce/checkout', {
+        const response = await siteFetch('/api/commerce/checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -401,7 +402,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               size="small"
               onClick={async () => {
                 if (hostId && resolved.id !== 'sample') {
-                  setWishlisted(await toggleWishlist(hostId, resolved.id))
+                  setWishlisted(await toggleWishlist(hostId, resolved.id, siteFetch))
                 }
               }}
             >
@@ -516,7 +517,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                   variant="outlined"
                   disabled={!notifyEmail.trim()}
                   onClick={async () => {
-                    const response = await fetch(
+                    const response = await siteFetch(
                       '/api/commerce/notify-restock',
                       {
                         method: 'POST',

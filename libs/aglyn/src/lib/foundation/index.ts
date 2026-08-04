@@ -76,6 +76,8 @@ export type {
   ProjectUid,
   PublishSchedule,
   RedirectUid,
+  ReusableComponentProp,
+  ReusableComponentPropType,
   ScopeToken,
   ScreenSlug,
   ScreenUid,

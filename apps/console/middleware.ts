@@ -143,9 +143,8 @@ export async function middleware(request: NextRequest) {
   // enforcing header is what breaks the nonce. So there is exactly ONE policy
   // header, and it carries script-src.
   const nonce = crypto.randomUUID().replace(/-/g, '')
-  const baseDirectives = baseCspDirectives(
-    process.env.NODE_ENV === 'production',
-  )
+  const isProduction = process.env.NODE_ENV === 'production'
+  const baseDirectives = baseCspDirectives(isProduction)
   // Not `strict-dynamic`, and this is MEASURED, not assumed — the same
   // signed-in flow was run under both policies and counted:
   //
@@ -157,14 +156,25 @@ export async function middleware(request: NextRequest) {
   // takes the whole bundle with it. Do not re-adopt it without fixing that
   // first.
   //
-  // The single remaining violation is `script-src / eval`, and it is benign:
-  // `Function("return function*() {}")` inside a try/catch — the feature probe
-  // in `is-generator-function`. Blocked, it is caught and returns false, so no
-  // `'unsafe-eval'` is needed (AGL-1238 tracks dropping the dependency).
+  // The single remaining violation in production is `script-src / eval`, and it
+  // is benign: `Function("return function*() {}")` inside a try/catch — the
+  // feature probe in `is-generator-function`. Blocked, it is caught and returns
+  // false, so no `'unsafe-eval'` is needed there (AGL-1238 tracks dropping the
+  // dependency).
+  //
+  // Development is the exception, and it is not optional: React's dev build
+  // uses `eval()` for debugging features like reconstructing a callstack from
+  // another environment, and without it every dev page load logs "eval() is not
+  // supported in this environment". React never evals in production, so the
+  // escape hatch is gated on the SAME `NODE_ENV` check the base directives use
+  // above — `'unsafe-eval'` in a production policy would hand an injected
+  // string back its ability to become code.
   //
   // This still blocks the real XSS vector — an injected inline `<script>` has
   // no nonce and does not run — plus `http:` and `data:` sources.
-  const scriptSrc = `script-src 'self' https: blob: 'nonce-${nonce}'`
+  const scriptSrc = `script-src 'self' https: blob: 'nonce-${nonce}'${
+    isProduction ? '' : " 'unsafe-eval'"
+  }`
   // BOTH directives, because neither is universally supported: `report-uri` is
   // deprecated but is what Safari and older Chrome actually send, while
   // `report-to` is the modern one and needs the `Reporting-Endpoints` header
@@ -250,5 +260,13 @@ export const config = {
   // Pages and data routes only — assets, API routes, and the Firebase
   // auth-helper namespace (/__/*, AGL-462) are never workspace-scoped and
   // must reach the next.config rewrite untouched on every host.
-  matcher: ['/((?!api|__|_next/static|_next/image|favicon.ico|_static).*)'],
+  //
+  // `sw.js` is excluded for a sharper reason than "it is an asset" (AGL-1053):
+  // this middleware can answer with a redirect, and a redirect served in place
+  // of the script fails registration with a content-type error rather than
+  // anything that names the cause. A service worker must also be fetched from
+  // the scope it claims, so it cannot simply be moved under `/_static`.
+  matcher: [
+    '/((?!api|__|_next/static|_next/image|favicon.ico|_static|sw.js).*)',
+  ],
 }

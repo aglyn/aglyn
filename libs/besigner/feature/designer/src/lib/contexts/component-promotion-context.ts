@@ -28,6 +28,18 @@ import { createContext } from 'react'
 export interface ComponentPromotionContextValue {
   onPromote?: (node: Aglyn.NodeSchema<any>) => void
   onDemote?: (node: Aglyn.NodeSchema<any>) => void
+  /**
+   * The host's component definitions, keyed by id (AGL-1247/1251). The
+   * designer stays storage-agnostic: the console reads them and passes them
+   * down, exactly as it does the callbacks above.
+   *
+   * Two consumers, deliberately one field: the Attributes panel reads each
+   * definition's declared `props` to build an instance's fields, and
+   * `NodeLeaf` renders the definition's subtree inside the instance so the
+   * canvas shows the component instead of a dashed box. Splitting them
+   * would let the panel and the canvas disagree about what a definition is.
+   */
+  definitions?: Record<string, Aglyn.ReusableComponentTree | undefined>
 }
 
 export const ComponentPromotionContext =

@@ -58,8 +58,13 @@ export const useComponentVersionRef = ({
   return ref.withConverter({
     toFirestore(data) {
       const { $id, ...rest } = data
+      // Only emit `nodes` when the write carries them — see the note in
+      // use-screen-version (AGL-1250). This is the converter the component
+      // Properties dialog writes through, and unconditional compression
+      // destroyed a real component's tree on the first partial write.
+      if (rest?.nodes === undefined) return { ...rest, updatedAt: Timestamp.now() }
       const nodes =
-        rest?.nodes instanceof Bytes ? rest.nodes : Bytes.fromUint8Array(compress(rest?.nodes || {}))
+        rest.nodes instanceof Bytes ? rest.nodes : Bytes.fromUint8Array(compress(rest.nodes))
       return { ...rest, nodes, updatedAt: Timestamp.now() }
     },
     fromFirestore(snapshot, options) {

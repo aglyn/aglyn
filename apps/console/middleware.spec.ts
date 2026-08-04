@@ -236,4 +236,44 @@ describe('CSP violation reporting (AGL-523)', () => {
     expect(reportUri).toBe(REPORT_PATH)
     expect(response.headers.get('Reporting-Endpoints')).not.toMatch(/https?:\/\//)
   })
+
+  /**
+   * `'unsafe-eval'` is the one directive here that is deliberately WEAKER off
+   * production, so it needs both directions asserted. React's dev build evals
+   * to reconstruct callstacks and the dev console is unusable without it; a
+   * production policy carrying it would hand an injected string back its
+   * ability to become code, and nothing else in this file would notice.
+   *
+   * `middleware` reads `NODE_ENV` per call, so flipping it around one await is
+   * enough — no module reset needed.
+   */
+  describe("'unsafe-eval' is DEVELOPMENT ONLY", () => {
+    const env = process.env as Record<string, string | undefined>
+    const original = env.NODE_ENV
+
+    afterEach(() => {
+      env.NODE_ENV = original
+    })
+
+    it('grants it off production, so React dev mode can eval', async () => {
+      env.NODE_ENV = 'development'
+      const response = await middleware(request('app.aglyn.com'))
+      expect(response.headers.get('Content-Security-Policy')).toContain(
+        "'unsafe-eval'",
+      )
+    })
+
+    it('NEVER grants it in production', async () => {
+      // The regression that matters: this is the assertion standing between a
+      // dev convenience and a real weakening shipped to every signed-in user.
+      env.NODE_ENV = 'production'
+      const response = await middleware(request('app.aglyn.com'))
+      const policy = response.headers.get('Content-Security-Policy') ?? ''
+      expect(policy).not.toContain('unsafe-eval')
+      // Still a real policy, so the absence above cannot be passing because
+      // the whole directive went missing.
+      expect(policy).toMatch(/script-src[^;]*'nonce-[a-f0-9]{32}'/)
+      expect(policy).not.toContain('unsafe-inline')
+    })
+  })
 })

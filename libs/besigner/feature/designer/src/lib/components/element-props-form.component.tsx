@@ -247,6 +247,64 @@ export const elementPropsComponentMapper = {
   [PLUGIN_SETTINGS_FIELD_COMPONENT]: PluginSettingsField,
 }
 
+/**
+ * One Attributes field per prop a reusable component declares (AGL-1247),
+ * so the same hero can carry different copy on eleven pages instead of
+ * being copied onto each.
+ *
+ * Fields are named for the `propValues.<name>` path the graft reads, so the
+ * form round-trips them through final-form's nested-path handling with no
+ * flatten/unflatten step. A name that is not an identifier is skipped
+ * rather than rendered as a field that could not save.
+ */
+export function buildInstancePropFields(
+  declared: Aglyn.ReusableComponentProp[] | undefined,
+  tokenOptions?: unknown,
+  tokenLabelContext?: unknown,
+): Array<Record<string, unknown>> {
+  if (!declared?.length) return []
+  return declared
+    .filter((prop) => Aglyn.COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? ''))
+    .map((prop) => {
+      const base = {
+        name: `${Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY}.${prop.name}`,
+        label: prop.label || prop.name,
+        // The definition's default shows as the field's placeholder, which
+        // is literally true: leave the field empty and that is what the
+        // page renders.
+        placeholder: prop.defaultValue,
+        ...(prop.defaultValue && {
+          description: `Defaults to "${prop.defaultValue}"`,
+        }),
+      }
+      switch (prop.type) {
+        case 'boolean':
+          return { ...base, component: Aglyn.FieldComponentType.CHECKBOX }
+        case 'number':
+          return {
+            ...base,
+            component: Aglyn.FieldComponentType.TEXT_FIELD,
+            type: 'number',
+          }
+        case 'richText':
+        case 'text':
+        case 'href':
+        case 'image':
+        default:
+          // Token-capable, so an override can itself carry a `{{var:id}}`:
+          // the graft substitutes first and the binding resolver runs after
+          // it, so those still resolve.
+          return {
+            ...base,
+            component: TOKEN_TEXT_FIELD_COMPONENT,
+            multiline: prop.type === 'richText',
+            tokenOptions,
+            tokenLabelContext,
+          }
+      }
+    })
+}
+
 const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
   (props, ref) => {
     const { node, ...rest } = props
@@ -520,10 +578,51 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
 
     // Reusable-component flows (AGL-35): actions appear only when the host
     // app provides callbacks; locked nodes (layout chrome) never promote.
-    const { onPromote, onDemote } = useContext(ComponentPromotionContext)
+    const { onPromote, onDemote, definitions } = useContext(
+      ComponentPromotionContext,
+    )
     const isInstance =
       node?.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID
     const unlocked = Besigner.dnd.canDragNode(node)
+
+    const instancePropFields = useMemo(() => {
+      if (!isInstance) return []
+      const refId = (node?.props as { refId?: string } | undefined)?.refId
+      return buildInstancePropFields(
+        refId ? definitions?.[refId]?.props : undefined,
+        insertOptions,
+        tokenLabelContext,
+      )
+    }, [
+      isInstance,
+      node,
+      definitions,
+      insertOptions,
+      tokenLabelContext,
+    ])
+
+    const formFieldSchema = useMemo(
+      () => [...attributes, ...instancePropFields],
+      [attributes, instancePropFields],
+    )
+
+    // Image-typed declared props get the same library browse button the
+    // component's own media attributes get (AGL-341).
+    const instanceMediaProps = useMemo(() => {
+      if (!isInstance) return []
+      const refId = (node?.props as { refId?: string } | undefined)?.refId
+      const declared = refId ? definitions?.[refId]?.props : undefined
+      return (declared ?? [])
+        .filter(
+          (prop) =>
+            prop?.type === 'image' &&
+            Aglyn.COMPONENT_PROP_NAME_PATTERN.test(prop.name ?? ''),
+        )
+        .map((prop) => ({
+          name: prop.name,
+          label: prop.label || prop.name,
+        }))
+    }, [isInstance, node, definitions])
 
     // AI copy assist (AGL-89, widened by AGL-130): text-editable elements
     // and any element declaring text attributes, when the host app
@@ -635,20 +734,56 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       [onPickMedia, node],
     )
 
+    // The same picker for an instance's image-typed declared prop, writing
+    // into the nested `propValues` object (AGL-1247). Both levels are
+    // spread because `updateNodeProps` REPLACES the props object rather
+    // than merging into it.
+    const handleBrowseInstanceMedia = useCallback(
+      (propName: string) => () => {
+        if (!node?.$id) return
+        onPickMedia?.((value) => {
+          const current = (
+            Aglyn.canvas.toJSON().nodes as Record<string, any>
+          )[node.$id]
+          Aglyn.canvas.updateNodeProps(node, {
+            ...current?.props,
+            [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: {
+              ...current?.props?.[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY],
+              [propName]: value,
+            },
+          })
+        })
+      },
+      [onPickMedia, node],
+    )
+
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
       (values: Record<string, unknown>) => {
         // Hand-typed {{name}} tokens normalize to their rename-safe
         // {{var:id}} form at save (AGL-186); unknown names pass through.
+        const normalizeToken = (value: unknown) =>
+          typeof value === 'string' && Aglyn.hasBindings(value)
+            ? Aglyn.normalizeBindingTokens(
+                value,
+                (bindingVariables ?? {}) as any,
+                (bindingFunctions ?? {}) as any,
+              )
+            : value
         const normalized: Record<string, unknown> = { ...values }
         for (const [key, value] of Object.entries(values)) {
-          if (typeof value === 'string' && Aglyn.hasBindings(value)) {
-            normalized[key] = Aglyn.normalizeBindingTokens(
-              value,
-              (bindingVariables ?? {}) as any,
-              (bindingFunctions ?? {}) as any,
-            )
+          normalized[key] = normalizeToken(value)
+        }
+        // A component instance's overrides sit one level down (AGL-1247),
+        // so the walk above skips them — normalize inside, or a hand-typed
+        // {{name}} in an override would persist in its rename-unsafe form.
+        const overrides = values[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]
+        if (overrides && typeof overrides === 'object') {
+          const nextOverrides: Record<string, unknown> = {}
+          for (const [key, value] of Object.entries(overrides)) {
+            nextOverrides[key] = normalizeToken(value)
           }
+          normalized[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY] = nextOverrides
         }
         // Denormalize each picked icon's SVG path next to its id (AGL-1212).
         // The catalog is ~2.9 MB and only picker surfaces load it, so a render
@@ -680,7 +815,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             onCancel={handleFormCancel}
             onSubmit={handleElementSave}
             initialValues={nodeProps}
-            schema={{ fields: attributes }}
+            schema={{ fields: formFieldSchema }}
             {...rest}
           >
             {({ formFields, schema, ...rest }) => (
@@ -768,6 +903,22 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                         >
                           {mediaAttributes.length > 1
                             ? `Browse media — ${field.label ?? field.name}`
+                            : 'Browse media'}
+                        </Button>
+                      </FormControl>
+                    ))
+                  : null}
+                {onPickMedia && instanceMediaProps.length
+                  ? instanceMediaProps.map((field) => (
+                      <FormControl key={field.name} margin="none" fullWidth>
+                        <Button
+                          color="primary"
+                          onClick={handleBrowseInstanceMedia(field.name)}
+                          sx={{ mt: 2 }}
+                          fullWidth
+                        >
+                          {instanceMediaProps.length > 1
+                            ? `Browse media — ${field.label}`
                             : 'Browse media'}
                         </Button>
                       </FormControl>

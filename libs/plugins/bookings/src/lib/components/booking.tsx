@@ -61,6 +61,7 @@ interface SlotOption {
 const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
   const { heading, successMessage, ...rest } = props
   const { hostId } = Aglyn.useSite()
+  const siteFetch = Aglyn.useSiteFetch()
 
   const [services, setServices] = useState<ServiceOption[] | null>(null)
   const [serviceId, setServiceId] = useState('')
@@ -132,7 +133,7 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
     setStatus('booking')
     setErrorMessage(null)
     try {
-      const response = await fetch('/api/bookings/book', {
+      const response = await siteFetch('/api/bookings/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -161,7 +162,7 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
       setErrorMessage('Booking failed — try again')
       setStatus('error')
     }
-  }, [hostId, serviceId, slotMs, name, email, status])
+  }, [hostId, serviceId, slotMs, name, email, status, siteFetch])
 
   if (!hostId) {
     return (

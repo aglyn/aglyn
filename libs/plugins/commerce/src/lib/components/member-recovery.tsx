@@ -48,6 +48,7 @@ const MemberRecovery = forwardRef<HTMLDivElement, MemberRecoveryProps>(
   (props, ref) => {
     const { heading, signinPath, ...rest } = props
     const { hostId } = Aglyn.useSite()
+    const siteFetch = Aglyn.useSiteFetch()
     // Read post-hydration only: the block server-renders inside published
     // screens, where the query string is unavailable.
     const [token, setToken] = useState('')
@@ -69,7 +70,7 @@ const MemberRecovery = forwardRef<HTMLDivElement, MemberRecoveryProps>(
       setBusy(true)
       setError('')
       try {
-        const response = await fetch('/api/membership/recover', {
+        const response = await siteFetch('/api/membership/recover', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, email }),
@@ -83,14 +84,14 @@ const MemberRecovery = forwardRef<HTMLDivElement, MemberRecoveryProps>(
       } finally {
         setBusy(false)
       }
-    }, [hostId, busy, email])
+    }, [hostId, busy, email, siteFetch])
 
     const handleReset = useCallback(async () => {
       if (!hostId || busy) return
       setBusy(true)
       setError('')
       try {
-        const response = await fetch('/api/membership/reset', {
+        const response = await siteFetch('/api/membership/reset', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, token, password }),
@@ -104,7 +105,7 @@ const MemberRecovery = forwardRef<HTMLDivElement, MemberRecoveryProps>(
       } finally {
         setBusy(false)
       }
-    }, [hostId, busy, token, password])
+    }, [hostId, busy, token, password, siteFetch])
 
     if (!hostId) {
       return (

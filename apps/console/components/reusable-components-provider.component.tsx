@@ -259,9 +259,33 @@ export function ReusableComponentsProvider(
     [firestore, hostId, queueLoading, enqueueSnackbar],
   )
 
+  // The definitions the designer needs (AGL-1247/1251): declared props for
+  // the Attributes panel, and the tree itself so the canvas can render an
+  // instance instead of a dashed box. Read off the same listener the drawer
+  // presets and the layout-chrome graft use — one query, one answer.
+  const definitions = useMemo(() => {
+    const next: Record<string, Aglyn.ReusableComponentTree | undefined> = {}
+    for (const definition of componentDocs ?? []) {
+      const value = definition as Aglyn.AglynHostComponent
+      // Same skip rules as every other reader: a doc without rootId/nodes is
+      // unpublished, not broken, and must not expand anywhere.
+      if (value?.deletedAt || !value?.nodes || !value?.rootId) continue
+      next[value.$id] = {
+        rootId: value.rootId,
+        nodes: value.nodes as Aglyn.ReusableComponentTree['nodes'],
+        ...(value.props?.length && { props: value.props }),
+      }
+    }
+    return next
+  }, [componentDocs])
+
   const contextValue = useMemo(
-    () => ({ onPromote: handlePromote, onDemote: handleDemote }),
-    [handlePromote, handleDemote],
+    () => ({
+      onPromote: handlePromote,
+      onDemote: handleDemote,
+      definitions,
+    }),
+    [handlePromote, handleDemote, definitions],
   )
 
   return (

@@ -210,3 +210,38 @@ Add rows to the `specs` table in `tools/e2e/console.e2e.mjs` — a path plus
 the text the seeded fixtures make visible. Keep the invariant when extending
 the seeder: **every doc carries the fields the page's queries `orderBy` or
 `where` on**, or the page will look empty with zero errors.
+
+## Clearing the service worker (AGL-1053)
+
+The console registers `/sw.js` **in production builds only** — `next dev` skips
+it deliberately. So you will only meet this after running `console-prod` /
+`console-prod-alt`, and it is worth knowing before it confuses you.
+
+A registered worker **outlives the server that registered it**. It is scoped to
+the origin, not the project, so one registered on `localhost:4200` stays
+registered against whatever you serve on that port next — including a different
+app entirely.
+
+Today's worker caches nothing and has no `fetch` handler, so a stale one is
+harmless. That stops being true at AGL-1054, which is exactly why the teardown
+belongs here now rather than after the first confusing afternoon.
+
+From the page's console:
+
+```js
+// Unregister every worker for this origin, then hard-reload.
+const regs = await navigator.serviceWorker.getRegistrations()
+await Promise.all(regs.map((r) => r.unregister()))
+// Caches are separate from registration — a worker can go while its caches stay.
+const keys = await caches.keys()
+await Promise.all(keys.map((k) => caches.delete(k)))
+location.reload()
+```
+
+Or in DevTools: **Application → Service workers → Unregister**, then
+**Application → Storage → Clear site data**. The Clear-site-data button covers
+caches and IndexedDB too — note that also drops the Firebase auth session, so
+you will be signed out.
+
+To confirm you are clean, `navigator.serviceWorker.getRegistrations()` should
+resolve to `[]`.

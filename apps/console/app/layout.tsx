@@ -111,6 +111,8 @@ export const viewport: Viewport = {
 // The console is a fully client-rendered authoring app (firebase/reactfire/
 // mobx behind an auth gate); nothing is statically prerenderable, so opt the
 // whole App Router tree out of static generation (AGL-401).
+import ServiceWorkerRegistrar from '../components/service-worker-registrar.component'
+
 export const dynamic = 'force-dynamic'
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -118,7 +120,23 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <AppRouterCacheProvider options={{ enableCssLayer: true }}>
-          <Providers>{children}</Providers>
+          <Providers>
+            {children}
+            {/* Registers /sw.js in production only, and offers its updates
+                (AGL-1053/AGL-1055). Renders nothing.
+
+                INSIDE Providers, which it was not at first: it needs the
+                snackbar to offer the reload, and `useSnackbar()` outside its
+                provider returns null — every render of the app then threw on
+                destructuring it. Caught by loading a production build, not by
+                the unit tests, which mocked `useSnackbar` and so mocked away
+                the exact thing that was broken.
+
+                The original reason for keeping it outside — "so it still runs
+                on the sign-in page" — was simply wrong. `Providers` wraps
+                every route, sign-in included. */}
+            <ServiceWorkerRegistrar />
+          </Providers>
         </AppRouterCacheProvider>
       </body>
     </html>

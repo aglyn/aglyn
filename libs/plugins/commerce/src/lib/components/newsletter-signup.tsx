@@ -43,6 +43,7 @@ const NewsletterSignup = forwardRef<HTMLDivElement, NewsletterSignupProps>(
   (props, ref) => {
     const { heading, buttonLabel, successText, ...rest } = props
     const { hostId } = Aglyn.useSite()
+    const siteFetch = Aglyn.useSiteFetch()
     const [email, setEmail] = useState('')
     const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>(
       'idle',
@@ -52,7 +53,7 @@ const NewsletterSignup = forwardRef<HTMLDivElement, NewsletterSignupProps>(
       if (!hostId || state === 'busy') return
       setState('busy')
       try {
-        const response = await fetch('/api/commerce/newsletter', {
+        const response = await siteFetch('/api/commerce/newsletter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, email }),
