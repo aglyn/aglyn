@@ -28,6 +28,59 @@ import {
 } from '../utils/interactive-signin'
 
 /**
+ * Mints the shared `__session` cookie, and reports whether it worked
+ * (AGL-1142).
+ *
+ * Every mint site used to be `try { await fetch(…) } catch {}` with the
+ * response discarded, and `mintedForUid` set BEFORE the request. That treats
+ * "refused" as "done": `POST /api/auth/session` answers 401 for an
+ * unverifiable token or a failed `createSessionCookie`, and 403 for an
+ * unverified email — and `await fetch(...)` RESOLVES on all of those rather
+ * than throwing, so the catch never ran. Having marked the uid as minted, the
+ * tab then never tried again.
+ *
+ * That is how a sign-out tombstone survives an interactive sign-in, which is
+ * the nine-day cookie measured on production 2026-07-31: nothing overwrote it,
+ * and nothing noticed.
+ *
+ * On failure the uid is cleared rather than left set, so a later auth emission
+ * gets another attempt — the mint is still best-effort and still never signs
+ * anyone out, but a refusal is no longer indistinguishable from success.
+ */
+async function mintSession(
+  user: { uid: string; getIdToken: () => Promise<string> },
+  mintedForUid: { current: string | null },
+): Promise<boolean> {
+  try {
+    const idToken = await user.getIdToken()
+    const response = await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}` },
+    })
+    if (!response.ok) {
+      mintedForUid.current = null
+      const payload = await response.json().catch(() => null)
+      // Named, like the AGL-467 server-side mint-failure log. A silent refusal
+      // here is invisible for as long as the tombstone lives.
+      console.warn(
+        '[auth/session] mint refused',
+        JSON.stringify({
+          status: response.status,
+          reason: payload?.reason ?? null,
+        }),
+      )
+      return false
+    }
+    mintedForUid.current = user.uid
+    return true
+  } catch {
+    // Network trouble: still best effort, but do not claim it happened.
+    mintedForUid.current = null
+    return false
+  }
+}
+
+/**
  * Cross-subdomain session sync (AGL-236). Firebase client auth is
  * per-origin, so each {org}.aglyn.com workspace starts signed out even
  * when app.aglyn.com is authenticated. The parent-domain `__session`
@@ -93,16 +146,7 @@ export function useSessionCookie(): void {
           // `signed-out` tombstone reads as "signed out elsewhere" and logs
           // them back out ~seconds after login (AGL-463).
           if (consumeInteractiveSignIn()) {
-            mintedForUid.current = user.uid
-            try {
-              const idToken = await user.getIdToken()
-              await fetch('/api/auth/session', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${idToken}` },
-              })
-            } catch {
-              // Mint is best-effort; this origin stays signed in.
-            }
+            await mintSession(user, mintedForUid)
             return
           }
           // Genuine restore — defer to the shared cookie, but only an
@@ -134,12 +178,7 @@ export function useSessionCookie(): void {
                 return
               }
             }
-            mintedForUid.current = user.uid
-            const idToken = await user.getIdToken()
-            await fetch('/api/auth/session', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${idToken}` },
-            })
+            await mintSession(user, mintedForUid)
           } catch {
             // Network trouble never signs anyone out.
           }
@@ -162,15 +201,7 @@ export function useSessionCookie(): void {
             restoredSilently.current = false
             return
           }
-          try {
-            const idToken = await user.getIdToken()
-            await fetch('/api/auth/session', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${idToken}` },
-            })
-          } catch {
-            // Mint is best-effort; the current origin stays signed in.
-          }
+          await mintSession(user, mintedForUid)
         }
         return
       }

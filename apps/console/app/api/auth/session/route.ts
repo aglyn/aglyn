@@ -154,6 +154,27 @@ async function handler(request: Request): Promise<Response> {
       if (!idToken) {
         return Response.json({ error: 'Unauthenticated' }, { status: 401 })
       }
+      // A tombstone standing in front of a caller who just proved they are
+      // signed in is provably stale (AGL-1142).
+      //
+      // The nine-day tombstone measured on production was left by a mint that
+      // was REFUSED rather than one that failed to happen — and a refusal is a
+      // 401/403, which `await fetch(...)` resolves rather than throws, so the
+      // client's best-effort `catch` never saw it and the tombstone stayed.
+      // The likeliest way in is the email-verification gate below: verify your
+      // email, sign in before the ID token refreshes, and the token still
+      // says `email_verified: false`. The mint is refused, correctly — and the
+      // tombstone then answers `401 signed-out` to every cross-subdomain
+      // exchange until it expires.
+      //
+      // So the refusal paths clear it. Refusing to mint a SHARED cookie is a
+      // statement about eligibility; it is not a statement that this person is
+      // signed out, and leaving a tombstone to say so is simply false. Cleared
+      // only after `verifyIdToken` succeeds, so an unauthenticated caller can
+      // never erase a real sign-out.
+      const clearTombstone = parseSignedOut(readCookie(request, SESSION_COOKIE))
+        ? [`${SESSION_COOKIE}=; ${cookieAttributes(request, 0)}`]
+        : undefined
       // Email-verification gate (AGL-479): never mint the cross-subdomain
       // session cookie for an unverified email/password account. Blocking it
       // here also covers workspaces — their silent sign-in reads this cookie,
@@ -170,7 +191,11 @@ async function handler(request: Request): Promise<Response> {
       try {
         const decoded = await auth.verifyIdToken(idToken)
         if (!decoded.email_verified && !isImpersonationSession(decoded)) {
-          return emailUnverifiedResponse()
+          const unverified = emailUnverifiedResponse()
+          for (const value of clearTombstone ?? []) {
+            unverified.headers.append('Set-Cookie', value)
+          }
+          return unverified
         }
         tenantId = decoded.firebase?.tenant
         // Seed the personal profile doc (AGL-1127). No account-creation path
@@ -237,9 +262,13 @@ async function handler(request: Request): Promise<Response> {
             message: (error as { message?: string })?.message,
           }),
         )
-        return Response.json(
+        // Same reasoning as the unverified branch (AGL-1142): the caller's
+        // token verified, so whatever went wrong in `createSessionCookie`,
+        // a tombstone claiming they are signed out is stale.
+        return jsonWithCookie(
           { error: 'Mint failed', reason: 'mint-failed' },
-          { status: 401 },
+          401,
+          clearTombstone,
         )
       }
       // Pair the session cookie with the tenant sidecar (set to the tenant, or
