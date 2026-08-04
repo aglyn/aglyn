@@ -27,6 +27,7 @@
 // the same shape as the media upload-URL route, which exists because
 // Storage rules have the identical limitation.
 
+import assert from 'node:assert/strict'
 import { after, before, beforeEach, describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -49,6 +50,10 @@ const MEMBER = 'uid-member'
 const OTHER_MEMBER = 'uid-other-member'
 const OUTSIDER = 'uid-outsider'
 const DOC = 'presence/org-acme/screen/screen-1'
+// Presence is keyed per TAB under the uid, so one person in two tabs is two
+// entries and neither closing removes the other (AGL-675).
+const SESSION = 'tab-one'
+const OTHER_SESSION = 'tab-two'
 
 /** A session holding a presence token for `orgId`. */
 const scoped = (uid, orgId) =>
@@ -80,7 +85,7 @@ beforeEach(async () => {
 describe('presence access', () => {
   it('a scoped member writes their own entry and reads the room', async () => {
     await assertSucceeds(
-      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}`), validEntry()),
+      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}/${SESSION}`), validEntry()),
     )
     await assertSucceeds(get(ref(scoped(MEMBER, ORG), DOC)))
   })
@@ -92,11 +97,14 @@ describe('presence access', () => {
    */
   it('an ordinary signed-in token cannot read or write presence', async () => {
     await env.withSecurityRulesDisabled(async (context) => {
-      await set(ref(context.database(), `${DOC}/${MEMBER}`), validEntry())
+      await set(
+        ref(context.database(), `${DOC}/${MEMBER}/${SESSION}`),
+        validEntry(),
+      )
     })
     await assertFails(get(ref(plain(MEMBER), DOC)))
     await assertFails(
-      set(ref(plain(MEMBER), `${DOC}/${MEMBER}`), validEntry()),
+      set(ref(plain(MEMBER), `${DOC}/${MEMBER}/${SESSION}`), validEntry()),
     )
     await assertFails(get(ref(anon(), DOC)))
   })
@@ -104,7 +112,10 @@ describe('presence access', () => {
   it('a token scoped to another org sees nothing here', async () => {
     await assertFails(get(ref(scoped(OUTSIDER, OTHER_ORG), DOC)))
     await assertFails(
-      set(ref(scoped(OUTSIDER, OTHER_ORG), `${DOC}/${OUTSIDER}`), validEntry()),
+      set(
+        ref(scoped(OUTSIDER, OTHER_ORG), `${DOC}/${OUTSIDER}/${SESSION}`),
+        validEntry(),
+      ),
     )
   })
 
@@ -112,7 +123,10 @@ describe('presence access', () => {
    *  would let someone plant a ghost or move somebody else's cursor. */
   it('cannot write somebody else’s entry', async () => {
     await assertFails(
-      set(ref(scoped(MEMBER, ORG), `${DOC}/${OTHER_MEMBER}`), validEntry('Not me')),
+      set(
+        ref(scoped(MEMBER, ORG), `${DOC}/${OTHER_MEMBER}/${SESSION}`),
+        validEntry('Not me'),
+      ),
     )
   })
 
@@ -125,10 +139,10 @@ describe('presence access', () => {
 describe('presence shape', () => {
   it('requires the fields the UI actually renders', async () => {
     await assertFails(
-      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}`), { displayName: 'Sam' }),
+      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}/${SESSION}`), { displayName: 'Sam' }),
     )
     await assertFails(
-      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}`), {
+      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}/${SESSION}`), {
         lastSeenAt: 1_700_000_000_000,
       }),
     )
@@ -138,12 +152,12 @@ describe('presence shape', () => {
    *  person makes the editor unusable for everyone else. */
   it('bounds the strings it renders', async () => {
     await assertFails(
-      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}`), {
+      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}/${SESSION}`), {
         ...validEntry('x'.repeat(200)),
       }),
     )
     await assertFails(
-      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}`), {
+      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}/${SESSION}`), {
         ...validEntry(),
         selectedNodeId: 'y'.repeat(500),
       }),
@@ -152,7 +166,7 @@ describe('presence shape', () => {
 
   it('rejects fields nobody declared', async () => {
     await assertFails(
-      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}`), {
+      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}/${SESSION}`), {
         ...validEntry(),
         smuggled: 'anything',
       }),
@@ -161,12 +175,62 @@ describe('presence shape', () => {
 
   it('accepts the full declared entry', async () => {
     await assertSucceeds(
-      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}`), {
+      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}/${SESSION}`), {
         ...validEntry(),
         selectedNodeId: 'node-1',
         photoURL: 'https://example.com/a.png',
         colour: '#ff8800',
       }),
+    )
+  })
+})
+
+/**
+ * One person, two tabs (AGL-675). Presence used to be keyed on uid alone, so
+ * two tabs were one entry: whichever closed first removed it and the tab
+ * still open disappeared from everybody else's room.
+ */
+describe('one person in more than one place', () => {
+  it('keeps a session per tab, and one closing leaves the other', async () => {
+    const db = scoped(MEMBER, ORG)
+    await assertSucceeds(
+      set(ref(db, `${DOC}/${MEMBER}/${SESSION}`), validEntry('Tab one')),
+    )
+    await assertSucceeds(
+      set(ref(db, `${DOC}/${MEMBER}/${OTHER_SESSION}`), validEntry('Tab two')),
+    )
+
+    await assertSucceeds(set(ref(db, `${DOC}/${MEMBER}/${SESSION}`), null))
+
+    const remaining = await assertSucceeds(get(ref(db, `${DOC}/${MEMBER}`)))
+    assert.deepEqual(Object.keys(remaining.val() ?? {}), [OTHER_SESSION])
+  })
+
+  it('still refuses another person’s session under their uid', async () => {
+    await assertFails(
+      set(
+        ref(scoped(MEMBER, ORG), `${DOC}/${OTHER_MEMBER}/${OTHER_SESSION}`),
+        validEntry('Not me'),
+      ),
+    )
+  })
+
+  /** The old flat shape would land a bare entry where a session map belongs. */
+  it('refuses an entry written straight onto the uid', async () => {
+    await assertFails(
+      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}`), validEntry()),
+    )
+    await assertFails(
+      set(ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}`), 'not even an object'),
+    )
+  })
+
+  it('bounds the session key so it cannot be used as storage', async () => {
+    await assertFails(
+      set(
+        ref(scoped(MEMBER, ORG), `${DOC}/${MEMBER}/${'s'.repeat(60)}`),
+        validEntry(),
+      ),
     )
   })
 })

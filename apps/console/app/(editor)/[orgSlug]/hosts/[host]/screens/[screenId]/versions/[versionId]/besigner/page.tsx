@@ -928,9 +928,9 @@ function BesignerPage(props) {
           LOADING_OVERLAY_ELEMENT
         ) : (
           <>
-            <PresenceAvatars entries={presence} />
             <BesignerAppBarComponent
               detailsUrl={detailUrl}
+              presence={<PresenceAvatars presence={presence} />}
               onSave={handleSave}
               onPreview={handlePreview}
               liveUrl={liveUrl}
