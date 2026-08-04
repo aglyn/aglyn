@@ -17,6 +17,26 @@
 #
 # Vercel "Ignored Build Step" for the apps that share this repo (AGL-1187).
 #
+# NOTE: `aglyn-plugins` does NOT use this script — it has its own
+# `ignoreCommand` in `tools/plugin-loader/origin/vercel.json`, because Vercel
+# reads vercel.json from a project's ROOT DIRECTORY and that project's root is
+# `tools/plugin-loader/origin`, not the repo root.
+#
+# That project also taught the distinction this whole file turns on
+# (2026-08-04): an **ignoreCommand cancels a build, it does not prevent a
+# DEPLOYMENT**. Vercel creates the deployment record first, then runs the
+# ignore step, then cancels — and the record still counts against the daily
+# limit. `aglyn-plugins` was set to `deploymentEnabled: {main: true}` while
+# every other project is `production` only, so it burned one canceled record
+# per push to `main` — 20 in a single day, none of which built anything.
+#
+# So the two levers are not interchangeable:
+#   git.deploymentEnabled  -> no deployment is CREATED (saves the quota)
+#   ignoreCommand          -> deployment created, build skipped (saves build
+#                             minutes, NOT quota)
+# Use the first to pick which branches deploy at all; the second to skip work
+# within a branch that does.
+#
 # Usage:  tools/scripts/vercel-ignore-build.sh <app> [base] [head]
 #
 # EXIT CODES ARE VERCEL'S, AND THEY READ BACKWARDS:
