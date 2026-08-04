@@ -190,3 +190,68 @@ describe('composeNodesWithChrome read fan-out (AGL-1225)', () => {
     expect(mockGetPublishedLayoutVersion).toHaveBeenCalledTimes(2)
   })
 })
+
+/**
+ * AGL-1022: `host.*` tokens resolve inside the real pipeline.
+ *
+ * `resolveNodesHostTokens` is unit-tested on its own, but a pure resolver that
+ * nothing calls substitutes nothing. What is untested without this is the CALL
+ * SITE: that compose passes the host through, and does it in an order where the
+ * substitution actually lands in the output rather than being overwritten by a
+ * later stage.
+ */
+describe('composeNodesWithChrome resolves host tokens (AGL-1022)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    setup()
+  })
+
+  const withToken = {
+    root: { $id: 'root', componentId: 'div', nodes: ['t'] },
+    t: {
+      $id: 't',
+      componentId: 'text',
+      parentId: 'root',
+      props: { children: 'Welcome to {{host.businessName}}' },
+      nodes: [],
+    },
+  }
+  /** The composed output, flattened to the strings it actually renders. */
+  const textOf = (composed: unknown) => JSON.stringify(composed)
+
+  it('substitutes the installing site’s value into the composed tree', async () => {
+    const composed = await composeNodesWithChrome({
+      hostId: 'h1',
+      screenNodes: withToken,
+      host: { displayName: 'Northwind Coffee' },
+    })
+    expect(textOf(composed)).toContain('Welcome to Northwind Coffee')
+    expect(textOf(composed)).not.toContain('{{host.')
+  })
+
+  it('CONTROL — the token is present before compose, so a pass is not vacuous', () => {
+    expect(textOf(withToken)).toContain('{{host.businessName}}')
+  })
+
+  it('never leaves the literal token when the site has no value', async () => {
+    // The failure the whole feature exists to prevent: a visitor seeing
+    // `{{host.businessName}}` on a published page.
+    const composed = await composeNodesWithChrome({
+      hostId: 'h1',
+      screenNodes: withToken,
+      host: {},
+    })
+    expect(textOf(composed)).not.toContain('{{host.')
+  })
+
+  it('composes normally when no host is passed', async () => {
+    // Callers that predate this option must not break — they simply resolve
+    // nothing, which is the same as a site with nothing set.
+    const composed = await composeNodesWithChrome({
+      hostId: 'h1',
+      screenNodes: withToken,
+    })
+    expect(composed).toBeTruthy()
+    expect(textOf(composed)).not.toContain('{{host.')
+  })
+})
