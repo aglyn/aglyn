@@ -170,11 +170,12 @@ describe('Drawer element (AGL-562)', () => {
     expect(style.width).toBe('0px')
     expect(style.height).toBe('0px')
     expect(style.margin).toBe('0px')
-    // NOT `position: absolute` on the marker itself. An absolutely
-    // positioned flex child takes its static position from the container's
-    // justify-content, so under `space-between` it jumps to the START of
-    // the row — which put the chip on top of the marketing nav's logo. The
-    // marker stays in flow at zero size; the chip overflows it.
+    // Out of flow entirely. Zero-sizing alone was not enough: a zero-width
+    // flex child is still a flex child, so `justify-content: space-between`
+    // kept it as a distribution point and the row's `gap` still applied on
+    // both sides — which pushed the nav's START FREE button in off the
+    // right edge for an element that renders nowhere near it.
+    expect(style.position).toBe('absolute')
     expect(style.overflow).toBe('visible')
     // The chip is lifted clear of the design surface to the canvas's
     // top-right, so it cannot sit on top of the content either.
@@ -198,7 +199,17 @@ describe('Drawer element (AGL-562)', () => {
       </DrawerElement>,
     )
     expect(screen.getByText('Editable contents')).toBeTruthy()
-    expect(screen.getByText(/slides in on the live site/)).toBeTruthy()
+    // It renders the way it actually opens: an overlay pinned to its anchor
+    // edge with the live panel's close row, not an inline block that shoves
+    // the surrounding row apart (AGL-1236).
+    const panel = screen
+      .getByRole('button', { name: 'Close menu' })
+      .closest('[class*="MuiBox"], div') as HTMLElement
+    const overlay = [...document.querySelectorAll('div')].find(
+      (el) => getComputedStyle(el).position === 'fixed' && el.contains(panel),
+    )
+    expect(overlay).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close menu' })).toBeTruthy()
   })
 
   it('runs live on the Preview surface, not the affordance (AGL-830)', () => {

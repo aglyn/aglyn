@@ -101,6 +101,31 @@ export function firstMountedDrawer(): string | undefined {
 }
 
 /**
+ * The canvas marker's box (AGL-1236). A drawer is a portal — it contributes
+ * nothing to the layout of the row it sits in — and on the canvas it has to
+ * cost exactly as little.
+ *
+ * `position: absolute` is doing the real work, and zero-sizing alone was not
+ * enough: a zero-WIDTH flex child is still a flex child, so the nav's
+ * `justify-content: space-between` kept it as a distribution point and its
+ * `gap: 24px` still applied on both sides — which pushed START FREE in off
+ * the right edge for an element that renders nowhere near it. Out of flow,
+ * the row lays out exactly as it ships.
+ *
+ * The visible chip is `fixed` to the canvas frame, so it no longer matters
+ * that an abspos flex child takes its static position from the container's
+ * justify-content (that is what once parked the chip on top of the logo).
+ */
+const MARKER_SX = {
+  position: 'absolute',
+  width: 0,
+  height: 0,
+  overflow: 'visible',
+  m: 0,
+  p: 0,
+} as const
+
+/**
  * Slide-in drawer (AGL-562): a canvas children slot that opens from the
  * page edge — the mobile-menu building block. Opens/closes/toggles via
  * the shared window event bus (`dispatchDrawerCommand`), reachable from
@@ -165,32 +190,45 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
       // panel's padding (AGL-572), so links and headers render full size.
       const authoring = isLeafSelectedWithin(rest as Record<string, unknown>)
       if (authoring) {
+        // Selected: render the panel the way it actually opens — an overlay
+        // pinned to its anchor edge, at the configured width, with the same
+        // padding and close row as the live drawer (AGL-1236). It used to be
+        // an inline block in the parent's flow, so selecting it shoved the
+        // nav row apart and showed a column that looked nothing like the
+        // panel that ships. Zero-size wrapper + `fixed` child, so the design
+        // surface behind it is untouched while it is open.
+        const edge = { left: 0, right: 0, top: 0, bottom: 0 }
+        const opposite = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' } as const
+        delete (edge as Record<string, number>)[opposite[resolvedAnchor]]
         return (
           <Box
             ref={ref}
             {...rest}
-            sx={[
-              {
-                position: 'relative',
-                m: 0.5,
-                p: 2,
-                width: sideAnchored ? width || 280 : '100%',
-                maxWidth: '100%',
-                border: '1px dashed',
-                borderColor: 'divider',
-                borderRadius: 1,
-              },
-              ...nodeSx,
-            ]}
+            sx={MARKER_SX}
           >
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ display: 'block', mb: 0.5 }}
+            <Box
+              sx={[
+                {
+                  position: 'fixed',
+                  ...edge,
+                  zIndex: 3,
+                  overflowY: 'auto',
+                  backgroundColor: 'background.paper',
+                  boxShadow: 16,
+                },
+                sideAnchored
+                  ? { width: width || 280, maxWidth: '90vw', p: 2 }
+                  : { width: 'auto', p: 2 },
+                ...nodeSx,
+              ]}
             >
-              {`Drawer (${resolvedAnchor}) — slides in on the live site`}
-            </Typography>
-            {children}
+              <Stack direction="row" sx={{ justifyContent: 'flex-end', mb: 1 }}>
+                <IconButton aria-label="Close menu" size="small" disabled>
+                  <MdiIcon path={mdiClose.path} />
+                </IconButton>
+              </Stack>
+              {children}
+            </Box>
           </Box>
         )
       }
@@ -218,25 +256,18 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            position: 'relative',
-            display: 'inline-block',
-            alignSelf: 'center',
-            width: 0,
-            height: 0,
-            overflow: 'visible',
-            m: 0,
-            p: 0,
-            flex: '0 0 0px',
-          }}
+          sx={MARKER_SX}
         >
           <Typography
             variant="caption"
             color="text.secondary"
             sx={{
+              // `fixed` resolves against the canvas viewport frame (it is a
+              // containing block), so a negative top puts the chip in the
+              // gutter ABOVE the design surface rather than over it.
               position: 'fixed',
-              top: 4,
-              insetInlineEnd: 4,
+              top: -26,
+              insetInlineEnd: 0,
               zIndex: 2,
               px: 0.75,
               py: 0.25,
