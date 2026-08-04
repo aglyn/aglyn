@@ -42,6 +42,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
+import { getSessionHealth } from '../utils/session-health'
 
 /**
  * Generic per-plugin settings form (AGL-428): renders every field a
@@ -83,6 +84,28 @@ function SchemaForm({
   }
 
   const save = async () => {
+    // Never write settings seeded from a read we know is stale (AGL-1066).
+    //
+    // The form is seeded from `stored`, and `persistentLocalCache` keeps
+    // serving `onSnapshot` from IndexedDB after the session goes stale — so
+    // `stored` can be arbitrarily old while `status` still reads 'success'.
+    // The save below then writes `mergePluginConfig(schema, values)`, which is
+    // the WHOLE config object, not the one field that changed: `merge: true`
+    // does not protect the untouched keys, because they are present in the
+    // payload. Saving one toggle would silently revert every other setting to
+    // whatever the cache last saw, over another admin's newer values.
+    //
+    // Distinct from the AGL-1143 guard on Manage Account, which keys on
+    // `status === 'error'`. That covers a read that FAILED; a cache-served
+    // stale read succeeds, so it sails straight past that check.
+    if (getSessionHealth().staleSession) {
+      enqueueSnackbar(
+        'Your session went stale, so these settings may be out of date — ' +
+          'saving now could overwrite newer values. Sign in again and reload.',
+        { variant: 'error' },
+      )
+      return
+    }
     const verdict = validatePluginConfigValues(schema, values)
     if (!verdict.ok) {
       enqueueSnackbar(verdict.error ?? 'Invalid settings', { variant: 'error' })
