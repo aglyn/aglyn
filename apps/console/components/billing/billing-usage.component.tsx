@@ -21,7 +21,6 @@ import {
   checkContactQuota,
   checkDatasetQuota,
   checkSeatQuota,
-  countManagerSeats,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
@@ -31,10 +30,10 @@ import {
   doc,
   getCountFromServer,
   getDoc,
-  getDocs,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import fetchSeatCounts from '../../utils/fetch-seat-counts'
 
 export interface BillingUsageProps {
   org: Partial<AglynOrgBilling> | null | undefined
@@ -309,10 +308,12 @@ function HostUsageMeters(props: {
 export function BillingUsageComponent(props: BillingUsageProps) {
   const { org, hosts } = props
   const entitlements = resolveOrgEntitlements(org)
-  // Team seats (AGL-119, org roster since AGL-238): every org member
-  // occupies a seat; the roster is member-readable so the count is a
-  // client aggregate query.
+  // Team seats (AGL-119, org roster since AGL-238). "The roster is
+  // member-readable so the count is a client aggregate query" stopped being
+  // true in AGL-1026 and the count moved to the server in AGL-1255 — the
+  // client list was denied for readers the rules do not call org-wide.
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const orgId = (org as any)?.$id as string | undefined
   const [teamSeats, setTeamSeats] = useState<number | null>(null)
   // Org-level data meters (AGL-239/240): datasets and their storage are
@@ -330,20 +331,16 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     // Team seats meter MANAGERS only (AGL-1113). The roster also holds
     // site-scoped collaborators, whose seats meter per host against
     // membersPerHost — an aggregate count of the collection billed them here
-    // too. `countManagerSeats` needs the docs (owner/admin are managers
-    // whatever `allHosts` says), so this reads them rather than aggregating;
-    // the roster is bounded by the plan's hard seat cap.
-    void getDocs(collection(firestore, 'orgs', orgId, 'members'))
-      .then((snapshot) => {
-        if (active) {
-          setTeamSeats(
-            countManagerSeats(snapshot.docs.map((doc) => doc.data() as never)),
-          )
-        }
-      })
-      .catch(() => {
-        // Meter keeps its "not yet metered" state on failure.
-      })
+    // too. The server does that counting now (AGL-1255).
+    // Counted SERVER-side (AGL-1255). The client list here was the same
+    // unconstrained `orgs/{orgId}/members` read AGL-1253 removed from the
+    // quota banner: denied for any reader the RULES do not call org-wide,
+    // which is not the same set the client thinks it is.
+    void fetchSeatCounts(user, orgId).then((counts) => {
+      // `null` means unanswerable, and the meter keeps its "not yet metered"
+      // state — deliberately not 0, which reads as "no seats used".
+      if (active && counts) setTeamSeats(counts.managerSeats)
+    })
     void getCountFromServer(collection(firestore, 'orgs', orgId, 'contacts'))
       .then((snapshot) => {
         if (active) setContactsCount(snapshot.data().count)
@@ -403,7 +400,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     return () => {
       active = false
     }
-  }, [firestore, orgId])
+  }, [firestore, orgId, user])
   const teamSeatLimit = checkSeatQuota(org, 'managers', 0).limit
   // Contacts meter past the band on a paid plan is billing, not blocking
   // (AGL-890) — the caption under the meter says so with the estimate.
