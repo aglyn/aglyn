@@ -164,58 +164,93 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
       // design surface sized to the configured width with the live
       // panel's padding (AGL-572), so links and headers render full size.
       const authoring = isLeafSelectedWithin(rest as Record<string, unknown>)
+      if (authoring) {
+        return (
+          <Box
+            ref={ref}
+            {...rest}
+            sx={[
+              {
+                position: 'relative',
+                m: 0.5,
+                p: 2,
+                width: sideAnchored ? width || 280 : '100%',
+                maxWidth: '100%',
+                border: '1px dashed',
+                borderColor: 'divider',
+                borderRadius: 1,
+              },
+              ...nodeSx,
+            ]}
+          >
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', mb: 0.5 }}
+            >
+              {`Drawer (${resolvedAnchor}) — slides in on the live site`}
+            </Typography>
+            {children}
+          </Box>
+        )
+      }
+      // Unselected: a ZERO-SIZE anchor in flow, with its chip lifted out of
+      // the design surface to the canvas's top-right (AGL-1236).
+      //
+      // A drawer is a portal — on the live site it contributes nothing to
+      // the layout of the row it sits in — so a placeholder that consumed
+      // 280px made the canvas disagree with the page it renders: the
+      // marketing nav's logo collapsed and overlapped the first link.
+      //
+      // Two things were needed, and the first alone was not enough.
+      // Absolute positioning on the marker itself takes its static position
+      // from the flex container's justify-content, so under `space-between`
+      // it jumped to the START of the row and sat on top of the logo. The
+      // marker is therefore a zero-size in-flow box — correct place in the
+      // row, no reserved space — and the chip is `fixed` to the top-right
+      // of the canvas so it never covers content at all.
+      //
+      // Author `sx` deliberately does NOT apply here: on the live site
+      // those styles land on the panel body, which is not on screen while
+      // the drawer is closed. Applying `width: 280` to the marker would put
+      // the footprint straight back.
       return (
         <Box
           ref={ref}
           {...rest}
-          sx={[
-            authoring
-              ? {
-                  position: 'relative',
-                  m: 0.5,
-                  p: 2,
-                  width: sideAnchored ? width || 280 : '100%',
-                  maxWidth: '100%',
-                  border: '1px dashed',
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                }
-              : // Unselected, the marker is OUT OF FLOW at its own static
-                // position (AGL-1236). A drawer is a portal: on the live
-                // site it contributes nothing to its parent's layout, so a
-                // placeholder that consumed 280px of the row made the
-                // canvas disagree with the page it renders — the nav's
-                // logo collapsed and overlapped the first link. "What you
-                // design is exactly what ships" has to hold for the
-                // elements that ship invisible too.
-                //
-                // `position: absolute` with no inset keeps it exactly where
-                // it would have been while removing it from flow.
-                {
-                  position: 'absolute',
-                  zIndex: 1,
-                  px: 0.75,
-                  py: 0.25,
-                  border: '1px dashed',
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  backgroundColor: 'background.paper',
-                  whiteSpace: 'nowrap',
-                  pointerEvents: 'auto',
-                },
-            ...nodeSx,
-          ]}
+          sx={{
+            position: 'relative',
+            display: 'inline-block',
+            alignSelf: 'center',
+            width: 0,
+            height: 0,
+            overflow: 'visible',
+            m: 0,
+            p: 0,
+            flex: '0 0 0px',
+          }}
         >
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ display: 'block', mb: authoring ? 0.5 : 0 }}
+            sx={{
+              position: 'fixed',
+              top: 4,
+              insetInlineEnd: 4,
+              zIndex: 2,
+              px: 0.75,
+              py: 0.25,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              backgroundColor: 'background.paper',
+              whiteSpace: 'nowrap',
+              lineHeight: 1.4,
+              opacity: 0.85,
+            }}
           >
-            {authoring
-              ? `Drawer (${resolvedAnchor}) — slides in on the live site`
-              : `Drawer · ${resolvedAnchor}`}
+            {`Drawer · ${resolvedAnchor}`}
           </Typography>
-          {authoring ? children : null}
         </Box>
       )
     }

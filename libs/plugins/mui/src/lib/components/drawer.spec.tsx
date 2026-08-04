@@ -165,16 +165,23 @@ describe('Drawer element (AGL-562)', () => {
       </DrawerElement>,
     )
     const marker = container.firstElementChild as HTMLElement
-    expect(getComputedStyle(marker).position).toBe('absolute')
-    // No inset: it stays at its own static position, so the marker is where
-    // the element is — it just stops reserving a box.
-    for (const edge of ['top', 'right', 'bottom', 'left'] as const) {
-      // jsdom reports an unset inset as '' rather than 'auto'; either way
-      // the point is that nothing pins it away from its static position.
-      expect(['auto', '']).toContain(getComputedStyle(marker)[edge])
-    }
-    // And it must not carry the configured panel width into the row.
-    expect(getComputedStyle(marker).width).not.toBe('320px')
+    const style = getComputedStyle(marker)
+    // Zero-size and zero-margin: the row lays out exactly as it ships.
+    expect(style.width).toBe('0px')
+    expect(style.height).toBe('0px')
+    expect(style.margin).toBe('0px')
+    // NOT `position: absolute` on the marker itself. An absolutely
+    // positioned flex child takes its static position from the container's
+    // justify-content, so under `space-between` it jumps to the START of
+    // the row — which put the chip on top of the marketing nav's logo. The
+    // marker stays in flow at zero size; the chip overflows it.
+    expect(style.overflow).toBe('visible')
+    // The chip is lifted clear of the design surface to the canvas's
+    // top-right, so it cannot sit on top of the content either.
+    const chip = marker.firstElementChild as HTMLElement
+    expect(getComputedStyle(chip).position).toBe('fixed')
+    // And the configured panel width must not reach the row.
+    expect(style.width).not.toBe('320px')
   })
 
   it('expands contents while the drawer subtree holds the selection (AGL-571)', () => {
