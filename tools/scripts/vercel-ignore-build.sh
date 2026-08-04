@@ -30,6 +30,11 @@
 # every other project is `production` only, so it burned one canceled record
 # per push to `main` — 20 in a single day, none of which built anything.
 #
+# Measured 2026-08-04: 99 of the last 100 aglyn-plugins deployments were
+# CANCELED and exactly ONE built (a real loader change on 08-02). So the ignore
+# step was always doing its job — the cost was purely the created-then-canceled
+# RECORDS, roughly 50/day against a 100/day account limit.
+#
 # So the two levers are not interchangeable:
 #   git.deploymentEnabled  -> no deployment is CREATED (saves the quota)
 #   ignoreCommand          -> deployment created, build skipped (saves build
@@ -84,8 +89,20 @@
 set -uo pipefail
 
 APP="${1:-}"
-BASE="${2:-HEAD^}"
-HEAD_REF="${3:-HEAD}"
+# The FULL push range, not just the last commit (2026-08-04).
+#
+# `HEAD^` only ever inspects ONE commit. A push carrying several — the normal
+# shape of a promotion, and of any batched work — would be judged on its tip
+# alone, so a change in an earlier commit of the same push is invisible and the
+# build is skipped. That is the silent-stale failure this script exists to
+# prevent, reintroduced by the default.
+#
+# `VERCEL_GIT_PREVIOUS_SHA` is what Vercel sets to the sha of the last
+# SUCCESSFUL deployment for this project and branch, so it also spans any
+# pushes that were themselves skipped or canceled in between — which `HEAD^`
+# cannot see at all. `HEAD^` remains the fallback for a local run.
+BASE="${2:-${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}}"
+HEAD_REF="${3:-${VERCEL_GIT_COMMIT_SHA:-HEAD}}"
 
 # Previews are disabled for these projects in vercel.json; this is belt and
 # braces, and preserves what the previous inline command did.
@@ -95,7 +112,7 @@ if [ "${VERCEL_ENV:-production}" != "production" ]; then
 fi
 
 case "$APP" in
-  console|tenant) ;;
+  console|tenant|plugins) ;;
   *)
     echo "ignore-build: unknown app '$APP' -> BUILD (fail safe)" >&2
     exit 1
@@ -144,6 +161,14 @@ fi
 #                   reach into tools/, so a change there can reach a build.
 #   libs/           see the header.
 is_ignorable() {
+  # `plugins` inverts the rule, and it is the one app where that is safe.
+  # `tools/plugin-loader/origin` is 9 files with a single LOCAL import and no
+  # dependency on libs/ or any app — verified, not assumed — so nothing outside
+  # that directory can change what it serves. Everything else is ignorable.
+  if [ "$APP" = "plugins" ]; then
+    case "$1" in tools/plugin-loader/origin/*) return 1 ;; esac
+    return 0
+  fi
   case "$1" in
     apps/docs/*|apps/www/*) return 0 ;;
     cloud/*|.github/*|.claude/*|docs/*) return 0 ;;

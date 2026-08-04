@@ -9,7 +9,7 @@
       "*/**": false
     }
   },
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- .",
+  "ignoreCommand": "bash ../../scripts/vercel-ignore-build.sh plugins",
   "functions": {
     "api/load.mjs": {
       "includeFiles": "**/load.html"
