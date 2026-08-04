@@ -21,6 +21,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
+  BesignerDraftAlertComponent,
   LayoutChromeContext,
   PropertiesDialogComponent,
   useAddElementDrawerCallback,
@@ -222,6 +223,7 @@ function BesignerPage(props) {
   const {
     saveAvailable,
     remoteChanged,
+    draft,
     handleSave,
     jsonOpen,
     openJsonEditor,
@@ -243,6 +245,12 @@ function BesignerPage(props) {
         ? Aglyn.HostViewType.EMAIL
         : Aglyn.HostViewType.SCREEN,
     documentKey: `${hostId}:${screenId}:${versionId}`,
+    draft: {
+      scope: hostId,
+      kind: 'screen',
+      docId: screenId,
+      versionId,
+    },
     notify: enqueueSnackbar,
     queueLoading,
     onSaved: () =>
@@ -736,6 +744,7 @@ function BesignerPage(props) {
     <EntityPickerProvider hostId={hostId}>
     <ReusableComponentsProvider hostId={hostId}>
     <BindingPickerProvider hostId={hostId}>
+            <BesignerDraftAlertComponent draft={draft} noun="screen" />
     {/* Email documents run no client JS (AGL-587): disable interaction
         capabilities so the attributes panel never offers the section. */}
     <InteractionsProvider

@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-import type { AglynHostTheme, NodesMap } from '@aglyn/aglyn'
+import {
+  type AglynHostTheme,
+  type NodesMap,
+  writeLocalStorageWithBudget,
+} from '@aglyn/aglyn'
+
+/** Every key this module owns; also the set it is allowed to evict. */
+export const PREVIEW_STATE_KEY_PREFIX = 'aglyn:preview:'
 
 /**
  * Which kind of besigner document a preview snapshot came from (AGL-1203).
@@ -45,7 +52,10 @@ export interface PreviewState {
 
 export function previewStateKey(ids: PreviewStateIds): string {
   const version = ids.versionId ?? 'current'
-  return `aglyn:preview:${ids.kind}:${ids.hostId}:${ids.docId}:${version}`
+  return (
+    `${PREVIEW_STATE_KEY_PREFIX}${ids.kind}:` +
+    `${ids.hostId}:${ids.docId}:${version}`
+  )
 }
 
 export function previewWindowName(ids: PreviewStateIds): string {
@@ -53,13 +63,27 @@ export function previewWindowName(ids: PreviewStateIds): string {
   return `aglyn-preview-${ids.kind}-${ids.hostId}-${ids.docId}-${version}`
 }
 
+/**
+ * Returns false when the origin was too full to hold the snapshot even after
+ * evicting older ones — the caller opens the preview window regardless, and
+ * it reads whatever it finds.
+ *
+ * A preview snapshot is the cheapest thing in storage: pressing Preview
+ * again regenerates it exactly. So this evicts only its own keys, and
+ * `besigner-draft-store` is deliberately allowed to evict these ahead of
+ * anyone's unsaved work (AGL-1256).
+ */
 export function writePreviewState(
   ids: PreviewStateIds,
   nodes: NodesMap,
   theme?: AglynHostTheme,
-): void {
+): boolean {
   const state: PreviewState = { nodes, theme, updatedAt: Date.now() }
-  window.localStorage.setItem(previewStateKey(ids), JSON.stringify(state))
+  return writeLocalStorageWithBudget({
+    key: previewStateKey(ids),
+    value: JSON.stringify(state),
+    evictPrefixes: [PREVIEW_STATE_KEY_PREFIX],
+  }).ok
 }
 
 export function readPreviewState(ids: PreviewStateIds): PreviewState | null {

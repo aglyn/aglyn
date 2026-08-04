@@ -21,6 +21,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
+  BesignerDraftAlertComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
   withBesignerContext,
@@ -196,6 +197,7 @@ function ComponentBesignerPage(props) {
   const {
     saveAvailable,
     remoteChanged,
+    draft,
     handleSave,
     markOwnWrite,
     jsonOpen,
@@ -212,6 +214,12 @@ function ComponentBesignerPage(props) {
     save: saveComponentVersion,
     noun: 'component',
     documentKey: `${hostId}:${componentId}:${versionId}`,
+    draft: {
+      scope: hostId,
+      kind: 'component',
+      docId: componentId,
+      versionId,
+    },
     notify: enqueueSnackbar,
     queueLoading,
     // A definition's root is the promoted node, not the canvas root, so it
@@ -530,6 +538,7 @@ function ComponentBesignerPage(props) {
               onSave={handleSave}
               saveAvailable={saveAvailable}
             />
+            <BesignerDraftAlertComponent draft={draft} noun="component" />
             {/* Shown as soon as their save lands, not on Save — finding out
                 after twenty more minutes of editing is the bad version of
                 this (AGL-674). */}
