@@ -29,12 +29,17 @@ export interface ComponentPromotionContextValue {
   onPromote?: (node: Aglyn.NodeSchema<any>) => void
   onDemote?: (node: Aglyn.NodeSchema<any>) => void
   /**
-   * Props each definition declares, keyed by definition id (AGL-1247), so
-   * the Attributes panel can offer a selected instance one field per prop.
-   * The designer stays storage-agnostic: the console reads the definitions
-   * and passes them down, exactly as it does the callbacks above.
+   * The host's component definitions, keyed by id (AGL-1247/1251). The
+   * designer stays storage-agnostic: the console reads them and passes them
+   * down, exactly as it does the callbacks above.
+   *
+   * Two consumers, deliberately one field: the Attributes panel reads each
+   * definition's declared `props` to build an instance's fields, and
+   * `NodeLeaf` renders the definition's subtree inside the instance so the
+   * canvas shows the component instead of a dashed box. Splitting them
+   * would let the panel and the canvas disagree about what a definition is.
    */
-  declaredProps?: Record<string, Aglyn.ReusableComponentProp[] | undefined>
+  definitions?: Record<string, Aglyn.ReusableComponentTree | undefined>
 }
 
 export const ComponentPromotionContext =

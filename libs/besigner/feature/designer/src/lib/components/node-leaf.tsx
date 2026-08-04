@@ -16,15 +16,61 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { Leaf, type LeafProps } from '@aglyn/aglyn-node-renderer'
+import {
+  Branch,
+  Leaf,
+  type LeafProps,
+  RendererComponents,
+  Stem,
+  Trunk,
+} from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
 import { alpha, Box } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useContext, useMemo } from 'react'
 import BindingPickerContext from '../contexts/binding-picker-context'
+import ComponentPromotionContext from '../contexts/component-promotion-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import DraggableDroppable from './dnd/draggable-droppable'
 import EmptyDocumentSlot from './empty-document-slot'
+
+/**
+ * Renderer overrides for the inside of a component instance (AGL-1251).
+ *
+ * The plain `Leaf`, deliberately, where the canvas otherwise uses `NodeLeaf`:
+ * the definition's nodes are NOT in the canvas, so anything that made them
+ * draggable, selectable or droppable would be reaching for canvas state that
+ * has no entry for them. Rendering them inert is not a restriction bolted on
+ * afterwards — it is the only thing these nodes can be.
+ */
+const INERT_RENDERER = {
+  TrunkComponent: Trunk,
+  StemComponent: Stem,
+  BranchComponent: Branch,
+  LeafComponent: Leaf,
+}
+
+/**
+ * Nested-object form of a normalized node map, which is what `Branch` walks
+ * (`node.children`). Cycle-safe via `seen`: a definition that somehow
+ * referenced an ancestor would otherwise recurse until the stack gave out.
+ */
+export function denormalizeTree(
+  nodes: Record<string, any>,
+  rootId: string,
+  seen: Set<string> = new Set(),
+): any {
+  const node = nodes?.[rootId]
+  if (!node || seen.has(rootId)) return undefined
+  seen.add(rootId)
+  const childIds = Array.isArray(node.nodes) ? node.nodes : []
+  return {
+    ...node,
+    children: childIds
+      .map((childId: string) => denormalizeTree(nodes, childId, seen))
+      .filter(Boolean),
+  }
+}
 
 export interface NodeLeafProps extends LeafProps {}
 
@@ -136,6 +182,50 @@ export const NodeLeaf = observer(
       return { ...node, props: resolved }
     }, [node, boundProps, resolveFlag, variables, functions])
 
+    // A component instance renders its definition (AGL-1251) instead of the
+    // named dashed box. Authors placed a hero and saw a grey rectangle, so
+    // the props they filled in were invisible until Preview.
+    //
+    // Rendered, never grafted: the definition's nodes stay out of the canvas
+    // entirely. That is what makes this safe — there is nothing to lock,
+    // nothing to strip before a save, and no way for a definition's node to
+    // be persisted into the document that placed it. Same shape as the
+    // binding resolution above, which renders a resolved copy while
+    // selection and dnd keep the original node.
+    const { definitions } = useContext(ComponentPromotionContext)
+    const instanceTree = useMemo(() => {
+      if (node?.componentId !== Aglyn.REUSABLE_INSTANCE_COMPONENT_ID) {
+        return undefined
+      }
+      // Already expanded into this canvas — the layout-chrome store grafts
+      // before it loads (AGL-1218), so its instances arrive with children.
+      // Rendering here too would draw the nav twice.
+      if (node?.nodes?.length) return undefined
+      const props = (node?.props ?? {}) as { refId?: string }
+      const definition = props.refId ? definitions?.[props.refId] : undefined
+      if (!definition?.nodes || !definition?.rootId) return undefined
+      // Reuse the real graft so the canvas resolves `{{prop.*}}` exactly as
+      // the published page will — one substitution path, not a second one
+      // that could disagree about which value wins.
+      const composed = Aglyn.composeReusableComponentNodes(
+        {
+          [node.$id]: {
+            $id: node.$id,
+            componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+            // Plain snapshot: props are MobX observables and the graft
+            // reads nested `propValues` off them.
+            props: JSON.parse(JSON.stringify(node.props ?? {})),
+            nodes: [],
+          } as any,
+        },
+        { [props.refId as string]: definition } as any,
+      )
+      const graftedRootId = (composed[node.$id]?.nodes as string[])?.[0]
+      return graftedRootId ? denormalizeTree(composed, graftedRootId) : undefined
+      // Observable props: the JSON string keys the memo, as above.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [node, JSON.stringify(node?.props ?? {}), definitions])
+
     return (
       <DraggableDroppable
         node={node}
@@ -159,6 +249,17 @@ export const NodeLeaf = observer(
           {...rest}
         >
           {children}
+          {instanceTree ? (
+            // `pointerEvents: none` so a click anywhere on the rendered
+            // component still lands on the instance beneath it — the
+            // instance is the only thing here that can be selected, and the
+            // only thing whose Attributes are editable.
+            <Box sx={{ pointerEvents: 'none' }} data-aglyn-component-preview="">
+              <RendererComponents.Provider value={INERT_RENDERER as any}>
+                <Stem node={instanceTree} />
+              </RendererComponents.Provider>
+            </Box>
+          ) : null}
           {showSlotMarker ? (
             <SlotMarker caption={node?.props?.['caption'] as string | undefined} />
           ) : null}

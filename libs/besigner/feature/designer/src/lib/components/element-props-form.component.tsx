@@ -578,7 +578,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
 
     // Reusable-component flows (AGL-35): actions appear only when the host
     // app provides callbacks; locked nodes (layout chrome) never promote.
-    const { onPromote, onDemote, declaredProps } = useContext(
+    const { onPromote, onDemote, definitions } = useContext(
       ComponentPromotionContext,
     )
     const isInstance =
@@ -589,14 +589,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       if (!isInstance) return []
       const refId = (node?.props as { refId?: string } | undefined)?.refId
       return buildInstancePropFields(
-        refId ? declaredProps?.[refId] : undefined,
+        refId ? definitions?.[refId]?.props : undefined,
         insertOptions,
         tokenLabelContext,
       )
     }, [
       isInstance,
       node,
-      declaredProps,
+      definitions,
       insertOptions,
       tokenLabelContext,
     ])
@@ -611,7 +611,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const instanceMediaProps = useMemo(() => {
       if (!isInstance) return []
       const refId = (node?.props as { refId?: string } | undefined)?.refId
-      const declared = refId ? declaredProps?.[refId] : undefined
+      const declared = refId ? definitions?.[refId]?.props : undefined
       return (declared ?? [])
         .filter(
           (prop) =>
@@ -622,7 +622,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           name: prop.name,
           label: prop.label || prop.name,
         }))
-    }, [isInstance, node, declaredProps])
+    }, [isInstance, node, definitions])
 
     // AI copy assist (AGL-89, widened by AGL-130): text-editable elements
     // and any element declaring text attributes, when the host app
