@@ -34,6 +34,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
+import supportRequest from '../../../../utils/support-request'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
@@ -81,58 +82,23 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
    *
    * Attaching it in the helper means a new call cannot forget it.
    */
+  // Extracted and unit-tested (AGL-1158). It was fifty lines of subtle rules
+  // — no body on a GET, org on the query, never swallow a failure — living
+  // inside this component with no test, which is how AGL-1157 shipped: one
+  // bad line took out the ticket list AND the forum at once.
   const request = useCallback(
-    async (
-      path: string,
-      method: string,
-      body?: Record<string, unknown>,
-    ): Promise<any | null> => {
-      try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const scoped = orgId
-          ? `${path}${path.includes('?') ? '&' : '?'}orgId=${encodeURIComponent(orgId)}`
-          : path
-        // A GET/HEAD request MAY NOT carry a body — `fetch` throws
-        // `TypeError: Request with GET/HEAD method cannot have body` before it
-        // opens a connection (AGL-1157). AGL-1147 attached the org to the body
-        // as well as the query so a body-only reader could not miss it, which
-        // silently killed every GET on this page the moment `orgId` resolved:
-        // the throw landed in the bare catch below, so there was no request, no
-        // status, and no error text — just an empty ticket list.
-        //
-        // The query carries it either way, and the routes read
-        // `query.orgId ?? payload.orgId`, so dropping the body here loses
-        // nothing. POSTs still send both.
-        const sendsBody = method !== 'GET' && method !== 'HEAD'
-        const response = await fetch(scoped, {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          ...(sendsBody && (body || orgId)
-            ? { body: JSON.stringify({ ...(body ?? {}), ...(orgId ? { orgId } : {}) }) }
-            : {}),
-        })
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok) {
-          enqueueSnackbar(payload?.error ?? 'Request failed', {
-            variant: 'warning',
-            persist: false,
-          })
-          return null
-        }
-        return payload
-      } catch (error) {
-        // Logged, not just swallowed (AGL-1157). A bare `catch {}` here turned
-        // a thrown TypeError into an empty list and a generic toast, which is
-        // indistinguishable from "this org has no tickets" — the reason the
-        // GET-with-body bug survived a release.
-        console.error('[support] request failed', method, path, error)
-        enqueueSnackbar('An error has occurred', { variant: 'error' })
-        return null
-      }
-    },
+    (path: string, method: string, body?: Record<string, unknown>) =>
+      supportRequest(
+        {
+          getIdToken: () => (user as any)?.getIdToken?.(),
+          orgId,
+          onError: (message) =>
+            enqueueSnackbar(message, { variant: 'warning', persist: false }),
+        },
+        path,
+        method,
+        body,
+      ) as Promise<any | null>,
     [user, orgId, enqueueSnackbar],
   )
 
