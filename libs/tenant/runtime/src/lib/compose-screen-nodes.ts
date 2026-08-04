@@ -133,6 +133,15 @@ export async function composeNodesWithChrome(options: {
   tokens?: Record<string, string>
   /** Routed content collection (AGL-551) for Collection entries blocks. */
   collection?: ComposeCollectionContext
+  /**
+   * The host document, for `host.*` tokens (AGL-1022).
+   *
+   * Passed in rather than read here: every caller already holds it, and
+   * `composeScreenNodes` was the largest single render phase before AGL-1225
+   * cut it to one round trip — adding a read back would spend that win on
+   * data we already have in hand.
+   */
+  host?: Aglyn.HostTokenSource | null
 }): Promise<Record<string, any>> {
   const { hostId, layoutId, screenNodes } = options
 
@@ -240,8 +249,19 @@ export async function composeNodesWithChrome(options: {
     variables,
     functions,
   )
+  // Host variables (AGL-1022): `{{host.*}}` resolves from the INSTALLING
+  // site, late — at render, never at install — so a rebrand propagates to
+  // every artifact that names the host instead of hard-coding it. Same
+  // registry the email path uses, so a token means one thing in both.
+  const withHostTokens = Aglyn.resolveNodesHostTokens(
+    bound as any,
+    options.host,
+  )
   // Function widgets run client-side: embed their definitions (AGL-93).
-  const withFunctions = Aglyn.attachFunctionDefinitions(bound, functions)
+  const withFunctions = Aglyn.attachFunctionDefinitions(
+    withHostTokens,
+    functions,
+  )
   // Marketplace plugins (AGL-45): stamp each marketplacePlugin node with its
   // pinned install (version/sha256/capabilities) + kill-switch state.
   const nodes = Aglyn.attachPluginInstalls(withFunctions, pluginInstalls)
@@ -269,6 +289,8 @@ export async function composeScreenNodes(options: {
    * experiment variants point at versions; schedules don't apply.
    */
   versionId?: string
+  /** The host document, for `host.*` tokens (AGL-1022). */
+  host?: Aglyn.HostTokenSource | null
 }): Promise<Record<string, any> | null> {
   const { hostId, screenId, screen } = options
 
@@ -295,6 +317,7 @@ export async function composeScreenNodes(options: {
     screenNodes: versionRes.version.nodes as any,
     tokens: options.tokens,
     collection: options.collection,
+    host: options.host,
   })
 }
 
