@@ -52,6 +52,72 @@ export interface PluginPropSchema {
   options?: Array<{ value: string; label?: string }>
 }
 
+/**
+ * A canvas element a plugin version contributes (AGL-1031).
+ *
+ * A first-party plugin that extends the besigner declares a `ComponentSchema`
+ * and gets a first-class palette entry. A marketplace plugin doing the same
+ * work got a generic "Plugin" wrapper and a JSON textarea. Where an element
+ * came from is a fact about its provenance, not a different kind of thing.
+ *
+ * The line this must not cross: **declared schema drives AUTHORING; the
+ * sandbox still owns runtime.** This is publisher-authored DATA. It never
+ * becomes a React component in the host bundle — the palette entry, the label
+ * and the attribute fields are host-rendered from the declaration, and the
+ * saved node still resolves to a sandboxed `PluginFrame` integrity-checked
+ * against the pinned sha256. Nothing here changes what executes or where.
+ */
+export interface PluginElementDeclaration {
+  /**
+   * Stable id, unique within the plugin. Saved on the node beside the listing
+   * id, so renaming the display name never orphans a placed element.
+   */
+  id: string
+  displayName: string
+  description?: string
+  /**
+   * Drawer category. Constrained to a subset — see
+   * {@link PLUGIN_ELEMENT_CATEGORIES}.
+   */
+  category?: string
+  /**
+   * An mdi icon NAME (`mdiTimerOutline`), never markup and never a path.
+   *
+   * A path would be arbitrary SVG from a publisher rendered into console
+   * chrome; a name is looked up in the icon set the host already ships, so the
+   * worst a bad value can do is render nothing.
+   */
+  icon?: string
+  /**
+   * The element's editable attributes. Intersected with `capabilities.props`
+   * exactly as {@link PluginPropSchema} is — an attribute the plugin cannot
+   * receive is not an attribute.
+   */
+  attributes?: PluginPropSchema[]
+}
+
+/**
+ * Categories a third-party element may declare.
+ *
+ * Deliberately not the whole enum. `LAYOUT` and `NAVIGATION` are structural —
+ * a third-party element appearing among the containers a page is built out of
+ * invites placements the sandbox cannot honour, and taking a category away
+ * later breaks every site that used it. Cheaper to decide now, as the issue
+ * says; widening later is easy and narrowing is not.
+ */
+export const PLUGIN_ELEMENT_CATEGORIES: readonly string[] = [
+  'Data Display',
+  'Media',
+  'Commerce',
+  'Forms',
+  'Input',
+  'Text',
+  'Sections & Blocks',
+]
+
+/** Bound on how many elements one plugin may contribute to the palette. */
+export const PLUGIN_MAX_ELEMENTS = 12
+
 export interface PluginCapabilities {
   /**
    * Outbound origins the plugin may call (`connect-src`), each an exact
@@ -90,6 +156,14 @@ export interface PluginManifest {
    */
   hostAbi?: number
   capabilities?: PluginCapabilities
+  /**
+   * Canvas elements this version contributes to the palette (AGL-1031).
+   *
+   * Part of the reviewed bytes: a new element is a new version through review,
+   * and a revoked version's elements vanish from the palette with it, because
+   * the palette is built from the pinned install.
+   */
+  elements?: PluginElementDeclaration[]
   /** Besigner lineal rules the registered component honors (AGL-45 §4). */
   restrictParent?: string[]
   restrictChildren?: string[]
@@ -157,6 +231,14 @@ export const PLUGIN_MAX_NETWORK_ORIGINS = 10
 export const PLUGIN_MAX_PROPS = 32
 /** Label/description/default text is publisher-authored; keep it bounded. */
 const PLUGIN_PROP_TEXT_MAX = 200
+/**
+ * `mdiTimerOutline` — an icon NAME from the set the host already ships.
+ *
+ * Never a path: a path is arbitrary SVG from a publisher rendered into console
+ * chrome. A name is a lookup, so the worst an unknown one does is render
+ * nothing.
+ */
+const MDI_ICON_NAME_PATTERN = /^mdi[A-Za-z0-9]{1,48}$/
 const PROP_SCHEMA_TYPES = new Set([
   'string',
   'number',
@@ -177,6 +259,70 @@ const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
  * bundle whose manifest doesn't pass, so bad capabilities never reach a
  * consumer's install screen.
  */
+/**
+ * Sanitizes a publisher-authored prop schema against a set of declared props.
+ *
+ * Shared by `capabilities.propSchema` and each element's `attributes`, so a
+ * declared element cannot describe its way past the allowlist any more than a
+ * top-level schema can. One implementation, one rule.
+ */
+function sanitizePropSchemaList(
+  input: unknown,
+  declared: ReadonlySet<string>,
+): PluginPropSchema[] {
+  if (!Array.isArray(input)) return []
+  const out: PluginPropSchema[] = []
+  const seen = new Set<string>()
+  for (const raw of input.slice(0, PLUGIN_MAX_PROPS)) {
+    if (!raw || typeof raw !== 'object') continue
+    const entry = raw as Record<string, unknown>
+    const name = entry['name']
+    if (typeof name !== 'string' || !IDENTIFIER_PATTERN.test(name)) continue
+    if (!declared.has(name) || seen.has(name)) continue
+    seen.add(name)
+    const type = PROP_SCHEMA_TYPES.has(String(entry['type']))
+      ? (entry['type'] as PluginPropSchema['type'])
+      : 'string'
+    const next: PluginPropSchema = { name, type }
+    for (const key of ['label', 'description'] as const) {
+      const value = entry[key]
+      if (typeof value === 'string' && value.trim()) {
+        next[key] = value.trim().slice(0, PLUGIN_PROP_TEXT_MAX)
+      }
+    }
+    const fallback = entry['default']
+    if (
+      typeof fallback === 'string' ||
+      typeof fallback === 'number' ||
+      typeof fallback === 'boolean'
+    ) {
+      next.default =
+        typeof fallback === 'string'
+          ? fallback.slice(0, PLUGIN_PROP_TEXT_MAX)
+          : fallback
+    }
+    if (type === 'select' && Array.isArray(entry['options'])) {
+      const options = (entry['options'] as unknown[])
+        .map((option) => {
+          const record = (option ?? {}) as Record<string, unknown>
+          const value = record['value']
+          if (typeof value !== 'string' || !value) return null
+          const label = record['label']
+          return {
+            value: value.slice(0, PLUGIN_PROP_TEXT_MAX),
+            ...(typeof label === 'string' && label.trim()
+              ? { label: label.trim().slice(0, PLUGIN_PROP_TEXT_MAX) }
+              : {}),
+          }
+        })
+        .filter(Boolean) as Array<{ value: string; label?: string }>
+      if (options.length) next.options = options.slice(0, PLUGIN_MAX_PROPS)
+    }
+    out.push(next)
+  }
+  return out
+}
+
 export function validatePluginManifest(
   input: unknown,
 ): { ok: true; manifest: PluginManifest } | { ok: false; error: string } {
@@ -263,56 +409,10 @@ export function validatePluginManifest(
     ) {
       return { ok: false, error: 'Too many prop schemas declared' }
     }
-    const declared = new Set(capabilities.props ?? [])
-    const propSchema: PluginPropSchema[] = []
-    const seen = new Set<string>()
-    for (const raw of propSchemaInput) {
-      if (!raw || typeof raw !== 'object') continue
-      const entry = raw as Record<string, unknown>
-      const name = entry['name']
-      if (typeof name !== 'string' || !IDENTIFIER_PATTERN.test(name)) continue
-      if (!declared.has(name) || seen.has(name)) continue
-      seen.add(name)
-      const type = PROP_SCHEMA_TYPES.has(String(entry['type']))
-        ? (entry['type'] as PluginPropSchema['type'])
-        : 'string'
-      const next: PluginPropSchema = { name, type }
-      for (const key of ['label', 'description'] as const) {
-        const value = entry[key]
-        if (typeof value === 'string' && value.trim()) {
-          next[key] = value.trim().slice(0, PLUGIN_PROP_TEXT_MAX)
-        }
-      }
-      const fallback = entry['default']
-      if (
-        typeof fallback === 'string' ||
-        typeof fallback === 'number' ||
-        typeof fallback === 'boolean'
-      ) {
-        next.default =
-          typeof fallback === 'string'
-            ? fallback.slice(0, PLUGIN_PROP_TEXT_MAX)
-            : fallback
-      }
-      if (type === 'select' && Array.isArray(entry['options'])) {
-        const options = (entry['options'] as unknown[])
-          .map((option) => {
-            const record = (option ?? {}) as Record<string, unknown>
-            const value = record['value']
-            if (typeof value !== 'string' || !value) return null
-            const label = record['label']
-            return {
-              value: value.slice(0, PLUGIN_PROP_TEXT_MAX),
-              ...(typeof label === 'string' && label.trim()
-                ? { label: label.trim().slice(0, PLUGIN_PROP_TEXT_MAX) }
-                : {}),
-            }
-          })
-          .filter(Boolean) as Array<{ value: string; label?: string }>
-        if (options.length) next.options = options.slice(0, PLUGIN_MAX_PROPS)
-      }
-      propSchema.push(next)
-    }
+    const propSchema = sanitizePropSchemaList(
+      propSchemaInput,
+      new Set(capabilities.props ?? []),
+    )
     if (propSchema.length) capabilities.propSchema = propSchema
   }
 
@@ -355,6 +455,73 @@ export function validatePluginManifest(
     }
   }
 
+  /**
+   * Declared canvas elements (AGL-1031). Sanitized hard, because every field
+   * here is publisher-authored data the HOST renders into its own chrome.
+   *
+   * A malformed `elements` array is refused — that is a build error a
+   * publisher can see and fix. A single bad ENTRY is dropped instead, so one
+   * typo cannot fail a whole release.
+   */
+  const elementsInput = raw['elements']
+  const elements: PluginElementDeclaration[] = []
+  if (elementsInput !== undefined) {
+    if (
+      !Array.isArray(elementsInput) ||
+      elementsInput.length > PLUGIN_MAX_ELEMENTS
+    ) {
+      return { ok: false, error: 'Too many elements declared' }
+    }
+    const declaredProps = new Set(capabilities.props ?? [])
+    const seenIds = new Set<string>()
+    for (const rawElement of elementsInput) {
+      if (!rawElement || typeof rawElement !== 'object') continue
+      const entryRecord = rawElement as Record<string, unknown>
+      const elementId = entryRecord['id']
+      const elementName = entryRecord['displayName']
+      if (typeof elementId !== 'string' || !IDENTIFIER_PATTERN.test(elementId)) {
+        continue
+      }
+      if (seenIds.has(elementId)) continue
+      if (typeof elementName !== 'string' || !elementName.trim()) continue
+      seenIds.add(elementId)
+      const element: PluginElementDeclaration = {
+        id: elementId,
+        displayName: elementName.trim().slice(0, PLUGIN_PROP_TEXT_MAX),
+      }
+      const elementDescription = entryRecord['description']
+      if (typeof elementDescription === 'string' && elementDescription.trim()) {
+        element.description = elementDescription
+          .trim()
+          .slice(0, PLUGIN_PROP_TEXT_MAX)
+      }
+      // A category outside the permitted subset is DROPPED, not refused: the
+      // structural ones are withheld deliberately (see
+      // PLUGIN_ELEMENT_CATEGORIES), and a publisher aiming at one should still
+      // get a usable element rather than a failed publish.
+      const elementCategory = entryRecord['category']
+      if (
+        typeof elementCategory === 'string' &&
+        PLUGIN_ELEMENT_CATEGORIES.includes(elementCategory)
+      ) {
+        element.category = elementCategory
+      }
+      const elementIcon = entryRecord['icon']
+      if (
+        typeof elementIcon === 'string' &&
+        MDI_ICON_NAME_PATTERN.test(elementIcon)
+      ) {
+        element.icon = elementIcon
+      }
+      const elementAttributes = sanitizePropSchemaList(
+        entryRecord['attributes'],
+        declaredProps,
+      )
+      if (elementAttributes.length) element.attributes = elementAttributes
+      elements.push(element)
+    }
+  }
+
   return {
     ok: true,
     manifest: {
@@ -364,6 +531,7 @@ export function validatePluginManifest(
       entry,
       ...(hostAbi !== undefined ? { hostAbi } : {}),
       ...(Object.keys(capabilities).length ? { capabilities } : {}),
+      ...(elements.length ? { elements } : {}),
       ...(restrict(raw['restrictParent'])
         ? { restrictParent: restrict(raw['restrictParent']) }
         : {}),
@@ -625,4 +793,64 @@ export function unknownPluginPropKeys(
   if (!values) return []
   const allowed = new Set(manifest?.capabilities?.props ?? [])
   return Object.keys(values).filter((key) => !allowed.has(key))
+}
+
+/** A declared element, resolved for the palette. */
+export interface PluginPaletteElement {
+  listingId: string
+  elementId: string
+  displayName: string
+  description?: string
+  category: string
+  /** mdi icon NAME; the surface looks it up, never renders it as markup. */
+  icon?: string
+  fields: PluginPropField[]
+}
+
+/**
+ * The palette entries an installed plugin contributes (AGL-1031).
+ *
+ * Resolved from the PINNED install, which is what makes the two guarantees in
+ * the issue hold without extra machinery: an element only appears where the
+ * plugin is installed, and a revoked or downgraded version's elements vanish
+ * with it, because the palette is rebuilt from whatever the pin now points at.
+ *
+ * Attributes come back through `resolvePluginPropFields`, so an element's
+ * editable fields are bounded by `capabilities.props` exactly like the generic
+ * plugin element's are. A declared element cannot widen what crosses the
+ * bridge; it only gives the same props a better name and a better editor.
+ */
+export function resolvePluginElements(
+  install:
+    | {
+        listingId?: string
+        capabilities?: PluginCapabilities
+        manifest?: { elements?: PluginElementDeclaration[] }
+        elements?: PluginElementDeclaration[]
+      }
+    | null
+    | undefined,
+): PluginPaletteElement[] {
+  const listingId = install?.listingId
+  if (!listingId) return []
+  const declared = install?.elements ?? install?.manifest?.elements ?? []
+  const capabilities = install?.capabilities
+  return declared.map((element) => ({
+    listingId,
+    elementId: element.id,
+    displayName: element.displayName,
+    ...(element.description ? { description: element.description } : {}),
+    category: element.category ?? 'Data Display',
+    ...(element.icon ? { icon: element.icon } : {}),
+    // Per-element attributes when declared; otherwise the plugin's whole
+    // declared prop set, which is still better than a JSON box.
+    fields: element.attributes?.length
+      ? resolvePluginPropFields({
+          capabilities: {
+            props: element.attributes.map((attribute) => attribute.name),
+            propSchema: element.attributes,
+          },
+        })
+      : resolvePluginPropFields({ capabilities }),
+  }))
 }
