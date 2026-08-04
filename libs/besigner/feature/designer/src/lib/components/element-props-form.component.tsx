@@ -248,16 +248,6 @@ export const elementPropsComponentMapper = {
 }
 
 /**
- * Declared prop names must be plain identifiers (AGL-1247).
- *
- * Not cosmetic: the form field is named for the nested path
- * `propValues.<name>` and final-form splits that on dots, so a prop called
- * `hero.title` would address a level that does not exist and its value
- * would silently never reach the node.
- */
-export const COMPONENT_PROP_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
-
-/**
  * One Attributes field per prop a reusable component declares (AGL-1247),
  * so the same hero can carry different copy on eleven pages instead of
  * being copied onto each.
@@ -274,7 +264,7 @@ export function buildInstancePropFields(
 ): Array<Record<string, unknown>> {
   if (!declared?.length) return []
   return declared
-    .filter((prop) => COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? ''))
+    .filter((prop) => Aglyn.COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? ''))
     .map((prop) => {
       const base = {
         name: `${Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY}.${prop.name}`,
@@ -626,7 +616,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         .filter(
           (prop) =>
             prop?.type === 'image' &&
-            COMPONENT_PROP_NAME_PATTERN.test(prop.name ?? ''),
+            Aglyn.COMPONENT_PROP_NAME_PATTERN.test(prop.name ?? ''),
         )
         .map((prop) => ({
           name: prop.name,

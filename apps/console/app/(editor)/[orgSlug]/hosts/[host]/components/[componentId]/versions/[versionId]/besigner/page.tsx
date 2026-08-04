@@ -49,6 +49,7 @@ import {
   useHostActivityLogger,
 } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, Typography } from '@mui/material'
+import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
@@ -196,6 +197,7 @@ function ComponentBesignerPage(props) {
     saveAvailable,
     remoteChanged,
     handleSave,
+    markOwnWrite,
     jsonOpen,
     openJsonEditor,
     closeJsonEditor,
@@ -237,6 +239,31 @@ function ComponentBesignerPage(props) {
    * until it happens the live site keeps rendering the previous tree.
    */
   const [publishing, setPublishing] = useState(false)
+  // Declared props (AGL-1247) are document metadata, not canvas nodes, so
+  // they save straight to the version doc rather than riding the node save.
+  const [propsDialogOpen, setPropsDialogOpen] = useState(false)
+  const declaredProps = (
+    data as { props?: Aglyn.ReusableComponentProp[] } | undefined
+  )?.props
+  const handleSaveDeclaredProps = useCallback(
+    async (nextProps: Aglyn.ReusableComponentProp[]) => {
+      const save = updateComponentVersion as unknown as (
+        value: Partial<Aglyn.AglynHostComponentVersion>,
+        options?: Parameters<typeof updateComponentVersion>[1],
+      ) => Promise<void>
+      // This bumps the version doc's `updatedAt` just like a node save, so
+      // the conflict guard has to be told it was us — otherwise declaring a
+      // property accuses the author of being a second editor and pauses
+      // saving until they reload (AGL-674).
+      markOwnWrite()
+      await save({ props: nextProps }, { merge: true })
+      enqueueSnackbar(
+        'Properties saved. Publish to make them available on live pages.',
+        { variant: 'success', persist: false },
+      )
+    },
+    [updateComponentVersion, markOwnWrite, enqueueSnackbar],
+  )
   const handlePublish = useCallback(async () => {
     if (publishing) return
     if (saveAvailable) {
@@ -415,6 +442,15 @@ function ComponentBesignerPage(props) {
                 onClick: handlePublish,
               },
               {
+                // Declared props (AGL-1247): what this component lets each
+                // page vary. Sits with Save/Publish because it is part of
+                // the component's contract, not of the selected element.
+                id: 'center-nav-file-properties',
+                children: 'Properties…',
+                onClick: () => setPropsDialogOpen(true),
+                ListItemTextProps: { inset: true },
+              },
+              {
                 id: 'center-nav-file-close',
                 children: 'Close',
                 href: listUrl,
@@ -533,6 +569,12 @@ function ComponentBesignerPage(props) {
           defaultValue={Aglyn.canvas.nestedNodes as any}
         />
       )}
+      <ComponentPropsDialog
+        open={propsDialogOpen}
+        value={declaredProps}
+        onClose={() => setPropsDialogOpen(false)}
+        onSave={handleSaveDeclaredProps}
+      />
     </BesignerMediaPickerProvider>
     </InteractionsProvider>
     </BindingPickerProvider>

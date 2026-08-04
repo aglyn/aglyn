@@ -47,6 +47,20 @@ export const REUSABLE_INSTANCE_PROP_VALUES_KEY = 'propValues'
 export const COMPONENT_PROP_TOKEN_PREFIX = 'prop.'
 
 /**
+ * Declared prop names must be plain identifiers (AGL-1247).
+ *
+ * Load-bearing rather than cosmetic, which is why it lives beside the
+ * storage contract instead of in whichever form happens to edit it: the
+ * Attributes panel names its field for the nested path
+ * `propValues.<name>`, and final-form splits that on dots — so a prop
+ * called `hero.title` would address a level that does not exist and its
+ * value would silently never reach the node. The editor that declares
+ * props and the panel that fills them in must agree on this, so they read
+ * the same constant.
+ */
+export const COMPONENT_PROP_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+/**
  * Prefix namespacing a grafted definition's node ids per instance, so the
  * same definition can appear many times in one tree without id collisions.
  */
