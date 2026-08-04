@@ -60,15 +60,61 @@ export interface RevalidateLivePagesOptions {
   componentId?: string
 }
 
+/**
+ * What the drop actually covered (AGL-1239).
+ *
+ * Returned rather than swallowed because the two shortfalls below are the only
+ * cases where a publish reported as complete leaves live pages stale on
+ * purpose, and until now they were recorded in a server log nobody reads
+ * during a publish.
+ */
+export interface RevalidateLivePagesResult {
+  /** Pages whose cached HTML was actually dropped. */
+  revalidated: number
+  /**
+   * Pages the tenant would not take because the payload exceeded its cap —
+   * AGL-1161's `truncated`, surfaced by the console route as `pathsDropped`.
+   */
+  pathsDropped: number
+  /** The console-side dependent scan hit its limit and stopped early. */
+  scanTruncated: boolean
+}
+
+/**
+ * One sentence for a drop that did not cover the whole site, or `null` when it
+ * did.
+ *
+ * Lives beside the call rather than at each call site so the two publish
+ * surfaces cannot word this differently — the same omission-repeated-per-caller
+ * shape the helper itself exists to prevent.
+ */
+export function describeRevalidateShortfall(
+  result: RevalidateLivePagesResult | null,
+): string | null {
+  if (!result) return null
+  const { pathsDropped, scanTruncated } = result
+  if (!pathsDropped && !scanTruncated) return null
+  // Deliberately says what to DO. "Truncated" is accurate and useless: the
+  // reader's question is whether their site is broken, and the answer is that
+  // it catches up on its own within the minute.
+  const stale = pathsDropped
+    ? `${pathsDropped} page${pathsDropped === 1 ? '' : 's'}`
+    : 'Some pages'
+  return (
+    `Published. ${stale} that use this are too many to refresh at once — ` +
+    'they update on their own within a minute.'
+  )
+}
+
 export async function revalidateLivePages(
   options: RevalidateLivePagesOptions,
-): Promise<void> {
+): Promise<RevalidateLivePagesResult | null> {
   const { user, hostId, screenId, layoutId, componentId } = options
-  if (!hostId || (!screenId && !layoutId && !componentId)) return
+  if (!hostId || (!screenId && !layoutId && !componentId)) return null
   try {
     const idToken = await user?.getIdToken?.()
-    if (!idToken) return
-    await fetch('/api/screens/revalidate', {
+    if (!idToken) return null
+    const response = await fetch('/api/screens/revalidate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -81,8 +127,24 @@ export async function revalidateLivePages(
         ...(componentId ? { componentId } : {}),
       }),
     })
+    if (!response.ok) return null
+    const body = (await response.json().catch(() => null)) as {
+      revalidated?: unknown
+      pathsDropped?: unknown
+      truncated?: unknown
+    } | null
+    if (!body) return null
+    return {
+      revalidated: Array.isArray(body.revalidated) ? body.revalidated.length : 0,
+      pathsDropped: Number(body.pathsDropped ?? 0) || 0,
+      scanTruncated: Boolean(body.truncated),
+    }
   } catch {
-    // Best effort by design — see above.
+    // Best effort by design — see above. A cache hint that could not be sent
+    // is NOT reported: the revalidate window is still underneath it, and
+    // telling someone their successful publish half-failed would be a worse
+    // lie than saying nothing.
+    return null
   }
 }
 

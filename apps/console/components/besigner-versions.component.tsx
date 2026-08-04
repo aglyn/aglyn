@@ -67,7 +67,9 @@ import { observer } from 'mobx-react-lite'
 import { useRouter } from 'next/navigation'
 import { useCallback, useImperativeHandle, useState, type Ref } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import revalidateLivePages from '../utils/revalidate-live-pages'
+import revalidateLivePages, {
+  describeRevalidateShortfall,
+} from '../utils/revalidate-live-pages'
 import { hasEntitlement } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostSubdomain } from '../components/host-id-provider'
@@ -327,6 +329,18 @@ export const BesignerVersionsComponent = observer(
                 : parent.kind === 'layout'
                   ? { layoutId: parent.id }
                   : { componentId: parent.id }),
+            }).then((result) => {
+              // Say so when the drop did not cover the whole site (AGL-1239).
+              // The cap and the scan limit were only ever reported to a server
+              // log, so the person publishing a site-wide component saw an
+              // unqualified success and pages that did not change.
+              const shortfall = describeRevalidateShortfall(result)
+              if (shortfall) {
+                enqueueSnackbar(shortfall, {
+                  variant: 'warning',
+                  persist: false,
+                })
+              }
             })
           }
         } catch (error) {

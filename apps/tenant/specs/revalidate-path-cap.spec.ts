@@ -21,18 +21,21 @@
  */
 
 /**
- * AGL-1161: the 50-path cap must SAY when it bites.
+ * AGL-1161: the path cap must SAY when it bites.
+ * AGL-1239: and it must not bite on an ordinary site.
  *
- * `paths.slice(0, 50)` silently discarded the overflow — a caller sending 80
+ * `paths.slice(0, cap)` silently discarded the overflow — a caller sending 80
  * paths got `count: 50` back with nothing to distinguish that from having sent
  * 50. The dropped pages then sat stale for the full revalidate window while the
  * editor reported a successful publish, which is the exact "reported fast,
  * still slow" confusion AGL-1150 set out to remove.
  *
- * A widely-used component is the case that overflows, and this was measured on
- * production: `aglyn-marketing`'s "Site nav" fans out to 48 screens against a
- * cap of 50. It fits today by two. Nothing else guards that margin, so this
- * suite does.
+ * A widely-used component is the case that overflows, and it was measured on
+ * production: `aglyn-marketing`'s "Site nav" fans out to 48 screens. Against
+ * the old cap of 50 that fit by two — which is why AGL-1239 raised it to 250.
+ * `SITE_FANOUT` below is that real measurement, kept as the number this suite
+ * asserts must NOT truncate, so the margin is guarded by a test rather than by
+ * whoever last read the issue.
  *
  * Deliberately asserts the SHAPE of the response, not just the count: `count`
  * alone cannot answer "did you take everything I sent", and that question is
@@ -66,47 +69,67 @@ const call = async (body: unknown, secret: string | null = SECRET) =>
 const paths = (n: number) =>
   Array.from({ length: n }, (_, i) => `/page-${i + 1}`)
 
-describe('tenant revalidate path cap (AGL-1161)', () => {
+/** The cap the route ships with (AGL-1239 raised it from 50). */
+const CAP = 250
+
+/**
+ * The real fan-out of `aglyn-marketing`'s nav component, measured on production
+ * 2026-08-04. The point of the cap is that a site like this never reaches it.
+ */
+const SITE_FANOUT = 48
+
+describe('tenant revalidate path cap (AGL-1161, AGL-1239)', () => {
   beforeEach(() => {
     mockRevalidatePath.mockClear()
     process.env['REVALIDATE_SECRET'] = SECRET
   })
 
   it('reports the overflow instead of swallowing it', async () => {
-    const response = await call({ host: 'demo', paths: paths(80) })
+    const response = await call({ host: 'demo', paths: paths(CAP + 30) })
     const body = await response.json()
     expect(response.status).toBe(200)
-    expect(body.count).toBe(50)
+    expect(body.count).toBe(CAP)
     // The three fields that let a caller tell "all of it" from "as much as I
     // would take". Without these the response is a lie by omission.
-    expect(body.requested).toBe(80)
+    expect(body.requested).toBe(CAP + 30)
     expect(body.truncated).toBe(30)
-    expect(body.cap).toBe(50)
-    expect(mockRevalidatePath).toHaveBeenCalledTimes(50)
+    expect(body.cap).toBe(CAP)
+    expect(mockRevalidatePath).toHaveBeenCalledTimes(CAP)
   })
 
   it('CONTROL — says nothing was dropped when nothing was', async () => {
     // Without this the test above passes against a route that reports
     // truncation unconditionally, which would be its own kind of wrong.
-    const response = await call({ host: 'demo', paths: paths(48) })
+    const response = await call({ host: 'demo', paths: paths(SITE_FANOUT) })
     const body = await response.json()
-    expect(body.count).toBe(48)
-    expect(body.requested).toBe(48)
+    expect(body.count).toBe(SITE_FANOUT)
+    expect(body.requested).toBe(SITE_FANOUT)
     expect(body.truncated).toBe(0)
     // `cap` is present ONLY when it bit — a caller keys off its absence.
     expect(body).not.toHaveProperty('cap')
   })
 
+  it('does not bite on a real site, with room to grow (AGL-1239)', async () => {
+    // The regression this issue exists to prevent. Under the old cap of 50 the
+    // measured 48 fit by two; anyone lowering the cap back toward the size of
+    // an ordinary site fails HERE rather than in production a publish later.
+    // Asserted against a quadrupled site rather than the measurement alone, so
+    // the test guards the margin and not just the day it was taken.
+    const grown = await (
+      await call({ host: 'demo', paths: paths(SITE_FANOUT * 4) })
+    ).json()
+    expect(grown.truncated).toBe(0)
+    expect(grown.count).toBe(SITE_FANOUT * 4)
+  })
+
   it('is exact at the boundary', async () => {
-    // 48 fits with two to spare on the real site that motivated this. 50 is
-    // where an off-by-one would hide.
-    const response = await call({ host: 'demo', paths: paths(50) })
+    const response = await call({ host: 'demo', paths: paths(CAP) })
     const body = await response.json()
     expect(body.truncated).toBe(0)
-    expect(body.count).toBe(50)
-    const over = await (await call({ host: 'demo', paths: paths(51) })).json()
+    expect(body.count).toBe(CAP)
+    const over = await (await call({ host: 'demo', paths: paths(CAP + 1) })).json()
     expect(over.truncated).toBe(1)
-    expect(over.count).toBe(50)
+    expect(over.count).toBe(CAP)
   })
 
   it('keys the cache on the rewritten host path, not the public URL', async () => {
