@@ -111,6 +111,8 @@ export const viewport: Viewport = {
 // The console is a fully client-rendered authoring app (firebase/reactfire/
 // mobx behind an auth gate); nothing is statically prerenderable, so opt the
 // whole App Router tree out of static generation (AGL-401).
+import ServiceWorkerRegistrar from '../components/service-worker-registrar.component'
+
 export const dynamic = 'force-dynamic'
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -120,6 +122,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <AppRouterCacheProvider options={{ enableCssLayer: true }}>
           <Providers>{children}</Providers>
         </AppRouterCacheProvider>
+        {/* Registers /sw.js in production only (AGL-1053). Renders nothing,
+            and sits OUTSIDE Providers because it depends on none of them —
+            a registration that needed the auth tree would not run on the
+            sign-in page, which is where a first visit starts. */}
+        <ServiceWorkerRegistrar />
       </body>
     </html>
   )

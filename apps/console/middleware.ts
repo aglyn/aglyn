@@ -260,5 +260,13 @@ export const config = {
   // Pages and data routes only — assets, API routes, and the Firebase
   // auth-helper namespace (/__/*, AGL-462) are never workspace-scoped and
   // must reach the next.config rewrite untouched on every host.
-  matcher: ['/((?!api|__|_next/static|_next/image|favicon.ico|_static).*)'],
+  //
+  // `sw.js` is excluded for a sharper reason than "it is an asset" (AGL-1053):
+  // this middleware can answer with a redirect, and a redirect served in place
+  // of the script fails registration with a content-type error rather than
+  // anything that names the cause. A service worker must also be fetched from
+  // the scope it claims, so it cannot simply be moved under `/_static`.
+  matcher: [
+    '/((?!api|__|_next/static|_next/image|favicon.ico|_static|sw.js).*)',
+  ],
 }
