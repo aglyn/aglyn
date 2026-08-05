@@ -298,6 +298,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Add a language switcher',
     excerpt: 'Let visitors move between your site\'s locales.',
   },
+  longFormMarkdown: {
+    path: '/building-sites/besigner/long-form-markdown',
+    title: 'Long documents in markdown',
+    excerpt: 'Put a whole policy, terms or handbook page on the canvas as one Markdown element, and let a Table of contents element build the "On this page" list from its headings.',
+  },
   maintenanceMode: {
     path: '/building-sites/site-protection/maintenance-mode',
     title: 'Maintenance mode',
@@ -581,7 +586,7 @@ export const DOCS_HELP_ANCHORS = {
   downgradingAndCanceling: ['#downgrading-to-a-lower-plan', '#canceling-your-subscription', '#deleting-a-single-site', '#deleting-your-organization', '#related'],
   dragDropHierarchy: ['#where-you-can-drag', '#what-a-drag-does', '#drop-zones-edges-vs-center', '#containers-vs-leaf-elements', '#containers-accept-children', '#leaf-elements-dont--dropping-on-one-makes-a-sibling', '#adding-a-new-element', '#when-a-drop-is-rejected', '#multi-drag', '#tips', '#related'],
   editYourTheme: ['#open-the-editor', '#set-colors-and-fonts', '#it-follows-you-into-the-besigner', '#tips', '#related'],
-  elementCatalog: ['#layout', '#grid', '#surface', '#accordion', '#navigation', '#tabs', '#pagination', '#data-display', '#media', '#image-list', '#forms-input-commerce-members', '#related'],
+  elementCatalog: ['#layout', '#grid', '#surface', '#accordion', '#navigation', '#tabs', '#pagination', '#text', '#data-display', '#media', '#image-list', '#forms-input-commerce-members', '#related'],
   emailCampaigns: ['#send-a-campaign', '#personalize-with-merge-tags', '#schedule-a-send', '#email-lists', '#experiments', '#opens--clicks', '#compliance', '#related'],
   enterprise: ['#what-enterprise-does-not-change', '#getting-enterprise'],
   errorScreens: ['#the-error-screens', '#design-one', '#tips', '#related'],
@@ -596,6 +601,7 @@ export const DOCS_HELP_ANCHORS = {
   interactions: ['#fluent-interactions', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#custom-html-block', '#related'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#tips', '#related'],
   languageSwitcher: ['#steps', '#tips', '#related'],
+  longFormMarkdown: ['#the-markdown-element', '#what-the-markdown-supports', '#the-table-of-contents-element', '#how-it-finds-the-markdown', '#heading-links', '#related'],
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
   manageAccount: ['#account', '#sign-in-methods', '#profile-image', '#basic-info', '#contact-details', '#security', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],

@@ -16,11 +16,14 @@
  */
 
 import {
+  collectMarkdownHeadings,
   isInternalMarkdownHref,
+  markdownInlinesToText,
   parseMarkdownInlines,
   parseMarkdownLite,
   serializeMarkdownInlines,
   serializeMarkdownLite,
+  slugifyHeading,
 } from './markdown-lite'
 
 describe('markdown-lite', () => {
@@ -311,5 +314,85 @@ describe('serializeMarkdownLite (AGL-582)', () => {
         { type: 'bold', text: 'b' },
       ]),
     ).toBe('multi line**b**')
+  })
+})
+
+describe('markdown-lite heading anchors (AGL-1162)', () => {
+  it('reads a heading as its plain words, marks and links removed', () => {
+    const [heading] = parseMarkdownLite(
+      '## The **fine** print and [terms](https://example.com)',
+    )
+    expect(markdownInlinesToText((heading as any).inlines)).toBe(
+      'The fine print and terms',
+    )
+  })
+
+  it('slugifies the way a hand-written anchor would', () => {
+    expect(slugifyHeading('Your Rights & Choices')).toBe('your-rights-choices')
+    expect(slugifyHeading('  Section 4.2 — Retention  ')).toBe(
+      'section-4-2-retention',
+    )
+    // Accents fold to their base letter rather than becoming an
+    // unreadable percent-encoded id.
+    expect(slugifyHeading('Résumé')).toBe('resume')
+    // A heading with nothing sluggable still has to be linkable.
+    expect(slugifyHeading('!!!')).toBe('section')
+  })
+
+  it('is deterministic — re-pasting the same source keeps every anchor', () => {
+    const source = '## One\n\ntext\n\n### Two\n\nmore'
+    const first = collectMarkdownHeadings(parseMarkdownLite(source))
+    const again = collectMarkdownHeadings(parseMarkdownLite(source))
+    expect(again).toEqual(first)
+    expect(first.map((entry) => entry.slug)).toEqual(['one', 'two'])
+  })
+
+  it('numbers duplicate headings instead of colliding', () => {
+    const headings = collectMarkdownHeadings(
+      parseMarkdownLite('## Notice\n\n## Notice\n\n## Notice'),
+    )
+    expect(headings.map((entry) => entry.slug)).toEqual([
+      'notice',
+      'notice-2',
+      'notice-3',
+    ])
+  })
+
+  it('does not hand a suffixed slug to a heading that already owns it', () => {
+    // The trap a plain counter falls into: `## Notice` twice wants
+    // `notice-2`, and `## Notice 2` slugifies to exactly that.
+    const headings = collectMarkdownHeadings(
+      parseMarkdownLite('## Notice\n\n## Notice 2\n\n## Notice'),
+    )
+    expect(headings.map((entry) => entry.slug)).toEqual([
+      'notice',
+      'notice-2',
+      'notice-3',
+    ])
+    expect(new Set(headings.map((entry) => entry.slug)).size).toBe(3)
+  })
+
+  it('reports the level and the block index each heading came from', () => {
+    const blocks = parseMarkdownLite('intro\n\n## Top\n\nbody\n\n### Sub')
+    expect(collectMarkdownHeadings(blocks)).toEqual([
+      { level: 2, text: 'Top', slug: 'top', index: 1 },
+      { level: 3, text: 'Sub', slug: 'sub', index: 3 },
+    ])
+  })
+
+  it('gives an out-of-range ATX heading the same anchor treatment', () => {
+    // `#` and `####`+ clamp onto the two rendered levels (AGL-1082), so a
+    // README-shaped document still gets a complete set of anchors.
+    const headings = collectMarkdownHeadings(
+      parseMarkdownLite('# Privacy Policy\n\n#### Deep note'),
+    )
+    expect(headings).toEqual([
+      { level: 2, text: 'Privacy Policy', slug: 'privacy-policy', index: 0 },
+      { level: 3, text: 'Deep note', slug: 'deep-note', index: 1 },
+    ])
+  })
+
+  it('finds nothing in a document with no headings', () => {
+    expect(collectMarkdownHeadings(parseMarkdownLite('just prose'))).toEqual([])
   })
 })

@@ -57,6 +57,7 @@ import * as NavMenuComponents from './components/nav-menu'
 import * as ReusableInstance from './components/reusable-instance'
 import * as SearchBox from './components/search-box'
 import * as LinkBox from './components/link-box'
+import * as MarkdownComponents from './components/markdown'
 import * as ScreenLink from './components/screen-link'
 import * as Section from './components/section'
 import * as Stack from './components/stack'
@@ -121,6 +122,10 @@ export const MUI_BUNDLE: Array<{
     { component: MarketplacePlugin.default, schema: MarketplacePlugin.schema, presets: MarketplacePlugin.presets },
     { component: CustomHtml.default, schema: CustomHtml.schema, presets: CustomHtml.presets },
     { component: SearchBox.default, schema: SearchBox.schema, presets: SearchBox.presets },
+    // Long-form documents (AGL-1162): one markdown element carrying the whole
+    // page, and an "On this page" aside derived from its headings.
+    { component: MarkdownComponents.Markdown, schema: MarkdownComponents.markdownSchema, presets: MarkdownComponents.markdownPresets },
+    { component: MarkdownComponents.TableOfContents, schema: MarkdownComponents.tableOfContentsSchema },
     { component: Section.default, schema: Section.schema, presets: Section.presets },
     { component: Stack.default, schema: Stack.schema, presets: Stack.presets },
     // Layout & surface primitives (AGL-1201).
