@@ -1,7 +1,7 @@
 ---
 sidebar_position: 5
 title: Reusable components
-description: Promote a subtree into a reusable component and insert instances across screens.
+description: Promote a subtree into a reusable component, give it properties, and insert instances across screens.
 ---
 
 # Reusable components
@@ -9,80 +9,184 @@ description: Promote a subtree into a reusable component and insert instances ac
 Build something once — a card, a call-to-action, a footer block — and reuse it everywhere as
 a **reusable component**.
 
+An instance is not a copy. It **grafts the source at render time**, so editing the component
+updates every page that places it. Change a font size once and the whole site follows.
+
 ![The site's reusable components page](/img/besigner/components-page.png)
 
 ## Promote
 
-1. Select the element (and its children) you want to reuse.
-2. **Promote** it to a reusable component and give it a name.
-3. The element you promoted becomes the **first instance** of the new component, so the
-   document you built it in follows the component like every other one does.
+1. Select the element you want to reuse. The whole subtree comes with it.
+2. In the **Attributes** panel, choose **Save as reusable component**.
+3. Give it a name and an optional description, then **Save component**.
 
-On the canvas an instance shows as a named dashed placeholder rather than its content —
-the source is grafted at render time, not in the editor. Open the component itself to edit
-what it contains, or **Detach** an instance to turn it back into ordinary elements.
+The element you promoted **becomes the first instance** of the new component, in place. It
+keeps its position in the page and its element id, so the parent's child list, your undo
+history and the current selection all stay valid.
+
+That in-place swap is the point. If promoting left the original behind as ordinary
+elements, the document that defined the component would be the one place that never
+tracked it — you would edit the component later and this page alone would silently keep the
+old copy.
+
+:::note
+**Save as reusable component** appears only on an element that is not already an instance
+and is not locked by a shared layout. Elements a layout frames are locked on the screens
+that use it — open the layout to promote from there.
+:::
 
 ## Insert instances
 
-Insert **instances** of the component onto any screen. Each instance **grafts the source at
-render time**, so editing the source updates every instance automatically — no copy-paste
-drift.
+Insert instances from **Your components** in the element drawer, on any screen, layout,
+template or other component.
+
+On the canvas an instance **renders its actual content**, not a placeholder — what you see
+is what the page will render, with properties already resolved. The rendered elements are
+not canvas elements, though: clicking anywhere on an instance selects **the instance**,
+which is the only thing there you can select, move or delete. To change what is inside it,
+open the component.
 
 ## Properties
 
-A component doesn't have to look identical everywhere. Give it **properties** and each
-place you use it can supply its own text, image or link — while everything else, the
-layout and the styling, still comes from the one component.
+A component doesn't have to look identical everywhere. Give it **properties** and each place
+you use it supplies its own text, image or link — while the layout and the styling still
+come from the one component.
 
-This is what stops a hero from being rebuilt on every page. Change the font size once and
-every page follows; only the words differ.
+This is what stops a hero from being rebuilt on every page. Only the words differ.
+
+### Declare them
 
 1. Open the component and choose **File ▸ Properties…**
-2. **Add property** and give it a name — `headline`, say. Pick a type (text, long text,
-   image, link, number, yes/no), an optional label for the Attributes panel, and a
-   **default**.
-3. Inside the component, use the property's token wherever the value belongs:
-   `{{prop.headline}}`. The dialog shows each property's token next to its name.
-4. **Save properties**, then **publish** the component — like any other change, live pages
-   pick it up on publish, not on save.
+2. **Add property**. Give it a name — `headline`, say — a type, an optional label for the
+   Attributes panel, and a **default**.
+3. The dialog shows each property's token under its name.
 
-Now select any instance of the component and the Attributes panel has a field per
-property. Fill in what that page should say; leave one empty and the component's own
-default is what renders, so a blank field can never collapse a section.
+| Type | Field in Attributes |
+| -- | -- |
+| Text | Single-line text |
+| Long text | Multi-line text |
+| Image | Image picker |
+| Link | Link / URL |
+| Number | Number |
+| Yes / no | Toggle |
 
-Property names use letters, numbers and underscores, and instance values are stored
-against the name — renaming a property means pages that set the old one fall back to the
-default, so the dialog warns you before you save.
+Property names must start with a letter or underscore and contain only letters, numbers and
+underscores. A dot is rejected: the Attributes panel names its field for the storage path
+`propValues.<name>`, which splits on dots, so `hero.title` would address a level that does
+not exist and its value would silently never reach the page.
 
-## Manage
+### Use them
 
-From the site dashboard you can **rename**, **demote** (turn an instance back into normal
-nodes), or **delete** a reusable component.
+Inside the component, put the property's token wherever the value belongs:
+
+```
+{{prop.headline}}
+```
+
+It works in any text element and in any string attribute — the same token syntax as
+`{{entry.*}}` and `{{host.*}}`.
+
+### Save, then publish
+
+**Saving properties is not publishing them.** A save writes the working version; live pages
+read the published component.
+
+1. **Save properties** — the dialog confirms *"Properties saved. Publish to make them
+   available on live pages."*
+2. **File ▸ Publish again** — *"Published. Every screen using this component picks it up
+   within a minute — you do not need to republish them."*
+
+Publishing the component is enough. You do not republish the pages that use it.
+
+### Fill them in per page
+
+Select any instance and the **Attributes** panel has one field per property.
+
+The component's default shows as the field's **placeholder**, with the exact default
+spelled out underneath. Leave a field empty and that default is what renders — so clearing
+a field restores the component's own copy rather than collapsing the section to nothing.
+
+An empty field counts as unset. `0` and **no** are real values and survive.
+
+:::warning
+Instance values are stored **against the property name**, so renaming a property orphans
+every value already set against the old one and those pages fall back to the default.
+Rename in place rather than deleting and re-adding.
+:::
+
+## Retrofit duplicated sections
+
+If the same section has already been copied onto several pages, converting it is safe and
+takes one pass:
+
+1. On the page whose wording is correct, **promote** the section. It becomes an instance
+   and the definition is created from it.
+2. Open the component, declare a property for each part that differs between pages, and
+   replace those texts with their tokens. Use the *first* page's wording as each default.
+3. **Save properties**, then **publish**.
+4. On every other page, insert an instance, check it renders, and only then delete the old
+   section. Appending before deleting keeps the page's section order intact when the
+   section is the last one.
+5. Fill in that page's wording on the instance — or leave the fields empty where the copy
+   was already identical.
+
+Deleting last is what makes this reversible: at every point the page still has exactly one
+copy of the section.
+
+## Detach
+
+**Detach from component**, on an instance, turns it back into ordinary elements with fresh
+ids. Use it when one page needs a variation the shared source shouldn't carry. The detached
+copy no longer follows the component.
+
+## Nesting
+
+A component can place instances of other components. Expansion runs to a depth of **5**,
+which also bounds a component that accidentally references itself.
 
 ## Used by
 
-A component's detail page has a **Used by** card listing everything that places an
-instance of it, so deleting one is not a guess. Because instances graft at render time,
-deleting a component that is still in use empties it out of every page it appears on.
+A component's detail page has a **Used by** card listing everything that places an instance
+of it, so deleting one is not a guess.
 
 Three places are searched, which is everywhere the renderer expands an instance:
 
 - the **published version** of every screen,
 - the **published version** of every layout,
-- and **other reusable components** — a component can be placed inside another one, so
-  one used nowhere else can still be very much in use.
+- and **other reusable components** — a component can be placed inside another one, so one
+  used nowhere else can still be very much in use.
 
-Unpublished drafts and templates in your library are not searched. If the check fails —
-a dropped connection, say — the card says so and shows a **Try again** button. It never
+Unpublished drafts and templates in your library are not searched. If the check fails — a
+dropped connection, say — the card says so and shows a **Try again** button. It never
 reports "nothing uses this" when it could not actually look.
+
+If a component is deleted while instances remain, those instances are left untouched rather
+than emptied: a missing definition never takes a published page down.
+
+## Manage
+
+From the site's **Components** page you can **rename**, edit the description, open the
+besigner, or **delete** a reusable component. The component's **ID** is persisted inside
+every screen that places it and never changes.
+
+## Copy & paste vs. reusable components
+
+| You want | Use |
+| -- | -- |
+| Another one right here | **Duplicate** |
+| The same structure somewhere else, edited separately from then on | **[Copy & paste](copy-paste.md)** |
+| One thing that updates everywhere it appears | **Reusable component** |
 
 ## Tips
 
 - Reusable components are perfect for anything that repeats across pages — headers, CTAs,
   contact blocks.
-- Demote when you need a one-off variation that shouldn't affect the shared source.
+- Give a property a default that reads well on its own. A page that sets nothing should
+  still look finished.
+- Detach when you need a one-off variation that shouldn't affect the shared source.
 
 ## Related
 
+- [Copy & paste elements](copy-paste.md)
 - [The Besigner](overview.md)
 - [Screens & layouts](../screens-and-layouts/overview.md#reusable-components)
