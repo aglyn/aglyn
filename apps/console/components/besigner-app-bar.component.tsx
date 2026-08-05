@@ -136,10 +136,16 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
           >
             {'Preview'}
           </Button>
+          {/* Never disabled, however up to date the editor believes it is
+              (AGL-1262). A disabled Save is a dead control: the one time it
+              matters — the editor's idea of "saved" has drifted from the
+              document — the author clicks it, nothing happens, nothing is
+              said, and they close the tab believing the work landed. Clicking
+              always produces an answer now, and `handleSave` checks the
+              stored document before agreeing there is nothing to write. */}
           <Button
             onClick={onSave}
             size="small"
-            disabled={!saveAvailable}
             endIcon={
               <MdiIcon
                 path={

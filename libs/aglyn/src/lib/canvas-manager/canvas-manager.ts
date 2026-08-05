@@ -248,11 +248,17 @@ class HistoryManager<K extends string, T> {
 
 export class CanvasManager {
   private _initial: NodesMap | undefined = undefined
+  /**
+   * Whether {@link _initial} is a state the STORE has confirmed, or merely
+   * one the client believes. See {@link updateInitialNodes}.
+   */
+  private _initialConfirmed = true
   private _history: HistoryManager<NodeId, NodeSchema<any>>
 
   constructor(public aglyn: Aglyn) {
-    makeObservable<CanvasManager, '_initial'>(this, {
+    makeObservable<CanvasManager, '_initial' | '_initialConfirmed'>(this, {
       _initial: observable.ref,
+      _initialConfirmed: observable,
       nodes: computed,
       isInitialSame: computed,
       didSetInitial: computed,
@@ -285,12 +291,27 @@ export class CanvasManager {
   public get canUndo() {
     return this._history.canUndo
   }
+  /**
+   * True when the canvas matches the last state the store is known to hold —
+   * i.e. there is nothing to save.
+   *
+   * An UNCONFIRMED baseline (see {@link updateInitialNodes}) always reads as
+   * different. The editor is loaded, but nothing in it is known to be
+   * persisted, and "clean" here disables Save: claiming a state is saved on
+   * the strength of a snapshot the server never acknowledged is how unsaved
+   * work becomes unsavable work (AGL-1262).
+   */
   public get isInitialSame() {
     if (!this._initial) return true
+    if (!this._initialConfirmed) return false
     return isEqual(this._initial, this.serializeNodes())
   }
   public get didSetInitial() {
     return Boolean(this._initial)
+  }
+  /** Whether the recorded baseline is one the store confirmed. */
+  public get isInitialConfirmed() {
+    return this._initialConfirmed
   }
   public get rootNode() {
     return this.nodes.get(NODE_ROOT_ID)
@@ -496,10 +517,24 @@ export class CanvasManager {
     this.clearNodes()
     this.clearHistory()
     this._initial = undefined
+    this._initialConfirmed = true
     return this
   }
-  public updateInitialNodes(nodes?: NodesMap) {
+  /**
+   * Record the state the canvas should be considered saved against.
+   *
+   * `confirmed` is what makes this honest. Pass `false` when the map came
+   * from a source the STORE has not acknowledged — a Firestore snapshot
+   * carrying this client's own pending write is the case that motivated it
+   * (AGL-1262): the document is loaded and must be shown, but nothing in it
+   * is known to have reached the server, so it must not be adopted as
+   * "already saved". An unconfirmed baseline keeps {@link isInitialSame}
+   * false — the editor stays savable — until a real save records a
+   * confirmed one.
+   */
+  public updateInitialNodes(nodes?: NodesMap, options?: { confirmed?: boolean }) {
     this._initial = nodes ? (toJS(nodes) as NodesMap) : this.serializeNodes()
+    this._initialConfirmed = options?.confirmed ?? true
     return this
   }
   public setNode(node: NodeSchema<any>, create = false) {

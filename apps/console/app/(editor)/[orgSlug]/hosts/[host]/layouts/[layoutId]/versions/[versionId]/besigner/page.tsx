@@ -144,7 +144,7 @@ function LayoutBesignerPage(props) {
     layoutId,
     versionId,
   })
-  const { data, status, error } = result
+  const { data, status, error, hasPendingWrites } = result
   const nodes = data?.nodes
 
   const saveLayoutVersion = useCallback(
@@ -179,6 +179,7 @@ function LayoutBesignerPage(props) {
   } = useBesignerDocument({
     nodes,
     updatedAt: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
+    pendingWrites: hasPendingWrites,
     status,
     error,
     save: saveLayoutVersion,
@@ -297,7 +298,6 @@ function LayoutBesignerPage(props) {
             items: [
               {
                 id: 'center-nav-file-save',
-                disabled: !saveAvailable,
                 icon: saveAvailable
                   ? { path: ICON_VARIANT_MODIFY_SAVE.path }
                   : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },

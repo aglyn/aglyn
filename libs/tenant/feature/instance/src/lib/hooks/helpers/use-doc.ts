@@ -49,6 +49,7 @@ export function useDocData<T>(
   const [data, setData] = useState<T>(initialData as T)
   const [error, setError] = useState<Error | undefined>(undefined)
   const [hasEmitted, setHasEmitted] = useState(initialData !== undefined)
+  const [hasPendingWrites, setHasPendingWrites] = useState(false)
   const resolveFirstValueRef = useRef<(() => void) | undefined>(undefined)
   const firstValuePromiseRef = useRef<Promise<void> | undefined>(undefined)
   if (!firstValuePromiseRef.current) {
@@ -75,6 +76,11 @@ export function useDocData<T>(
           setStatus('success')
           setError(undefined)
           setHasEmitted(true)
+          // Kept, not dropped: a snapshot that still carries this client's
+          // own queued write is not evidence of what the store holds
+          // (AGL-1262). Callers that record a "last saved" state need to
+          // know the difference.
+          setHasPendingWrites(snapshot.metadata.hasPendingWrites)
           const value = snapshot.exists()
             ? ({
                 ...(snapshot.data() as object),
@@ -115,6 +121,7 @@ export function useDocData<T>(
     data,
     error,
     firstValuePromise: firstValuePromiseRef.current,
+    hasPendingWrites,
   }
 }
 export type UseDocData<T> = typeof useDocData<T>

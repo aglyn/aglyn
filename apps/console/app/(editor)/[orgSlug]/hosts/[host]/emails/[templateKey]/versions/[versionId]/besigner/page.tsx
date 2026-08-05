@@ -153,6 +153,7 @@ function HostEmailBesignerPage() {
     data: version,
     status,
     error,
+    hasPendingWrites,
   } = useFirestoreDoc<HostEmailVersionState>(
     () =>
       editable && hostId
@@ -214,6 +215,7 @@ function HostEmailBesignerPage() {
   } = useBesignerDocument({
     nodes,
     updatedAt: version?.updatedAt,
+    pendingWrites: hasPendingWrites,
     status: editable ? status : 'success',
     error,
     save: saveVersion,
@@ -332,7 +334,6 @@ function HostEmailBesignerPage() {
             items: [
               {
                 id: 'center-nav-file-save',
-                disabled: !saveAvailable,
                 icon: saveAvailable
                   ? { path: ICON_VARIANT_MODIFY_SAVE.path }
                   : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },

@@ -169,6 +169,7 @@ function SystemEmailBesignerPage() {
     data: version,
     status,
     error,
+    hasPendingWrites,
   } = useFirestoreDoc<SystemEmailVersionState>(
     () =>
       editable
@@ -234,6 +235,7 @@ function SystemEmailBesignerPage() {
   } = useBesignerDocument({
     nodes,
     updatedAt: version?.updatedAt,
+    pendingWrites: hasPendingWrites,
     // A refused template never builds a document ref, so `useFirestoreDoc`
     // reports 'loading' forever — and the shared hook turns that into a
     // loading overlay that would sit on top of the refusal message with no
@@ -347,7 +349,6 @@ function SystemEmailBesignerPage() {
             items: [
               {
                 id: 'center-nav-file-save',
-                disabled: !saveAvailable,
                 icon: saveAvailable
                   ? { path: ICON_VARIANT_MODIFY_SAVE.path }
                   : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },

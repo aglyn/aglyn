@@ -214,6 +214,66 @@ describe('Aglyn: Screen Manager', () => {
       canvas.updateInitialNodes(canvas.toJSON().nodes)
       expect(canvas.isInitialSame).toBe(true)
     })
+
+    /**
+     * The baseline answers one question — "is there anything the store does
+     * not have?" — and a baseline the store never confirmed cannot answer
+     * it. AGL-1262: the besigner recorded a Firestore snapshot that still
+     * carried the client's own queued write as the saved state, went clean,
+     * and disabled Save. The work was on the canvas, absent from the
+     * document, and there was no longer any way to write it.
+     */
+    describe('an unconfirmed baseline', () => {
+      it('never reads as saved, however exactly the canvas matches it', () => {
+        const canvas = makeCanvas()
+        canvas.updateInitialNodes(undefined, { confirmed: false })
+
+        // The canvas IS the recorded baseline — and still not saved.
+        expect(canvas.didSetInitial).toBe(true)
+        expect(canvas.isInitialConfirmed).toBe(false)
+        expect(canvas.isInitialSame).toBe(false)
+      })
+
+      it('stays unsaved after an edit and its exact undo', () => {
+        const canvas = makeCanvas()
+        canvas.updateInitialNodes(undefined, { confirmed: false })
+
+        const child = canvas.nodes.get('child1')
+        canvas.updateNodeProps(child, { title: 'changed' })
+        expect(canvas.isInitialSame).toBe(false)
+        // Undo puts the canvas back exactly; a confirmed baseline would now
+        // read as clean, and that is precisely the trap — re-applying a
+        // value is not a mutation, so the author could never get back to
+        // "dirty" by hand.
+        canvas.undo()
+        expect(canvas.isInitialSame).toBe(false)
+      })
+
+      it('is cleared by the save that finally confirms one', () => {
+        const canvas = makeCanvas()
+        canvas.updateInitialNodes(undefined, { confirmed: false })
+        expect(canvas.isInitialSame).toBe(false)
+
+        canvas.updateInitialNodes(canvas.toJSON().nodes)
+        expect(canvas.isInitialConfirmed).toBe(true)
+        expect(canvas.isInitialSame).toBe(true)
+      })
+
+      it('does not survive a reset onto the next document', () => {
+        const canvas = makeCanvas()
+        canvas.updateInitialNodes(undefined, { confirmed: false })
+        canvas.reset()
+
+        expect(canvas.isInitialConfirmed).toBe(true)
+        expect(canvas.didSetInitial).toBe(false)
+      })
+
+      it('defaults to confirmed, so every existing caller is unaffected', () => {
+        const canvas = makeCanvas()
+        canvas.updateInitialNodes()
+        expect(canvas.isInitialSame).toBe(true)
+      })
+    })
   })
 
   describe('nestedNodes raw json', () => {

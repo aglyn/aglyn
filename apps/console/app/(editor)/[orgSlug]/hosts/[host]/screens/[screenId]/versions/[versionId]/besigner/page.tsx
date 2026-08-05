@@ -219,7 +219,7 @@ function BesignerPage(props) {
     screenId: screenId as string,
     versionId: versionId as string,
   })
-  const {data, status, error} = result
+  const { data, status, error, hasPendingWrites } = result
   const nodes = data?.nodes
 
   const screenKind = screenResult?.data?.kind
@@ -257,6 +257,7 @@ function BesignerPage(props) {
   } = useBesignerDocument({
     nodes,
     updatedAt: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
+    pendingWrites: hasPendingWrites,
     status,
     error,
     save: saveScreenVersion,
@@ -864,7 +865,6 @@ function BesignerPage(props) {
             items: [
               {
                 id: 'center-nav-file-save',
-                disabled: !saveAvailable,
                 icon: saveAvailable
                   ? {path: ICON_VARIANT_MODIFY_SAVE.path}
                   : {path: ICON_VARIANT_SYMBOL_CONFIRMED.path},

@@ -37,6 +37,12 @@ export interface UseFirestoreDocResult<T> {
   data: T | undefined
   status: FirestoreDocStatus
   error: FirestoreError | undefined
+  /**
+   * `data` still carries writes this client made that the server has NOT
+   * acknowledged. Carried rather than dropped for the same reason as
+   * `ObservableStatus.hasPendingWrites` — see that comment (AGL-1262).
+   */
+  hasPendingWrites: boolean
 }
 
 /**
@@ -57,6 +63,7 @@ export function useFirestoreDoc<T = DocumentData>(
   const [data, setData] = useState<T | undefined>(undefined)
   const [status, setStatus] = useState<FirestoreDocStatus>('loading')
   const [error, setError] = useState<FirestoreError | undefined>(undefined)
+  const [hasPendingWrites, setHasPendingWrites] = useState(false)
   const buildRefRef = useRef(buildRef)
   buildRefRef.current = buildRef
   const idField = options.idField
@@ -68,6 +75,7 @@ export function useFirestoreDoc<T = DocumentData>(
     // refs must not keep showing the previous doc until the new snapshot
     // arrives. Mirrors use-firestore-collection.
     setData(undefined)
+    setHasPendingWrites(false)
 
     const ref = buildRefRef.current()
     if (!ref) {
@@ -87,6 +95,7 @@ export function useFirestoreDoc<T = DocumentData>(
           attempt = 0
           setStatus('success')
           setError(undefined)
+          setHasPendingWrites(snapshot.metadata.hasPendingWrites)
           if (!snapshot.exists()) {
             setData(undefined)
             return
@@ -118,7 +127,7 @@ export function useFirestoreDoc<T = DocumentData>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
-  return { data, status, error }
+  return { data, status, error, hasPendingWrites }
 }
 
 export default useFirestoreDoc

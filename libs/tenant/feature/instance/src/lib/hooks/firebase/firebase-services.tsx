@@ -80,6 +80,18 @@ export interface ObservableStatus<T> {
   data: T
   error: Error | undefined
   firstValuePromise: Promise<void>
+  /**
+   * The emitted `data` includes local writes the server has NOT
+   * acknowledged (`snapshot.metadata.hasPendingWrites`).
+   *
+   * Carried rather than dropped because a caller cannot otherwise tell "the
+   * store holds this" from "my browser holds this". `persistentLocalCache`
+   * replays a queued write into the very first snapshot after a reload, so a
+   * caller that treats every snapshot as authoritative will adopt its own
+   * unacknowledged edit as the saved state — which is how the besigner ended
+   * up unable to save real changes (AGL-1262).
+   */
+  hasPendingWrites: boolean
 }
 
 /** Replaces reactfire's `ReactFireOptions<T>` — drops the `suspense` field, which was never read. */
