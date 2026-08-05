@@ -175,6 +175,13 @@ From the site's **Components** page you can **rename**, edit the description, op
 besigner, or **delete** a reusable component. The component's **ID** is persisted inside
 every screen that places it and never changes.
 
+You can also give a component its own **icon**, from the same picker the besigner uses for
+icon elements — either in the **Edit component** dialog on the Components page, or on the
+component's detail page. Every instance is then marked with it: in the hierarchy, on the
+canvas badge, and in the element drawer under **Your components**. A page assembled from
+promoted sections becomes readable at a glance. Components without an icon keep the
+generic package glyph.
+
 ## Copy & paste vs. reusable components
 
 | You want | Use |

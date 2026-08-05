@@ -96,6 +96,229 @@ export interface IconSelectProps extends HTMLAttributes<HTMLDivElement> {
   classes?: Partial<typeof classKeys>
 }
 
+export interface IconSelectControlProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
+  /** Picked icon id, or empty for "nothing chosen yet". */
+  value?: string
+  onChange?: (iconId: string) => void
+  label?: JSX.Node
+  helperText?: JSX.Node
+  GridListProps?: Record<string, unknown>
+  classes?: Partial<typeof classKeys>
+}
+
+/**
+ * The picker itself, with no form library attached (AGL-1193).
+ *
+ * Extracted so surfaces outside the designer can offer the SAME picker
+ * rather than growing a second one: the console sets a reusable
+ * component's icon from a plain dialog and a plain detail form, neither of
+ * which runs inside a data-driven-forms tree. The field below is now a
+ * thin adapter over this, so the two can't drift.
+ */
+export const IconSelectControl = forwardRef<any, IconSelectControlProps>(
+  (props, ref) => {
+    const {
+      value: currentValue = '',
+      onChange,
+      label,
+      helperText: helperContent,
+      GridListProps,
+      ...rest
+    } = props
+    const [open, setOpen] = useState(false)
+    const [icons, allIcons, applyFilter, clearFilter] = useMdiIconsFuzzy()
+    const [selected, setSelected] = useState(() => currentValue)
+
+    // Rendering all ~6,600 icons at once froze the panel (AGL-340): cap the
+    // grid and let search narrow the rest.
+    const MAX_RENDERED_ICONS = 240
+    const visibleIcons = useMemo(
+      () =>
+        icons.length > MAX_RENDERED_ICONS
+          ? icons.slice(0, MAX_RENDERED_ICONS)
+          : icons,
+      [icons],
+    )
+
+    const [currentIcon, selectedIcon] = useMemo(() => {
+      const findIcon = (id: string) => allIcons.find((icon) => icon.id === id)
+      const currentIcon = (currentValue && findIcon(currentValue)) || iconUnset
+      const selectedIcon = (selected && findIcon(selected)) || iconUnset
+      return [currentIcon, selectedIcon]
+    }, [currentValue, selected, allIcons])
+
+    const handleButtonClick = useCallback(() => {
+      setOpen((prev) => !prev)
+    }, [setOpen])
+    const handleChooseButtonClick = useCallback(() => {
+      onChange?.(selected)
+      setOpen((prev) => !prev)
+    }, [onChange, selected])
+    const updateFilter = useDebouncedCallback((value?: string) => {
+      if (value) {
+        applyFilter(value)
+      } else {
+        clearFilter()
+      }
+    }, 300)
+    const handleFilterChange = useCallback(
+      (e) => {
+        const target = e.currentTarget
+        if (target && target.value) {
+          updateFilter(target.value)
+        } else {
+          updateFilter()
+        }
+      },
+      [updateFilter],
+    )
+    const handleItemClick = useCallback(
+      (e, item: Icon) => {
+        setSelected(item.id)
+      },
+      [setSelected],
+    )
+
+    const renderItemContent = useCallback(
+      function RenderItemContent(item: Icon, key: number) {
+        return (
+          <Tooltip
+            key={item.id ?? key}
+            title={item.name}
+            disableInteractive
+            enterDelay={375}
+            enterNextDelay={745}
+          >
+            <CardListItem
+              item={item}
+              selected={selected && selected === item.id}
+              onClick={(e) => handleItemClick(e, item)}
+            >
+              <div>
+                <MdiIcon fontSize="medium" path={item.path} />
+              </div>
+            </CardListItem>
+          </Tooltip>
+        )
+      },
+      [selected, handleItemClick],
+    )
+
+    return (
+      <Grid ref={ref} container>
+        <Grid spacing={2} container sx={{
+          alignItems: 'center'
+        }}>
+          <Grid>
+            <ButtonBase
+              onClick={handleButtonClick}
+              disableRipple
+              sx={(theme) => ({ fontSize: theme.typography.pxToRem(38) })}
+              title={currentIcon.name || 'Choose icon'}
+            >
+              <MdiIcon fontSize="inherit" path={currentIcon.path} />
+            </ButtonBase>
+          </Grid>
+          <Grid
+            size={{
+              sm: "grow"
+            }}>
+            <Typography component="div" variant="caption">
+              {label}
+            </Typography>
+            <MuiLink
+              onClick={handleButtonClick}
+              variant="button"
+              component="button"
+              color="primary"
+              sx={{
+                display: 'flex',
+                flexDirection: 'row',
+                justifyContent: 'flex-start',
+              }}
+            >
+              <span>
+                <MdiIcon
+                  fontSize="inherit"
+                  path={open ? mdiChevronUp.path : mdiChevronDown.path}
+                />
+              </span>
+              <span>{currentIcon.name}</span>
+            </MuiLink>
+          </Grid>
+        </Grid>
+        <Grid size={12}>
+          <StyledCollapse in={open}>
+            <Grid spacing={2} container sx={{
+              alignItems: "center"
+            }}>
+              <Grid size={12}>
+                <MuiTextField
+                  onChange={handleFilterChange}
+                  placeholder="Search icons..."
+                  size="small"
+                  helperText={helperContent}
+                  fullWidth
+                />
+              </Grid>
+              <Grid size="grow">
+                <Typography component="div" variant="body2">
+                  Selected icon: <b>{selectedIcon.name}</b>
+                </Typography>
+              </Grid>
+              <Grid>
+                <Button
+                  color="primary"
+                  onClick={handleChooseButtonClick}
+                  variant="contained"
+                >
+                  Choose
+                </Button>
+              </Grid>
+            </Grid>
+
+            <GridListWrapper>
+              <GridList
+                GridContainerProps={{ spacing: 1 }}
+                GridItemProps={{ size: { xs: 2 } }}
+                ListWrapperProps={{ className: classKeys.gridList }}
+                items={visibleIcons}
+                renderItemContent={renderItemContent}
+                {...GridListProps}
+              />
+              {icons.length > visibleIcons.length ? (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: 'block', px: 1, pb: 1 }}
+                >
+                  {`Showing ${visibleIcons.length} of ${icons.length} icons — search to narrow down.`}
+                </Typography>
+              ) : null}
+              {allIcons.length === 0 ? (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: 'block', px: 1, pb: 1 }}
+                >
+                  {'Loading icon catalog…'}
+                </Typography>
+              ) : null}
+            </GridListWrapper>
+          </StyledCollapse>
+        </Grid>
+      </Grid>
+    )
+  },
+)
+IconSelectControl.displayName = 'IconSelectControl'
+
+/**
+ * The data-driven-forms field: everything form-shaped (validation message,
+ * helper/description precedence, the final-form input) resolved here, and
+ * the picking itself delegated to {@link IconSelectControl}.
+ */
 const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
   const {
     input,
@@ -121,191 +344,16 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
     description,
   ].find((i) => Boolean(i))
 
-  const currentValue = input.value
-  const [open, setOpen] = useState(false)
-  const [icons, allIcons, applyFilter, clearFilter] = useMdiIconsFuzzy()
-  const [selected, setSelected] = useState(() => currentValue)
-
-  // Rendering all ~6,600 icons at once froze the panel (AGL-340): cap the
-  // grid and let search narrow the rest.
-  const MAX_RENDERED_ICONS = 240
-  const visibleIcons = useMemo(
-    () =>
-      icons.length > MAX_RENDERED_ICONS
-        ? icons.slice(0, MAX_RENDERED_ICONS)
-        : icons,
-    [icons],
-  )
-
-  const [currentIcon, selectedIcon] = useMemo(() => {
-    const findIcon = (id: string) => allIcons.find((icon) => icon.id === id)
-    const currentIcon = (currentValue && findIcon(currentValue)) || iconUnset
-    const selectedIcon = (selected && findIcon(selected)) || iconUnset
-    return [currentIcon, selectedIcon]
-  }, [currentValue, selected, allIcons])
-
-  const handleButtonClick = useCallback(() => {
-    setOpen((prev) => !prev)
-  }, [setOpen])
-  const handleChooseButtonClick = useCallback(() => {
-    input.onChange(selected)
-    setOpen((prev) => !prev)
-  }, [input, selected])
-  const updateFilter = useDebouncedCallback((value?: string) => {
-    if (value) {
-      applyFilter(value)
-    } else {
-      clearFilter()
-    }
-  }, 300)
-  const handleFilterChange = useCallback(
-    (e) => {
-      const target = e.currentTarget
-      if (target && target.value) {
-        updateFilter(target.value)
-      } else {
-        updateFilter()
-      }
-    },
-    [updateFilter],
-  )
-  const handleItemClick = useCallback(
-    (e, item: Icon) => {
-      setSelected(item.id)
-    },
-    [setSelected],
-  )
-
-  const renderItemContent = useCallback(
-    function RenderItemContent(item: Icon, key: number) {
-      return (
-        <Tooltip
-          key={item.id ?? key}
-          title={item.name}
-          disableInteractive
-          enterDelay={375}
-          enterNextDelay={745}
-        >
-          <CardListItem
-            item={item}
-            selected={selected && selected === item.id}
-            onClick={(e) => handleItemClick(e, item)}
-          >
-            <div>
-              <MdiIcon fontSize="medium" path={item.path} />
-            </div>
-          </CardListItem>
-        </Tooltip>
-      )
-    },
-    [selected, handleItemClick],
-  )
-
   return (
-    <Grid ref={ref} container>
-      <Grid spacing={2} container sx={{
-        alignItems: 'center'
-      }}>
-        <Grid>
-          <ButtonBase
-            onClick={handleButtonClick}
-            disableRipple
-            sx={(theme) => ({ fontSize: theme.typography.pxToRem(38) })}
-            title={currentIcon.name || 'Choose icon'}
-          >
-            <MdiIcon fontSize="inherit" path={currentIcon.path} />
-          </ButtonBase>
-        </Grid>
-        <Grid
-          size={{
-            sm: "grow"
-          }}>
-          <Typography component="div" variant="caption">
-            {label}
-          </Typography>
-          <MuiLink
-            onClick={handleButtonClick}
-            variant="button"
-            component="button"
-            color="primary"
-            sx={{
-              display: 'flex',
-              flexDirection: 'row',
-              justifyContent: 'flex-start',
-            }}
-          >
-            <span>
-              <MdiIcon
-                fontSize="inherit"
-                path={open ? mdiChevronUp.path : mdiChevronDown.path}
-              />
-            </span>
-            <span>{currentIcon.name}</span>
-          </MuiLink>
-        </Grid>
-      </Grid>
-      <Grid size={12}>
-        <StyledCollapse in={open}>
-          <Grid spacing={2} container sx={{
-            alignItems: "center"
-          }}>
-            <Grid size={12}>
-              <MuiTextField
-                onChange={handleFilterChange}
-                placeholder="Search icons..."
-                size="small"
-                helperText={helperContent}
-                fullWidth
-              />
-            </Grid>
-            <Grid size="grow">
-              <Typography component="div" variant="body2">
-                Selected icon: <b>{selectedIcon.name}</b>
-              </Typography>
-            </Grid>
-            <Grid>
-              <Button
-                color="primary"
-                onClick={handleChooseButtonClick}
-                variant="contained"
-              >
-                Choose
-              </Button>
-            </Grid>
-          </Grid>
-
-          <GridListWrapper>
-            <GridList
-              GridContainerProps={{ spacing: 1 }}
-              GridItemProps={{ size: { xs: 2 } }}
-              ListWrapperProps={{ className: classKeys.gridList }}
-              items={visibleIcons}
-              renderItemContent={renderItemContent}
-              {...GridListProps}
-            />
-            {icons.length > visibleIcons.length ? (
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: 'block', px: 1, pb: 1 }}
-              >
-                {`Showing ${visibleIcons.length} of ${icons.length} icons — search to narrow down.`}
-              </Typography>
-            ) : null}
-            {allIcons.length === 0 ? (
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: 'block', px: 1, pb: 1 }}
-              >
-                {'Loading icon catalog…'}
-              </Typography>
-            ) : null}
-          </GridListWrapper>
-        </StyledCollapse>
-      </Grid>
-    </Grid>
-  );
+    <IconSelectControl
+      ref={ref}
+      value={input.value}
+      onChange={input.onChange}
+      label={label}
+      helperText={helperContent}
+      GridListProps={GridListProps}
+    />
+  )
 })
 
 IconSelectComponent.displayName = 'IconSelectComponent'

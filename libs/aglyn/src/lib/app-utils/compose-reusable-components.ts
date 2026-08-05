@@ -18,6 +18,7 @@
 import type {
   AglynNodeSchema,
   NodeId,
+  ReusableComponentIcon,
   ReusableComponentProp,
 } from '../foundation'
 import { resolveNamedTokens } from './resolve-named-tokens'
@@ -82,6 +83,13 @@ export interface ReusableComponentTree<
   nodes: NormalizedNodes<N>
   /** Props this definition declares (AGL-1247); absent = unparameterised. */
   props?: ReusableComponentProp[]
+  /**
+   * The definition's chosen icon (AGL-1193), carried so every editor surface
+   * that draws an instance can reach it without a second read. Nothing in
+   * the graft below touches it — an instance's icon is editor chrome, and
+   * the published page renders the definition's own nodes.
+   */
+  icon?: ReusableComponentIcon
 }
 
 function instancePrefix(instanceId: NodeId) {
@@ -271,6 +279,45 @@ export function replaceSubtreeWithInstance<
     nodes: [],
   } as unknown as N
   return next
+}
+
+/**
+ * The icon path an instance node should be drawn with (AGL-1193), or
+ * `undefined` when the node is not an instance, its definition is unknown,
+ * or that definition chose no icon — every one of which means "fall back to
+ * the component schema's own glyph".
+ *
+ * The visual half of `getNodeLabelShort`: an instance stands for one
+ * specific component, so a hierarchy of promoted sections drawn with one
+ * repeated package glyph tells the author nothing. Unlike the label, the
+ * icon is NOT denormalized onto the instance — it is read live off the
+ * definition, so changing a component's icon updates every instance already
+ * placed instead of only the ones inserted afterwards.
+ *
+ * Deliberately here rather than in the canvas manager: this file owns what
+ * an instance node looks like, and a second reader that disagreed would draw
+ * definition icons on nodes the graft does not treat as instances.
+ *
+ * Returns only the stored `iconPath`. Resolving `iconId` would need the
+ * ~2.9 MB icon catalog, which render surfaces never load — and the lookup
+ * that "helpfully" substitutes a default is what made every icon a "help"
+ * glyph in AGL-1212.
+ */
+export function resolveInstanceIconPath(
+  node:
+    | { componentId?: string; props?: unknown }
+    | undefined
+    | null,
+  definitionsById:
+    | Record<string, { icon?: ReusableComponentIcon } | undefined>
+    | undefined
+    | null,
+): string | undefined {
+  if (!node || !definitionsById) return undefined
+  if (node.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) return undefined
+  const refId = (node.props as { refId?: unknown } | undefined)?.refId
+  if (typeof refId !== 'string' || !refId) return undefined
+  return definitionsById[refId]?.icon?.iconPath || undefined
 }
 
 /**

@@ -19,6 +19,7 @@ import {
   composeReusableComponentNodes,
   nodesReferenceComponent,
   replaceSubtreeWithInstance,
+  resolveInstanceIconPath,
   REUSABLE_INSTANCE_COMPONENT_ID,
 } from './compose-reusable-components'
 
@@ -242,6 +243,57 @@ describe('nodesReferenceComponent', () => {
     expect(nodesReferenceComponent({ a: instance('a', 'card') } as any, '')).toBe(
       false,
     )
+  })
+})
+
+describe('resolveInstanceIconPath (AGL-1193)', () => {
+  const definitions = {
+    card: {
+      rootId: 'root',
+      nodes: {},
+      icon: { iconId: 'mdi-card', iconPath: 'M1 1h2' },
+    },
+    banner: { rootId: 'root', nodes: {} },
+  } as any
+
+  it('draws an instance with the icon its definition chose', () => {
+    expect(resolveInstanceIconPath(instance('a', 'card'), definitions)).toBe(
+      'M1 1h2',
+    )
+  })
+
+  it('falls back for a definition that chose none', () => {
+    // Undefined, never a substitute path: the caller owns the fallback, and
+    // a confident wrong glyph is exactly what AGL-1212 was.
+    expect(
+      resolveInstanceIconPath(instance('a', 'banner'), definitions),
+    ).toBeUndefined()
+  })
+
+  it('never resolves an id alone', () => {
+    // A definition whose `iconPath` never got denormalized must degrade to
+    // the fallback — resolving the id would need the 2.9 MB catalog, which
+    // render surfaces do not load.
+    const idOnly = { card: { rootId: 'root', nodes: {}, icon: { iconId: 'mdi-card' } } } as any
+    expect(resolveInstanceIconPath(instance('a', 'card'), idOnly)).toBeUndefined()
+  })
+
+  it('ignores nodes that are not instances', () => {
+    // Same rule the graft applies: a plain component carrying `refId` is
+    // not an instance, so it must not borrow a definition's icon.
+    const impostor = {
+      $id: 'a',
+      componentId: 'muiButton',
+      props: { refId: 'card' },
+    }
+    expect(resolveInstanceIconPath(impostor, definitions)).toBeUndefined()
+  })
+
+  it('is safe on empty, missing and unknown input', () => {
+    expect(resolveInstanceIconPath(undefined, definitions)).toBeUndefined()
+    expect(resolveInstanceIconPath(instance('a', 'card'), undefined)).toBeUndefined()
+    expect(resolveInstanceIconPath(instance('a', 'gone'), definitions)).toBeUndefined()
+    expect(resolveInstanceIconPath(instance('a', ''), definitions)).toBeUndefined()
   })
 })
 

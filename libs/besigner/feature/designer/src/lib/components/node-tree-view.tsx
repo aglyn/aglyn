@@ -317,7 +317,10 @@ const NodeTreeItem = observer(
                 flexDirection: 'column',
               }}
             >
-              <ComponentIconComponent component={node?.componentSchema} />
+              <ComponentIconComponent
+                component={node?.componentSchema}
+                node={node}
+              />
             </MuiListItemIcon>
             <MuiListItemText
               primary={nodeLabel}

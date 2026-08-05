@@ -71,6 +71,10 @@ export function useHostComponentDefinitions(
         // Declared props ride along (AGL-1247) so the editor's graft
         // substitutes the same values the live site will.
         ...(value.props?.length && { props: value.props }),
+        // As does the chosen icon (AGL-1193) — the hierarchy row and canvas
+        // badge draw it from here, so an instance's icon needs no read of
+        // its own.
+        ...(value.icon?.iconPath && { icon: value.icon }),
       }
     }
     return next

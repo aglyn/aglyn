@@ -65,6 +65,7 @@ import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import ComponentIconField from './component-icon-field.component'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -105,6 +106,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
     id: string
     name: string
     description: string
+    icon?: Aglyn.ReusableComponentIcon
   } | null>(null)
 
   // Marketplace publish (AGL-44): posts to the server-side publish API —
@@ -175,6 +177,10 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       {
         displayName: editor.name.trim(),
         description: editor.description.trim(),
+        // Only when the dialog was opened on a component that has one or the
+        // picker set one — an untouched dialog must not write `icon: {}` over
+        // a component whose icon was chosen on the detail page.
+        ...(editor.icon && { icon: editor.icon }),
         updatedAt: Timestamp.now(),
       },
     )
@@ -350,6 +356,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
                 id: definition.$id,
                 name: definition.displayName ?? '',
                 description: definition.description ?? '',
+                icon: definition.icon,
               })
             }
           />,
@@ -457,6 +464,13 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
             size="small"
             multiline
             minRows={2}
+          />
+          <ComponentIconField
+            value={editor?.icon}
+            onChange={(icon) =>
+              setEditor((prev) => (prev ? { ...prev, icon } : prev))
+            }
+            helperText="Marks every instance of this component in the besigner"
           />
         </DialogContent>
         <DialogActions>

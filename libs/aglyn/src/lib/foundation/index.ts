@@ -76,6 +76,7 @@ export type {
   ProjectUid,
   PublishSchedule,
   RedirectUid,
+  ReusableComponentIcon,
   ReusableComponentProp,
   ReusableComponentPropType,
   ScopeToken,
