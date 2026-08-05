@@ -109,19 +109,29 @@ async function resolveARecords(domain: string): Promise<string[]> {
  * subsets of the same anycast pool from one lookup to the next.
  *
  * `HOST_APEX_ADDRESSES` covers the case the intersection cannot: our platform
- * host publishes ONE anycast address for every apex it serves (`76.76.21.21`),
- * routing by `Host` rather than by IP. An apex pointed there therefore never
- * shares an address with `sites.aglyn.app`, yet is configured correctly.
+ * host publishes a small anycast pool for every apex it serves, routing by
+ * `Host` rather than by IP. An apex pointed there therefore never shares an
+ * address with `sites.aglyn.app`, yet is configured correctly.
  *
- * Accepting it is deliberately a weaker claim — "this domain resolves to our
- * platform" rather than "to this account". That is sound because it is not the
- * ownership check: attaching a domain to the project is, and the platform
- * performs that itself. This only answers "has DNS been pointed yet", which is
- * what the customer is actually stuck on. Configurable so a host change is an
- * env edit rather than a patch.
+ * The list has to span the host's WHOLE pool, not just the address we happen
+ * to have used. It shipped with only `76.76.21.21` — the host's legacy
+ * address, which still resolves but is no longer what a newly-pointed apex
+ * lands on, so every new customer would have failed the very check this
+ * fallback exists to let them pass. Our own zones are the proof: after taking
+ * the host's recommended records, `aglyn.com` and `aglyn.io` resolve into the
+ * `216.198.79.x` / `64.29.17.x` range and not one of them is the legacy
+ * address. Keep the legacy entry — zones still pointed at it work fine.
+ *
+ * Accepting an address match is deliberately a weaker claim — "this domain
+ * resolves to our platform" rather than "to this account". That is sound
+ * because it is not the ownership check: attaching a domain to the project is,
+ * and the platform performs that itself. This only answers "has DNS been
+ * pointed yet", which is what the customer is actually stuck on. Configurable
+ * so the next range expansion is an env edit rather than a patch.
  */
 const HOST_APEX_ADDRESSES = (
-  process.env['AGLYN_TENANT_APEX_ADDRESSES'] ?? '76.76.21.21'
+  process.env['AGLYN_TENANT_APEX_ADDRESSES'] ??
+  '216.198.79.1,216.198.79.65,64.29.17.1,64.29.17.65,76.76.21.21'
 )
   .split(',')
   .map((address) => address.trim())
