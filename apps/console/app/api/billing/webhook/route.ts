@@ -24,6 +24,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
+import { stripeCustomerIdentityParams } from '../../../../utils/stripe-customer-identity'
 import {
   addonQuantitiesFromItems,
 } from '../../../../utils/server/billing-addons'
@@ -281,6 +282,50 @@ async function handler(request: Request): Promise<Response> {
               : null,
           },
         } as never)
+
+        // Stamp the workspace onto the CUSTOMER (AGL-941).
+        //
+        // The subscription has carried `metadata.orgId` since AGL-445, but the
+        // customer — the row the Stripe dashboard actually lists — carried
+        // only an email. With one person owning several orgs that list is
+        // unreadable, and nothing can be grouped by workspace.
+        //
+        // Done here rather than at checkout because this is the one place the
+        // customer id is known for certain, and it re-runs on every
+        // subscription event, so it self-heals a customer created before this
+        // shipped or renamed since. Best-effort and non-blocking: a cosmetic
+        // PATCH must never fail a billing webhook, because Stripe retries the
+        // whole event and the mirrors above would be re-applied for nothing.
+        if (stripeCustomerId && process.env.STRIPE_SECRET_KEY) {
+          try {
+            const orgSnapshot = await orgRef.get()
+            const identity = stripeCustomerIdentityParams({
+              orgId: String(orgId),
+              name: orgSnapshot.get('name') as string | undefined,
+              slug: orgSnapshot.get('slug') as string | undefined,
+            })
+            if (Object.keys(identity).length) {
+              await fetch(
+                `https://api.stripe.com/v1/customers/${stripeCustomerId}`,
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                  },
+                  body: new URLSearchParams(identity).toString(),
+                },
+              )
+            }
+          } catch (error) {
+            console.error(
+              '[billing/webhook] stamping org identity on the Stripe customer failed',
+              orgId,
+              stripeCustomerId,
+              error,
+            )
+          }
+        }
       }
     }
 
