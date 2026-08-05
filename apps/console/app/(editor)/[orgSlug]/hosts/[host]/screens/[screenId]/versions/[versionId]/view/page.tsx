@@ -130,6 +130,12 @@ const VISIBILITY_OPTIONS = [
   },
 ]
 
+/**
+ * Ceiling on the app-wide loading overlay this page raises while its screen
+ * document loads (AGL-1261). See the effect that uses it.
+ */
+const SCREEN_LOAD_OVERLAY_MAX_MS = 12000
+
 function ScreenDetails() {
   const params = useParams<{
     hostId: string
@@ -196,14 +202,52 @@ function ScreenDetails() {
     return map
   }, [screenDocs])
 
+  /**
+   * The screen read holds the GLOBAL loading overlay — bounded (AGL-1261).
+   *
+   * `queueLoading()` renders an app-wide modal backdrop with no dismiss and
+   * no message. Tying it to `status === 'loading'` with no ceiling means that
+   * whenever this listener never emits — a stale session denying every server
+   * read while `persistentLocalCache` keeps other pages looking fine
+   * (AGL-1062), an offline tab, a wedged transport — the whole console sits
+   * under an un-dismissable spinner with the page dimmed behind it, and the
+   * only way out is a reload. That is the "clicking view detail spins
+   * forever" report.
+   *
+   * After the ceiling, drop the overlay and let the page render its own
+   * state. A visible page that is honest about what it does not have beats a
+   * modal that says nothing at all.
+   */
+  const [loadStalled, setLoadStalled] = useState(false)
   useEffect(() => {
-    if (status === 'loading') {
-      const dequeue = queueLoading()
-      return () => dequeue && dequeue()
+    if (status !== 'loading') {
+      setLoadStalled(false)
+      return undefined
+    }
+    const dequeue = queueLoading()
+    const timer = setTimeout(() => {
+      setLoadStalled(true)
+      dequeue && dequeue()
+    }, SCREEN_LOAD_OVERLAY_MAX_MS)
+    return () => {
+      clearTimeout(timer)
+      dequeue && dequeue()
     }
   }, [status, queueLoading])
 
-  const displayName = screen?.displayName || 'Not Found'
+  useEffect(() => {
+    if (!loadStalled) return
+    enqueueSnackbar(
+      "This screen is taking longer than usual to load. If it doesn't " +
+        'appear, your session may need refreshing — sign out and back in.',
+      { variant: 'warning', persist: true, allowDuplicate: true },
+    )
+  }, [loadStalled, enqueueSnackbar])
+
+  // "Not Found" is only true once the read has SETTLED. While it is still in
+  // flight the honest answer is that we do not know yet (AGL-1261).
+  const displayName =
+    screen?.displayName || (status === 'loading' ? 'Loading…' : 'Not Found')
   const schedule =
     screen?.publishSchedule?.status === 'pending'
       ? screen.publishSchedule

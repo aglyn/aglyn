@@ -265,14 +265,26 @@ export function useRemoteConfig(): RemoteConfig {
  * `emailVerified` stay live across token refresh (e.g. after
  * `user.reload()` post-email-verification), not just sign-in/out — matched
  * here for behavioral parity.
+ *
+ * THREE states, not two (AGL-1261): `undefined` = auth has not resolved yet,
+ * `null` = resolved, signed OUT, a `User` = resolved, signed in. This used to
+ * collapse the emitted `null` into `undefined`, which made "signed out" and
+ * "still loading" the same value — a state that, for a signed-out visitor,
+ * never left "loading". `useSessionCookie` gates its whole body on
+ * `user === undefined`, so its silent restore from the shared `__session`
+ * cookie could never run: the cookie exchange returned a valid custom token
+ * and nothing ever asked for it.
  */
-export function useUser(): { data: User | undefined } {
+export function useUser(): { data: User | null | undefined } {
   const auth = useAuth()
-  const [user, setUser] = useState<User | undefined>(auth.currentUser ?? undefined)
+  const [user, setUser] = useState<User | null | undefined>(
+    auth.currentUser ?? undefined,
+  )
 
   useEffect(() => {
     return onIdTokenChanged(auth, (nextUser) => {
-      setUser(nextUser ?? undefined)
+      // `?? null`, never `?? undefined` — see the note above.
+      setUser(nextUser ?? null)
     })
   }, [auth])
 
