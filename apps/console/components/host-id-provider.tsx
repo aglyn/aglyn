@@ -40,12 +40,20 @@ export const HostReadyContext = createContext<boolean>(true)
  * that doesn't exist.
  */
 export const HostErrorContext = createContext<boolean>(false)
+/**
+ * Re-runs host resolution (AGL-1200). The guard's "Try again" reloaded the
+ * page, which re-entered the same cold-load window and failed identically —
+ * so the error state was permanent in practice. This retries in place.
+ */
+export const HostRetryContext = createContext<() => void>(() => undefined)
 
 export const useHostId = () => useContext(HostIdContext)
 export const useHostSubdomain = () => useContext(HostSubdomainContext)
 export const useHostReady = () => useContext(HostReadyContext)
 /** Whether host resolution gave up after retries (AGL-813). */
 export const useHostError = () => useContext(HostErrorContext)
+/** Re-run host resolution after it gave up (AGL-1200). */
+export const useHostRetry = () => useContext(HostRetryContext)
 
 export function HostIdProvider({ children }) {
   const params = useParams<{ orgSlug?: string; host?: string }>()
@@ -61,7 +69,7 @@ export function HostIdProvider({ children }) {
   // a legacy fallback, replacing the scan of the org's whole host list. Scoping
   // to the current org is what the rules allow; a subdomain owned by another
   // org resolves to nothing here and the cross-org redirect below handles it.
-  const { hostId, ready, error } = useHostResolution(
+  const { hostId, ready, error, retry } = useHostResolution(
     firestore,
     hostSubdomain,
     user?.uid,
@@ -119,11 +127,13 @@ export function HostIdProvider({ children }) {
   return (
     <HostReadyContext.Provider value={hostReady}>
       <HostErrorContext.Provider value={Boolean(hostSubdomain) && error}>
-        <HostSubdomainContext.Provider value={hostSubdomain}>
-          <HostIdContext.Provider value={hostId ?? null}>
-            {children}
-          </HostIdContext.Provider>
-        </HostSubdomainContext.Provider>
+        <HostRetryContext.Provider value={retry}>
+          <HostSubdomainContext.Provider value={hostSubdomain}>
+            <HostIdContext.Provider value={hostId ?? null}>
+              {children}
+            </HostIdContext.Provider>
+          </HostSubdomainContext.Provider>
+        </HostRetryContext.Provider>
       </HostErrorContext.Provider>
     </HostReadyContext.Provider>
   )

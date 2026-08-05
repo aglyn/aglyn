@@ -23,6 +23,7 @@ import {
   useHostError,
   useHostId,
   useHostReady,
+  useHostRetry,
   useHostSubdomain,
 } from './host-id-provider'
 
@@ -48,6 +49,7 @@ export function HostGuard({ children }: { children?: ReactNode }) {
   const ready = useHostReady()
   const hostId = useHostId()
   const errored = useHostError()
+  const retry = useHostRetry()
 
   if (subdomain && !ready) {
     return (
@@ -73,11 +75,13 @@ export function HostGuard({ children }: { children?: ReactNode }) {
             {"Couldn't load this workspace's sites. Check your connection " +
               'and try again.'}
           </Typography>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() => window.location.reload()}
-          >
+          {/*
+            Retries in place, never `window.location.reload()` (AGL-1200). A
+            reload re-enters the same cold-load window that failed, so the
+            button reproduced the error every time it was pressed. Retrying
+            from a warm page is the one thing that has a chance of working.
+          */}
+          <Button variant="contained" color="primary" onClick={retry}>
             {'Try again'}
           </Button>
         </Box>

@@ -26,7 +26,7 @@ import {
   query,
   where,
 } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 /**
  * Every host role, as a value (AGL-1145).
@@ -48,8 +48,29 @@ const HOST_ACCESS_ROLE_KEYS: Record<HostAccessRole, true> = {
 }
 const HOST_ACCESS_ROLES = Object.keys(HOST_ACCESS_ROLE_KEYS) as HostAccessRole[]
 
-const RETRY_DELAY_MS = 400
-const MAX_RETRIES = 8
+/**
+ * Retry schedule (AGL-1200). Doubling, capped — NOT a flat delay.
+ *
+ * A flat 400 ms × 8 spent every attempt inside the first 3.2 s of page load,
+ * which is precisely the window this read is most likely to fail in: on a cold
+ * load the Firestore connection is not up yet, so the `getDocsFromServer`
+ * confirmation below throws `unavailable` until it is. The heavier the route,
+ * the longer that takes — which is why a cold hit on the besigner failed while
+ * the same URL reached in-app worked, and why the light `(app)` pages usually
+ * got away with it.
+ *
+ * Doubling to a 3.2 s cap spans ~12.4 s in SEVEN requests, where the flat
+ * schedule spanned 3.2 s in nine. A wider window and less hammering, because
+ * the thing being waited on is a warm-up, not a coin flip.
+ */
+const RETRY_BASE_DELAY_MS = 400
+const RETRY_MAX_DELAY_MS = 3200
+const MAX_RETRIES = 6
+
+/** 400, 800, 1600, 3200, 3200, 3200 — see {@link RETRY_BASE_DELAY_MS}. */
+export function retryDelayMs(attempt: number): number {
+  return Math.min(RETRY_BASE_DELAY_MS * 2 ** attempt, RETRY_MAX_DELAY_MS)
+}
 
 export interface HostResolution {
   /** The resolved host doc id for the current org, or null (spinner/404/redirect). */
@@ -58,10 +79,26 @@ export interface HostResolution {
   ready: boolean
   /** Resolution gave up after retries — show retry, never a false 404 (AGL-813). */
   error: boolean
+  /**
+   * Re-runs resolution from scratch (AGL-1200).
+   *
+   * `error` is otherwise terminal: the effect's deps do not change after it
+   * latches, so nothing retries. The guard's "Try again" used to call
+   * `window.location.reload()`, which re-entered the same cold-load window and
+   * failed identically every time — a recovery action that recreates the
+   * conditions it is recovering from is not a recovery action.
+   */
+  retry: () => void
 }
 
-/** Resolution state tagged with the subdomain it was computed for (AGL-894). */
-interface ResolutionState extends HostResolution {
+/**
+ * Resolution state tagged with the subdomain it was computed for (AGL-894).
+ *
+ * `retry` is deliberately NOT part of the state: it is a stable callback the
+ * hook derives, not something a read can produce, and putting it in state
+ * would mean every `setState` had to carry it around.
+ */
+interface ResolutionState extends Omit<HostResolution, 'retry'> {
   /** The `subdomain` argument this state describes; null off host routes. */
   for: string | null
 }
@@ -102,6 +139,10 @@ export function useHostResolution(
     ready: false,
     error: false,
   })
+  // Bumping this re-runs the effect below, which is the whole mechanism
+  // behind `retry` (AGL-1200).
+  const [attempt, setAttempt] = useState(0)
+  const retry = useCallback(() => setAttempt((value) => value + 1), [])
 
   useEffect(() => {
     // Off a host route there is nothing to resolve.
@@ -116,7 +157,7 @@ export function useHostResolution(
     }
 
     let cancelled = false
-    let attempt = 0
+    let retried = 0
     let timer: ReturnType<typeof setTimeout> | null = null
 
     const resolve = async () => {
@@ -185,9 +226,9 @@ export function useHostResolution(
         setState({ for: subdomain, hostId: null, ready: true, error: false })
       } catch {
         if (cancelled) return
-        if (attempt < MAX_RETRIES) {
-          attempt += 1
-          timer = setTimeout(resolve, RETRY_DELAY_MS)
+        if (retried < MAX_RETRIES) {
+          timer = setTimeout(resolve, retryDelayMs(retried))
+          retried += 1
         } else {
           setState({ for: subdomain, hostId: null, ready: true, error: true })
         }
@@ -200,15 +241,20 @@ export function useHostResolution(
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [firestore, subdomain, uid, orgId])
+  }, [firestore, subdomain, uid, orgId, attempt])
 
   // State from a previous subdomain describes a different route, so it cannot
   // stand in for this one: until the effect re-runs, the honest answer is "not
   // ready" (a spinner), never a settled miss the guard would 404 (AGL-894).
   if (state.for !== subdomain) {
-    return { hostId: null, ready: !subdomain, error: false }
+    return { hostId: null, ready: !subdomain, error: false, retry }
   }
-  return { hostId: state.hostId, ready: state.ready, error: state.error }
+  return {
+    hostId: state.hostId,
+    ready: state.ready,
+    error: state.error,
+    retry,
+  }
 }
 
 export default useHostResolution
