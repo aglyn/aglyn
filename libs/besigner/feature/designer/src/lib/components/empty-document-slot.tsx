@@ -63,7 +63,17 @@ export function EmptyDocumentSlot() {
         }
       }}
       sx={{
-        m: 2,
+        // NO outer margin (AGL-1265). This box IS the document: it is the
+        // root leaf's only child, and a drop anywhere on it resolves against
+        // the document root. A margin here bought nothing and cost alignment
+        // — measured, `m: 2` pushed the dashed border 16px inside the root's
+        // border box on the LEFT and RIGHT, while the vertical margins
+        // collapsed straight through the root and showed no gap at all. So
+        // the one dashed rectangle on an empty canvas sat inside the grey
+        // dotted document outline and inside the selection overlay (which
+        // measures the root leaf, `node-overlay.tsx`), reading as an editor
+        // that cannot line its own chrome up. Padding, not margin, keeps the
+        // label off the edge.
         p: 4,
         minHeight: 220,
         display: 'flex',
