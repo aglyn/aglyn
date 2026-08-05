@@ -45,6 +45,20 @@ describe('EmptyDocumentSlot (AGL-1246)', () => {
     expect(mockAddElement).toHaveBeenCalledWith()
   })
 
+  it('carries NO outer margin, so it fills the document exactly (AGL-1265)', () => {
+    // A margin here insets the dashed dropzone from the root leaf's border
+    // box on the left and right (the vertical margins collapse through the
+    // root, so only the horizontal gap is visible) — the box that stands in
+    // for the document then does not line up with the document's own outline
+    // or with the selection overlay, which measures the root leaf.
+    render(<EmptyDocumentSlot />)
+    const style = getComputedStyle(screen.getByRole('button'))
+    for (const side of ['marginTop', 'marginRight', 'marginBottom', 'marginLeft']) {
+      const value = style[side as 'marginTop']
+      expect(value === '' || value === '0px' || value === '0').toBe(true)
+    }
+  })
+
   it('is reachable from the keyboard', () => {
     render(<EmptyDocumentSlot />)
     const region = screen.getByRole('button')
