@@ -32,6 +32,7 @@ import {
 } from 'mobx'
 import { computedFn } from 'mobx-utils'
 import type { Aglyn } from '../aglyn'
+import { REUSABLE_INSTANCE_COMPONENT_ID } from '../app-utils/compose-reusable-components'
 import { createIdUrlSafe, FEATURE_FLAG } from '../foundation'
 import type { PluginId } from '../plugin-manager'
 import {
@@ -351,9 +352,25 @@ export class CanvasManager {
   public getNodeLabelShort = computedFn((node: NodeSchema<any>): any => {
     if (!node) throw new Error('Invalid node')
     if (this.isRootNode(node)) return NODE_ROOT_LABEL
+    // A reusable-component instance stands for one specific definition, and
+    // its component label is the same generic word for every one of them —
+    // a page built from promoted sections reads as a column of identical
+    // "Reusable Component" rows in the hierarchy and identical badges on the
+    // canvas. The definition's name rides on the instance for exactly this
+    // (`props.name`, AGL-1193), so prefer it. An explicit per-node `name`
+    // still wins, since that is someone deliberately renaming this instance.
+    const instanceName =
+      node.componentId === REUSABLE_INSTANCE_COMPONENT_ID
+        ? (node.props as { name?: unknown } | undefined)?.name
+        : undefined
     const componentLabel =
       node.componentId && this.aglyn.components.getLabel(node.componentId)
-    return node?.name || componentLabel || node?.$id
+    return (
+      node?.name ||
+      (_isStrT(instanceName) ? instanceName : undefined) ||
+      componentLabel ||
+      node?.$id
+    )
   })
 
   /**
