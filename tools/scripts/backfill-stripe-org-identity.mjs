@@ -31,15 +31,17 @@
  * records. Nothing is sent unless you pass `--apply`, and the key's mode is
  * printed before anything happens.
  *
- *   node tools/scripts/backfill-stripe-org-identity.mjs            # report
- *   node tools/scripts/backfill-stripe-org-identity.mjs --apply    # write
+ *   node --env-file=apps/console/.env.production.local \
+ *     tools/scripts/backfill-stripe-org-identity.mjs            # report
+ *   node --env-file=apps/console/.env.production.local \
+ *     tools/scripts/backfill-stripe-org-identity.mjs --apply    # write
  *
  * Idempotent: re-running writes the same values. It does NOT merge metadata —
  * Stripe merges keys server-side, so unrelated metadata on the customer is
  * preserved, but a key of the same name is overwritten.
  */
 
-import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app'
+import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 
 const APPLY = process.argv.includes('--apply')
@@ -79,7 +81,20 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 5000))
   }
 
-  if (!getApps().length) initializeApp({ credential: applicationDefault() })
+  // Same credential shape as every other script here (backfill-contacts,
+  // audit-staff-claims, …), so one `--env-file` works for all of them.
+  if (!getApps().length) {
+    const projectId = process.env.FIREBASE_PROJECT_ID
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+    if (!projectId || !clientEmail || !privateKey) {
+      console.error(
+        'Missing FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY',
+      )
+      process.exit(1)
+    }
+    initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
+  }
   const db = getFirestore()
 
   const orgs = await db.collection('orgs').get()

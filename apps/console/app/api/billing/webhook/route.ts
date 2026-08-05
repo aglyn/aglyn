@@ -355,6 +355,44 @@ async function handler(request: Request): Promise<Response> {
           const orgSlug = (
             await firebaseAdmin.app().firestore().collection('orgs').doc(orgId).get()
           ).get('slug') as string | undefined
+          // Tag the INVOICE itself with the workspace (AGL-941).
+          //
+          // Checkout cannot do this: `subscription_data[metadata]` reaches
+          // only the subscription, and a session has no invoice-metadata
+          // param at all — which is why the issue's third bullet needed an
+          // event rather than a parameter. Doing it here means revenue can be
+          // grouped by workspace in the Stripe dashboard, not merely traced
+          // back one customer at a time.
+          //
+          // Invoice metadata stays writable after finalization, so
+          // `invoice.finalized` is safe and every invoice gets tagged
+          // regardless of which of the three events arrives first (Stripe
+          // sends them in an order this must not depend on). Re-tagging an
+          // already-tagged invoice writes the same values.
+          if (process.env.STRIPE_SECRET_KEY && object?.id) {
+            const invoiceTags = new URLSearchParams({
+              'metadata[orgId]': orgId,
+              ...(orgSlug ? { 'metadata[orgSlug]': orgSlug } : {}),
+            })
+            // Best-effort, exactly like the customer stamping above: a
+            // notification webhook must not 500 over a metadata write, or
+            // Stripe redelivers and the admins get notified twice.
+            void fetch(`https://api.stripe.com/v1/invoices/${object.id}`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: invoiceTags.toString(),
+            }).catch((error) =>
+              console.error(
+                '[billing/webhook] tagging the invoice with the org failed',
+                orgId,
+                object.id,
+                error,
+              ),
+            )
+          }
           void notifyOrgAdmins(orgId, {
             type:
               type === 'invoice.payment_failed'
