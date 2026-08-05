@@ -113,6 +113,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Product catalog',
     excerpt: 'Products with options and variants, categories, tags, and manual or smart collections.',
   },
+  comingSoonLaunch: {
+    path: '/guides/coming-soon-launch',
+    title: 'Launch a coming-soon page',
+    excerpt: 'Put a coming-soon page on your domain, keep the rest of the site out of search while you finish it, collect signups, and reverse all of it on launch day.',
+  },
   commerce: {
     path: '/commerce-and-bookings/commerce/overview',
     title: 'Commerce',
@@ -567,6 +572,7 @@ export const DOCS_HELP_ANCHORS = {
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#4-save-and-test', '#tips', '#related'],
   buildingFeaturePlugins: ['#the-ui-half', '#the-console-half', '#how-the-shell-consumes-the-registry', '#loading-org-gated-and-dynamic-agl-417', '#extending-beyond-pages-slots-providers-runtimes-hooks-agl-418419', '#remote-bundles-the-trusted-realm-tier-agl-420', '#the-server-half-api-routes', '#shared-server-runtime-aglyntenant-runtime', '#project-setup', '#reference-implementations'],
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#categories-and-tags', '#collections', '#slugs', '#related'],
+  comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
   commerce: ['#products-hub', '#inventory', '#orders', '#shipping--taxes', '#dropshipping', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
   components: ['#promote', '#insert-instances', '#properties', '#declare-them', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#copy--paste-vs-reusable-components', '#tips', '#related'],
@@ -632,7 +638,7 @@ export const DOCS_HELP_ANCHORS = {
   screens: ['#screens--routing', '#layouts', '#nested-layouts', '#used-by', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],
   securityAndCompliance: ['#what-it-covers', '#why-the-gaps-are-listed-first', '#reporting-a-vulnerability'],
   selfHosting: ['#the-short-version', '#the-full-runbook', '#honest-limits'],
-  seo: ['#per-screen-seo', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
+  seo: ['#per-screen-seo', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
   serverApis: ['#an-api-route', '#webhooks-with-signature-verification', '#platform-billing-events', '#scheduled-jobs', '#troubleshooting'],
   siteProtection: ['#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#configure-it', '#related'],

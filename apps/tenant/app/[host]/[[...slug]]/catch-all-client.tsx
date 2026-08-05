@@ -186,9 +186,12 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   const socialImage =
     ((screen as any)?.seo?.image as string) ||
     ((host?.seo?.image as string) ?? undefined)
-  // Unlisted pages (AGL-113 visibility) stay reachable but out of search.
-  const unlisted =
-    screen?.visibility === Aglyn.HostScreenVisibility.UNLISTED
+  // Out of search (AGL-113 visibility, AGL-1263 site switch): unlisted and
+  // gated pages stay reachable but unindexed, and the site-level "discourage
+  // search engines" switch takes every page with it. Same `isPageIndexable`
+  // the server metadata twin calls — a second copy of the rule here is exactly
+  // how the two heads would drift.
+  const noindex = !Aglyn.isPageIndexable({ host, screen })
   // Shared with the server metadata twin and the email renderer (AGL-1224) —
   // three copies of "which name does this site answer to" would drift.
   const canonicalBase = Aglyn.hostPublicOrigin(host)
@@ -608,7 +611,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         {canonical ? (
           <link key="canonical" rel="canonical" href={canonical} />
         ) : null}
-        {props.notFoundFallback || props.maintenanceFallback || unlisted ? (
+        {props.notFoundFallback || props.maintenanceFallback || noindex ? (
           <meta key="robots" name="robots" content="noindex" />
         ) : null}
       </Head>

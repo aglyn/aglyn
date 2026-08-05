@@ -106,27 +106,34 @@ import useHostActivityLogger from '../../../../../../../../../../hooks/use-host-
 const whiteSpace = '--'
 
 /** Visibility options (page permissions, AGL-113). Members/password rows
- * explain where enforcement lives so the select never overpromises. */
+ * explain where enforcement lives so the select never overpromises.
+ *
+ * Every hint now says what the choice does to SEARCH (AGL-1263), because it
+ * always did and nothing said so. `Public` is the only indexable value — the
+ * other three are excluded from the sitemap and carry `noindex` — and
+ * "Reachable by URL only" was the whole of what an author was told before
+ * picking the option that quietly de-indexes a page. This is the per-page
+ * half of the site-wide switch in Setup → SEO. */
 const VISIBILITY_OPTIONS = [
   {
     value: HostScreenVisibility.PUBLIC,
     label: 'Public',
-    hint: 'Anyone with the link; listed in navigation.',
+    hint: 'Anyone with the link; listed in navigation and offered to search engines.',
   },
   {
     value: HostScreenVisibility.UNLISTED,
     label: 'Unlisted',
-    hint: 'Reachable by URL only.',
+    hint: 'Reachable by URL only — kept out of search results and the sitemap.',
   },
   {
     value: HostScreenVisibility.PASSWORD,
     label: 'Password protected',
-    hint: 'Visitors must enter the page password.',
+    hint: 'Visitors must enter the page password; kept out of search results.',
   },
   {
     value: HostScreenVisibility.AUTHENTICATED,
     label: 'Members only',
-    hint: 'Requires site membership (enforced once site sign-in ships).',
+    hint: 'Requires site membership (enforced once site sign-in ships); kept out of search results.',
   },
 ]
 

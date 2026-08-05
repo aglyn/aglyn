@@ -24,6 +24,7 @@ import DashboardHeaderComponent, {
 } from '../dashboard-header.component'
 import FooterComponent from '../footer.component'
 import QuotaWarningsBanner from '../quota-warnings-banner.component'
+import SearchDiscouragedBanner from '../search-discouraged-banner.component'
 
 const defaultBreadcrumbs = [
   {
@@ -69,6 +70,9 @@ export function DashboardLayout(props: DashboardLayoutProps) {
       <Stack component="main" direction="column" sx={{ flexGrow: 1 }}>
         {/* Site-wide usage-cap banner (AGL-136). */}
         <QuotaWarningsBanner />
+        {/* "Hidden from search" indicator (AGL-1263) — persistent on purpose;
+            a switch left on is invisible everywhere else. */}
+        <SearchDiscouragedBanner />
         <DashboardHeaderComponent
           disableBreadcrumbs={disableBreadcrumbs}
           breadcrumbItems={breadcrumbs}

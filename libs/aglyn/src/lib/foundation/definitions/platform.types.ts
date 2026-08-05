@@ -165,6 +165,17 @@ export interface AglynHost extends AglynDocument {
     separator?: string
     favicon?: string
     image?: HostMediaUid
+    /**
+     * Site-wide "discourage search engines" (AGL-1263): `robots.txt` refuses
+     * everything, the sitemap goes empty, and every page carries `noindex`.
+     * The staged-launch control — a site that is live but not ready to be
+     * found, which until now could only be approximated by setting each
+     * screen to {@link HostScreenVisibility.UNLISTED} one at a time.
+     *
+     * Absent means INDEX, and must keep meaning that. Reading a missing field
+     * as "hide" would let a schema slip de-index every customer at once.
+     */
+    discourageSearchEngines?: boolean
     entity?: {
       type?: HostEntityType
       name?: string
