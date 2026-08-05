@@ -27,6 +27,7 @@ import {
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
+  CircularProgress,
   CssBaseline,
   Snackbar,
   Stack,
@@ -41,8 +42,18 @@ import {
   previewStateKey,
   readPreviewState,
 } from '../constants/preview-state'
+import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 
 const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }
+
+/**
+ * How long the first paint may wait on the host-components read (AGL-1261).
+ *
+ * Generous — the graft is worth waiting for, and swapping a placeholder for
+ * the real nav a beat later is the visible flash AGL-1211 set out to avoid.
+ * It is a ceiling on a hang, not a latency budget.
+ */
+export const DEFINITIONS_TIMEOUT_MS = 8000
 
 const KIND_LABEL: Record<PreviewKind, string> = {
   screen: 'screen',
@@ -104,8 +115,19 @@ export function DocumentPreview(props: DocumentPreviewProps) {
   useEffect(() => {
     if (!hostId || !firestore) return
     let cancelled = false
-    getDocs(
-      query(collection(firestore, 'hosts', hostId, 'components'), limit(200)),
+    // The same short backoff every other one-shot read in the console gets
+    // (AGL-1062): Firestore can deny the first read after sign-in, a beat
+    // before the credential provider has attached the ID token — and a
+    // preview tab opened by `window.open` is exactly a fresh sign-in race.
+    firestoreOneShotRetry(
+      () =>
+        getDocs(
+          query(
+            collection(firestore, 'hosts', hostId, 'components'),
+            limit(200),
+          ),
+        ),
+      'components',
     )
       .then((res) => {
         if (cancelled) return
@@ -127,8 +149,33 @@ export function DocumentPreview(props: DocumentPreviewProps) {
         console.error(error)
         if (!cancelled) setDefinitions({})
       })
+    // A read that never SETTLES is the case the `.catch` above cannot cover,
+    // and it is the one that produced "Preview opens a tab that never
+    // finishes loading": with `definitions` still `undefined` the apply
+    // effect below returns early forever, so the page paints nothing at all —
+    // no snapshot, no message, no spinner. A one-shot `getDocs` has no
+    // timeout of its own and can hang indefinitely (offline, a wedged
+    // WebChannel, a multi-tab persistence lease held by a frozen tab).
+    //
+    // So bound it, and fail OPEN exactly like the error path already does:
+    // an empty definitions map leaves `reusableInstance` nodes as their named
+    // placeholder, which is the AGL-1211 behaviour — strictly better than a
+    // blank tab, and it self-corrects if the read lands afterwards.
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      setDefinitions((current) => {
+        if (current) return current
+        console.warn(
+          `[preview] the host components read did not settle within ` +
+            `${DEFINITIONS_TIMEOUT_MS}ms — rendering without reusable-component ` +
+            'definitions rather than holding a blank page.',
+        )
+        return {}
+      })
+    }, DEFINITIONS_TIMEOUT_MS)
     return () => {
       cancelled = true
+      clearTimeout(timer)
     }
   }, [hostId, firestore])
 
@@ -239,6 +286,30 @@ export function DocumentPreview(props: DocumentPreviewProps) {
         <Typography variant="h6">{'No preview state found'}</Typography>
         <Typography color="text.secondary">
           {`Open this ${KIND_LABEL[kind ?? 'screen']} in the besigner and click Preview again.`}
+        </Typography>
+      </Stack>
+    )
+  }
+
+  // Say so, rather than painting white (AGL-1261). Everything above this can
+  // legitimately take a moment — the components read, the host-id resolution
+  // that supplies `ids`, the snapshot apply — and the old code rendered an
+  // empty document throughout, which is indistinguishable from a tab that
+  // will never load. The bounded read above means this state is temporary
+  // even when Firestore never answers.
+  if (!root) {
+    return (
+      <Stack
+        sx={{
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          gap: 2,
+        }}
+      >
+        <CircularProgress />
+        <Typography color="text.secondary">
+          {`Preparing the ${KIND_LABEL[kind ?? 'screen']} preview…`}
         </Typography>
       </Stack>
     )

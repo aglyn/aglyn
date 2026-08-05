@@ -80,6 +80,18 @@ export interface ObservableStatus<T> {
   data: T
   error: Error | undefined
   firstValuePromise: Promise<void>
+  /**
+   * The emitted `data` includes local writes the server has NOT
+   * acknowledged (`snapshot.metadata.hasPendingWrites`).
+   *
+   * Carried rather than dropped because a caller cannot otherwise tell "the
+   * store holds this" from "my browser holds this". `persistentLocalCache`
+   * replays a queued write into the very first snapshot after a reload, so a
+   * caller that treats every snapshot as authoritative will adopt its own
+   * unacknowledged edit as the saved state — which is how the besigner ended
+   * up unable to save real changes (AGL-1262).
+   */
+  hasPendingWrites: boolean
 }
 
 /** Replaces reactfire's `ReactFireOptions<T>` — drops the `suspense` field, which was never read. */
@@ -265,14 +277,26 @@ export function useRemoteConfig(): RemoteConfig {
  * `emailVerified` stay live across token refresh (e.g. after
  * `user.reload()` post-email-verification), not just sign-in/out — matched
  * here for behavioral parity.
+ *
+ * THREE states, not two (AGL-1261): `undefined` = auth has not resolved yet,
+ * `null` = resolved, signed OUT, a `User` = resolved, signed in. This used to
+ * collapse the emitted `null` into `undefined`, which made "signed out" and
+ * "still loading" the same value — a state that, for a signed-out visitor,
+ * never left "loading". `useSessionCookie` gates its whole body on
+ * `user === undefined`, so its silent restore from the shared `__session`
+ * cookie could never run: the cookie exchange returned a valid custom token
+ * and nothing ever asked for it.
  */
-export function useUser(): { data: User | undefined } {
+export function useUser(): { data: User | null | undefined } {
   const auth = useAuth()
-  const [user, setUser] = useState<User | undefined>(auth.currentUser ?? undefined)
+  const [user, setUser] = useState<User | null | undefined>(
+    auth.currentUser ?? undefined,
+  )
 
   useEffect(() => {
     return onIdTokenChanged(auth, (nextUser) => {
-      setUser(nextUser ?? undefined)
+      // `?? null`, never `?? undefined` — see the note above.
+      setUser(nextUser ?? null)
     })
   }, [auth])
 

@@ -165,6 +165,17 @@ export interface AglynHost extends AglynDocument {
     separator?: string
     favicon?: string
     image?: HostMediaUid
+    /**
+     * Site-wide "discourage search engines" (AGL-1263): `robots.txt` refuses
+     * everything, the sitemap goes empty, and every page carries `noindex`.
+     * The staged-launch control — a site that is live but not ready to be
+     * found, which until now could only be approximated by setting each
+     * screen to {@link HostScreenVisibility.UNLISTED} one at a time.
+     *
+     * Absent means INDEX, and must keep meaning that. Reading a missing field
+     * as "hide" would let a schema slip de-index every customer at once.
+     */
+    discourageSearchEngines?: boolean
     entity?: {
       type?: HostEntityType
       name?: string
@@ -467,6 +478,21 @@ export interface ReusableComponentProp {
 }
 
 /**
+ * A reusable component's chosen icon (AGL-1193), stood in for by the generic
+ * package glyph when unset.
+ *
+ * Both halves are stored, for the reason AGL-1212 exists: the MDI catalog is
+ * ~2.9 MB and only picker surfaces load it, so anything that had to resolve
+ * `iconId` on a render surface got `DEFAULT_ICON` — a real path, so every
+ * icon painted a confident "help" glyph. The id stays the source of truth;
+ * `iconPath` is the denormalized copy that travels with the document.
+ */
+export interface ReusableComponentIcon {
+  iconId?: string
+  iconPath?: string
+}
+
+/**
  * Reusable component definition: a node subtree promoted from a screen,
  * inserted anywhere as an instance node (`componentId: 'reusableInstance'`,
  * `props.refId`) and grafted at render time (see
@@ -479,6 +505,14 @@ export interface AglynHostComponent<N = AglynNodeSchema>
   hostId?: HostUid
   displayName?: string
   description?: string
+  /**
+   * Icon shown wherever an instance of this component is represented in the
+   * besigner (AGL-1193) — the hierarchy row, the canvas badge, the element
+   * drawer. Absent on every component that predates the picker, which is
+   * why it is optional and never defaulted: unset means "the package glyph",
+   * not "an icon we failed to read".
+   */
+  icon?: ReusableComponentIcon
   /**
    * Definition tree root id within {@link AglynHostComponent.nodes}.
    *

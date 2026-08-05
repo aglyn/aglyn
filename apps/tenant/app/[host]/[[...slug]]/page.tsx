@@ -71,6 +71,13 @@ function buildMetadata(props: Props): Metadata {
   const withSite = (title?: string) =>
     [title, siteTitle].filter(Boolean).join(separator) || `${brandName} site`
 
+  // Site-wide "discourage search engines" (AGL-1263). Read up here, above the
+  // early returns, because it has to reach the CONTENT branch too: collection
+  // lists and blog entries emitted no robots directive at all, so a discouraged
+  // site would have gone dark everywhere except the pages people actually link
+  // to from elsewhere.
+  const searchDiscouraged = Aglyn.isSearchDiscouraged(host)
+
   // Gated / fixed surfaces stay out of search (AGL-87/109/131).
   if (props.membershipPage) {
     return {
@@ -107,6 +114,7 @@ function buildMetadata(props: Props): Metadata {
     return {
       title: fullTitle,
       ...(description ? { description } : {}),
+      ...(searchDiscouraged ? { robots: { index: false, follow: true } } : {}),
       openGraph: {
         title: fullTitle,
         ...(description ? { description } : {}),
@@ -128,8 +136,13 @@ function buildMetadata(props: Props): Metadata {
     screen?.seo?.description || screen?.description || host?.seo?.description
   const socialImage: string | undefined =
     screen?.seo?.image || host?.seo?.image || undefined
-  const unlisted = screen?.visibility === Aglyn.HostScreenVisibility.UNLISTED
-  const noindex = unlisted || props.notFoundFallback || props.protectedScreen
+  // One policy, four surfaces (AGL-1263): this, the client twin in
+  // `catch-all-client.tsx`, `robots.txt` and `sitemap.xml` all ask
+  // `isPageIndexable` rather than each keeping their own copy of the rule.
+  const noindex =
+    !Aglyn.isPageIndexable({ host, screen }) ||
+    props.notFoundFallback ||
+    props.protectedScreen
   // Shared with the client twin and the email renderer (AGL-1224) — three
   // copies of "which name does this site answer to" would drift.
   const canonicalBase = Aglyn.hostPublicOrigin(host)

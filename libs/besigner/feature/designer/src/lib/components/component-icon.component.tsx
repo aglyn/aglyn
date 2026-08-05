@@ -19,15 +19,32 @@ import * as Aglyn from '@aglyn/aglyn'
 import { ICON_VARIANT_ELEMENT } from '@aglyn/shared-data-enums'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-jsx'
 import { observer } from 'mobx-react-lite'
+import { useContext } from 'react'
 import { isElement, isValidElementType } from 'react-is'
+import ComponentPromotionContext from '../contexts/component-promotion-context'
 
 export interface ComponentIconProps extends MdiIconProps {
   component?: Aglyn.ComponentSchema
+  /**
+   * The node being drawn, when there is one. Only a reusable-component
+   * instance needs it, and only to reach the icon its definition chose —
+   * `component` alone cannot answer that, since every instance shares the
+   * one `reusableInstance` schema (AGL-1193).
+   */
+  node?: Aglyn.NodeSchema<any>
 }
 
 export const ComponentIconComponent = observer((props: ComponentIconProps) => {
-  const { component, ...rest } = props
+  const { component, node, ...rest } = props
   const Icon = component?.icon
+
+  // An instance's definition icon outranks the schema's package glyph, which
+  // is the same glyph for every component anyone has ever promoted. Read live
+  // off the definition rather than denormalized onto the node, so changing a
+  // component's icon reaches the instances already placed.
+  const { definitions } = useContext(ComponentPromotionContext)
+  const definitionIconPath = Aglyn.resolveInstanceIconPath(node, definitions)
+  if (definitionIconPath) return <MdiIcon path={definitionIconPath} {...rest} />
 
   if (isElement(Icon)) return Icon
 

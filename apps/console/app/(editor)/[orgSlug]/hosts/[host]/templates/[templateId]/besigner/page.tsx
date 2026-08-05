@@ -140,7 +140,7 @@ function TemplateBesignerPage(props) {
     hostId,
     templateId,
   })
-  const { data, status, error } = result
+  const { data, status, error, hasPendingWrites } = result
   const nodes = data?.nodes
 
   // Deliberately NO viewType override: a component edits like screen
@@ -218,6 +218,7 @@ function TemplateBesignerPage(props) {
   } = useBesignerDocument({
     nodes,
     updatedAt: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
+    pendingWrites: hasPendingWrites,
     status,
     error,
     save: saveTemplateNodes,
@@ -353,7 +354,6 @@ function TemplateBesignerPage(props) {
             items: [
               {
                 id: 'center-nav-file-save',
-                disabled: !saveAvailable,
                 icon: saveAvailable
                   ? { path: ICON_VARIANT_MODIFY_SAVE.path }
                   : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },

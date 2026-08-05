@@ -82,6 +82,7 @@ The **FAQ** preset drops three complete panels at once.
 | **Breadcrumbs** | The trail showing where a page sits. Fill it with Screen Links so it survives renames, and leave the **current** page as plain Typography — linking a page to itself is the classic breadcrumb mistake. Set **Collapse above** to fold a long trail into an ellipsis. |
 | **Pagination** | A page picker. See [Pagination](#pagination) below. |
 | **Language switcher** / **Theme mode switcher** | Locale and light/dark controls. |
+| **Table of Contents** | An "On this page" list built from the headings of a [Markdown](long-form-markdown.md) element on the same screen. |
 
 ### Tabs
 
@@ -101,6 +102,14 @@ label typo you can see. Preview and the published site show one at a time.
 Pagination renders the control and highlights the page a visitor picks. It does **not** by
 itself change what the rest of the page shows — wire an
 [interaction](interactions-and-custom-html.md) to it for that.
+
+## Text
+
+| Element | What it's for |
+| --- | --- |
+| **Typography** | One run of text — a headline, a label, a paragraph. The element you [edit inline on the canvas](text-editing.md). |
+| **Markdown** | A whole document, held as markdown source in one element. For policies, terms and anything whose real source is a `.md` file. See [Long documents in markdown](long-form-markdown.md). |
+| **Entry Body** | A content entry's markdown body, on an entry-template screen. |
 
 ## Data Display
 
@@ -148,5 +157,6 @@ see [Forms](../../content-and-data/forms/overview.md),
 
 - [The Besigner](overview.md)
 - [Drag-and-drop hierarchy](drag-drop-hierarchy.md) — which elements accept which children
+- [Long documents in markdown](long-form-markdown.md) — the Markdown and Table of contents elements
 - [Responsive styling](responsive-styling.md)
 - [Interactions & custom HTML](interactions-and-custom-html.md)

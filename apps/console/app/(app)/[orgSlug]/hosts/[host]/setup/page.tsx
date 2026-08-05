@@ -53,6 +53,7 @@ import AuthScreensCard from '../../../../../../components/auth-screens-card.comp
 import CustomDomainCard from '../../../../../../components/custom-domain-card.component'
 import SiteEmailsCard from '../../../../../../components/site-emails-card.component'
 import FaviconCard from '../../../../../../components/favicon-card.component'
+import SearchIndexingCard from '../../../../../../components/search-indexing-card.component'
 import BusinessDetailsCard from '../../../../../../components/business-details-card.component'
 import LogoCard from '../../../../../../components/logo-card.component'
 import ErrorScreensCard from '../../../../../../components/error-screens-card.component'
@@ -692,9 +693,21 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                           </>
                         ) : null}
                         {schema.id === 'hostSeo' ? (
-                          <div style={{ marginTop: 24 }}>
-                            <FaviconCard hostId={hostId} />
-                          </div>
+                          <>
+                            <div style={{ marginTop: 24 }}>
+                              <FaviconCard hostId={hostId} />
+                            </div>
+                            {/* Site-wide search indexing (AGL-1263). Its own
+                                card rather than a field in the SEO form
+                                above: the form saves on submit and refuses to
+                                until title and description validate, so a
+                                switch inside it could not be turned back OFF
+                                by someone whose SEO copy is mid-edit — the
+                                one direction that must never be blocked. */}
+                            <div style={{ marginTop: 24 }}>
+                              <SearchIndexingCard hostId={hostId} />
+                            </div>
+                          </>
                         ) : null}
                       </TabPanel>
                     ))}

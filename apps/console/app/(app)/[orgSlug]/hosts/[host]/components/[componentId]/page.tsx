@@ -48,6 +48,7 @@ import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/fires
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import ArtifactNotFound from '../../../../../../../components/artifact-not-found.component'
+import ComponentIconField from '../../../../../../../components/component-icon-field.component'
 import HostDisplayNameComponent from '../../../../../../../components/host-display-name.component'
 import { useHostId, useHostSubdomain } from '../../../../../../../components/host-id-provider'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
@@ -112,18 +113,23 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
 
   const [name, setName] = useState<string | null>(null)
   const [description, setDescription] = useState<string | null>(null)
+  const [icon, setIcon] = useState<Aglyn.ReusableComponentIcon | null>(null)
   const [opening, setOpening] = useState(false)
 
   const handleSave = useCallback(async () => {
     const dequeue = queueLoading()
     try {
+      // `updateDoc` on a converter-less ref: field-scoped writes stay field
+      // scoped here, unlike the besigner's version docs (AGL-1250).
       await updateDoc(doc(firestore, 'hosts', hostId, 'components', componentId), {
         ...(name != null ? { displayName: name.trim() } : {}),
         ...(description != null ? { description: description.trim() } : {}),
+        ...(icon != null ? { icon } : {}),
         updatedAt: Timestamp.now(),
       })
       setName(null)
       setDescription(null)
+      setIcon(null)
       enqueueSnackbar('Component saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
@@ -134,7 +140,16 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
     } finally {
       dequeue()
     }
-  }, [firestore, hostId, componentId, name, description, queueLoading, enqueueSnackbar])
+  }, [
+    firestore,
+    hostId,
+    componentId,
+    name,
+    description,
+    icon,
+    queueLoading,
+    enqueueSnackbar,
+  ])
 
   /**
    * Opens a version in the besigner, minting the first one when the component
@@ -223,7 +238,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   const listUrl = buildRoute(Route.HOST_COMPONENTS, { orgSlug, host })
-  const dirty = name != null || description != null
+  const dirty = name != null || description != null || icon != null
 
   return (
     <DashboardLayout
@@ -306,6 +321,11 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
               multiline
               minRows={2}
               helperText="Shown in the components list and the element drawer"
+            />
+            <ComponentIconField
+              value={icon ?? definition?.icon}
+              onChange={setIcon}
+              helperText="Marks every instance of this component in the besigner"
             />
             <Typography variant="caption" color="text.secondary">
               {`ID ${componentId} — persisted in screen documents, so it never changes`}

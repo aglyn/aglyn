@@ -143,6 +143,7 @@ export const NodeQuickActions = observer(
           }}>
           <ComponentIconComponent
             component={node?.componentSchema}
+            node={node}
             fontSize="inherit"
           />
         </Stack>

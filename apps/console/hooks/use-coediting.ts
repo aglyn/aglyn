@@ -18,11 +18,11 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  get,
   onChildAdded,
   onChildChanged,
   onValue,
   ref,
-  remove,
   update,
 } from 'firebase/database'
 import { autorun, runInAction } from 'mobx'
@@ -289,7 +289,24 @@ export function useCoEditing(options: {
   // the next person who joins.
   const clearMirror = useCallback(() => {
     if (!roomPath || !session || !canWrite) return
-    void remove(ref(session.database, roomPath)).catch(() => undefined)
+    // Per NODE, not the room. The database rules grant `.write` at
+    // `…/nodes/$nodeId` and nothing above it, so `remove()` on the room was
+    // refused every time — measured on production 2026-08-05, every room on
+    // the marketing host still held entries from saves hours earlier
+    // (AGL-1262). A multi-path update of nulls deletes the same children
+    // through the path the rules actually allow.
+    const roomRef = ref(session.database, roomPath)
+    void get(roomRef)
+      .then((snapshot) => {
+        const value = snapshot.val() as Record<string, unknown> | null
+        const ids = value ? Object.keys(value) : []
+        if (!ids.length) return undefined
+        return update(
+          roomRef,
+          Object.fromEntries(ids.map((id) => [id, null])),
+        )
+      })
+      .catch((error) => console.warn('[coedit] could not clear', error))
   }, [roomPath, session, canWrite])
 
   useEffect(() => {

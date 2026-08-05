@@ -100,7 +100,58 @@ describe('useBesignerDocument', () => {
   describe('save guards', () => {
     it('does not call save when nothing changed', async () => {
       setCanvasDirty(false)
+      // "Nothing changed" means the canvas matches the stored document.
+      mockCanvas.toJSON.mockReturnValue({ nodes: NODES })
       const { result, save, notify } = setup()
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(save).not.toHaveBeenCalled()
+      expect(notify).toHaveBeenCalledWith(
+        'Already saved',
+        expect.objectContaining({ variant: 'info' }),
+      )
+    })
+
+    /**
+     * The data-loss shape of AGL-1262. The editor believed it was clean
+     * while the canvas held work the document did not, so Save was a
+     * no-op and the author had no way to write it — re-applying the same
+     * value is not a mutation, and restoring the draft put back content
+     * the canvas already had. A clean editor must therefore check the
+     * document before agreeing there is nothing to write.
+     */
+    it('saves anyway when a clean editor disagrees with the stored document', async () => {
+      setCanvasDirty(false)
+      mockCanvas.toJSON.mockReturnValue({
+        nodes: { root: { $id: 'root', componentId: 'div', sx: { width: '100%' } } },
+      })
+      const { result, save, notify } = setup()
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          root: expect.objectContaining({ sx: { width: '100%' } }),
+        }),
+      )
+      expect(notify).not.toHaveBeenCalledWith(
+        'Already saved',
+        expect.anything(),
+      )
+    })
+
+    it('never writes the empty canvas over a document that has not loaded', async () => {
+      setCanvasDirty(false)
+      mockCanvas.toJSON.mockReturnValue({ nodes: {} })
+      const { result, save, notify } = setup({
+        nodes: undefined,
+        status: 'loading',
+      })
 
       await act(async () => {
         await result.current.handleSave()
@@ -283,6 +334,44 @@ describe('useBesignerDocument', () => {
       act(() => result.current.handleJsonSave(null, { root: {} }))
       expect(applyNodes).toHaveBeenCalledWith({ root: {} })
       expect(result.current.jsonOpen).toBe(false)
+    })
+  })
+
+  /**
+   * A Firestore snapshot is not proof of what Firestore holds:
+   * `persistentLocalCache` replays a queued write into the first snapshot
+   * after a reload, `updatedAt` (a server timestamp) still reads null, and
+   * nothing in the payload says so. Recording that as the saved state is
+   * what left a screen editable, dirty-looking on the canvas, and
+   * permanently unsavable (AGL-1262).
+   */
+  describe('the saved baseline', () => {
+    const confirmedOf = () =>
+      mockCanvas.updateInitialNodes.mock.calls.at(-1)?.[1]
+
+    it('is recorded as confirmed from an acknowledged snapshot', () => {
+      setup({ pendingWrites: false })
+      expect(mockCanvas.updateInitialNodes).toHaveBeenCalled()
+      expect(confirmedOf()).toEqual(
+        expect.objectContaining({ confirmed: true }),
+      )
+    })
+
+    it('refuses to adopt a snapshot still carrying our own queued write', () => {
+      setup({ pendingWrites: true })
+      // Loaded — the work must be shown, never hidden…
+      expect(mockCanvas.setNodes).toHaveBeenCalled()
+      // …but nothing in it counts as saved.
+      expect(confirmedOf()).toEqual(
+        expect.objectContaining({ confirmed: false }),
+      )
+    })
+
+    it('treats a store with no pending-write concept as acknowledged', () => {
+      setup()
+      expect(confirmedOf()).toEqual(
+        expect.objectContaining({ confirmed: true }),
+      )
     })
   })
 

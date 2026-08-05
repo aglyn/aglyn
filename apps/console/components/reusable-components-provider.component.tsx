@@ -84,7 +84,8 @@ export function ReusableComponentsProvider(
 
   // Shared with the canvas's reusable-instance graft (AGL-1217): one query,
   // one listener, one set of skip rules for both readers.
-  const { docs: componentDocs } = useHostComponentDefinitions(hostId)
+  const { docs: componentDocs, definitions } =
+    useHostComponentDefinitions(hostId)
 
   // Element drawer: one preset per definition, category "Your components".
   useEffect(() => {
@@ -97,7 +98,11 @@ export function ReusableComponentsProvider(
         $id: `hostcmp:${definition.$id}`,
         type: Aglyn.NodeType.PRESET,
         displayName: definition.displayName ?? definition.$id,
-        icon: { path: mdiPackageVariant.path, sx: { color: '#9c27b0' } },
+        // The component's own icon when it has one (AGL-1193); the purple
+        // package glyph is what "no icon chosen" looks like, not a brand.
+        icon: definition.icon?.iconPath
+          ? { path: definition.icon.iconPath }
+          : { path: mdiPackageVariant.path, sx: { color: '#9c27b0' } },
         category: 'Your components',
         data: {
           $id: null,
@@ -259,26 +264,11 @@ export function ReusableComponentsProvider(
     [firestore, hostId, queueLoading, enqueueSnackbar],
   )
 
-  // The definitions the designer needs (AGL-1247/1251): declared props for
-  // the Attributes panel, and the tree itself so the canvas can render an
-  // instance instead of a dashed box. Read off the same listener the drawer
-  // presets and the layout-chrome graft use — one query, one answer.
-  const definitions = useMemo(() => {
-    const next: Record<string, Aglyn.ReusableComponentTree | undefined> = {}
-    for (const definition of componentDocs ?? []) {
-      const value = definition as Aglyn.AglynHostComponent
-      // Same skip rules as every other reader: a doc without rootId/nodes is
-      // unpublished, not broken, and must not expand anywhere.
-      if (value?.deletedAt || !value?.nodes || !value?.rootId) continue
-      next[value.$id] = {
-        rootId: value.rootId,
-        nodes: value.nodes as Aglyn.ReusableComponentTree['nodes'],
-        ...(value.props?.length && { props: value.props }),
-      }
-    }
-    return next
-  }, [componentDocs])
-
+  // The definitions the designer needs (AGL-1247/1251/1193): declared props
+  // for the Attributes panel, the tree itself so the canvas can render an
+  // instance instead of a dashed box, and the chosen icon. Straight off the
+  // hook rather than a second mapping of the same docs — two maps of the
+  // same type will eventually disagree about which fields a definition has.
   const contextValue = useMemo(
     () => ({
       onPromote: handlePromote,

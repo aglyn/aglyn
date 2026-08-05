@@ -18,6 +18,8 @@
 import {
   hostCollectionKind,
   hostPublicOrigin,
+  isScreenIndexable,
+  isSearchDiscouraged,
   screenRoutePathToUrl,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -33,9 +35,49 @@ const escapeXml = (value: string) =>
     .replace(/"/g, '&quot;')
 
 /**
+ * The XML envelope, shared by the normal path and the discouraged-site early
+ * return (AGL-1263) so an empty sitemap is a real, well-formed sitemap.
+ */
+function sitemapResponse(urls: string[]): Response {
+  const xml =
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    // De-duplicated (AGL-582): a collection slug can shadow a screen path.
+    [...new Set(urls)]
+      .map((item) => `  <url><loc>${escapeXml(item)}</loc></url>`)
+      .join('\n') +
+    '\n</urlset>\n'
+
+  return new Response(xml, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/xml',
+      // MEASURED 2026-08-04: this header is OVERRIDDEN and has no effect.
+      // Production returns `public, max-age=0, must-revalidate` here, on
+      // `collections-rss`, on `robots` and on ordinary pages alike — so the
+      // value below has never reached a CDN, and neither did the
+      // `s-maxage=3600` it replaced.
+      //
+      // What actually caches this route is Vercel's own revalidation, at
+      // **60 s**, measured by polling `age`: it climbs to ~60, flips to
+      // `x-vercel-cache: STALE`, then resets — twice, exactly 60 s apart.
+      // Which is the same window every page uses, so a sitemap is never more
+      // stale than the site it describes.
+      //
+      // Kept rather than deleted because it states the intent correctly and
+      // costs nothing; do NOT treat it as the thing producing the 60 s.
+      // AGL-1160 was filed believing this header made the sitemap an HOUR
+      // stale. It never did.
+      'Cache-Control': 's-maxage=60, stale-while-revalidate=60',
+    },
+  })
+}
+
+/**
  * Per-host sitemap (SEO Toolkit): the middleware rewrites
  * `{tenant-site}/sitemap.xml` here with the resolved tenant host. URLs come
- * from the host routing map — exactly the published screens.
+ * from the host routing map — the published screens a crawler may index
+ * (AGL-1263).
  */
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url)
@@ -71,18 +113,54 @@ export async function GET(request: Request): Promise<Response> {
   const base =
     hostPublicOrigin(hostRes.host) ??
     `https://${String(request.headers.get('host') ?? host)}`
-  const urls = Object.values(hostRes.host.screens ?? {})
-    .map((path) => `${base}${screenRoutePathToUrl(path)}`)
+
+  const hostRef = firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(hostRes.host.$id)
+
+  // Search discouraged site-wide (AGL-1263): a valid but EMPTY sitemap, not a
+  // 404. The file still exists and still parses, so a crawler that already
+  // knows the URL — or Search Console, which keeps asking — reads "nothing
+  // here" instead of an error it will retry. Returning early also skips every
+  // read below, which is the whole cost of this route.
+  if (isSearchDiscouraged(hostRes.host)) return sitemapResponse([])
+
+  // Screens that are not indexable must not be submitted (AGL-1263). The
+  // routing map is every PUBLISHED screen, which is not the same set: an
+  // unlisted page carries `noindex` in its own head, and listing it here
+  // meant the site contradicted itself about that page. Password-protected,
+  // members-only and private screens were listed too — URLs that answer a
+  // crawler with a gate.
+  //
+  // `select('visibility')` keeps this a projection over exactly the field the
+  // predicate reads; the doc id it also needs always travels with a snapshot.
+  const excluded = new Set<string>()
+  try {
+    const screenDocs = await hostRef
+      .collection('screens')
+      .select('visibility')
+      .limit(1000)
+      .get()
+    for (const docSnapshot of screenDocs.docs) {
+      if (!isScreenIndexable(docSnapshot.data() as any)) {
+        excluded.add(docSnapshot.id)
+      }
+    }
+  } catch {
+    // Fail OPEN, matching robots.txt: a read failure must not blank a working
+    // sitemap. The pages' own `noindex` still holds.
+  }
+
+  const urls = Object.entries(hostRes.host.screens ?? {})
+    .filter(([screenId]) => !excluded.has(screenId))
+    .map(([, path]) => `${base}${screenRoutePathToUrl(path)}`)
     .sort()
 
   // Commerce URLs (AGL-299): active product + collection pages join the
   // sitemap when the host has the matching template configured.
   try {
-    const hostRef = firebaseAdmin
-      .app()
-      .firestore()
-      .collection('hosts')
-      .doc(hostRes.host.$id)
     const storeSettings = await hostRef.collection('settings').doc('store').get()
     if (storeSettings.get('pdpScreenId')) {
       const products = await hostRef.collection('products').limit(500).get()
@@ -111,11 +189,6 @@ export async function GET(request: Request): Promise<Response> {
   // published /{collection}/{entry} articles join the sitemap. Bounded
   // reads, fail-open — a content read failure never takes the sitemap down.
   try {
-    const hostRef = firebaseAdmin
-      .app()
-      .firestore()
-      .collection('hosts')
-      .doc(hostRes.host.$id)
     const collections = await hostRef.collection('collections').limit(50).get()
     for (const docSnapshot of collections.docs) {
       const raw = docSnapshot.data() as any
@@ -139,36 +212,5 @@ export async function GET(request: Request): Promise<Response> {
     // Sitemap stays screens-only if content reads fail.
   }
 
-  const xml =
-    '<?xml version="1.0" encoding="UTF-8"?>\n' +
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    // De-duplicated (AGL-582): a collection slug can shadow a screen path.
-    [...new Set(urls)]
-      .map((item) => `  <url><loc>${escapeXml(item)}</loc></url>`)
-      .join('\n') +
-    '\n</urlset>\n'
-
-  return new Response(xml, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/xml',
-      // MEASURED 2026-08-04: this header is OVERRIDDEN and has no effect.
-      // Production returns `public, max-age=0, must-revalidate` here, on
-      // `collections-rss`, on `robots` (which still carries the old
-      // `s-maxage=3600`) and on ordinary pages alike — so the value below has
-      // never reached a CDN, and neither did the `s-maxage=3600` it replaced.
-      //
-      // What actually caches this route is Vercel's own revalidation, at
-      // **60 s**, measured by polling `age`: it climbs to ~60, flips to
-      // `x-vercel-cache: STALE`, then resets — twice, exactly 60 s apart.
-      // Which is the same window every page uses, so a sitemap is never more
-      // stale than the site it describes.
-      //
-      // Kept rather than deleted because it states the intent correctly and
-      // costs nothing; do NOT treat it as the thing producing the 60 s.
-      // AGL-1160 was filed believing this header made the sitemap an HOUR
-      // stale. It never did.
-      'Cache-Control': 's-maxage=60, stale-while-revalidate=60',
-    },
-  })
+  return sitemapResponse(urls)
 }

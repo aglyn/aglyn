@@ -256,6 +256,92 @@ export function parseMarkdownLite(body: string): MarkdownBlock[] {
   return blocks
 }
 
+/**
+ * The plain text an inline run reads as — the words with the emphasis and
+ * link syntax removed. What a heading contributes to an anchor slug and to a
+ * table-of-contents label (AGL-1162), where `## The **fine** print` has to
+ * become "The fine print" and `the-fine-print`, not two of either.
+ */
+export function markdownInlinesToText(inlines: MarkdownInline[]): string {
+  return inlines.map((inline) => inline.text).join('')
+}
+
+/** A heading a table of contents can point at (AGL-1162). */
+export interface MarkdownHeading {
+  level: 2 | 3
+  /** Heading text with emphasis/link syntax stripped. */
+  text: string
+  /** Anchor id, deterministic and unique within the document. */
+  slug: string
+  /** Position in the block list, so a renderer can id the right heading. */
+  index: number
+}
+
+/**
+ * Anchor id for one heading's text (AGL-1162).
+ *
+ * Deterministic by construction — the same words always produce the same id,
+ * which is the whole point: a legal page's true source is a markdown file
+ * elsewhere, and re-pasting it must not silently break every link that ever
+ * pointed into it. Accents fold to their base letter (NFKD then drop the
+ * combining marks) so `Résumé` and `Resume` are the same anchor rather than
+ * one of them being an unreadable percent-encoded id.
+ *
+ * A heading of nothing but punctuation or non-Latin script slugifies to
+ * empty; those get `SLUG_FALLBACK` here and are told apart by the numbering
+ * in {@link collectMarkdownHeadings}, because an id is required for the link
+ * to work at all and no id is worse than a dull one.
+ */
+export const SLUG_FALLBACK = 'section'
+
+export function slugifyHeading(text: string): string {
+  return (
+    text
+      .normalize('NFKD')
+      // Combining diacritics left behind by the decomposition above.
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || SLUG_FALLBACK
+  )
+}
+
+/**
+ * Every heading in a parsed document, with a unique anchor slug (AGL-1162).
+ *
+ * Duplicates take a `-2`, `-3`, … suffix in document order, and the loop
+ * re-checks the suffixed candidate: a document holding two `## Notice`
+ * headings AND a literal `## Notice 2` must not hand the same id to two
+ * elements, which is exactly what a plain counter would do.
+ *
+ * Deliberately NOT a widening of the `MarkdownBlock` union. The union is
+ * rendered exhaustively in five places, so a slug carried on the heading
+ * block would have to be produced by every writer of that union — including
+ * the visual editor's serializer, which round-trips through markdown source
+ * that has nowhere to put one. Derived here instead, from the same parse the
+ * renderer already has, so the markdown text stays the only source of truth.
+ */
+export function collectMarkdownHeadings(
+  blocks: MarkdownBlock[],
+): MarkdownHeading[] {
+  const headings: MarkdownHeading[] = []
+  const used = new Set<string>()
+  blocks.forEach((block, index) => {
+    if (block.type !== 'heading') return
+    const text = markdownInlinesToText(block.inlines).trim()
+    const base = slugifyHeading(text)
+    let slug = base
+    let suffix = 1
+    while (used.has(slug)) {
+      suffix += 1
+      slug = `${base}-${suffix}`
+    }
+    used.add(slug)
+    headings.push({ level: block.level, text, slug, index })
+  })
+  return headings
+}
+
 /** Newlines cannot exist inside an inline run — flatten them to a space. */
 const flattenInlineText = (text: string): string =>
   text.replace(/\s*\n+\s*/g, ' ')

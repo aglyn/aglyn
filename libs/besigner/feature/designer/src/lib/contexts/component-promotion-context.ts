@@ -33,11 +33,12 @@ export interface ComponentPromotionContextValue {
    * designer stays storage-agnostic: the console reads them and passes them
    * down, exactly as it does the callbacks above.
    *
-   * Two consumers, deliberately one field: the Attributes panel reads each
-   * definition's declared `props` to build an instance's fields, and
-   * `NodeLeaf` renders the definition's subtree inside the instance so the
-   * canvas shows the component instead of a dashed box. Splitting them
-   * would let the panel and the canvas disagree about what a definition is.
+   * Three consumers, deliberately one field: the Attributes panel reads each
+   * definition's declared `props` to build an instance's fields, `NodeLeaf`
+   * renders the definition's subtree inside the instance so the canvas shows
+   * the component instead of a dashed box, and `ComponentIconComponent`
+   * reads its chosen `icon` (AGL-1193). Splitting them would let the panel,
+   * the canvas and the hierarchy disagree about what a definition is.
    */
   definitions?: Record<string, Aglyn.ReusableComponentTree | undefined>
 }

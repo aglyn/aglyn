@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import isEqual from 'lodash-es/isEqual'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Besigner from '@aglyn/besigner'
 import {
@@ -59,6 +60,20 @@ export interface BesignerDocumentSource<TData = unknown> {
   nodes: Aglyn.ProcessableNodes | undefined
   /** Whatever the store stamps on write; used to detect concurrent edits. */
   updatedAt?: unknown
+  /**
+   * The snapshot `nodes` came from still carries writes this client made
+   * that the store has NOT acknowledged (Firestore's
+   * `snapshot.metadata.hasPendingWrites`).
+   *
+   * It decides whether the loaded document may be adopted as the *saved*
+   * state. It may not: a queued write is replayed into the first snapshot
+   * after a reload, so believing it would mean recording work the server
+   * never took as "already saved" — after which the editor is clean, Save is
+   * dead, and the canvas and the document disagree in silence (AGL-1262).
+   * Omitted (undefined) reads as confirmed, which is right for every store
+   * that has no such queue.
+   */
+  pendingWrites?: boolean
   status?: 'idle' | 'loading' | 'success' | 'error'
   error?: { message?: string } | null
   /** Persists the node map. Rejecting surfaces as an error notification. */
@@ -198,6 +213,7 @@ export function useBesignerDocument<TData = unknown>(
   const {
     nodes,
     updatedAt,
+    pendingWrites,
     status,
     error,
     save,
@@ -260,10 +276,19 @@ export function useBesignerDocument<TData = unknown>(
   useEffect(() => {
     if (nodes && !Aglyn.canvas.didSetInitial) {
       setLocalNodes(toCanvasNodes ? toCanvasNodes(nodes) : nodes)
-      Aglyn.canvas.updateInitialNodes()
+      // The loaded document becomes the "saved" baseline ONLY when the store
+      // has acknowledged it. A snapshot still carrying our own queued write
+      // shows the work (never hide it) but records nothing as saved, so the
+      // editor stays dirty and the work can still be written for real
+      // (AGL-1262). Without this the editor adopts an unacknowledged edit as
+      // the saved state and can never save again — not by re-editing, not by
+      // restoring the draft, whose content is the same.
+      Aglyn.canvas.updateInitialNodes(undefined, {
+        confirmed: !pendingWrites,
+      })
       baseStampRef.current = Aglyn.versionStamp(updatedAt)
     }
-  }, [nodes])
+  }, [nodes, pendingWrites])
 
   useEffect(() => {
     const stored = Aglyn.versionStamp(updatedAt)
@@ -288,8 +313,24 @@ export function useBesignerDocument<TData = unknown>(
   })
 
   const handleSave = useCallback(async () => {
+    const canvasNodes = Aglyn.canvas.toJSON().nodes as Record<string, unknown>
+    const prepared = fromCanvasNodes
+      ? fromCanvasNodes(canvasNodes)
+      : { nodes: canvasNodes }
+
+    // "Nothing to save" is a claim about the STORED document, so check it
+    // against the stored document — not against a baseline that can be
+    // wrong. When the two disagree the baseline lied, and this click is the
+    // author's only way out: a Save that quietly does nothing while the
+    // canvas and the document differ is how work is lost in silence
+    // (AGL-1262). `nodes` absent means the document has not loaded, and
+    // saving the empty canvas over it would be the worse bug.
     if (!saveAvailable) {
-      return notify('Already saved', { variant: 'info', persist: false })
+      const agrees =
+        !nodes || 'error' in prepared || isEqual(prepared.nodes, nodes)
+      if (agrees) {
+        return notify('Already saved', { variant: 'info', persist: false })
+      }
     }
     // Refuse rather than merge. A wrong automatic merge of a whole node map
     // is worse than a refusal the user can act on — and their work is still
@@ -302,10 +343,6 @@ export function useBesignerDocument<TData = unknown>(
     }
     const dequeueLoading = queueLoading()
 
-    const canvasNodes = Aglyn.canvas.toJSON().nodes as Record<string, unknown>
-    const prepared = fromCanvasNodes
-      ? fromCanvasNodes(canvasNodes)
-      : { nodes: canvasNodes }
     if ('error' in prepared) {
       dequeueLoading()
       return notify(prepared.error, {
@@ -374,6 +411,7 @@ export function useBesignerDocument<TData = unknown>(
   }, [
     saveAvailable,
     remoteChanged,
+    nodes,
     save,
     notify,
     queueLoading,
