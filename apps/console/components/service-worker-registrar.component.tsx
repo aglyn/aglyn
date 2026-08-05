@@ -44,6 +44,23 @@ export function createReloadOnce(
 export const SERVICE_WORKER_URL = '/sw.js'
 
 /**
+ * Whether this PAGE has already offered an update, at module scope rather
+ * than in a ref (AGL-1258).
+ *
+ * A ref is per component instance, so anything that remounts the registrar —
+ * and in production two stacked prompts were observed — gets a fresh guard
+ * and prompts again. The snackbar is `persist: true`, so the first one is
+ * still on screen when the second arrives. Module scope lives as long as the
+ * page, which is the correct lifetime for "have we already asked".
+ */
+let promptedThisPage = false
+
+/** Test seam: the module-scope guard must not leak between cases. */
+export function resetUpdatePromptGuard(): void {
+  promptedThisPage = false
+}
+
+/**
  * Registers the console's service worker and offers its updates (AGL-1053,
  * AGL-1055).
  *
@@ -75,7 +92,6 @@ export function ServiceWorkerRegistrar() {
   // and reloading on each is the classic reload LOOP in this exact code —
   // the page reloads, registers, sees a controller change, reloads again.
   const reloadOnce = useRef(createReloadOnce())
-  const prompted = useRef(false)
 
   /** Promote the waiting worker, then reload once it takes over. */
   const acceptUpdate = useCallback((waiting: ServiceWorker) => {
@@ -92,10 +108,17 @@ export function ServiceWorkerRegistrar() {
 
   const offerUpdate = useCallback(
     (waiting: ServiceWorker) => {
-      if (prompted.current) return
-      prompted.current = true
+      if (promptedThisPage) return
+      promptedThisPage = true
       enqueueSnackbar('A new version of the console is available.', {
         variant: 'info',
+        // Suppresses a second copy of the same message (AGL-1258). The flag
+        // reads backwards and is not: per its own docs it means "ignore
+        // displaying multiple snackbars with the same message", and every
+        // caller in the repo uses it that way. Belt and braces with the
+        // module-scope guard above — that one stops the second ENQUEUE, this
+        // one stops a second copy ever rendering if it somehow does.
+        allowDuplicate: true,
         // Never auto-hides and never steals focus: the point is that the old
         // build KEEPS WORKING. Someone mid-edit should be able to ignore this
         // indefinitely and finish what they were doing.
@@ -139,14 +162,15 @@ export function ServiceWorkerRegistrar() {
       )
     }
     const offerReload = () => {
-      if (prompted.current) return
-      prompted.current = true
+      if (promptedThisPage) return
+      promptedThisPage = true
       enqueueSnackbar(
         'This page is running an older version of the console and could not ' +
           'load part of it.',
         {
           variant: 'warning',
           persist: true,
+          allowDuplicate: true,
           action: () => (
             <Button
               size="small"
@@ -197,8 +221,28 @@ export function ServiceWorkerRegistrar() {
           // to replace and nothing to interrupt anyone about. Without this the
           // first-ever install prompts, which is how people learn to dismiss
           // the notice without reading it.
+          // A worker ALREADY waiting when this page loaded is adopted
+          // silently, not offered (AGL-1258).
+          //
+          // AGL-1055's rule is "never swap the build out from under a live
+          // page", and it is right — but a page that has only just loaded is
+          // not a live page yet. There is no unsaved work, nothing mid-edit,
+          // and the HTML in front of you already came from the network (this
+          // worker never caches a navigation), so it is ALREADY the new
+          // build. Promoting here changes which worker serves future assets
+          // and nothing the user can see.
+          //
+          // Left as a prompt, this was a trap: someone who reloads without
+          // clicking Reload gets the same worker waiting and the same notice
+          // on every single load, forever, while the toast trains them to
+          // ignore it. Observed in production with `active: true, waiting:
+          // true` surviving repeated reloads.
+          //
+          // No reload is issued — that would be exactly the yank AGL-1055
+          // forbids, and it is unnecessary: nothing already on the page
+          // changes when the worker behind it does.
           if (registration.waiting && navigator.serviceWorker.controller) {
-            offerUpdate(registration.waiting)
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' })
           }
           registration.addEventListener('updatefound', () => {
             const installing = registration.installing
