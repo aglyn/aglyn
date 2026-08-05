@@ -48,6 +48,12 @@ const HOST = process.env.E2E_HOST ?? 'demo'
 const HOST_BASE = `${ORG_SLUG}/hosts/${HOST}`
 // Account fixtures the password shots target (AGL-921); both come from
 // seed-e2e.mjs, which is also where their guard-relevant properties are set.
+// Reusable component with declared props (AGL-1247), seeded by
+// seed-e2e.mjs. The component besigner routes by /components/[id]/versions/
+// [versionId]/besigner, so both ids are needed to open it.
+const COMPONENT_ID = process.env.E2E_COMPONENT_ID ?? 'seed-marketing-cta'
+const COMPONENT_VERSION_ID =
+  process.env.E2E_COMPONENT_VERSION_ID ?? 'seed-marketing-cta-v1'
 const TEAMMATE_UID = process.env.E2E_TEAMMATE_UID ?? 'e2e-teammate'
 const NON_STAFF_UID = process.env.E2E_OWNER_UID ?? 'e2e-nonstaff-owner'
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
@@ -244,6 +250,49 @@ const shots = [
     path: `/${HOST_BASE}/components`,
     waitFor: 'Components',
     settleMs: 2500,
+  },
+  {
+    // Declared component properties (AGL-1247), in the component's own
+    // besigner. The dialog is reachable only from File — there is no URL
+    // for it — and the two rows come from the seeded `Marketing CTA`
+    // fixture, whose `{{prop.*}}` tokens are visible on the canvas behind.
+    out: 'besigner/component-properties-dialog.png',
+    path: `/${HOST_BASE}/components/${COMPONENT_ID}/versions/${COMPONENT_VERSION_ID}/besigner`,
+    waitFor: 'Properties',
+    settleMs: 8000,
+    actions: [
+      // `text=File` would also match "Profile"/"File name" elsewhere in the
+      // chrome; the menu button carries a stable id.
+      { click: '#center-nav-file', settleMs: 800 },
+      { click: 'text=Properties…', waitFor: 'Component properties' },
+    ],
+  },
+  {
+    // The instance side of the same feature: one Attributes field per
+    // declared prop, the definition's defaults as placeholders, and the
+    // "Defaults to …" helper under each. Selected from the Hierarchy panel
+    // rather than the canvas, so the shot is about the right-hand panel.
+    out: 'besigner/component-instance-attributes.png',
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
+    waitFor: 'Properties',
+    settleMs: 6000,
+    actions: [
+      { click: 'text=Document', settleMs: 1200 },
+      { click: 'text=Reusable Component', settleMs: 2000 },
+    ],
+  },
+  {
+    // AGL-1251: an instance renders its real content on the canvas, where
+    // the page used to claim a dashed placeholder. HOVERED rather than
+    // selected — the outline and the "Reusable Comp…" badge say which band
+    // is the instance, while the empty Attributes panel keeps this shot
+    // about the canvas and not about the panel the shot above owns.
+    // Viewport coordinates, since the canvas is a closed shadow root.
+    out: 'besigner/component-instance-on-canvas.png',
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
+    waitFor: 'Properties',
+    settleMs: 6000,
+    actions: [{ hoverXY: [610, 512], settleMs: 2500 }],
   },
   {
     out: 'staff-console/admin-orgs.png',
@@ -519,6 +568,16 @@ for (const shot of selected) {
       }
       if (action.clickXY) {
         await page.mouse.click(action.clickXY[0], action.clickXY[1])
+      }
+      // Hover the canvas without selecting: the besigner outlines and names
+      // the element under the pointer, which is how a shot can say "this
+      // band is the instance" while the Attributes panel stays empty. Two
+      // moves, because a single move to a fresh page fires no `mousemove`
+      // transition and the outline never appears.
+      if (action.hoverXY) {
+        const [x, y] = action.hoverXY
+        await page.mouse.move(x, y - 32)
+        await page.mouse.move(x, y)
       }
       if (action.click) await scope.locator(action.click).first().click()
       if (action.waitFor) {

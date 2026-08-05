@@ -46,6 +46,8 @@ not canvas elements, though: clicking anywhere on an instance selects **the inst
 which is the only thing there you can select, move or delete. To change what is inside it,
 open the component.
 
+![An instance rendering its content on the besigner canvas](/img/besigner/component-instance-on-canvas.png)
+
 ## Properties
 
 A component doesn't have to look identical everywhere. Give it **properties** and each place
@@ -60,6 +62,8 @@ This is what stops a hero from being rebuilt on every page. Only the words diffe
 2. **Add property**. Give it a name — `headline`, say — a type, an optional label for the
    Attributes panel, and a **default**.
 3. The dialog shows each property's token under its name.
+
+![The Component properties dialog with two properties declared](/img/besigner/component-properties-dialog.png)
 
 | Type | Field in Attributes |
 | -- | -- |
@@ -101,6 +105,8 @@ Publishing the component is enough. You do not republish the pages that use it.
 ### Fill them in per page
 
 Select any instance and the **Attributes** panel has one field per property.
+
+![The Attributes panel showing one field per declared property](/img/besigner/component-instance-attributes.png)
 
 The component's default shows as the field's **placeholder**, with the exact default
 spelled out underneath. Leave a field empty and that default is what renders — so clearing

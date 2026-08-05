@@ -640,6 +640,115 @@ for (const [id, name, email, offsetMs, status] of bookings) {
   })
 }
 
+// ── Reusable component with declared props (AGL-1247) ──────────────────────
+//
+// A parameterised component, because an unparameterised one proves nothing
+// about the feature: the docs shots need the Properties dialog to have rows
+// in it, the Attributes panel to have one field per prop, and the canvas to
+// render a grafted instance.
+//
+// Written in BOTH places on purpose, mirroring what the editor does:
+//
+// - the version doc is the working copy the component besigner edits (its
+//   `props` is what File ▸ Properties… reads), and
+// - the parent component doc is the PUBLISHED snapshot — `getComponents`
+//   reads it on every tenant render and the Attributes panel resolves
+//   declared props from it, so props left only on the version would leave
+//   every `{{prop.*}}` unresolved and the instance with no fields at all.
+const COMPONENT_ID = 'seed-marketing-cta'
+const COMPONENT_VERSION_ID = 'seed-marketing-cta-v1'
+const COMPONENT_ROOT_ID = 'ctaSection'
+/** Declared props; `name` is the stable key instance values are stored under. */
+const componentProps = [
+  {
+    name: 'headline',
+    type: 'text',
+    label: 'Headline',
+    defaultValue: 'Start with a blank canvas.',
+  },
+  {
+    name: 'lede',
+    type: 'richText',
+    label: 'Lede',
+    defaultValue:
+      'Design, ship, and run your entire web presence from one place — ' +
+      'free to start.',
+  },
+]
+/**
+ * Definition subtree. `rootId` is the promoted element itself, NOT a canvas
+ * root — the component editor wraps it (`definitionToCanvasTree`) and the
+ * graft unwraps back to this shape.
+ */
+const componentNodes = {
+  // Non-mui-prefixed component ids carry an explicit pluginId.
+  [COMPONENT_ROOT_ID]: {
+    $id: COMPONENT_ROOT_ID,
+    componentId: 'section',
+    pluginId: 'mui',
+    nodes: ['ctaContainer'],
+    sx: { py: 8 },
+  },
+  ctaContainer: {
+    $id: 'ctaContainer',
+    componentId: 'muiContainer',
+    parentId: COMPONENT_ROOT_ID,
+    nodes: ['ctaStack'],
+    props: { maxWidth: 'md' },
+  },
+  ctaStack: {
+    $id: 'ctaStack',
+    componentId: 'muiStack',
+    parentId: 'ctaContainer',
+    nodes: ['ctaHeadline', 'ctaLede', 'ctaButton'],
+    props: { spacing: 2 },
+  },
+  // The tokens are the whole point: each instance substitutes its own value
+  // (or the default above) as the subtree is grafted.
+  ctaHeadline: {
+    $id: 'ctaHeadline',
+    componentId: 'muiTypography',
+    parentId: 'ctaStack',
+    props: { children: '{{prop.headline}}', variant: 'h2' },
+  },
+  ctaLede: {
+    $id: 'ctaLede',
+    componentId: 'muiTypography',
+    parentId: 'ctaStack',
+    props: { children: '{{prop.lede}}', variant: 'body1' },
+  },
+  ctaButton: {
+    $id: 'ctaButton',
+    componentId: 'muiButton',
+    parentId: 'ctaStack',
+    props: { children: 'Get started free', variant: 'contained' },
+  },
+}
+const componentRef = hostRef.collection('components').doc(COMPONENT_ID)
+await put(componentRef, {
+  hostId,
+  displayName: 'Marketing CTA',
+  description:
+    'Closing call-to-action band — one component, different words per page.',
+  rootId: COMPONENT_ROOT_ID,
+  nodes: componentNodes,
+  props: componentProps,
+  versionId: COMPONENT_VERSION_ID,
+  deletedAt: null,
+  createdAt: now,
+  updatedAt: now,
+})
+await put(componentRef.collection('versions').doc(COMPONENT_VERSION_ID), {
+  hostId,
+  componentId: COMPONENT_ID,
+  displayName: 'Marketing CTA',
+  rootId: COMPONENT_ROOT_ID,
+  nodes: componentNodes,
+  props: componentProps,
+  createdAt: now,
+  updatedAt: now,
+})
+
 // Designed web screen so the besigner opens seeded content (docs
 // screenshots + editor smoke, AGL-450).
 const homeScreen = hostRef.collection('screens').doc('seed-home')
@@ -653,7 +762,21 @@ await put(homeScreen.collection('versions').doc('seed-home-v1'), {
   screenId: 'seed-home',
   nodes: {
     // '_@_' is the canvas root id (NODE_ROOT_ID / CANVAS_ROOT_ELEMENT_ID).
-    '_@_': { $id: '_@_', componentId: 'root', nodes: ['hero'] },
+    '_@_': { $id: '_@_', componentId: 'root', nodes: ['hero', 'ctaInstance'] },
+    // Instance of the `seed-marketing-cta` reusable component (AGL-1247 /
+    // AGL-1251), so the home screen has a selectable instance: the canvas
+    // renders its grafted content and the Attributes panel renders one field
+    // per declared prop. `propValues` is deliberately absent — an instance
+    // that sets nothing is what shows the definition's defaults as
+    // placeholders, which is the behaviour the docs shot has to prove.
+    ctaInstance: {
+      $id: 'ctaInstance',
+      componentId: 'reusableInstance',
+      pluginId: 'mui',
+      parentId: '_@_',
+      nodes: [],
+      props: { refId: COMPONENT_ID, name: 'Marketing CTA' },
+    },
     hero: {
       $id: 'hero',
       componentId: 'muiContainer',
