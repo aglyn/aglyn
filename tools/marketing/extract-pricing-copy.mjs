@@ -160,11 +160,19 @@ function recordsOf(node) {
     const childFramesWithText = n.children.filter(
       (c) => !isText(c) && textsOf(c).length > 0,
     )
-    // A leaf record: all of this node's text is either directly on it or in
-    // wrappers that hold nothing but a single text (Figma wraps an icon+label
-    // row that way). Anything with two or more text-bearing child frames is a
-    // container and must be descended into, or a whole table becomes one row.
-    if (childFramesWithText.length <= 1 && texts.length <= 4) {
+    // A record is a node whose text-bearing children each hold exactly ONE
+    // text — that is precisely a table row: N cells, one value per cell. A
+    // child holding two or more texts means this node is a container of
+    // records (the FAQ grid's `qa` pairs, the Plans row's plan cards), so
+    // descend.
+    //
+    // Note there is deliberately NO cap on cell count. An earlier
+    // `texts.length <= 4` guard split every row of the 9-column compare table
+    // into nine one-cell records — the data survived conservation but stopped
+    // being readable as a table, which is most of why it is extracted at all.
+    // Container-vs-row is a structural question and the shape of the children
+    // already answers it; a magic number only overrides the right answer.
+    if (childFramesWithText.every((c) => textsOf(c).length === 1)) {
       out.push({
         figmaNodeId: n.id,
         name: n.name === texts[0]?.name ? null : n.name,

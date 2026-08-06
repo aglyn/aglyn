@@ -65,16 +65,10 @@
           "widthPx": 288,
           "records": [
             {
-              "figmaNodeId": "247:3573",
-              "name": null,
+              "figmaNodeId": "247:3572",
+              "name": "toggle",
               "cells": [
-                "Monthly"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3575",
-              "name": "Annual · save 20%",
-              "cells": [
+                "Monthly",
                 "Annual · save up to 35%"
               ]
             }
@@ -125,44 +119,14 @@
               ]
             },
             {
-              "figmaNodeId": "247:3588",
-              "name": "f",
+              "figmaNodeId": "247:3587",
+              "name": "fl",
               "cells": [
-                "1 site"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3593",
-              "name": "f",
-              "cells": [
-                "5 pages · 1 seat"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3598",
-              "name": "f",
-              "cells": [
-                "250 MB storage"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3603",
-              "name": "f",
-              "cells": [
-                "Forms & media library"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3608",
-              "name": "f",
-              "cells": [
-                "Interactions"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3613",
-              "name": "f",
-              "cells": [
+                "1 site",
+                "5 pages · 1 seat",
+                "250 MB storage",
+                "Forms & media library",
+                "Interactions",
                 "Aglyn subdomain"
               ]
             }
@@ -203,44 +167,14 @@
               ]
             },
             {
-              "figmaNodeId": "247:3628",
-              "name": "f",
+              "figmaNodeId": "247:3627",
+              "name": "fl",
               "cells": [
-                "Everything in Free, plus:"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3630",
-              "name": "f",
-              "cells": [
-                "25 pages · 3 collaborators"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3635",
-              "name": "f",
-              "cells": [
-                "Custom domain & SSL"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3640",
-              "name": "f",
-              "cells": [
-                "Remove Aglyn branding"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3645",
-              "name": "f",
-              "cells": [
-                "Commerce · 100 products"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3650",
-              "name": "f",
-              "cells": [
+                "Everything in Free, plus:",
+                "25 pages · 3 collaborators",
+                "Custom domain & SSL",
+                "Remove Aglyn branding",
+                "Commerce · 100 products",
                 "Workflows & bookings"
               ]
             }
@@ -282,44 +216,14 @@
               ]
             },
             {
-              "figmaNodeId": "247:3667",
-              "name": "f",
+              "figmaNodeId": "247:3666",
+              "name": "fl",
               "cells": [
-                "Everything in Starter, plus:"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3669",
-              "name": "f",
-              "cells": [
-                "3 sites · 10 collaborators"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3674",
-              "name": "f",
-              "cells": [
-                "Versioning & AI assist"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3679",
-              "name": "f",
-              "cells": [
-                "Video, POS & marketplace"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3684",
-              "name": "f",
-              "cells": [
-                "Site export & analytics"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3689",
-              "name": "f",
-              "cells": [
+                "Everything in Starter, plus:",
+                "3 sites · 10 collaborators",
+                "Versioning & AI assist",
+                "Video, POS & marketplace",
+                "Site export & analytics",
                 "2,500 products / site"
               ]
             }
@@ -360,44 +264,14 @@
               ]
             },
             {
-              "figmaNodeId": "247:3704",
-              "name": "f",
+              "figmaNodeId": "247:3703",
+              "name": "fl",
               "cells": [
-                "Everything in Pro, plus:"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3706",
-              "name": "f",
-              "cells": [
-                "10 sites · 50 collaborators"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3711",
-              "name": "f",
-              "cells": [
-                "API access · 100k req/mo"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3716",
-              "name": "f",
-              "cells": [
-                "A/B testing & webhooks"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3721",
-              "name": "f",
-              "cells": [
-                "Multilingual & scheduling"
-              ]
-            },
-            {
-              "figmaNodeId": "247:3726",
-              "name": "f",
-              "cells": [
+                "Everything in Pro, plus:",
+                "10 sites · 50 collaborators",
+                "API access · 100k req/mo",
+                "A/B testing & webhooks",
+                "Multilingual & scheduling",
                 "Full commerce + POS"
               ]
             }
@@ -542,58 +416,16 @@
           "widthPx": 375,
           "records": [
             {
-              "figmaNodeId": "268:1997",
-              "name": "tab·Free",
+              "figmaNodeId": "268:1996",
+              "name": "Plan selector",
               "cells": [
-                "Free"
-              ]
-            },
-            {
-              "figmaNodeId": "268:1999",
-              "name": "tab·Starter",
-              "cells": [
-                "Starter"
-              ]
-            },
-            {
-              "figmaNodeId": "268:2001",
-              "name": "tab·Pro",
-              "cells": [
-                "Pro"
-              ]
-            },
-            {
-              "figmaNodeId": "268:2003",
-              "name": "tab·Business",
-              "cells": [
-                "Business"
-              ]
-            },
-            {
-              "figmaNodeId": "583:1218",
-              "name": "tab·Advanced",
-              "cells": [
-                "Scale"
-              ]
-            },
-            {
-              "figmaNodeId": "268:2005",
-              "name": "tab·Advanced",
-              "cells": [
-                "Advanced"
-              ]
-            },
-            {
-              "figmaNodeId": "583:1220",
-              "name": "tab·Advanced",
-              "cells": [
-                "Agency"
-              ]
-            },
-            {
-              "figmaNodeId": "583:1222",
-              "name": "tab·Advanced",
-              "cells": [
+                "Free",
+                "Starter",
+                "Pro",
+                "Business",
+                "Scale",
+                "Advanced",
+                "Agency",
                 "Enterprise"
               ]
             }
@@ -605,10 +437,16 @@
           "widthPx": 375,
           "records": [
             {
-              "figmaNodeId": "268:2007",
-              "name": "Selected plan",
+              "figmaNodeId": "268:2008",
+              "name": null,
               "cells": [
-                "Pro",
+                "Pro"
+              ]
+            },
+            {
+              "figmaNodeId": "268:2009",
+              "name": "pr",
+              "cells": [
                 "$56",
                 "/mo"
               ]
