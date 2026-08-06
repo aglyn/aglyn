@@ -72,6 +72,11 @@ function given(options: {
   /** `hosts/{id}/collections` docs, read for both the template-screen
    * exclusion (AGL-1267) and the content-collection URLs. */
   collectionDocs?: Array<Record<string, unknown>>
+  /** `hosts/{id}/settings/store`, read for the commerce template-screen
+   * exclusion (AGL-1270) and the catalog URLs. Absent = no store doc. */
+  storeSettings?: Record<string, unknown>
+  /** `hosts/{id}/products` docs, for the `/products/{slug}` URLs. */
+  productDocs?: Array<Record<string, unknown>>
 }) {
   // Routing-map values are bare slugs; the root screen is the literal '/'.
   const screens = options.screens ?? { home: '/', secret: 'secret' }
@@ -103,17 +108,33 @@ function given(options: {
       ref: { collection: (name: string) => collectionRef(name) },
     })),
   }
+  const productSnapshot = {
+    docs: (options.productDocs ?? []).map((fields) => ({
+      id: String(fields['slug'] ?? 'product'),
+      get: (field: string) => fields[field],
+      data: () => fields,
+    })),
+  }
+  const storeDoc = {
+    docs: [],
+    exists: options.storeSettings != null,
+    get: (field: string) => options.storeSettings?.[field],
+  }
   const collectionRef = (name: string): any => ({
     select: () => collectionRef(name),
     limit: () => collectionRef(name),
     where: () => collectionRef(name),
-    doc: () => ({ get: async () => emptySnapshot }),
+    doc: () => ({
+      get: async () => (name === 'settings' ? storeDoc : emptySnapshot),
+    }),
     get: async () =>
       name === 'screens'
         ? screenSnapshot
         : name === 'collections'
           ? collectionSnapshot
-          : emptySnapshot,
+          : name === 'products'
+            ? productSnapshot
+            : emptySnapshot,
   })
   const hostRef = { collection: (name: string) => collectionRef(name) }
   ;(firebaseAdmin.app as jest.Mock).mockReturnValue({
@@ -252,6 +273,66 @@ describe('sitemap.xml (AGL-1263)', () => {
     // The collection itself still has a URL — contributed by the collection
     // loop, not by the list template's routing entry.
     expect(locs).toEqual(['https://acme.aglyn.app/', 'https://acme.aglyn.app/blog'])
+  })
+
+  it('drops the commerce PDP and collection templates, keeping the real catalog URLs (AGL-1270)', async () => {
+    // The duplication was provable here before the fix: `/product-page-template`
+    // and `/collection-page-template` were emitted as ordinary screen URLs,
+    // while the commerce block below emitted the real `/products/{slug}` and
+    // `/collections/{slug}` those very screens render. Two URLs per page, one of
+    // them raw `{{product.*}}` tokens — and `sitemapResponse`'s string de-dupe
+    // cannot see it, because the paths genuinely differ.
+    given({
+      screens: {
+        home: '/',
+        pdpTmpl: 'product-page-template',
+        shopTmpl: 'collection-page-template',
+      },
+      screenDocs: [
+        { id: 'home', visibility: HostScreenVisibility.PUBLIC },
+        { id: 'pdpTmpl', visibility: HostScreenVisibility.PUBLIC },
+        { id: 'shopTmpl', visibility: HostScreenVisibility.PUBLIC },
+      ],
+      storeSettings: {
+        pdpScreenId: 'pdpTmpl',
+        collectionScreenId: 'shopTmpl',
+      },
+      productDocs: [{ slug: 'anvil', status: 'active' }],
+      collectionDocs: [{ slug: 'tools', kind: 'catalog' }],
+    })
+
+    const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
+
+    expect(locs).not.toContain('https://acme.aglyn.app/product-page-template')
+    expect(locs).not.toContain(
+      'https://acme.aglyn.app/collection-page-template',
+    )
+    // The URLs those templates exist to render are still listed.
+    expect(locs).toEqual([
+      'https://acme.aglyn.app/',
+      'https://acme.aglyn.app/products/anvil',
+      'https://acme.aglyn.app/collections/tools',
+    ])
+  })
+
+  it('lists every screen for a host with no store settings', async () => {
+    // Commerce disabled, or Store settings never opened: `settings/store` does
+    // not exist, so nothing is subtracted and no catalog URL is invented.
+    given({
+      screens: { home: '/', about: 'about' },
+      screenDocs: [
+        { id: 'home', visibility: HostScreenVisibility.PUBLIC },
+        { id: 'about', visibility: HostScreenVisibility.PUBLIC },
+      ],
+      productDocs: [{ slug: 'anvil', status: 'active' }],
+    })
+
+    const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
+
+    expect(locs).toEqual([
+      'https://acme.aglyn.app/',
+      'https://acme.aglyn.app/about',
+    ])
   })
 
   it('is empty but still a valid sitemap when the site is discouraged', async () => {
