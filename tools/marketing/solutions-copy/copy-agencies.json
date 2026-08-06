@@ -184,7 +184,7 @@
         {
           "figmaNodeId": "168:1563",
           "meta": null,
-          "title": "Multiple hosts (up to 25)",
+          "title": "Multiple sites (up to 100 on Agency)",
           "body": null,
           "extra": []
         },
