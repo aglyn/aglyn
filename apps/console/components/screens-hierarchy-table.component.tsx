@@ -54,9 +54,12 @@ import {
   TableRow,
   Skeleton,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { Fragment, useCallback, useMemo, useState, type ReactNode } from 'react'
+import { collectionTemplateRoutesSummary } from '../constants/collection-templates'
+import type { UseCollectionTemplatesResult } from '../hooks/use-collection-templates'
 import { TABLE_HEAD_HEIGHT } from '../constants/shared'
 
 export interface ScreenHierarchyRow {
@@ -95,6 +98,12 @@ export interface ScreensHierarchyTableProps {
   onRowOpen?: (row: ScreenHierarchyRow) => void
   /** Onboarding CTA rendered inside the empty state (AGL-125). */
   emptyAction?: ReactNode
+  /**
+   * Which rows are collection templates, and what they render (AGL-1269).
+   * Their entry in `routingMap` is a slug the tenant refuses to serve
+   * (AGL-1267), so the Path column must not print it.
+   */
+  collectionTemplates?: UseCollectionTemplatesResult
 }
 
 const COLUMN_COUNT = 8
@@ -208,6 +217,7 @@ function ScreenTableRow(props: {
   anyExpandable: boolean
   onRowOpen: ScreensHierarchyTableProps['onRowOpen']
   routingMap?: Record<ScreenUid, string>
+  collectionTemplates?: UseCollectionTemplatesResult
 }) {
   const {
     entry,
@@ -219,6 +229,7 @@ function ScreenTableRow(props: {
     onRowOpen,
     anyExpandable,
     routingMap,
+    collectionTemplates,
   } = props
   const { row, depth, hasChildren } = entry
   const { isOver, setNodeRef: setDropRef } = useDroppable({
@@ -236,6 +247,15 @@ function ScreenTableRow(props: {
     data: { screenId: row.$id },
   })
   const path = routingMap?.[row.$id]
+  // A collection template is published — which is what makes the compose
+  // pipeline use it — but it is NOT a page (AGL-1267), so its routing-map
+  // slug 404s. Print the collection routes it renders instead of that slug.
+  const isCollectionTemplate = Boolean(
+    collectionTemplates?.templateScreenIds.has(row.$id),
+  )
+  const templateRoutes = collectionTemplateRoutesSummary(
+    collectionTemplates?.routesByScreenId.get(row.$id),
+  )
 
   return (
     <TableRow
@@ -306,7 +326,24 @@ function ScreenTableRow(props: {
         <Typography variant="body2">{row.displayName || '--'}</Typography>
       </TableCell>
       <TableCell>{row.$id}</TableCell>
-      <TableCell>{path ? screenRoutePathToUrl(path) : '--'}</TableCell>
+      <TableCell>
+        {isCollectionTemplate ? (
+          <Tooltip
+            title={
+              'A collection template is not served at a path of its own — ' +
+              'it renders the collection’s routes.'
+            }
+          >
+            <Typography variant="body2" color="text.secondary" component="span">
+              {templateRoutes ?? 'Collection template'}
+            </Typography>
+          </Tooltip>
+        ) : path ? (
+          screenRoutePathToUrl(path)
+        ) : (
+          '--'
+        )}
+      </TableCell>
       <TableCell>{row.description || '--'}</TableCell>
       <TableCell>{row.updatedAt?.toDate?.().toLocaleString() || '--'}</TableCell>
       <TableCell>
@@ -346,6 +383,7 @@ export function ScreensHierarchyTableComponent(
     renderRowLeadingActions,
     onRowOpen,
     emptyAction,
+    collectionTemplates,
   } = props
   const [collapsedIds, setCollapsedIds] = useState<Set<ScreenUid>>(new Set())
   const [activeId, setActiveId] = useState<ScreenUid | undefined>(undefined)
@@ -535,6 +573,7 @@ export function ScreensHierarchyTableComponent(
                     onRowOpen={onRowOpen}
                     anyExpandable={anyExpandable}
                     routingMap={routingMap}
+                    collectionTemplates={collectionTemplates}
                   />
                 </Fragment>
               )
