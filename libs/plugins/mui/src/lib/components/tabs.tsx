@@ -44,6 +44,20 @@ export interface TabsElementProps {
   centered?: boolean
   textColor?: 'primary' | 'secondary' | 'inherit'
   indicatorColor?: 'primary' | 'secondary'
+  /**
+   * Render only the selected panel, mounting the others the first time they
+   * are opened (AGL-1283). Off by default, because a hidden panel's content
+   * is normally worth having in the SSR output — it is indexable and
+   * findable, and most tab sets are small enough that the cost is noise.
+   *
+   * Turn it on when the panels are LARGE and REPETITIVE. `/pricing` renders
+   * a 50-row feature table per plan across eight plans; shipping all eight
+   * doubled the page, and every desktop visitor downloaded all of it to
+   * display none of it. The content is not lost to crawlers there because
+   * the same figures appear in the wide table that desktop actually shows —
+   * check that a page has that property before switching this on.
+   */
+  lazyPanels?: boolean
   children?: ReactNode
 }
 
@@ -88,6 +102,10 @@ interface TabsContextValue {
   activeLabel: string
   /** True on the besigner canvas, where every panel is shown at once. */
   showAll: boolean
+  /** Panels render nothing until first selected (AGL-1283). */
+  lazyPanels: boolean
+  /** Labels opened at least once — a lazily mounted panel stays mounted. */
+  opened: ReadonlySet<string>
 }
 
 export const TabsContext = createContext<TabsContextValue | undefined>(
@@ -118,12 +136,25 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
       centered,
       textColor,
       indicatorColor,
+      lazyPanels,
       children,
       ...rest
     } = props
     const { editorInert } = Aglyn.useScreenLink(undefined)
     const parsed = parseLabels(labels)
     const [active, setActive] = useState(0)
+    // Once a lazy panel has been opened it stays mounted: re-tabbing between
+    // two plans should not re-render 50 rows each time, and anything the
+    // reader typed or scrolled inside a panel survives a round trip.
+    //
+    // Seeded with the FIRST label, because that panel is open from the start
+    // without anyone clicking it. Leaving it out unmounted the landing panel
+    // the moment the reader moved away — visibly inconsistent with every
+    // other panel they had visited, and caught by the round-trip test.
+    const [opened, setOpened] = useState<ReadonlySet<string>>(() => {
+      const first = parseLabels(labels)[0]
+      return new Set<string>(first === undefined ? [] : [first])
+    })
     // A label removed from the list must not leave the strip pointing at
     // a tab that no longer exists — MUI warns and drops the indicator.
     const activeIndex = active < parsed.length ? active : 0
@@ -133,7 +164,19 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
     const strip = (
       <MuiTabs
         value={parsed.length ? activeIndex : false}
-        onChange={editorInert ? undefined : (_event, next) => setActive(next)}
+        onChange={
+          editorInert
+            ? undefined
+            : (_event, next: number) => {
+                setActive(next)
+                const label = parsed[next]
+                if (label !== undefined) {
+                  setOpened((prev) =>
+                    prev.has(label) ? prev : new Set(prev).add(label),
+                  )
+                }
+              }
+        }
         orientation={vertical ? 'vertical' : 'horizontal'}
         variant={resolvedVariant}
         // MUI ignores `centered` on a scrollable strip and warns in dev.
@@ -160,12 +203,23 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
           // Every panel at once on the canvas: a hidden panel cannot be
           // selected or styled, the same reason Accordion force-expands.
           showAll: !!editorInert,
+          lazyPanels: !!lazyPanels,
+          opened,
         }}
       >
         <Box
           ref={ref}
           {...rest}
-          sx={{ display: vertical ? 'flex' : undefined }}
+          // MERGE, never replace. `sx` written after `{...rest}` silently
+          // discarded whatever the author set on the node — every Tabs on
+          // every site rendered with default MUI styling and no way to
+          // change it, with nothing in the editor to suggest the value had
+          // been dropped (AGL-1284). Vertical orientation still needs the
+          // flex row, so it goes first and the author can override it.
+          sx={[
+            { display: vertical ? 'flex' : undefined },
+            ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx]),
+          ]}
         >
           {strip}
           {children}
@@ -189,6 +243,21 @@ export const TabPanelElement = forwardRef<
   const context = useContext(TabsContext)
   const selected = !context || labelsMatch(label, context.activeLabel)
   const visible = selected || !!context?.showAll
+  /**
+   * With `lazyPanels`, an unopened panel renders its wrapper but not its
+   * children — the wrapper stays so the `aria-controls` target and the
+   * tab ⇄ panel wiring still resolve, and so nothing about the accessible
+   * structure depends on whether the reader has clicked yet.
+   *
+   * `opened` is checked as well as `selected` because a panel that has been
+   * visited stays mounted; only the never-opened ones are skipped.
+   */
+  const mounted =
+    !context ||
+    !context.lazyPanels ||
+    context.showAll ||
+    selected ||
+    context.opened.has(String(label ?? ''))
 
   return (
     <Box
@@ -198,7 +267,16 @@ export const TabPanelElement = forwardRef<
       id={`tabpanel-${labelSlug(String(label ?? ''))}`}
       aria-labelledby={`tab-${labelSlug(String(label ?? ''))}`}
       {...rest}
-      sx={{ p: 2, ...(visible ? null : { display: 'none' }) }}
+      // Same merge bug as the Tabs container (AGL-1284): the author's `sx`
+      // was dropped, so a panel could not even have its padding changed.
+      // Order matters — the default padding is first so the author can
+      // override it, and the hide rule is LAST so an authored `display`
+      // can never force a deselected panel back on screen.
+      sx={[
+        { p: 2 },
+        ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx]),
+        ...(visible ? [] : [{ display: 'none' }]),
+      ]}
     >
       {context?.showAll && !selected ? (
         // Canvas only: says which tab this content belongs to, so a
@@ -211,7 +289,7 @@ export const TabPanelElement = forwardRef<
           {label ? `Tab: ${label}` : 'Tab: (no label set)'}
         </Typography>
       ) : null}
-      {children}
+      {mounted ? children : null}
     </Box>
   )
 })
@@ -265,6 +343,16 @@ export const tabsSchema: Aglyn.ComponentSchema<TabsElementProps> = {
         { value: 'scrollable', label: 'Scrollable' },
         { value: 'fullWidth', label: 'Full width' },
       ],
+    },
+    {
+      name: 'lazyPanels',
+      label: 'Load panels on demand',
+      description:
+        'Only builds a panel the first time its tab is opened. Makes the ' +
+        'page much lighter when the panels are large, but their content is ' +
+        'then not in the page source — leave this off unless the same ' +
+        'information appears elsewhere on the page.',
+      component: Aglyn.FieldComponentType.SWITCH,
     },
     {
       name: 'centered',

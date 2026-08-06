@@ -202,3 +202,110 @@ describe('Tabs schema and presets', () => {
     expect(field.label).toBe('Shows under tab')
   })
 })
+
+describe('authored sx survives (AGL-1284)', () => {
+  /**
+   * Both elements rendered `<Box {...rest} sx={{…}}>`, so the `sx` written
+   * on the node was overwritten by the component's own. Every authored style
+   * on every Tabs on every site was silently dropped, with nothing in the
+   * editor to say so — the styles were saved, they just never rendered.
+   */
+  it('keeps the container sx the author set', () => {
+    render(
+      <TabsElement labels={'One\nTwo'} sx={{ backgroundColor: 'rgb(1, 2, 3)' }}>
+        <TabPanelElement label="One">{'One body'}</TabPanelElement>
+      </TabsElement>,
+    )
+    const box = screen.getByText('One body').closest('[role=tabpanel]')
+      ?.parentElement as HTMLElement
+    expect(getComputedStyle(box).backgroundColor).toBe('rgb(1, 2, 3)')
+  })
+
+  it('keeps the panel sx the author set, overriding the default padding', () => {
+    render(
+      <TabsElement labels={'One'}>
+        <TabPanelElement label="One" sx={{ padding: '0px' }}>
+          {'One body'}
+        </TabPanelElement>
+      </TabsElement>,
+    )
+    const panel = screen.getByText('One body').closest(
+      '[role=tabpanel]',
+    ) as HTMLElement
+    expect(getComputedStyle(panel).padding).toBe('0px')
+  })
+
+  /**
+   * The merge must not hand authors a way to un-hide a deselected panel:
+   * the hide rule is appended last precisely so it wins.
+   */
+  it('still hides a deselected panel even when the author sets display', () => {
+    render(
+      <TabsElement labels={'One\nTwo'}>
+        <TabPanelElement label="One">{'One body'}</TabPanelElement>
+        <TabPanelElement label="Two" sx={{ display: 'block' }}>
+          {'Two body'}
+        </TabPanelElement>
+      </TabsElement>,
+    )
+    const two = screen.getByText('Two body').closest(
+      '[role=tabpanel]',
+    ) as HTMLElement
+    expect(two.hidden).toBe(true)
+    expect(getComputedStyle(two).display).toBe('none')
+  })
+})
+
+describe('lazyPanels (AGL-1283)', () => {
+  const eight = (lazy: boolean) => (
+    <TabsElement labels={'One\nTwo\nThree'} lazyPanels={lazy}>
+      <TabPanelElement label="One">{'One body'}</TabPanelElement>
+      <TabPanelElement label="Two">{'Two body'}</TabPanelElement>
+      <TabPanelElement label="Three">{'Three body'}</TabPanelElement>
+    </TabsElement>
+  )
+
+  it('ships every panel by default — hidden content stays in the markup', () => {
+    render(eight(false))
+    expect(screen.getByText('Two body')).toBeTruthy()
+    expect(screen.getByText('Three body')).toBeTruthy()
+  })
+
+  it('renders only the selected panel when on', () => {
+    render(eight(true))
+    expect(screen.getByText('One body')).toBeTruthy()
+    expect(screen.queryByText('Two body')).toBeNull()
+    expect(screen.queryByText('Three body')).toBeNull()
+  })
+
+  it('mounts a panel when its tab is first opened, and only that one', () => {
+    render(eight(true))
+    fireEvent.click(screen.getByRole('tab', { name: 'Two' }))
+    expect(screen.getByText('Two body')).toBeTruthy()
+    // Still untouched — opening one tab must not mount the whole set.
+    expect(screen.queryByText('Three body')).toBeNull()
+  })
+
+  /**
+   * A visited panel stays mounted, so switching back and forth does not
+   * rebuild it — and anything the reader scrolled or typed inside survives.
+   */
+  it('keeps a visited panel mounted after moving away', () => {
+    render(eight(true))
+    fireEvent.click(screen.getByRole('tab', { name: 'Two' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Three' }))
+    // Two is no longer selected but was visited, so it stays in the tree.
+    expect(screen.getByText('Two body')).toBeTruthy()
+    expect(screen.getByText('Three body')).toBeTruthy()
+    // One was the initial selection, so it is mounted too — but nothing
+    // that was never selected should have appeared.
+    expect(screen.getByText('One body')).toBeTruthy()
+  })
+
+  /** The canvas must keep showing everything, or panels become unselectable. */
+  it('ignores lazyPanels on the besigner canvas', () => {
+    renderEditor(eight(true))
+    expect(screen.getByText('Two body')).toBeTruthy()
+    expect(screen.getByText('Three body')).toBeTruthy()
+  })
+})
