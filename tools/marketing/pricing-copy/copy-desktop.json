@@ -1,0 +1,4610 @@
+{
+  "variant": "desktop",
+  "route": "/pricing",
+  "figmaNodeId": "77:38",
+  "frameName": "Pricing",
+  "frameSize": {
+    "width": 1440,
+    "height": 6791
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "77:61",
+      "name": "Hero",
+      "order": 0,
+      "widthPx": 1440,
+      "heightPx": 343,
+      "groups": [
+        {
+          "figmaNodeId": "77:62",
+          "name": "PRICING",
+          "widthPx": 58,
+          "records": [
+            {
+              "figmaNodeId": "77:62",
+              "name": null,
+              "cells": [
+                "PRICING"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "77:63",
+          "name": "Start free. Grow when you’re ready.",
+          "widthPx": 960,
+          "records": [
+            {
+              "figmaNodeId": "77:63",
+              "name": null,
+              "cells": [
+                "Start free. Grow when you’re ready."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "77:64",
+          "name": "Every plan includes the full platform — Besigner, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves.",
+          "widthPx": 680,
+          "records": [
+            {
+              "figmaNodeId": "77:64",
+              "name": null,
+              "cells": [
+                "Every plan includes the full platform — Besigner, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "77:65",
+          "name": "toggle",
+          "widthPx": 288,
+          "records": [
+            {
+              "figmaNodeId": "77:66",
+              "name": null,
+              "cells": [
+                "Monthly"
+              ]
+            },
+            {
+              "figmaNodeId": "77:68",
+              "name": "Annual · save 20%",
+              "cells": [
+                "Annual · save up to 35%"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "77:70",
+      "name": "Plans",
+      "order": 1,
+      "widthPx": 1440,
+      "heightPx": 906,
+      "groups": [
+        {
+          "figmaNodeId": "77:71",
+          "name": "row",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "80:55",
+              "name": "h",
+              "cells": [
+                "Free"
+              ]
+            },
+            {
+              "figmaNodeId": "80:57",
+              "name": "price",
+              "cells": [
+                "$0"
+              ]
+            },
+            {
+              "figmaNodeId": "80:59",
+              "name": null,
+              "cells": [
+                "No credit card required"
+              ]
+            },
+            {
+              "figmaNodeId": "80:60",
+              "name": null,
+              "cells": [
+                "For a single site to get started."
+              ]
+            },
+            {
+              "figmaNodeId": "80:64",
+              "name": "f",
+              "cells": [
+                "1 site"
+              ]
+            },
+            {
+              "figmaNodeId": "80:69",
+              "name": "f",
+              "cells": [
+                "5 pages · 1 seat"
+              ]
+            },
+            {
+              "figmaNodeId": "80:74",
+              "name": "f",
+              "cells": [
+                "250 MB storage"
+              ]
+            },
+            {
+              "figmaNodeId": "80:79",
+              "name": "f",
+              "cells": [
+                "Forms & media library"
+              ]
+            },
+            {
+              "figmaNodeId": "80:84",
+              "name": "f",
+              "cells": [
+                "Interactions"
+              ]
+            },
+            {
+              "figmaNodeId": "80:89",
+              "name": "f",
+              "cells": [
+                "Aglyn subdomain"
+              ]
+            },
+            {
+              "figmaNodeId": "80:95",
+              "name": "h",
+              "cells": [
+                "Starter"
+              ]
+            },
+            {
+              "figmaNodeId": "80:97",
+              "name": "price",
+              "cells": [
+                "$25",
+                "/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "80:100",
+              "name": null,
+              "cells": [
+                "$16/mo billed yearly"
+              ]
+            },
+            {
+              "figmaNodeId": "80:101",
+              "name": null,
+              "cells": [
+                "For a growing single site."
+              ]
+            },
+            {
+              "figmaNodeId": "80:105",
+              "name": "f",
+              "cells": [
+                "Everything in Free, plus:"
+              ]
+            },
+            {
+              "figmaNodeId": "80:107",
+              "name": "f",
+              "cells": [
+                "25 pages · 3 collaborators"
+              ]
+            },
+            {
+              "figmaNodeId": "80:112",
+              "name": "f",
+              "cells": [
+                "Custom domain & SSL"
+              ]
+            },
+            {
+              "figmaNodeId": "80:117",
+              "name": "f",
+              "cells": [
+                "Remove Aglyn branding"
+              ]
+            },
+            {
+              "figmaNodeId": "80:122",
+              "name": "f",
+              "cells": [
+                "Commerce · 100 products"
+              ]
+            },
+            {
+              "figmaNodeId": "80:127",
+              "name": "f",
+              "cells": [
+                "Workflows & bookings"
+              ]
+            },
+            {
+              "figmaNodeId": "80:133",
+              "name": "h",
+              "cells": [
+                "Pro",
+                "POPULAR"
+              ]
+            },
+            {
+              "figmaNodeId": "80:137",
+              "name": "price",
+              "cells": [
+                "$56",
+                "/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "80:140",
+              "name": null,
+              "cells": [
+                "$39/mo billed yearly"
+              ]
+            },
+            {
+              "figmaNodeId": "80:141",
+              "name": null,
+              "cells": [
+                "For pros running a few sites."
+              ]
+            },
+            {
+              "figmaNodeId": "80:145",
+              "name": "f",
+              "cells": [
+                "Everything in Starter, plus:"
+              ]
+            },
+            {
+              "figmaNodeId": "80:147",
+              "name": "f",
+              "cells": [
+                "3 sites · 10 collaborators"
+              ]
+            },
+            {
+              "figmaNodeId": "80:152",
+              "name": "f",
+              "cells": [
+                "Versioning & AI assist"
+              ]
+            },
+            {
+              "figmaNodeId": "80:157",
+              "name": "f",
+              "cells": [
+                "Video, POS & marketplace"
+              ]
+            },
+            {
+              "figmaNodeId": "80:162",
+              "name": "f",
+              "cells": [
+                "Site export & analytics"
+              ]
+            },
+            {
+              "figmaNodeId": "80:167",
+              "name": "f",
+              "cells": [
+                "2,500 products / site"
+              ]
+            },
+            {
+              "figmaNodeId": "80:173",
+              "name": "h",
+              "cells": [
+                "Business"
+              ]
+            },
+            {
+              "figmaNodeId": "80:175",
+              "name": "price",
+              "cells": [
+                "$139",
+                "/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "80:178",
+              "name": null,
+              "cells": [
+                "$99/mo billed yearly"
+              ]
+            },
+            {
+              "figmaNodeId": "80:179",
+              "name": null,
+              "cells": [
+                "For teams & agencies at scale."
+              ]
+            },
+            {
+              "figmaNodeId": "80:183",
+              "name": "f",
+              "cells": [
+                "Everything in Pro, plus:"
+              ]
+            },
+            {
+              "figmaNodeId": "80:185",
+              "name": "f",
+              "cells": [
+                "10 sites · 50 collaborators"
+              ]
+            },
+            {
+              "figmaNodeId": "80:190",
+              "name": "f",
+              "cells": [
+                "API access · 100k req/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "80:195",
+              "name": "f",
+              "cells": [
+                "A/B testing & webhooks"
+              ]
+            },
+            {
+              "figmaNodeId": "80:200",
+              "name": "f",
+              "cells": [
+                "Multilingual & scheduling"
+              ]
+            },
+            {
+              "figmaNodeId": "80:205",
+              "name": "f",
+              "cells": [
+                "Full commerce + POS"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "570:1218",
+          "name": "scale-strip",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "570:1219",
+              "name": "Frame",
+              "cells": [
+                "Need more scale? Higher-volume plans for stores, orgs, and agencies."
+              ]
+            },
+            {
+              "figmaNodeId": "570:1222",
+              "name": "Frame",
+              "cells": [
+                "Scale",
+                "$249 /mo"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1225",
+              "name": "Frame",
+              "cells": [
+                "For high-growth stores and multi-site teams that have outgrown Business.",
+                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 2.5 TB bandwidth"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1228",
+              "name": "Frame",
+              "cells": [
+                "CHOOSE"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1231",
+              "name": "Frame",
+              "cells": [
+                "Advanced",
+                "$399 /mo"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1234",
+              "name": "Frame",
+              "cells": [
+                "For high-volume organizations that need headroom on every limit.",
+                "25 sites · 100 collaborators · 0% commerce fees · 1M API requests/mo · unlimited products · priority scale & limits"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1237",
+              "name": "Frame",
+              "cells": [
+                "CHOOSE"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1240",
+              "name": "Frame",
+              "cells": [
+                "Agency",
+                "$799 /mo"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1243",
+              "name": "Frame",
+              "cells": [
+                "For agencies and resellers running whole client portfolios under one roof.",
+                "100 sites · 250 collaborators · full white-label incl. custom console domain · 5M API requests/mo · unlimited records & variables · 20 POS registers"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1246",
+              "name": "Frame",
+              "cells": [
+                "CHOOSE"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1249",
+              "name": "Frame",
+              "cells": [
+                "Enterprise",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1252",
+              "name": "Frame",
+              "cells": [
+                "For large organizations with bespoke requirements — volume pricing available.",
+                "Unlimited scale · 0% platform fees · white-label · SSO · SLA & dedicated support · custom contracts"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1255",
+              "name": "Frame",
+              "cells": [
+                "CONTACT SALES"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "87:56",
+      "name": "Compare features",
+      "order": 2,
+      "widthPx": 1440,
+      "heightPx": 2777,
+      "groups": [
+        {
+          "figmaNodeId": "87:57",
+          "name": "hh",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "87:57",
+              "name": "hh",
+              "cells": [
+                "COMPARE ALL FEATURES",
+                "Every plan, feature by feature",
+                "Prices shown monthly (USD). Every plan includes the full Besigner builder and platform."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "87:61",
+          "name": "Feature table",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "87:63",
+              "name": "c",
+              "cells": [
+                "Text"
+              ]
+            },
+            {
+              "figmaNodeId": "87:65",
+              "name": "c",
+              "cells": [
+                "Free"
+              ]
+            },
+            {
+              "figmaNodeId": "87:67",
+              "name": "c",
+              "cells": [
+                "Starter"
+              ]
+            },
+            {
+              "figmaNodeId": "87:69",
+              "name": "c",
+              "cells": [
+                "Pro"
+              ]
+            },
+            {
+              "figmaNodeId": "87:71",
+              "name": "c",
+              "cells": [
+                "Business"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2176",
+              "name": "c",
+              "cells": [
+                "Scale"
+              ]
+            },
+            {
+              "figmaNodeId": "87:73",
+              "name": "c",
+              "cells": [
+                "Advanced"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2178",
+              "name": "c",
+              "cells": [
+                "Agency"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2180",
+              "name": "c",
+              "cells": [
+                "Enterprise"
+              ]
+            },
+            {
+              "figmaNodeId": "87:76",
+              "name": "c",
+              "cells": [
+                "Text"
+              ]
+            },
+            {
+              "figmaNodeId": "87:78",
+              "name": "c",
+              "cells": [
+                "$0"
+              ]
+            },
+            {
+              "figmaNodeId": "87:80",
+              "name": "c",
+              "cells": [
+                "$25"
+              ]
+            },
+            {
+              "figmaNodeId": "87:82",
+              "name": "c",
+              "cells": [
+                "$56"
+              ]
+            },
+            {
+              "figmaNodeId": "87:84",
+              "name": "c",
+              "cells": [
+                "$139"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2182",
+              "name": "c",
+              "cells": [
+                "$249"
+              ]
+            },
+            {
+              "figmaNodeId": "87:86",
+              "name": "c",
+              "cells": [
+                "$399"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2184",
+              "name": "c",
+              "cells": [
+                "$799"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2186",
+              "name": "c",
+              "cells": [
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "87:89",
+              "name": "grp",
+              "cells": [
+                "Sites & publishing"
+              ]
+            },
+            {
+              "figmaNodeId": "87:92",
+              "name": "c",
+              "cells": [
+                "Sites (hosts)"
+              ]
+            },
+            {
+              "figmaNodeId": "87:94",
+              "name": "c",
+              "cells": [
+                "1"
+              ]
+            },
+            {
+              "figmaNodeId": "87:96",
+              "name": "c",
+              "cells": [
+                "1"
+              ]
+            },
+            {
+              "figmaNodeId": "87:98",
+              "name": "c",
+              "cells": [
+                "3"
+              ]
+            },
+            {
+              "figmaNodeId": "87:100",
+              "name": "c",
+              "cells": [
+                "10"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2188",
+              "name": "c",
+              "cells": [
+                "15"
+              ]
+            },
+            {
+              "figmaNodeId": "87:102",
+              "name": "c",
+              "cells": [
+                "25"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2190",
+              "name": "c",
+              "cells": [
+                "100"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2192",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:105",
+              "name": "c",
+              "cells": [
+                "Pages per site"
+              ]
+            },
+            {
+              "figmaNodeId": "87:107",
+              "name": "c",
+              "cells": [
+                "5"
+              ]
+            },
+            {
+              "figmaNodeId": "87:109",
+              "name": "c",
+              "cells": [
+                "25"
+              ]
+            },
+            {
+              "figmaNodeId": "87:111",
+              "name": "c",
+              "cells": [
+                "100"
+              ]
+            },
+            {
+              "figmaNodeId": "87:113",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2194",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "87:115",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2196",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2198",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:118",
+              "name": "c",
+              "cells": [
+                "Storage per site"
+              ]
+            },
+            {
+              "figmaNodeId": "87:120",
+              "name": "c",
+              "cells": [
+                "250 MB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:122",
+              "name": "c",
+              "cells": [
+                "2 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:124",
+              "name": "c",
+              "cells": [
+                "10 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:126",
+              "name": "c",
+              "cells": [
+                "50 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2200",
+              "name": "c",
+              "cells": [
+                "75 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:128",
+              "name": "c",
+              "cells": [
+                "100 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2202",
+              "name": "c",
+              "cells": [
+                "200 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2204",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:131",
+              "name": "c",
+              "cells": [
+                "Total site size"
+              ]
+            },
+            {
+              "figmaNodeId": "87:133",
+              "name": "c",
+              "cells": [
+                "100 MB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:135",
+              "name": "c",
+              "cells": [
+                "1 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:137",
+              "name": "c",
+              "cells": [
+                "5 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:139",
+              "name": "c",
+              "cells": [
+                "25 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2206",
+              "name": "c",
+              "cells": [
+                "37.5 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:141",
+              "name": "c",
+              "cells": [
+                "50 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2208",
+              "name": "c",
+              "cells": [
+                "100 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2210",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:144",
+              "name": "c",
+              "cells": [
+                "Bandwidth / mo"
+              ]
+            },
+            {
+              "figmaNodeId": "87:146",
+              "name": "c",
+              "cells": [
+                "5 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:148",
+              "name": "c",
+              "cells": [
+                "50 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:150",
+              "name": "c",
+              "cells": [
+                "250 GB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:152",
+              "name": "c",
+              "cells": [
+                "1 TB"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2212",
+              "name": "c",
+              "cells": [
+                "2.5 TB"
+              ]
+            },
+            {
+              "figmaNodeId": "87:154",
+              "name": "c",
+              "cells": [
+                "5 TB"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2214",
+              "name": "c",
+              "cells": [
+                "20 TB"
+              ]
+            },
+            {
+              "figmaNodeId": "548:2216",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:157",
+              "name": "c",
+              "cells": [
+                "Custom domain & SSL"
+              ]
+            },
+            {
+              "figmaNodeId": "87:159",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:161",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:163",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:165",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2176",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:167",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2178",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2180",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:170",
+              "name": "c",
+              "cells": [
+                "Remove Aglyn branding"
+              ]
+            },
+            {
+              "figmaNodeId": "87:172",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:174",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:176",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:178",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2182",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:180",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2184",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2186",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:183",
+              "name": "c",
+              "cells": [
+                "Reusable components"
+              ]
+            },
+            {
+              "figmaNodeId": "87:185",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:187",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:189",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:191",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2188",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:193",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2190",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2192",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:196",
+              "name": "c",
+              "cells": [
+                "Screen versioning"
+              ]
+            },
+            {
+              "figmaNodeId": "87:198",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:200",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:202",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:204",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2194",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:206",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2196",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2198",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:209",
+              "name": "c",
+              "cells": [
+                "Scheduled publishing"
+              ]
+            },
+            {
+              "figmaNodeId": "87:211",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:213",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:215",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:217",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2200",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:219",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2202",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2204",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:222",
+              "name": "c",
+              "cells": [
+                "URL redirects"
+              ]
+            },
+            {
+              "figmaNodeId": "87:224",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:226",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:228",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:230",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2206",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:232",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2208",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2210",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:235",
+              "name": "c",
+              "cells": [
+                "Multilingual sites"
+              ]
+            },
+            {
+              "figmaNodeId": "87:237",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:239",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:241",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:243",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2212",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:245",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2214",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2216",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:248",
+              "name": "c",
+              "cells": [
+                "Site backup & restore"
+              ]
+            },
+            {
+              "figmaNodeId": "87:250",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:252",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:254",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:256",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2218",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:258",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2220",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2222",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:261",
+              "name": "c",
+              "cells": [
+                "A/B testing"
+              ]
+            },
+            {
+              "figmaNodeId": "87:263",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:265",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:267",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:269",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2224",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:271",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2226",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2228",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:273",
+              "name": "grp",
+              "cells": [
+                "Team"
+              ]
+            },
+            {
+              "figmaNodeId": "87:276",
+              "name": "c",
+              "cells": [
+                "Team seats"
+              ]
+            },
+            {
+              "figmaNodeId": "87:278",
+              "name": "c",
+              "cells": [
+                "1"
+              ]
+            },
+            {
+              "figmaNodeId": "87:280",
+              "name": "c",
+              "cells": [
+                "2 · max 5"
+              ]
+            },
+            {
+              "figmaNodeId": "87:282",
+              "name": "c",
+              "cells": [
+                "5 · max 20"
+              ]
+            },
+            {
+              "figmaNodeId": "87:284",
+              "name": "c",
+              "cells": [
+                "15 · max 100"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2230",
+              "name": "c",
+              "cells": [
+                "25 · max 150"
+              ]
+            },
+            {
+              "figmaNodeId": "87:286",
+              "name": "c",
+              "cells": [
+                "50 · max 250"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2232",
+              "name": "c",
+              "cells": [
+                "100 · max 500"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2234",
+              "name": "c",
+              "cells": [
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "87:289",
+              "name": "c",
+              "cells": [
+                "Site collaborators"
+              ]
+            },
+            {
+              "figmaNodeId": "87:291",
+              "name": "c",
+              "cells": [
+                "1"
+              ]
+            },
+            {
+              "figmaNodeId": "87:293",
+              "name": "c",
+              "cells": [
+                "3 · max 10"
+              ]
+            },
+            {
+              "figmaNodeId": "87:295",
+              "name": "c",
+              "cells": [
+                "10 · max 25"
+              ]
+            },
+            {
+              "figmaNodeId": "87:297",
+              "name": "c",
+              "cells": [
+                "50 · max 100"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2236",
+              "name": "c",
+              "cells": [
+                "75 · max 150"
+              ]
+            },
+            {
+              "figmaNodeId": "87:299",
+              "name": "c",
+              "cells": [
+                "100 · max 250"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2238",
+              "name": "c",
+              "cells": [
+                "250 · max 1,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2240",
+              "name": "c",
+              "cells": [
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "414:25072",
+              "name": "c",
+              "cells": [
+                "Member accounts"
+              ]
+            },
+            {
+              "figmaNodeId": "414:25074",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "414:25076",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "414:25078",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "414:25080",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2242",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "414:25082",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2244",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2246",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "603:1238",
+              "name": "c",
+              "cells": [
+                "White-label"
+              ]
+            },
+            {
+              "figmaNodeId": "603:1240",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "603:1242",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "603:1244",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "603:1246",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "603:1248",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "603:1250",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "603:1252",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "603:1254",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:301",
+              "name": "grp",
+              "cells": [
+                "Content & data"
+              ]
+            },
+            {
+              "figmaNodeId": "87:304",
+              "name": "c",
+              "cells": [
+                "Datasets"
+              ]
+            },
+            {
+              "figmaNodeId": "87:306",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:308",
+              "name": "c",
+              "cells": [
+                "3 · max 10"
+              ]
+            },
+            {
+              "figmaNodeId": "87:310",
+              "name": "c",
+              "cells": [
+                "15 · max 50"
+              ]
+            },
+            {
+              "figmaNodeId": "87:312",
+              "name": "c",
+              "cells": [
+                "100 · max 250"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2248",
+              "name": "c",
+              "cells": [
+                "250 · max 500"
+              ]
+            },
+            {
+              "figmaNodeId": "87:314",
+              "name": "c",
+              "cells": [
+                "500 · max 1,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2250",
+              "name": "c",
+              "cells": [
+                "2,000 · max 5,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2252",
+              "name": "c",
+              "cells": [
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "87:317",
+              "name": "c",
+              "cells": [
+                "Records per dataset"
+              ]
+            },
+            {
+              "figmaNodeId": "87:319",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:321",
+              "name": "c",
+              "cells": [
+                "1,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:323",
+              "name": "c",
+              "cells": [
+                "10,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:325",
+              "name": "c",
+              "cells": [
+                "100,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2254",
+              "name": "c",
+              "cells": [
+                "500,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:327",
+              "name": "c",
+              "cells": [
+                "1,000,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2256",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2258",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:330",
+              "name": "c",
+              "cells": [
+                "Variables per site"
+              ]
+            },
+            {
+              "figmaNodeId": "87:332",
+              "name": "c",
+              "cells": [
+                "3"
+              ]
+            },
+            {
+              "figmaNodeId": "87:334",
+              "name": "c",
+              "cells": [
+                "25"
+              ]
+            },
+            {
+              "figmaNodeId": "87:336",
+              "name": "c",
+              "cells": [
+                "100"
+              ]
+            },
+            {
+              "figmaNodeId": "87:338",
+              "name": "c",
+              "cells": [
+                "1,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2260",
+              "name": "c",
+              "cells": [
+                "5,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:340",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2262",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2264",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:343",
+              "name": "c",
+              "cells": [
+                "Functions per site"
+              ]
+            },
+            {
+              "figmaNodeId": "87:345",
+              "name": "c",
+              "cells": [
+                "1"
+              ]
+            },
+            {
+              "figmaNodeId": "87:347",
+              "name": "c",
+              "cells": [
+                "10"
+              ]
+            },
+            {
+              "figmaNodeId": "87:349",
+              "name": "c",
+              "cells": [
+                "50"
+              ]
+            },
+            {
+              "figmaNodeId": "87:351",
+              "name": "c",
+              "cells": [
+                "250"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2266",
+              "name": "c",
+              "cells": [
+                "500"
+              ]
+            },
+            {
+              "figmaNodeId": "87:353",
+              "name": "c",
+              "cells": [
+                "1,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2268",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2270",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:356",
+              "name": "c",
+              "cells": [
+                "Workflows per site"
+              ]
+            },
+            {
+              "figmaNodeId": "87:358",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:360",
+              "name": "c",
+              "cells": [
+                "3"
+              ]
+            },
+            {
+              "figmaNodeId": "87:362",
+              "name": "c",
+              "cells": [
+                "25"
+              ]
+            },
+            {
+              "figmaNodeId": "87:364",
+              "name": "c",
+              "cells": [
+                "100"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2272",
+              "name": "c",
+              "cells": [
+                "250"
+              ]
+            },
+            {
+              "figmaNodeId": "87:366",
+              "name": "c",
+              "cells": [
+                "500"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2274",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2276",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:369",
+              "name": "c",
+              "cells": [
+                "Workflow runs / mo"
+              ]
+            },
+            {
+              "figmaNodeId": "87:371",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:373",
+              "name": "c",
+              "cells": [
+                "500"
+              ]
+            },
+            {
+              "figmaNodeId": "87:375",
+              "name": "c",
+              "cells": [
+                "5,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:377",
+              "name": "c",
+              "cells": [
+                "50,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2278",
+              "name": "c",
+              "cells": [
+                "150,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:379",
+              "name": "c",
+              "cells": [
+                "500,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2280",
+              "name": "c",
+              "cells": [
+                "2,000,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2282",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:382",
+              "name": "c",
+              "cells": [
+                "Actions builder"
+              ]
+            },
+            {
+              "figmaNodeId": "87:384",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:386",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:388",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:390",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2284",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:392",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2286",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2288",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:395",
+              "name": "c",
+              "cells": [
+                "Appointment bookings"
+              ]
+            },
+            {
+              "figmaNodeId": "87:397",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:399",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:401",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:403",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2290",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:405",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2292",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2294",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:408",
+              "name": "c",
+              "cells": [
+                "Form submissions / mo"
+              ]
+            },
+            {
+              "figmaNodeId": "87:410",
+              "name": "c",
+              "cells": [
+                "20"
+              ]
+            },
+            {
+              "figmaNodeId": "87:412",
+              "name": "c",
+              "cells": [
+                "200"
+              ]
+            },
+            {
+              "figmaNodeId": "87:414",
+              "name": "c",
+              "cells": [
+                "1,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:416",
+              "name": "c",
+              "cells": [
+                "10,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2296",
+              "name": "c",
+              "cells": [
+                "50,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:418",
+              "name": "c",
+              "cells": [
+                "100,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2298",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2300",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:421",
+              "name": "c",
+              "cells": [
+                "Contacts included"
+              ]
+            },
+            {
+              "figmaNodeId": "87:423",
+              "name": "c",
+              "cells": [
+                "100"
+              ]
+            },
+            {
+              "figmaNodeId": "87:425",
+              "name": "c",
+              "cells": [
+                "1,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:427",
+              "name": "c",
+              "cells": [
+                "10,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:429",
+              "name": "c",
+              "cells": [
+                "100,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2302",
+              "name": "c",
+              "cells": [
+                "500,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:431",
+              "name": "c",
+              "cells": [
+                "1,000,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2304",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2306",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:434",
+              "name": "c",
+              "cells": [
+                "Email sends / mo"
+              ]
+            },
+            {
+              "figmaNodeId": "87:436",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:438",
+              "name": "c",
+              "cells": [
+                "500"
+              ]
+            },
+            {
+              "figmaNodeId": "87:440",
+              "name": "c",
+              "cells": [
+                "5,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:442",
+              "name": "c",
+              "cells": [
+                "50,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2308",
+              "name": "c",
+              "cells": [
+                "100,000"
+              ]
+            },
+            {
+              "figmaNodeId": "87:444",
+              "name": "c",
+              "cells": [
+                "250,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2310",
+              "name": "c",
+              "cells": [
+                "1,000,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2312",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:447",
+              "name": "c",
+              "cells": [
+                "Video & file uploads"
+              ]
+            },
+            {
+              "figmaNodeId": "87:449",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:451",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "87:453",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:455",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2314",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:457",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2316",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2318",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:56",
+              "name": "grp",
+              "cells": [
+                "Commerce"
+              ]
+            },
+            {
+              "figmaNodeId": "88:59",
+              "name": "c",
+              "cells": [
+                "Online store"
+              ]
+            },
+            {
+              "figmaNodeId": "88:61",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:63",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:65",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:67",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2320",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:69",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2322",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2324",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:72",
+              "name": "c",
+              "cells": [
+                "Products per site"
+              ]
+            },
+            {
+              "figmaNodeId": "88:74",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:76",
+              "name": "c",
+              "cells": [
+                "100"
+              ]
+            },
+            {
+              "figmaNodeId": "88:78",
+              "name": "c",
+              "cells": [
+                "2,500"
+              ]
+            },
+            {
+              "figmaNodeId": "88:80",
+              "name": "c",
+              "cells": [
+                "10,000"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2326",
+              "name": "c",
+              "cells": [
+                "25,000"
+              ]
+            },
+            {
+              "figmaNodeId": "88:82",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2328",
+              "name": "c",
+              "cells": [
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2330",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "88:85",
+              "name": "c",
+              "cells": [
+                "POS registers"
+              ]
+            },
+            {
+              "figmaNodeId": "88:87",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:89",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:91",
+              "name": "c",
+              "cells": [
+                "1"
+              ]
+            },
+            {
+              "figmaNodeId": "88:93",
+              "name": "c",
+              "cells": [
+                "2"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2332",
+              "name": "c",
+              "cells": [
+                "3"
+              ]
+            },
+            {
+              "figmaNodeId": "88:95",
+              "name": "c",
+              "cells": [
+                "5"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2334",
+              "name": "c",
+              "cells": [
+                "20"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2336",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "88:98",
+              "name": "c",
+              "cells": [
+                "Digital transaction fee"
+              ]
+            },
+            {
+              "figmaNodeId": "88:100",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:102",
+              "name": "c",
+              "cells": [
+                "5%"
+              ]
+            },
+            {
+              "figmaNodeId": "88:104",
+              "name": "c",
+              "cells": [
+                "3%"
+              ]
+            },
+            {
+              "figmaNodeId": "88:106",
+              "name": "c",
+              "cells": [
+                "2%"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2338",
+              "name": "c",
+              "cells": [
+                "1%"
+              ]
+            },
+            {
+              "figmaNodeId": "88:108",
+              "name": "c",
+              "cells": [
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2340",
+              "name": "c",
+              "cells": [
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2342",
+              "name": "c",
+              "cells": [
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "88:111",
+              "name": "c",
+              "cells": [
+                "Physical transaction fee"
+              ]
+            },
+            {
+              "figmaNodeId": "88:113",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:115",
+              "name": "c",
+              "cells": [
+                "2%"
+              ]
+            },
+            {
+              "figmaNodeId": "88:117",
+              "name": "c",
+              "cells": [
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "88:119",
+              "name": "c",
+              "cells": [
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2344",
+              "name": "c",
+              "cells": [
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "88:121",
+              "name": "c",
+              "cells": [
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2346",
+              "name": "c",
+              "cells": [
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2348",
+              "name": "c",
+              "cells": [
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "88:124",
+              "name": "c",
+              "cells": [
+                "Subscriptions & memberships"
+              ]
+            },
+            {
+              "figmaNodeId": "88:126",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:128",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:130",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:132",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2350",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:134",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2352",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2354",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:137",
+              "name": "c",
+              "cells": [
+                "Gift cards"
+              ]
+            },
+            {
+              "figmaNodeId": "88:139",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:141",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:143",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:145",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2356",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:147",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2358",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2360",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:150",
+              "name": "c",
+              "cells": [
+                "Product reviews"
+              ]
+            },
+            {
+              "figmaNodeId": "88:152",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:154",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:156",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:158",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2362",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:160",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2364",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2366",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:163",
+              "name": "c",
+              "cells": [
+                "Abandoned cart recovery"
+              ]
+            },
+            {
+              "figmaNodeId": "88:165",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:167",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:169",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:171",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2368",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:173",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2370",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2372",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:176",
+              "name": "c",
+              "cells": [
+                "Content gating"
+              ]
+            },
+            {
+              "figmaNodeId": "88:178",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:180",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:182",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:184",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2374",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:186",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2376",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2378",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:189",
+              "name": "c",
+              "cells": [
+                "Commerce analytics"
+              ]
+            },
+            {
+              "figmaNodeId": "88:191",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:193",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:195",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:197",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2380",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:199",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2382",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2384",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:201",
+              "name": "grp",
+              "cells": [
+                "Marketing & analytics"
+              ]
+            },
+            {
+              "figmaNodeId": "88:204",
+              "name": "c",
+              "cells": [
+                "Interactions"
+              ]
+            },
+            {
+              "figmaNodeId": "88:206",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:208",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:210",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:212",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2386",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:214",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2388",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2390",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:217",
+              "name": "c",
+              "cells": [
+                "Announcement bar & popups"
+              ]
+            },
+            {
+              "figmaNodeId": "88:219",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:221",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:223",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:225",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2392",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:227",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2394",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2396",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:230",
+              "name": "c",
+              "cells": [
+                "CDN & responsive images"
+              ]
+            },
+            {
+              "figmaNodeId": "88:232",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:234",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:236",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:238",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2398",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:240",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2400",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2402",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:243",
+              "name": "c",
+              "cells": [
+                "AI assist"
+              ]
+            },
+            {
+              "figmaNodeId": "88:245",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:247",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:249",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:251",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2404",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:253",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2406",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2408",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:256",
+              "name": "c",
+              "cells": [
+                "Per-screen analytics"
+              ]
+            },
+            {
+              "figmaNodeId": "88:258",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:260",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:262",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:264",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2410",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:266",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2412",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2414",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:269",
+              "name": "c",
+              "cells": [
+                "Sell on the marketplace"
+              ]
+            },
+            {
+              "figmaNodeId": "88:271",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:273",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:275",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:277",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2416",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:279",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2418",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2420",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:281",
+              "name": "grp",
+              "cells": [
+                "Developer & API"
+              ]
+            },
+            {
+              "figmaNodeId": "88:284",
+              "name": "c",
+              "cells": [
+                "API access"
+              ]
+            },
+            {
+              "figmaNodeId": "88:286",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:288",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:290",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:292",
+              "name": "c",
+              "cells": [
+                "100k / mo"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2422",
+              "name": "c",
+              "cells": [
+                "300k / mo"
+              ]
+            },
+            {
+              "figmaNodeId": "88:294",
+              "name": "c",
+              "cells": [
+                "1M / mo"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2424",
+              "name": "c",
+              "cells": [
+                "5M / mo"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2426",
+              "name": "c",
+              "cells": [
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "88:297",
+              "name": "c",
+              "cells": [
+                "Webhooks"
+              ]
+            },
+            {
+              "figmaNodeId": "88:299",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:301",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:303",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:305",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2428",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:307",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2430",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2432",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:310",
+              "name": "c",
+              "cells": [
+                "Site export & backup"
+              ]
+            },
+            {
+              "figmaNodeId": "88:312",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:314",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "88:316",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:318",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2434",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:320",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2436",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "550:2438",
+              "name": "c",
+              "cells": [
+                "✓"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "89:56",
+      "name": "Usage pricing",
+      "order": 3,
+      "widthPx": 1440,
+      "heightPx": 1092,
+      "groups": [
+        {
+          "figmaNodeId": "89:57",
+          "name": "hh",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "89:57",
+              "name": "hh",
+              "cells": [
+                "USAGE-BASED PRICING",
+                "Scale past your plan, only pay for what you use",
+                "Add capacity a la carte at rates that improve as you move up. No surprise bills — everything is metered and itemized on your invoice."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "89:61",
+          "name": "Metered table",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "89:63",
+              "name": "c",
+              "cells": [
+                "Add-on capacity"
+              ]
+            },
+            {
+              "figmaNodeId": "89:65",
+              "name": "c",
+              "cells": [
+                "Starter"
+              ]
+            },
+            {
+              "figmaNodeId": "89:67",
+              "name": "c",
+              "cells": [
+                "Pro"
+              ]
+            },
+            {
+              "figmaNodeId": "89:69",
+              "name": "c",
+              "cells": [
+                "Business"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2179",
+              "name": "c",
+              "cells": [
+                "Scale"
+              ]
+            },
+            {
+              "figmaNodeId": "89:71",
+              "name": "c",
+              "cells": [
+                "Advanced"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2181",
+              "name": "c",
+              "cells": [
+                "Agency"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2183",
+              "name": "c",
+              "cells": [
+                "Enterprise"
+              ]
+            },
+            {
+              "figmaNodeId": "89:75",
+              "name": "c",
+              "cells": [
+                "Extra site / host"
+              ]
+            },
+            {
+              "figmaNodeId": "89:77",
+              "name": "c",
+              "cells": [
+                "+$10/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:79",
+              "name": "c",
+              "cells": [
+                "+$8/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:81",
+              "name": "c",
+              "cells": [
+                "+$5/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2185",
+              "name": "c",
+              "cells": [
+                "+$5/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:83",
+              "name": "c",
+              "cells": [
+                "+$4/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2187",
+              "name": "c",
+              "cells": [
+                "+$3/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2189",
+              "name": "c",
+              "cells": [
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "89:86",
+              "name": "c",
+              "cells": [
+                "Extra team seat"
+              ]
+            },
+            {
+              "figmaNodeId": "89:88",
+              "name": "c",
+              "cells": [
+                "+$5/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:90",
+              "name": "c",
+              "cells": [
+                "+$4/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:92",
+              "name": "c",
+              "cells": [
+                "+$3/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2191",
+              "name": "c",
+              "cells": [
+                "+$2/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:94",
+              "name": "c",
+              "cells": [
+                "+$2/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2193",
+              "name": "c",
+              "cells": [
+                "+$2/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2195",
+              "name": "c",
+              "cells": [
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "89:97",
+              "name": "c",
+              "cells": [
+                "Extra site collaborator"
+              ]
+            },
+            {
+              "figmaNodeId": "89:99",
+              "name": "c",
+              "cells": [
+                "+$3/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:101",
+              "name": "c",
+              "cells": [
+                "+$2/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:103",
+              "name": "c",
+              "cells": [
+                "+$1/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2197",
+              "name": "c",
+              "cells": [
+                "+$1/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:105",
+              "name": "c",
+              "cells": [
+                "+$1/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2199",
+              "name": "c",
+              "cells": [
+                "+$1/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2201",
+              "name": "c",
+              "cells": [
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "89:108",
+              "name": "c",
+              "cells": [
+                "Extra dataset"
+              ]
+            },
+            {
+              "figmaNodeId": "89:110",
+              "name": "c",
+              "cells": [
+                "+$2/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:112",
+              "name": "c",
+              "cells": [
+                "+$2/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:114",
+              "name": "c",
+              "cells": [
+                "+$1/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2203",
+              "name": "c",
+              "cells": [
+                "+$1/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:116",
+              "name": "c",
+              "cells": [
+                "+$1/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2205",
+              "name": "c",
+              "cells": [
+                "+$1/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2207",
+              "name": "c",
+              "cells": [
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "89:119",
+              "name": "c",
+              "cells": [
+                "Extra data storage"
+              ]
+            },
+            {
+              "figmaNodeId": "89:121",
+              "name": "c",
+              "cells": [
+                "$0.25 / GB-mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:123",
+              "name": "c",
+              "cells": [
+                "$0.25 / GB-mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:125",
+              "name": "c",
+              "cells": [
+                "$0.25 / GB-mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2209",
+              "name": "c",
+              "cells": [
+                "$0.25 / GB-mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:127",
+              "name": "c",
+              "cells": [
+                "$0.25 / GB-mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2211",
+              "name": "c",
+              "cells": [
+                "$0.25 / GB-mo"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2213",
+              "name": "c",
+              "cells": [
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "89:130",
+              "name": "c",
+              "cells": [
+                "API requests over limit"
+              ]
+            },
+            {
+              "figmaNodeId": "89:132",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "89:134",
+              "name": "c",
+              "cells": [
+                "—"
+              ]
+            },
+            {
+              "figmaNodeId": "89:136",
+              "name": "c",
+              "cells": [
+                "+$0.50 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2215",
+              "name": "c",
+              "cells": [
+                "+$0.35 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "89:138",
+              "name": "c",
+              "cells": [
+                "+$0.20 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2217",
+              "name": "c",
+              "cells": [
+                "+$0.15 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2219",
+              "name": "c",
+              "cells": [
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "416:1215",
+              "name": "c",
+              "cells": [
+                "Contacts over included band"
+              ]
+            },
+            {
+              "figmaNodeId": "416:1217",
+              "name": "c",
+              "cells": [
+                "+$1 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "416:1219",
+              "name": "c",
+              "cells": [
+                "+$0.75 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "416:1221",
+              "name": "c",
+              "cells": [
+                "+$0.50 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2221",
+              "name": "c",
+              "cells": [
+                "+$0.40 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "416:1223",
+              "name": "c",
+              "cells": [
+                "+$0.25 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2223",
+              "name": "c",
+              "cells": [
+                "+$0.20 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "563:2225",
+              "name": "c",
+              "cells": [
+                "Custom"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "89:140",
+          "name": "cards",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "89:141",
+              "name": "Event Calendar",
+              "cells": [
+                "Event Calendar (add-on)",
+                "$9 / mo",
+                "First-party event calendar with RSVPs, per site."
+              ]
+            },
+            {
+              "figmaNodeId": "89:146",
+              "name": null,
+              "cells": [
+                "POS Pro register",
+                "$89 / mo",
+                "Add extra point-of-sale registers or locations, each."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "92:107",
+          "name": "pass-through",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "92:108",
+              "name": "h",
+              "cells": [
+                "Metered infrastructure — passed through at cost + 30%",
+                "Usage beyond your plan’s included storage, bandwidth, and form submissions is metered monthly at our actual provider cost (Firebase + Vercel) plus a flat 30% — no hidden markup, itemized on every invoice."
+              ]
+            },
+            {
+              "figmaNodeId": "92:113",
+              "name": "c",
+              "cells": [
+                "Metered item"
+              ]
+            },
+            {
+              "figmaNodeId": "92:115",
+              "name": "c",
+              "cells": [
+                "Our cost"
+              ]
+            },
+            {
+              "figmaNodeId": "92:117",
+              "name": "c",
+              "cells": [
+                "You pay (+30%)"
+              ]
+            },
+            {
+              "figmaNodeId": "92:120",
+              "name": "c",
+              "cells": [
+                "Media & file storage"
+              ]
+            },
+            {
+              "figmaNodeId": "92:122",
+              "name": "c",
+              "cells": [
+                "$0.03 / GB-mo"
+              ]
+            },
+            {
+              "figmaNodeId": "92:124",
+              "name": "c",
+              "cells": [
+                "$0.039 / GB-mo"
+              ]
+            },
+            {
+              "figmaNodeId": "92:127",
+              "name": "c",
+              "cells": [
+                "Page views (bandwidth + reads)"
+              ]
+            },
+            {
+              "figmaNodeId": "92:129",
+              "name": "c",
+              "cells": [
+                "$0.10 / 1k views"
+              ]
+            },
+            {
+              "figmaNodeId": "92:131",
+              "name": "c",
+              "cells": [
+                "$0.13 / 1k views"
+              ]
+            },
+            {
+              "figmaNodeId": "92:134",
+              "name": "c",
+              "cells": [
+                "Form submissions"
+              ]
+            },
+            {
+              "figmaNodeId": "92:136",
+              "name": "c",
+              "cells": [
+                "$0.50 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "92:138",
+              "name": "c",
+              "cells": [
+                "$0.65 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "92:140",
+              "name": null,
+              "cells": [
+                "Online payments run on Stripe; Aglyn’s transaction fee (see the comparison table) applies on top of Stripe’s processing fees. Dataset storage over your included amount is billed separately at $0.25 / GB-mo."
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "90:30",
+      "name": "FAQ",
+      "order": 4,
+      "widthPx": 1440,
+      "heightPx": 689,
+      "groups": [
+        {
+          "figmaNodeId": "90:31",
+          "name": "Pricing FAQ",
+          "widthPx": 175,
+          "records": [
+            {
+              "figmaNodeId": "90:31",
+              "name": null,
+              "cells": [
+                "Pricing FAQ"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "90:32",
+          "name": "grid",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "90:33",
+              "name": "qa",
+              "cells": [
+                "Is there really a free plan?",
+                "Yes — the Free plan gives you one site, with the Besigner builder, forms, and media included. No credit card required."
+              ]
+            },
+            {
+              "figmaNodeId": "90:36",
+              "name": "qa",
+              "cells": [
+                "Monthly or annual billing?",
+                "Both. Annual is billed once up front and saves up to ~35% versus paying monthly. Switch anytime from the console."
+              ]
+            },
+            {
+              "figmaNodeId": "90:39",
+              "name": "qa",
+              "cells": [
+                "What happens if I exceed a plan limit?",
+                "You’re not cut off. Extra sites, seats, datasets, storage, and API calls are metered at the rates in the usage table and itemized on your invoice."
+              ]
+            },
+            {
+              "figmaNodeId": "90:42",
+              "name": "qa",
+              "cells": [
+                "How do transaction fees work?",
+                "Payments run on Stripe. Aglyn adds a transaction fee on top of Stripe’s processing — 0–5% depending on plan and digital vs. physical goods. It steps down as you move up — 1% on Scale, 0% from Advanced up."
+              ]
+            },
+            {
+              "figmaNodeId": "90:45",
+              "name": "qa",
+              "cells": [
+                "Can I self-host instead of subscribing?",
+                "Yes. Aglyn is Apache-2.0 — run it yourself with Docker and your own Firebase project (see the self-hosting guide), or use the hosted platform and skip the ops."
+              ]
+            },
+            {
+              "figmaNodeId": "90:48",
+              "name": "qa",
+              "cells": [
+                "Can I change or cancel anytime?",
+                "Upgrade, downgrade, or cancel whenever you like from the billing page. Plan changes prorate automatically."
+              ]
+            },
+            {
+              "figmaNodeId": "604:1272",
+              "name": "qa",
+              "cells": [
+                "Have a promo code?",
+                "Apply it at checkout — promotion codes work on any paid plan and show up itemized on your invoice."
+              ]
+            },
+            {
+              "figmaNodeId": "604:1275",
+              "name": "qa",
+              "cells": [
+                "Do you offer SSO or an SLA?",
+                "Both are coming for Enterprise contracts: SAML / OIDC single sign-on, an uptime SLA with a public status page, and priority support. Contact sales to plan around them."
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "90:51",
+      "name": "CTA",
+      "order": 5,
+      "widthPx": 1440,
+      "heightPx": 452,
+      "groups": [
+        {
+          "figmaNodeId": "90:52",
+          "name": "START FREE, UPGRADE ANYTIME",
+          "widthPx": 228,
+          "records": [
+            {
+              "figmaNodeId": "90:52",
+              "name": null,
+              "cells": [
+                "START FREE, UPGRADE ANYTIME"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "90:53",
+          "name": "Start building for free today.",
+          "widthPx": 761,
+          "records": [
+            {
+              "figmaNodeId": "90:53",
+              "name": null,
+              "cells": [
+                "Start building for free today."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "90:54",
+          "name": "No credit card required. Beta pricing — plans, prices, and included features may change as Aglyn evolves.",
+          "widthPx": 620,
+          "records": [
+            {
+              "figmaNodeId": "90:54",
+              "name": null,
+              "cells": [
+                "No credit card required. Beta pricing — plans, prices, and included features may change as Aglyn evolves."
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}
