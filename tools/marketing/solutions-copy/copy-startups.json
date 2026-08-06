@@ -1,0 +1,304 @@
+{
+  "page": "Startups",
+  "route": "/solutions/startups",
+  "figmaNodeId": "165:358",
+  "frameName": "Solutions — Startups",
+  "frameSize": {
+    "width": 1440,
+    "height": 4363
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "165:360",
+      "order": 0,
+      "heightPx": 689.5652465820312,
+      "eyebrow": "SOLUTIONS · STARTUPS",
+      "heading": "Launch fast. Iterate without a stack.",
+      "subheading": null,
+      "body": [
+        "Get your marketing site, waitlist, blog — even a store — live in days, on one platform you won’t outgrow. Spend your time on the product, not the plumbing."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:1630",
+      "order": 1,
+      "heightPx": 214,
+      "eyebrow": null,
+      "heading": "Early on, every hour counts. Instead of wiring together five tools you’ll have to rip out later, start on one platform that already does the whole job — and grows with you.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:369",
+      "order": 2,
+      "heightPx": 716,
+      "eyebrow": "WHY AGLYN FOR STARTUPS",
+      "heading": "Move fast without gluing tools together.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "165:374",
+          "meta": null,
+          "title": "One platform, not ten",
+          "body": "Site, blog, forms, email, and commerce are all built in — nothing to integrate or maintain.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:380",
+          "meta": null,
+          "title": "Your whole team, one workspace",
+          "body": "Invite teammates with roles and work on the same site from one shared console.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:387",
+          "meta": null,
+          "title": "Own your stack",
+          "body": "Aglyn is Apache-2.0 and self-hostable — you can take the whole platform with you as you scale.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:393",
+          "meta": null,
+          "title": "Ship pages in minutes",
+          "body": "Design on a live canvas with reusable components you can reuse across every page.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:402",
+          "meta": null,
+          "title": "Start free, pay as you grow",
+          "body": "Begin on the free plan and upgrade only when your traffic and needs do.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:409",
+          "meta": null,
+          "title": "From idea to live, today",
+          "body": "Publish to your domain in one click, with SSL and a global CDN out of the box.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:1632",
+      "order": 3,
+      "heightPx": 554.2608642578125,
+      "eyebrow": "ONE CONSOLE, WHOLE STACK",
+      "heading": "Run the whole thing from one place.",
+      "subheading": null,
+      "body": [
+        "Site, store, forms, email, workflows, and analytics all live in one console. No juggling logins, no glue code, and no surprise integration bills as you grow."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:1638",
+          "meta": null,
+          "title": "Everything built in",
+          "body": "Commerce, forms, media, workflows, and email are part of the platform.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1644",
+          "meta": null,
+          "title": "Instant publishing",
+          "body": "Ship changes to your domain in one click, with versioning to roll back.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1650",
+          "meta": null,
+          "title": "Grow without migrating",
+          "body": "Start free and move up tiers — the same platform the whole way.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:415",
+      "order": 4,
+      "heightPx": 410,
+      "eyebrow": "HOW STARTUPS SHIP ON AGLYN",
+      "heading": "From zero to launched, fast.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "165:420",
+          "meta": "01",
+          "title": "Design it live",
+          "body": "Open Besigner and build your pages on a real canvas — what you see is what ships.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:425",
+          "meta": "02",
+          "title": "Add what you need",
+          "body": "Turn on forms, email, a blog, or a store as you go — no new tools.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:430",
+          "meta": "03",
+          "title": "Publish and iterate",
+          "body": "Ship to your domain in one click, then keep editing with instant publishing.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:1809",
+      "order": 5,
+      "heightPx": 473,
+      "eyebrow": "WHAT'S INCLUDED",
+      "heading": "Everything to launch.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:1814",
+          "meta": null,
+          "title": "Free plan to start",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1818",
+          "meta": null,
+          "title": "Custom domain + SSL",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1822",
+          "meta": null,
+          "title": "Blog with scheduled publishing",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1826",
+          "meta": null,
+          "title": "Forms & Inbox",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1830",
+          "meta": null,
+          "title": "Email — transactional & campaigns",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1834",
+          "meta": null,
+          "title": "Commerce when you need it",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1838",
+          "meta": null,
+          "title": "Workflows & automations",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1842",
+          "meta": null,
+          "title": "Site backup & export",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:1846",
+      "order": 6,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:1851",
+          "meta": null,
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:1861",
+          "meta": null,
+          "title": "Commerce",
+          "body": "Storefronts, checkout, POS & digital goods.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:1871",
+          "meta": null,
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages & store revenue.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:435",
+      "order": 7,
+      "heightPx": 289,
+      "eyebrow": null,
+      "heading": "Build your startup on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — get your site live today and add the rest as you grow."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}
