@@ -23,6 +23,19 @@ Move your site from its Aglyn subdomain to a domain you own.
 4. Back in Aglyn, run **verification**. Aglyn checks DNS and resolves the CNAME.
 5. Once it verifies, your site serves on the custom domain.
 
+## Your Aglyn subdomain afterwards
+
+Once the domain is connected and serving, `your-site.aglyn.app` **redirects** to it —
+same page, same path, so an old link to `your-site.aglyn.app/pricing` lands on
+`https://your-domain.com/pricing`.
+
+That is deliberate. Serving the same pages at two addresses splits your search ranking
+between them, and lets a search engine pick which one to show. One address keeps the
+credit on the domain you own.
+
+Disconnect the domain and the Aglyn subdomain starts serving again on its own, within a
+minute or so. The redirect is temporary by design so that reversal always works.
+
 ## Registrar quick reference
 
 The exact screen differs by registrar, but the record is the same:

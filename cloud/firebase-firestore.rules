@@ -521,12 +521,23 @@ service cloud.firestore {
       // a reserved name or collide with another org's site, making
       // subdomain->host resolution ambiguous (AGL-642). It goes through
       // /api/hosts/rename, which claims uniqueness transactionally.
+      // `cname` is the site's OTHER public address and has the identical
+      // ambiguity (AGL-743 moved its write server-side for exactly that
+      // reason, and /api/domains/attach's comment claims to be its only
+      // writer) — but it was never added here, so the claim held for our code
+      // and not for the rules. Any editor could still `updateDoc` a cname
+      // directly, skipping both the uniqueness transaction and DNS
+      // verification. That was already enough to serve one org on another
+      // org's domain; since AGL-1272 it also decides whether
+      // `{sub}.aglyn.app` redirects, so a forged cname can take a site's
+      // last working origin down with it.
       // Those keys are Admin-SDK-only (org APIs bypass rules); staff keep
       // full control for tooling.
       allow update: if isStaff() ||
         (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['memberRoles', 'orgId', 'admins', 'hosts', 'subdomain']));
+            .hasAny(['memberRoles', 'orgId', 'admins', 'hosts', 'subdomain',
+                     'cname']));
       allow delete: if isStaff() ||
         (hostMemberRole(hostId) == 'admin' && !hostOrgSuspended(hostId));
       // Screen/layout DOC creates are API-only (AGL-473): /api/hosts/

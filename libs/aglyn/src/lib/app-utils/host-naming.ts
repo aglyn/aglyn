@@ -146,3 +146,71 @@ export function hostPublicOrigin(
   if (host?.subdomain) return `https://${host.subdomain}.${TENANT_APEX}`
   return undefined
 }
+
+/**
+ * The custom-domain lifecycle as it is actually persisted on the host doc.
+ *
+ * There is no `verifiedAt`, no `status`, no `sslReady` — the console's
+ * `/api/domains/*` routes write exactly these three fields, so this is the
+ * whole vocabulary anything downstream has to reason from.
+ */
+export interface HostCustomDomainState {
+  cname?: string | null
+  /** Vercel attach failed or was unconfigured — the domain does NOT serve. */
+  cnameAttachmentPending?: boolean | null
+  /** Vercel detach failed — the customer is mid-disconnect. */
+  cnameDetachmentPending?: boolean | null
+  subdomain?: string | null
+}
+
+/** A bare hostname: labels of a-z0-9/dash, at least two of them. */
+const CUSTOM_DOMAIN_PATTERN = /^(?!-)[a-z0-9-]{1,63}(\.(?!-)[a-z0-9-]{1,63})+$/
+
+/**
+ * The custom domain a host is actually **serving on**, or undefined (AGL-1272).
+ *
+ * Deliberately stricter than `hostPublicOrigin`, which answers "what name does
+ * this site call itself" and is right to prefer `cname` the moment it exists.
+ * This answers a load-bearing question instead — "is it safe to send visitors
+ * away from the platform subdomain and onto this name" — and the cost of
+ * getting it wrong is the whole site, not a wrong URL in an email.
+ *
+ * So every reason to doubt the domain is a refusal:
+ *
+ *  - `cnameAttachmentPending` means the Vercel attach never landed (missing
+ *    env, or a 5xx). The domain is claimed in Firestore and serves nothing:
+ *    no certificate, no routing. This is precisely the "attached but not
+ *    live" state, and redirecting to it strands the site on a dead host.
+ *  - `cnameDetachmentPending` means the customer asked to disconnect and the
+ *    platform release failed. The name may still resolve, but the customer's
+ *    stated intent is to leave it, so we stop advertising it.
+ *  - A name inside `aglyn.app` is refused outright. `{sub}.aglyn.app` is the
+ *    very origin we redirect FROM, and the tenant middleware resolves that
+ *    space by `subdomain` before it ever considers `cname` — so a host whose
+ *    cname pointed back into it would redirect to itself forever.
+ *  - A name that is not hostname-shaped is refused. `/api/domains/attach`
+ *    lowercases and trims what the wizard sends but never pattern-checks it
+ *    (only `/api/domains/verify` does), so a junk value can reach Firestore.
+ *    A junk value reaching a `Location:` header is a different class of
+ *    problem again.
+ *
+ * Note what this CANNOT tell you: DNS was verified once, at connect time, and
+ * nothing re-checks it. A domain whose DNS is later repointed or whose
+ * registration lapses still reads as live here. That residual risk is why the
+ * redirect built on this is temporary and revocable rather than permanent.
+ */
+export function liveCustomDomain(
+  host: HostCustomDomainState | null | undefined,
+): string | undefined {
+  if (!host) return undefined
+  if (host.cnameAttachmentPending === true) return undefined
+  if (host.cnameDetachmentPending === true) return undefined
+  const domain = String(host.cname ?? '')
+    .trim()
+    .toLowerCase()
+  if (!CUSTOM_DOMAIN_PATTERN.test(domain)) return undefined
+  if (domain === TENANT_APEX || domain.endsWith(`.${TENANT_APEX}`)) {
+    return undefined
+  }
+  return domain
+}
