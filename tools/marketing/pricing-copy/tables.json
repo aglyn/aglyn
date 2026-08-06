@@ -3,6 +3,7 @@
   "generatedBy": "tools/marketing/build-pricing-tables.mts",
   "notes": "Every value here is READ FROM CODE, never transcribed from Figma. The frame supplies the shape (which rows, in which groups); the code supplies the values. Regenerate rather than hand-edit.",
   "compare": {
+    "highlightPlan": "pro",
     "columns": [
       {
         "plan": "free",
@@ -76,7 +77,7 @@
               "scale": "15",
               "advanced": "25",
               "agency": "100",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -90,7 +91,7 @@
               "scale": "Unlimited",
               "advanced": "Unlimited",
               "agency": "Unlimited",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -104,7 +105,7 @@
               "scale": "75 GB",
               "advanced": "100 GB",
               "agency": "200 GB",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -118,7 +119,7 @@
               "scale": "37.5 GB",
               "advanced": "50 GB",
               "agency": "100 GB",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -132,7 +133,7 @@
               "scale": "2.5 TB",
               "advanced": "5 TB",
               "agency": "20 TB",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -263,7 +264,7 @@
               "scale": "25 · max 150",
               "advanced": "50 · max 250",
               "agency": "100 · max 500",
-              "enterprise": "Unlimited"
+              "enterprise": "Custom"
             }
           },
           {
@@ -277,7 +278,7 @@
               "scale": "75 · max 150",
               "advanced": "100 · max 250",
               "agency": "250 · max 1,000",
-              "enterprise": "Unlimited"
+              "enterprise": "Custom"
             }
           },
           {
@@ -338,7 +339,7 @@
               "scale": "250 · max 500",
               "advanced": "500 · max 1,000",
               "agency": "2,000 · max 5,000",
-              "enterprise": "Unlimited"
+              "enterprise": "Custom"
             }
           },
           {
@@ -352,7 +353,7 @@
               "scale": "500,000",
               "advanced": "1,000,000",
               "agency": "Unlimited",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -366,7 +367,7 @@
               "scale": "5,000",
               "advanced": "Unlimited",
               "agency": "Unlimited",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -380,7 +381,7 @@
               "scale": "500",
               "advanced": "1,000",
               "agency": "Unlimited",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -394,7 +395,7 @@
               "scale": "250",
               "advanced": "500",
               "agency": "Unlimited",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -408,7 +409,7 @@
               "scale": "150,000",
               "advanced": "500,000",
               "agency": "2,000,000",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -450,7 +451,7 @@
               "scale": "50,000",
               "advanced": "100,000",
               "agency": "Unlimited",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -464,7 +465,7 @@
               "scale": "500,000",
               "advanced": "1,000,000",
               "agency": "Unlimited",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -478,7 +479,7 @@
               "scale": "100,000",
               "advanced": "250,000",
               "agency": "1,000,000",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -525,7 +526,7 @@
               "scale": "25,000",
               "advanced": "Unlimited",
               "agency": "Unlimited",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -539,7 +540,7 @@
               "scale": "3",
               "advanced": "5",
               "agency": "20",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -759,7 +760,7 @@
               "scale": "300k / mo",
               "advanced": "1M / mo",
               "agency": "5M / mo",
-              "enterprise": "Unlimited"
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -794,6 +795,76 @@
       }
     ]
   },
+  "tiers": {
+    "heading": "Need more scale?",
+    "lede": "Higher-volume plans for stores, orgs, and agencies.",
+    "rows": [
+      {
+        "plan": "scale",
+        "label": "Scale",
+        "priceLabel": "$249 /mo",
+        "annualLabel": "$179/mo billed annually",
+        "blurb": "For high-growth stores and multi-site teams that have outgrown Business.",
+        "specs": [
+          "15 sites",
+          "75 collaborators",
+          "1% commerce fees",
+          "300k API requests/mo",
+          "25,000 products per site",
+          "2.5 TB bandwidth"
+        ],
+        "cta": "CHOOSE"
+      },
+      {
+        "plan": "advanced",
+        "label": "Advanced",
+        "priceLabel": "$399 /mo",
+        "annualLabel": "$299/mo billed annually",
+        "blurb": "For high-volume organizations that need headroom on every limit.",
+        "specs": [
+          "25 sites",
+          "100 collaborators",
+          "0% commerce fees",
+          "1M API requests/mo",
+          "unlimited products",
+          "priority scale & limits"
+        ],
+        "cta": "CHOOSE"
+      },
+      {
+        "plan": "agency",
+        "label": "Agency",
+        "priceLabel": "$799 /mo",
+        "annualLabel": "$649/mo billed annually",
+        "blurb": "For agencies and resellers running whole client portfolios under one roof.",
+        "specs": [
+          "100 sites",
+          "250 collaborators",
+          "full white-label incl. custom console domain",
+          "5M API requests/mo",
+          "unlimited records & variables",
+          "20 POS registers"
+        ],
+        "cta": "CHOOSE"
+      }
+    ],
+    "enterprise": {
+      "plan": "enterprise",
+      "label": "Enterprise",
+      "priceLabel": "Custom",
+      "annualLabel": "Quoted per agreement",
+      "blurb": "For large organizations with bespoke requirements — volume pricing available.",
+      "specs": [
+        "Unlimited scale",
+        "0% platform fees",
+        "white-label",
+        "SSO",
+        "SLA & dedicated support",
+        "custom contracts"
+      ],
+      "cta": "CONTACT SALES"
+    }
+  },
   "usage": {
     "columns": [
       {
@@ -819,8 +890,14 @@
       {
         "plan": "agency",
         "label": "Agency"
+      },
+      {
+        "plan": "enterprise",
+        "label": "Enterprise"
       }
     ],
+    "rowLabel": "Add-on capacity",
+    "highlightPlan": "pro",
     "rows": [
       {
         "label": "Extra site, per month",
@@ -830,7 +907,8 @@
           "business": "$5",
           "scale": "$5",
           "advanced": "$4",
-          "agency": "$3"
+          "agency": "$3",
+          "enterprise": "Custom"
         }
       },
       {
@@ -841,7 +919,8 @@
           "business": "$3",
           "scale": "$2",
           "advanced": "$2",
-          "agency": "$2"
+          "agency": "$2",
+          "enterprise": "Custom"
         }
       },
       {
@@ -852,7 +931,8 @@
           "business": "$1",
           "scale": "$1",
           "advanced": "$1",
-          "agency": "$1"
+          "agency": "$1",
+          "enterprise": "Custom"
         }
       },
       {
@@ -863,7 +943,8 @@
           "business": "$1",
           "scale": "$1",
           "advanced": "$1",
-          "agency": "$1"
+          "agency": "$1",
+          "enterprise": "Custom"
         }
       },
       {
@@ -874,7 +955,8 @@
           "business": "$0.25",
           "scale": "$0.25",
           "advanced": "$0.25",
-          "agency": "$0.25"
+          "agency": "$0.25",
+          "enterprise": "Custom"
         }
       },
       {
@@ -885,7 +967,8 @@
           "business": "$0.50",
           "scale": "$0.35",
           "advanced": "$0.20",
-          "agency": "$0.15"
+          "agency": "$0.15",
+          "enterprise": "Custom"
         }
       },
       {
@@ -896,7 +979,8 @@
           "business": "$0.50",
           "scale": "$0.40",
           "advanced": "$0.25",
-          "agency": "$0.20"
+          "agency": "$0.20",
+          "enterprise": "Custom"
         }
       }
     ],

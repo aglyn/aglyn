@@ -129,20 +129,45 @@ interface Row {
   value: (p: Plan) => string
   /** Set when the frame carries this row twice; see the duplicate note. */
   duplicateOf?: string
+  /**
+   * What Enterprise shows. The code resolves every Enterprise limit to
+   * UNLIMITED, but that is the *default* — a real Enterprise contract sets
+   * specific numbers through `org.entitlements` overrides. So publishing
+   * "Unlimited" on 30 rows would advertise a commitment no contract actually
+   * makes, and the frame's "Talk to us" / "Custom" is the more accurate copy
+   * as well as the designed one. Booleans and fee percentages are genuinely
+   * fixed, so those print their real value.
+   */
+  enterprise?: 'talk' | 'custom' | null
 }
+
+const TALK = 'Talk to us'
+const CUSTOM_LABEL = 'Custom'
 
 const E = (p: Plan) => PLAN_ENTITLEMENTS[p]
 const F = (p: Plan) => PLAN_ENTITLEMENTS[p].features
+
+/** Enterprise shows "Talk to us" instead of the resolved number. */
+const talk =
+  (fn: (p: Plan) => string) =>
+  (p: Plan): string =>
+    p === 'enterprise' ? TALK : fn(p)
+
+/** Enterprise shows "Custom" instead of the resolved allowance band. */
+const custom =
+  (fn: (p: Plan) => string) =>
+  (p: Plan): string =>
+    p === 'enterprise' ? CUSTOM_LABEL : fn(p)
 
 const GROUPS: Array<{ title: string; rows: Row[] }> = [
   {
     title: 'Sites & publishing',
     rows: [
-      { label: 'Sites (hosts)', value: (p) => num(E(p).hostLimit) },
-      { label: 'Pages per site', value: (p) => num(E(p).screensPerHost) },
-      { label: 'Storage per site', value: (p) => mb(E(p).storagePerHostMb) },
-      { label: 'Total site size', value: (p) => mb(E(p).totalSiteSizeMb) },
-      { label: 'Bandwidth / mo', value: (p) => gb(E(p).bandwidthGb) },
+      { label: 'Sites (hosts)', value: talk((p) => num(E(p).hostLimit)) },
+      { label: 'Pages per site', value: talk((p) => num(E(p).screensPerHost)) },
+      { label: 'Storage per site', value: talk((p) => mb(E(p).storagePerHostMb)) },
+      { label: 'Total site size', value: talk((p) => mb(E(p).totalSiteSizeMb)) },
+      { label: 'Bandwidth / mo', value: talk((p) => gb(E(p).bandwidthGb)) },
       { label: 'Custom domain & SSL', value: (p) => bool(F(p).customDomain) },
       { label: 'Remove Aglyn branding', value: (p) => bool(F(p).removeBranding) },
       { label: 'Reusable components', value: (p) => bool(F(p).reusableComponents) },
@@ -158,11 +183,11 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
     rows: [
       {
         label: 'Team seats',
-        value: (p) => band(E(p).managersPerOrg, E(p).maxManagersPerOrg),
+        value: custom((p) => band(E(p).managersPerOrg, E(p).maxManagersPerOrg)),
       },
       {
         label: 'Site collaborators',
-        value: (p) => band(E(p).membersPerHost, E(p).maxMembersPerHost),
+        value: custom((p) => band(E(p).membersPerHost, E(p).maxMembersPerHost)),
       },
       { label: 'Member accounts', value: () => 'Unlimited' },
       { label: 'White-label', value: (p) => bool(F(p).whiteLabel) },
@@ -174,21 +199,21 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
     rows: [
       {
         label: 'Datasets',
-        value: (p) => band(E(p).datasetsPerOrg, E(p).maxDatasetsPerOrg),
+        value: custom((p) => band(E(p).datasetsPerOrg, E(p).maxDatasetsPerOrg)),
       },
-      { label: 'Records per dataset', value: (p) => num(E(p).recordsPerDataset) },
-      { label: 'Variables per site', value: (p) => num(E(p).variablesPerHost) },
-      { label: 'Functions per site', value: (p) => num(E(p).functionsPerHost) },
-      { label: 'Workflows per site', value: (p) => num(E(p).workflowsPerHost) },
-      { label: 'Workflow runs / mo', value: (p) => num(E(p).workflowRunsPerMonth) },
+      { label: 'Records per dataset', value: talk((p) => num(E(p).recordsPerDataset)) },
+      { label: 'Variables per site', value: talk((p) => num(E(p).variablesPerHost)) },
+      { label: 'Functions per site', value: talk((p) => num(E(p).functionsPerHost)) },
+      { label: 'Workflows per site', value: talk((p) => num(E(p).workflowsPerHost)) },
+      { label: 'Workflow runs / mo', value: talk((p) => num(E(p).workflowRunsPerMonth)) },
       { label: 'Actions builder', value: (p) => bool(F(p).actions) },
       { label: 'Appointment bookings', value: (p) => bool(F(p).bookings) },
       {
         label: 'Form submissions / mo',
-        value: (p) => num(E(p).formSubmissionsPerMonth),
+        value: talk((p) => num(E(p).formSubmissionsPerMonth)),
       },
-      { label: 'Contacts included', value: (p) => num(E(p).contactsPerHost) },
-      { label: 'Email sends / mo', value: (p) => num(E(p).emailSendsPerMonth) },
+      { label: 'Contacts included', value: talk((p) => num(E(p).contactsPerHost)) },
+      { label: 'Email sends / mo', value: talk((p) => num(E(p).emailSendsPerMonth)) },
       { label: 'Video & file uploads', value: (p) => bool(F(p).videoMedia) },
     ],
   },
@@ -196,8 +221,8 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
     title: 'Commerce',
     rows: [
       { label: 'Online store', value: (p) => bool(F(p).commerce) },
-      { label: 'Products per site', value: (p) => num(E(p).productsPerHost) },
-      { label: 'POS registers', value: (p) => num(E(p).posRegisters) },
+      { label: 'Products per site', value: talk((p) => num(E(p).productsPerHost)) },
+      { label: 'POS registers', value: talk((p) => num(E(p).posRegisters)) },
       // A fee only means something if you can sell. Free carries
       // `transactionFeeDigitalPct: 0` but `commerce: false`, so printing "0%"
       // would read as "sell for free on the Free plan" — the opposite of
@@ -238,7 +263,7 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
   {
     title: 'Developer & API',
     rows: [
-      { label: 'API access', value: (p) => perMonth(E(p).apiRequestsPerMonth) },
+      { label: 'API access', value: talk((p) => perMonth(E(p).apiRequestsPerMonth)) },
       { label: 'Webhooks', value: (p) => bool(F(p).webhooks) },
       // The frame lists this capability TWICE — as "Site backup & restore"
       // under Sites & publishing and again here as "Site export & backup".
@@ -292,6 +317,8 @@ const USAGE_ROWS: Array<{ label: string; value: (p: Plan) => string }> = [
 // ---------------------------------------------------------------- emit
 
 const compare = {
+  /** The frame tints the Pro column full-height; the page mirrors that. */
+  highlightPlan: 'pro' as const,
   columns: PLANS.map((p) => ({
     plan: p,
     label: PLAN_LABELS[p],
@@ -310,11 +337,26 @@ const compare = {
   })),
 }
 
+/**
+ * The usage table runs Starter→Enterprise. Free is absent by design — it has
+ * no paid add-ons at all (`PLAN_PRICING.free.*` is null throughout), so a
+ * column of dashes would only invite the reader to look for a rate that does
+ * not exist. Enterprise carries "Custom" for every row, matching the frame.
+ */
+const USAGE_PLANS: Plan[] = [...PAID, 'enterprise']
+
 const usage = {
-  columns: PAID.map((p) => ({ plan: p, label: PLAN_LABELS[p] })),
+  columns: USAGE_PLANS.map((p) => ({ plan: p, label: PLAN_LABELS[p] })),
+  rowLabel: 'Add-on capacity',
+  highlightPlan: 'pro' as const,
   rows: USAGE_ROWS.map((r) => ({
     label: r.label,
-    values: Object.fromEntries(PAID.map((p) => [p, r.value(p)])),
+    values: Object.fromEntries(
+      USAGE_PLANS.map((p) => [
+        p,
+        p === 'enterprise' ? CUSTOM_LABEL : r.value(p),
+      ]),
+    ),
   })),
   note:
     'The Free plan has no paid add-ons. Annual billing does not change these ' +
@@ -328,6 +370,118 @@ const fees = {
     digital: pct(PLAN_ENTITLEMENTS[p].transactionFeeDigitalPct),
     physical: pct(PLAN_ENTITLEMENTS[p].transactionFeePhysicalPct),
   })),
+}
+
+/**
+ * The "Need more scale?" strip under the four plan cards (frame `570:1218`).
+ *
+ * `blurb` is design copy — a positioning sentence with no numbers in it, so
+ * there is nothing to drift. `specs` is assembled from code, because the
+ * frame's own spec lines are dense with figures ("15 sites · 75 collaborators
+ * · 1% commerce fees · 300k API requests/mo …") and every one of them is a
+ * claim. The frame's numbers were checked against these and all matched; the
+ * point of generating them is that they stay matched.
+ *
+ * A few trailing items are genuinely prose ("priority scale & limits") and are
+ * carried verbatim in `extras`, kept separate so it is obvious which half of
+ * each line is derived and which is written.
+ */
+/** Each token is a fact the frame chose to show, rendered from code. */
+const SPEC: Record<string, (e: (typeof PLAN_ENTITLEMENTS)[Plan]) => string> = {
+  sites: (e) => `${num(e.hostLimit)} sites`,
+  collaborators: (e) => `${num(e.membersPerHost)} collaborators`,
+  fees: (e) => `${pct(e.transactionFeeDigitalPct)} commerce fees`,
+  api: (e) =>
+    `${perMonth(e.apiRequestsPerMonth).replace(' / mo', '')} API requests/mo`,
+  products: (e) =>
+    e.productsPerHost === UNLIMITED
+      ? 'unlimited products'
+      : `${num(e.productsPerHost)} products per site`,
+  bandwidth: (e) => `${gb(e.bandwidthGb)} bandwidth`,
+  registers: (e) => `${num(e.posRegisters)} POS registers`,
+  whiteLabel: (e) =>
+    e.features.whiteLabel
+      ? 'full white-label incl. custom console domain'
+      : 'no white-label',
+  recordsAndVars: (e) =>
+    e.recordsPerDataset === UNLIMITED && e.variablesPerHost === UNLIMITED
+      ? 'unlimited records & variables'
+      : `${num(e.recordsPerDataset)} records · ${num(e.variablesPerHost)} variables`,
+}
+
+/**
+ * Which facts each tier leads with, in the frame's order. Kept to six items
+ * per row like the design — a longer line is not more informative, it just
+ * wraps. `lit` entries are prose the frame wrote that has no code equivalent.
+ */
+const TIER_SPEC: Partial<
+  Record<Plan, { blurb: string; specs: Array<keyof typeof SPEC | { lit: string }> }>
+> = {
+  scale: {
+    blurb:
+      'For high-growth stores and multi-site teams that have outgrown Business.',
+    specs: ['sites', 'collaborators', 'fees', 'api', 'products', 'bandwidth'],
+  },
+  advanced: {
+    blurb: 'For high-volume organizations that need headroom on every limit.',
+    specs: [
+      'sites',
+      'collaborators',
+      'fees',
+      'api',
+      'products',
+      { lit: 'priority scale & limits' },
+    ],
+  },
+  agency: {
+    blurb:
+      'For agencies and resellers running whole client portfolios under one roof.',
+    specs: [
+      'sites',
+      'collaborators',
+      'whiteLabel',
+      'api',
+      'recordsAndVars',
+      'registers',
+    ],
+  },
+}
+
+const tiers = {
+  heading: 'Need more scale?',
+  lede: 'Higher-volume plans for stores, orgs, and agencies.',
+  rows: (['scale', 'advanced', 'agency'] as Plan[]).map((p) => {
+    const e = PLAN_ENTITLEMENTS[p]
+    const spec = TIER_SPEC[p]!
+    return {
+      plan: p,
+      label: PLAN_LABELS[p],
+      priceLabel: `$${PLAN_PRICING[p].basePriceMonthlyUsd} /mo`,
+      annualLabel: `$${PLAN_PRICING[p].basePriceAnnualMonthlyUsd}/mo billed annually`,
+      blurb: spec.blurb,
+      specs: spec.specs.map((s) =>
+        typeof s === 'string' ? SPEC[s](e) : s.lit,
+      ),
+      cta: 'CHOOSE',
+    }
+  }),
+  enterprise: {
+    plan: 'enterprise',
+    label: PLAN_LABELS.enterprise,
+    priceLabel: CUSTOM_LABEL,
+    annualLabel: 'Quoted per agreement',
+    blurb:
+      'For large organizations with bespoke requirements — volume pricing available.',
+    specs: [
+      'Unlimited scale',
+      `${pct(PLAN_ENTITLEMENTS.enterprise.transactionFeeDigitalPct)} platform fees`,
+      'white-label',
+      'SSO',
+      'SLA & dedicated support',
+      'custom contracts',
+    ],
+    cta: 'CONTACT SALES',
+  },
 }
 
 const addons = {
@@ -362,6 +516,7 @@ writeFileSync(
         'The frame supplies the shape (which rows, in which groups); the code ' +
         'supplies the values. Regenerate rather than hand-edit.',
       compare,
+      tiers,
       usage,
       fees,
       addons,
@@ -415,10 +570,11 @@ for (const g of GROUPS) {
     framePlanOrder.forEach((p, i) => {
       const ours = r.value(p)
       const theirs = got[i]
-      // The frame writes "Talk to us" / "Custom" wherever Enterprise is
-      // quoted per deal. That is a copy choice about a contact-sales motion,
-      // not a claim about a number, so it is not drift.
-      if (p === 'enterprise' && /^(Talk to us|Custom)$/.test(theirs)) return
+      // Enterprise used to be excused here, on the grounds that "Talk to us"
+      // is a copy choice rather than a claim. It is now generated to match
+      // (see the `enterprise` note on Row), so the excuse is gone and all 50
+      // Enterprise cells are checked like every other column. An exemption
+      // that outlives its reason is just an untested column.
       if (ours !== theirs) {
         diffs.push(`  ${r.label} · ${PLAN_LABELS[p]}: code=${ours}  frame=${theirs}`)
       }
