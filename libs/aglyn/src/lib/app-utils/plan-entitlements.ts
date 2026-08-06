@@ -671,8 +671,15 @@ export const PLAN_LABELS: Record<OrgPlan, string> = {
 
 /**
  * Event Calendar add-on (AGL-145): first-party, Aglyn-supported, $9/mo
- * per host — cost×1.3 floor honored (mostly Firestore reads). Enabled via
- * the `eventCalendar` entitlement override at purchase.
+ * **per organization** — cost×1.3 floor honored (mostly Firestore reads).
+ * Enabled via the `eventCalendar` entitlement override at purchase.
+ *
+ * NOT per host, despite what this comment said until AGL-1279. AGL-145
+ * shipped it per host; AGL-526 then made add-ons self-serve and capped this
+ * one at `return 1` in `app/api/billing/addons/route.ts`, and
+ * `resolveOrgEntitlements` flips a single org-level `features.eventCalendar`
+ * boolean from any quantity >= 1. One purchase covers every host in the org.
+ * The marketing copy on /pricing is written against that behaviour.
  */
 export const EVENT_CALENDAR_ADDON_MONTHLY_USD = 9
 
