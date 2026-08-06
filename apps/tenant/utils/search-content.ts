@@ -18,7 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import {
   orgDataQueryForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
-import getCollectionTemplateScreenIds from '@aglyn/tenant-runtime/collection-template-screens'
+import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
 
 export interface SearchResult {
   title: string
@@ -49,13 +49,14 @@ export async function searchContent(options: {
 
   // Published screens (routing map = exactly what's reachable).
   //
-  // Minus the collection list/entry templates (AGL-1267): the router no
-  // longer serves those at their own slug, so a hit on one would be a search
+  // Minus the template screens (AGL-1267 for collection list/entry templates,
+  // AGL-1270 for commerce's PDP and catalog-collection templates): the router
+  // no longer serves those at their own slug, so a hit on one would be a search
   // result linking to a 404 — and its `displayName`/SEO ("Blog — Entry
-  // Template") is exactly the sort of string a visitor searching "blog"
-  // matches.
+  // Template", "Product Page Template") is exactly the sort of string a visitor
+  // searching "blog" or a product name matches.
   const routing = host.screens ?? {}
-  const templateScreenIds = await getCollectionTemplateScreenIds({
+  const templateScreenIds = await getTemplateScreenIds({
     hostId: host.$id,
   })
   const screenSnapshots = await Promise.all(

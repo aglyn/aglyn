@@ -27,7 +27,7 @@ import {
   composeCollectionTemplatePage,
 } from '@aglyn/tenant-runtime/compose-collection-page'
 import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
-import getCollectionTemplateScreenIds from '@aglyn/tenant-runtime/collection-template-screens'
+import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import getVariables from '@aglyn/tenant-runtime/get-variables'
 import { cache } from 'react'
@@ -107,14 +107,16 @@ const loadPageDataCached = cache(
     const hostId = hostRes.host.$id
     const pathsByScreenId = hostRes.host.screens || {}
 
-    // Collection template screens are not pages (AGL-1267). Started HERE,
-    // unawaited, and collected at the routing decision below: by then this
-    // render has already awaited org billing, the plugin loader and the
-    // redirect resolver, so the round trip overlaps work the page pays for
-    // anyway rather than adding one to the critical path (AGL-1152).
-    // `getCollectionTemplateScreenIds` never rejects, so a floating promise
-    // here cannot become an unhandled rejection.
-    const templateScreenIdsPromise = getCollectionTemplateScreenIds({ hostId })
+    // Template screens are not pages (AGL-1267, and commerce's PDP/catalog
+    // templates since AGL-1270). Started HERE, unawaited, and collected at the
+    // routing decision below: by then this render has already awaited org
+    // billing, the plugin loader and the redirect resolver, so the round trip
+    // overlaps work the page pays for anyway rather than adding one to the
+    // critical path (AGL-1152). Widening it to the store templates added a
+    // second Firestore RPC but no second round trip — the two reads are issued
+    // concurrently inside. `getTemplateScreenIds` never rejects, so a floating
+    // promise here cannot become an unhandled rejection.
+    const templateScreenIdsPromise = getTemplateScreenIds({ hostId })
 
     // Org suspension (AGL-202/238): staff-suspended orgs stop serving
     // every path immediately (short revalidate bounds the lag). Loaded
@@ -285,20 +287,24 @@ const loadPageDataCached = cache(
       },
     )
 
-    // A collection's list/entry template screen is NOT a page of this site
-    // (AGL-1267). Publishing one is how the compose pipeline picks it up, but
-    // publishing also writes its id into the host's routing map, so the
-    // template became reachable at its own slug and rendered its
-    // `{{entry.*}}` tokens raw — there is no routed entry to substitute.
+    // A template screen is NOT a page of this site (AGL-1267 for a content
+    // collection's list/entry screens; AGL-1270 for commerce's `pdpScreenId`
+    // and `collectionScreenId`, which live on `settings/store`). Publishing one
+    // is how the compose pipeline picks it up, but publishing also writes its
+    // id into the host's routing map, so the template became reachable at its
+    // own slug and rendered its `{{entry.*}}` / `{{product.*}}` tokens raw —
+    // there is no routed subject to substitute.
     //
     // Dropped from the routing map rather than 404'd outright, so the request
     // continues down the normal non-screen chain (plugin resolvers → content
     // collections → custom 404 → 404). That is what preserves the legitimate
-    // case: a LIST template published at its own collection's root (`/blog`
+    // cases: a LIST template published at its own collection's root (`/blog`
     // for the `blog` collection) is picked up two branches down by
     // `composeCollectionTemplatePage`, which renders the same screen WITH the
-    // entries and `{{collection.*}}` tokens it needs. The entry template has
-    // no such branch and correctly 404s.
+    // entries and `{{collection.*}}` tokens it needs; and a store template
+    // published at a real catalog route falls through to the commerce resolver
+    // one branch down, which renders it WITH the product or collection. The
+    // entry template has no such branch and correctly 404s.
     const templateScreenIds = await templateScreenIdsPromise
     timer.mark('collectionTemplateScreens')
     const screenEntry =
