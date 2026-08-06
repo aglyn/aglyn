@@ -102,6 +102,11 @@ import {
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
 import { buildScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
+import {
+  collectionTemplatePublishMessage,
+  collectionTemplateRoutesSummary,
+} from '../../../../../../../../../../constants/collection-templates'
+import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import useHostComponentDefinitions from '../../../../../../../../../../hooks/use-host-component-definitions'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
@@ -434,6 +439,15 @@ function BesignerPage(props) {
     | Record<string, string>
     | undefined
 
+  // Publishing a collection's list/entry template is what makes the compose
+  // pipeline use it, but the template is not a page of the site (AGL-1267):
+  // its routing-map slug 404s, so nothing here may name it (AGL-1269).
+  const { templateScreenIds, routesByScreenId } = useCollectionTemplates(hostId)
+  const isCollectionTemplate = templateScreenIds.has(screenId)
+  const templateRoutes = collectionTemplateRoutesSummary(
+    routesByScreenId.get(screenId),
+  )
+
   const publishedPath = routingMap?.[screenId]
   const parentId = screenResult?.data?.parentId
   const [slugInput, setSlugInput] = useState<string | null>(null)
@@ -485,7 +499,10 @@ function BesignerPage(props) {
             .then(() => {
               setSlugInput(null)
               enqueueSnackbar(
-                `Published at ${Aglyn.screenRoutePathToUrl(composedPath)}`,
+                collectionTemplatePublishMessage(
+                  routesByScreenId.get(screenId),
+                  { isTemplateScreen: isCollectionTemplate },
+                ) ?? `Published at ${Aglyn.screenRoutePathToUrl(composedPath)}`,
                 { variant: 'success', persist: false },
               )
             })
@@ -531,6 +548,8 @@ function BesignerPage(props) {
     hostId,
     screenId,
     enqueueSnackbar,
+    isCollectionTemplate,
+    routesByScreenId,
   ])
 
   // One-click publish from the app bar (AGL-452). Publish points the live
@@ -583,7 +602,9 @@ function BesignerPage(props) {
         buildRouteEntries(candidateById),
       )
       enqueueSnackbar(
-        `Published at ${Aglyn.screenRoutePathToUrl(composedPath as string)}`,
+        collectionTemplatePublishMessage(routesByScreenId.get(screenId), {
+          isTemplateScreen: isCollectionTemplate,
+        }) ?? `Published at ${Aglyn.screenRoutePathToUrl(composedPath as string)}`,
         { variant: 'success', persist: false },
       )
     } catch (e) {
@@ -608,6 +629,8 @@ function BesignerPage(props) {
     screenId,
     versionId,
     enqueueSnackbar,
+    isCollectionTemplate,
+    routesByScreenId,
   ])
 
   const handleParentChange = useCallback(
@@ -821,9 +844,13 @@ function BesignerPage(props) {
           <>
           <Tooltip
             title={
-              publishedPath
-                ? `Live at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
-                : 'Publish this version to your site'
+              publishedPath && isCollectionTemplate
+                ? templateRoutes
+                  ? `Live — this template renders ${templateRoutes}`
+                  : 'Live as a collection template — no path of its own'
+                : publishedPath
+                  ? `Live at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
+                  : 'Publish this version to your site'
             }
           >
             <Button
@@ -1101,11 +1128,15 @@ function BesignerPage(props) {
                   ? 'Another screen already uses this path'
                   : unpublishedAncestor
                     ? 'A parent screen has no slug yet — publish the parent first'
-                    : composedPath
-                      ? `Served at ${Aglyn.screenRoutePathToUrl(composedPath)}`
-                      : publishedPath
-                        ? `Currently published at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
-                        : 'Not published'
+                    : isCollectionTemplate
+                      ? templateRoutes
+                        ? `A collection template — renders ${templateRoutes}, not this path`
+                        : 'A collection template — not served at a path of its own'
+                      : composedPath
+                        ? `Served at ${Aglyn.screenRoutePathToUrl(composedPath)}`
+                        : publishedPath
+                          ? `Currently published at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
+                          : 'Not published'
               }
             />
             <Button
