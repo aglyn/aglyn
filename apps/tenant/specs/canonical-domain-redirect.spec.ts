@@ -114,7 +114,7 @@ jest.mock('@aglyn/tenant-runtime/compose-collection-page', () => ({
   composeCollectionTemplatePage: jest.fn(async () => null),
   composeCollectionFallbackPage: jest.fn(async () => null),
 }))
-jest.mock('@aglyn/tenant-runtime/collection-template-screens', () => ({
+jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
   __esModule: true,
   default: jest.fn(async () => new Set<string>()),
 }))
