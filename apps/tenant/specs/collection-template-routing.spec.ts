@@ -56,6 +56,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   SCREEN_ROOT_PATH: '/',
   COLLECTION_LIST_PAGE_SIZE: 10,
   HostScreenVisibility: { AUTHENTICATED: 'authenticated' },
+  // None of these hosts has a custom domain, so the canonical-origin branch
+  // (AGL-1272) is never taken — but the loader CALLS this on every render, and
+  // a stub missing it throws into the loader's catch and 404s every case here
+  // for a reason that has nothing to do with routing.
+  liveCustomDomain: jest.fn(() => undefined),
   resolveSiteRedirect: jest.fn(async () => null),
   resolveSitePage: jest.fn(async () => undefined),
   runSitePageEnrichers: jest.fn(async () => ({})),
@@ -64,7 +69,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   resolveBrandingProfile: jest.fn(() => ({})),
   checkEntitlement: jest.fn(() => true),
 }))
-jest.mock('../utils/get-host', () => ({ __esModule: true, default: jest.fn() }))
+jest.mock('../utils/get-host', () => ({
+  __esModule: true,
+  default: jest.fn(),
+  CNAME_HOST_PREFIX: 'cname--',
+}))
 jest.mock('../utils/get-org-billing', () => ({
   __esModule: true,
   default: jest.fn(async () => ({ org: { $id: 'org-1' } })),

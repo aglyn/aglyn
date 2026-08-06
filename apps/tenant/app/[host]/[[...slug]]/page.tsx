@@ -111,14 +111,40 @@ function buildMetadata(props: Props): Metadata {
       : undefined
     const socialImage: string | undefined = entry?.coverImage || undefined
     const fullTitle = withSite(title)
+    // Collection pages had NO canonical at all (AGL-1272). This branch returns
+    // before the screen path builds one, so every `/blog` and `/blog/{entry}`
+    // shipped without the tag — on a site reachable at two origins, that is
+    // exactly the set of pages with the most duplicate URLs and the least to
+    // say about which one counts. The redirect handles the platform-subdomain
+    // twin; this handles the rest (a paginated list is its own page, and an
+    // entry reachable through more than one route still resolves to one URL).
+    //
+    // Derived, not passed: entry routing is `/{collection}/{entry}` and lists
+    // are `/{collection}` (`/{collection}/page/{n}` beyond page 1), the same
+    // derivation `buildJsonLd` already makes from this payload.
+    const collectionBase = Aglyn.hostPublicOrigin(host)
+    const collectionSlug: string | undefined = content.collection?.slug
+    const listPage = Number(content.pagination?.page) || 1
+    const contentCanonical =
+      collectionBase && collectionSlug
+        ? entry?.slug
+          ? `${collectionBase}/${collectionSlug}/${entry.slug}`
+          : listPage > 1
+            ? `${collectionBase}/${collectionSlug}/page/${listPage}`
+            : `${collectionBase}/${collectionSlug}`
+        : undefined
     return {
       title: fullTitle,
       ...(description ? { description } : {}),
       ...(searchDiscouraged ? { robots: { index: false, follow: true } } : {}),
+      ...(contentCanonical
+        ? { alternates: { canonical: contentCanonical } }
+        : {}),
       openGraph: {
         title: fullTitle,
         ...(description ? { description } : {}),
         type: entry ? 'article' : 'website',
+        ...(contentCanonical ? { url: contentCanonical } : {}),
         ...(socialImage ? { images: [socialImage] } : {}),
         ...(siteTitle ? { siteName: siteTitle } : {}),
       },
