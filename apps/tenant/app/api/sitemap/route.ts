@@ -23,7 +23,7 @@ import {
   screenRoutePathToUrl,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import getCollectionTemplateScreenIds from '@aglyn/tenant-runtime/collection-template-screens'
+import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
 import getHost from '../../../utils/get-host'
 
 export const dynamic = 'force-dynamic'
@@ -138,6 +138,14 @@ export async function GET(request: Request): Promise<Response> {
   // `select('visibility')` keeps this a projection over exactly the field the
   // predicate reads; the doc id it also needs always travels with a snapshot.
   const excluded = new Set<string>()
+
+  // Started before the screens read and collected after it, so it overlaps
+  // rather than adding a round trip. Never rejects, so a floating promise here
+  // cannot become an unhandled rejection.
+  const templateScreenIdsPromise = getTemplateScreenIds({
+    hostId: hostRes.host.$id,
+  })
+
   try {
     const screenDocs = await hostRef
       .collection('screens')
@@ -154,15 +162,19 @@ export async function GET(request: Request): Promise<Response> {
     // sitemap. The pages' own `noindex` still holds.
   }
 
-  // Collection template screens are not pages (AGL-1267) — the router now
+  // Template screens are not pages (AGL-1267, AGL-1270) — the router now
   // refuses to serve them, so listing them here would submit URLs that 404.
   // Before the router fix they were worse than dead: a second, duplicate URL
   // for `/{collection}` and `/{collection}/{entry}`, whose body was raw
   // `{{entry.*}}` tokens. The de-dupe at `sitemapResponse` cannot catch that —
   // the paths differ, only the rendering is the same page.
-  for (const screenId of await getCollectionTemplateScreenIds({
-    hostId: hostRes.host.$id,
-  })) {
+  //
+  // The commerce templates (AGL-1270) made that duplication provable right
+  // here: `pdpScreenId`'s own slug was emitted as an ordinary screen URL, and
+  // the commerce block below ALSO emits every `/products/{slug}` that same
+  // template renders. Excluding it keeps the real catalog URLs and drops the
+  // token-rendering twin.
+  for (const screenId of await templateScreenIdsPromise) {
     excluded.add(screenId)
   }
 

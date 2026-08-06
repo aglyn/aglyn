@@ -27,12 +27,12 @@ import {
   composeCollectionTemplatePage,
 } from '@aglyn/tenant-runtime/compose-collection-page'
 import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
-import getCollectionTemplateScreenIds from '@aglyn/tenant-runtime/collection-template-screens'
+import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import getVariables from '@aglyn/tenant-runtime/get-variables'
 import { cache } from 'react'
 import { serverPluginLoader } from '../../../utils/server-plugin-loader'
-import getHost from '../../../utils/get-host'
+import getHost, { CNAME_HOST_PREFIX } from '../../../utils/get-host'
 import getOrgBilling from '../../../utils/get-org-billing'
 import { startRenderTimer } from '../../../utils/render-timings'
 import type { LoadResult, Props } from './types'
@@ -100,6 +100,99 @@ const loadPageDataCached = cache(
 
     /*==========================================
      *
+     * MARK - CANONICAL ORIGIN
+     *
+     *=========================================*/
+
+    // One site, one address (AGL-1272). A host with a live custom domain was
+    // serving byte-identical HTML at BOTH that domain and `{sub}.aglyn.app`,
+    // so search engines indexed two copies and split the ranking signal
+    // between them — with no say in which one they'd elect canonical.
+    //
+    // Hooked HERE, immediately after `getHost`, for two reasons. It is the
+    // first point where the answer is knowable, and it is knowable at zero
+    // cost: `hostRes.host` is already in hand, so the whole decision is field
+    // reads on a document this render had to load anyway. No round trip is
+    // added to the cold-start budget (AGL-1152) — the redirecting render in
+    // fact does strictly LESS work than before, returning before org billing,
+    // the plugin loader and screen composition. Middleware is the other
+    // obvious home and is where an origin redirect normally belongs, but the
+    // edge runtime cannot reach Firestore (it is why the `cname--` sentinel
+    // exists at all), so putting it there would mean a per-request lookup on
+    // the single hottest path in the product to answer a question that is
+    // free right here.
+    //
+    // Three independent guards, each of which is an outage if it is wrong:
+    //
+    //  1. THE LOOP GUARD. A request that arrived ON the custom domain reaches
+    //     this loader as `cname--{hostname}` (the middleware sentinel), and
+    //     must render. Without this the custom domain redirects to itself and
+    //     the site is gone — not degraded, gone, and gone in exactly the case
+    //     where the customer has the most to lose. Testing the REQUESTED host
+    //     rather than comparing hostnames is what makes it airtight: the
+    //     sentinel is assigned by the one branch of middleware that handles
+    //     custom domains, so it cannot disagree with itself.
+    //
+    //  2. THE LIVENESS GUARD. `liveCustomDomain` refuses a domain that is
+    //     merely claimed — see its own reasoning. "Has a cname" is NOT the
+    //     same question as "that cname serves".
+    //
+    //  3. THE DEPLOYMENT GUARD. Only the production deployment redirects.
+    //     Preview and branch deployments, `*.vercel.app` and local dev all
+    //     resolve their tenant host from `?tenantHost=`/`AGLYN_TENANT_DEMO`,
+    //     which yields a BARE subdomain — indistinguishable here from a real
+    //     `{sub}.aglyn.app` request, because both deliberately share one ISR
+    //     entry. Rather than split that cache to tell them apart, refuse to
+    //     redirect anywhere but production: a preview that bounced reviewers
+    //     onto the customer's live site would be useless, and a dev machine
+    //     that did it would be baffling.
+    const canonicalDomain = Aglyn.liveCustomDomain(hostRes.host)
+    if (
+      canonicalDomain &&
+      !host.startsWith(CNAME_HOST_PREFIX) &&
+      process.env.VERCEL_ENV === 'production'
+    ) {
+      // Path preserved segment by segment, re-encoded: `params` arrives
+      // URL-decoded, and a decoded segment goes straight into a `Location`
+      // header. Encoding keeps a slug carrying `/`, `?` or a control
+      // character from rewriting the destination it is supposed to be part of.
+      const destinationPath = slugSegments.length
+        ? `/${slugSegments.map(encodeURIComponent).join('/')}`
+        : '/'
+      return {
+        redirect: {
+          destination: `https://${canonicalDomain}${destinationPath}`,
+          // 307, NOT 301/308 — and the difference is the customer's site.
+          //
+          // 301/308 is the stronger consolidation signal, and it is also
+          // cacheable by default (RFC 9110 §15.4.2/§15.4.9): a browser that
+          // sees one may never ask us again. We have no way to take that
+          // back. Custom domains are disconnected routinely (AGL-742) and
+          // domains lapse, so a permanent redirect would pin returning
+          // visitors to a name the customer no longer controls — possibly one
+          // somebody else now owns — with the platform origin that still
+          // works sitting right there, unreachable.
+          //
+          // 307 is not cacheable unless a response says so (§15.4.8), so the
+          // moment `cname` is cleared the redirect stops: the ISR entry
+          // rebuilds within `revalidate` and every visitor re-asks. Nothing
+          // in this codebase can invalidate an already-cached redirect —
+          // checked — so "revocable" has to come from the status code itself.
+          //
+          // The SEO cost is smaller than it looks. Google follows and
+          // consolidates a consistently-served temporary redirect; and the
+          // signal that actually elects a canonical here is the
+          // self-referential `<link rel="canonical">` the destination emits
+          // (`hostPublicOrigin`, same field, same answer). The redirect
+          // removes the duplicate from circulation; the tag names the winner.
+          statusCode: 307,
+        },
+        revalidate: 30,
+      }
+    }
+
+    /*==========================================
+     *
      * MARK - FIND SCREEN ID FROM SLUG
      *
      *=========================================*/
@@ -107,14 +200,16 @@ const loadPageDataCached = cache(
     const hostId = hostRes.host.$id
     const pathsByScreenId = hostRes.host.screens || {}
 
-    // Collection template screens are not pages (AGL-1267). Started HERE,
-    // unawaited, and collected at the routing decision below: by then this
-    // render has already awaited org billing, the plugin loader and the
-    // redirect resolver, so the round trip overlaps work the page pays for
-    // anyway rather than adding one to the critical path (AGL-1152).
-    // `getCollectionTemplateScreenIds` never rejects, so a floating promise
-    // here cannot become an unhandled rejection.
-    const templateScreenIdsPromise = getCollectionTemplateScreenIds({ hostId })
+    // Template screens are not pages (AGL-1267, and commerce's PDP/catalog
+    // templates since AGL-1270). Started HERE, unawaited, and collected at the
+    // routing decision below: by then this render has already awaited org
+    // billing, the plugin loader and the redirect resolver, so the round trip
+    // overlaps work the page pays for anyway rather than adding one to the
+    // critical path (AGL-1152). Widening it to the store templates added a
+    // second Firestore RPC but no second round trip — the two reads are issued
+    // concurrently inside. `getTemplateScreenIds` never rejects, so a floating
+    // promise here cannot become an unhandled rejection.
+    const templateScreenIdsPromise = getTemplateScreenIds({ hostId })
 
     // Org suspension (AGL-202/238): staff-suspended orgs stop serving
     // every path immediately (short revalidate bounds the lag). Loaded
@@ -285,20 +380,24 @@ const loadPageDataCached = cache(
       },
     )
 
-    // A collection's list/entry template screen is NOT a page of this site
-    // (AGL-1267). Publishing one is how the compose pipeline picks it up, but
-    // publishing also writes its id into the host's routing map, so the
-    // template became reachable at its own slug and rendered its
-    // `{{entry.*}}` tokens raw — there is no routed entry to substitute.
+    // A template screen is NOT a page of this site (AGL-1267 for a content
+    // collection's list/entry screens; AGL-1270 for commerce's `pdpScreenId`
+    // and `collectionScreenId`, which live on `settings/store`). Publishing one
+    // is how the compose pipeline picks it up, but publishing also writes its
+    // id into the host's routing map, so the template became reachable at its
+    // own slug and rendered its `{{entry.*}}` / `{{product.*}}` tokens raw —
+    // there is no routed subject to substitute.
     //
     // Dropped from the routing map rather than 404'd outright, so the request
     // continues down the normal non-screen chain (plugin resolvers → content
     // collections → custom 404 → 404). That is what preserves the legitimate
-    // case: a LIST template published at its own collection's root (`/blog`
+    // cases: a LIST template published at its own collection's root (`/blog`
     // for the `blog` collection) is picked up two branches down by
     // `composeCollectionTemplatePage`, which renders the same screen WITH the
-    // entries and `{{collection.*}}` tokens it needs. The entry template has
-    // no such branch and correctly 404s.
+    // entries and `{{collection.*}}` tokens it needs; and a store template
+    // published at a real catalog route falls through to the commerce resolver
+    // one branch down, which renders it WITH the product or collection. The
+    // entry template has no such branch and correctly 404s.
     const templateScreenIds = await templateScreenIdsPromise
     timer.mark('collectionTemplateScreens')
     const screenEntry =

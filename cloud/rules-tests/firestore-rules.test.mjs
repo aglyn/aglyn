@@ -321,6 +321,22 @@ describe('hosts', () => {
     await assertFails(
       updateDoc(doc(authed(OWNER), 'hosts', HOST), { subdomain: 'grabbed' }),
     )
+    // `cname` is the site's OTHER public address and was never given the same
+    // protection (AGL-1272). /api/domains/attach claims it transactionally and
+    // only after DNS verification; a client write skips both, which is how one
+    // org could end up served on another org's domain — and now also how a
+    // forged domain could redirect `{sub}.aglyn.app` at a host that serves
+    // nothing, taking down the site's last working address.
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        cname: 'someone-elses.example',
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        cname: 'someone-elses.example',
+      }),
+    )
     await assertFails(deleteDoc(doc(authed(EDITOR), 'hosts', HOST)))
     await assertSucceeds(deleteDoc(doc(authed(OWNER), 'hosts', HOST)))
   })
