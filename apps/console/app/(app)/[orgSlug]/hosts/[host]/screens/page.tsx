@@ -108,6 +108,7 @@ import {
   unpublishScreenRoute,
 } from '../../../../../../constants/screen-publishing'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
+import useCollectionTemplates from '../../../../../../hooks/use-collection-templates'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useFirestoreCollection from '../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../hooks/use-firestore-doc'
@@ -157,36 +158,19 @@ function Screens(props) {
   )
   // A content collection's list/entry template screens serve every entry
   // from one screen at no URL of their own, so they don't spend the plan's
-  // screen allowance (AGL-1173). Read the collections to know which ids
-  // those are, and keep this precheck in step with the server's
-  // countBillableScreens — a client that warns on a different number than
-  // the API enforces is worse than no precheck at all.
-  const { data: contentCollections } = useFirestoreCollection<any>(
-    () => collection(firestore, 'hosts', hostId, 'collections'),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const collectionTemplateScreenIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const contentCollection of contentCollections ?? []) {
-      for (const field of [
-        'listScreenId',
-        'entryScreenId',
-        'templateScreenId',
-      ]) {
-        const screenId = contentCollection?.[field]
-        if (typeof screenId === 'string' && screenId) ids.add(screenId)
-      }
-    }
-    return ids
-  }, [contentCollections])
+  // screen allowance (AGL-1173) — and, since AGL-1267, they are not pages of
+  // the site at all. Both answers come from the same read of the collections,
+  // shared with the publish surfaces (AGL-1269); this precheck stays in step
+  // with the server's countBillableScreens, because a client that warns on a
+  // different number than the API enforces is worse than no precheck at all.
+  const collectionTemplates = useCollectionTemplates(hostId)
+  const { templateScreenIds } = collectionTemplates
   // `screens` already drops soft-deleted and email screens, matching the
   // other two exclusions the server makes.
   const billableScreenCount = useMemo(
     () =>
-      screens.filter((screen) => !collectionTemplateScreenIds.has(screen.$id))
-        .length,
-    [screens, collectionTemplateScreenIds],
+      screens.filter((screen) => !templateScreenIds.has(screen.$id)).length,
+    [screens, templateScreenIds],
   )
   const { data: hostData } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
@@ -762,6 +746,7 @@ function Screens(props) {
               onRowOpen={handleRowOpen}
               screens={screens}
               routingMap={routingMap}
+              collectionTemplates={collectionTemplates}
               loading={status === 'loading'}
               onMoveScreen={handleMoveScreen}
               renderRowActions={renderRowActions}

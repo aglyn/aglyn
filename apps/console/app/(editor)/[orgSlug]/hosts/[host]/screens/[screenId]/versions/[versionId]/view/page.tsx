@@ -98,6 +98,11 @@ import {
 import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../../../../constants/docs-links'
+import {
+  collectionTemplatePublishMessage,
+  collectionTemplateRoutesSummary,
+} from '../../../../../../../../../../constants/collection-templates'
+import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
 import useCurrentOrg from '../../../../../../../../../../hooks/use-current-org'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../../../../hooks/use-firestore-doc'
@@ -195,6 +200,14 @@ function ScreenDetails() {
     [versionDocs],
   )
 
+  // A collection's list/entry template is published so the compose pipeline
+  // picks it up, but it is not a page of the site (AGL-1267) — so nothing
+  // here may name the slug it was published under (AGL-1269).
+  const { templateScreenIds, routesByScreenId } = useCollectionTemplates(hostId)
+  const isCollectionTemplate = templateScreenIds.has(screenId)
+  const templateRoutes = collectionTemplateRoutesSummary(
+    routesByScreenId.get(screenId),
+  )
   const routingMap = hostData?.screens as Record<ScreenUid, string> | undefined
   // AGL-374: buildScreenLiveUrl normalizes the slug into a path and knows
   // custom domains + preview consoles.
@@ -376,7 +389,9 @@ function ScreenDetails() {
         composed ?? slug,
       )
       enqueueSnackbar(
-        `Published at ${screenRoutePathToUrl(composed ?? slug)}`,
+        collectionTemplatePublishMessage(routesByScreenId.get(screenId), {
+          isTemplateScreen: isCollectionTemplate,
+        }) ?? `Published at ${screenRoutePathToUrl(composed ?? slug)}`,
         { variant: 'success', persist: false },
       )
       logActivity(
@@ -402,6 +417,8 @@ function ScreenDetails() {
     enqueueSnackbar,
     displayName,
     logActivity,
+    isCollectionTemplate,
+    routesByScreenId,
   ])
 
   const handleUnpublishRoute = useCallback(async () => {
@@ -844,7 +861,11 @@ function ScreenDetails() {
                         />
                         {isRoutePublished ? (
                           <Typography variant="body2" color="text.secondary">
-                            {screenRoutePathToUrl(publishedPath as string)}
+                            {isCollectionTemplate
+                              ? templateRoutes
+                                ? `Renders ${templateRoutes}`
+                                : 'Collection template — no path of its own'
+                              : screenRoutePathToUrl(publishedPath as string)}
                           </Typography>
                         ) : null}
                         {schedule ? (
