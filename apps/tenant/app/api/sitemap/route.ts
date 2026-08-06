@@ -23,6 +23,7 @@ import {
   screenRoutePathToUrl,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import getCollectionTemplateScreenIds from '@aglyn/tenant-runtime/collection-template-screens'
 import getHost from '../../../utils/get-host'
 
 export const dynamic = 'force-dynamic'
@@ -151,6 +152,18 @@ export async function GET(request: Request): Promise<Response> {
   } catch {
     // Fail OPEN, matching robots.txt: a read failure must not blank a working
     // sitemap. The pages' own `noindex` still holds.
+  }
+
+  // Collection template screens are not pages (AGL-1267) — the router now
+  // refuses to serve them, so listing them here would submit URLs that 404.
+  // Before the router fix they were worse than dead: a second, duplicate URL
+  // for `/{collection}` and `/{collection}/{entry}`, whose body was raw
+  // `{{entry.*}}` tokens. The de-dupe at `sitemapResponse` cannot catch that —
+  // the paths differ, only the rendering is the same page.
+  for (const screenId of await getCollectionTemplateScreenIds({
+    hostId: hostRes.host.$id,
+  })) {
+    excluded.add(screenId)
   }
 
   const urls = Object.entries(hostRes.host.screens ?? {})

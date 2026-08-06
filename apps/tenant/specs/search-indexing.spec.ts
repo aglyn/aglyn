@@ -69,6 +69,9 @@ function given(options: {
   discouraged?: boolean
   screens?: Record<string, string>
   screenDocs?: Array<{ id: string; visibility?: HostScreenVisibility }>
+  /** `hosts/{id}/collections` docs, read for both the template-screen
+   * exclusion (AGL-1267) and the content-collection URLs. */
+  collectionDocs?: Array<Record<string, unknown>>
 }) {
   // Routing-map values are bare slugs; the root screen is the literal '/'.
   const screens = options.screens ?? { home: '/', secret: 'secret' }
@@ -92,12 +95,25 @@ function given(options: {
       data: () => ({ visibility: screen.visibility }),
     })),
   }
-  const collectionRef = (name: string) => ({
+  const collectionSnapshot = {
+    docs: (options.collectionDocs ?? []).map((fields) => ({
+      id: String(fields['slug'] ?? 'col'),
+      get: (field: string) => fields[field],
+      data: () => fields,
+      ref: { collection: (name: string) => collectionRef(name) },
+    })),
+  }
+  const collectionRef = (name: string): any => ({
     select: () => collectionRef(name),
     limit: () => collectionRef(name),
     where: () => collectionRef(name),
     doc: () => ({ get: async () => emptySnapshot }),
-    get: async () => (name === 'screens' ? screenSnapshot : emptySnapshot),
+    get: async () =>
+      name === 'screens'
+        ? screenSnapshot
+        : name === 'collections'
+          ? collectionSnapshot
+          : emptySnapshot,
   })
   const hostRef = { collection: (name: string) => collectionRef(name) }
   ;(firebaseAdmin.app as jest.Mock).mockReturnValue({
@@ -202,6 +218,40 @@ describe('sitemap.xml (AGL-1263)', () => {
     const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
 
     expect(locs).toEqual(['https://acme.aglyn.app/'])
+  })
+
+  it('drops a collection list/entry template screen (AGL-1267)', async () => {
+    // Publishing the blog's entry template put it in the routing map, so the
+    // sitemap submitted `/blog-entry-template` — a URL whose body is raw
+    // `{{entry.*}}` tokens, sitting next to the real `/blog` it duplicates.
+    // The de-dupe at `sitemapResponse` cannot see that: different paths, same
+    // page. The router 404s it now, so listing it would submit a dead URL.
+    given({
+      screens: {
+        home: '/',
+        blogEntryTmpl: 'blog-entry-template',
+        blogListTmpl: 'blog',
+      },
+      screenDocs: [
+        { id: 'home', visibility: HostScreenVisibility.PUBLIC },
+        { id: 'blogEntryTmpl', visibility: HostScreenVisibility.PUBLIC },
+        { id: 'blogListTmpl', visibility: HostScreenVisibility.PUBLIC },
+      ],
+      collectionDocs: [
+        {
+          slug: 'blog',
+          listScreenId: 'blogListTmpl',
+          entryScreenId: 'blogEntryTmpl',
+        },
+      ],
+    })
+
+    const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
+
+    expect(locs).not.toContain('https://acme.aglyn.app/blog-entry-template')
+    // The collection itself still has a URL — contributed by the collection
+    // loop, not by the list template's routing entry.
+    expect(locs).toEqual(['https://acme.aglyn.app/', 'https://acme.aglyn.app/blog'])
   })
 
   it('is empty but still a valid sitemap when the site is discouraged', async () => {
