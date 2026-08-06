@@ -165,7 +165,16 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{ display: vertical ? 'flex' : undefined }}
+          // MERGE, never replace. `sx` written after `{...rest}` silently
+          // discarded whatever the author set on the node — every Tabs on
+          // every site rendered with default MUI styling and no way to
+          // change it, with nothing in the editor to suggest the value had
+          // been dropped (AGL-1284). Vertical orientation still needs the
+          // flex row, so it goes first and the author can override it.
+          sx={[
+            { display: vertical ? 'flex' : undefined },
+            ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx]),
+          ]}
         >
           {strip}
           {children}
@@ -198,7 +207,16 @@ export const TabPanelElement = forwardRef<
       id={`tabpanel-${labelSlug(String(label ?? ''))}`}
       aria-labelledby={`tab-${labelSlug(String(label ?? ''))}`}
       {...rest}
-      sx={{ p: 2, ...(visible ? null : { display: 'none' }) }}
+      // Same merge bug as the Tabs container (AGL-1284): the author's `sx`
+      // was dropped, so a panel could not even have its padding changed.
+      // Order matters — the default padding is first so the author can
+      // override it, and the hide rule is LAST so an authored `display`
+      // can never force a deselected panel back on screen.
+      sx={[
+        { p: 2 },
+        ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx]),
+        ...(visible ? [] : [{ display: 'none' }]),
+      ]}
     >
       {context?.showAll && !selected ? (
         // Canvas only: says which tab this content belongs to, so a
