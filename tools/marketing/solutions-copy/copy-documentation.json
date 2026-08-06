@@ -1,0 +1,326 @@
+{
+  "page": "Documentation",
+  "route": "/use-cases/documentation",
+  "figmaNodeId": "190:3137",
+  "frameName": "Use case — Documentation",
+  "frameSize": {
+    "width": 1440,
+    "height": 4709
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "190:3139",
+      "order": 0,
+      "heightPx": 639.1304321289062,
+      "eyebrow": "USE CASE · DOCUMENTATION",
+      "heading": "Docs that are easy to publish.",
+      "subheading": null,
+      "body": [
+        "Publish product docs, guides, and help articles as clean, fast pages — organized, searchable, and on your own domain. Write in markdown — fenced code blocks and tables render everywhere, and a pasted README keeps its structure."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3148",
+      "order": 1,
+      "heightPx": 214,
+      "eyebrow": null,
+      "heading": "Documentation shouldn’t need a separate tool and a separate deploy. Build your docs on the same platform as your site, and publish them in one click.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3150",
+      "order": 2,
+      "heightPx": 707,
+      "eyebrow": "WHAT YOUR DOCS INCLUDE",
+      "heading": "Clear, fast, findable.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:3155",
+          "meta": null,
+          "title": "Structured pages",
+          "body": "Build doc pages and guides on a live canvas with reusable components.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3162",
+          "meta": null,
+          "title": "Site-wide search",
+          "body": "Visitors can search across your content to find the right page.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3169",
+          "meta": null,
+          "title": "Multilingual",
+          "body": "Publish docs in multiple languages with a language switcher (Business and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3176",
+          "meta": null,
+          "title": "Versioning",
+          "body": "Roll back any page to an earlier version at any time (Pro and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3182",
+          "meta": null,
+          "title": "Fast delivery",
+          "body": "Pages and images are served on a global CDN with responsive images.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3189",
+          "meta": null,
+          "title": "Your domain",
+          "body": "Host docs on your own domain or subdomain with automatic SSL.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "420:6037",
+      "order": 3,
+      "heightPx": 554.2608642578125,
+      "eyebrow": "KEEP IT CURRENT",
+      "heading": "Docs that keep up with the product.",
+      "subheading": null,
+      "body": [
+        "Ship doc changes with confidence: roll back any page with versioning, watch which pages get read with per-screen analytics, and let site-wide search do the finding."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "420:6043",
+          "meta": null,
+          "title": "Version every page",
+          "body": "Roll back any page to an earlier version (Pro and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "420:6049",
+          "meta": null,
+          "title": "See what gets read",
+          "body": "Per-screen analytics show your most-visited docs (Pro and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "420:6055",
+          "meta": null,
+          "title": "Findable by default",
+          "body": "Site-wide search covers every published page.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3195",
+      "order": 4,
+      "heightPx": 411,
+      "eyebrow": "WHAT’S INCLUDED",
+      "heading": "Everything to document.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:3200",
+          "meta": null,
+          "title": "Live page editor",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3204",
+          "meta": null,
+          "title": "Site-wide search",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3208",
+          "meta": null,
+          "title": "Multilingual (Business+)",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3212",
+          "meta": null,
+          "title": "Versioning & rollback (Pro+)",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3216",
+          "meta": null,
+          "title": "Global CDN",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3220",
+          "meta": null,
+          "title": "Custom domain + SSL",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3224",
+      "order": 5,
+      "heightPx": 392,
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From draft to docs.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:3229",
+          "meta": "01",
+          "title": "Write your pages",
+          "body": "Build doc pages and guides on a live canvas.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3234",
+          "meta": "02",
+          "title": "Organize & translate",
+          "body": "Structure your pages and add languages if you need them.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3239",
+          "meta": "03",
+          "title": "Publish",
+          "body": "Ship to your domain, searchable and fast on a global CDN.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "420:6193",
+      "order": 6,
+      "heightPx": 485,
+      "eyebrow": "GOOD TO KNOW",
+      "heading": "Plans, in plain terms.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "420:6198",
+          "meta": null,
+          "title": "Search on every plan",
+          "body": "Site-wide search ships with every published site.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "420:6205",
+          "meta": null,
+          "title": "Translate on Business",
+          "body": "Multilingual pages with a language switcher from Business up.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "420:6212",
+          "meta": null,
+          "title": "Roll back on Pro",
+          "body": "Version history and restore for every page from Pro up.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "420:6238",
+      "order": 7,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "420:6243",
+          "meta": null,
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "420:6253",
+          "meta": null,
+          "title": "Console",
+          "body": "Run every site, team, and setting in one place.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "420:6263",
+          "meta": null,
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages & referrers.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3244",
+      "order": 8,
+      "heightPx": 290,
+      "eyebrow": null,
+      "heading": "Publish your docs on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — build your docs and publish in minutes."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

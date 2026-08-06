@@ -1,0 +1,304 @@
+{
+  "page": "Developers",
+  "route": "/solutions/developers",
+  "figmaNodeId": "165:902",
+  "frameName": "Solutions — Developers",
+  "frameSize": {
+    "width": 1440,
+    "height": 4423
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "165:904",
+      "order": 0,
+      "heightPx": 689.5652465820312,
+      "eyebrow": "SOLUTIONS · DEVELOPERS",
+      "heading": "Open source. Yours to extend.",
+      "subheading": null,
+      "body": [
+        "Aglyn is Apache-2.0 — fork it, self-host it with Docker, and extend it with a plugin architecture and a REST API. The whole platform is built the same way you’d build on it."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2098",
+      "order": 1,
+      "heightPx": 253,
+      "eyebrow": null,
+      "heading": "Most website platforms are black boxes. Aglyn is the opposite — Apache-2.0, built from plugins, and driven by an API — so you can see how it works and make it your own.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:913",
+      "order": 2,
+      "heightPx": 737,
+      "eyebrow": "WHY AGLYN FOR DEVELOPERS",
+      "heading": "Built to be built on.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "165:918",
+          "meta": null,
+          "title": "Apache-2.0, end to end",
+          "body": "Read the source, fork it, and self-host the entire platform with Docker — no black boxes.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:924",
+          "meta": null,
+          "title": "Built from plugins",
+          "body": "Commerce, bookings, email, workflows and more ship as plugins on the same architecture you build against.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:931",
+          "meta": null,
+          "title": "Self-host with Docker",
+          "body": "Run it yourself with Docker and your own Firebase project, or use the hosted platform — the code is the same either way.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:937",
+          "meta": null,
+          "title": "A real marketplace",
+          "body": "Install templates, layouts, and schemas — or package and sell your own (Pro and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:946",
+          "meta": null,
+          "title": "REST API & keys",
+          "body": "Automate datasets and read your sites, contacts, and form data with scoped API keys (Business and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:953",
+          "meta": null,
+          "title": "Extend the canvas",
+          "body": "Add blocks and console panels through the plugin system, right where they fit.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2100",
+      "order": 3,
+      "heightPx": 554.2608642578125,
+      "eyebrow": "AUTOMATE & INTEGRATE",
+      "heading": "Wire it to the rest of your stack.",
+      "subheading": null,
+      "body": [
+        "Trigger automations on real events — form submissions, bookings, sign-ups — call out to your own services with webhooks, or drive datasets through the REST API with scoped keys."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:2106",
+          "meta": null,
+          "title": "Event-driven automations",
+          "body": "Run steps when forms, bookings, sign-ups, or page views happen.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2112",
+          "meta": null,
+          "title": "Outbound webhooks",
+          "body": "POST to your own services on any event (Business and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2118",
+          "meta": null,
+          "title": "REST API & keys",
+          "body": "Read and write datasets with scoped API keys (Business and up).",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:959",
+      "order": 4,
+      "heightPx": 410,
+      "eyebrow": "HOW DEVELOPERS BUILD ON AGLYN",
+      "heading": "Fork it, extend it, ship it.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "165:964",
+          "meta": "01",
+          "title": "Start from the source",
+          "body": "Clone the Apache-2.0 repo and self-host it with Docker, or use the hosted platform.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:969",
+          "meta": "02",
+          "title": "Extend it",
+          "body": "Add plugins and blocks, or call the REST API with scoped keys.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:974",
+          "meta": "03",
+          "title": "Publish & share",
+          "body": "Ship your sites, and publish templates or listings to the marketplace.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2218",
+      "order": 5,
+      "heightPx": 473,
+      "eyebrow": "WHAT'S INCLUDED",
+      "heading": "Everything developers get.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:2223",
+          "meta": null,
+          "title": "Apache-2.0, self-hostable",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2227",
+          "meta": null,
+          "title": "Plugin architecture",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2231",
+          "meta": null,
+          "title": "REST API + scoped keys",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2235",
+          "meta": null,
+          "title": "Marketplace publish & sell",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2239",
+          "meta": null,
+          "title": "Datasets — full CRUD via API",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2243",
+          "meta": null,
+          "title": "Webhooks in & out",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2247",
+          "meta": null,
+          "title": "Interactions & actions",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2251",
+          "meta": null,
+          "title": "Reusable components",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2255",
+      "order": 6,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:2260",
+          "meta": null,
+          "title": "Plugins",
+          "body": "Install templates & layouts, or publish your own.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:2270",
+          "meta": null,
+          "title": "Workflows",
+          "body": "Automate the busywork with triggers & actions.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:2280",
+          "meta": null,
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages & store revenue.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:979",
+      "order": 7,
+      "heightPx": 289,
+      "eyebrow": null,
+      "heading": "Build on an open platform.",
+      "subheading": null,
+      "body": [
+        "Read the source, self-host it, and extend Aglyn however you need."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

@@ -1,0 +1,304 @@
+{
+  "page": "Small business",
+  "route": "/solutions/small-business",
+  "figmaNodeId": "165:1446",
+  "frameName": "Solutions — Small business",
+  "frameSize": {
+    "width": 1440,
+    "height": 4402
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "165:1448",
+      "order": 0,
+      "heightPx": 689.5652465820312,
+      "eyebrow": "SOLUTIONS · SMALL BUSINESS",
+      "heading": "Everything to get online, one price.",
+      "subheading": null,
+      "body": [
+        "A professional site, a store, bookings, and a contact form — without hiring a developer or paying for five different subscriptions."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2498",
+      "order": 1,
+      "heightPx": 253,
+      "eyebrow": null,
+      "heading": "You shouldn’t need a developer, an agency, and three subscriptions just to get online. Aglyn gives you a professional site, a store, and bookings for one simple price.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:1457",
+      "order": 2,
+      "heightPx": 716,
+      "eyebrow": "WHY AGLYN FOR SMALL BUSINESS",
+      "heading": "Your whole online presence, handled.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "165:1462",
+          "meta": null,
+          "title": "Site, store & bookings in one",
+          "body": "Everything your business needs to get online lives on one platform, for one price.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1468",
+          "meta": null,
+          "title": "No developer required",
+          "body": "Design your site on a live canvas — drag, drop, and edit right on the page.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1475",
+          "meta": null,
+          "title": "Look professional",
+          "body": "A custom domain, SSL, and your own branding make your site look established from day one.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1481",
+          "meta": null,
+          "title": "Take appointments",
+          "body": "Let customers book time with availability windows and automatic reminder emails.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1490",
+          "meta": null,
+          "title": "Sell online or in person",
+          "body": "Open a store with checkout, or ring up sales at the counter with POS.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1497",
+          "meta": null,
+          "title": "Get found & get leads",
+          "body": "Add a contact form, collect every message in your Inbox, and follow up by email.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2500",
+      "order": 3,
+      "heightPx": 554.2608642578125,
+      "eyebrow": "SELL, BOOK, AND GET PAID",
+      "heading": "Turn your site into a business.",
+      "subheading": null,
+      "body": [
+        "Add a storefront for online orders, a POS for in-person sales, and appointment booking with reminders — all on the same site, paid out through Stripe."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:2506",
+          "meta": null,
+          "title": "Online store",
+          "body": "List products, take checkout, and manage orders in one place.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2512",
+          "meta": null,
+          "title": "In-person POS",
+          "body": "Ring up sales at the counter with inventory kept in sync (Pro and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2518",
+          "meta": null,
+          "title": "Appointments",
+          "body": "Let customers book time slots with automatic reminder emails.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:1503",
+      "order": 4,
+      "heightPx": 410,
+      "eyebrow": "HOW SMALL BUSINESSES GET ONLINE",
+      "heading": "Online in an afternoon.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "165:1508",
+          "meta": "01",
+          "title": "Build your site",
+          "body": "Start from a template or a blank canvas and make it yours — no code.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1513",
+          "meta": "02",
+          "title": "Add store & bookings",
+          "body": "Turn on commerce, POS, and appointment booking as you need them.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1518",
+          "meta": "03",
+          "title": "Publish & grow",
+          "body": "Go live on your domain, then collect leads and sales in one place.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2616",
+      "order": 5,
+      "heightPx": 473,
+      "eyebrow": "WHAT'S INCLUDED",
+      "heading": "Everything to run your business.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:2621",
+          "meta": null,
+          "title": "Professional site, no code",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2625",
+          "meta": null,
+          "title": "Custom domain + SSL",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2629",
+          "meta": null,
+          "title": "Online store & checkout",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2633",
+          "meta": null,
+          "title": "In-person POS",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2637",
+          "meta": null,
+          "title": "Appointment booking",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2641",
+          "meta": null,
+          "title": "Contact forms & Inbox",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2645",
+          "meta": null,
+          "title": "Marketing popups & bars",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2649",
+          "meta": null,
+          "title": "Email to customers",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2653",
+      "order": 6,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:2658",
+          "meta": null,
+          "title": "Commerce",
+          "body": "Storefronts, checkout, POS & digital goods.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:2668",
+          "meta": null,
+          "title": "Forms & Inbox",
+          "body": "Collect submissions in one Inbox and route them onward.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:2678",
+          "meta": null,
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:1523",
+      "order": 7,
+      "heightPx": 289,
+      "eyebrow": null,
+      "heading": "Get your business online.",
+      "subheading": null,
+      "body": [
+        "Free to start — build your site, then add a store or bookings when you’re ready."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

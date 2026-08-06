@@ -1,0 +1,332 @@
+{
+  "page": "Membership sites",
+  "route": "/use-cases/membership-sites",
+  "figmaNodeId": "190:3421",
+  "frameName": "Use case — Membership sites",
+  "frameSize": {
+    "width": 1440,
+    "height": 4906
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "190:3423",
+      "order": 0,
+      "heightPx": 639.1304321289062,
+      "eyebrow": "USE CASE · MEMBERSHIP SITES",
+      "heading": "Members-only, made simple.",
+      "subheading": null,
+      "body": [
+        "Let people sign up, gate your content and perks behind a membership, and bill them on a recurring plan — all on your own site."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3432",
+      "order": 1,
+      "heightPx": 214,
+      "eyebrow": null,
+      "heading": "Membership usually means stitching together a login, a paywall, and a billing tool. Aglyn builds member accounts, gated content, and subscriptions into the platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3434",
+      "order": 2,
+      "heightPx": 707,
+      "eyebrow": "WHAT YOUR MEMBERSHIP INCLUDES",
+      "heading": "Everything to run members.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:3439",
+          "meta": null,
+          "title": "Member accounts",
+          "body": "Let people create accounts and sign in on your own site.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3446",
+          "meta": null,
+          "title": "Gated content",
+          "body": "Lock pages, posts, or downloads behind a membership (Business and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3453",
+          "meta": null,
+          "title": "Subscriptions",
+          "body": "Bill members on recurring plans through Stripe (Business and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3460",
+          "meta": null,
+          "title": "Digital downloads",
+          "body": "Deliver files and perks to members automatically.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3466",
+          "meta": null,
+          "title": "Email your members",
+          "body": "Reach members with campaigns and lists, delivered through Resend.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3473",
+          "meta": null,
+          "title": "Your domain",
+          "body": "Run your membership on your own domain with automatic SSL.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "420:6273",
+      "order": 3,
+      "heightPx": 554.2608642578125,
+      "eyebrow": "GATED CONTENT",
+      "heading": "Members in. Everyone else out.",
+      "subheading": null,
+      "body": [
+        "Member accounts, gated content, and recurring billing are part of the platform — people sign up on your site, unlock what they’ve paid for, and get billed through Stripe."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "420:6279",
+          "meta": null,
+          "title": "Accounts on every plan",
+          "body": "Member sign-ups are never capped — on any tier.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "420:6285",
+          "meta": null,
+          "title": "Gate what matters",
+          "body": "Lock pages, posts, and downloads behind membership (Business and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "420:6291",
+          "meta": null,
+          "title": "Bill on repeat",
+          "body": "Recurring subscriptions through Stripe, managed in your console.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3479",
+      "order": 4,
+      "heightPx": 586,
+      "eyebrow": "WHAT’S INCLUDED",
+      "heading": "Everything to run a membership.",
+      "subheading": null,
+      "body": [
+        "—",
+        "—",
+        "—",
+        "—",
+        "—"
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:3484",
+          "meta": null,
+          "title": "Member accounts",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3488",
+          "meta": null,
+          "title": "Gated content (Business+)",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3492",
+          "meta": null,
+          "title": "Subscriptions (Business+)",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3496",
+          "meta": null,
+          "title": "Digital downloads",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3500",
+          "meta": null,
+          "title": "Email campaigns & lists",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3504",
+          "meta": null,
+          "title": "Custom domain + SSL",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3508",
+      "order": 5,
+      "heightPx": 414,
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From sign-up to subscription.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:3513",
+          "meta": "01",
+          "title": "Set up membership",
+          "body": "Create your plans and decide what members get.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3518",
+          "meta": "02",
+          "title": "Gate your content",
+          "body": "Lock pages, posts, or downloads behind a membership.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:3523",
+          "meta": "03",
+          "title": "Grow & bill",
+          "body": "Members sign up, get billed through Stripe, and stay in the loop by email.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "420:6425",
+      "order": 6,
+      "heightPx": 485,
+      "eyebrow": "GOOD TO KNOW",
+      "heading": "Plans, in plain terms.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "420:6430",
+          "meta": null,
+          "title": "Accounts never capped",
+          "body": "Unlimited member accounts on every plan — only CRM contacts band by tier.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "420:6437",
+          "meta": null,
+          "title": "Business unlocks gating",
+          "body": "Content gating, subscriptions, and gift cards from Business up.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "420:6444",
+          "meta": null,
+          "title": "Email included",
+          "body": "Campaigns and lists built in — no separate email tool to pay for.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "420:6470",
+      "order": 7,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "420:6475",
+          "meta": null,
+          "title": "Commerce",
+          "body": "Subscriptions, gating & digital goods.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "420:6485",
+          "meta": null,
+          "title": "Marketing",
+          "body": "Email campaigns, popups & A/B testing.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "420:6495",
+          "meta": null,
+          "title": "Forms & Inbox",
+          "body": "Collect sign-ups and route them onward.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3528",
+      "order": 8,
+      "heightPx": 290,
+      "eyebrow": null,
+      "heading": "Launch your membership on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — set up members and gating in minutes."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

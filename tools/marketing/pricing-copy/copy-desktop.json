@@ -1,0 +1,1616 @@
+{
+  "variant": "desktop",
+  "route": "/pricing",
+  "figmaNodeId": "77:38",
+  "frameName": "Pricing",
+  "frameSize": {
+    "width": 1440,
+    "height": 6791
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "77:61",
+      "name": "Hero",
+      "order": 0,
+      "widthPx": 1440,
+      "heightPx": 343,
+      "groups": [
+        {
+          "figmaNodeId": "77:62",
+          "name": "PRICING",
+          "widthPx": 58,
+          "records": [
+            {
+              "figmaNodeId": "77:62",
+              "name": null,
+              "cells": [
+                "PRICING"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "77:63",
+          "name": "Start free. Grow when you’re ready.",
+          "widthPx": 960,
+          "records": [
+            {
+              "figmaNodeId": "77:63",
+              "name": null,
+              "cells": [
+                "Start free. Grow when you’re ready."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "77:64",
+          "name": "Every plan includes the full platform — Besigner, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves.",
+          "widthPx": 680,
+          "records": [
+            {
+              "figmaNodeId": "77:64",
+              "name": null,
+              "cells": [
+                "Every plan includes the full platform — Besigner, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "77:65",
+          "name": "toggle",
+          "widthPx": 288,
+          "records": [
+            {
+              "figmaNodeId": "77:65",
+              "name": "toggle",
+              "cells": [
+                "Monthly",
+                "Annual · save up to 35%"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "77:70",
+      "name": "Plans",
+      "order": 1,
+      "widthPx": 1440,
+      "heightPx": 906,
+      "groups": [
+        {
+          "figmaNodeId": "77:71",
+          "name": "row",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "80:55",
+              "name": "h",
+              "cells": [
+                "Free"
+              ]
+            },
+            {
+              "figmaNodeId": "80:57",
+              "name": "price",
+              "cells": [
+                "$0"
+              ]
+            },
+            {
+              "figmaNodeId": "80:59",
+              "name": null,
+              "cells": [
+                "No credit card required"
+              ]
+            },
+            {
+              "figmaNodeId": "80:60",
+              "name": null,
+              "cells": [
+                "For a single site to get started."
+              ]
+            },
+            {
+              "figmaNodeId": "80:63",
+              "name": "fl",
+              "cells": [
+                "1 site",
+                "5 pages · 1 seat",
+                "250 MB storage",
+                "Forms & media library",
+                "Interactions",
+                "Aglyn subdomain"
+              ]
+            },
+            {
+              "figmaNodeId": "80:95",
+              "name": "h",
+              "cells": [
+                "Starter"
+              ]
+            },
+            {
+              "figmaNodeId": "80:97",
+              "name": "price",
+              "cells": [
+                "$25",
+                "/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "80:100",
+              "name": null,
+              "cells": [
+                "$16/mo billed yearly"
+              ]
+            },
+            {
+              "figmaNodeId": "80:101",
+              "name": null,
+              "cells": [
+                "For a growing single site."
+              ]
+            },
+            {
+              "figmaNodeId": "80:104",
+              "name": "fl",
+              "cells": [
+                "Everything in Free, plus:",
+                "25 pages · 3 collaborators",
+                "Custom domain & SSL",
+                "Remove Aglyn branding",
+                "Commerce · 100 products",
+                "Workflows & bookings"
+              ]
+            },
+            {
+              "figmaNodeId": "80:133",
+              "name": "h",
+              "cells": [
+                "Pro",
+                "POPULAR"
+              ]
+            },
+            {
+              "figmaNodeId": "80:137",
+              "name": "price",
+              "cells": [
+                "$56",
+                "/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "80:140",
+              "name": null,
+              "cells": [
+                "$39/mo billed yearly"
+              ]
+            },
+            {
+              "figmaNodeId": "80:141",
+              "name": null,
+              "cells": [
+                "For pros running a few sites."
+              ]
+            },
+            {
+              "figmaNodeId": "80:144",
+              "name": "fl",
+              "cells": [
+                "Everything in Starter, plus:",
+                "3 sites · 10 collaborators",
+                "Versioning & AI assist",
+                "Video, POS & marketplace",
+                "Site export & analytics",
+                "2,500 products / site"
+              ]
+            },
+            {
+              "figmaNodeId": "80:173",
+              "name": "h",
+              "cells": [
+                "Business"
+              ]
+            },
+            {
+              "figmaNodeId": "80:175",
+              "name": "price",
+              "cells": [
+                "$139",
+                "/mo"
+              ]
+            },
+            {
+              "figmaNodeId": "80:178",
+              "name": null,
+              "cells": [
+                "$99/mo billed yearly"
+              ]
+            },
+            {
+              "figmaNodeId": "80:179",
+              "name": null,
+              "cells": [
+                "For teams & agencies at scale."
+              ]
+            },
+            {
+              "figmaNodeId": "80:182",
+              "name": "fl",
+              "cells": [
+                "Everything in Pro, plus:",
+                "10 sites · 50 collaborators",
+                "API access · 100k req/mo",
+                "A/B testing & webhooks",
+                "Multilingual & scheduling",
+                "Full commerce + POS"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "570:1218",
+          "name": "scale-strip",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "570:1219",
+              "name": "Frame",
+              "cells": [
+                "Need more scale? Higher-volume plans for stores, orgs, and agencies."
+              ]
+            },
+            {
+              "figmaNodeId": "570:1222",
+              "name": "Frame",
+              "cells": [
+                "Scale",
+                "$249 /mo"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1225",
+              "name": "Frame",
+              "cells": [
+                "For high-growth stores and multi-site teams that have outgrown Business.",
+                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 2.5 TB bandwidth"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1228",
+              "name": "Frame",
+              "cells": [
+                "CHOOSE"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1231",
+              "name": "Frame",
+              "cells": [
+                "Advanced",
+                "$399 /mo"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1234",
+              "name": "Frame",
+              "cells": [
+                "For high-volume organizations that need headroom on every limit.",
+                "25 sites · 100 collaborators · 0% commerce fees · 1M API requests/mo · unlimited products · priority scale & limits"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1237",
+              "name": "Frame",
+              "cells": [
+                "CHOOSE"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1240",
+              "name": "Frame",
+              "cells": [
+                "Agency",
+                "$799 /mo"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1243",
+              "name": "Frame",
+              "cells": [
+                "For agencies and resellers running whole client portfolios under one roof.",
+                "100 sites · 250 collaborators · full white-label incl. custom console domain · 5M API requests/mo · unlimited records & variables · 20 POS registers"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1246",
+              "name": "Frame",
+              "cells": [
+                "CHOOSE"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1249",
+              "name": "Frame",
+              "cells": [
+                "Enterprise",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1252",
+              "name": "Frame",
+              "cells": [
+                "For large organizations with bespoke requirements — volume pricing available.",
+                "Unlimited scale · 0% platform fees · white-label · SSO · SLA & dedicated support · custom contracts"
+              ]
+            },
+            {
+              "figmaNodeId": "570:1255",
+              "name": "Frame",
+              "cells": [
+                "CONTACT SALES"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "87:56",
+      "name": "Compare features",
+      "order": 2,
+      "widthPx": 1440,
+      "heightPx": 2777,
+      "groups": [
+        {
+          "figmaNodeId": "87:57",
+          "name": "hh",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "87:57",
+              "name": "hh",
+              "cells": [
+                "COMPARE ALL FEATURES",
+                "Every plan, feature by feature",
+                "Prices shown monthly (USD). Every plan includes the full Besigner builder and platform."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "87:61",
+          "name": "Feature table",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "87:62",
+              "name": "row",
+              "cells": [
+                "Text",
+                "Free",
+                "Starter",
+                "Pro",
+                "Business",
+                "Scale",
+                "Advanced",
+                "Agency",
+                "Enterprise"
+              ]
+            },
+            {
+              "figmaNodeId": "87:75",
+              "name": "row",
+              "cells": [
+                "Text",
+                "$0",
+                "$25",
+                "$56",
+                "$139",
+                "$249",
+                "$399",
+                "$799",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "87:89",
+              "name": "grp",
+              "cells": [
+                "Sites & publishing"
+              ]
+            },
+            {
+              "figmaNodeId": "87:91",
+              "name": "row",
+              "cells": [
+                "Sites (hosts)",
+                "1",
+                "1",
+                "3",
+                "10",
+                "15",
+                "25",
+                "100",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:104",
+              "name": "row",
+              "cells": [
+                "Pages per site",
+                "5",
+                "25",
+                "100",
+                "Unlimited",
+                "Unlimited",
+                "Unlimited",
+                "Unlimited",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:117",
+              "name": "row",
+              "cells": [
+                "Storage per site",
+                "250 MB",
+                "2 GB",
+                "10 GB",
+                "50 GB",
+                "75 GB",
+                "100 GB",
+                "200 GB",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:130",
+              "name": "row",
+              "cells": [
+                "Total site size",
+                "100 MB",
+                "1 GB",
+                "5 GB",
+                "25 GB",
+                "37.5 GB",
+                "50 GB",
+                "100 GB",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:143",
+              "name": "row",
+              "cells": [
+                "Bandwidth / mo",
+                "5 GB",
+                "50 GB",
+                "250 GB",
+                "1 TB",
+                "2.5 TB",
+                "5 TB",
+                "20 TB",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:156",
+              "name": "row",
+              "cells": [
+                "Custom domain & SSL",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:169",
+              "name": "row",
+              "cells": [
+                "Remove Aglyn branding",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:182",
+              "name": "row",
+              "cells": [
+                "Reusable components",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:195",
+              "name": "row",
+              "cells": [
+                "Screen versioning",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:208",
+              "name": "row",
+              "cells": [
+                "Scheduled publishing",
+                "—",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:221",
+              "name": "row",
+              "cells": [
+                "URL redirects",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:234",
+              "name": "row",
+              "cells": [
+                "Multilingual sites",
+                "—",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:247",
+              "name": "row",
+              "cells": [
+                "Site backup & restore",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:260",
+              "name": "row",
+              "cells": [
+                "A/B testing",
+                "—",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:273",
+              "name": "grp",
+              "cells": [
+                "Team"
+              ]
+            },
+            {
+              "figmaNodeId": "87:275",
+              "name": "row",
+              "cells": [
+                "Team seats",
+                "1",
+                "2 · max 5",
+                "5 · max 20",
+                "15 · max 100",
+                "25 · max 150",
+                "50 · max 250",
+                "100 · max 500",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "87:288",
+              "name": "row",
+              "cells": [
+                "Site collaborators",
+                "1",
+                "3 · max 10",
+                "10 · max 25",
+                "50 · max 100",
+                "75 · max 150",
+                "100 · max 250",
+                "250 · max 1,000",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "414:25071",
+              "name": "row",
+              "cells": [
+                "Member accounts",
+                "Unlimited",
+                "Unlimited",
+                "Unlimited",
+                "Unlimited",
+                "Unlimited",
+                "Unlimited",
+                "Unlimited",
+                "Unlimited"
+              ]
+            },
+            {
+              "figmaNodeId": "603:1237",
+              "name": "row",
+              "cells": [
+                "White-label",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:301",
+              "name": "grp",
+              "cells": [
+                "Content & data"
+              ]
+            },
+            {
+              "figmaNodeId": "87:303",
+              "name": "row",
+              "cells": [
+                "Datasets",
+                "—",
+                "3 · max 10",
+                "15 · max 50",
+                "100 · max 250",
+                "250 · max 500",
+                "500 · max 1,000",
+                "2,000 · max 5,000",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "87:316",
+              "name": "row",
+              "cells": [
+                "Records per dataset",
+                "—",
+                "1,000",
+                "10,000",
+                "100,000",
+                "500,000",
+                "1,000,000",
+                "Unlimited",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:329",
+              "name": "row",
+              "cells": [
+                "Variables per site",
+                "3",
+                "25",
+                "100",
+                "1,000",
+                "5,000",
+                "Unlimited",
+                "Unlimited",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:342",
+              "name": "row",
+              "cells": [
+                "Functions per site",
+                "1",
+                "10",
+                "50",
+                "250",
+                "500",
+                "1,000",
+                "Unlimited",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:355",
+              "name": "row",
+              "cells": [
+                "Workflows per site",
+                "—",
+                "3",
+                "25",
+                "100",
+                "250",
+                "500",
+                "Unlimited",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:368",
+              "name": "row",
+              "cells": [
+                "Workflow runs / mo",
+                "—",
+                "500",
+                "5,000",
+                "50,000",
+                "150,000",
+                "500,000",
+                "2,000,000",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:381",
+              "name": "row",
+              "cells": [
+                "Actions builder",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:394",
+              "name": "row",
+              "cells": [
+                "Appointment bookings",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "87:407",
+              "name": "row",
+              "cells": [
+                "Form submissions / mo",
+                "20",
+                "200",
+                "1,000",
+                "10,000",
+                "50,000",
+                "100,000",
+                "Unlimited",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:420",
+              "name": "row",
+              "cells": [
+                "Contacts included",
+                "100",
+                "1,000",
+                "10,000",
+                "100,000",
+                "500,000",
+                "1,000,000",
+                "Unlimited",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:433",
+              "name": "row",
+              "cells": [
+                "Email sends / mo",
+                "—",
+                "500",
+                "5,000",
+                "50,000",
+                "100,000",
+                "250,000",
+                "1,000,000",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "87:446",
+              "name": "row",
+              "cells": [
+                "Video & file uploads",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:56",
+              "name": "grp",
+              "cells": [
+                "Commerce"
+              ]
+            },
+            {
+              "figmaNodeId": "88:58",
+              "name": "row",
+              "cells": [
+                "Online store",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:71",
+              "name": "row",
+              "cells": [
+                "Products per site",
+                "—",
+                "100",
+                "2,500",
+                "10,000",
+                "25,000",
+                "Unlimited",
+                "Unlimited",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "88:84",
+              "name": "row",
+              "cells": [
+                "POS registers",
+                "—",
+                "—",
+                "1",
+                "2",
+                "3",
+                "5",
+                "20",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "88:97",
+              "name": "row",
+              "cells": [
+                "Digital transaction fee",
+                "—",
+                "5%",
+                "3%",
+                "2%",
+                "1%",
+                "0%",
+                "0%",
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "88:110",
+              "name": "row",
+              "cells": [
+                "Physical transaction fee",
+                "—",
+                "2%",
+                "0%",
+                "0%",
+                "0%",
+                "0%",
+                "0%",
+                "0%"
+              ]
+            },
+            {
+              "figmaNodeId": "88:123",
+              "name": "row",
+              "cells": [
+                "Subscriptions & memberships",
+                "—",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:136",
+              "name": "row",
+              "cells": [
+                "Gift cards",
+                "—",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:149",
+              "name": "row",
+              "cells": [
+                "Product reviews",
+                "—",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:162",
+              "name": "row",
+              "cells": [
+                "Abandoned cart recovery",
+                "—",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:175",
+              "name": "row",
+              "cells": [
+                "Content gating",
+                "—",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:188",
+              "name": "row",
+              "cells": [
+                "Commerce analytics",
+                "—",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:201",
+              "name": "grp",
+              "cells": [
+                "Marketing & analytics"
+              ]
+            },
+            {
+              "figmaNodeId": "88:203",
+              "name": "row",
+              "cells": [
+                "Interactions",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:216",
+              "name": "row",
+              "cells": [
+                "Announcement bar & popups",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:229",
+              "name": "row",
+              "cells": [
+                "CDN & responsive images",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:242",
+              "name": "row",
+              "cells": [
+                "AI assist",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:255",
+              "name": "row",
+              "cells": [
+                "Per-screen analytics",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:268",
+              "name": "row",
+              "cells": [
+                "Sell on the marketplace",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:281",
+              "name": "grp",
+              "cells": [
+                "Developer & API"
+              ]
+            },
+            {
+              "figmaNodeId": "88:283",
+              "name": "row",
+              "cells": [
+                "API access",
+                "—",
+                "—",
+                "—",
+                "100k / mo",
+                "300k / mo",
+                "1M / mo",
+                "5M / mo",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "88:296",
+              "name": "row",
+              "cells": [
+                "Webhooks",
+                "—",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "88:309",
+              "name": "row",
+              "cells": [
+                "Site export & backup",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "89:56",
+      "name": "Usage pricing",
+      "order": 3,
+      "widthPx": 1440,
+      "heightPx": 1092,
+      "groups": [
+        {
+          "figmaNodeId": "89:57",
+          "name": "hh",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "89:57",
+              "name": "hh",
+              "cells": [
+                "USAGE-BASED PRICING",
+                "Scale past your plan, only pay for what you use",
+                "Add capacity a la carte at rates that improve as you move up. No surprise bills — everything is metered and itemized on your invoice."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "89:61",
+          "name": "Metered table",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "89:62",
+              "name": "row",
+              "cells": [
+                "Add-on capacity",
+                "Starter",
+                "Pro",
+                "Business",
+                "Scale",
+                "Advanced",
+                "Agency",
+                "Enterprise"
+              ]
+            },
+            {
+              "figmaNodeId": "89:74",
+              "name": "row",
+              "cells": [
+                "Extra site / host",
+                "+$10/mo",
+                "+$8/mo",
+                "+$5/mo",
+                "+$5/mo",
+                "+$4/mo",
+                "+$3/mo",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "89:85",
+              "name": "row",
+              "cells": [
+                "Extra team seat",
+                "+$5/mo",
+                "+$4/mo",
+                "+$3/mo",
+                "+$2/mo",
+                "+$2/mo",
+                "+$2/mo",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "89:96",
+              "name": "row",
+              "cells": [
+                "Extra site collaborator",
+                "+$3/mo",
+                "+$2/mo",
+                "+$1/mo",
+                "+$1/mo",
+                "+$1/mo",
+                "+$1/mo",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "89:107",
+              "name": "row",
+              "cells": [
+                "Extra dataset",
+                "+$2/mo",
+                "+$2/mo",
+                "+$1/mo",
+                "+$1/mo",
+                "+$1/mo",
+                "+$1/mo",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "89:118",
+              "name": "row",
+              "cells": [
+                "Extra data storage",
+                "$0.25 / GB-mo",
+                "$0.25 / GB-mo",
+                "$0.25 / GB-mo",
+                "$0.25 / GB-mo",
+                "$0.25 / GB-mo",
+                "$0.25 / GB-mo",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "89:129",
+              "name": "row",
+              "cells": [
+                "API requests over limit",
+                "—",
+                "—",
+                "+$0.50 / 1k",
+                "+$0.35 / 1k",
+                "+$0.20 / 1k",
+                "+$0.15 / 1k",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "416:1214",
+              "name": "row",
+              "cells": [
+                "Contacts over included band",
+                "+$1 / 1k",
+                "+$0.75 / 1k",
+                "+$0.50 / 1k",
+                "+$0.40 / 1k",
+                "+$0.25 / 1k",
+                "+$0.20 / 1k",
+                "Custom"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "89:140",
+          "name": "cards",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "89:142",
+              "name": "h",
+              "cells": [
+                "Event Calendar (add-on)",
+                "$9 / mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:145",
+              "name": null,
+              "cells": [
+                "First-party event calendar with RSVPs, per site."
+              ]
+            },
+            {
+              "figmaNodeId": "89:147",
+              "name": "h",
+              "cells": [
+                "POS Pro register",
+                "$89 / mo"
+              ]
+            },
+            {
+              "figmaNodeId": "89:150",
+              "name": null,
+              "cells": [
+                "Add extra point-of-sale registers or locations, each."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "92:107",
+          "name": "pass-through",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "92:108",
+              "name": "h",
+              "cells": [
+                "Metered infrastructure — passed through at cost + 30%",
+                "Usage beyond your plan’s included storage, bandwidth, and form submissions is metered monthly at our actual provider cost (Firebase + Vercel) plus a flat 30% — no hidden markup, itemized on every invoice."
+              ]
+            },
+            {
+              "figmaNodeId": "92:112",
+              "name": "r",
+              "cells": [
+                "Metered item",
+                "Our cost",
+                "You pay (+30%)"
+              ]
+            },
+            {
+              "figmaNodeId": "92:119",
+              "name": "r",
+              "cells": [
+                "Media & file storage",
+                "$0.03 / GB-mo",
+                "$0.039 / GB-mo"
+              ]
+            },
+            {
+              "figmaNodeId": "92:126",
+              "name": "r",
+              "cells": [
+                "Page views (bandwidth + reads)",
+                "$0.10 / 1k views",
+                "$0.13 / 1k views"
+              ]
+            },
+            {
+              "figmaNodeId": "92:133",
+              "name": "r",
+              "cells": [
+                "Form submissions",
+                "$0.50 / 1k",
+                "$0.65 / 1k"
+              ]
+            },
+            {
+              "figmaNodeId": "92:140",
+              "name": null,
+              "cells": [
+                "Online payments run on Stripe; Aglyn’s transaction fee (see the comparison table) applies on top of Stripe’s processing fees. Dataset storage over your included amount is billed separately at $0.25 / GB-mo."
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "90:30",
+      "name": "FAQ",
+      "order": 4,
+      "widthPx": 1440,
+      "heightPx": 689,
+      "groups": [
+        {
+          "figmaNodeId": "90:31",
+          "name": "Pricing FAQ",
+          "widthPx": 175,
+          "records": [
+            {
+              "figmaNodeId": "90:31",
+              "name": null,
+              "cells": [
+                "Pricing FAQ"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "90:32",
+          "name": "grid",
+          "widthPx": 1280,
+          "records": [
+            {
+              "figmaNodeId": "90:33",
+              "name": "qa",
+              "cells": [
+                "Is there really a free plan?",
+                "Yes — the Free plan gives you one site, with the Besigner builder, forms, and media included. No credit card required."
+              ]
+            },
+            {
+              "figmaNodeId": "90:36",
+              "name": "qa",
+              "cells": [
+                "Monthly or annual billing?",
+                "Both. Annual is billed once up front and saves up to ~35% versus paying monthly. Switch anytime from the console."
+              ]
+            },
+            {
+              "figmaNodeId": "90:39",
+              "name": "qa",
+              "cells": [
+                "What happens if I exceed a plan limit?",
+                "You’re not cut off. Extra sites, seats, datasets, storage, and API calls are metered at the rates in the usage table and itemized on your invoice."
+              ]
+            },
+            {
+              "figmaNodeId": "90:42",
+              "name": "qa",
+              "cells": [
+                "How do transaction fees work?",
+                "Payments run on Stripe. Aglyn adds a transaction fee on top of Stripe’s processing — 0–5% depending on plan and digital vs. physical goods. It steps down as you move up — 1% on Scale, 0% from Advanced up."
+              ]
+            },
+            {
+              "figmaNodeId": "90:45",
+              "name": "qa",
+              "cells": [
+                "Can I self-host instead of subscribing?",
+                "Yes. Aglyn is Apache-2.0 — run it yourself with Docker and your own Firebase project (see the self-hosting guide), or use the hosted platform and skip the ops."
+              ]
+            },
+            {
+              "figmaNodeId": "90:48",
+              "name": "qa",
+              "cells": [
+                "Can I change or cancel anytime?",
+                "Upgrade, downgrade, or cancel whenever you like from the billing page. Plan changes prorate automatically."
+              ]
+            },
+            {
+              "figmaNodeId": "604:1272",
+              "name": "qa",
+              "cells": [
+                "Have a promo code?",
+                "Apply it at checkout — promotion codes work on any paid plan and show up itemized on your invoice."
+              ]
+            },
+            {
+              "figmaNodeId": "604:1275",
+              "name": "qa",
+              "cells": [
+                "Do you offer SSO or an SLA?",
+                "Both are coming for Enterprise contracts: SAML / OIDC single sign-on, an uptime SLA with a public status page, and priority support. Contact sales to plan around them."
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "90:51",
+      "name": "CTA",
+      "order": 5,
+      "widthPx": 1440,
+      "heightPx": 452,
+      "groups": [
+        {
+          "figmaNodeId": "90:52",
+          "name": "START FREE, UPGRADE ANYTIME",
+          "widthPx": 228,
+          "records": [
+            {
+              "figmaNodeId": "90:52",
+              "name": null,
+              "cells": [
+                "START FREE, UPGRADE ANYTIME"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "90:53",
+          "name": "Start building for free today.",
+          "widthPx": 761,
+          "records": [
+            {
+              "figmaNodeId": "90:53",
+              "name": null,
+              "cells": [
+                "Start building for free today."
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "90:54",
+          "name": "No credit card required. Beta pricing — plans, prices, and included features may change as Aglyn evolves.",
+          "widthPx": 620,
+          "records": [
+            {
+              "figmaNodeId": "90:54",
+              "name": null,
+              "cells": [
+                "No credit card required. Beta pricing — plans, prices, and included features may change as Aglyn evolves."
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

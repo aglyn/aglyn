@@ -1,0 +1,318 @@
+{
+  "page": "Enterprise",
+  "route": "/solutions/enterprise",
+  "figmaNodeId": "165:1174",
+  "frameName": "Solutions — Enterprise",
+  "frameSize": {
+    "width": 1440,
+    "height": 4572
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "165:1176",
+      "order": 0,
+      "heightPx": 689.5652465820312,
+      "eyebrow": "SOLUTIONS · ENTERPRISE",
+      "heading": "Roles, security, and scale.",
+      "subheading": null,
+      "body": [
+        "Run many sites and a big team on one console — with granular roles, audit trails, custom domains, and room to grow, backed by an open, self-hostable platform."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2290",
+      "order": 1,
+      "heightPx": 253,
+      "eyebrow": null,
+      "heading": "Running dozens of sites usually means dozens of logins, vendors, and gaps. Aglyn brings every site into one console — with the roles, audit, and governance a large team needs.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:1185",
+      "order": 2,
+      "heightPx": 737,
+      "eyebrow": "WHY AGLYN FOR ENTERPRISE",
+      "heading": "Built for teams that need control.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "165:1190",
+          "meta": null,
+          "title": "Every site, one console",
+          "body": "Manage up to 25 hosts on Advanced from a single organization, with room to add more.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1196",
+          "meta": null,
+          "title": "Granular roles & permissions",
+          "body": "Owner, admin, editor, and viewer — plus custom roles and per-site access for large teams.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1203",
+          "meta": null,
+          "title": "Audit & accountability",
+          "body": "A live activity feed shows who published, changed, or ordered what, across every site.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1209",
+          "meta": null,
+          "title": "Governance at scale",
+          "body": "Scheduled publishing, versioning with rollback, and site backup and restore keep changes safe.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1218",
+          "meta": null,
+          "title": "One bill, many sites",
+          "body": "Manage plans, seats, members, and usage for the whole org from one billing hub.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1225",
+          "meta": null,
+          "title": "Own your platform",
+          "body": "Self-host the Apache-2.0 platform with Docker behind your own infrastructure, or let us run it — either way your team can audit the code.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2292",
+      "order": 3,
+      "heightPx": 565,
+      "eyebrow": "SCALE WITHOUT CHAOS",
+      "heading": "Many sites, one source of truth.",
+      "subheading": null,
+      "body": [
+        "Run every brand, region, or product site as a host under one organization — with shared roles, billing, and governance, and an Apache-2.0 codebase your team can audit."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:2298",
+          "meta": null,
+          "title": "Scale without ceilings",
+          "body": "Advanced runs 25 sites, Agency runs 100 — and Enterprise contracts are sized to your portfolio, with volume pricing.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2304",
+          "meta": null,
+          "title": "Shared governance",
+          "body": "Roles, scheduled publishing, and audit apply across every site.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2310",
+          "meta": null,
+          "title": "Self-host option",
+          "body": "Self-host the Apache-2.0 platform, or audit the source your sites run on.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "589:1218",
+      "order": 4,
+      "heightPx": 138,
+      "eyebrow": "ON THE ENTERPRISE ROADMAP",
+      "heading": "Single sign-on (SAML / OIDC), an uptime SLA with a public status page, priority support with a named success manager, and a security & compliance kit are in active planning for Enterprise contracts.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:1231",
+      "order": 5,
+      "heightPx": 410,
+      "eyebrow": "HOW ENTERPRISES RUN ON AGLYN",
+      "heading": "Control, without the overhead.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "165:1236",
+          "meta": "01",
+          "title": "Set up your org",
+          "body": "Create your organization and add every site your teams run as a host.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1241",
+          "meta": "02",
+          "title": "Define roles",
+          "body": "Give each person the exact access they need with roles and custom permissions.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:1246",
+          "meta": "03",
+          "title": "Publish with guardrails",
+          "body": "Schedule releases, roll back versions, and keep a full audit trail.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2426",
+      "order": 6,
+      "heightPx": 473,
+      "eyebrow": "WHAT'S INCLUDED",
+      "heading": "Built for scale and control.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:2431",
+          "meta": null,
+          "title": "Up to 100 sites on Agency",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2435",
+          "meta": null,
+          "title": "Roles & custom permissions",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2439",
+          "meta": null,
+          "title": "Scheduled publishing",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2443",
+          "meta": null,
+          "title": "Versioning & rollback",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2447",
+          "meta": null,
+          "title": "Site backup & restore",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2451",
+          "meta": null,
+          "title": "A/B testing",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2455",
+          "meta": null,
+          "title": "Multilingual sites",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2459",
+          "meta": null,
+          "title": "Activity feed & audit",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2463",
+      "order": 7,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:2468",
+          "meta": null,
+          "title": "Console",
+          "body": "Run every site, team, and setting in one place.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:2478",
+          "meta": null,
+          "title": "Workflows",
+          "body": "Automate the busywork with triggers & actions.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:2488",
+          "meta": null,
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages & store revenue.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:1251",
+      "order": 8,
+      "heightPx": 289,
+      "eyebrow": null,
+      "heading": "Bring your team to Aglyn.",
+      "subheading": null,
+      "body": [
+        "Talk to us about roles, scale, and self-hosting for your organization."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

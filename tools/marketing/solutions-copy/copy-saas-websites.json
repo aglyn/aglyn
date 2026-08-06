@@ -1,0 +1,326 @@
+{
+  "page": "SaaS websites",
+  "route": "/use-cases/saas-websites",
+  "figmaNodeId": "190:2853",
+  "frameName": "Use case — SaaS websites",
+  "frameSize": {
+    "width": 1440,
+    "height": 4709
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "190:2855",
+      "order": 0,
+      "heightPx": 639.1304321289062,
+      "eyebrow": "USE CASE · SAAS WEBSITES",
+      "heading": "The website around your app.",
+      "subheading": null,
+      "body": [
+        "Build the marketing site, docs, pricing, blog, and even a store for your SaaS — all on one platform, so your whole web presence lives in one console."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2864",
+      "order": 1,
+      "heightPx": 214,
+      "eyebrow": null,
+      "heading": "Your product lives in your app; everything around it — marketing, docs, pricing, blog, changelog — usually sprawls across tools. Aglyn brings that whole surface into one place.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2866",
+      "order": 2,
+      "heightPx": 707,
+      "eyebrow": "WHAT YOU CAN BUILD",
+      "heading": "Your whole web presence.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:2871",
+          "meta": null,
+          "title": "Marketing site",
+          "body": "Design a fast, on-brand marketing site on a live canvas.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2878",
+          "meta": null,
+          "title": "Docs & guides",
+          "body": "Publish product docs and guides as clean, searchable pages.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2885",
+          "meta": null,
+          "title": "Pricing & plans",
+          "body": "Build pricing pages and connect a store for self-serve plans.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2892",
+          "meta": null,
+          "title": "Blog & changelog",
+          "body": "Ship a blog and changelog with scheduled publishing and RSS.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2898",
+          "meta": null,
+          "title": "Forms & leads",
+          "body": "Capture demo requests and leads in one Inbox, routed to your data.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2905",
+          "meta": null,
+          "title": "One console",
+          "body": "Run every site — marketing, docs, blog — from a single console.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "419:6126",
+      "order": 3,
+      "heightPx": 554.2608642578125,
+      "eyebrow": "CAPTURE DEMAND",
+      "heading": "From visitor to lead.",
+      "subheading": null,
+      "body": [
+        "Demo requests and sign-ups land in one Inbox with spam protection built in — then flow into datasets and automations so your team can actually act on them."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "419:6132",
+          "meta": null,
+          "title": "One Inbox for leads",
+          "body": "Demo requests and contact forms land together, honeypot-filtered.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "419:6138",
+          "meta": null,
+          "title": "Data, not spreadsheets",
+          "body": "Route every submission into a dataset automatically.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "419:6144",
+          "meta": null,
+          "title": "Follow up instantly",
+          "body": "Automations trigger emails, admin alerts, and webhooks on submit.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2911",
+      "order": 4,
+      "heightPx": 411,
+      "eyebrow": "WHAT’S INCLUDED",
+      "heading": "Everything around your app.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:2916",
+          "meta": null,
+          "title": "Marketing site",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2920",
+          "meta": null,
+          "title": "Docs & guides",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2924",
+          "meta": null,
+          "title": "Pricing pages",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2928",
+          "meta": null,
+          "title": "Blog & changelog",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2932",
+          "meta": null,
+          "title": "Lead-capture forms",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2936",
+          "meta": null,
+          "title": "Custom domains + SSL",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2940",
+      "order": 5,
+      "heightPx": 392,
+      "eyebrow": "HOW IT WORKS",
+      "heading": "Ship your whole site.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:2945",
+          "meta": "01",
+          "title": "Design your pages",
+          "body": "Build marketing, docs, and pricing on a live canvas.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2950",
+          "meta": "02",
+          "title": "Capture & connect",
+          "body": "Add forms for demos and leads, and route them to your data.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2955",
+          "meta": "03",
+          "title": "Publish & measure",
+          "body": "Ship to your domain and track traffic with built-in analytics.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "419:6282",
+      "order": 6,
+      "heightPx": 485,
+      "eyebrow": "GOOD TO KNOW",
+      "heading": "Plans, in plain terms.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "419:6287",
+          "meta": null,
+          "title": "One console for the surface",
+          "body": "Marketing, docs, blog, and changelog run as one site — or several under one org.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "419:6294",
+          "meta": null,
+          "title": "Test on Business",
+          "body": "A/B experiments on screens and sections from Business up.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "419:6301",
+          "meta": null,
+          "title": "API when you need it",
+          "body": "REST API with scoped keys — 100k requests/mo on Business, 1M on Advanced.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "419:6327",
+      "order": 7,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "419:6332",
+          "meta": null,
+          "title": "Forms & Inbox",
+          "body": "Collect submissions in one Inbox and route them onward.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "419:6342",
+          "meta": null,
+          "title": "Workflows",
+          "body": "Automate the busywork with triggers & actions.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "419:6352",
+          "meta": null,
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages & referrers.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2960",
+      "order": 8,
+      "heightPx": 290,
+      "eyebrow": null,
+      "heading": "Build your SaaS site on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — launch your marketing site and docs in minutes."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

@@ -1,0 +1,304 @@
+{
+  "page": "Creators",
+  "route": "/solutions/creators",
+  "figmaNodeId": "165:630",
+  "frameName": "Solutions — Creators",
+  "frameSize": {
+    "width": 1440,
+    "height": 4363
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "165:632",
+      "order": 0,
+      "heightPx": 689.5652465820312,
+      "eyebrow": "SOLUTIONS · CREATORS",
+      "heading": "Sell your work, your way.",
+      "subheading": null,
+      "body": [
+        "Publish your content, open a store for digital downloads and memberships, and grow an audience — all on one platform you fully control."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:1881",
+      "order": 1,
+      "heightPx": 214,
+      "eyebrow": null,
+      "heading": "Your work deserves better than a rented storefront bolted to a separate site. Aglyn puts your portfolio, your content, and your store in one place you actually own.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:641",
+      "order": 2,
+      "heightPx": 716,
+      "eyebrow": "WHY AGLYN FOR CREATORS",
+      "heading": "Everything to publish and get paid.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "165:646",
+          "meta": null,
+          "title": "Site, store, and content in one",
+          "body": "Your portfolio, blog, and shop live together — no separate storefront to bolt on.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:652",
+          "meta": null,
+          "title": "Members & sign-ups",
+          "body": "Let fans create accounts, then gate content or perks behind a membership (Business and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:659",
+          "meta": null,
+          "title": "Own your audience",
+          "body": "Your members and their data live in your own console, and Aglyn is open source — no walled garden.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:665",
+          "meta": null,
+          "title": "A real media library",
+          "body": "Upload images and video into a DAM with folders and metadata, delivered fast on a CDN.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:674",
+          "meta": null,
+          "title": "Sell digital goods & subscriptions",
+          "body": "Take payments through Stripe for downloads, memberships, and recurring plans.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:681",
+          "meta": null,
+          "title": "Design-first, no code",
+          "body": "Build a site that looks like you on a live canvas — no templates to fight.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:1883",
+      "order": 3,
+      "heightPx": 554.2608642578125,
+      "eyebrow": "A REAL MEDIA LIBRARY",
+      "heading": "Your work, organized and fast.",
+      "subheading": null,
+      "body": [
+        "Upload images and video into a real DAM with folders, drag-and-drop, and custom metadata — all delivered responsive on a global CDN so your portfolio loads fast everywhere."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:1889",
+          "meta": null,
+          "title": "Folders & metadata",
+          "body": "Organize assets into folders and tag them with your own fields.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1895",
+          "meta": null,
+          "title": "Video & files",
+          "body": "Upload video and downloadable files, not just images (Pro and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1901",
+          "meta": null,
+          "title": "Fast everywhere",
+          "body": "Responsive image variants are served from a global CDN automatically.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:687",
+      "order": 4,
+      "heightPx": 410,
+      "eyebrow": "HOW CREATORS BUILD ON AGLYN",
+      "heading": "From first post to first sale.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "165:692",
+          "meta": "01",
+          "title": "Build your space",
+          "body": "Design your site and portfolio on a live canvas, in your own style.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:697",
+          "meta": "02",
+          "title": "Add a store",
+          "body": "List digital downloads, memberships, or products and connect Stripe.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "165:702",
+          "meta": "03",
+          "title": "Publish & grow",
+          "body": "Ship to your domain, sign up members, and reach them with built-in email.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2026",
+      "order": 5,
+      "heightPx": 473,
+      "eyebrow": "WHAT'S INCLUDED",
+      "heading": "Everything creators get.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:2031",
+          "meta": null,
+          "title": "Design-first canvas",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2035",
+          "meta": null,
+          "title": "Real media library (DAM)",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2039",
+          "meta": null,
+          "title": "Digital downloads",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2043",
+          "meta": null,
+          "title": "Memberships & gated content",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2047",
+          "meta": null,
+          "title": "Subscriptions via Stripe",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2051",
+          "meta": null,
+          "title": "Product reviews",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2055",
+          "meta": null,
+          "title": "Email to your audience",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:2059",
+          "meta": null,
+          "title": "Custom domain + SSL",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2063",
+      "order": 6,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:2068",
+          "meta": null,
+          "title": "Commerce",
+          "body": "Storefronts, checkout, POS & digital goods.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:2078",
+          "meta": null,
+          "title": "Media",
+          "body": "A real DAM — folders, drag-and-drop, metadata.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:2088",
+          "meta": null,
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:707",
+      "order": 7,
+      "heightPx": 289,
+      "eyebrow": null,
+      "heading": "Start creating on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — publish your work and open your store in minutes."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

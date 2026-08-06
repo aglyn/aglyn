@@ -1,0 +1,326 @@
+{
+  "page": "Online stores",
+  "route": "/use-cases/online-stores",
+  "figmaNodeId": "189:2113",
+  "frameName": "Use case — Online stores",
+  "frameSize": {
+    "width": 1440,
+    "height": 4709
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "189:2139",
+      "order": 0,
+      "heightPx": 639.1304321289062,
+      "eyebrow": "USE CASE · ONLINE STORES",
+      "heading": "Open a store on your own site.",
+      "subheading": null,
+      "body": [
+        "Sell physical products, digital downloads, and subscriptions from a storefront that’s part of your site — with checkout, POS, and inventory built in."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "189:2241",
+      "order": 1,
+      "heightPx": 214,
+      "eyebrow": null,
+      "heading": "You don’t need a separate storefront platform bolted onto your site. With Aglyn, your store and your site are the same thing — one design, one login, one checkout.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "189:2243",
+      "order": 2,
+      "heightPx": 707,
+      "eyebrow": "WHAT YOUR STORE INCLUDES",
+      "heading": "Everything you need to sell.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "189:2248",
+          "meta": null,
+          "title": "Products & variants",
+          "body": "Sell physical, digital, and service products with options, variants, and images.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2255",
+          "meta": null,
+          "title": "Checkout & payments",
+          "body": "Stripe-powered checkout with taxes, discounts, coupons, and gift cards.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2262",
+          "meta": null,
+          "title": "POS & in person",
+          "body": "Ring up sales at the counter with registers; inventory stays in sync (Pro and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2269",
+          "meta": null,
+          "title": "Subscriptions",
+          "body": "Offer recurring plans and memberships, billed through Stripe (Business and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2275",
+          "meta": null,
+          "title": "Inventory & orders",
+          "body": "Track stock across locations, and manage orders, refunds, and fulfillment.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2282",
+          "meta": null,
+          "title": "Store analytics",
+          "body": "Revenue, orders, average order value, and top products, built in.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "418:5709",
+      "order": 3,
+      "heightPx": 554.2608642578125,
+      "eyebrow": "ORDERS & IN-PERSON",
+      "heading": "Every order, one stream.",
+      "subheading": null,
+      "body": [
+        "Orders from your storefront and your POS land in the same place — track status, issue refunds, and keep inventory honest without leaving the console."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "418:5715",
+          "meta": null,
+          "title": "One order stream",
+          "body": "Online and POS orders land in one list, each with status and fulfillment.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "418:5721",
+          "meta": null,
+          "title": "Refunds through Stripe",
+          "body": "Issue refunds in the console; platform fees adjust automatically.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "418:5727",
+          "meta": null,
+          "title": "Inventory that keeps up",
+          "body": "Stock tracked per location, with oversell rules and restock alerts.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "189:2288",
+      "order": 4,
+      "heightPx": 411,
+      "eyebrow": "WHAT’S INCLUDED",
+      "heading": "Everything to sell.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "189:2293",
+          "meta": null,
+          "title": "Physical, digital & service products",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2297",
+          "meta": null,
+          "title": "Stripe checkout",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2301",
+          "meta": null,
+          "title": "In-person POS (Pro+)",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2305",
+          "meta": null,
+          "title": "Subscriptions & gift cards (Business+)",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2309",
+          "meta": null,
+          "title": "Discounts & coupon codes",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2313",
+          "meta": null,
+          "title": "Shipping & tax rules",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "189:2317",
+      "order": 5,
+      "heightPx": 392,
+      "eyebrow": "HOW IT WORKS",
+      "heading": "Selling in three steps.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "189:2322",
+          "meta": "01",
+          "title": "Add products",
+          "body": "Create your catalog with variants, images, and inventory.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2327",
+          "meta": "02",
+          "title": "Design your store",
+          "body": "Drop product grids and a cart onto your site in Besigner.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "189:2332",
+          "meta": "03",
+          "title": "Start selling",
+          "body": "Connect Stripe, publish, and take orders online or in person.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "418:5861",
+      "order": 6,
+      "heightPx": 485,
+      "eyebrow": "GOOD TO KNOW",
+      "heading": "Plans, in plain terms.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "418:5866",
+          "meta": null,
+          "title": "Selling starts on Starter",
+          "body": "Open your store on any paid plan — digital fee 5% on Starter, down to 0% on Advanced.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "418:5873",
+          "meta": null,
+          "title": "POS from Pro",
+          "body": "Ring up in-person sales with 1 register on Pro, 2 on Business, 5 on Advanced.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "418:5880",
+          "meta": null,
+          "title": "Physical fees drop fast",
+          "body": "2% on Starter, then 0% from Pro up — payments through your own Stripe account.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "418:5906",
+      "order": 7,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "418:5911",
+          "meta": null,
+          "title": "Commerce",
+          "body": "Storefronts, checkout, POS & digital goods.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "418:5921",
+          "meta": null,
+          "title": "Media",
+          "body": "A real DAM — folders, drag-and-drop, metadata.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "418:5931",
+          "meta": null,
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages & store revenue.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "189:2337",
+      "order": 8,
+      "heightPx": 290,
+      "eyebrow": null,
+      "heading": "Open your store on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — add products and open your store in minutes."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

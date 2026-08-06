@@ -1,0 +1,326 @@
+{
+  "page": "Portfolios",
+  "route": "/use-cases/portfolios",
+  "figmaNodeId": "190:2285",
+  "frameName": "Use case — Portfolios",
+  "frameSize": {
+    "width": 1440,
+    "height": 4709
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "190:2287",
+      "order": 0,
+      "heightPx": 639.1304321289062,
+      "eyebrow": "USE CASE · PORTFOLIOS",
+      "heading": "Show your work, beautifully.",
+      "subheading": null,
+      "body": [
+        "Design a portfolio that looks like you — on a live canvas, with a real media library behind it and your own domain out front."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2296",
+      "order": 1,
+      "heightPx": 214,
+      "eyebrow": null,
+      "heading": "A portfolio is a design project, not a template you fill in. Aglyn lets you build yours on a real canvas, then publish it to your own domain in one click.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2298",
+      "order": 2,
+      "heightPx": 707,
+      "eyebrow": "WHAT YOUR PORTFOLIO INCLUDES",
+      "heading": "Built to be looked at.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:2303",
+          "meta": null,
+          "title": "Design-first canvas",
+          "body": "Build every page on a live canvas — no rigid templates to fight.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2310",
+          "meta": null,
+          "title": "A real media library",
+          "body": "Store images and video in a DAM with folders and metadata, served on a CDN.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2317",
+          "meta": null,
+          "title": "Responsive by device",
+          "body": "Design and preview desktop, tablet, and mobile from one canvas.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2324",
+          "meta": null,
+          "title": "Custom domain",
+          "body": "Publish to your own domain with automatic SSL (Starter and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2330",
+          "meta": null,
+          "title": "Interactions",
+          "body": "Add hovers, reveals, and overlays without code.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2337",
+          "meta": null,
+          "title": "Sell your work",
+          "body": "Add a store for prints or digital downloads whenever you want.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "418:5941",
+      "order": 3,
+      "heightPx": 554.2608642578125,
+      "eyebrow": "YOUR LIBRARY",
+      "heading": "Every piece, organized.",
+      "subheading": null,
+      "body": [
+        "Your work lives in a real digital-asset manager — folders, drag-and-drop, custom metadata — and ships responsive from a global CDN so it looks sharp everywhere."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "418:5947",
+          "meta": null,
+          "title": "Folders that scale",
+          "body": "Drag-and-drop folders keep even huge libraries tidy.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "418:5953",
+          "meta": null,
+          "title": "Metadata that matters",
+          "body": "Add credits, usage notes, and alt text to any asset.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "418:5959",
+          "meta": null,
+          "title": "Fast on every screen",
+          "body": "Responsive WebP variants served from the global CDN.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2343",
+      "order": 4,
+      "heightPx": 411,
+      "eyebrow": "WHAT’S INCLUDED",
+      "heading": "Everything to present your work.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:2348",
+          "meta": null,
+          "title": "Live design canvas",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2352",
+          "meta": null,
+          "title": "Real media library (DAM)",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2356",
+          "meta": null,
+          "title": "Video & files (Pro+)",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2360",
+          "meta": null,
+          "title": "Custom domain + SSL",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2364",
+          "meta": null,
+          "title": "Interactions",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2368",
+          "meta": null,
+          "title": "Optional store",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2372",
+      "order": 5,
+      "heightPx": 392,
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From blank canvas to portfolio.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:2377",
+          "meta": "01",
+          "title": "Design it",
+          "body": "Lay out your work on a live canvas, exactly how you want it.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2382",
+          "meta": "02",
+          "title": "Add your media",
+          "body": "Upload images and video into your library and drop them in.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2387",
+          "meta": "03",
+          "title": "Publish",
+          "body": "Ship to your own domain in one click, with SSL and a CDN.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "418:6097",
+      "order": 6,
+      "heightPx": 485,
+      "eyebrow": "GOOD TO KNOW",
+      "heading": "Plans, in plain terms.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "418:6102",
+          "meta": null,
+          "title": "Free to start",
+          "body": "One site with 250 MB of media on the free plan — upgrade when you outgrow it.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "418:6109",
+          "meta": null,
+          "title": "Video lands on Pro",
+          "body": "Video and PDF uploads join images from the Pro plan up.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "418:6116",
+          "meta": null,
+          "title": "Look pro on Starter",
+          "body": "Custom domain, SSL, and Aglyn branding removed on any paid plan.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "418:6142",
+      "order": 7,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "418:6147",
+          "meta": null,
+          "title": "Media",
+          "body": "A real DAM — folders, drag-and-drop, metadata.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "418:6157",
+          "meta": null,
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "418:6167",
+          "meta": null,
+          "title": "Commerce",
+          "body": "Sell prints and downloads whenever you’re ready.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2392",
+      "order": 8,
+      "heightPx": 290,
+      "eyebrow": null,
+      "heading": "Build your portfolio on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — design your portfolio and publish in minutes."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

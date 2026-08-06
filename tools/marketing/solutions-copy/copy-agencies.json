@@ -1,0 +1,304 @@
+{
+  "page": "Agencies",
+  "route": "/solutions/agencies",
+  "figmaNodeId": "164:169",
+  "frameName": "Solutions — Agencies",
+  "frameSize": {
+    "width": 1440,
+    "height": 4444
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "164:195",
+      "order": 0,
+      "heightPx": 689.5652465820312,
+      "eyebrow": "SOLUTIONS · AGENCIES",
+      "heading": "Run every client site from one console.",
+      "subheading": null,
+      "body": [
+        "Spin up a host for each client, brand it as your own, control who can touch what, and bill it all from one place — without stitching a stack of tools together."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:1404",
+      "order": 1,
+      "heightPx": 253,
+      "eyebrow": null,
+      "heading": "Most agencies run a different stack for every client — a builder here, a store there, analytics somewhere else. Aglyn puts every client site on one platform, so your team learns it once and reuses everything.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "164:315",
+      "order": 2,
+      "heightPx": 758,
+      "eyebrow": "WHY AGLYN FOR AGENCIES",
+      "heading": "One platform for every client.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "164:320",
+          "meta": null,
+          "title": "One console, every client",
+          "body": "Add a host for each client site under your org, and switch between them without new logins.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "164:326",
+          "meta": null,
+          "title": "Roles & per-site access",
+          "body": "Org roles for your team, per-site collaborator seats for clients — a collaborator’s console shows only their site. Keep internal datasets and media off client sites with per-site sharing.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "164:333",
+          "meta": null,
+          "title": "White-label sites, console & email",
+          "body": "On the Agency plan, published sites, the console your clients sign into, and every transactional email carry your brand — right down to running the console on your own domain.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "164:339",
+          "meta": null,
+          "title": "Reusable components & templates",
+          "body": "Build a component once, or install a marketplace template, then reuse it across every client site.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "164:348",
+          "meta": null,
+          "title": "One billing hub",
+          "body": "Manage plans, seats, and hosts across all your clients from a single billing view.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "164:355",
+          "meta": null,
+          "title": "Clean handoff",
+          "body": "Give clients viewer or editor access to just their own site — and nothing else.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:1406",
+      "order": 3,
+      "heightPx": 554.2608642578125,
+      "eyebrow": "BUILD ONCE, REUSE EVERYWHERE",
+      "heading": "Design a system, not one-off sites.",
+      "subheading": null,
+      "body": [
+        "Build components, layouts, and templates once, then reuse them across every client site. Update the source and the change flows everywhere — so ten client sites don’t mean ten times the work."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:1412",
+          "meta": null,
+          "title": "Reusable components",
+          "body": "Author a component once and instance it across every client site.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1418",
+          "meta": null,
+          "title": "Templates & starters",
+          "body": "Install marketplace templates, or save your own as a starting point.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1424",
+          "meta": null,
+          "title": "Consistent theming",
+          "body": "Set brand tokens per client so every page stays on-brand.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "164:361",
+      "order": 4,
+      "heightPx": 410,
+      "eyebrow": "HOW AGENCIES RUN ON AGLYN",
+      "heading": "From pitch to handoff, in one place.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "164:366",
+          "meta": "01",
+          "title": "Create a host per client",
+          "body": "Spin up a new site under your org for each client, on whatever plan fits them.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "164:371",
+          "meta": "02",
+          "title": "Brand it and build it",
+          "body": "Design on the canvas, connect a custom domain, and remove Aglyn branding.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "164:376",
+          "meta": "03",
+          "title": "Invite and hand off",
+          "body": "Give the client and your team the exact roles they need, and manage billing from one hub.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:1558",
+      "order": 5,
+      "heightPx": 473,
+      "eyebrow": "WHAT'S INCLUDED",
+      "heading": "Everything agencies get.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:1563",
+          "meta": null,
+          "title": "Multiple sites (up to 100 on Agency)",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1567",
+          "meta": null,
+          "title": "Custom domain + SSL per site",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1571",
+          "meta": null,
+          "title": "Remove Aglyn branding",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1575",
+          "meta": null,
+          "title": "Roles & custom permissions",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1579",
+          "meta": null,
+          "title": "Reusable components & templates",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1583",
+          "meta": null,
+          "title": "Marketplace templates",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1587",
+          "meta": null,
+          "title": "One billing hub",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "168:1591",
+          "meta": null,
+          "title": "Activity feed & audit",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:1595",
+      "order": 6,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "168:1600",
+          "meta": null,
+          "title": "Console",
+          "body": "Run every site, team, and setting in one place.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:1610",
+          "meta": null,
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "168:1620",
+          "meta": null,
+          "title": "Plugins",
+          "body": "Install templates & layouts, or publish your own.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "164:381",
+      "order": 7,
+      "heightPx": 289,
+      "eyebrow": null,
+      "heading": "Run your agency on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Start free, add clients as you grow, and manage every site from one console."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

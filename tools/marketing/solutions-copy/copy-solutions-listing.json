@@ -1,0 +1,184 @@
+{
+  "page": "Listing",
+  "route": "/solutions",
+  "figmaNodeId": "163:90",
+  "frameName": "Solutions — Listing",
+  "frameSize": {
+    "width": 1440,
+    "height": 2585
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "163:116",
+      "order": 0,
+      "heightPx": 412,
+      "eyebrow": "SOLUTIONS",
+      "heading": "Built for how you build.",
+      "subheading": null,
+      "body": [
+        "Whatever you’re putting on the web — client sites, a storefront, a startup, a docs site — Aglyn is one platform that adapts to the way you work."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "163:126",
+      "order": 1,
+      "heightPx": 755,
+      "eyebrow": "BY TEAM",
+      "heading": "Find your fit.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "163:131",
+          "meta": null,
+          "title": "Agencies",
+          "body": "Run every client site from one console.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "163:141",
+          "meta": null,
+          "title": "Startups",
+          "body": "Launch fast and iterate without a stack.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "163:151",
+          "meta": null,
+          "title": "Creators",
+          "body": "Sell content, memberships & digital goods.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "163:161",
+          "meta": null,
+          "title": "Developers",
+          "body": "Open source, self-host, extend with APIs.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "163:171",
+          "meta": null,
+          "title": "Enterprise",
+          "body": "Roles, security & scale for big teams.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "163:182",
+          "meta": null,
+          "title": "Small business",
+          "body": "Everything to get online, one price.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "163:192",
+      "order": 2,
+      "heightPx": 601,
+      "eyebrow": "BY USE CASE",
+      "heading": "Whatever you need to ship.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "163:197",
+          "meta": null,
+          "title": "Online stores",
+          "body": "Products, checkout, POS, and subscriptions — a full store built in.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "163:200",
+          "meta": null,
+          "title": "Portfolios",
+          "body": "Show your work on a design-first canvas with a real DAM.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "163:203",
+          "meta": null,
+          "title": "Blogs",
+          "body": "Write, schedule, and publish posts on a fast, global CDN.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "163:206",
+          "meta": null,
+          "title": "SaaS websites",
+          "body": "Marketing site, docs, pricing, and a store — around your app.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "163:209",
+          "meta": null,
+          "title": "Documentation",
+          "body": "Publish clean, organized docs and guides as fast pages.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "163:212",
+          "meta": null,
+          "title": "Membership sites",
+          "body": "Member sign-ups, gated content, and email, all in one place.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "163:215",
+      "order": 3,
+      "heightPx": 285,
+      "eyebrow": null,
+      "heading": "Not sure where you fit? Start building.",
+      "subheading": null,
+      "body": [
+        "Aglyn is free to start — spin up your first site and see where it takes you."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

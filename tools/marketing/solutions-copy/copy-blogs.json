@@ -1,0 +1,326 @@
+{
+  "page": "Blogs",
+  "route": "/use-cases/blogs",
+  "figmaNodeId": "190:2569",
+  "frameName": "Use case — Blogs",
+  "frameSize": {
+    "width": 1440,
+    "height": 4709
+  },
+  "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
+  "sections": [
+    {
+      "kind": null,
+      "figmaNodeId": "190:2571",
+      "order": 0,
+      "heightPx": 639.1304321289062,
+      "eyebrow": "USE CASE · BLOGS",
+      "heading": "A blog that’s truly yours.",
+      "subheading": null,
+      "body": [
+        "Write, schedule, and publish posts on a fast, global CDN — with categories, tags, and SEO built in, on a site you fully own. Write in markdown — fenced code blocks and tables render everywhere, and a pasted README keeps its structure."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2580",
+      "order": 1,
+      "heightPx": 214,
+      "eyebrow": null,
+      "heading": "Most blogs live on someone else’s platform, with their branding and their rules. Aglyn puts your blog on your own site and domain — designed your way, open source underneath.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2582",
+      "order": 2,
+      "heightPx": 707,
+      "eyebrow": "WHAT YOUR BLOG INCLUDES",
+      "heading": "Everything to publish.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:2587",
+          "meta": null,
+          "title": "Design your posts",
+          "body": "Write and lay out posts on a live canvas with real components.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2594",
+          "meta": null,
+          "title": "Categories & tags",
+          "body": "Organize posts with categories and tags, and filter lists by them.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2601",
+          "meta": null,
+          "title": "Scheduled publishing",
+          "body": "Write now and publish later on a schedule (Business and up).",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2608",
+          "meta": null,
+          "title": "SEO built in",
+          "body": "Per-post SEO titles, descriptions, sitemaps, and JSON-LD structured data.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2614",
+          "meta": null,
+          "title": "Fast delivery",
+          "body": "Posts and images are served responsive on a global CDN.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2621",
+          "meta": null,
+          "title": "RSS & search",
+          "body": "An RSS endpoint for each collection, and site-wide search across your content.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "419:5886",
+      "order": 3,
+      "heightPx": 554.2608642578125,
+      "eyebrow": "REACH READERS",
+      "heading": "From post to inbox.",
+      "subheading": null,
+      "body": [
+        "Turn readers into subscribers: collect sign-ups with a form on any page, then send new posts as campaigns with the built-in email designer — no separate newsletter tool."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "419:5892",
+          "meta": null,
+          "title": "Grow a list",
+          "body": "Collect subscribers with a form on any page — straight into a list.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "419:5898",
+          "meta": null,
+          "title": "Send with the designer",
+          "body": "Design campaigns with the same blocks you build your site with.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "419:5904",
+          "meta": null,
+          "title": "Delivered through Resend",
+          "body": "Campaigns and lists are built in, with send quotas per plan.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2627",
+      "order": 4,
+      "heightPx": 411,
+      "eyebrow": "WHAT’S INCLUDED",
+      "heading": "Everything to run a blog.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:2632",
+          "meta": null,
+          "title": "Live post editor",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2636",
+          "meta": null,
+          "title": "Categories & tags",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2640",
+          "meta": null,
+          "title": "Scheduled publishing (Business+)",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2644",
+          "meta": null,
+          "title": "SEO titles & descriptions",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2648",
+          "meta": null,
+          "title": "RSS endpoint",
+          "body": null,
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2652",
+          "meta": null,
+          "title": "Custom domain + SSL",
+          "body": null,
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2656",
+      "order": 5,
+      "heightPx": 392,
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From draft to published.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "190:2661",
+          "meta": "01",
+          "title": "Write it",
+          "body": "Draft and design your post on a live canvas.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2666",
+          "meta": "02",
+          "title": "Organize it",
+          "body": "Add a category, tags, cover image, and SEO details.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "190:2671",
+          "meta": "03",
+          "title": "Publish or schedule",
+          "body": "Ship now or schedule it, served fast on a global CDN.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "419:6046",
+      "order": 6,
+      "heightPx": 485,
+      "eyebrow": "GOOD TO KNOW",
+      "heading": "Plans, in plain terms.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "419:6051",
+          "meta": null,
+          "title": "SEO out of the box",
+          "body": "Per-post titles and descriptions, sitemap.xml, and structured data on every plan.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "419:6058",
+          "meta": null,
+          "title": "Schedule on Business",
+          "body": "Write ahead and publish on a schedule from the Business plan up.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "419:6065",
+          "meta": null,
+          "title": "Email your readers",
+          "body": "500 sends a month on Starter, up to 250,000 on Advanced.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "419:6091",
+      "order": 7,
+      "heightPx": 485,
+      "eyebrow": "EXPLORE THE PLATFORM",
+      "heading": "Built on the whole platform.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "419:6096",
+          "meta": null,
+          "title": "Marketing",
+          "body": "Email campaigns, popups & A/B testing.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "419:6106",
+          "meta": null,
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages & referrers.",
+          "extra": [
+            "Learn more"
+          ]
+        },
+        {
+          "figmaNodeId": "419:6116",
+          "meta": null,
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "extra": [
+            "Learn more"
+          ]
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2676",
+      "order": 8,
+      "heightPx": 290,
+      "eyebrow": null,
+      "heading": "Start your blog on Aglyn.",
+      "subheading": null,
+      "body": [
+        "Free to start — write your first post and publish in minutes."
+      ],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    }
+  ],
+  "claimsToVerify": []
+}

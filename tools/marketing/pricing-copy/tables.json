@@ -1,0 +1,977 @@
+{
+  "source": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts",
+  "generatedBy": "tools/marketing/build-pricing-tables.mts",
+  "notes": "Every value here is READ FROM CODE, never transcribed from Figma. The frame supplies the shape (which rows, in which groups); the code supplies the values. Regenerate rather than hand-edit.",
+  "compare": {
+    "columns": [
+      {
+        "plan": "free",
+        "label": "Free",
+        "monthlyUsd": 0,
+        "annualMonthlyUsd": 0,
+        "priceLabel": "$0"
+      },
+      {
+        "plan": "starter",
+        "label": "Starter",
+        "monthlyUsd": 25,
+        "annualMonthlyUsd": 16,
+        "priceLabel": "$25"
+      },
+      {
+        "plan": "pro",
+        "label": "Pro",
+        "monthlyUsd": 56,
+        "annualMonthlyUsd": 39,
+        "priceLabel": "$56"
+      },
+      {
+        "plan": "business",
+        "label": "Business",
+        "monthlyUsd": 139,
+        "annualMonthlyUsd": 99,
+        "priceLabel": "$139"
+      },
+      {
+        "plan": "scale",
+        "label": "Scale",
+        "monthlyUsd": 249,
+        "annualMonthlyUsd": 179,
+        "priceLabel": "$249"
+      },
+      {
+        "plan": "advanced",
+        "label": "Advanced",
+        "monthlyUsd": 399,
+        "annualMonthlyUsd": 299,
+        "priceLabel": "$399"
+      },
+      {
+        "plan": "agency",
+        "label": "Agency",
+        "monthlyUsd": 799,
+        "annualMonthlyUsd": 649,
+        "priceLabel": "$799"
+      },
+      {
+        "plan": "enterprise",
+        "label": "Enterprise",
+        "monthlyUsd": 0,
+        "annualMonthlyUsd": 0,
+        "priceLabel": "Custom"
+      }
+    ],
+    "groups": [
+      {
+        "title": "Sites & publishing",
+        "rows": [
+          {
+            "label": "Sites (hosts)",
+            "duplicateOf": null,
+            "values": {
+              "free": "1",
+              "starter": "1",
+              "pro": "3",
+              "business": "10",
+              "scale": "15",
+              "advanced": "25",
+              "agency": "100",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Pages per site",
+            "duplicateOf": null,
+            "values": {
+              "free": "5",
+              "starter": "25",
+              "pro": "100",
+              "business": "Unlimited",
+              "scale": "Unlimited",
+              "advanced": "Unlimited",
+              "agency": "Unlimited",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Storage per site",
+            "duplicateOf": null,
+            "values": {
+              "free": "250 MB",
+              "starter": "2 GB",
+              "pro": "10 GB",
+              "business": "50 GB",
+              "scale": "75 GB",
+              "advanced": "100 GB",
+              "agency": "200 GB",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Total site size",
+            "duplicateOf": null,
+            "values": {
+              "free": "100 MB",
+              "starter": "1 GB",
+              "pro": "5 GB",
+              "business": "25 GB",
+              "scale": "37.5 GB",
+              "advanced": "50 GB",
+              "agency": "100 GB",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Bandwidth / mo",
+            "duplicateOf": null,
+            "values": {
+              "free": "5 GB",
+              "starter": "50 GB",
+              "pro": "250 GB",
+              "business": "1 TB",
+              "scale": "2.5 TB",
+              "advanced": "5 TB",
+              "agency": "20 TB",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Custom domain & SSL",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "✓",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Remove Aglyn branding",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "✓",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Reusable components",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "✓",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Screen versioning",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Scheduled publishing",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "—",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "URL redirects",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "✓",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Multilingual sites",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "—",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "A/B testing",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "—",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Team",
+        "rows": [
+          {
+            "label": "Team seats",
+            "duplicateOf": null,
+            "values": {
+              "free": "1",
+              "starter": "2 · max 5",
+              "pro": "5 · max 20",
+              "business": "15 · max 100",
+              "scale": "25 · max 150",
+              "advanced": "50 · max 250",
+              "agency": "100 · max 500",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Site collaborators",
+            "duplicateOf": null,
+            "values": {
+              "free": "1",
+              "starter": "3 · max 10",
+              "pro": "10 · max 25",
+              "business": "50 · max 100",
+              "scale": "75 · max 150",
+              "advanced": "100 · max 250",
+              "agency": "250 · max 1,000",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Member accounts",
+            "duplicateOf": null,
+            "values": {
+              "free": "Unlimited",
+              "starter": "Unlimited",
+              "pro": "Unlimited",
+              "business": "Unlimited",
+              "scale": "Unlimited",
+              "advanced": "Unlimited",
+              "agency": "Unlimited",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "White-label",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "—",
+              "business": "—",
+              "scale": "—",
+              "advanced": "—",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Single sign-on (SAML/OIDC)",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "—",
+              "business": "—",
+              "scale": "—",
+              "advanced": "—",
+              "agency": "—",
+              "enterprise": "✓"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Content & data",
+        "rows": [
+          {
+            "label": "Datasets",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "3 · max 10",
+              "pro": "15 · max 50",
+              "business": "100 · max 250",
+              "scale": "250 · max 500",
+              "advanced": "500 · max 1,000",
+              "agency": "2,000 · max 5,000",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Records per dataset",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "1,000",
+              "pro": "10,000",
+              "business": "100,000",
+              "scale": "500,000",
+              "advanced": "1,000,000",
+              "agency": "Unlimited",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Variables per site",
+            "duplicateOf": null,
+            "values": {
+              "free": "3",
+              "starter": "25",
+              "pro": "100",
+              "business": "1,000",
+              "scale": "5,000",
+              "advanced": "Unlimited",
+              "agency": "Unlimited",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Functions per site",
+            "duplicateOf": null,
+            "values": {
+              "free": "1",
+              "starter": "10",
+              "pro": "50",
+              "business": "250",
+              "scale": "500",
+              "advanced": "1,000",
+              "agency": "Unlimited",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Workflows per site",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "3",
+              "pro": "25",
+              "business": "100",
+              "scale": "250",
+              "advanced": "500",
+              "agency": "Unlimited",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Workflow runs / mo",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "500",
+              "pro": "5,000",
+              "business": "50,000",
+              "scale": "150,000",
+              "advanced": "500,000",
+              "agency": "2,000,000",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Actions builder",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Appointment bookings",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "✓",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Form submissions / mo",
+            "duplicateOf": null,
+            "values": {
+              "free": "20",
+              "starter": "200",
+              "pro": "1,000",
+              "business": "10,000",
+              "scale": "50,000",
+              "advanced": "100,000",
+              "agency": "Unlimited",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Contacts included",
+            "duplicateOf": null,
+            "values": {
+              "free": "100",
+              "starter": "1,000",
+              "pro": "10,000",
+              "business": "100,000",
+              "scale": "500,000",
+              "advanced": "1,000,000",
+              "agency": "Unlimited",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Email sends / mo",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "500",
+              "pro": "5,000",
+              "business": "50,000",
+              "scale": "100,000",
+              "advanced": "250,000",
+              "agency": "1,000,000",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Video & file uploads",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Commerce",
+        "rows": [
+          {
+            "label": "Online store",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "✓",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Products per site",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "100",
+              "pro": "2,500",
+              "business": "10,000",
+              "scale": "25,000",
+              "advanced": "Unlimited",
+              "agency": "Unlimited",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "POS registers",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "1",
+              "business": "2",
+              "scale": "3",
+              "advanced": "5",
+              "agency": "20",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Digital transaction fee",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "5%",
+              "pro": "3%",
+              "business": "2%",
+              "scale": "1%",
+              "advanced": "0%",
+              "agency": "0%",
+              "enterprise": "0%"
+            }
+          },
+          {
+            "label": "Physical transaction fee",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "2%",
+              "pro": "0%",
+              "business": "0%",
+              "scale": "0%",
+              "advanced": "0%",
+              "agency": "0%",
+              "enterprise": "0%"
+            }
+          },
+          {
+            "label": "Subscriptions & memberships",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "—",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Gift cards",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "—",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Product reviews",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Abandoned cart recovery",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Content gating",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "—",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Commerce analytics",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Marketing & analytics",
+        "rows": [
+          {
+            "label": "Interactions",
+            "duplicateOf": null,
+            "values": {
+              "free": "✓",
+              "starter": "✓",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Announcement bar & popups",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "✓",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "CDN & responsive images",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "✓",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "AI assist",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Per-screen analytics",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Sell on the marketplace",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Developer & API",
+        "rows": [
+          {
+            "label": "API access",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "—",
+              "business": "100k / mo",
+              "scale": "300k / mo",
+              "advanced": "1M / mo",
+              "agency": "5M / mo",
+              "enterprise": "Unlimited"
+            }
+          },
+          {
+            "label": "Webhooks",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "—",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Site export & backup",
+            "duplicateOf": "Site backup & restore",
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "usage": {
+    "columns": [
+      {
+        "plan": "starter",
+        "label": "Starter"
+      },
+      {
+        "plan": "pro",
+        "label": "Pro"
+      },
+      {
+        "plan": "business",
+        "label": "Business"
+      },
+      {
+        "plan": "scale",
+        "label": "Scale"
+      },
+      {
+        "plan": "advanced",
+        "label": "Advanced"
+      },
+      {
+        "plan": "agency",
+        "label": "Agency"
+      }
+    ],
+    "rows": [
+      {
+        "label": "Extra site, per month",
+        "values": {
+          "starter": "$10",
+          "pro": "$8",
+          "business": "$5",
+          "scale": "$5",
+          "advanced": "$4",
+          "agency": "$3"
+        }
+      },
+      {
+        "label": "Extra team seat, per month",
+        "values": {
+          "starter": "$5",
+          "pro": "$4",
+          "business": "$3",
+          "scale": "$2",
+          "advanced": "$2",
+          "agency": "$2"
+        }
+      },
+      {
+        "label": "Extra site collaborator, per month",
+        "values": {
+          "starter": "$3",
+          "pro": "$2",
+          "business": "$1",
+          "scale": "$1",
+          "advanced": "$1",
+          "agency": "$1"
+        }
+      },
+      {
+        "label": "Extra dataset, per month",
+        "values": {
+          "starter": "$2",
+          "pro": "$2",
+          "business": "$1",
+          "scale": "$1",
+          "advanced": "$1",
+          "agency": "$1"
+        }
+      },
+      {
+        "label": "Extra data storage, per GB-month",
+        "values": {
+          "starter": "$0.25",
+          "pro": "$0.25",
+          "business": "$0.25",
+          "scale": "$0.25",
+          "advanced": "$0.25",
+          "agency": "$0.25"
+        }
+      },
+      {
+        "label": "API requests, per 1,000 over limit",
+        "values": {
+          "starter": "—",
+          "pro": "—",
+          "business": "$0.50",
+          "scale": "$0.35",
+          "advanced": "$0.20",
+          "agency": "$0.15"
+        }
+      },
+      {
+        "label": "Contacts, per 1,000 over the included band",
+        "values": {
+          "starter": "$1",
+          "pro": "$0.75",
+          "business": "$0.50",
+          "scale": "$0.40",
+          "advanced": "$0.25",
+          "agency": "$0.20"
+        }
+      }
+    ],
+    "note": "The Free plan has no paid add-ons. Annual billing does not change these rates."
+  },
+  "fees": {
+    "rows": [
+      {
+        "plan": "free",
+        "label": "Free",
+        "digital": "0%",
+        "physical": "0%"
+      },
+      {
+        "plan": "starter",
+        "label": "Starter",
+        "digital": "5%",
+        "physical": "2%"
+      },
+      {
+        "plan": "pro",
+        "label": "Pro",
+        "digital": "3%",
+        "physical": "0%"
+      },
+      {
+        "plan": "business",
+        "label": "Business",
+        "digital": "2%",
+        "physical": "0%"
+      },
+      {
+        "plan": "scale",
+        "label": "Scale",
+        "digital": "1%",
+        "physical": "0%"
+      },
+      {
+        "plan": "advanced",
+        "label": "Advanced",
+        "digital": "0%",
+        "physical": "0%"
+      },
+      {
+        "plan": "agency",
+        "label": "Agency",
+        "digital": "0%",
+        "physical": "0%"
+      }
+    ]
+  },
+  "addons": {
+    "rows": [
+      {
+        "label": "Event Calendar",
+        "priceUsd": 9,
+        "scope": "organization",
+        "maxQuantity": 1
+      },
+      {
+        "label": "Extra POS register",
+        "priceUsd": 89,
+        "scope": "per register",
+        "maxQuantity": null,
+        "included": {
+          "free": 0,
+          "starter": 0,
+          "pro": 1,
+          "business": 2,
+          "scale": 3,
+          "advanced": 5,
+          "agency": 20,
+          "enterprise": null
+        }
+      }
+    ]
+  }
+}
