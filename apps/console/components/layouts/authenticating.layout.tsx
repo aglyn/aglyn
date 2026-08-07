@@ -21,9 +21,10 @@ import {
   type BackgroundImageComponentProps,
 } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
+import { parseOnboardingPlanIntent } from '@aglyn/aglyn'
 import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
 import { Stack } from '@mui/material'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 
@@ -42,6 +43,7 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
   const signedIn = signInCheckResult?.signedIn === true
   const emailVerified = signInCheckResult?.user?.emailVerified
   const [, continueUrl, pushContinued] = useContinueUrl()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     if (authLoading) return void 0
@@ -103,7 +105,16 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
       }
     }
 
-    return void pushContinued('/')
+    // Carry a marketing plan CTA through the auth bounce (AGL-1117). Someone
+    // already signed in — or signing in to upgrade — hits /signup?plan=pro and
+    // would otherwise land on their sites with the plan silently dropped. The
+    // home jump reads it back off the URL and routes to billing instead.
+    const intent = parseOnboardingPlanIntent(searchParams)
+    return void pushContinued(
+      intent
+        ? `/?plan=${encodeURIComponent(intent.plan)}&interval=${intent.interval}`
+        : '/',
+    )
   }, [
     auth,
     authLoading,
@@ -113,6 +124,7 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
     pushContinued,
     requireEmailVerification,
     router,
+    searchParams,
     signedIn,
     signInCheckResult,
   ])

@@ -17,6 +17,10 @@
 'use client'
 
 import {
+  onboardingDestination,
+  parseOnboardingPlanIntent,
+} from '@aglyn/aglyn'
+import {
   ICON_VARIANT_HOST_GROUP,
   ICON_VARIANT_ORGANIZATION,
 } from '@aglyn/shared-data-enums'
@@ -33,7 +37,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import CreateHostDialog from '../../../components/create-host-dialog.component'
 import CreateOrgDialog from '../../../components/create-org-dialog.component'
@@ -60,6 +64,7 @@ function OrgJump() {
   // reachable only from a hosts page, which needs an org you don't have yet.
   const { invites, loading: invitesLoading } = usePendingInvites()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [creatingOrg, setCreatingOrg] = useState(false)
   const [creatingSite, setCreatingSite] = useState(false)
 
@@ -79,8 +84,16 @@ function OrgJump() {
   useEffect(() => {
     if (loading || !confirmed || orgs.length !== 1) return
     const slug = orgs[0]?.slug
-    if (slug) router.replace(buildRoute(Route.HOST_LIST, { orgSlug: slug }))
-  }, [loading, confirmed, orgs, router])
+    if (!slug) return
+    // An already-signed-in visitor who clicked a plan CTA on the marketing
+    // site arrives here with the intent still on the URL (AGL-1117). Sending
+    // them to their sites would silently drop the plan they just picked, so
+    // the upgrade path lands on billing with it preselected instead. A
+    // malformed param parses to null and falls through to the normal jump.
+    const intent = parseOnboardingPlanIntent(searchParams)
+    if (intent) return void router.replace(onboardingDestination(slug, intent))
+    router.replace(buildRoute(Route.HOST_LIST, { orgSlug: slug }))
+  }, [loading, confirmed, orgs, router, searchParams])
 
   return (
     <DashboardLayout
