@@ -60,6 +60,31 @@ import type { LoadResult, Props } from './types'
  * a string array, so a segment containing `/` survives (a plain `join`/`split`
  * would not).
  */
+/**
+ * `blockingPlugins` for one exit path (AGL-1289), or nothing when no narrowing
+ * was safe — in which case the client blocks on the whole enabled list, as it
+ * always did.
+ *
+ * A helper because the loader has several exits that render nodes, and each
+ * has to answer this for itself. Collection and auth-screen pages pass no
+ * enrichment at all, and that is correct rather than lazy: those branches
+ * return before `runSitePageEnrichers`, so no plugin contributed anything to
+ * them and only their nodes can require one.
+ */
+const blockingPluginsFor = (
+  nodes: Record<string, any> | null | undefined,
+  enabledPlugins: string[] | undefined,
+  enrichment?: { contributors: string[]; unattributed: boolean },
+): { blockingPlugins?: string[] } => {
+  const blockingPlugins = requiredSitePlugins({
+    nodes,
+    contributors: enrichment?.contributors,
+    unattributed: enrichment?.unattributed,
+    enabledPlugins,
+  })
+  return blockingPlugins ? { blockingPlugins } : {}
+}
+
 const loadPageDataCached = cache(
   async (hostParam: string, slugKey: string): Promise<LoadResult> => {
     const slug = JSON.parse(slugKey) as string[]
@@ -355,6 +380,7 @@ const loadPageDataCached = cache(
                   nodes: designatedNodes,
                   membershipPage: path,
                   enabledPlugins: authEnabledPlugins,
+                  ...blockingPluginsFor(designatedNodes, authEnabledPlugins),
                   showBranding: !Aglyn.resolveOrgEntitlements(orgRes.org)
                     .features.removeBranding,
                 }),
@@ -479,6 +505,10 @@ const loadPageDataCached = cache(
                   // the composed nodes because they are present).
                   content,
                   enabledPlugins: collectionEnabledPlugins,
+                  ...blockingPluginsFor(
+                    templated.nodes,
+                    collectionEnabledPlugins,
+                  ),
                   showBranding: collectionShowBranding,
                 }),
               ),
@@ -504,6 +534,10 @@ const loadPageDataCached = cache(
                 ...(fallback
                   ? {
                       enabledPlugins: collectionEnabledPlugins,
+                      ...blockingPluginsFor(
+                        fallback.nodes,
+                        collectionEnabledPlugins,
+                      ),
                       showBranding: collectionShowBranding,
                     }
                   : {}),
@@ -739,21 +773,9 @@ const loadPageDataCached = cache(
       showBranding,
       branding,
       ...enriched.props,
-      // Which of those plugins have to be registered before this page can
-      // render (AGL-1289). Computed here because this is the only place that
-      // has both halves of the answer: the full composed document, and which
-      // plugins actually contributed something to THIS page. Absent when no
-      // narrowing was safe — the client then blocks on the whole list, as it
-      // always did.
-      ...(() => {
-        const blockingPlugins = requiredSitePlugins({
-          nodes: denormalized,
-          contributors: enriched.contributors,
-          unattributed: enriched.unattributed,
-          enabledPlugins,
-        })
-        return blockingPlugins ? { blockingPlugins } : {}
-      })(),
+      // The full composed document, before the AGL-1285 prune in `page.tsx`:
+      // a component inside a withheld panel still belongs to this page.
+      ...blockingPluginsFor(denormalized, enabledPlugins, enriched),
     }
 
     return {
