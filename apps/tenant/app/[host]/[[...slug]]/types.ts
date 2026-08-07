@@ -82,6 +82,17 @@ export interface Props {
   maintenanceFallback?: boolean
   /** Composed 401 screen nodes for members-only denials (AGL-131). */
   unauthorizedNodes?: Record<string, any> | null
+  /**
+   * Set when this page's `nodes` had lazy-panel subtrees withheld (AGL-1285),
+   * carrying the coordinates the client needs to ask `/api/screen/nodes` for
+   * the whole document. Its PRESENCE is the "has deferred nodes" flag — the
+   * two can't be passed separately, because a flag without coordinates would
+   * leave those panels permanently empty and coordinates without the flag
+   * would fetch a document nobody needs.
+   *
+   * `host` is the route's own param, sentinel form included; see the route.
+   */
+  deferral?: { host: string; slug: string[] }
 }
 
 /** Discriminated result of {@link Props} loading — mirrors the old

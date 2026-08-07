@@ -64,6 +64,19 @@ export interface TabsElementProps {
 export interface TabPanelElementProps {
   /** Which tab reveals this panel; must match one of the Tabs labels. */
   label?: string
+  /**
+   * Set by the server when this panel's children were withheld from the page
+   * payload (AGL-1285, `deferLazyPanelNodes`) — never authored, and there is
+   * deliberately no attribute for it.
+   *
+   * Declared here only so it can be destructured off the prop bag. It is not
+   * a DOM attribute, and everything else on this element is spread straight
+   * onto a `Box`; leaving it in produced a React "does not recognize the prop"
+   * warning for every deferred panel on the page. The panel needs no other
+   * behaviour from it — a withheld subtree renders as nothing because it has
+   * no children, which is already the right answer.
+   */
+  aglynDeferred?: boolean
   children?: ReactNode
 }
 
@@ -239,7 +252,8 @@ export const TabPanelElement = forwardRef<
   HTMLDivElement,
   TabPanelElementProps
 >((props, ref) => {
-  const { label, children, ...rest } = props
+  // `aglynDeferred` is pulled out and discarded — see its doc comment.
+  const { label, aglynDeferred: _deferred, children, ...rest } = props
   const context = useContext(TabsContext)
   const selected = !context || labelsMatch(label, context.activeLabel)
   const visible = selected || !!context?.showAll
