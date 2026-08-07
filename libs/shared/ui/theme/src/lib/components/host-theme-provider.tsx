@@ -28,6 +28,7 @@ import {
 } from '../hocs/create-with-theme-provider'
 import { createResponsiveTheme } from '../util/create-responsive-theme'
 import {
+  hasDarkScheme,
   hasHostTheme,
   hostThemeToThemeOptions,
   mergeThemeOptions,
@@ -84,7 +85,28 @@ export function HostThemeProvider(props: HostThemeProviderProps) {
   const hostTheme = theme ?? contextTheme
   const themeModeState = useThemeModeState()
   const [[, themeMode]] = themeModeState
-  const scheme = themeMode === 'dark' ? 'dark' : 'light'
+  const requested = themeMode === 'dark' ? 'dark' : 'light'
+
+  /**
+   * A site only goes dark if it HAS a dark design (AGL-1292).
+   *
+   * Sites are authored against a light canvas and their content carries
+   * hard-coded hex backgrounds. Honouring `prefers-color-scheme` flipped the
+   * theme's TEXT tokens to white while those backgrounds stayed light — for a
+   * host with no theme by handing it the console's dark theme wholesale, and
+   * for a host with a theme but no dark scheme by leaving `consoleOptionsDark`
+   * showing through the merge below.
+   *
+   * Measured on aglyn.com/pricing in dark mode: 903 of 1,910 text elements
+   * below AA, 539 of them under 1.5:1 and 44 at exactly 1.00:1 — white on
+   * white. It was never a `/pricing` bug; it is every site that has not
+   * authored dark colours.
+   *
+   * So dark is opt-in, and the opt-in is authoring `colorSchemes.dark`. A host
+   * that has done so is unaffected and still follows the visitor's preference.
+   */
+  const scheme =
+    requested === 'dark' && !hasDarkScheme(hostTheme) ? 'light' : requested
 
   const activeTheme = useMemo<Theme>(() => {
     if (!hasHostTheme(hostTheme)) {
