@@ -280,6 +280,23 @@ export function hasHostTheme(theme: HostTheme | undefined): theme is HostTheme {
 }
 
 /**
+ * True when the host has actually AUTHORED dark colours (AGL-1292).
+ *
+ * Distinct from `hasHostTheme`, and the distinction is the whole point: a host
+ * that sets only fonts and a border radius "has a theme", but it has no dark
+ * DESIGN. Rendering it dark leaves the base theme's palette showing through
+ * the merge — white text over the light backgrounds the site's content
+ * hard-codes.
+ *
+ * An empty `colorSchemes.dark` object does not count. It is what a partially
+ * filled editor form produces, and it carries no colours to render with.
+ */
+export function hasDarkScheme(theme: HostTheme | undefined): boolean {
+  const dark = theme?.colorSchemes?.dark
+  return !!dark && Object.keys(dark).length > 0
+}
+
+/**
  * Builds a Google Fonts CSS2 stylesheet URL for the theme's loadable fonts.
  * Returns undefined when nothing needs loading (system/absent fonts).
  */
