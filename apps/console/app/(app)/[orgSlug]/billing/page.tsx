@@ -122,6 +122,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     () => parseOnboardingPlanIntent(searchParams),
     [searchParams],
   )
+  // `parseOnboardingPlanIntent` defaults a missing interval to 'month', which is
+  // the safe reading for checkout but the wrong one for the toggle: some CTAs
+  // carry a plan and deliberately no interval (the /pricing scale strip quotes
+  // monthly and annual side by side, so it commits to neither). Honoring that
+  // default would silently flip an annual org to monthly on arrival, so only an
+  // interval the URL actually stated is allowed to move the toggle.
+  const intervalStated = Boolean(searchParams?.get('interval'))
   // The toggle starts on the live subscription's interval (AGL-532) so
   // annual orgs see their real prices and switches keep their interval.
   //
@@ -130,11 +137,11 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // otherwise the number they were sold changes between the two pages.
   const subscriptionInterval = (org?.subscription as any)?.interval
   useEffect(() => {
-    if (planIntent) return void setInterval(planIntent.interval)
+    if (planIntent && intervalStated) return void setInterval(planIntent.interval)
     if (subscriptionInterval === 'year' || subscriptionInterval === 'month') {
       setInterval(subscriptionInterval)
     }
-  }, [planIntent, subscriptionInterval])
+  }, [planIntent, intervalStated, subscriptionInterval])
   // Self-serve add-on purchases (AGL-529), release-gated.
   const addonStore = useReleaseFlag('release_addon_store')
 
