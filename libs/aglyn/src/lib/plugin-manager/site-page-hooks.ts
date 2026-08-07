@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+// The leaf module, NOT `api-plugins` — that one is reachable only through the
+// `/server` entry, and importing it from this shared barrel formed a cycle
+// that left the binding missing at runtime (AGL-1289).
+import { getRegisteringPluginId } from '../app-utils/registering-plugin'
+
 /**
  * Tenant page-composition extension points (AGL-418): plugins hook the
  * site loader (`load-page-data`) from their `/server` entries instead of
@@ -83,6 +88,13 @@ export type SitePageEnricher = (
 const redirectResolvers: SiteRedirectResolver[] = []
 const pageResolvers: SitePageResolver[] = []
 const enrichers: SitePageEnricher[] = []
+/**
+ * Which plugin registered which enricher (AGL-1289). Recorded from the loader's
+ * existing "currently registering" marker — the same mechanism that gives
+ * `registerPluginApiRoute` its path→plugin ownership — so plugins need no new
+ * API and nothing has to be kept in sync by hand.
+ */
+const enricherOwners = new WeakMap<SitePageEnricher, string>()
 
 export function registerSiteRedirectResolver(fn: SiteRedirectResolver): void {
   redirectResolvers.push(fn)
@@ -92,6 +104,8 @@ export function registerSitePageResolver(fn: SitePageResolver): void {
 }
 export function registerSitePageEnricher(fn: SitePageEnricher): void {
   enrichers.push(fn)
+  const owner = getRegisteringPluginId()
+  if (owner) enricherOwners.set(fn, owner)
 }
 
 export async function resolveSiteRedirect(
@@ -114,18 +128,53 @@ export async function resolveSitePage(
   return undefined
 }
 
+/** Null/undefined, an empty array or an empty object — nothing to render. */
+function isEmptyContribution(value: unknown): boolean {
+  if (value == null) return true
+  if (Array.isArray(value)) return value.length === 0
+  if (typeof value === 'object') return Object.keys(value).length === 0
+  return false
+}
+
+export interface SitePageEnrichment {
+  /** The merged contributions, spread into the page props as before. */
+  props: Record<string, unknown>
+  /** Plugins that returned something non-empty for THIS page. */
+  contributors: string[]
+  /**
+   * True when an enricher produced work but could not be attributed to a
+   * plugin — registered outside a plugin's register fn, so the loader's
+   * marker was unset. Callers narrowing on `contributors` must treat this as
+   * "cannot narrow": an unattributed contribution belongs to somebody.
+   */
+  unattributed: boolean
+}
+
 export async function runSitePageEnrichers(
   context: SitePageContext,
-): Promise<Record<string, unknown>> {
+): Promise<SitePageEnrichment> {
   const merged: Record<string, unknown> = {}
+  const contributors = new Set<string>()
+  let unattributed = false
   for (const enricher of enrichers) {
     try {
-      Object.assign(merged, (await enricher(context)) ?? {})
+      const result = (await enricher(context)) ?? {}
+      Object.assign(merged, result)
+      // "Contributed" means produced something with content, not merely
+      // returned a key. Every marketing enricher returns its full key set on
+      // every page — `announcementBar: null`, `experiments: []` — so keying
+      // off presence would mark it a contributor everywhere and the
+      // attribution would be worth nothing.
+      if (Object.values(result).some((value) => !isEmptyContribution(value))) {
+        const owner = enricherOwners.get(enricher)
+        if (owner) contributors.add(owner)
+        else unattributed = true
+      }
     } catch (error) {
       // A broken plugin must not take the site down — the page renders
       // without that plugin's contribution.
       console.error('site page enricher failed', error)
     }
   }
-  return merged
+  return { props: merged, contributors: [...contributors], unattributed }
 }

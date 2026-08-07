@@ -30,6 +30,7 @@ import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
 import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import getVariables from '@aglyn/tenant-runtime/get-variables'
+import { requiredSitePlugins } from '@aglyn/tenant-runtime/required-site-plugins'
 import { cache } from 'react'
 import { serverPluginLoader } from '../../../utils/server-plugin-loader'
 import getHost, { CNAME_HOST_PREFIX } from '../../../utils/get-host'
@@ -737,7 +738,22 @@ const loadPageDataCached = cache(
       ...(realmPlugins.length ? { realmPlugins } : {}),
       showBranding,
       branding,
-      ...enriched,
+      ...enriched.props,
+      // Which of those plugins have to be registered before this page can
+      // render (AGL-1289). Computed here because this is the only place that
+      // has both halves of the answer: the full composed document, and which
+      // plugins actually contributed something to THIS page. Absent when no
+      // narrowing was safe — the client then blocks on the whole list, as it
+      // always did.
+      ...(() => {
+        const blockingPlugins = requiredSitePlugins({
+          nodes: denormalized,
+          contributors: enriched.contributors,
+          unattributed: enriched.unattributed,
+          enabledPlugins,
+        })
+        return blockingPlugins ? { blockingPlugins } : {}
+      })(),
     }
 
     return {
