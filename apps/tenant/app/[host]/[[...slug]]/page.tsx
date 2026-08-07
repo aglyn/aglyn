@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
 import { Suspense } from 'react'
@@ -516,6 +517,28 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
     redirect(destination)
   }
   const jsonLd = buildJsonLd(result.props)
+  // Withhold the subtrees of lazy tab panels that will not mount (AGL-1285).
+  //
+  // Applied HERE rather than inside the loader, and the distinction is the
+  // whole design. `loadPageData` is what `/api/screen/nodes` calls to serve
+  // the full document back, and `generateMetadata` shares its cache entry —
+  // pruning inside it would leave nothing to fetch and no way to un-prune.
+  // This is the one place the nodes become a CLIENT prop, which is exactly
+  // where the payload cost is incurred: what never crosses into
+  // `CatchAllClient` is never serialized into the flight payload.
+  //
+  // A new props object, never a mutated one: `result.props` belongs to the
+  // cached loader.
+  const deferred = result.props.nodes
+    ? deferLazyPanelNodes(result.props.nodes)
+    : null
+  const clientProps: Props = deferred?.deferredPanelIds.length
+    ? {
+        ...result.props,
+        nodes: deferred.nodes,
+        deferral: { host, slug: slug ?? [] },
+      }
+    : result.props
   return (
     <>
       {jsonLd.map((json, index) => (
@@ -532,7 +555,7 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
           (AGL-417) — streaming SSR awaits the dynamic imports, so published
           screens keep their full HTML. */}
       <Suspense fallback={null}>
-        <CatchAllClient {...result.props} />
+        <CatchAllClient {...clientProps} />
       </Suspense>
     </>
   )
