@@ -21,6 +21,7 @@ import Box from '@mui/material/Box'
 import MuiTab from '@mui/material/Tab'
 import MuiTabs from '@mui/material/Tabs'
 import Typography from '@mui/material/Typography'
+import type { SxProps } from '@mui/material/styles'
 import {
   createContext,
   forwardRef,
@@ -69,12 +70,18 @@ export interface TabPanelElementProps {
    * payload (AGL-1285, `deferLazyPanelNodes`) — never authored, and there is
    * deliberately no attribute for it.
    *
-   * Declared here only so it can be destructured off the prop bag. It is not
-   * a DOM attribute, and everything else on this element is spread straight
-   * onto a `Box`; leaving it in produced a React "does not recognize the prop"
-   * warning for every deferred panel on the page. The panel needs no other
-   * behaviour from it — a withheld subtree renders as nothing because it has
-   * no children, which is already the right answer.
+   * It must be destructured off the prop bag either way: everything else on
+   * this element is spread straight onto a `Box`, so leaving it in produced a
+   * React "does not recognize the prop" warning for every deferred panel.
+   *
+   * It also drives the loading state. A withheld panel that the reader has
+   * just opened has no children yet and is indistinguishable from a panel that
+   * is genuinely empty, and the fetch behind it is a full server compose —
+   * 3.8s cold when measured. This flag is what lets the panel say so.
+   *
+   * It clears itself: the patch from `/api/screen/nodes` carries the ORIGINAL
+   * panel nodes, which never had the marker, so the moment the real children
+   * arrive this is gone and the placeholder with it (AGL-1287).
    */
   aglynDeferred?: boolean
   children?: ReactNode
@@ -142,6 +149,10 @@ export const TabsContext = createContext<TabsContextValue | undefined>(
  */
 const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
   (props, ref) => {
+    // `sx` is not authored on this interface — the node renderer passes it
+    // through — but the merge below reads it, and without this the six
+    // `rest.sx` accesses across both components are type errors against the
+    // empty rest type (AGL-1284 added the reads, not the declaration).
     const {
       labels,
       orientation,
@@ -152,7 +163,7 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
       lazyPanels,
       children,
       ...rest
-    } = props
+    } = props as TabsElementProps & { sx?: SxProps }
     const { editorInert } = Aglyn.useScreenLink(undefined)
     const parsed = parseLabels(labels)
     const [active, setActive] = useState(0)
@@ -252,8 +263,8 @@ export const TabPanelElement = forwardRef<
   HTMLDivElement,
   TabPanelElementProps
 >((props, ref) => {
-  // `aglynDeferred` is pulled out and discarded — see its doc comment.
-  const { label, aglynDeferred: _deferred, children, ...rest } = props
+  const { label, aglynDeferred, children, ...rest } = props as
+    TabPanelElementProps & { sx?: SxProps }
   const context = useContext(TabsContext)
   const selected = !context || labelsMatch(label, context.activeLabel)
   const visible = selected || !!context?.showAll
@@ -303,7 +314,29 @@ export const TabPanelElement = forwardRef<
           {label ? `Tab: ${label}` : 'Tab: (no label set)'}
         </Typography>
       ) : null}
-      {mounted ? children : null}
+      {mounted ? (
+        aglynDeferred && visible ? (
+          // Opened, but its nodes are still in flight (AGL-1287). Only while
+          // VISIBLE — a deferred panel nobody has opened must stay silent, or
+          // every unopened tab would render a spinner into the page.
+          //
+          // Deliberately not a skeleton of the content: a withheld subtree can
+          // be a 50-row table or a paragraph, and this component has no way to
+          // know which, so a shaped skeleton would be a guess that flashes
+          // wrong. `role="status"` announces it to a screen reader, which
+          // otherwise gets a panel that is silently empty for seconds.
+          <Typography
+            role="status"
+            variant="body2"
+            color="text.secondary"
+            sx={{ display: 'block', py: 2 }}
+          >
+            {'Loading…'}
+          </Typography>
+        ) : (
+          children
+        )
+      ) : null}
     </Box>
   )
 })

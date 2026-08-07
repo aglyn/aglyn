@@ -532,6 +532,11 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
   const deferred = result.props.nodes
     ? deferLazyPanelNodes(result.props.nodes)
     : null
+  // `blockingPlugins` is already on `result.props` — the loader computes it
+  // from the FULL document, before this prune. That ordering matters: a
+  // component sitting inside a withheld panel still belongs to this page, and
+  // narrowing on the pruned map would drop its plugin and leave that panel
+  // unrenderable the moment someone opened it.
   const clientProps: Props = deferred?.deferredPanelIds.length
     ? {
         ...result.props,

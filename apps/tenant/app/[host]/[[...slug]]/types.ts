@@ -43,6 +43,16 @@ export interface Props {
   /** Org-enabled site plugins the client must load pre-canvas (AGL-417). */
   enabledPlugins?: string[]
   /**
+   * The subset of `enabledPlugins` this page must have registered *before it
+   * renders*, when that subset is smaller (AGL-1289). The rest still load,
+   * immediately after hydration, off the critical path.
+   *
+   * Absent means "no narrowing was safe" — `requiredSitePlugins` refuses
+   * whenever any plugin contributed something to the page — and the client
+   * then blocks on the full `enabledPlugins`, exactly as it always did.
+   */
+  blockingPlugins?: string[]
+  /**
    * Trusted-realm marketplace installs (AGL-420): sha-pinned, staff-signed
    * bundles the client loads into the app realm after hydration.
    */

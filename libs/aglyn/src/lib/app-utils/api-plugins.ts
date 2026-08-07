@@ -71,18 +71,20 @@ function normalizeApiPath(path: string): string {
 
 const apiRoutes = new Map<string, PluginApiHandler>()
 const apiRouteOwners = new Map<string, string>()
-let registeringPluginId: string | undefined
 
 /**
- * Marks which plugin's register fn is currently running so
- * {@link registerPluginApiRoute} can record exact path→plugin ownership —
- * the dispatcher's per-org enablement gate (AGL-417) reads it back via
- * {@link pluginIdForRegisteredApiPath}. Set by the plugin loader around
- * each register-fn invocation; undefined outside registration.
+ * The "currently registering plugin" marker moved to a leaf module
+ * (`registering-plugin`) so `site-page-hooks` can read it too — this file is
+ * only reachable through the `/server` entry, and importing it from the shared
+ * plugin-manager barrel formed a cycle (AGL-1289). Re-exported here so the
+ * plugin loader's existing import keeps working unchanged.
  */
-export function setRegisteringPluginId(pluginId: string | undefined): void {
-  registeringPluginId = pluginId
-}
+import { getRegisteringPluginId } from './registering-plugin'
+
+export {
+  setRegisteringPluginId,
+  getRegisteringPluginId,
+} from './registering-plugin'
 
 /**
  * Registers a plugin API handler at a host-relative path (e.g.
@@ -95,7 +97,8 @@ export function registerPluginApiRoute(
 ): void {
   const key = normalizeApiPath(path)
   apiRoutes.set(key, handler)
-  if (registeringPluginId) apiRouteOwners.set(key, registeringPluginId)
+  const owner = getRegisteringPluginId()
+  if (owner) apiRouteOwners.set(key, owner)
 }
 
 /** The plugin that registered a path, for per-org enablement gating. */
