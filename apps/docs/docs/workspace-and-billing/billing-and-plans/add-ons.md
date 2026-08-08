@@ -16,14 +16,14 @@ pick a plan first).
 
 ## What you can add
 
-| Add-on | What it does | Starter | Pro | Business | Advanced |
-|---|---|---|---|---|---|
-| Manager seats | Workspace manager seats beyond the included count | $5/mo | $4/mo | $3/mo | $2/mo |
-| Collaborator seats | Per-site collaborator (teammate) seats beyond the included count | $3/mo | $2/mo | $1/mo | $1/mo |
-| Extra datasets | Additional shared datasets across the workspace | $2/mo | $2/mo | $1/mo | $1/mo |
-| Extra sites | Publish more sites than your plan includes | $10/mo | $8/mo | $5/mo | $4/mo |
-| POS registers | Additional point-of-sale registers/locations | $89/mo | $89/mo | $89/mo | $89/mo |
-| Event Calendar | The event manager + calendar elements, workspace-wide | $9/mo | $9/mo | $9/mo | $9/mo |
+| Add-on | What it does | Starter | Pro | Business | Scale | Advanced | Agency |
+|---|---|---|---|---|---|---|---|
+| Manager seats | Workspace manager seats beyond the included count | $5/mo | $4/mo | $3/mo | $2/mo | $2/mo | $2/mo |
+| Collaborator seats | Per-site collaborator (teammate) seats beyond the included count | $3/mo | $2/mo | $1/mo | $1/mo | $1/mo | $1/mo |
+| Extra datasets | Additional shared datasets across the workspace | $2/mo | $2/mo | $1/mo | $1/mo | $1/mo | $1/mo |
+| Extra sites | Publish more sites than your plan includes | $10/mo | $8/mo | $5/mo | $5/mo | $4/mo | $3/mo |
+| POS registers | Additional point-of-sale registers/locations | $89/mo | $89/mo | $89/mo | $89/mo | $89/mo | $89/mo |
+| Event Calendar | The event manager + calendar elements, workspace-wide | $9/mo | $9/mo | $9/mo | $9/mo | $9/mo | $9/mo |
 
 - **Prices are per unit per month.** On annual billing, add-ons bill yearly alongside
   your plan (12× the monthly price) — a subscription has one billing interval.
