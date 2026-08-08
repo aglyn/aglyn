@@ -21,6 +21,7 @@ import { getSessionHealth } from '../../../../../../../../../../utils/session-he
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
+  BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
   CloseableDrawerComponent,
   useAddElementDrawerCallback,
@@ -465,28 +466,8 @@ function HostEmailBesignerPage() {
                 onPropertiesEdit={() => setPropertiesOpen(true)}
               />
               <BesignerDraftAlertComponent draft={draft} noun="email" />
-            {remoteChanged ? (
-                <Alert
-                  severity="warning"
-                  sx={{
-                    borderRadius: 0,
-                    position: 'relative',
-                    zIndex: 'appBar',
-                  }}
-                  action={
-                    <Button
-                      color="inherit"
-                      size="small"
-                      onClick={() => window.location.reload()}
-                    >
-                      {'Reload'}
-                    </Button>
-                  }
-                >
-                  {'Someone else saved this email while you were editing. ' +
-                    'Saving is paused so their work is not overwritten — ' +
-                    'reload to pick up their changes.'}
-                </Alert>
+              {remoteChanged ? (
+                <BesignerConflictAlertComponent noun="email" />
               ) : null}
               {/* Host emails have a host, so the media picker works here — the
                   affordance the system-email editor lacked (AGL-761). */}

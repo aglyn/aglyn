@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
+  BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
   CloseableDrawerComponent,
   useAddElementDrawerCallback,
@@ -435,29 +436,8 @@ function SystemEmailBesignerPage() {
                 onPropertiesEdit={() => setPropertiesOpen(true)}
               />
               <BesignerDraftAlertComponent draft={draft} noun="email" />
-            {remoteChanged ? (
-                <Alert
-                  severity="warning"
-                  sx={{
-                    borderRadius: 0,
-                    position: 'relative',
-                    zIndex: 'appBar',
-                  }}
-                  action={
-                    <Button
-                      color="inherit"
-                      size="small"
-                      onClick={() => window.location.reload()}
-                    >
-                      {'Reload'}
-                    </Button>
-                  }
-                >
-                  {'Someone else saved this email while you were editing. ' +
-                    'Saving is paused so their work is not overwritten — ' +
-                    'reload to pick up their changes. Nothing you have done ' +
-                    'here is lost until you do.'}
-                </Alert>
+              {remoteChanged ? (
+                <BesignerConflictAlertComponent noun="email" />
               ) : null}
               <WorkspaceEditorComponent>
                 <ViewportRootComponent>

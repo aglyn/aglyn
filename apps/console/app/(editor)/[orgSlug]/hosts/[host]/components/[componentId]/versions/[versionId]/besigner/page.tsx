@@ -21,6 +21,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
+  BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
@@ -53,7 +54,7 @@ import {
   useHost,
   useHostActivityLogger,
 } from '@aglyn/tenant-feature-instance'
-import { Alert, Button, Stack, Typography } from '@mui/material'
+import { Stack, Typography } from '@mui/material'
 import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -596,24 +597,7 @@ function ComponentBesignerPage(props) {
                 after twenty more minutes of editing is the bad version of
                 this (AGL-674). */}
             {remoteChanged ? (
-              <Alert
-                severity="warning"
-                sx={{ borderRadius: 0, position: 'relative', zIndex: 'appBar' }}
-                action={
-                  <Button
-                    color="inherit"
-                    size="small"
-                    onClick={() => window.location.reload()}
-                  >
-                    {'Reload'}
-                  </Button>
-                }
-              >
-                {'Someone else saved this layout while you were editing. ' +
-                  'Saving is paused so their work is not overwritten — ' +
-                  'reload to pick up their changes. Nothing you have done ' +
-                  'here is lost until you do.'}
-              </Alert>
+              <BesignerConflictAlertComponent noun="component" />
             ) : null}
             <WorkspaceEditorComponent>
               <ViewportRootComponent>
