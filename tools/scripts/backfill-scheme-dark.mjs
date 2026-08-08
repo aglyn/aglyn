@@ -249,8 +249,64 @@ function bgStaysLight(sx) {
   return derive('bgcolor', bg) === null && luminance(bg) > 0.5
 }
 
+/**
+ * Light values for the tokens that DO flip. Used to pin text inside a gradient
+ * panel, where following the scheme is exactly the wrong behaviour.
+ */
+const TOKEN_LIGHT = {
+  'text.primary': 'rgba(0,0,0,0.87)',
+  'text.secondary': 'rgba(0,0,0,0.6)',
+  'text.disabled': 'rgba(0,0,0,0.38)',
+  'divider': 'rgba(0,0,0,0.12)',
+  'background.paper': '#ffffff',
+  'background.default': '#f5f5f5',
+  'surface.main': '#f8f9fa',
+}
+
+const hasGradient = (v) => {
+  if (typeof v === 'string') return v.includes('gradient')
+  if (!v || typeof v !== 'object') return false
+  return Object.values(v).some(hasGradient)
+}
+
+/**
+ * Every node sitting on a gradient panel, itself included.
+ *
+ * A gradient background is a string in `backgroundImage`, so nothing above
+ * rewrites it — the panel is BRIGHT in both schemes. Its text, however, is
+ * token-driven, so the scheme flip turned near-black copy into near-white copy
+ * on a bright blue/purple band. That is the `/pricing` CTA defect.
+ *
+ * The panel cannot carry AA text either way (white is 2.6:1 on the `#00b0ff`
+ * stop), so this does NOT try to improve it — it pins the light appearance,
+ * which is what the site has always shipped. The panel is undesigned drift in
+ * the first place: Figma's CTA (`90:51`) is `bg/paper` with a top border and no
+ * gradient at all. Fixing that is a design decision, filed separately.
+ */
+function gradientPanelIds(nodes) {
+  const inPanel = new Set()
+  const walk = (id) => {
+    if (!id || inPanel.has(id)) return
+    inPanel.add(id)
+    for (const child of nodes[id]?.nodes ?? []) walk(child)
+  }
+  for (const [id, node] of Object.entries(nodes))
+    if (hasGradient(node?.sx)) walk(id)
+  return inPanel
+}
+
 /** The slice a node's LIGHT base implies, or null when it needs none. */
-function sliceFor(sx) {
+function sliceFor(sx, onGradient = false) {
+  if (onGradient) {
+    // Pin, don't flip. Only token-driven colours need saying — a literal hex
+    // already stays put once we emit no override for it.
+    const pinned = {}
+    for (const [k, v] of Object.entries(sx)) {
+      if (k === SCHEME_DARK || !COLOR_PROP.test(k)) continue
+      if (typeof v === 'string' && TOKEN_LIGHT[v]) pinned[k] = TOKEN_LIGHT[v]
+    }
+    return Object.keys(pinned).length ? pinned : null
+  }
   const keepForeground = !bgStaysLight(sx)
   const slice = {}
   for (const [k, v] of Object.entries(sx)) {
@@ -321,6 +377,7 @@ let nodesWithSx = 0
 let nodesWithHex = 0
 let slicesWritten = 0
 let slicesRemoved = 0
+let gradientNodes = 0
 const formCounts = { map: 0, bytes: 0 }
 const palette = new Map()
 
@@ -335,6 +392,9 @@ async function processDoc(ref) {
   docsWithNodes += 1
   formCounts[form] += 1
 
+  const onGradient = gradientPanelIds(nodes)
+  if (onGradient.size) gradientNodes += onGradient.size
+
   const next = {}
   let changed = 0
   for (const [id, node] of Object.entries(nodes)) {
@@ -348,7 +408,7 @@ async function processDoc(ref) {
     const base = JSON.parse(JSON.stringify(sx))
     delete base[SCHEME_DARK]
 
-    const slice = sliceFor(base)
+    const slice = sliceFor(base, onGradient.has(id))
     if (slice) {
       nodesWithHex += 1
       checkSlice(base, slice, `${ref.path}#${id}`)
@@ -409,6 +469,7 @@ console.log(
   `\n${apply ? 'APPLIED' : 'DRY RUN'} — scanned ${docsScanned} document(s), ` +
     `${docsWithNodes} carried nodes (map ${formCounts.map}, msgpack ${formCounts.bytes}), ` +
     `${nodesWithSx} node(s) with sx, ${nodesWithHex} carrying literal hex, ` +
+    `${gradientNodes} node(s) on gradient panels (text PINNED, not flipped), ` +
     `${docsChanged} document(s) needed changes, ` +
     `${slicesWritten} slice(s) ${apply ? 'written' : 'pending'}, ${slicesRemoved} removed.`,
 )
