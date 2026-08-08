@@ -66,13 +66,9 @@ export * from './lib/components/grid-items'
 export * from './lib/components/help-tip.component'
 export * from './lib/components/menu'
 export * from './lib/components/mui-shadow-dom'
-// navigation-drawer stays IN the barrel for now, against the rule above: the
-// console screens page (apps/console/.../hosts/[host]/screens/page.tsx) was
-// mid-edit in a concurrent session when this prune landed and imports the
-// value by name. It keeps the MUI Drawer stack in the tenant's first-load
-// chunk — move that consumer (and the other drawer consumers) to the subpath
-// and drop this line to collect the rest of the win.
-export * from './lib/components/navigation-drawer.component'
+// navigation-drawer is NOT re-exported (AGL-1290): it kept the MUI Drawer
+// stack in the tenant's first-load chunk. Import it from
+// `@aglyn/shared-ui-jsx/components/navigation-drawer.component`.
 export * from './lib/components/shadow-dom'
 export * from './lib/components/sr-only'
 export * from './lib/components/zoomable-panning-component'

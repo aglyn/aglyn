@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx'
+import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
 import { mdiClose } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {

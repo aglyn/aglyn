@@ -17,10 +17,9 @@
 
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import {
-  NavigationDrawerComponent,
-  type NavigationDrawerProps,
   SrOnly,
 } from '@aglyn/shared-ui-jsx'
+import { NavigationDrawerComponent, type NavigationDrawerProps } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { styled } from '@aglyn/shared-ui-theme'
 import { Button, IconButton, Typography } from '@mui/material'

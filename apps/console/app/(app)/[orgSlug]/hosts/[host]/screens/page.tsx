@@ -38,11 +38,11 @@ import {
   AppLink,
   AppLinkNakedLinkProps,
   Container,
-  NavigationDrawerComponent,
   SrOnly,
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
+import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
