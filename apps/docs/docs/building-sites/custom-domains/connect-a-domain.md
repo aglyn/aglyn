@@ -48,9 +48,10 @@ The exact screen differs by registrar, but the record is the same:
 | TTL | default is fine |
 
 :::tip Apex domains
-`CNAME` records can't sit on a bare apex (`example.com`) at most registrars. Connect `www`
-and use your registrar's forwarding/ALIAS/ANAME feature for the apex, or follow the wizard's
-guidance.
+A bare apex (`example.com`) can't carry a `CNAME`, but it connects just as well: create an
+`A` record pointing the apex (`@`) at `216.198.79.1`, or use your registrar's ALIAS/ANAME
+feature to alias it to the CNAME target above — either verifies in the wizard. Subdomains
+like `www` keep using the `CNAME` record.
 :::
 
 ## Related
