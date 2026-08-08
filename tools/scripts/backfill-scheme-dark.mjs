@@ -54,6 +54,7 @@ import { decode, encode } from '@msgpack/msgpack'
 
 const apply = process.argv.includes('--apply')
 const openGate = process.argv.includes('--open-gate')
+const closeGate = process.argv.includes('--close-gate')
 const hostArg = process.argv.find((a) => a.startsWith('--host='))
 const onlyHost = hostArg ? hostArg.slice('--host='.length) : null
 
@@ -223,11 +224,38 @@ function darkFor(key, value) {
   return changed ? out : null
 }
 
+/**
+ * Tokens that do NOT flip with the scheme. `common.white` is white in both, and
+ * the grey ramp is identical in light and dark in `console.theme.ts` — so a node
+ * sitting on one of these keeps a LIGHT background in dark mode.
+ */
+const NON_FLIPPING_BG = /^(common\.white|common\.black|grey\.(50|100|200|300|400))$/
+
+/**
+ * Whether this node's own background stays light once the scheme flips.
+ *
+ * This decides whether its foreground may be lifted. The Pro card's CTA is the
+ * case that matters: a white button (`bgcolor: common.white`) with near-black
+ * label. The button does not darken, so lifting its label to near-white — which
+ * is right for text on the page — puts white on white. A foreground is only
+ * safe to lift when the surface under it actually went dark.
+ */
+function bgStaysLight(sx) {
+  const bg = sx.bgcolor ?? sx.backgroundColor
+  if (typeof bg !== 'string') return false
+  if (NON_FLIPPING_BG.test(bg)) return true
+  if (!HEX.test(bg)) return false // background.paper/default/surface flip
+  // A hex we remap goes dark; one we leave alone stays exactly as it is.
+  return derive('bgcolor', bg) === null && luminance(bg) > 0.5
+}
+
 /** The slice a node's LIGHT base implies, or null when it needs none. */
 function sliceFor(sx) {
+  const keepForeground = !bgStaysLight(sx)
   const slice = {}
   for (const [k, v] of Object.entries(sx)) {
     if (k === SCHEME_DARK) continue
+    if (!keepForeground && !BG_PROP.test(k) && COLOR_PROP.test(k)) continue
     const d = darkFor(k, v)
     if (d !== null) slice[k] = d
   }
@@ -456,6 +484,33 @@ if (openGate) {
         { merge: true },
       )
     console.log('Gate OPEN. Revalidate the host, then sweep contrast in dark.')
+  }
+}
+
+/**
+ * The undo. `hasDarkScheme` requires a NON-EMPTY `colorSchemes.dark`, so
+ * deleting the key puts the site back to light everywhere — the AGL-1292
+ * behaviour — without touching a single node slice. Opening the gate is the
+ * only step here with a public blast radius, so it gets a one-command revert.
+ */
+if (closeGate) {
+  if (!onlyHost) {
+    console.error('\n--close-gate requires --host=<hostId>.')
+    process.exit(1)
+  }
+  console.log(
+    `\n${apply ? 'CLOSING' : 'would close'} the dark gate on host ${onlyHost} ` +
+      `— the site renders light again; node slices are left in place.`,
+  )
+  if (apply) {
+    await firestore
+      .collection('hosts')
+      .doc(onlyHost)
+      .update({
+        'theme.colorSchemes.dark': FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    console.log('Gate CLOSED. Pages pick it up on their next ISR regeneration.')
   }
 }
 
