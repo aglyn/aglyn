@@ -56,9 +56,15 @@ export async function GET(request: Request): Promise<Response> {
     status: 200,
     headers: {
       'Content-Type': 'text/plain',
-      // Matches the sitemap's window (AGL-1160) so flipping the switch is
-      // visible in about a minute, not an hour.
-      'Cache-Control': 's-maxage=60, stale-while-revalidate=60',
+      // CDN-cache for 5 minutes, serve stale up to an hour while refreshing
+      // (AGL-1302) — matching the sitemap. The host read behind this route is
+      // now served from the tagged document cache anyway, so flipping the
+      // discourage switch still shows within about a minute of the doc TTL
+      // even where a CDN honors the longer window. See the sitemap route's
+      // measured note (AGL-1160): production overrode this header entirely,
+      // so it states intent for fronts that respect it rather than being the
+      // mechanism that saves the reads.
+      'Cache-Control': 's-maxage=300, stale-while-revalidate=3600',
     },
   })
 }

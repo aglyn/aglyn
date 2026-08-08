@@ -16,10 +16,23 @@
  */
 
 import { hostPublicOrigin, resolveEntryCategoryName } from '@aglyn/aglyn/server'
+import {
+  tenantDataTag,
+  withRenderCache,
+} from '@aglyn/tenant-data-admin/render-cache'
 import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
 import getHost from '../../../utils/get-host'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Feed readers poll relentlessly, and every poll re-read the collection and
+ * its entries (AGL-1302). The rendered XML is a pure function of the host
+ * doc and the collection's published entries, so it caches whole for 5
+ * minutes under the `tenant-data:{hostId}` tag every publish busts. A
+ * missing collection is never cached — creating one shows up immediately.
+ */
+const RSS_TTL_SECONDS = 300
 
 const escapeXml = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -40,19 +53,60 @@ export async function GET(request: Request): Promise<Response> {
     return new Response('Not found', { status: 404 })
   }
 
-  const content = await getCollectionContent({
-    hostId: hostRes.host.$id,
-    collectionSlug,
-  })
-  if (!content.collection) return new Response('Not found', { status: 404 })
-
   // The site's public origin, not the domain the request arrived on — see the
   // longer note in `../sitemap/route.ts` (AGL-1160). It matters more here: a
   // feed's `<guid>` is the identity a reader stores, so a URL that changes with
   // the requesting domain re-announces every old entry as new.
+  //
+  // Computed BEFORE the cache and folded into its key (AGL-1302): the
+  // header fallback is the one impurity in this response, so it must never
+  // leak INTO a cached body another origin could then be served.
   const base =
     hostPublicOrigin(hostRes.host) ??
     `https://${request.headers.get('host') ?? host}`
+
+  let xml: string | null
+  try {
+    xml = await withRenderCache({
+      key: ['tenant-rss', hostRes.host.$id, collectionSlug, base],
+      revalidate: RSS_TTL_SECONDS,
+      tags: [tenantDataTag(hostRes.host.$id)],
+      read: () => buildRssXml(hostRes.host.$id, collectionSlug, base),
+      store: (value) => value !== null,
+    })
+  } catch (error) {
+    console.error(error)
+    xml = await buildRssXml(hostRes.host.$id, collectionSlug, base)
+  }
+  if (xml === null) return new Response('Not found', { status: 404 })
+
+  return new Response(xml, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/rss+xml',
+      // CDN-cache for 5 minutes, serve stale up to an hour while refreshing
+      // (AGL-1302). See the measured note in `../sitemap/route.ts`
+      // (AGL-1160): production overrode this header, so the read savings
+      // come from the tagged data cache above, not from here — the header
+      // states the intent for any front that honors it.
+      'Cache-Control': 's-maxage=300, stale-while-revalidate=3600',
+    },
+  })
+}
+
+/**
+ * The rendered feed, or null when the slug names no content collection.
+ * Pure function of published data + `base`, which is what makes it safe to
+ * cache whole.
+ */
+async function buildRssXml(
+  hostId: string,
+  collectionSlug: string,
+  base: string,
+): Promise<string | null> {
+  const content = await getCollectionContent({ hostId, collectionSlug })
+  if (!content.collection) return null
+
   const categories = content.collection.categories
   const items = content.entries
     .map(
@@ -87,15 +141,5 @@ export async function GET(request: Request): Promise<Response> {
     items +
     '\n</channel></rss>\n'
 
-  return new Response(xml, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/rss+xml',
-      // OVERRIDDEN and inert — see the measured note in `../sitemap/route.ts`
-      // (AGL-1160). Production replaces this with
-      // `public, max-age=0, must-revalidate`; the real TTL is Vercel's own
-      // 60 s revalidation, which is what a feed reader actually experiences.
-      'Cache-Control': 's-maxage=60, stale-while-revalidate=60',
-    },
-  })
+  return xml
 }
