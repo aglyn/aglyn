@@ -117,6 +117,14 @@ export interface BillingPlanCardsProps {
    * us, not by clicking Downgrade.
    */
   enterprise?: boolean
+  /**
+   * Plan the visitor already chose on the marketing site (AGL-1117), read off
+   * `?plan=` by the billing page. It emphasizes that card instead of the
+   * next-tier-up default, so the deep link lands on the plan they clicked.
+   * Never auto-submits: preselecting a card is a hint, and starting a
+   * checkout is a decision the person still has to make here.
+   */
+  highlight?: OrgPlan
   onSelect: (plan: OrgPlan) => void
 }
 
@@ -131,14 +139,30 @@ export interface BillingPlanCardsProps {
  * card after the grid — never a price and never a checkout button.
  */
 export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
-  const { plan, interval = 'month', enterprise = false, onSelect } = props
+  const {
+    plan,
+    interval = 'month',
+    enterprise = false,
+    highlight,
+    onSelect,
+  } = props
   // An enterprise org sits above the ladder: nothing in the grid is its
   // "current" plan, and nothing there is an upgrade for it either.
   const currentIndex = enterprise || !plan ? -1 : PLAN_ORDER.indexOf(plan)
-  const recommendedIndex =
-    !enterprise && currentIndex >= 0 && currentIndex < PLAN_ORDER.length - 1
-      ? currentIndex + 1
+  // A deep-linked plan wins over the next-tier-up heuristic — the visitor
+  // told us which one they want. Still suppressed for an enterprise org,
+  // whose grid carries no self-serve CTA to emphasize, and ignored when the
+  // highlighted tier is the one they are already on.
+  const highlightIndex =
+    !enterprise && highlight && highlight !== plan
+      ? PLAN_ORDER.indexOf(highlight)
       : -1
+  const recommendedIndex =
+    highlightIndex >= 0
+      ? highlightIndex
+      : !enterprise && currentIndex >= 0 && currentIndex < PLAN_ORDER.length - 1
+        ? currentIndex + 1
+        : -1
 
   return (
     <Grid container spacing={2} id="plans">

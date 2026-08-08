@@ -21,6 +21,7 @@ import {
   isEnterpriseOrg,
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
+  parseOnboardingPlanIntent,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   resolveOrgEntitlements,
@@ -55,6 +56,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, getCountFromServer } from 'firebase/firestore'
+import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import fetchSeatCounts from '../../../../utils/fetch-seat-counts'
@@ -112,14 +114,34 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<
     string | null
   >(null)
+  // The plan the visitor picked on the marketing site, if they arrived by a
+  // pricing CTA (AGL-1117). Read once off the URL: it preselects the toggle
+  // and emphasizes the matching card, and nothing here submits on its own.
+  const searchParams = useSearchParams()
+  const planIntent = useMemo(
+    () => parseOnboardingPlanIntent(searchParams),
+    [searchParams],
+  )
+  // `parseOnboardingPlanIntent` defaults a missing interval to 'month', which is
+  // the safe reading for checkout but the wrong one for the toggle: some CTAs
+  // carry a plan and deliberately no interval (the /pricing scale strip quotes
+  // monthly and annual side by side, so it commits to neither). Honoring that
+  // default would silently flip an annual org to monthly on arrival, so only an
+  // interval the URL actually stated is allowed to move the toggle.
+  const intervalStated = Boolean(searchParams?.get('interval'))
   // The toggle starts on the live subscription's interval (AGL-532) so
   // annual orgs see their real prices and switches keep their interval.
+  //
+  // An incoming deep link outranks it: someone who clicked the annual price
+  // on /pricing must see that price here, even on a month-to-month org —
+  // otherwise the number they were sold changes between the two pages.
   const subscriptionInterval = (org?.subscription as any)?.interval
   useEffect(() => {
+    if (planIntent && intervalStated) return void setInterval(planIntent.interval)
     if (subscriptionInterval === 'year' || subscriptionInterval === 'month') {
       setInterval(subscriptionInterval)
     }
-  }, [subscriptionInterval])
+  }, [planIntent, intervalStated, subscriptionInterval])
   // Self-serve add-on purchases (AGL-529), release-gated.
   const addonStore = useReleaseFlag('release_addon_store')
 
@@ -832,6 +854,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   plan={org?.plan as OrgPlan | undefined}
                   interval={interval}
                   enterprise={enterprise}
+                  highlight={planIntent?.plan}
                   onSelect={(tier) =>
                     permissions.editBilling
                       ? void handleUpgrade(tier)()
