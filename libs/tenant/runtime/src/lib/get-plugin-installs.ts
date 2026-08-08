@@ -18,6 +18,18 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import {
   resolveOrgIdForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  tenantDataTag,
+  withRenderCache,
+} from '@aglyn/tenant-data-admin/render-cache'
+
+/**
+ * SECURITY-RELEVANT TTL (AGL-1302): the kill switch (`revocations/{id}`) is
+ * folded into each resolved install, so this cache bounds how long a revoked
+ * plugin keeps rendering — 60s, on par with the page ISR window that already
+ * bounded it. Do not raise it.
+ */
+const PLUGIN_INSTALLS_TTL_SECONDS = 60
 
 /**
  * Resolves a host's pinned plugin installs (AGL-45) into the compose-time
@@ -28,6 +40,22 @@ import {
  * than taking the published screen down.
  */
 export async function getPluginInstalls(options: {
+  hostId: string
+}): Promise<Record<string, Aglyn.ResolvedPluginInstall>> {
+  try {
+    return await withRenderCache({
+      key: ['tenant-plugin-installs', options.hostId],
+      revalidate: PLUGIN_INSTALLS_TTL_SECONDS,
+      tags: [tenantDataTag(options.hostId)],
+      read: () => readPluginInstalls(options),
+    })
+  } catch (error) {
+    console.error(error)
+    return readPluginInstalls(options)
+  }
+}
+
+async function readPluginInstalls(options: {
   hostId: string
 }): Promise<Record<string, Aglyn.ResolvedPluginInstall>> {
   const installs: Record<string, Aglyn.ResolvedPluginInstall> = {}

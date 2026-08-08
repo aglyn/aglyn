@@ -55,6 +55,20 @@ export type BesignerNotify = (
  */
 export type BesignerQueueLoading = () => () => void
 
+/**
+ * What this editor believes the stored document looked like when it last
+ * agreed with it, handed to `save` so a store can make the write
+ * conditional (AGL-1301) — a Firestore provider runs the same comparison
+ * inside a transaction, closing the window where a save lands between
+ * another writer's commit and the local snapshot's delivery.
+ */
+export interface BesignerSaveBaseline {
+  /** `versionStamp(...)` of the stored `updatedAt` at load/last agreement. */
+  baseStamp: string | null
+  /** The stored nodes as of that agreement, in STORED shape. */
+  baseNodes: Aglyn.ProcessableNodes | undefined
+}
+
 export interface BesignerDocumentSource<TData = unknown> {
   /** The stored node map, or undefined while loading. */
   nodes: Aglyn.ProcessableNodes | undefined
@@ -76,8 +90,18 @@ export interface BesignerDocumentSource<TData = unknown> {
   pendingWrites?: boolean
   status?: 'idle' | 'loading' | 'success' | 'error'
   error?: { message?: string } | null
-  /** Persists the node map. Rejecting surfaces as an error notification. */
-  save: (nodes: Record<string, unknown>) => Promise<void>
+  /**
+   * Persists the node map. Rejecting surfaces as an error notification —
+   * except `ConcurrentEditError`, which surfaces through the same refusal
+   * UX as the listener-side guard (AGL-1301). `baseline` is what this
+   * editor last agreed the stored document looked like; a store that can
+   * make the write conditional should (see `saveNodesGuarded`), and one
+   * that cannot may ignore it.
+   */
+  save: (
+    nodes: Record<string, unknown>,
+    baseline?: BesignerSaveBaseline,
+  ) => Promise<void>
   data?: TData
 }
 
@@ -269,6 +293,16 @@ export function useBesignerDocument<TData = unknown>(
   // earlier one and neither is told. `baseStamp` is what the document looked
   // like when this editor last agreed with it.
   const baseStampRef = useRef<string | null>(null)
+  /**
+   * The stored nodes as of the last agreement, in STORED shape. Kept
+   * alongside the stamp because the stamp is an app-level FIELD a writer can
+   * forget: admin scripts have updated `nodes` without touching `updatedAt`,
+   * and such a write was invisible to the stamp guard and got clobbered
+   * (AGL-1301). The web SDK exposes no server-side `updateTime` on a
+   * snapshot, so a change in the content itself is the strongest signal a
+   * client can key on.
+   */
+  const baseNodesRef = useRef<Aglyn.ProcessableNodes | undefined>(undefined)
   /** Set when we save, so the resulting snapshot is adopted, not flagged. */
   const expectOwnWriteRef = useRef(false)
   const [remoteChanged, setRemoteChanged] = useState(false)
@@ -287,20 +321,28 @@ export function useBesignerDocument<TData = unknown>(
         confirmed: !pendingWrites,
       })
       baseStampRef.current = Aglyn.versionStamp(updatedAt)
+      baseNodesRef.current = nodes
     }
   }, [nodes, pendingWrites])
 
   useEffect(() => {
     const stored = Aglyn.versionStamp(updatedAt)
-    if (!Aglyn.hasConcurrentWrite(baseStampRef.current, stored)) return
+    const stampMoved = Aglyn.hasConcurrentWrite(baseStampRef.current, stored)
+    // A writer that forgot the stamp still cannot hide: the content moved.
+    const nodesMoved =
+      nodes != null &&
+      baseNodesRef.current != null &&
+      !isEqual(nodes, baseNodesRef.current)
+    if (!stampMoved && !nodesMoved) return
     if (expectOwnWriteRef.current) {
       // This is the echo of our own save landing.
       expectOwnWriteRef.current = false
       baseStampRef.current = stored
+      baseNodesRef.current = nodes
       return
     }
     setRemoteChanged(true)
-  }, [updatedAt])
+  }, [updatedAt, nodes])
 
   // Crash net (AGL-1256). Shares the conflict guard's stamp so the restore
   // prompt can tell "your unsaved work" from "your unsaved work, and someone
@@ -379,7 +421,13 @@ export function useBesignerDocument<TData = unknown>(
     }
 
     try {
-      await save(nextNodes)
+      // The baseline rides along so the store can refuse a stale save
+      // SERVER-side (AGL-1301) — the listener guard above only knows about
+      // writes whose snapshot has already arrived.
+      await save(nextNodes, {
+        baseStamp: baseStampRef.current,
+        baseNodes: baseNodesRef.current,
+      })
       Aglyn.canvas.updateInitialNodes(nextNodes as never)
       // The draft dies with the save that made it redundant (AGL-1256). This
       // is the rule that keeps a crash net from quietly becoming free version
@@ -400,10 +448,22 @@ export function useBesignerDocument<TData = unknown>(
         { variant: 'success', persist: false },
       )
     } catch (saveError) {
-      notify(`Error: ${JSON.stringify(saveError)}`, {
-        variant: 'error',
-        allowDuplicate: true,
-      })
+      // A store-side refusal of a stale baseline (AGL-1301) is the SAME
+      // conflict the guard above refuses, caught later — surface it the same
+      // way, and pause saving so the next click does not retry blind. Name
+      // check rather than instanceof: the error may cross a lib boundary.
+      if ((saveError as Error | undefined)?.name === 'ConcurrentEditError') {
+        setRemoteChanged(true)
+        notify((saveError as Error).message, {
+          variant: 'warning',
+          allowDuplicate: true,
+        })
+      } else {
+        notify(`Error: ${JSON.stringify(saveError)}`, {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
     } finally {
       dequeueLoading()
     }

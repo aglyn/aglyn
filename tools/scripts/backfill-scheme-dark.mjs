@@ -98,11 +98,10 @@ const BG_MAP = {
   // pixel — the point is that they are now reviewable, and that the fallback
   // report drops to zero and becomes an alarm instead of background noise.
   //
-  // ⚠️ One inherited inconsistency, deliberately frozen rather than silently
-  // fixed: `#f1f3f5` (160×) and `#eff1f3` (66×) are the same grey band role
-  // one step apart, yet land on DIFFERENT depths — #242b33 vs #28323d. Same
-  // for the two near-identical purples below. Worth a designer's call; see the
-  // note on AGL-1295.
+  // ⚠️ One inherited inconsistency, deliberately KEPT: `#f1f3f5` (160×) and
+  // `#eff1f3` (66×) are adjacent grey-band steps landing on different depths
+  // (#242b33 vs #28323d). Distinct light values keeping distinct dark depths
+  // is defensible, so it stays until a designer says otherwise (AGL-1295).
   '#f1f3f5': '#242b33', // grey band, one step lighter than #eff1f3
   '#eef0f2': '#262b31', // grey band, cooler
   '#e6e9ed': '#242a32',
@@ -111,7 +110,9 @@ const BG_MAP = {
   '#f6f8fa': '#1f2b38',
   '#e6f5ff': '#143043', // brand tint, between #eaf6fd and #e3f2fb
   '#fbe6fe': '#3d1443', // secondary (magenta) tint
-  '#fcebff': '#3c1443', // secondary tint, 1 step off #fbe6fe
+  // Collapsed onto #fbe6fe's dark (was #3c1443 — a ONE-DIGIT accidental split
+  // the formula produced for two near-identical light magentas; AGL-1295).
+  '#fcebff': '#3d1443',
   '#f3e8ff': '#2a1443', // violet tint
   '#e7f8ef': '#14432a', // success tint
   '#fff1e0': '#432e14', // warning tint

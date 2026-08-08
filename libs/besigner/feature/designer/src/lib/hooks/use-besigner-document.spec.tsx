@@ -138,6 +138,9 @@ describe('useBesignerDocument', () => {
         expect.objectContaining({
           root: expect.objectContaining({ sx: { width: '100%' } }),
         }),
+        // The baseline rides along for the store-side precondition
+        // (AGL-1301).
+        expect.objectContaining({ baseNodes: expect.anything() }),
       )
       expect(notify).not.toHaveBeenCalledWith(
         'Already saved',
@@ -200,6 +203,111 @@ describe('useBesignerDocument', () => {
       })
 
       expect(result.current.remoteChanged).toBe(false)
+    })
+  })
+
+  /**
+   * AGL-1301. The AGL-674 guard keyed on the `updatedAt` FIELD alone, so a
+   * writer that updated `nodes` without touching it — admin scripts did
+   * exactly this — was invisible and got clobbered by the next save. The
+   * web SDK exposes no server-side updateTime on a snapshot, so the guard
+   * now also keys on the content itself; and the save carries its baseline
+   * so a Firestore provider can re-run the same check in a transaction,
+   * closing the listener's delivery window.
+   */
+  describe('external writers and the save baseline (AGL-1301)', () => {
+    const MOVED_NODES = {
+      root: { $id: 'root', componentId: 'div', sx: { p: 2 } },
+    } as never
+
+    beforeEach(() => {
+      jest.spyOn(Aglyn, 'measureNodeMap').mockReturnValue({
+        bytes: 100,
+        tooLarge: false,
+        nearLimit: false,
+        largest: [],
+      } as never)
+    })
+
+    it('flags a write that changed nodes without touching the stamp', async () => {
+      setCanvasDirty(true)
+      const { result, save, notify, rerender } = setup({ updatedAt: stamp(1) })
+
+      // A snapshot lands whose nodes moved but whose stamp did not.
+      act(() => {
+        rerender({ updatedAt: stamp(1), nodes: MOVED_NODES } as never)
+      })
+
+      expect(result.current.remoteChanged).toBe(true)
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(save).not.toHaveBeenCalled()
+      expect(notify).toHaveBeenCalledWith(
+        new Aglyn.ConcurrentEditError().message,
+        expect.objectContaining({ variant: 'warning' }),
+      )
+    })
+
+    it('hands save the baseline it last agreed with', async () => {
+      setCanvasDirty(true)
+      const { result, save } = setup({ updatedAt: stamp(1) })
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(save).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          baseStamp: Aglyn.versionStamp(stamp(1)),
+          baseNodes: NODES,
+        }),
+      )
+    })
+
+    it('surfaces a store-side refusal through the conflict UX', async () => {
+      setCanvasDirty(true)
+      const save = jest
+        .fn()
+        .mockRejectedValue(new Aglyn.ConcurrentEditError())
+      const { result, notify, dequeue } = setup({ save, updatedAt: stamp(1) })
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      // Same refusal as the listener guard: warn, pause saving, keep the
+      // work in the canvas. Never the generic error toast.
+      expect(result.current.remoteChanged).toBe(true)
+      expect(notify).toHaveBeenCalledWith(
+        new Aglyn.ConcurrentEditError().message,
+        expect.objectContaining({ variant: 'warning' }),
+      )
+      expect(dequeue).toHaveBeenCalled()
+    })
+
+    it('moves the content baseline with the echo of our own save', async () => {
+      setCanvasDirty(true)
+      const { result, rerender } = setup({ updatedAt: stamp(1) })
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+      // Our save's echo: new stamp AND new content — adopted, not flagged.
+      act(() => {
+        rerender({ updatedAt: stamp(2), nodes: MOVED_NODES } as never)
+      })
+      expect(result.current.remoteChanged).toBe(false)
+
+      // A later stamp-less content change is measured against the ADOPTED
+      // baseline, so it still reads as somebody else.
+      act(() => {
+        rerender({ updatedAt: stamp(2), nodes: NODES } as never)
+      })
+      expect(result.current.remoteChanged).toBe(true)
     })
   })
 

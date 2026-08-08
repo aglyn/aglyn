@@ -17,6 +17,40 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, screenVersionConverter } from '@aglyn/tenant-data-admin'
+import {
+  tenantDataTag,
+  withRenderCache,
+} from '@aglyn/tenant-data-admin/render-cache'
+
+/**
+ * The version doc is the LARGEST read of a render (the whole node tree), and
+ * it is keyed by `versionId` — a publish points the screen doc at a NEW
+ * version, so a re-publish lands under a new cache key on its own. The TTL
+ * is still kept short rather than treating versions as immutable, because
+ * the editor can save into an already-published version doc; 60s bounds
+ * that exactly like the page's ISR window did, and the publish-path tag
+ * bust covers the announced case (AGL-1302).
+ */
+const SCREEN_VERSION_TTL_SECONDS = 60
+
+async function readScreenVersionDoc(
+  hostId: string,
+  screenId: string,
+  versionId: string,
+): Promise<Aglyn.AglynScreen | null> {
+  const snapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(hostId)
+    .collection('screens')
+    .doc(screenId)
+    .collection('versions')
+    .withConverter(screenVersionConverter)
+    .doc(versionId)
+    .get()
+  return snapshot.exists ? (snapshot.data() as Aglyn.AglynScreen) : null
+}
 
 export async function getScreenVersion(options: {
   hostId: Aglyn.HostUid
@@ -31,26 +65,20 @@ export async function getScreenVersion(options: {
     nextPageToken: '',
     error: null,
   }
-  const firestore = firebaseAdmin.app().firestore()
 
-  // List batch of users, 1000 at a time.
-  await firestore
-    .collection('hosts')
-    .doc(hostId)
-    .collection('screens')
-    .doc(screenId)
-    .collection('versions')
-    .withConverter(screenVersionConverter)
-    .doc(versionId)
-    .get()
-    .then((res) => {
-      if (!res.exists) return
-      data.version = res.data() as Aglyn.AglynScreen
+  try {
+    const version = await withRenderCache({
+      key: ['tenant-screen-version', hostId, screenId, versionId],
+      revalidate: SCREEN_VERSION_TTL_SECONDS,
+      tags: [tenantDataTag(hostId)],
+      read: () => readScreenVersionDoc(hostId, screenId, versionId),
+      store: (value) => value !== null,
     })
-    .catch((error) => {
-      console.error(error)
-      data.error = error
-    })
+    if (version) data.version = version
+  } catch (error) {
+    console.error(error)
+    data.error = error
+  }
 
   return data
 }

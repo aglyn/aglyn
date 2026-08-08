@@ -1,3 +1,18 @@
+> ⚠️ **CHARTER OVERRIDE (Zach, 2026-08-08) — supersedes anything below that
+> says otherwise.** The marketing site is built by CLICKING in the besigner, in
+> Zach's authenticated browser, exactly as a no-code subscriber would: screens,
+> layouts, reusable components, templates, the attribute/style panels. **No JSON
+> Editor, no Raw Markup, no custom CSS/sx, and no admin scripts that write node
+> data.** When the styles panel can't express something, the answer is a new
+> user-friendly style form field component (file it as a `Gap ·` issue), not a
+> workaround. One-shot scripts are not committed. The full charter is in the
+> Linear project description and in memory as `project_marketing_site_charter`.
+> In particular, ignore any "you do not need the besigner / use an admin script"
+> guidance below — that drift is exactly what this banner corrects.
+> Also rescinded (AGL-1302): the all-routes `while read p; do curl` republish sweep
+> — it forced ~40 Firestore reads per render and burned 87% of the daily free tier.
+> Verify ONE route; use POST /api/screens/revalidate for layout-wide invalidation.
+
 Finish the **Marketing site on Aglyn** project. Two threads, and Thread 1 comes
 first because doing it later means redoing Thread 2's work.
 

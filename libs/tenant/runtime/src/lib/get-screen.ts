@@ -17,6 +17,34 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, screenConverter } from '@aglyn/tenant-data-admin'
+import {
+  tenantDataTag,
+  withRenderCache,
+} from '@aglyn/tenant-data-admin/render-cache'
+
+/**
+ * Backstop TTL only (AGL-1302): a screen publish flips `versionId` on this
+ * doc, and the publish path already busts `tenant-data:{hostId}` through the
+ * tenant `/api/revalidate` route, so publishes stay as instant as AGL-1150
+ * made them. 60s matches the page's own ISR window for everything else.
+ */
+const SCREEN_DOC_TTL_SECONDS = 60
+
+async function readScreenDoc(
+  hostId: string,
+  screenId: string,
+): Promise<Aglyn.AglynScreen | null> {
+  const snapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(hostId)
+    .collection('screens')
+    .withConverter(screenConverter)
+    .doc(screenId)
+    .get()
+  return snapshot.exists ? (snapshot.data() as Aglyn.AglynScreen) : null
+}
 
 export async function getScreen(options: {
   screenId: Aglyn.ScreenUid
@@ -28,24 +56,29 @@ export async function getScreen(options: {
     nextPageToken: '',
     error: null,
   }
-  const firestore = firebaseAdmin.app().firestore()
 
-  // List batch of users, 1000 at a time.
-  await firestore
-    .collection('hosts')
-    .doc(hostId)
-    .collection('screens')
-    .withConverter(screenConverter)
-    .doc(screenId)
-    .get()
-    .then((res) => {
-      if (!res.exists) return
-      data.screen = res.data() as Aglyn.AglynScreen
+  try {
+    const screen = await withRenderCache({
+      key: ['tenant-screen-doc', hostId as string, screenId as string],
+      revalidate: SCREEN_DOC_TTL_SECONDS,
+      tags: [tenantDataTag(hostId as string)],
+      read: () => readScreenDoc(hostId as string, screenId as string),
+      // Never store a missing screen, and never store a doc carrying a
+      // PENDING publish schedule: `applyDuePublishSchedule` reads
+      // `publishSchedule.publishAt.seconds` off a live Timestamp, and the
+      // JSON round trip a cache hit implies decays that to `_seconds` —
+      // which would make every pending schedule look already due. A pending
+      // schedule therefore keeps its doc read fresh until it resolves.
+      store: (value) =>
+        value !== null &&
+        (value as { publishSchedule?: { status?: string } }).publishSchedule
+          ?.status !== 'pending',
     })
-    .catch((error) => {
-      console.error(error)
-      data.error = error
-    })
+    if (screen) data.screen = screen
+  } catch (error) {
+    console.error(error)
+    data.error = error
+  }
 
   return data
 }

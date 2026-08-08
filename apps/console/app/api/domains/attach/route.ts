@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { checkEntitlement, pluginRequestFromWeb, TENANT_APEX } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -30,6 +30,70 @@ import {
  * that as "DNS connected, platform attachment pending". Auth: Firebase ID
  * token; the caller must be an admin of the host.
  */
+
+/**
+ * Registers `{subdomain}.aglyn.app` on the tenant project as a Vercel
+ * per-domain REDIRECT to the custom domain (AGL-1273). The app-level
+ * canonical redirect in `loadPageData` is baked into an ISR entry keyed on
+ * pathname, so it structurally cannot carry the query string — a campaign
+ * that pointed at the platform subdomain lost its `utm_*` on the hop. The
+ * edge redirect preserves path AND query at zero runtime cost, and the
+ * app-level redirect stays as the fallback for self-hosted deployments
+ * where no Vercel API exists.
+ *
+ * Best-effort BY DESIGN: the custom domain is already attached by the time
+ * this runs, and a redirect-registration failure must not unwind that. A
+ * failure sets `subdomainRedirectPending` so the gap is visible and the
+ * backfill script (`tools/scripts/backfill-subdomain-redirects.mjs`) can
+ * close it.
+ */
+async function upsertSubdomainRedirect(options: {
+  token: string
+  projectId: string
+  teamId?: string
+  subdomain: string
+  target: string
+}): Promise<boolean> {
+  const { token, projectId, teamId, subdomain, target } = options
+  const name = `${subdomain}.${TENANT_APEX}`
+  const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  }
+  const body = JSON.stringify({
+    redirect: `https://${target}`,
+    // Mirrors the app-level redirect's 307: revocable, method-preserving.
+    redirectStatusCode: 307,
+  })
+  // The subdomain may or may not already exist as an explicit project
+  // domain (a wildcard serving it does not count) — PATCH the existing
+  // entry, and on 404 create it with the redirect in one call.
+  const patch = await fetch(
+    `https://api.vercel.com/v9/projects/${projectId}/domains/${encodeURIComponent(name)}${query}`,
+    { method: 'PATCH', headers, body },
+  )
+  if (patch.ok) return true
+  if (patch.status !== 404) {
+    console.error(await patch.json().catch(() => undefined))
+    return false
+  }
+  const post = await fetch(
+    `https://api.vercel.com/v10/projects/${projectId}/domains${query}`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name,
+        redirect: `https://${target}`,
+        redirectStatusCode: 307,
+      }),
+    },
+  )
+  if (!post.ok) console.error(await post.json().catch(() => undefined))
+  return post.ok
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -148,6 +212,31 @@ async function handler(request: Request): Promise<Response> {
         { merge: true },
       )
       .catch(() => undefined)
+
+    // Query-preserving edge redirect from the platform subdomain (AGL-1273).
+    const subdomain = String(hostSnapshot.get('subdomain') ?? '')
+      .trim()
+      .toLowerCase()
+    if (subdomain) {
+      const redirected = await upsertSubdomainRedirect({
+        token,
+        projectId,
+        teamId,
+        subdomain,
+        target: domain,
+      }).catch(() => false)
+      await hostSnapshot.ref
+        .set(
+          redirected
+            ? {
+                subdomainRedirectPending:
+                  firebaseAdmin.firestore.FieldValue.delete(),
+              }
+            : { subdomainRedirectPending: true },
+          { merge: true },
+        )
+        .catch(() => undefined)
+    }
     return Response.json({ attached: true }, { status: 200 })
   } catch (error) {
     console.error(error)

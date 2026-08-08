@@ -121,7 +121,7 @@ one people list — is priced as an **audience band**, not a hard cap:
 - **Datasets are organization-scoped**: counts and storage meter against your
   organization, not individual sites.
 - Each paid tier includes a number of datasets and an included **data storage** size
-  (Starter 1 GB, Pro 5 GB, Business 25 GB).
+  (Starter 1 GB, Pro 5 GB, Business 25 GB, Scale 50 GB, Advanced 100 GB, Agency 500 GB).
 - Extra datasets are a monthly **[add-on](add-ons.md)** ($2/mo on Starter and Pro, $1/mo
   on Business); storage beyond the included size is **metered overage** at $0.25 per
   GB-month on your monthly invoice.

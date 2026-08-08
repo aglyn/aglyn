@@ -20,6 +20,7 @@
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
 import type { ReactNode } from 'react'
+import AdminBarSlot from './admin-bar/admin-bar-slot'
 import { getHostCached } from './host-data'
 import { HostThemeProviders } from './host-theme-providers'
 
@@ -66,6 +67,9 @@ export default async function HostLayout({
         </>
       ) : null}
       {children}
+      {/* Edit-access admin bar (AGL-1302 follow-on) — renders nothing unless
+          release_edit_bar is on; anonymous visitors get no output at all. */}
+      <AdminBarSlot host={host} />
     </HostThemeProviders>
   )
 }

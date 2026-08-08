@@ -28,7 +28,7 @@ import {
 } from '@aglyn/shared-data-mdi'
 import Typography, { type TypographyProps } from '@mui/material/Typography'
 import DOMPurify from 'dompurify'
-import { forwardRef, useMemo } from 'react'
+import { forwardRef, useEffect, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_TEXT_CONTENT } from '../constants/field-presets'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -177,11 +177,21 @@ const AglynTypography = forwardRef<
   TypographyProps & { html?: string }
 >(function AglynTypography(props, ref) {
   const { html, children, ...rest } = props
-  const sanitized = useMemo(() => {
-    if (typeof html !== 'string' || !html) return null
-    if (typeof window === 'undefined') return '' // SSR paints on hydrate.
-    return sanitizeTypographyHtml(html)
-  }, [html])
+  const hasHtml = typeof html === 'string' && Boolean(html)
+  // DOMPurify needs a DOM, so the server cannot sanitize — and unsanitized
+  // markup must never reach `dangerouslySetInnerHTML` (AGL-497). Rendering
+  // the content during hydration made the first client render diverge from
+  // the server HTML ('' vs content) — a hydration mismatch by construction
+  // on every rich-text node (AGL-1268). Deferring the sanitize to an EFFECT
+  // keeps the first client render empty like the server's, so hydration is
+  // clean and the content paints one frame later. The SSR/SEO cost of the
+  // empty server render is unchanged and stays open on AGL-1268 — fixing
+  // that needs an isomorphic sanitizer, a dependency decision.
+  const [clientSanitized, setClientSanitized] = useState<string | null>(null)
+  useEffect(() => {
+    setClientSanitized(hasHtml ? sanitizeTypographyHtml(html as string) : null)
+  }, [hasHtml, html])
+  const sanitized = hasHtml ? (clientSanitized ?? '') : null
   if (sanitized !== null) {
     return (
       <Typography

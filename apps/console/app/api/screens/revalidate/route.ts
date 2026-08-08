@@ -282,6 +282,11 @@ export async function POST(request: Request): Promise<Response> {
       },
       body: JSON.stringify({
         host: subdomain,
+        // The tenant busts its `tenant-data:{hostId}` document cache with
+        // this (AGL-1302) — without it a dropped page would regenerate from
+        // the same cached routing map and version pointers the publish just
+        // replaced. Older tenant deploys ignore unknown fields.
+        hostId,
         paths: routePaths.map((path) => screenRoutePathToUrl(path)),
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),

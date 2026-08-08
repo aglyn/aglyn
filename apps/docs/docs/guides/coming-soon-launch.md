@@ -240,8 +240,8 @@ That counts the URLs you're submitting to search engines. It should be `0` while
 site-wide switch is on, and after launch it should match your public pages. Any page
 you expect to see and don't is a screen still set to Unlisted.
 
-:::tip Give it a minute
-These three files are cached for about 60 seconds. If a change hasn't shown up, wait a
+:::tip Give it a few minutes
+These three files are cached for about five minutes. If a change hasn't shown up, wait a
 beat and re-run rather than changing another setting.
 :::
 

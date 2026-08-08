@@ -36,6 +36,14 @@ import useFirestoreDoc from '../hooks/use-firestore-doc'
 
 const CNAME_TARGET =
   process.env['NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME'] ?? 'sites.aglyn.app'
+/**
+ * The address an apex A record should point at — the platform host's primary
+ * anycast address. The verify route accepts the WHOLE pool (AGL-1264's
+ * `AGLYN_TENANT_APEX_ADDRESSES`); this is only the one we print, so it must
+ * stay a member of that pool.
+ */
+const APEX_A_TARGET =
+  process.env['NEXT_PUBLIC_AGLYN_TENANT_APEX_A'] ?? '216.198.79.1'
 
 export interface CustomDomainCardProps {
   hostId: string
@@ -90,10 +98,20 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
             ? `Domain points at ${verify.records.join(', ')} — expected ${
                 verify.expected ?? CNAME_TARGET
               }. DNS changes can take a while to propagate.`
-            : 'No CNAME record found yet — DNS changes can take a while to ' +
-                'propagate.',
+            : 'No CNAME found, and the domain does not point at Aglyn by ' +
+                'A record yet — add one of the records above. DNS changes ' +
+                'can take a while to propagate.',
           { variant: 'warning', persist: false },
         )
+      }
+      // The verify route says WHICH rule passed (AGL-1264 added
+      // `matchedBy: 'apex-address'` precisely so this wizard could explain
+      // itself); until now nothing read it and apex customers got a bare tick.
+      if (verify.matchedBy === 'apex-address') {
+        enqueueSnackbar('Apex verified by its A record.', {
+          variant: 'info',
+          persist: false,
+        })
       }
       // `/api/domains/attach` claims the domain and persists `host.cname` in a
       // single transaction (AGL-743) — the client must NOT write `cname` itself,
@@ -266,7 +284,9 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
         ) : (
           <>
             <Typography variant="body2" color="text.secondary">
-              {'Point your domain at Aglyn with a CNAME record, then verify:'}
+              {'Point your domain at Aglyn, then verify. A subdomain like ' +
+                'www uses a CNAME; a bare apex uses an A record — either ' +
+                'verifies:'}
             </Typography>
             <Typography
               variant="body2"
@@ -280,11 +300,23 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
             >
               {`CNAME  ${domain.trim() || 'www.your-domain.com'}  →  ${CNAME_TARGET}`}
             </Typography>
+            <Typography
+              variant="body2"
+              component="code"
+              sx={{
+                p: 1,
+                bgcolor: 'action.hover',
+                borderRadius: 1,
+                fontFamily: 'monospace',
+              }}
+            >
+              {`A      ${domain.trim() || 'your-domain.com'}  →  ${APEX_A_TARGET}`}
+            </Typography>
             <Stack direction="row" spacing={1}>
               <TextField
                 size="small"
                 label="Domain"
-                placeholder="www.your-domain.com"
+                placeholder="your-domain.com or www.your-domain.com"
                 value={domain}
                 onChange={(event) => setDomain(event.target.value)}
                 sx={{ flex: 1, maxWidth: 360 }}

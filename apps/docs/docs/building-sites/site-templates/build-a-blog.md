@@ -31,14 +31,29 @@ Each entry carries, besides the title, excerpt, cover image, and markdown body:
 - **Category** — a single bucket (e.g. `Guides`) used for filtering and related posts,
   **picked from the collection's category list** (see below), never typed free-form.
 - **Tags** — comma-separated labels (e.g. `nextjs, seo`).
+- **Author** — the entry's byline; falls back to the site name when blank.
 - **SEO title / SEO description** — search & social overrides; they fall back to the
   title and excerpt when blank.
+
+### Scheduling
+
+Each entry row has a **Schedule** button. Pick a **Publish at** time (the past is
+refused) and confirm — the entry's status chip reads **scheduled** with the local
+time, and *"the entry goes live once the time passes (applied on the next site
+refresh)"*, exactly as the dialog says: no manual step, and its status flips to
+published on its own. A scheduled entry joins the sitemap and RSS feed at the same
+moment. **Publish**/**Unpublish** on the row toggle an entry immediately, and **View**
+opens the live URL once it's published.
+
+<!-- screenshot: content/entry-schedule-dialog.png per SCREENSHOT_PLAN.md -->
 
 ### Categories
 
 Categories are **managed per collection** — open **Categories** next to the template
 pickers (or **Manage categories…** inside the entry editor) to add, rename, or delete
-them. Entries reference a category by a **stable id**, so **renaming a category updates
+them.
+
+<!-- screenshot: content/categories-dialog.png per SCREENSHOT_PLAN.md --> Entries reference a category by a **stable id**, so **renaming a category updates
 every post instantly without touching a single entry** — the display name is resolved at
 render time wherever it appears (entry pages, meta lines, related posts, RSS, JSON-LD).
 Deleting a category leaves its entries uncategorized until they are reassigned. A
@@ -164,10 +179,21 @@ block shows the top **Entries limit** entries as before.
 
 ## 4. Publish & syndicate
 
-Publish the collection. Aglyn generates an **RSS** feed (entries include their category
-and tags) so readers and aggregators can subscribe, and blog pages join the site's
-**sitemap** automatically. Each entry's `<head>` uses its SEO title/description
-(falling back to title/excerpt) and its cover image as the social card.
+Publish the collection. Blog pages join the site's **sitemap** automatically, and each
+entry's `<head>` uses its SEO title/description (falling back to title/excerpt) and its
+cover image as the social card.
+
+Aglyn also generates an **RSS feed** per collection, at:
+
+```
+https://your-domain.com/api/collections-rss?host=<your-site>&collection=<collection-slug>
+```
+
+`host` is your site's subdomain (or custom domain) and `collection` is the collection's
+slug — e.g. `?host=acme&collection=blog`. Items carry the entry's title, link, publish
+date, excerpt, and its category and tags as feed categories, newest first. Link it from
+your own footer or share it with aggregators — feed readers don't discover it
+automatically yet.
 
 ## Tips
 

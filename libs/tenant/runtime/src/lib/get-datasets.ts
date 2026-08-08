@@ -17,6 +17,19 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { orgDataQueryForHost } from '@aglyn/tenant-data-admin'
+import {
+  tenantDataTag,
+  withRenderCache,
+} from '@aglyn/tenant-data-admin/render-cache'
+
+/**
+ * The single worst read amplifier of the compose bundle (AGL-1302): the
+ * datasets query PLUS a records subquery per dataset, on every render of
+ * every path. Records are already mapped to plain values before return, so
+ * the cached shape is byte-identical to what repeatable expansion consumed
+ * before. 60s backstop; the publish path busts the tag.
+ */
+const DATASETS_TTL_SECONDS = 60
 
 /**
  * Fetches the host's datasets with their records for repeatable expansion
@@ -33,6 +46,22 @@ import { orgDataQueryForHost } from '@aglyn/tenant-data-admin'
  * cover this path; the filter has to live here.
  */
 export async function getDatasets(options: {
+  hostId: string
+}): Promise<Record<string, Aglyn.RepeatableDataset>> {
+  try {
+    return await withRenderCache({
+      key: ['tenant-datasets', options.hostId],
+      revalidate: DATASETS_TTL_SECONDS,
+      tags: [tenantDataTag(options.hostId)],
+      read: () => readDatasets(options),
+    })
+  } catch (error) {
+    console.error(error)
+    return readDatasets(options)
+  }
+}
+
+async function readDatasets(options: {
   hostId: string
 }): Promise<Record<string, Aglyn.RepeatableDataset>> {
   const datasets: Record<string, Aglyn.RepeatableDataset> = {}

@@ -127,10 +127,15 @@ describe('collections RSS origin (AGL-1160)', () => {
       'cache-control',
     )
 
-    // The old value was `s-maxage=3600, stale-while-revalidate` — an hour, and
-    // an SWR with no delta-seconds, which RFC 5861 requires and without which a
-    // CDN may serve stale indefinitely.
-    expect(cacheControl).toBe('s-maxage=60, stale-while-revalidate=60')
+    // The original AGL-1160 fix pinned this to 60s because the header was the
+    // ONLY freshness bound. Since AGL-1302 the feed body is cached under the
+    // `tenant-data:{hostId}` tag and busted on publish, so publish freshness
+    // no longer rides on this header — it may CDN-cache for 5 minutes and
+    // serve stale up to an hour while refreshing. What this test still
+    // guards: `s-maxage` (never a browser `max-age`, which nothing could
+    // bust) and an SWR WITH delta-seconds, which RFC 5861 requires and
+    // without which a CDN may serve stale indefinitely.
+    expect(cacheControl).toBe('s-maxage=300, stale-while-revalidate=3600')
     expect(cacheControl).toMatch(/stale-while-revalidate=\d+/)
   })
 })

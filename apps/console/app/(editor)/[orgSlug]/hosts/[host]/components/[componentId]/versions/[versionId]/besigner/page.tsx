@@ -24,7 +24,9 @@ import {
   BesignerDraftAlertComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
+  useRenderedCanvasElements,
   withBesignerContext,
+  type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-ui'
 import {
@@ -44,8 +46,10 @@ import {
   HostThemeDocumentContext,
 } from '@aglyn/shared-ui-theme'
 import {
+  saveNodesGuarded,
   useComponent,
   useComponentVersion,
+  useComponentVersionRef,
   useHost,
   useHostActivityLogger,
 } from '@aglyn/tenant-feature-instance'
@@ -56,7 +60,7 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // Dynamic site-plugin activation (AGL-417): canvas components register
 // via the org-gated loader; the page gates the canvas on readiness.
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
@@ -78,6 +82,10 @@ import { useHostId, useHostSubdomain } from '../../../../../../../../../../compo
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
+import usePresence from '../../../../../../../../../../hooks/use-presence'
+import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
+import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
+import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -150,6 +158,11 @@ function ComponentBesignerPage(props) {
     componentId,
     versionId,
   })
+  const componentVersionRef = useComponentVersionRef({
+    hostId,
+    componentId,
+    versionId,
+  })
   const { data, status, error, hasPendingWrites } = result
   const nodes = data?.nodes
 
@@ -174,22 +187,43 @@ function ComponentBesignerPage(props) {
     }
   }, [status])
 
+  // Conditional write (AGL-1301): the transaction re-checks the baseline
+  // against what Firestore actually holds, so a save racing another writer's
+  // commit aborts server-side instead of clobbering it.
   const saveComponentVersion = useCallback(
-    async (nextNodes: Record<string, unknown>) => {
-      const save = updateComponentVersion as unknown as (
-        data: Partial<Aglyn.AglynHostComponentVersion>,
-        options?: Parameters<typeof updateComponentVersion>[1],
-      ) => Promise<void>
-      await save(
+    async (
+      nextNodes: Record<string, unknown>,
+      baseline?: BesignerSaveBaseline,
+    ) => {
+      await saveNodesGuarded(
+        componentVersionRef,
         {
           nodes: nextNodes as unknown as
             Aglyn.AglynHostComponentVersion['nodes'],
         },
-        { merge: true },
+        baseline,
       )
     },
-    [updateComponentVersion],
+    [componentVersionRef],
   )
+
+  // Who else is in this document (AGL-675) and live co-editing (AGL-677) —
+  // adopted from the screen editor (AGL-1301).
+  const selectedNodeId = Besigner.focus.getLastSelected()?.$id
+  const clearMirrorRef = useRef<(() => void) | undefined>(undefined)
+  const { elements: canvasElements } = useRenderedCanvasElements()
+  const getCanvasRoot = useCallback(
+    () => canvasElements.current?.[Aglyn.CANVAS_ROOT_ELEMENT_ID]?.node,
+    [canvasElements],
+  )
+  const presence = usePresence({
+    hostId,
+    docType: 'component',
+    docId: componentId,
+    selectedNodeId,
+    broadcastCursor: true,
+    getCanvasRoot,
+  })
 
   // Canvas lifecycle, first load, concurrent-write detection (AGL-674) and
   // the size-guarded save (AGL-678) are shared by every besigner editor
@@ -231,13 +265,30 @@ function ComponentBesignerPage(props) {
         rootId: data?.rootId,
         nodes: storedNodes as Record<string, unknown>,
       }) as Aglyn.ProcessableNodes,
-    onSaved: () =>
-      logActivity('Saved the component', {
+    onSaved: () => {
+      // A save makes Firestore authoritative again, so the live mirror of
+      // unsaved work has to go — otherwise the next person to join replays
+      // edits that are already in the document (AGL-677).
+      clearMirrorRef.current?.()
+      return logActivity('Saved the component', {
         type: 'component',
         id: componentId,
         name: componentResult?.data?.displayName,
-      }),
+      })
+    },
   })
+
+  // Live co-editing (AGL-677). Rides the presence session's authenticated
+  // RTDB app rather than brokering a second token.
+  const coediting = useCoEditing({
+    session: presence.session,
+    docType: 'component',
+    docId: componentId,
+    versionId,
+    storedStamp: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
+    loaded: Aglyn.canvas.didSetInitial,
+  })
+  clearMirrorRef.current = coediting.clearMirror
 
   /**
    * Publish (AGL-679): copy this version's tree onto the component doc.
@@ -532,9 +583,11 @@ function ComponentBesignerPage(props) {
           LOADING_OVERLAY_ELEMENT
         ) : (
           <>
+            <CollaboratorOverlays entries={presence.entries} />
             <BesignerAppBarComponent
               onPreview={handlePreview}
               detailsUrl={listUrl}
+              presence={<PresenceAvatars presence={presence} />}
               onSave={handleSave}
               saveAvailable={saveAvailable}
             />

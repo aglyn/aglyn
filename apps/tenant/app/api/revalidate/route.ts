@@ -38,7 +38,11 @@
  * it is rate-limited by being uninteresting.
  */
 
-import { revalidatePath } from 'next/cache'
+import {
+  tenantDataTag,
+  tenantHostAliasTag,
+} from '@aglyn/tenant-data-admin/render-cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,7 +81,7 @@ export async function POST(request: Request): Promise<Response> {
   }
   if (request.headers.get('x-revalidate-secret') !== secret) return unauthorized()
 
-  let payload: { host?: unknown; paths?: unknown }
+  let payload: { host?: unknown; hostId?: unknown; paths?: unknown }
   try {
     payload = (await request.json()) as typeof payload
   } catch {
@@ -93,6 +97,31 @@ export async function POST(request: Request): Promise<Response> {
   if (!paths.length) {
     return Response.json({ error: 'no paths' }, { status: 400 })
   }
+
+  // Cached DOCS, not just cached HTML (AGL-1302). Dropping a page's cache
+  // entry makes Next re-render it — but the re-render now reads through the
+  // `tenant-data:{hostId}` document cache, so without this bust the fresh
+  // render would faithfully rebuild the page from the stale routing map,
+  // component set and version pointers it just published over. The tag is
+  // busted BEFORE the paths so the regeneration each `revalidatePath`
+  // triggers cannot race a still-warm doc cache. `hostId` is optional for
+  // one deploy window's worth of backward compatibility: an old console
+  // build that omits it degrades to the 60s doc TTL, never to an error.
+  // The alias tag keyed by subdomain is busted too — it covers the
+  // alias→hostId resolution for `{host}.aglyn.app` requests (the custom
+  // domain's `cname--` alias entry only expires by TTL, which is fine: a
+  // publish never changes what a domain resolves TO, only the doc behind
+  // it, and that doc's tag covers every alias at once).
+  // `'max'` = expire the tag immediately (Next 16 made the profile argument
+  // required; `'max'` is the legacy single-argument behavior).
+  const hostId = String(payload.hostId ?? '').trim()
+  const revalidatedTags: string[] = []
+  if (hostId && !hostId.includes('/')) {
+    revalidateTag(tenantDataTag(hostId), 'max')
+    revalidatedTags.push(tenantDataTag(hostId))
+  }
+  revalidateTag(tenantHostAliasTag(host), 'max')
+  revalidatedTags.push(tenantHostAliasTag(host))
 
   // Say when the cap bites (AGL-1161). `slice` silently discarded the
   // overflow: a caller sending 80 paths got `count: 50` back and nothing to
@@ -140,6 +169,9 @@ export async function POST(request: Request): Promise<Response> {
       // asked for" apart from "as much as I would take".
       requested,
       truncated,
+      // Which doc-cache tags were busted alongside the paths (AGL-1302) —
+      // additive, so pre-existing callers read the same fields they always did.
+      revalidatedTags,
       ...(truncated > 0 ? { cap: MAX_PATHS } : {}),
     },
     { status: 200, headers: { 'Cache-Control': 'no-store' } },

@@ -24,7 +24,9 @@ import {
   BesignerDraftAlertComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
+  useRenderedCanvasElements,
   withBesignerContext,
+  type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-ui'
 import {
@@ -43,7 +45,13 @@ import {
   getGoogleFontsUrl,
   HostThemeDocumentContext,
 } from '@aglyn/shared-ui-theme'
-import { useHost, useHostTemplate, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
+import {
+  saveNodesGuarded,
+  useHost,
+  useHostTemplate,
+  useHostTemplateRef,
+  useHostActivityLogger,
+} from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -72,6 +80,10 @@ import { useHostId, useHostSubdomain } from '../../../../../../../../components/
 import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../hooks/use-firestore-collection'
 import usePluginDrawerRegistration from '../../../../../../../../hooks/use-plugin-drawer-registration'
+import usePresence from '../../../../../../../../hooks/use-presence'
+import useCoEditing from '../../../../../../../../hooks/use-coediting'
+import PresenceAvatars from '../../../../../../../../components/presence-avatars.component'
+import CollaboratorOverlays from '../../../../../../../../components/collaborator-overlays.component'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -136,10 +148,11 @@ function TemplateBesignerPage(props) {
     }),
     [hostResult?.data?.screens, screenDocs],
   )
-  const { doc: result, setDoc: updateTemplate } = useHostTemplate({
+  const { doc: result } = useHostTemplate({
     hostId,
     templateId,
   })
+  const templateRef = useHostTemplateRef({ hostId, templateId })
   const { data, status, error, hasPendingWrites } = result
   const nodes = data?.nodes
 
@@ -168,7 +181,10 @@ function TemplateBesignerPage(props) {
   const wrappedOnLoadRef = useRef(false)
 
   const saveTemplateNodes = useCallback(
-    async (nextNodes: Record<string, unknown>) => {
+    async (
+      nextNodes: Record<string, unknown>,
+      baseline?: BesignerSaveBaseline,
+    ) => {
       // Placeholders are DERIVED from the tokens in the content (AGL-672),
       // so editing has to recompute them: otherwise a template goes on
       // asking for a placeholder its copy no longer contains, or silently
@@ -181,11 +197,11 @@ function TemplateBesignerPage(props) {
         ),
       )
       const placeholders = declared.map((name) => previous.get(name) ?? { name })
-      const save = updateTemplate as unknown as (
-        value: Partial<Aglyn.AglynTemplate>,
-        options?: Parameters<typeof updateTemplate>[1],
-      ) => Promise<void>
-      await save(
+      // Conditional write (AGL-1301): the transaction re-checks the baseline
+      // against what Firestore actually holds, so a save racing another
+      // writer's commit aborts server-side instead of clobbering it.
+      await saveNodesGuarded(
+        templateRef,
         {
           nodes: nextNodes as unknown as Aglyn.AglynTemplate['nodes'],
           placeholders,
@@ -195,11 +211,30 @@ function TemplateBesignerPage(props) {
           // nobody gains by lying about.
           editedAt: Timestamp.now(),
         } as Partial<Aglyn.AglynTemplate>,
-        { merge: true },
+        baseline,
       )
     },
-    [updateTemplate, data?.placeholders],
+    [templateRef, data?.placeholders],
   )
+
+  // Who else is in this document (AGL-675) and live co-editing (AGL-677) —
+  // adopted from the screen editor (AGL-1301). Templates have no version
+  // subcollection, so the co-edit room keys on the doc alone.
+  const selectedNodeId = Besigner.focus.getLastSelected()?.$id
+  const clearMirrorRef = useRef<(() => void) | undefined>(undefined)
+  const { elements: canvasElements } = useRenderedCanvasElements()
+  const getCanvasRoot = useCallback(
+    () => canvasElements.current?.[Aglyn.CANVAS_ROOT_ELEMENT_ID]?.node,
+    [canvasElements],
+  )
+  const presence = usePresence({
+    hostId,
+    docType: 'template',
+    docId: templateId,
+    selectedNodeId,
+    broadcastCursor: true,
+    getCanvasRoot,
+  })
 
   // Canvas lifecycle, first load, concurrent-write detection (AGL-674) and
   // the size-guarded save (AGL-678) are shared by every besigner editor
@@ -259,13 +294,30 @@ function TemplateBesignerPage(props) {
       }
       return { nodes: unwrapped ? unwrapped.nodes : canvasNodes }
     },
-    onSaved: () =>
-      logActivity('Saved the template', {
+    onSaved: () => {
+      // A save makes Firestore authoritative again, so the live mirror of
+      // unsaved work has to go — otherwise the next person to join replays
+      // edits that are already in the document (AGL-677).
+      clearMirrorRef.current?.()
+      return logActivity('Saved the template', {
         type: 'template',
         id: templateId,
         name: result?.data?.displayName,
-      }),
+      })
+    },
   })
+
+  // Live co-editing (AGL-677). Rides the presence session's authenticated
+  // RTDB app rather than brokering a second token.
+  const coediting = useCoEditing({
+    session: presence.session,
+    docType: 'template',
+    docId: templateId,
+    versionId: undefined,
+    storedStamp: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
+    loaded: Aglyn.canvas.didSetInitial,
+  })
+  clearMirrorRef.current = coediting.clearMirror
 
   // No publish step: a template is inert by definition — nothing renders
   // from it until it is used to create a page, component or layout, so
@@ -434,9 +486,11 @@ function TemplateBesignerPage(props) {
           LOADING_OVERLAY_ELEMENT
         ) : (
           <>
+            <CollaboratorOverlays entries={presence.entries} />
             <BesignerAppBarComponent
               onPreview={handlePreview}
               detailsUrl={listUrl}
+              presence={<PresenceAvatars presence={presence} />}
               onSave={handleSave}
               saveAvailable={saveAvailable}
             />

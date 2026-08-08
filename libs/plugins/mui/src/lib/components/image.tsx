@@ -35,6 +35,17 @@ export interface ImageProps {
    */
   src?: string
   alt?: string
+  /**
+   * Explicit decorative choice (AGL-1305): ON forces `alt=""` (and drops
+   * the tooltip) no matter what the alt field says, so screen readers skip
+   * the image. Distinct from simply leaving alt unset, which also renders
+   * `alt=""` today but records no intent.
+   */
+  decorative?: boolean
+  /** Tooltip shown on hover — the native img `title` attribute. */
+  title?: string
+  /** Native loading hint; unset stays lazy, exactly as before AGL-1305. */
+  loading?: 'lazy' | 'eager'
   objectFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down'
   /** CSS width (e.g. "100%", "320px"); defaults to 100%. */
   width?: string
@@ -60,6 +71,9 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
   const {
     src: storedSrc,
     alt,
+    decorative,
+    title,
+    loading,
     objectFit,
     width,
     height,
@@ -155,8 +169,13 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
           : undefined
       }
       sizes={isCdnUrl ? '100vw' : undefined}
-      alt={alt ?? ''}
-      loading="lazy"
+      // Unset alt keeps rendering `alt=""` exactly as it always has —
+      // existing documents must not change output (AGL-1305). Decorative
+      // ON forces `alt=""` over any alt text and suppresses the tooltip,
+      // so the a11y intent is explicit rather than an accident of blank.
+      alt={decorative ? '' : alt ?? ''}
+      title={decorative ? undefined : title || undefined}
+      loading={loading === 'eager' ? 'eager' : 'lazy'}
       {...rest}
       sx={[
         {
@@ -172,6 +191,9 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
   )
 })
 Image.displayName = 'Image'
+
+/** Alt text and tooltip make no sense on an explicitly decorative image. */
+const NOT_DECORATIVE = { when: 'decorative', is: true, notMatch: true }
 
 export const schema: Aglyn.ComponentSchema<ImageProps> = {
   $id: ID,
@@ -205,6 +227,25 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
         'Describes the image for screen readers and search engines.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Alt text',
+      // Hidden while Decorative is on — the renderer forces alt="" then,
+      // but the text is kept on the node so toggling back restores it.
+      condition: NOT_DECORATIVE,
+    },
+    {
+      name: 'decorative',
+      description:
+        'Turn on when the image is purely decorative so screen readers ' +
+        'skip it — no alt text is needed then.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Decorative image',
+    },
+    {
+      name: 'title',
+      description:
+        'Optional tooltip shown when a visitor hovers over the image.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Tooltip',
+      condition: NOT_DECORATIVE,
     },
     {
       name: 'objectFit',
@@ -230,6 +271,19 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
       description: 'Height of the image. Leave empty for auto.',
       component: Aglyn.FieldComponentType.CSS_DIMENSION,
       label: 'Height',
+    },
+    {
+      name: 'loading',
+      description:
+        'Lazy waits to load the image until a visitor scrolls near it; ' +
+        'pick Eager for the first image at the top of a screen so it ' +
+        'shows immediately.',
+      component: Aglyn.FieldComponentType.SELECT,
+      label: 'Loading',
+      options: [
+        { value: '', label: 'Lazy (default)' },
+        { value: 'eager', label: 'Eager' },
+      ],
     },
     {
       name: 'screenId',

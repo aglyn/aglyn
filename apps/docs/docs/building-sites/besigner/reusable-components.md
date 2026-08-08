@@ -12,6 +12,12 @@ a **reusable component**.
 An instance is not a copy. It **grafts the source at render time**, so editing the component
 updates every page that places it. Change a font size once and the whole site follows.
 
+:::info Plan availability
+**Starter and above.** On Free, promoting an element answers *"Reusable components
+require a Starter plan — see Billing to upgrade."* There is no cap on how many
+components a site can have.
+:::
+
 ![The site's reusable components page](/img/besigner/components-page.png)
 
 ## Promote
@@ -97,8 +103,9 @@ read the published component.
 
 1. **Save properties** — the dialog confirms *"Properties saved. Publish to make them
    available on live pages."*
-2. **File ▸ Publish again** — *"Published. Every screen using this component picks it up
-   within a minute — you do not need to republish them."*
+2. **File ▸ Publish to sites** (labeled **Publish again** when the version you have open
+   is already the published one) — *"Published. Every screen using this component picks
+   it up within a minute — you do not need to republish them."*
 
 Publishing the component is enough. You do not republish the pages that use it.
 
@@ -113,6 +120,15 @@ spelled out underneath. Leave a field empty and that default is what renders —
 a field restores the component's own copy rather than collapsing the section to nothing.
 
 An empty field counts as unset. `0` and **no** are real values and survive.
+
+### What an instance can — and can't — restyle
+
+Properties are the **only** per-instance knob for what's inside a component. Selecting
+an instance and using the **Styles** tab styles the box the instance sits in — margin,
+padding, background and the like all apply — but nothing inside the component can be
+restyled per page. If one page needs different internals, either add a property for
+the difference, edit the component itself (every page follows), or
+[detach](#detach) that instance.
 
 :::warning
 Instance values are stored **against the property name**, so renaming a property orphans
@@ -142,8 +158,11 @@ copy of the section.
 ## Detach
 
 **Detach from component**, on an instance, turns it back into ordinary elements with fresh
-ids. Use it when one page needs a variation the shared source shouldn't carry. The detached
-copy no longer follows the component.
+ids — the confirmation reads *"Detached — this copy no longer follows the component."*
+Use it when one page needs a variation the shared source shouldn't carry.
+
+Detach copies the component's **published** tree — unsaved or unpublished edits sitting
+in the component's working version are not what you get.
 
 ## Nesting
 

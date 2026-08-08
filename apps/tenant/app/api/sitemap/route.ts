@@ -21,12 +21,28 @@ import {
   isScreenIndexable,
   isSearchDiscouraged,
   screenRoutePathToUrl,
+  type AglynHost,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  tenantDataTag,
+  withRenderCache,
+} from '@aglyn/tenant-data-admin/render-cache'
 import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
 import getHost from '../../../utils/get-host'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * The URL sweep below reads the whole screens collection (plus products,
+ * collections and entries) — ~60 reads per request on a real site, and
+ * crawlers plus verification traffic hit this route constantly (AGL-1302).
+ * Cached for 5 minutes under the same `tenant-data:{hostId}` tag every
+ * publish busts, so the sitemap reflects a publish IMMEDIATELY — the TTL
+ * only bounds writes that never announce themselves. That keeps AGL-1160's
+ * intent (revalidation on publish) while restoring cacheability.
+ */
+const SITEMAP_TTL_SECONDS = 300
 
 const escapeXml = (value: string) =>
   value
@@ -53,23 +69,17 @@ function sitemapResponse(urls: string[]): Response {
     status: 200,
     headers: {
       'Content-Type': 'application/xml',
-      // MEASURED 2026-08-04: this header is OVERRIDDEN and has no effect.
-      // Production returns `public, max-age=0, must-revalidate` here, on
-      // `collections-rss`, on `robots` and on ordinary pages alike — so the
-      // value below has never reached a CDN, and neither did the
-      // `s-maxage=3600` it replaced.
-      //
-      // What actually caches this route is Vercel's own revalidation, at
-      // **60 s**, measured by polling `age`: it climbs to ~60, flips to
-      // `x-vercel-cache: STALE`, then resets — twice, exactly 60 s apart.
-      // Which is the same window every page uses, so a sitemap is never more
-      // stale than the site it describes.
-      //
-      // Kept rather than deleted because it states the intent correctly and
-      // costs nothing; do NOT treat it as the thing producing the 60 s.
-      // AGL-1160 was filed believing this header made the sitemap an HOUR
-      // stale. It never did.
-      'Cache-Control': 's-maxage=60, stale-while-revalidate=60',
+      // MEASURED 2026-08-04 (AGL-1160): this header was OVERRIDDEN in
+      // production — Vercel returned `public, max-age=0, must-revalidate`
+      // here, on `collections-rss`, on `robots` and on ordinary pages alike,
+      // and cached the route under its own ~60s revalidation instead. So do
+      // not treat this value as the thing a CDN necessarily honors; the
+      // read-amplification fix that actually holds is the tagged data cache
+      // around the URL sweep (AGL-1302), which works regardless of what the
+      // CDN does. The header still states the intent — CDN-cache for 5
+      // minutes, serve stale for up to an hour while refreshing, never cache
+      // in the browser — for any front that does respect it.
+      'Cache-Control': 's-maxage=300, stale-while-revalidate=3600',
     },
   })
 }
@@ -115,18 +125,49 @@ export async function GET(request: Request): Promise<Response> {
     hostPublicOrigin(hostRes.host) ??
     `https://${String(request.headers.get('host') ?? host)}`
 
-  const hostRef = firebaseAdmin
-    .app()
-    .firestore()
-    .collection('hosts')
-    .doc(hostRes.host.$id)
-
   // Search discouraged site-wide (AGL-1263): a valid but EMPTY sitemap, not a
   // 404. The file still exists and still parses, so a crawler that already
   // knows the URL — or Search Console, which keeps asking — reads "nothing
   // here" instead of an error it will retry. Returning early also skips every
   // read below, which is the whole cost of this route.
   if (isSearchDiscouraged(hostRes.host)) return sitemapResponse([])
+
+  try {
+    const { urls } = await withRenderCache({
+      key: ['tenant-sitemap', hostRes.host.$id, base],
+      revalidate: SITEMAP_TTL_SECONDS,
+      tags: [tenantDataTag(hostRes.host.$id)],
+      read: () => buildSitemapUrls(hostRes.host, base),
+      // A sweep that lost one of its fail-open reads still SERVES (partial
+      // beats absent, matching the pre-cache behavior), but replaying the
+      // gap for the whole TTL would widen a blip into minutes — degraded
+      // sweeps are never stored.
+      store: (value) => !value.degraded,
+    })
+    return sitemapResponse(urls)
+  } catch (error) {
+    console.error(error)
+    const { urls } = await buildSitemapUrls(hostRes.host, base)
+    return sitemapResponse(urls)
+  }
+}
+
+/**
+ * The full URL sweep — screens minus non-indexable and template screens,
+ * plus commerce and content-collection URLs. Pure function of published
+ * site data and `base`, which is what makes it cacheable at all (AGL-1160
+ * removed the request headers from the output for exactly this reason).
+ */
+async function buildSitemapUrls(
+  host: AglynHost,
+  base: string,
+): Promise<{ urls: string[]; degraded: boolean }> {
+  let degraded = false
+  const hostRef = firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(host.$id)
 
   // Screens that are not indexable must not be submitted (AGL-1263). The
   // routing map is every PUBLISHED screen, which is not the same set: an
@@ -143,7 +184,7 @@ export async function GET(request: Request): Promise<Response> {
   // rather than adding a round trip. Never rejects, so a floating promise here
   // cannot become an unhandled rejection.
   const templateScreenIdsPromise = getTemplateScreenIds({
-    hostId: hostRes.host.$id,
+    hostId: host.$id,
   })
 
   try {
@@ -160,6 +201,7 @@ export async function GET(request: Request): Promise<Response> {
   } catch {
     // Fail OPEN, matching robots.txt: a read failure must not blank a working
     // sitemap. The pages' own `noindex` still holds.
+    degraded = true
   }
 
   // Template screens are not pages (AGL-1267, AGL-1270) — the router now
@@ -178,7 +220,7 @@ export async function GET(request: Request): Promise<Response> {
     excluded.add(screenId)
   }
 
-  const urls = Object.entries(hostRes.host.screens ?? {})
+  const urls = Object.entries(host.screens ?? {})
     .filter(([screenId]) => !excluded.has(screenId))
     .map(([, path]) => `${base}${screenRoutePathToUrl(path)}`)
     .sort()
@@ -208,6 +250,7 @@ export async function GET(request: Request): Promise<Response> {
     }
   } catch {
     // Sitemap stays screens-only if commerce reads fail.
+    degraded = true
   }
 
   // Content collections & blog (AGL-582): /{collection} lists and their
@@ -235,7 +278,8 @@ export async function GET(request: Request): Promise<Response> {
     }
   } catch {
     // Sitemap stays screens-only if content reads fail.
+    degraded = true
   }
 
-  return sitemapResponse(urls)
+  return { urls, degraded }
 }
