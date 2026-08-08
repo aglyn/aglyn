@@ -30,6 +30,28 @@ lock out everyone else — but bulk-importing through your own public form will 
 it. Use [datasets](../datasets/import-export.md) for imports instead.
 :::
 
+### Monthly allowance per plan
+
+Each tier includes a monthly form-submission allowance, counted per site:
+
+| Plan | Submissions / month |
+| --- | --- |
+| Free | 20 |
+| Starter | 200 |
+| Pro | 1,000 |
+| Business | 10,000 |
+| Scale | 50,000 |
+| Advanced | 100,000 |
+| Agency & Enterprise | Unlimited |
+
+At the cap, further submissions are **declined** — the visitor sees the form's error
+message rather than a fake success — and the count resets with the calendar month
+(UTC). The [billing page's usage meters](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
+warn you at 80% before you get there.
+
+A single submission can carry up to **20 fields** and about **10 KB** of text — plenty
+for any real form, tight enough that a bot can't stuff your inbox.
+
 ## Field types
 
 Each **Form Field** has a type that controls what visitors see and what is submitted:
@@ -102,9 +124,28 @@ either of two topic boxes is ticked.
 ## Where submissions go
 
 - **Inbox** — every submission is captured; open it in the console's mail reader dialog.
-- **Datasets** — bind a form to a dataset and each submission becomes a validated record.
+- **Datasets** — bind a form to a dataset (**Write to dataset** on the Form element)
+  and each submission is also appended as a record. The inbox always gets its copy.
 - **Contacts** — form submissions are one of the [ingestion sources](../contacts/overview.md)
   that build your contacts list.
+
+### The inbox
+
+The site's **Inbox** page collects everything visitors send, in three tabs —
+**Submissions**, **Members & leads**, and **Campaigns**. On the **Form Submissions**
+table:
+
+- Unread submissions are bold with a **New** chip; site managers also get an in-app
+  notification per submission.
+- Click a row to read it — every field the visitor filled, labeled — and it's marked
+  read; **Mark unread** puts it back.
+- **Delete** removes a submission permanently (it asks first).
+
+Each row shows which **Form** it came from — that's the Form element's **Form name**
+attribute, so name your forms distinctly ("Contact", "Newsletter", "Survey") and the
+inbox stays sorted at a glance.
+
+<!-- screenshot: forms/inbox-submission-reader.png per SCREENSHOT_PLAN.md -->
 
 ## Related
 

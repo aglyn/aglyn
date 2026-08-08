@@ -46,13 +46,38 @@ feature; large video uploads and higher storage are gated by plan.
 
 ## Upload
 
-- Upload **images**, **video**, and **PDFs**, with tiered size caps. Click **Upload**, or
-  **drag files straight from your desktop onto the library** — dropped files land in the
-  folder you have open.
-- Large video (up to 200MB) uses **signed-URL uploads** so big files go straight to
-  storage.
-- Rename, **replace the file** behind an asset, and apply **image transforms**. Replace is
+- Upload **images**, **video** (MP4, WebM, QuickTime), and **PDFs**. Click **Upload
+  media**, or **drag files straight from your desktop onto the library** — dropped files
+  land in the folder you have open.
+- Rename, **replace the file** behind an asset, and edit images in place. Replace is
   available from the asset's details drawer and straight from the card's overflow menu.
+
+### Size and plan limits
+
+| Upload | Cap | Plan |
+| --- | --- | --- |
+| Images | 15 MB per file | Every plan |
+| PDFs | 10 MB per file | **Pro and above** |
+| Video | 200 MB per file | **Pro and above** |
+
+Video over 20 MB automatically uses **signed-URL uploads**, so big files go straight to
+storage without tying up the console. Folders nest up to **5 levels** deep.
+
+Storage is metered per site against your plan (Free 250 MB, Starter 2 GB, Pro 10 GB,
+Business 50 GB, Scale 75 GB, Advanced 100 GB, Agency 200 GB, Enterprise unlimited) —
+the library's toolbar shows the running total, and the
+[billing page](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
+meters it alongside everything else.
+
+### Edit images
+
+**Edit image**, in an image's details, opens the editor: rotate left/right, flip
+horizontally or vertically, drag a **crop** (pick a **Crop ratio** — 1:1, 4:3, 3:2,
+16:9, or Free — first to lock the aspect), and set a **Max width** to downscale.
+Finish with **Save as copy** to keep the original, or **Replace original** to update
+every place the asset is used at once.
+
+<!-- screenshot: media/image-editor-dialog.png per SCREENSHOT_PLAN.md -->
 
 ## Deliver over CDN
 
