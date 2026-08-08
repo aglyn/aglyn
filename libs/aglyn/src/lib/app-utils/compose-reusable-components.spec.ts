@@ -17,10 +17,12 @@
 
 import {
   composeReusableComponentNodes,
+  getInstanceRootStyleOverride,
   nodesReferenceComponent,
   replaceSubtreeWithInstance,
   resolveInstanceIconPath,
   REUSABLE_INSTANCE_COMPONENT_ID,
+  STYLE_OVERRIDES_ROOT_KEY,
 } from './compose-reusable-components'
 
 const instance = (id: string, refId: string) => ({
@@ -433,5 +435,149 @@ describe('declared props (AGL-1247)', () => {
     // Untouched: substitution is driven by the DECLARATION, not by whatever
     // an instance happens to carry.
     expect(composed['cmp__a__root'].props.children).toBe('{{prop.headline}}')
+  })
+})
+
+describe('root style overrides (AGL-1306)', () => {
+  const definition = {
+    rootId: 'root',
+    nodes: {
+      root: {
+        $id: 'root',
+        componentId: 'muiStack',
+        sx: { backgroundColor: '#101828', py: 8 },
+        nodes: ['label'],
+      },
+      label: {
+        $id: 'label',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        sx: { color: '#fff' },
+      },
+    },
+  } as any
+
+  const overriddenInstance = (
+    id: string,
+    root: Record<string, unknown>,
+  ) => ({
+    $id: id,
+    componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+    props: { refId: 'cta' },
+    styleOverrides: { [STYLE_OVERRIDES_ROOT_KEY]: root },
+    nodes: [] as string[],
+  })
+
+  it('merges the instance override over the grafted ROOT sx, leaf-wise', () => {
+    const composed = composeReusableComponentNodes(
+      { a: overriddenInstance('a', { backgroundColor: '#0b4a6f' }) } as any,
+      { cta: definition },
+    )
+    // The named leaf is replaced; the root's other properties and the
+    // subtree's own styles are untouched.
+    expect(composed['cmp__a__root'].sx).toEqual({
+      backgroundColor: '#0b4a6f',
+      py: 8,
+    })
+    expect(composed['cmp__a__label'].sx).toEqual({ color: '#fff' })
+    // The definition itself is never mutated — the next instance grafts
+    // the original.
+    expect(definition.nodes.root.sx).toEqual({
+      backgroundColor: '#101828',
+      py: 8,
+    })
+  })
+
+  it('each instance renders its own override; unoverridden instances keep the component look', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        a: overriddenInstance('a', { backgroundColor: '#0b4a6f' }),
+        b: {
+          $id: 'b',
+          componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+          props: { refId: 'cta' },
+          nodes: [] as string[],
+        },
+      } as any,
+      { cta: definition },
+    )
+    expect(composed['cmp__a__root'].sx.backgroundColor).toBe('#0b4a6f')
+    expect(composed['cmp__b__root'].sx.backgroundColor).toBe('#101828')
+  })
+
+  it('survives a republished definition: the override rides the CURRENT root', () => {
+    // Same instance node, new definition content — what the screen document
+    // sees after the component republishes. The override merges over the
+    // new root rather than pinning any old copy.
+    const republished = {
+      rootId: 'root',
+      nodes: {
+        root: {
+          $id: 'root',
+          componentId: 'muiStack',
+          sx: { backgroundColor: '#14532d', px: 4 },
+          nodes: [],
+        },
+      },
+    } as any
+    const composed = composeReusableComponentNodes(
+      { a: overriddenInstance('a', { backgroundColor: '#0b4a6f' }) } as any,
+      { cta: republished },
+    )
+    expect(composed['cmp__a__root'].sx).toEqual({
+      backgroundColor: '#0b4a6f',
+      px: 4,
+    })
+  })
+
+  it('keeps the instance node itself carrying its overrides after the graft', () => {
+    const composed = composeReusableComponentNodes(
+      { a: overriddenInstance('a', { backgroundColor: '#0b4a6f' }) } as any,
+      { cta: definition },
+    )
+    // The override is document state, not render output: a save of the
+    // composed-for-canvas map must still find it on the instance.
+    expect((composed['a'] as any).styleOverrides).toEqual({
+      [STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#0b4a6f' },
+    })
+  })
+
+  it('an empty or absent override leaves the grafted root sx alone', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        a: overriddenInstance('a', {}),
+        b: {
+          $id: 'b',
+          componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+          props: { refId: 'cta' },
+          styleOverrides: {},
+          nodes: [] as string[],
+        },
+      } as any,
+      { cta: definition },
+    )
+    expect(composed['cmp__a__root'].sx).toEqual(definition.nodes.root.sx)
+    expect(composed['cmp__b__root'].sx).toEqual(definition.nodes.root.sx)
+  })
+
+  it('getInstanceRootStyleOverride answers only for instances with a real record', () => {
+    expect(
+      getInstanceRootStyleOverride(
+        overriddenInstance('a', { py: 2 }) as any,
+      ),
+    ).toEqual({ py: 2 })
+    // Not an instance: styleOverrides on an ordinary node is inert here.
+    expect(
+      getInstanceRootStyleOverride({
+        componentId: 'muiStack',
+        styleOverrides: { [STYLE_OVERRIDES_ROOT_KEY]: { py: 2 } },
+      } as any),
+    ).toBeUndefined()
+    expect(getInstanceRootStyleOverride(undefined)).toBeUndefined()
+    expect(
+      getInstanceRootStyleOverride({
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+      } as any),
+    ).toBeUndefined()
   })
 })

@@ -229,6 +229,13 @@ export function ReusableComponentsProvider(
           if (!(defId in idMap)) idMap[defId] = Aglyn.createResourceUid()
         }
         const all = Aglyn.canvas.toJSON().nodes as Record<string, any>
+        // Root style overrides (AGL-1306) bake into the detached copy's
+        // root sx: detaching forks the look this instance actually renders,
+        // not the component's base look — without this the page changes
+        // appearance the moment the author detaches.
+        const rootOverride = Aglyn.getInstanceRootStyleOverride(
+          all[node.$id] ?? (node as any),
+        )
         const next: Record<string, any> = { ...all }
         for (const [defId, defNode] of Object.entries<any>(definition.nodes)) {
           const newId = idMap[defId]
@@ -244,6 +251,9 @@ export function ReusableComponentsProvider(
                 (childId: string) => idMap[childId] ?? childId,
               ),
             }),
+            ...(defId === definition.rootId && rootOverride
+              ? { sx: Aglyn.mergeNodeSx(defNode.sx, rootOverride) }
+              : {}),
           }
         }
         Aglyn.canvas.applyNodes(next as any)

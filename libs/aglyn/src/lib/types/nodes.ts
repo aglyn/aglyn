@@ -306,6 +306,23 @@ export interface NodeSchema<P = JSX.AnyProps> extends NodeI<P> {
    */
   presetRef?: string
   /**
+   * Per-instance style overrides on a reusable-component instance node
+   * (AGL-1306), keyed by target: `root` (see `STYLE_OVERRIDES_ROOT_KEY`)
+   * holds an sx-shaped record merged over the component ROOT's own sx at
+   * graft time (`composeReusableComponentNodes` → `mergeNodeSx`), so one
+   * page's CTA can change its background without widening the component's
+   * declared props or detaching. Phase 2 adds component-internal node ids
+   * as keys.
+   *
+   * A first-class node field, NOT a prop: `AglynNode`'s constructor drops
+   * unknown top-level keys, and anything in `props` is spread onto the
+   * instance's wrapper DOM element. Lives on the instance node in the
+   * document that places it — it survives component republish and never
+   * pins the instance to an old component version, because the graft
+   * always merges it over the definition's CURRENT root.
+   */
+  styleOverrides?: Record<string, JSX.SxProps>
+  /**
    * The computed node parent (only for type completion)
    */
   readonly parent?: NodeSchema<any> | null

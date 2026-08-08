@@ -21,6 +21,7 @@ import type {
   ReusableComponentIcon,
   ReusableComponentProp,
 } from '../foundation'
+import { mergeNodeSx } from './merge-node-sx'
 import { resolveNamedTokens } from './resolve-named-tokens'
 
 /**
@@ -39,6 +40,44 @@ export const REUSABLE_INSTANCE_COMPONENT_ID = 'reusableInstance'
  * the whole object — values reach a page only through the graft below.
  */
 export const REUSABLE_INSTANCE_PROP_VALUES_KEY = 'propValues'
+
+/**
+ * `styleOverrides` key addressing the component ROOT (AGL-1306). Persisted
+ * in screen documents — never rename. Phase 2 adds component-internal node
+ * ids beside it; the definition root is addressed by this constant rather
+ * than its id so the same override survives a republish that reroots the
+ * definition.
+ */
+export const STYLE_OVERRIDES_ROOT_KEY = 'root'
+
+/**
+ * The sx-shaped root style override carried by an instance node, or
+ * `undefined` when the node is not an instance or carries none.
+ *
+ * Deliberately here rather than in a render surface: this file owns what
+ * an instance node looks like, and the graft below is the ONE place the
+ * override is applied — canvas, Preview and tenant SSR all call
+ * {@link composeReusableComponentNodes}, so they cannot disagree about
+ * what an override means.
+ */
+export function getInstanceRootStyleOverride(
+  node: { componentId?: string; styleOverrides?: unknown } | undefined | null,
+): Record<string, unknown> | undefined {
+  if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) return undefined
+  const overrides = node?.styleOverrides as
+    | Record<string, unknown>
+    | undefined
+  const root = overrides?.[STYLE_OVERRIDES_ROOT_KEY]
+  if (
+    typeof root !== 'object' ||
+    root === null ||
+    Array.isArray(root) ||
+    Object.keys(root).length === 0
+  ) {
+    return undefined
+  }
+  return root as Record<string, unknown>
+}
 
 /**
  * Token namespace a definition uses to reference its own declared props:
@@ -176,6 +215,16 @@ export function composeReusableComponentNodes<
       const definition = definitionsById[refId] as ReusableComponentTree<N>
       const prefix = instancePrefix(instanceId)
       const prefixId = (id: NodeId) => `${prefix}${id}`
+      // Root style override (AGL-1306): merged over the definition ROOT's
+      // own sx as this instance's copy is grafted — per-instance scope
+      // exists only here, exactly like the declared-prop substitution
+      // below. Merging into the graft (rather than a renderer patch) is
+      // what gives canvas/Preview/tenant parity for free, and reading the
+      // definition's CURRENT root each pass is why an override can never
+      // pin the instance to an old component version.
+      const rootStyleOverride = getInstanceRootStyleOverride(
+        instanceNode as { componentId?: string; styleOverrides?: unknown },
+      )
 
       const grafted: NormalizedNodes<N> = {}
       for (const [defId, defNode] of Object.entries(definition.nodes)) {
@@ -194,6 +243,9 @@ export function composeReusableComponentNodes<
               typeof childId === 'string' ? prefixId(childId) : childId,
             ),
           }),
+          ...(defId === definition.rootId && rootStyleOverride
+            ? { sx: mergeNodeSx(defNode.sx, rootStyleOverride) as any }
+            : {}),
         }
       }
       // Declared props (AGL-1247) substitute HERE, on this instance's copy

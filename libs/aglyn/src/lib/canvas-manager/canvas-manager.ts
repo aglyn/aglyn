@@ -74,6 +74,13 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   public props: P
   public sx?: JSX.SxProps
   public className?: string
+  /**
+   * Per-instance style overrides (AGL-1306) — see `NodeSchema`. Assigned
+   * by name like every other field: this constructor DROPS unknown
+   * top-level keys, so forgetting a field here silently strips it from
+   * every canvas round-trip.
+   */
+  public styleOverrides?: Record<string, JSX.SxProps>
 
   get parent(): NodeSchema<any> | undefined {
     if (!this.parentId) return
@@ -131,6 +138,9 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     this.nodes = Array.isArray(schema.nodes) ? [...schema.nodes] : []
     this.props = { ...schema.props } as P
     this.sx = Array.isArray(schema.sx) ? [...schema.sx] : { ...schema.sx }
+    this.styleOverrides = schema.styleOverrides
+      ? { ...schema.styleOverrides }
+      : undefined
 
     makeAutoObservable(this, {
       store: false,
@@ -161,6 +171,13 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     const sx = toJS(this.sx)
     const sxEmpty = Array.isArray(sx) ? sx.length === 0 : !sx || Object.keys(sx).length === 0
     if (!sxEmpty) json['sx'] = sx
+    // Instance style overrides (AGL-1306): emitted like sx — absent when
+    // empty — so the SAVED node map carries them into both storage forms
+    // (the plain map and the msgpack bytes both serialize this output).
+    const styleOverrides = toJS(this.styleOverrides)
+    if (styleOverrides && Object.keys(styleOverrides).length > 0) {
+      json['styleOverrides'] = styleOverrides
+    }
     return json as NodeSchemaJSON<P>
   }
 }

@@ -17,6 +17,8 @@
 
 import { NodeId, NodeSchema, NodeSchemaNested, NodeType } from '../types/nodes'
 import { FEATURE_FLAG } from '../foundation'
+import { compress } from '../app-utils/compress'
+import { decompress } from '../app-utils/decompress'
 import { CanvasManager, NODE_ROOT_ID } from './canvas-manager'
 
 describe('Aglyn: Screen Manager', () => {
@@ -732,6 +734,87 @@ describe('Aglyn: Screen Manager', () => {
 
       const stale = canvas.resolveInsertTarget({ $id: 'ghost' } as any)
       expect(stale.parent.$id).toBe(NODE_ROOT_ID)
+    })
+  })
+
+  describe('instance styleOverrides round-trip (AGL-1306)', () => {
+    // The constructor assigns fields BY NAME, so an unlisted key dies on
+    // the first setNodes — this is the save→reload survival proof for the
+    // override layer: load (setNodes) → serialize (toJSON) → both storage
+    // forms persist that serialization wholesale (the plain map as-is, the
+    // version converter as msgpack of the same map).
+    const instanceMap = {
+      [NODE_ROOT_ID]: {
+        $id: NODE_ROOT_ID,
+        type: NodeType.NODE,
+        componentId: 'div',
+        nodes: ['inst'],
+      },
+      inst: {
+        $id: 'inst',
+        type: NodeType.NODE,
+        parentId: NODE_ROOT_ID,
+        componentId: 'reusableInstance',
+        props: { refId: 'cta' },
+        styleOverrides: {
+          root: {
+            backgroundColor: '#0b4a6f',
+            '@scheme dark': { backgroundColor: '#101828' },
+          },
+        },
+        nodes: [],
+      },
+    } as unknown as Record<NodeId, NodeSchema>
+
+    it('survives setNodes → toJSON unchanged', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(instanceMap as any)
+      const serialized = canvas.toJSON().nodes as Record<string, any>
+      expect(serialized['inst'].styleOverrides).toEqual(
+        (instanceMap['inst'] as any).styleOverrides,
+      )
+      // And a second load of the serialization keeps it again — reload of
+      // a saved document, not just the first save.
+      const reloaded = new CanvasManager(undefined as any)
+      reloaded.setNodes(serialized as any)
+      expect(
+        (reloaded.toJSON().nodes as Record<string, any>)['inst']
+          .styleOverrides,
+      ).toEqual((instanceMap['inst'] as any).styleOverrides)
+    })
+
+    it('survives the msgpack storage form (compress → decompress)', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(instanceMap as any)
+      const serialized = canvas.toJSON().nodes as Record<string, any>
+      const decoded = decompress<Record<string, any>>(compress(serialized))
+      expect(decoded['inst'].styleOverrides).toEqual(
+        (instanceMap['inst'] as any).styleOverrides,
+      )
+    })
+
+    it('omits the field when absent or empty, like sx', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes({
+        plain: {
+          $id: 'plain',
+          type: NodeType.NODE,
+          componentId: 'div',
+          props: {},
+          nodes: [],
+        },
+        empty: {
+          $id: 'empty',
+          type: NodeType.NODE,
+          componentId: 'div',
+          props: {},
+          styleOverrides: {},
+          nodes: [],
+        },
+      } as any)
+      const serialized = canvas.toJSON().nodes as Record<string, any>
+      expect('styleOverrides' in serialized['plain']).toBe(false)
+      expect('styleOverrides' in serialized['empty']).toBe(false)
     })
   })
 })
