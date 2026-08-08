@@ -46,6 +46,21 @@ The **Live** button is environment-aware — in production it reflects your publ
 saves so you can jump straight to the real page.
 :::
 
+## How fast changes go live
+
+- **Publishing a screen** refreshes its live page immediately — the very next visitor
+  gets the new version, usually within seconds.
+- **Publishing a layout or a reusable component** refreshes every page that uses it
+  the same way. When that fan-out is very large, the publish confirms that the
+  remaining pages *"update on their own within a minute"* — and they do.
+- **Saving is not publishing.** A save writes your working version; the live site
+  serves the published one. The one subtle case: if you edit the version that is
+  *currently live* and press Save, the live site catches up on its own within about a
+  minute — and because pages regenerate behind the scenes, you may need to refresh
+  twice to see it.
+- Your site's `sitemap.xml`, `robots.txt`, and RSS feeds refresh within about five
+  minutes (a publish refreshes the sitemap immediately).
+
 ## Next
 
 Explore the feature areas in the sidebar, or see **[What's New](../whats-new.md)** for

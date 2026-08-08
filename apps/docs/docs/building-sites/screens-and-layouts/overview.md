@@ -81,10 +81,35 @@ delete) reusable components from the site dashboard.
 
 ## Versions & scheduled publishing
 
-- Save **named versions** of a screen or layout.
-- **Schedule** a version to publish at a future time.
-- Delete versions you no longer need.
-- The **version dropdown** lives in the app bar near your avatar for quick switching.
+Screens, layouts, and reusable components all keep **versions** — open the version
+name in the besigner's app bar to see the **Versions** dialog, with each version's
+created/updated times and a **Published** chip on the live one.
+
+- **New version** saves a named snapshot of the current saved document (prefilled
+  "Copy of …" — rename it to something meaningful).
+- **Open** switches the besigner to that version. Viewing an old version never
+  publishes it.
+- **Publish** on any row makes that version the live one — which is also how you
+  **roll back**: publishing an older version moves the live pointer, destroys
+  nothing, and is symmetrical, so rolling forward again is the same click.
+- **Schedule** publishes a version automatically at a chosen future time; the row
+  then shows a *"Publishes …"* chip you can clear to cancel.
+- Delete versions you no longer need — the published version can't be deleted, and
+  the one you have open must be closed first.
+
+<!-- screenshot: besigner/versions-dialog.png per SCREENSHOT_PLAN.md -->
+
+Plan gating, enforced where you click:
+
+- **Creating versions** requires **Pro or above** — on a lower tier the editor answers
+  *"Versioning requires a Pro plan — see Billing to upgrade"* instead of opening the
+  name dialog.
+- **Scheduled publishing** requires **Business or above**.
+- A version is snapshotted from the **saved** document, so the editor asks you to save
+  the canvas first rather than silently capturing (or losing) unsaved edits.
+- If a scheduled publish comes due on a plan that no longer includes scheduling — after
+  a downgrade, say — it is **skipped and shown as skipped** on the screen's page, never
+  silently dropped, so you can dismiss it or upgrade and reschedule.
 
 ## Error & maintenance screens
 
