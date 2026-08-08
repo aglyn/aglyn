@@ -1,30 +1,35 @@
 ---
 sidebar_position: 1
 title: Custom Domains
-description: Connect your own domain with a self-service wizard and DNS verification.
+description: Connect your own domain — subdomain or bare apex — with one-click DNS verification.
 ---
 
 # Custom Domains
 
-Every site starts on an Aglyn subdomain. When you're ready, connect your **own domain** with
-a guided, self-service wizard.
+Every site starts on an Aglyn subdomain. When you're ready, connect your **own domain** —
+a subdomain like `www.example.com` or the bare apex `example.com` — self-serve, from the
+site's Setup page.
 
 :::info Plan availability
-**Paid**. Custom domains are available on paid tiers.
+**Starter and above.**
 :::
 
 ![The custom domain card in site setup](/img/custom-domains/setup-domains.png)
 
 ## Connect a domain
 
-1. In **Setup**, open the **custom domain** tab.
-2. Enter your domain and follow the **wizard**.
-3. Add the DNS records it shows you at your registrar (typically a **CNAME**).
-4. Aglyn runs **DNS verification** and resolves the CNAME; once it checks out, your site
-   serves on the custom domain.
+1. In **Setup**, open the **Custom Domain** tab.
+2. Add **one DNS record** at your registrar — a **CNAME** to `sites.aglyn.app` for a
+   subdomain, or an **A record** (or ALIAS) for a bare apex.
+3. Type the domain into the **Domain** field and press **Verify & connect**. Aglyn
+   checks DNS and connects the domain in the same click; SSL provisions automatically.
+
+Each site carries **one** custom domain, shown as a chip on the card with **Re-attach**
+and **Disconnect** actions beside it. Once it serves, your `*.aglyn.app` subdomain
+redirects to it, path preserved, so old links keep working.
 
 :::tip How-tos
-- [Connect a domain](connect-a-domain.md)
+- [Connect a domain](connect-a-domain.md) — steps, apex records, and what happens after
 - [Troubleshoot verification](troubleshooting.md)
 :::
 
