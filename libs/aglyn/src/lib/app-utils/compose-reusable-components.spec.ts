@@ -17,10 +17,13 @@
 
 import {
   composeReusableComponentNodes,
+  getInstanceEffectivePropText,
   getInstanceRootStyleOverride,
+  matchComponentPropToken,
   nodesReferenceComponent,
   replaceSubtreeWithInstance,
   resolveInstanceIconPath,
+  resolveInstanceLeafBinding,
   REUSABLE_INSTANCE_COMPONENT_ID,
   STYLE_OVERRIDES_ROOT_KEY,
 } from './compose-reusable-components'
@@ -579,5 +582,189 @@ describe('root style overrides (AGL-1306)', () => {
         componentId: REUSABLE_INSTANCE_COMPONENT_ID,
       } as any),
     ).toBeUndefined()
+  })
+})
+
+describe('instance leaf hit-test (AGL-1304)', () => {
+  /** Prop-fed headline + image, a mixed-content caption, a static label. */
+  const hero = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'muiStack', nodes: ['h', 'img', 'cap', 'label'] },
+      h: {
+        $id: 'h',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        props: { children: '{{prop.headline}}' },
+      },
+      img: {
+        $id: 'img',
+        componentId: 'muiImage',
+        parentId: 'root',
+        props: { src: '{{prop.image}}', alt: 'Hero' },
+      },
+      cap: {
+        $id: 'cap',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        props: { children: 'By {{prop.headline}} — read on' },
+      },
+      label: {
+        $id: 'label',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        props: { children: 'NEW' },
+      },
+    },
+    props: [
+      { name: 'headline', type: 'text', defaultValue: 'Headline goes here' },
+      { name: 'image', type: 'image', defaultValue: '/placeholder.png' },
+    ],
+  } as any
+
+  describe('matchComponentPropToken', () => {
+    it('matches exactly one prop token, tolerating brace whitespace', () => {
+      expect(matchComponentPropToken('{{prop.headline}}')).toBe('headline')
+      expect(matchComponentPropToken('  {{ prop.headline }}  ')).toBe(
+        'headline',
+      )
+    })
+
+    it('rejects partial feeds, other namespaces and non-strings', () => {
+      // Mixed content cannot be decomposed back into a prop value.
+      expect(matchComponentPropToken('Hi {{prop.headline}}!')).toBeNull()
+      expect(
+        matchComponentPropToken('{{prop.headline}}{{prop.image}}'),
+      ).toBeNull()
+      expect(matchComponentPropToken('{{entry.title}}')).toBeNull()
+      expect(matchComponentPropToken('{{prop.bad-name}}')).toBeNull()
+      expect(matchComponentPropToken(42)).toBeNull()
+      expect(matchComponentPropToken(undefined)).toBeNull()
+    })
+  })
+
+  describe('resolveInstanceLeafBinding', () => {
+    it('maps a grafted text leaf to its internal id and the prop feeding it', () => {
+      expect(resolveInstanceLeafBinding('cmp__a__h', 'a', hero)).toEqual({
+        componentInternalId: 'h',
+        boundProp: 'headline',
+      })
+    })
+
+    it('agrees with the graft about which id names which leaf', () => {
+      // The inverse mapping must track the graft's own id scheme — resolve
+      // the id the REAL graft produced, not a hand-written lookalike.
+      const composed = composeReusableComponentNodes(
+        {
+          a: {
+            $id: 'a',
+            componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+            props: { refId: 'hero', propValues: { headline: 'Ship faster' } },
+            nodes: [],
+          },
+        } as any,
+        { hero },
+      )
+      const graftedId = Object.keys(composed).find(
+        (id) => composed[id].props?.['children'] === 'Ship faster',
+      ) as string
+      expect(resolveInstanceLeafBinding(graftedId, 'a', hero)).toEqual({
+        componentInternalId: 'h',
+        boundProp: 'headline',
+      })
+    })
+
+    it('inspects src for image leaves', () => {
+      expect(
+        resolveInstanceLeafBinding('cmp__a__img', 'a', hero, 'src'),
+      ).toEqual({ componentInternalId: 'img', boundProp: 'image' })
+      // The image's TEXT channel is not prop-fed.
+      expect(resolveInstanceLeafBinding('cmp__a__img', 'a', hero)).toEqual({
+        componentInternalId: 'img',
+        boundProp: null,
+      })
+    })
+
+    it('component-owned leaves resolve with boundProp null', () => {
+      // Static text and mixed content both stay locked (AGL-1303's
+      // edit-the-component flow, not an inline prop edit).
+      expect(resolveInstanceLeafBinding('cmp__a__label', 'a', hero)).toEqual({
+        componentInternalId: 'label',
+        boundProp: null,
+      })
+      expect(resolveInstanceLeafBinding('cmp__a__cap', 'a', hero)).toEqual({
+        componentInternalId: 'cap',
+        boundProp: null,
+      })
+    })
+
+    it('an undeclared prop token never binds', () => {
+      const rogue = {
+        rootId: 'root',
+        nodes: {
+          root: {
+            $id: 'root',
+            componentId: 'muiTypography',
+            props: { children: '{{prop.ghost}}' },
+          },
+        },
+        props: [{ name: 'headline' }],
+      } as any
+      // The graft would never substitute it, so an override written for it
+      // would silently do nothing.
+      expect(resolveInstanceLeafBinding('cmp__a__root', 'a', rogue)).toEqual({
+        componentInternalId: 'root',
+        boundProp: null,
+      })
+    })
+
+    it('rejects ids grafted from another instance, nested grafts and junk', () => {
+      // Another instance's graft.
+      expect(resolveInstanceLeafBinding('cmp__b__h', 'a', hero)).toBeNull()
+      // A NESTED instance's leaf (prefixes stack per pass): its props are
+      // fed by the outer definition, not by this instance.
+      expect(
+        resolveInstanceLeafBinding('cmp__cmp__a__x__h', 'a', hero),
+      ).toBeNull()
+      // Not grafted at all / unknown internal id / missing input.
+      expect(resolveInstanceLeafBinding('h', 'a', hero)).toBeNull()
+      expect(resolveInstanceLeafBinding('cmp__a__nope', 'a', hero)).toBeNull()
+      expect(resolveInstanceLeafBinding('cmp__a__', 'a', hero)).toBeNull()
+      expect(resolveInstanceLeafBinding('cmp__a__h', 'a', undefined)).toBeNull()
+      expect(resolveInstanceLeafBinding(undefined, 'a', hero)).toBeNull()
+      expect(resolveInstanceLeafBinding('cmp__a__h', undefined, hero)).toBeNull()
+    })
+  })
+
+  describe('getInstanceEffectivePropText', () => {
+    it('prefers the override, falls back to the declared default', () => {
+      expect(
+        getInstanceEffectivePropText(
+          { refId: 'hero', propValues: { headline: 'Ship faster' } },
+          hero.props,
+          'headline',
+        ),
+      ).toBe('Ship faster')
+      expect(
+        getInstanceEffectivePropText({ refId: 'hero' }, hero.props, 'headline'),
+      ).toBe('Headline goes here')
+    })
+
+    it('treats an empty override as unset, like the graft does', () => {
+      expect(
+        getInstanceEffectivePropText(
+          { refId: 'hero', propValues: { headline: '' } },
+          hero.props,
+          'headline',
+        ),
+      ).toBe('Headline goes here')
+    })
+
+    it('is empty for an unknown prop or missing declarations', () => {
+      expect(
+        getInstanceEffectivePropText({ refId: 'hero' }, hero.props, 'ghost'),
+      ).toBe('')
+      expect(getInstanceEffectivePropText(undefined, undefined, 'headline')).toBe('')
+    })
   })
 })

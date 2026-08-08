@@ -136,6 +136,102 @@ function instancePrefix(instanceId: NodeId) {
 }
 
 /**
+ * The declared-prop name a stored value references when it is EXACTLY one
+ * `{{prop.<name>}}` token (whitespace inside the braces tolerated, matching
+ * `resolveNamedTokens`' grammar), else `null`.
+ *
+ * Exact-match on purpose: a value that merely CONTAINS a token
+ * (`"Hi {{prop.name}}!"`) is only partially prop-fed, so an inline edit of
+ * the rendered text could not be decomposed back into a prop value — those
+ * leaves stay component-owned (AGL-1304).
+ */
+export function matchComponentPropToken(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const match =
+    /^\s*\{\{\s*prop\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}\s*$/.exec(value)
+  return match ? match[1] : null
+}
+
+/** What feeds a grafted instance leaf — see {@link resolveInstanceLeafBinding}. */
+export interface InstanceLeafBinding {
+  /** The definition-internal node id the grafted leaf was copied from. */
+  componentInternalId: NodeId
+  /**
+   * The declared prop whose value feeds the leaf's `contentProp`, or `null`
+   * when the leaf's content is the component's own (not prop-fed).
+   */
+  boundProp: string | null
+}
+
+/**
+ * Maps a grafted node id back to its component-internal source and the
+ * declared prop (if any) feeding one of its content props (AGL-1304).
+ *
+ * The graft's provenance is its id scheme — `cmp__{instanceId}__{defId}`
+ * (see {@link composeReusableComponentNodes}) — and this is the ONE reader
+ * of that scheme, deliberately beside the writer: the canvas double-click
+ * hit-test uses it today, and AGL-1306 phase 2 (inner-node style overrides)
+ * and AGL-1303 phase 3 (in-place focus mode) need the same inverse mapping.
+ *
+ * Returns `null` when the id was not grafted from THIS instance, or when
+ * the internal id is unknown to the definition — which includes leaves of a
+ * NESTED instance's graft (prefixes stack per pass), whose props are fed by
+ * the outer definition's own instance node, not by this one.
+ *
+ * `boundProp` is non-null only when the definition node's `contentProp`
+ * (default `children`; pass `src` for image leaves) is exactly one
+ * `{{prop.*}}` token naming a DECLARED prop — an undeclared token never
+ * substitutes, so an override written for it would silently do nothing.
+ *
+ * Pure: no canvas, no DOM, inputs never mutated.
+ */
+export function resolveInstanceLeafBinding(
+  graftedId: NodeId | null | undefined,
+  instanceId: NodeId | null | undefined,
+  definition:
+    | Pick<ReusableComponentTree, 'nodes' | 'props'>
+    | null
+    | undefined,
+  contentProp = 'children',
+): InstanceLeafBinding | null {
+  if (!graftedId || !instanceId) return null
+  const prefix = instancePrefix(instanceId)
+  if (!graftedId.startsWith(prefix)) return null
+  const componentInternalId = graftedId.slice(prefix.length)
+  if (!componentInternalId) return null
+  const defNode = definition?.nodes?.[componentInternalId]
+  if (!defNode) return null
+  const raw = (defNode.props as Record<string, unknown> | undefined)?.[
+    contentProp
+  ]
+  const name = matchComponentPropToken(raw)
+  const declared =
+    name != null && (definition?.props ?? []).some((prop) => prop?.name === name)
+  return { componentInternalId, boundProp: declared ? name : null }
+}
+
+/**
+ * The text an instance currently renders for a declared prop: its override
+ * when set, else the prop's `defaultValue`, else `''`. `''` counts as unset,
+ * mirroring {@link buildPropTokens} — clearing an override restores the
+ * component's own copy, so the inline editor and the graft agree about what
+ * the author is looking at.
+ */
+export function getInstanceEffectivePropText(
+  instanceProps: unknown,
+  declared: ReusableComponentProp[] | undefined | null,
+  propName: string,
+): string {
+  const values = (instanceProps as Record<string, unknown> | undefined)?.[
+    REUSABLE_INSTANCE_PROP_VALUES_KEY
+  ] as Record<string, unknown> | undefined
+  const override = values?.[propName]
+  if (override != null && override !== '') return String(override)
+  const prop = (declared ?? []).find((entry) => entry?.name === propName)
+  return prop?.defaultValue == null ? '' : String(prop.defaultValue)
+}
+
+/**
  * Token map for one instance: each declared prop resolved to that
  * instance's override, or to the definition's default where it set none.
  *
