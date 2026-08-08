@@ -22,6 +22,7 @@ export * from './constants/firebase-config'
 export * from './hooks/firebase/firebase-services'
 export * from './hooks/helpers/use-doc'
 export * from './hooks/helpers/use-modify-doc-callback'
+export * from './hooks/helpers/guarded-nodes-save'
 
 export * from './hooks/use-firestore-collection'
 export * from './hooks/use-firestore-doc'

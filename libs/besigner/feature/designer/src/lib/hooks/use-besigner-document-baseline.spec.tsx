@@ -126,6 +126,8 @@ describe('useBesignerDocument: the saved baseline vs the store', () => {
           sx: { width: '100%', maxWidth: '440px' },
         }),
       }),
+      // The baseline rides along for the store-side precondition (AGL-1301).
+      expect.objectContaining({ baseNodes: expect.anything() }),
     )
   })
 
