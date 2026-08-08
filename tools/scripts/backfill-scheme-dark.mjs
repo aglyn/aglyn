@@ -90,13 +90,49 @@ const BG_MAP = {
   '#eaf6fd': '#12303f', // brand tint
   '#eef7fd': '#12303f',
   '#e3f2fb': '#16394b', // brand tint, zebra
+
+  // ── Promoted from the algorithmic fallback (AGL-1295 leftovers) ──────────
+  //
+  // These 12 reached dark mode by formula, not by choice. The values below are
+  // EXACTLY what the fallback produces today, so promoting them changes no
+  // pixel — the point is that they are now reviewable, and that the fallback
+  // report drops to zero and becomes an alarm instead of background noise.
+  //
+  // ⚠️ One inherited inconsistency, deliberately frozen rather than silently
+  // fixed: `#f1f3f5` (160×) and `#eff1f3` (66×) are the same grey band role
+  // one step apart, yet land on DIFFERENT depths — #242b33 vs #28323d. Same
+  // for the two near-identical purples below. Worth a designer's call; see the
+  // note on AGL-1295.
+  '#f1f3f5': '#242b33', // grey band, one step lighter than #eff1f3
+  '#eef0f2': '#262b31', // grey band, cooler
+  '#e6e9ed': '#242a32',
+  '#dde2e7': '#242b33', // grey divider band
+  '#c9d0d8': '#242b32',
+  '#f6f8fa': '#1f2b38',
+  '#e6f5ff': '#143043', // brand tint, between #eaf6fd and #e3f2fb
+  '#fbe6fe': '#3d1443', // secondary (magenta) tint
+  '#fcebff': '#3c1443', // secondary tint, 1 step off #fbe6fe
+  '#f3e8ff': '#2a1443', // violet tint
+  '#e7f8ef': '#14432a', // success tint
+  '#fff1e0': '#432e14', // warning tint
 }
 
 /** Curated foreground map. Near-black text goes near-white, never to a surface. */
 const FG_MAP = {
   '#161c21': '#e6e9ec',
-  '#0090d9': '#4fc3f7', // the AA-darkened brand lifts to lightBlue 300
+  // DORMANT since AGL-1293: no node carries either of these as a foreground
+  // any more — all 614 moved to the `primary.dark` token, which flips by
+  // itself and needs no slice. Kept only as a safety net if the literal is
+  // ever re-authored; the right answer then is the token, not this mapping.
+  '#0090d9': '#4fc3f7',
   '#0079b8': '#29b6f6',
+
+  // Promoted from the fallback, same reasoning and same values as above.
+  // The slate ramp reads as secondary text; the green is a success figure.
+  '#3a4453': '#b1bac8',
+  '#475569': '#b0baca',
+  '#5a6675': '#b4bcc5',
+  '#059669': '#84f5d2', // success green
 }
 
 function toHsl(hex) {
