@@ -100,6 +100,69 @@ describe('Image src resolution (AGL-1215)', () => {
   })
 })
 
+describe('Image metadata (AGL-1305)', () => {
+  const img = (element: JSX.Element) =>
+    render(element).container.querySelector('img') as HTMLImageElement
+
+  it('renders absent alt exactly as before — alt="", no title, lazy', () => {
+    // Existing-content invariance: unset alt has ALWAYS rendered alt=""
+    // and loading="lazy"; no new attributes may appear on old documents.
+    const element = img(<Image src="https://example.com/a.png" />)
+    expect(element.getAttribute('alt')).toBe('')
+    expect(element.hasAttribute('title')).toBe(false)
+    expect(element.getAttribute('loading')).toBe('lazy')
+  })
+
+  it('puts alt text and the tooltip on the img', () => {
+    const element = img(
+      <Image
+        src="https://example.com/a.png"
+        alt="A red barn at dusk"
+        title="The old barn"
+      />,
+    )
+    expect(element.getAttribute('alt')).toBe('A red barn at dusk')
+    expect(element.getAttribute('title')).toBe('The old barn')
+  })
+
+  it('decorative forces alt="" and drops the tooltip over set values', () => {
+    const element = img(
+      <Image
+        src="https://example.com/a.png"
+        alt="ignored"
+        title="ignored"
+        decorative
+      />,
+    )
+    expect(element.getAttribute('alt')).toBe('')
+    expect(element.hasAttribute('title')).toBe(false)
+    // The intent marker itself must never leak into the DOM.
+    expect(element.hasAttribute('decorative')).toBe(false)
+  })
+
+  it('honors an eager loading choice', () => {
+    const element = img(
+      <Image src="https://example.com/a.png" loading="eager" />,
+    )
+    expect(element.getAttribute('loading')).toBe('eager')
+  })
+
+  it('exposes alt, decorative, tooltip and loading in the schema', () => {
+    const names = (schema.attributes ?? []).map((a) => a.name)
+    expect(names).toEqual(
+      expect.arrayContaining(['alt', 'decorative', 'title', 'loading']),
+    )
+    const altField = (schema.attributes ?? []).find((a) => a.name === 'alt')
+    // The alt field hides while Decorative is on, but the value stays on
+    // the node — toggling back restores it.
+    expect(altField?.condition).toEqual({
+      when: 'decorative',
+      is: true,
+      notMatch: true,
+    })
+  })
+})
+
 describe('Image node styles (AGL-1238)', () => {
   it('merges the node sx over the component defaults instead of dropping it', () => {
     // The literals are composed AFTER `{...rest}`, so leaving `sx` in the
