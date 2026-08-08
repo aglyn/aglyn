@@ -75,7 +75,6 @@ import {
 } from '@mui/material'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
-import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import {
   type ChangeEvent,
@@ -560,15 +559,29 @@ const ElementStylesForm = observer(
      */
     const applyStyleValues = useCallback(
       (partial: Record<string, unknown>) => {
-        action(() => {
-          if (!node) return
-          node.sx = applyStylePartialToSx(
-            (node.sx ?? {}) as Record<string, any>,
-            partial,
-            activeBreakpoint,
-            activeScheme,
-          ) as any
-        })()
+        if (!node) return
+        // Undoable, and coalesced (AGL-1204). Every control here applies
+        // live — one call per character typed, one per drag tick — so the
+        // key ends the burst when the adjustment changes, not when the
+        // writing stops: the field names are in it, so moving from Gap to
+        // Padding is a second undo step even mid-burst.
+        Aglyn.canvas.transact(
+          () => {
+            node.sx = applyStylePartialToSx(
+              (node.sx ?? {}) as Record<string, any>,
+              partial,
+              activeBreakpoint,
+              activeScheme,
+            ) as any
+          },
+          [
+            'sx',
+            node.$id,
+            activeBreakpoint ?? 'base',
+            activeScheme ?? 'light',
+            Object.keys(partial).sort().join(','),
+          ].join(':'),
+        )
       },
       [node, activeBreakpoint, activeScheme],
     )
@@ -637,14 +650,17 @@ const ElementStylesForm = observer(
     const handleVisibilityChange = useCallback(
       (band: (typeof VISIBILITY_BANDS)[number]) =>
         (event: ChangeEvent<HTMLInputElement>) => {
-          action(() => {
-            if (!node) return
+          if (!node) return
+          // No coalesce key: a band switch is one discrete decision, so it
+          // gets its own undo step even when two are flipped in quick
+          // succession (AGL-1204).
+          Aglyn.canvas.transact(() => {
             node.sx = writeHiddenBand(
               (node.sx ?? {}) as Record<string, any>,
               band,
               event.target.checked,
             ) as any
-          })()
+          })
         },
       [node],
     )

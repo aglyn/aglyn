@@ -28,7 +28,6 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { SxBreakpoint } from '../utils/responsive-sx'
@@ -134,14 +133,20 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
   const writeProperty = useCallback(
     (property: string, value: string | undefined) => {
       if (!node || !property) return
-      action(() => {
-        node.sx = writeSxValue(
-          (node.sx ?? {}) as Record<string, any>,
-          property,
-          value === '' ? undefined : value,
-          breakpoint,
-        ) as any
-      })()
+      // Coalesced per property (AGL-1204): the builder rows write on every
+      // keystroke, so typing one value is one undo step, and editing a
+      // different property starts another.
+      Aglyn.canvas.transact(
+        () => {
+          node.sx = writeSxValue(
+            (node.sx ?? {}) as Record<string, any>,
+            property,
+            value === '' ? undefined : value,
+            breakpoint,
+          ) as any
+        },
+        ['sx', node.$id, breakpoint ?? 'base', property].join(':'),
+      )
     },
     [node, breakpoint],
   )
@@ -149,7 +154,9 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
   const applyCss = useCallback(() => {
     if (!node) return
     const parsed = parseCssDeclarations(cssDraft)
-    action(() => {
+    // Uncoalesced: pressing Apply is one deliberate commit, however many
+    // declarations it carries (AGL-1204).
+    Aglyn.canvas.transact(() => {
       let sx = (node.sx ?? {}) as Record<string, any>
       // Clear scalar declarations no longer present, then write the rest.
       for (const row of rows) {
@@ -161,7 +168,7 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
         sx = writeSxValue(sx, property, value, breakpoint)
       }
       node.sx = sx as any
-    })()
+    })
     setError(null)
   }, [node, cssDraft, rows, breakpoint])
 
@@ -172,9 +179,11 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
         throw new Error('The sx value must be a JSON object')
       }
-      action(() => {
+      // Replacing sx wholesale is the single most destructive edit this panel
+      // offers, so it is the one that most needs to be undoable (AGL-1204).
+      Aglyn.canvas.transact(() => {
         node.sx = parsed
-      })()
+      })
       setError(null)
     } catch (parseError: any) {
       setError(parseError?.message ?? 'Invalid JSON')

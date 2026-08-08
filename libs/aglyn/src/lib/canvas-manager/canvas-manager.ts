@@ -247,6 +247,12 @@ class HistoryManager<K extends string, T> {
 }
 
 export class CanvasManager {
+  /**
+   * How long a coalesced burst stays open. Comfortably above typing cadence
+   * and slider tick rate, well below the pause that means "a new adjustment".
+   */
+  public static readonly COALESCE_WINDOW_MS = 500
+
   private _initial: NodesMap | undefined = undefined
   /**
    * Whether {@link _initial} is a state the STORE has confirmed, or merely
@@ -254,6 +260,8 @@ export class CanvasManager {
    */
   private _initialConfirmed = true
   private _history: HistoryManager<NodeId, NodeSchema<any>>
+  /** The open {@link transact} burst, if any. See that method. */
+  private _coalescing: { key: string; at: number } | undefined = undefined
 
   constructor(public aglyn: Aglyn) {
     makeObservable<CanvasManager, '_initial' | '_initialConfirmed'>(this, {
@@ -265,6 +273,10 @@ export class CanvasManager {
       undo: action,
       redo: action,
       saveHistory: action,
+      // An action so the snapshot and the mutation land in ONE mobx
+      // transaction — otherwise `saveHistory` alone notifies observers, and
+      // the canvas renders a frame between the two (AGL-1204).
+      transact: action,
       clearHistory: action,
       clearNodes: action,
       reset: action,
@@ -486,8 +498,48 @@ export class CanvasManager {
     this._history.saveHistory()
     return this
   }
+  /**
+   * Runs `mutate` as one undoable step (AGL-1204).
+   *
+   * Every mutator on this class records history for itself, but a panel that
+   * writes `node.sx` directly does not go through any of them — the Styles and
+   * custom-CSS forms assign to the node, so an undo after a style change
+   * restored the last *recorded* snapshot instead, silently discarding
+   * everything done since. This is the seam those panels were missing.
+   *
+   * **`coalesceKey` is what makes it usable for a live-applying control.**
+   * Those forms fire on every change — one per character typed, one per drag
+   * tick of a slider — so recording unconditionally would replace "undo does
+   * not step back far enough" with "undo steps back one character", which is
+   * no better. Consecutive calls sharing a key inside {@link
+   * COALESCE_WINDOW_MS} record **once**, at the start of the burst, so the
+   * snapshot is the state *before* the adjustment began. Omit the key for a
+   * discrete commit (a toggle, an Apply button) that deserves its own step.
+   *
+   * The window is evaluated on call rather than by a timer: a burst ends
+   * because the next edit arrives late, not because something fired in the
+   * background. That keeps the canvas free of pending timers it would have to
+   * cancel on {@link reset}, and keeps this testable without fake clocks.
+   *
+   * The key should identify *what* is being adjusted, not just the node —
+   * moving from Gap to Padding is a second adjustment even if it happens
+   * within the window.
+   */
+  public transact<T>(mutate: () => T, coalesceKey?: string): T {
+    const now = Date.now()
+    const burst = this._coalescing
+    const continues =
+      coalesceKey !== undefined &&
+      burst?.key === coalesceKey &&
+      now - burst.at < CanvasManager.COALESCE_WINDOW_MS
+    if (!continues) this.saveHistory()
+    this._coalescing =
+      coalesceKey === undefined ? undefined : { key: coalesceKey, at: now }
+    return mutate()
+  }
   public clearHistory() {
     this._history.clearPast()
+    this._coalescing = undefined
   }
   public createNodeId(): NodeId {
     return createIdUrlSafe()
