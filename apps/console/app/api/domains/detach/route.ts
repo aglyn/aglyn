@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb, TENANT_APEX } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -110,11 +110,35 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    // Undo the platform-subdomain edge redirect (AGL-1273): once no custom
+    // domain is connected, `{subdomain}.aglyn.app` must serve again rather
+    // than redirect to a domain the customer just released. Best-effort —
+    // a 404 means no explicit entry existed (wildcard-served), which is the
+    // end state we want either way.
+    const subdomain = String(hostSnapshot.get('subdomain') ?? '')
+      .trim()
+      .toLowerCase()
+    if (token && projectId && subdomain) {
+      const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''
+      await fetch(
+        `https://api.vercel.com/v9/projects/${projectId}/domains/${encodeURIComponent(`${subdomain}.${TENANT_APEX}`)}${query}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ redirect: null }),
+        },
+      ).catch(() => undefined)
+    }
+
     await hostSnapshot.ref.set(
       {
         cname: firebaseAdmin.firestore.FieldValue.delete(),
         cnameAttachmentPending: firebaseAdmin.firestore.FieldValue.delete(),
         cnameDetachmentPending: firebaseAdmin.firestore.FieldValue.delete(),
+        subdomainRedirectPending: firebaseAdmin.firestore.FieldValue.delete(),
       },
       { merge: true },
     )
