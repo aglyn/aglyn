@@ -86,11 +86,22 @@ function escapeHtml(text: string): string {
  * (assembled from this node's ancestor context) and drops a pill at the
  * caret; clicking a pill offers Replace/Remove. Commits serialize pills
  * back to raw token syntax — names shown, ids stored.
+ *
+ * Instance prop overrides (AGL-1304): opened with a `propTarget`, the same
+ * surface edits a component instance's `propValues[propName]` instead of a
+ * node's `children` — the double-clicked leaf is a GRAFTED preview node,
+ * not a canvas node, so the commit rides the instance. Always the plain
+ * surface (prop values substitute as strings), the same single
+ * `updateNodeProps` commit (one undo entry, and the same node-changed
+ * signal co-editing's shadow diff already mirrors), and an emptied commit
+ * REMOVES the override so the component's own copy returns — exactly what
+ * clearing the Attributes field does.
  */
 export const InlineTextEditorComponent = observer(
   function InlineTextEditorComponent() {
     const node = inlineTextEdit.node
     const rect = inlineTextEdit.rect
+    const propTarget = inlineTextEdit.propTarget
     const plainRef = useRef<HTMLDivElement>(null)
     const richRef = useRef<HTMLDivElement>(null)
     // Distinguish commit-blur (Enter already committed) from cancel paths.
@@ -113,11 +124,15 @@ export const InlineTextEditorComponent = observer(
     const labelContextRef = useRef(labelContext)
     labelContextRef.current = labelContext
 
+    // A prop edit is always the plain surface: prop values substitute into
+    // the definition as strings (see buildPropTokens), so there is no
+    // per-instance html channel for the rich toolbar to write.
     const rich =
+      !propTarget &&
       ((node?.componentSchema?.flags?.richTextEditable ??
         Aglyn.FEATURE_FLAG.DISABLED) &
         Aglyn.FEATURE_FLAG.ENABLED) !==
-      0
+        0
 
     const activeEditable = useCallback(
       () => (rich ? richRef.current : plainRef.current),
@@ -130,8 +145,11 @@ export const InlineTextEditorComponent = observer(
       menuOpenRef.current = false
       savedRangeRef.current = null
       const props = { ...node.props, ...node.resolvedProps } as any
-      const text =
-        typeof props?.children === 'string' ? (props.children as string) : ''
+      const text = propTarget
+        ? propTarget.initialText
+        : typeof props?.children === 'string'
+          ? (props.children as string)
+          : ''
       const resolve = (token: string) =>
         resolveTokenLabel(token, labelContextRef.current)
       if (rich) {
@@ -189,7 +207,7 @@ export const InlineTextEditorComponent = observer(
         }
       })
       return () => cancelAnimationFrame(raf)
-    }, [node, rich])
+    }, [node, rich, propTarget])
 
     const commit = useCallback(() => {
       if (committedRef.current) return
@@ -219,10 +237,36 @@ export const InlineTextEditorComponent = observer(
           )
           // An emptied contentEditable leaves a stray <br> behind.
           if (value === '\n') value = ''
-          Aglyn.canvas.updateNodeProps(current, {
-            ...current.props,
-            children: value,
-          })
+          const target = inlineTextEdit.propTarget
+          if (target) {
+            // Instance prop override (AGL-1304): the edit rides the
+            // INSTANCE's nested propValues, never the grafted leaf (which
+            // is not a canvas node). An emptied value REMOVES the key —
+            // the graft treats '' as unset anyway, and a cleared override
+            // must read as clean, exactly like the style-override layer.
+            const values = {
+              ...(current.props?.[
+                Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY
+              ] as Record<string, unknown> | undefined),
+            }
+            if (value === '') delete values[target.propName]
+            else values[target.propName] = value
+            const nextProps = {
+              ...current.props,
+              [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: values,
+            }
+            // The LAST override cleared: drop the container too, so the
+            // stored instance is byte-identical to one never overridden.
+            if (!Object.keys(values).length) {
+              delete nextProps[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]
+            }
+            Aglyn.canvas.updateNodeProps(current, nextProps)
+          } else {
+            Aglyn.canvas.updateNodeProps(current, {
+              ...current.props,
+              children: value,
+            })
+          }
         }
       }
       inlineTextEdit.close()

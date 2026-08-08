@@ -26,6 +26,24 @@ export interface InlineTextEditRect {
 }
 
 /**
+ * Prop-override edit target (AGL-1304): the editor is anchored on a grafted
+ * text leaf INSIDE a component instance, and the commit writes the
+ * instance's `propValues[propName]` instead of the node's `children`. The
+ * `node` held by the store stays the INSTANCE — the grafted leaf is not a
+ * canvas node, only the anchor rect came from it.
+ */
+export interface InlinePropEditTarget {
+  /** Declared prop name the edit commits to. */
+  propName: string
+  /**
+   * The text the leaf currently renders (override unless unset, else the
+   * declared default — `getInstanceEffectivePropText`). Captured at open
+   * because the editor cannot re-derive it without the definition.
+   */
+  initialText: string
+}
+
+/**
  * State for the inline canvas text editor: which node is being edited and
  * where its element sits in viewport coordinates (the editor renders as a
  * fixed overlay OUTSIDE the closed canvas shadow root, so screen coordinates
@@ -34,19 +52,26 @@ export interface InlineTextEditRect {
 class InlineTextEditStore {
   node?: Aglyn.NodeSchema<any> = undefined
   rect?: InlineTextEditRect = undefined
+  propTarget?: InlinePropEditTarget = undefined
 
   constructor() {
     makeAutoObservable(this)
   }
 
-  open(node: Aglyn.NodeSchema<any>, rect: InlineTextEditRect) {
+  open(
+    node: Aglyn.NodeSchema<any>,
+    rect: InlineTextEditRect,
+    propTarget?: InlinePropEditTarget,
+  ) {
     this.node = node
     this.rect = rect
+    this.propTarget = propTarget
   }
 
   close() {
     this.node = undefined
     this.rect = undefined
+    this.propTarget = undefined
   }
 }
 

@@ -22,8 +22,18 @@ import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { CSS as css } from '@dnd-kit/utilities'
 import { mergeProps } from '@react-aria/utils'
 import { observer } from 'mobx-react-lite'
-import { Children, cloneElement, CSSProperties, useEffect, useRef } from 'react'
+import {
+  Children,
+  cloneElement,
+  CSSProperties,
+  useContext,
+  useEffect,
+  useRef,
+} from 'react'
+import ComponentPromotionContext from '../../contexts/component-promotion-context'
+import { MediaPickerContext } from '../../contexts/media-picker-context'
 import { inlineTextEdit } from '../../utils/inline-text-edit.store'
+import { findInstanceLeafAtPoint } from '../../utils/instance-leaf-hit'
 
 export interface DraggableDroppableProps<T extends Aglyn.NodeSchema<any>> {
   children: JSX.Element
@@ -113,6 +123,15 @@ export const DraggableDroppable = observer(
 
     const ref = useRef<HTMLElement>(null)
 
+    // Instance-internals double-click (AGL-1304) needs the component
+    // definitions (hit-test) and the host's media picker (image props).
+    // Read through a ref so the listener effect below keeps its `[node]`
+    // dependency — context updates must not re-register DOM listeners.
+    const { definitions } = useContext(ComponentPromotionContext)
+    const { onPickMedia } = useContext(MediaPickerContext)
+    const instanceEditRef = useRef({ definitions, onPickMedia })
+    instanceEditRef.current = { definitions, onPickMedia }
+
     useEffect(() => {
       Besigner.refs.set(node.$id, ref)
       return () => {
@@ -176,6 +195,23 @@ export const DraggableDroppable = observer(
         }
       }
       function handleDoubleClick(e: Event) {
+        // Prop-fed instance internals (AGL-1304): the rendered preview sits
+        // under `pointer-events: none`, so the double-click lands HERE, on
+        // the instance — hit-test the preview geometrically, map the grafted
+        // leaf back to the definition, and if a declared prop feeds it, edit
+        // that prop inline. Leaves the component owns stay locked (the
+        // selection this dblclick's mousedowns already made puts AGL-1303's
+        // "Edit component" in the panel — nothing extra to build).
+        if (
+          node?.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID &&
+          Besigner.dnd.canDragNode(node)
+        ) {
+          if (handleInstanceDoubleClick(e as globalThis.MouseEvent)) {
+            e.preventDefault()
+            e.stopPropagation()
+          }
+          return
+        }
         // Inline text editing for components that declare textEditable;
         // locked nodes (layout chrome in the screen besigner) stay read-only
         // — same gate the drag system uses.
@@ -192,6 +228,79 @@ export const DraggableDroppable = observer(
           width: rect.width,
           height: rect.height,
         })
+      }
+      /** True when the double-click resolved to a prop edit it opened. */
+      function handleInstanceDoubleClick(pointer: globalThis.MouseEvent) {
+        const { definitions, onPickMedia } = instanceEditRef.current
+        const refId = (node?.props as { refId?: string } | undefined)?.refId
+        const definition = refId ? definitions?.[refId] : undefined
+        const container = ref.current
+        if (!definition || !container) return false
+        const hit = findInstanceLeafAtPoint(
+          container,
+          pointer.clientX,
+          pointer.clientY,
+        )
+        if (!hit) return false
+        // Text first: a leaf whose `children` a declared prop feeds opens
+        // the EXISTING inline editor, anchored on the clicked leaf, and the
+        // commit writes propValues[prop] on the instance (one undo entry,
+        // mirrored to peers like any node edit).
+        const text = Aglyn.resolveInstanceLeafBinding(
+          hit.graftedId,
+          node.$id,
+          definition,
+        )
+        if (text?.boundProp) {
+          const rect = hit.element.getBoundingClientRect()
+          inlineTextEdit.open(
+            node,
+            {
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              height: rect.height,
+            },
+            {
+              propName: text.boundProp,
+              initialText: Aglyn.getInstanceEffectivePropText(
+                node.props,
+                definition.props,
+                text.boundProp,
+              ),
+            },
+          )
+          return true
+        }
+        // Image half: `src` fed by a declared prop opens the host's media
+        // picker, committing the picked value to the same propValues slot —
+        // the exact pipeline the Attributes panel's Browse button uses.
+        const src = Aglyn.resolveInstanceLeafBinding(
+          hit.graftedId,
+          node.$id,
+          definition,
+          'src',
+        )
+        if (src?.boundProp && onPickMedia) {
+          const propName = src.boundProp
+          onPickMedia((value) => {
+            // Written through verbatim (media reference or raw URL — the
+            // host app decides; AGL-1215). Snapshot via toJSON like the
+            // panel: updateNodeProps REPLACES the props object.
+            const current = (
+              Aglyn.canvas.toJSON().nodes as Record<string, any>
+            )[node.$id]
+            Aglyn.canvas.updateNodeProps(node, {
+              ...current?.props,
+              [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: {
+                ...current?.props?.[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY],
+                [propName]: value,
+              },
+            })
+          })
+          return true
+        }
+        return false
       }
     }, [node])
 
