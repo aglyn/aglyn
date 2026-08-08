@@ -47,8 +47,13 @@ const renderEditor = (ui: React.ReactElement) =>
 const panelHidden = (text: string): boolean =>
   (screen.getByText(text).closest('[role=tabpanel]') as HTMLElement).hidden
 
+/**
+ * `ssrPanels` so every panel is in the tree: these cases are about the strip,
+ * the label matching and the hide rule, not about mounting — which has its
+ * own describe below (panels mount lazily BY DEFAULT since AGL-1283 opt. 3).
+ */
 const threeTabs = (
-  <TabsElement labels={'Overview\nDetails\nFAQ'}>
+  <TabsElement labels={'Overview\nDetails\nFAQ'} ssrPanels>
     <TabPanelElement label="Overview">{'Overview body'}</TabPanelElement>
     <TabPanelElement label="Details">{'Details body'}</TabPanelElement>
     <TabPanelElement label="FAQ">{'FAQ body'}</TabPanelElement>
@@ -109,7 +114,7 @@ describe('Tabs element', () => {
     // panel behind the first tab. Matching by label also survives
     // reordering panels in the hierarchy.
     render(
-      <TabsElement labels={'One\nTwo'}>
+      <TabsElement labels={'One\nTwo'} ssrPanels>
         <>
           <TabPanelElement label="Two">{'Second body'}</TabPanelElement>
           <TabPanelElement label="One">{'First body'}</TabPanelElement>
@@ -150,7 +155,7 @@ describe('Tabs element', () => {
     const { rerender } = render(threeTabs)
     fireEvent.click(screen.getByRole('tab', { name: 'FAQ' }))
     rerender(
-      <TabsElement labels={'Overview'}>
+      <TabsElement labels={'Overview'} ssrPanels>
         <TabPanelElement label="Overview">{'Overview body'}</TabPanelElement>
       </TabsElement>,
     )
@@ -212,7 +217,11 @@ describe('authored sx survives (AGL-1284)', () => {
    */
   it('keeps the container sx the author set', () => {
     render(
-      <TabsElement labels={'One\nTwo'} sx={{ backgroundColor: 'rgb(1, 2, 3)' }}>
+      <TabsElement
+        labels={'One\nTwo'}
+        ssrPanels
+        sx={{ backgroundColor: 'rgb(1, 2, 3)' }}
+      >
         <TabPanelElement label="One">{'One body'}</TabPanelElement>
       </TabsElement>,
     )
@@ -241,7 +250,7 @@ describe('authored sx survives (AGL-1284)', () => {
    */
   it('still hides a deselected panel even when the author sets display', () => {
     render(
-      <TabsElement labels={'One\nTwo'}>
+      <TabsElement labels={'One\nTwo'} ssrPanels>
         <TabPanelElement label="One">{'One body'}</TabPanelElement>
         <TabPanelElement label="Two" sx={{ display: 'block' }}>
           {'Two body'}
@@ -256,30 +265,48 @@ describe('authored sx survives (AGL-1284)', () => {
   })
 })
 
-describe('lazyPanels (AGL-1283)', () => {
-  const eight = (lazy: boolean) => (
-    <TabsElement labels={'One\nTwo\nThree'} lazyPanels={lazy}>
+describe('panel mounting (AGL-1283)', () => {
+  const three = (props: { ssrPanels?: boolean; lazyPanels?: boolean } = {}) => (
+    <TabsElement labels={'One\nTwo\nThree'} {...props}>
       <TabPanelElement label="One">{'One body'}</TabPanelElement>
       <TabPanelElement label="Two">{'Two body'}</TabPanelElement>
       <TabPanelElement label="Three">{'Three body'}</TabPanelElement>
     </TabsElement>
   )
 
-  it('ships every panel by default — hidden content stays in the markup', () => {
-    render(eight(false))
-    expect(screen.getByText('Two body')).toBeTruthy()
-    expect(screen.getByText('Three body')).toBeTruthy()
-  })
-
-  it('renders only the selected panel when on', () => {
-    render(eight(true))
+  it('renders only the selected panel by default (option 3)', () => {
+    render(three())
     expect(screen.getByText('One body')).toBeTruthy()
     expect(screen.queryByText('Two body')).toBeNull()
     expect(screen.queryByText('Three body')).toBeNull()
   })
 
+  it('keeps the aria wiring for panels whose children are unmounted', () => {
+    // The wrapper stays so `aria-controls` still resolves; only the panel's
+    // children wait for the first selection.
+    render(three())
+    const tab = screen.getByRole('tab', { name: 'Two' })
+    expect(tab.getAttribute('aria-controls')).toBe('tabpanel-two')
+    expect(document.getElementById('tabpanel-two')).toBeTruthy()
+  })
+
+  it('ships every panel when ssrPanels is on — content stays in the markup', () => {
+    render(three({ ssrPanels: true }))
+    expect(screen.getByText('Two body')).toBeTruthy()
+    expect(screen.getByText('Three body')).toBeTruthy()
+  })
+
+  it('treats the legacy lazyPanels opt-in as the (now default) lazy mode', () => {
+    // Documents authored while lazy was opt-in still carry the prop; it must
+    // not turn anything back on, and it must not reach the DOM element.
+    render(three({ lazyPanels: true }))
+    expect(screen.queryByText('Two body')).toBeNull()
+    const panel = document.getElementById('tabpanel-one') as HTMLElement
+    expect(panel.getAttribute('lazyPanels')).toBeNull()
+  })
+
   it('mounts a panel when its tab is first opened, and only that one', () => {
-    render(eight(true))
+    render(three())
     fireEvent.click(screen.getByRole('tab', { name: 'Two' }))
     expect(screen.getByText('Two body')).toBeTruthy()
     // Still untouched — opening one tab must not mount the whole set.
@@ -291,7 +318,7 @@ describe('lazyPanels (AGL-1283)', () => {
    * rebuild it — and anything the reader scrolled or typed inside survives.
    */
   it('keeps a visited panel mounted after moving away', () => {
-    render(eight(true))
+    render(three())
     fireEvent.click(screen.getByRole('tab', { name: 'Two' }))
     fireEvent.click(screen.getByRole('tab', { name: 'Three' }))
     // Two is no longer selected but was visited, so it stays in the tree.
@@ -303,8 +330,8 @@ describe('lazyPanels (AGL-1283)', () => {
   })
 
   /** The canvas must keep showing everything, or panels become unselectable. */
-  it('ignores lazyPanels on the besigner canvas', () => {
-    renderEditor(eight(true))
+  it('mounts everything on the besigner canvas regardless', () => {
+    renderEditor(three())
     expect(screen.getByText('Two body')).toBeTruthy()
     expect(screen.getByText('Three body')).toBeTruthy()
   })

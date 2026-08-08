@@ -19,8 +19,8 @@
  * Withholds the node definitions inside lazy tab panels that will not mount on
  * first render (AGL-1285).
  *
- * `lazyPanels` (AGL-1283) already stops a Tabs container rendering anything but
- * the selected panel. The document did not follow: every panel's nodes were
+ * Lazy mounting (AGL-1283) already stops a Tabs container rendering anything
+ * but the selected panel. The document did not follow: every panel's nodes were
  * still serialized into the page. On `/pricing` that is 1,489 of 2,523 nodes —
  * eight copies of a 50-row table — and the RSC payload is 63% of the page's
  * gzipped weight, so the render knowing they are unneeded was worth nothing.
@@ -30,10 +30,16 @@
  * panel is marked so the client can fetch the rest when the reader first opens
  * one.
  *
- * SEO note: withheld content is not in the HTML. That is only safe where the
- * same information is reachable another way — on `/pricing`, the wide compare
- * table that desktop renders carries the same figures. The `lazyPanels` prop
- * carries the same warning; this function is the half that makes it bite.
+ * Lazy is the DEFAULT (AGL-1283 option 3), so this prunes every multi-panel
+ * Tabs unless the author set `ssrPanels` — the same predicate the client
+ * mount uses (`tabs.tsx`), and the two MUST agree: a panel this function
+ * withholds that the client would render arrives empty, and a panel it ships
+ * that the client defers is payload for nothing. The legacy `lazyPanels`
+ * opt-in is subsumed by the default and no longer consulted.
+ *
+ * SEO note: withheld content is not in the HTML. Where a panel holds content
+ * that appears nowhere else on the page and must reach crawlers, `ssrPanels`
+ * is the escape hatch — it keeps the panels in the payload AND in the markup.
  */
 
 /** Marks a panel whose children were withheld. */
@@ -96,7 +102,9 @@ export function deferLazyPanelNodes(
 
   for (const [id, node] of Object.entries(nodes)) {
     if (node?.componentId !== TABS_ID) continue
-    if (!node?.props?.lazyPanels) continue
+    // Defer by default; `ssrPanels` is the author's SEO escape hatch
+    // (AGL-1283 option 3). Must match the client-side mount predicate.
+    if (node?.props?.ssrPanels) continue
 
     const labels = parseLabels(node.props.labels)
     const panelIds: string[] = (node.nodes ?? []).filter(

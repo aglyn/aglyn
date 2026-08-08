@@ -46,17 +46,22 @@ export interface TabsElementProps {
   textColor?: 'primary' | 'secondary' | 'inherit'
   indicatorColor?: 'primary' | 'secondary'
   /**
-   * Render only the selected panel, mounting the others the first time they
-   * are opened (AGL-1283). Off by default, because a hidden panel's content
-   * is normally worth having in the SSR output — it is indexable and
-   * findable, and most tab sets are small enough that the cost is noise.
+   * Render every panel into the SSR output up front instead of building each
+   * panel the first time its tab is opened (AGL-1283 option 3).
    *
-   * Turn it on when the panels are LARGE and REPETITIVE. `/pricing` renders
-   * a 50-row feature table per plan across eight plans; shipping all eight
-   * doubled the page, and every desktop visitor downloaded all of it to
-   * display none of it. The content is not lost to crawlers there because
-   * the same figures appear in the wide table that desktop actually shows —
-   * check that a page has that property before switching this on.
+   * Mount-on-first-selection is the DEFAULT: `/pricing` shipped eight copies
+   * of a 50-row table so desktop visitors could see none of them, and any
+   * large tab set pays the same tax silently. The trade is that an unopened
+   * panel's content is then not in the page source — not indexable, not
+   * findable — so this switch exists for the panels where that matters:
+   * content that appears nowhere else on the page and must reach crawlers.
+   */
+  ssrPanels?: boolean
+  /**
+   * Legacy opt-in from when eager panels were the default (AGL-1283).
+   * Lazy mounting is now the default, so this is accepted from existing
+   * documents but no longer consulted — `ssrPanels` is the one switch.
+   * Still destructured so an authored value never leaks onto the DOM.
    */
   lazyPanels?: boolean
   children?: ReactNode
@@ -160,6 +165,7 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
       centered,
       textColor,
       indicatorColor,
+      ssrPanels,
       lazyPanels,
       children,
       ...rest
@@ -227,7 +233,11 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
           // Every panel at once on the canvas: a hidden panel cannot be
           // selected or styled, the same reason Accordion force-expands.
           showAll: !!editorInert,
-          lazyPanels: !!lazyPanels,
+          // Lazy is the default (AGL-1283 option 3); `ssrPanels` is the SEO
+          // escape hatch. The legacy `lazyPanels` opt-in is subsumed: `true`
+          // now means what the default means, and a stored `false` was only
+          // ever the old default, never an author's intent.
+          lazyPanels: !ssrPanels,
           opened,
         }}
       >
@@ -392,13 +402,14 @@ export const tabsSchema: Aglyn.ComponentSchema<TabsElementProps> = {
       ],
     },
     {
-      name: 'lazyPanels',
-      label: 'Load panels on demand',
+      name: 'ssrPanels',
+      label: 'Keep every panel in the page source',
       description:
-        'Only builds a panel the first time its tab is opened. Makes the ' +
-        'page much lighter when the panels are large, but their content is ' +
-        'then not in the page source — leave this off unless the same ' +
-        'information appears elsewhere on the page.',
+        'Panels are normally built the first time their tab is opened, ' +
+        'which keeps big tab sets light. Turn this on when panel content ' +
+        'appears nowhere else on the page and search engines must be able ' +
+        'to read it — every panel is then rendered into the page source ' +
+        'up front, which can make a large tab set much heavier.',
       component: Aglyn.FieldComponentType.SWITCH,
     },
     {
