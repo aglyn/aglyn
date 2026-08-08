@@ -13,6 +13,9 @@ description: Diff every built marketing surface against its Figma frame (AGL-124
 > Linear project description and in memory as `project_marketing_site_charter`.
 > In particular, ignore any "you do not need the besigner / use an admin script"
 > guidance below — that drift is exactly what this banner corrects.
+> Also rescinded (AGL-1302): the all-routes `while read p; do curl` republish sweep
+> — it forced ~40 Firestore reads per render and burned 87% of the daily free tier.
+> Verify ONE route; use POST /api/screens/revalidate for layout-wide invalidation.
 
 
 Pick up the aglyn.com rebuild. Every page you need is live and green; the job
