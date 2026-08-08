@@ -20,7 +20,7 @@ import { mdiCodeTags } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import DOMPurify from 'dompurify'
-import { forwardRef, useMemo } from 'react'
+import { forwardRef, useEffect, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -69,10 +69,15 @@ const CustomHtml = forwardRef<HTMLDivElement, CustomHtmlProps>(
     const { html, css, embedMode, embedHeight, ...rest } = props
     const { hostId } = Aglyn.useSite()
 
-    const sanitized = useMemo(() => {
-      if (!html || embedMode) return ''
-      if (typeof window === 'undefined') return '' // SSR paints on hydrate.
-      return sanitizeCustomHtml(html)
+    // Same shape as typography's rich text (AGL-1268): DOMPurify needs a
+    // DOM, and sanitizing during hydration made the first client render
+    // diverge from the server's empty HTML — a mismatch by construction.
+    // Sanitize in an effect instead: server render and first client render
+    // agree (empty), the content paints one frame later. The empty-SSR SEO
+    // cost is unchanged and tracked on AGL-1268.
+    const [sanitized, setSanitized] = useState('')
+    useEffect(() => {
+      setSanitized(!html || embedMode ? '' : sanitizeCustomHtml(html))
     }, [html, embedMode])
 
     if (!html?.trim()) {

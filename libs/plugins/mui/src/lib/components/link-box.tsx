@@ -83,11 +83,24 @@ const LinkBox = forwardRef<HTMLElement, LinkBoxProps>((props, ref) => {
   const external =
     !screenId && Boolean(safeExternalHref) && LEAVES_SITE.test(safeExternalHref!)
 
-  // The canvas must not lie about the box the page will ship, so the
-  // unresolved and suppressed cases keep the same box, minus the anchor.
+  // The unresolved and suppressed cases keep the same ELEMENT, not just the
+  // same box (AGL-1268): this used to render a `<div>` here and an `<a>` when
+  // the screen resolved, so the node's element type depended on the screens
+  // map — a screen published or unpublished between renders changed the DOM
+  // shape. An `<a>` without `href` is HTML's placeholder link: identical
+  // element, non-interactive, and the canvas stays inert exactly as before.
+  // The style floor matches the active branch so the two render identically.
   if (!href || suppressNavigation) {
     return (
-      <MuiBox ref={ref} {...rest} sx={nodeSx}>
+      <MuiBox
+        ref={ref}
+        component="a"
+        {...rest}
+        sx={[
+          { display: 'block', color: 'inherit', textDecoration: 'none' },
+          ...nodeSx,
+        ]}
+      >
         {children}
       </MuiBox>
     )
