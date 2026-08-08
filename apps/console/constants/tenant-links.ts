@@ -16,6 +16,7 @@
  */
 
 import type { AglynHost, ScreenUid } from '@aglyn/aglyn'
+import type { CollectionTemplateRoute } from './collection-templates'
 
 const TENANT_PRODUCTION_ROOT = 'aglyn.app'
 
@@ -65,6 +66,75 @@ export function isPreviewConsole(hostname: string): boolean {
   )
 }
 
+export interface ResolvedScreenLiveUrl {
+  url?: string
+  /**
+   * Why there is no live URL, when the author deserves an explanation
+   * rather than a silently absent control (AGL-1271). Only set for
+   * collection templates — an ordinary unpublished screen stays reason-less,
+   * matching every other unpublished screen.
+   */
+  unavailableReason?: string
+}
+
+/**
+ * The live URL a screen ACTUALLY renders at (AGL-1271).
+ *
+ * `buildScreenLiveUrl` reads the screen's own routing-map entry — which
+ * AGL-1267 deliberately dropped for collection templates, so for a template
+ * it either produces nothing or, worse, the dead `/blog-entry-template`
+ * path the map briefly carried. What a template really renders is decided
+ * by the collection that designates it (`collectCollectionTemplateRoutes`,
+ * mirroring the tenant's `resolveCollectionTemplateScreenId`):
+ *
+ *   list template   → `/{collectionSlug}` — a real, single live page
+ *   entry template  → `/{collectionSlug}/{entry}`, one page per entry —
+ *                     no single URL exists, and the control should say so
+ *   designated but slugless/superseded → nothing renders it; say why
+ *   ordinary screen → `buildScreenLiveUrl`, unchanged
+ */
+export function resolveScreenLiveUrl(
+  host: AglynHost | undefined,
+  screenId: ScreenUid,
+  template: {
+    isTemplate: boolean
+    routes: readonly CollectionTemplateRoute[] | undefined
+  },
+  consoleHostname?: string,
+): ResolvedScreenLiveUrl {
+  if (!template.isTemplate) {
+    return { url: buildScreenLiveUrl(host, screenId, consoleHostname) }
+  }
+  const routes = template.routes ?? []
+  const listRoute = routes.find((route) => route.role === 'list')
+  if (listRoute) {
+    // The list page renders this screen whether or not the template was
+    // ever published at its own slug — the collection branch resolves the
+    // screen through `listScreenId`, not the routing map.
+    return {
+      url: buildLiveUrlForSlug(
+        host,
+        `/${listRoute.collectionSlug}`,
+        consoleHostname,
+      ),
+    }
+  }
+  const entryRoute = routes.find((route) => route.role === 'entry')
+  if (entryRoute) {
+    return {
+      unavailableReason:
+        `Renders /${entryRoute.collectionSlug}/{entry} — one page per ` +
+        'published entry, so there is no single live address. Open an ' +
+        `entry from the live /${entryRoute.collectionSlug} list instead.`,
+    }
+  }
+  return {
+    unavailableReason:
+      'This template has no live address — the collection it serves has ' +
+      'no slug, or another screen has taken over as its template.',
+  }
+}
+
 export function buildScreenLiveUrl(
   host: AglynHost | undefined,
   screenId: ScreenUid,
@@ -76,6 +146,18 @@ export function buildScreenLiveUrl(
   if (!host) return undefined
   const slug = host.screens?.[screenId]
   if (slug == null) return undefined
+  return buildLiveUrlForSlug(host, String(slug), consoleHostname)
+}
+
+/** The live URL for a site-relative slug on this host's real origin. */
+function buildLiveUrlForSlug(
+  host: AglynHost | undefined,
+  slug: string,
+  consoleHostname: string | undefined = typeof window !== 'undefined'
+    ? window.location.hostname
+    : undefined,
+): string | undefined {
+  if (!host) return undefined
   // Published slugs are stored with a leading slash ("/product/besigner");
   // the origin already ends without one, so strip it rather than emitting the
   // "//" that every one of these URLs used to carry.

@@ -104,7 +104,7 @@ import {
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
-import { buildScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
+import { resolveScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
 import {
   collectionTemplatePublishMessage,
   collectionTemplateRoutesSummary,
@@ -322,9 +322,19 @@ function BesignerPage(props) {
   })
   clearMirrorRef.current = coediting.clearMirror
 
-  const liveUrl = useMemo(
-    () => buildScreenLiveUrl(hostResult?.data, screenId),
-    [hostResult?.data, screenId],
+  // Publishing a collection's list/entry template is what makes the compose
+  // pipeline use it, but the template is not a page of the site (AGL-1267):
+  // its routing-map slug 404s, so nothing here may name it (AGL-1269).
+  const { templateScreenIds, routesByScreenId } = useCollectionTemplates(hostId)
+  // AGL-1271: a template's live URL is decided by the collection that
+  // renders it, not its own (dropped) routing-map entry.
+  const { url: liveUrl, unavailableReason: liveUnavailableReason } = useMemo(
+    () =>
+      resolveScreenLiveUrl(hostResult?.data, screenId, {
+        isTemplate: templateScreenIds.has(screenId),
+        routes: routesByScreenId.get(screenId),
+      }),
+    [hostResult?.data, screenId, templateScreenIds, routesByScreenId],
   )
   // The site's theme with this site's overrides resolved over it
   // (AGL-1021). The editor must render exactly what the tenant will.
@@ -451,10 +461,6 @@ function BesignerPage(props) {
     | Record<string, string>
     | undefined
 
-  // Publishing a collection's list/entry template is what makes the compose
-  // pipeline use it, but the template is not a page of the site (AGL-1267):
-  // its routing-map slug 404s, so nothing here may name it (AGL-1269).
-  const { templateScreenIds, routesByScreenId } = useCollectionTemplates(hostId)
   const isCollectionTemplate = templateScreenIds.has(screenId)
   const templateRoutes = collectionTemplateRoutesSummary(
     routesByScreenId.get(screenId),
@@ -1016,6 +1022,7 @@ function BesignerPage(props) {
               onSave={handleSave}
               onPreview={handlePreview}
               liveUrl={liveUrl}
+              liveUnavailableReason={liveUnavailableReason}
               onPropertiesEdit={() => setScreenDialog(true)}
               saveAvailable={saveAvailable}
             />
