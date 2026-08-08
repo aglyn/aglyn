@@ -24,7 +24,9 @@ import {
   BesignerDraftAlertComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
+  useRenderedCanvasElements,
   withBesignerContext,
+  type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-ui'
 import {
@@ -42,14 +44,21 @@ import {
   getGoogleFontsUrl,
   HostThemeDocumentContext,
 } from '@aglyn/shared-ui-theme'
-import { useHost, useLayout, useLayoutVersion, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
+import {
+  saveNodesGuarded,
+  useHost,
+  useLayout,
+  useLayoutVersion,
+  useLayoutVersionRef,
+  useHostActivityLogger,
+} from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 // Dynamic site-plugin activation (AGL-417): canvas components register
 // via the org-gated loader; the page gates the canvas on readiness.
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
@@ -71,6 +80,10 @@ import { useHostId, useHostSubdomain } from '../../../../../../../../../../compo
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
+import usePresence from '../../../../../../../../../../hooks/use-presence'
+import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
+import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
+import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -139,7 +152,12 @@ function LayoutBesignerPage(props) {
     }),
     [hostResult?.data?.screens, screenDocs],
   )
-  const { doc: result, setDoc: updateLayoutVersion } = useLayoutVersion({
+  const { doc: result } = useLayoutVersion({
+    hostId,
+    layoutId,
+    versionId,
+  })
+  const layoutVersionRef = useLayoutVersionRef({
     hostId,
     layoutId,
     versionId,
@@ -147,19 +165,41 @@ function LayoutBesignerPage(props) {
   const { data, status, error, hasPendingWrites } = result
   const nodes = data?.nodes
 
+  // Conditional write (AGL-1301): the transaction re-checks the baseline
+  // against what Firestore actually holds, so a save racing another writer's
+  // commit aborts server-side instead of clobbering it.
   const saveLayoutVersion = useCallback(
-    async (nextNodes: Record<string, unknown>) => {
-      const save = updateLayoutVersion as unknown as (
-        data: Partial<Aglyn.AglynLayoutVersion>,
-        options?: Parameters<typeof updateLayoutVersion>[1],
-      ) => Promise<void>
-      await save(
+    async (
+      nextNodes: Record<string, unknown>,
+      baseline?: BesignerSaveBaseline,
+    ) => {
+      await saveNodesGuarded(
+        layoutVersionRef,
         { nodes: nextNodes as unknown as Aglyn.AglynLayoutVersion['nodes'] },
-        { merge: true },
+        baseline,
       )
     },
-    [updateLayoutVersion],
+    [layoutVersionRef],
   )
+
+  // Who else is in this document (AGL-675) and live co-editing (AGL-677) —
+  // adopted from the screen editor (AGL-1301): the architecture already
+  // carries a docType axis, layouts simply never wired it.
+  const selectedNodeId = Besigner.focus.getLastSelected()?.$id
+  const clearMirrorRef = useRef<(() => void) | undefined>(undefined)
+  const { elements: canvasElements } = useRenderedCanvasElements()
+  const getCanvasRoot = useCallback(
+    () => canvasElements.current?.[Aglyn.CANVAS_ROOT_ELEMENT_ID]?.node,
+    [canvasElements],
+  )
+  const presence = usePresence({
+    hostId,
+    docType: 'layout',
+    docId: layoutId,
+    selectedNodeId,
+    broadcastCursor: true,
+    getCanvasRoot,
+  })
 
   // Canvas lifecycle, first load, concurrent-write detection (AGL-674) and
   // the size-guarded save (AGL-678) are identical in every besigner editor
@@ -196,13 +236,30 @@ function LayoutBesignerPage(props) {
     queueLoading,
     // Attribution (AGL-676): `updatedAt` carries no actor, so without this
     // "someone changed this" could never become "Sam changed this".
-    onSaved: () =>
-      logActivity('Saved the layout', {
+    onSaved: () => {
+      // A save makes Firestore authoritative again, so the live mirror of
+      // unsaved work has to go — otherwise the next person to join replays
+      // edits that are already in the document (AGL-677).
+      clearMirrorRef.current?.()
+      return logActivity('Saved the layout', {
         type: 'layout',
         id: layoutId,
         name: layoutResult?.data?.displayName,
-      }),
+      })
+    },
   })
+
+  // Live co-editing (AGL-677). Rides the presence session's authenticated
+  // RTDB app rather than brokering a second token.
+  const coediting = useCoEditing({
+    session: presence.session,
+    docType: 'layout',
+    docId: layoutId,
+    versionId,
+    storedStamp: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
+    loaded: Aglyn.canvas.didSetInitial,
+  })
+  clearMirrorRef.current = coediting.clearMirror
 
   // The site's theme with this site's overrides resolved over it
   // (AGL-1021). The editor must render exactly what the tenant will.
@@ -378,9 +435,11 @@ function LayoutBesignerPage(props) {
           LOADING_OVERLAY_ELEMENT
         ) : (
           <>
+            <CollaboratorOverlays entries={presence.entries} />
             <BesignerAppBarComponent
               onPreview={handlePreview}
               detailsUrl={listUrl}
+              presence={<PresenceAvatars presence={presence} />}
               onSave={handleSave}
               saveAvailable={saveAvailable}
             />

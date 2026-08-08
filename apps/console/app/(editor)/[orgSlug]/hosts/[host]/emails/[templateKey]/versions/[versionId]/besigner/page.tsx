@@ -25,7 +25,9 @@ import {
   CloseableDrawerComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
+  useRenderedCanvasElements,
   withBesignerContext,
+  type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-ui'
 import {
@@ -45,15 +47,23 @@ import {
   getTenantEmail,
   isTenantEmailEditable,
 } from '@aglyn/shared-util-email'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  saveNodesGuarded,
+  useFirestore,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material'
 import { doc, setDoc, Timestamp } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import BesignerAppBarComponent from '../../../../../../../../../../components/besigner-app-bar.component'
 import BesignerMediaPickerProvider from '../../../../../../../../../../components/besigner-media-picker-provider.component'
+import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
+import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
+import usePresence from '../../../../../../../../../../hooks/use-presence'
+import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
@@ -172,10 +182,17 @@ function HostEmailBesignerPage() {
   const nodes = version?.nodes
 
   const saveVersion = useCallback(
-    async (nextNodes: Record<string, unknown>) => {
+    async (
+      nextNodes: Record<string, unknown>,
+      baseline?: BesignerSaveBaseline,
+    ) => {
       if (!hostId) return
       const stamp = Timestamp.now()
-      await setDoc(
+      // Conditional write (AGL-1301): the transaction re-checks the baseline
+      // against what Firestore actually holds, so a save racing another
+      // writer's commit aborts server-side instead of clobbering it. The
+      // pointer write below stays outside the guard — it carries no nodes.
+      await saveNodesGuarded(
         doc(
           firestore,
           'hosts',
@@ -186,7 +203,7 @@ function HostEmailBesignerPage() {
           versionId,
         ),
         { templateKey, nodes: nextNodes, updatedAt: stamp },
-        { merge: true },
+        baseline,
       )
       await setDoc(
         doc(firestore, 'hosts', hostId, TENANT_EMAIL_COLLECTION, templateKey),
@@ -200,6 +217,26 @@ function HostEmailBesignerPage() {
     },
     [firestore, hostId, templateKey, versionId, user],
   )
+
+  // Who else is in this document (AGL-675) and live co-editing (AGL-677) —
+  // adopted from the screen editor (AGL-1301). This editor HAS a host, so
+  // the presence broker can prove membership; its host-free admin sibling
+  // stays presence-less by design.
+  const selectedNodeId = Besigner.focus.getLastSelected()?.$id
+  const clearMirrorRef = useRef<(() => void) | undefined>(undefined)
+  const { elements: canvasElements } = useRenderedCanvasElements()
+  const getCanvasRoot = useCallback(
+    () => canvasElements.current?.[Aglyn.CANVAS_ROOT_ELEMENT_ID]?.node,
+    [canvasElements],
+  )
+  const presence = usePresence({
+    hostId,
+    docType: 'email',
+    docId: templateKey,
+    selectedNodeId,
+    broadcastCursor: true,
+    getCanvasRoot,
+  })
 
   const {
     saveAvailable,
@@ -230,7 +267,25 @@ function HostEmailBesignerPage() {
     },
     notify: enqueueSnackbar,
     queueLoading,
+    onSaved: () => {
+      // A save makes Firestore authoritative again, so the live mirror of
+      // unsaved work has to go — otherwise the next person to join replays
+      // edits that are already in the document (AGL-677).
+      clearMirrorRef.current?.()
+    },
   })
+
+  // Live co-editing (AGL-677). Rides the presence session's authenticated
+  // RTDB app rather than brokering a second token.
+  const coediting = useCoEditing({
+    session: presence.session,
+    docType: 'email',
+    docId: templateKey,
+    versionId,
+    storedStamp: version?.updatedAt,
+    loaded: Aglyn.canvas.didSetInitial,
+  })
+  clearMirrorRef.current = coediting.clearMirror
 
   const handlePropertiesSave = useCallback(async () => {
     if (!definition || !hostId) return
@@ -401,8 +456,10 @@ function HostEmailBesignerPage() {
             LOADING_OVERLAY_ELEMENT
           ) : (
             <>
+              <CollaboratorOverlays entries={presence.entries} />
               <BesignerAppBarComponent
                 detailsUrl={listUrl}
+                presence={<PresenceAvatars presence={presence} />}
                 onSave={handleSave}
                 saveAvailable={saveAvailable}
                 onPropertiesEdit={() => setPropertiesOpen(true)}

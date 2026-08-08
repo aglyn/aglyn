@@ -235,7 +235,7 @@ function startPresenceAppCheck(app: FirebaseApp): void {
  */
 export function usePresence(options: {
   hostId: string | undefined
-  docType: 'screen' | 'layout' | 'component' | 'template'
+  docType: 'screen' | 'layout' | 'component' | 'template' | 'email'
   docId: string | undefined
   /** Currently selected node, broadcast so others can see where you are. */
   selectedNodeId?: string

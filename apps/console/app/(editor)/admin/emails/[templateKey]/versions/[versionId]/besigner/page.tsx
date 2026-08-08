@@ -24,6 +24,7 @@ import {
   useAddElementDrawerCallback,
   useBesignerDocument,
   withBesignerContext,
+  type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-ui'
 import {
@@ -43,7 +44,11 @@ import {
   getSystemEmailTemplate,
   isSystemEmailEditable,
 } from '@aglyn/shared-util-email'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  saveNodesGuarded,
+  useFirestore,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material'
 import { doc, setDoc, Timestamp } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
@@ -186,13 +191,20 @@ function SystemEmailBesignerPage() {
   const nodes = version?.nodes
 
   const saveVersion = useCallback(
-    async (nextNodes: Record<string, unknown>) => {
+    async (
+      nextNodes: Record<string, unknown>,
+      baseline?: BesignerSaveBaseline,
+    ) => {
       // Client clock, matching every other version writer (AGL-674): the
       // conflict guard compares stamps for equality, never ordering, and a
       // `serverTimestamp()` sentinel reads back as null on the local
       // snapshot before it resolves — a stamp the guard cannot use.
       const stamp = Timestamp.now()
-      await setDoc(
+      // Conditional write (AGL-1301): the transaction re-checks the baseline
+      // against what Firestore actually holds, so a save racing another
+      // writer's commit aborts server-side instead of clobbering it. The
+      // pointer write below stays outside the guard — it carries no nodes.
+      await saveNodesGuarded(
         doc(
           firestore,
           SYSTEM_EMAIL_COLLECTION,
@@ -201,7 +213,7 @@ function SystemEmailBesignerPage() {
           versionId,
         ),
         { templateKey, nodes: nextNodes, updatedAt: stamp },
-        { merge: true },
+        baseline,
       )
       // Re-point the template at this version on every save, not just the
       // first. "Reset to default" nulls the pointer (AGL-748), and a staffer

@@ -72,7 +72,7 @@ import { TAB_SESSION_ID, type PresenceSession } from './use-presence'
 export const COEDIT_PUBLISH_MS = 120
 
 /** One node's entry in the live mirror. */
-interface MirrorEntry {
+export interface MirrorEntry {
   by?: string
   at?: number
   json?: string
@@ -103,8 +103,11 @@ function serializeNodes(): Record<string, unknown> {
  * action, so the canvas re-renders once; crucially it does NOT call
  * `saveHistory`, which is what keeps a remote edit out of the local undo
  * stack.
+ *
+ * Exported for its spec: the AGL-677 rules it encodes (no history entry, no
+ * `deleteNode` recursion) are asserted against the REAL canvas there.
  */
-function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
+export function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
   if (entry.deleted) {
     // A raw map delete, NOT `canvas.deleteNode` — that one recurses into the
     // whole subtree and saves history. The peer already told us about every
@@ -127,7 +130,7 @@ function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
 
 export function useCoEditing(options: {
   session: PresenceSession | null
-  docType: 'screen' | 'layout' | 'component' | 'template'
+  docType: 'screen' | 'layout' | 'component' | 'template' | 'email'
   docId: string | undefined
   versionId: string | undefined
   /**

@@ -29,6 +29,7 @@ import {
   useRenderedCanvasElements,
   useLayoutChromeCanvas,
   withBesignerContext,
+  type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-ui'
 // import '@aglyn/foundation-feature-singleton'
@@ -50,12 +51,14 @@ import {
   HostThemeDocumentContext,
 } from '@aglyn/shared-ui-theme'
 import {
+  saveNodesGuarded,
   useHost,
   useHostActivityLogger,
   useLayout,
   useLayoutVersion,
   useScreen,
   useScreenVersion,
+  useScreenVersionRef,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -219,7 +222,12 @@ function BesignerPage(props) {
       : undefined,
     componentDefinitions,
   )
-  const {doc: result, setDoc: updateScreen} = useScreenVersion({
+  const {doc: result} = useScreenVersion({
+    hostId: hostId as string,
+    screenId: screenId as string,
+    versionId: versionId as string,
+  })
+  const screenVersionRef = useScreenVersionRef({
     hostId: hostId as string,
     screenId: screenId as string,
     versionId: versionId as string,
@@ -229,18 +237,22 @@ function BesignerPage(props) {
 
   const screenKind = screenResult?.data?.kind
 
+  // Conditional write (AGL-1301): the transaction re-checks the baseline
+  // against what Firestore actually holds, so a save racing another writer's
+  // commit aborts server-side instead of clobbering it — the listener-based
+  // AGL-674 guard alone cannot see a write whose snapshot has not arrived.
   const saveScreenVersion = useCallback(
-    async (nextNodes: Record<string, unknown>) => {
-      const save = updateScreen as unknown as (
-        data: Partial<Aglyn.AglynScreenVersion>,
-        options?: Parameters<typeof updateScreen>[1],
-      ) => Promise<void>
-      await save(
+    async (
+      nextNodes: Record<string, unknown>,
+      baseline?: BesignerSaveBaseline,
+    ) => {
+      await saveNodesGuarded(
+        screenVersionRef,
         { nodes: nextNodes as unknown as Aglyn.AglynScreenVersion['nodes'] },
-        { merge: true },
+        baseline,
       )
     },
-    [updateScreen],
+    [screenVersionRef],
   )
 
   // Canvas lifecycle, first load, concurrent-write detection (AGL-674) and
