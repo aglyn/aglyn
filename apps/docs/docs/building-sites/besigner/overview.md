@@ -103,6 +103,14 @@ screens. Editing the source updates every instance at render time. You can renam
 or delete reusable components from the site dashboard. See
 [Reusable components](../screens-and-layouts/overview.md#reusable-components).
 
+## Editing together
+
+Two people can open the same document and edit it **live**: you see each other's
+avatars in the toolbar, cursors and selections on the canvas, and element-level changes
+as they happen. Saves are protected against overwriting each other, and unsaved work
+survives a crash as a local draft. See
+[Live co-editing & unsaved work](live-co-editing.md).
+
 ## AI in the canvas
 
 - **AI copy assist** rewrites or generates text for any canvas text prop.

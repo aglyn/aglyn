@@ -5,12 +5,33 @@ title: What's New
 description: The features Aglyn shipped most recently, grouped by area with links into the docs.
 ---
 
-# What's New — July 2026
+# What's New
 
-A huge wave of features shipped over the last few days. Here's the tour, grouped by area.
-Each links into its section for the how-to.
+The features Aglyn shipped most recently, grouped by area. Each links into its section
+for the how-to.
 
-## Besigner copy & paste (newest)
+## August 2026 — editing together (newest)
+
+- **[Live co-editing](building-sites/besigner/live-co-editing.md)** — open the same
+  screen, layout, component, template, or designed email as a teammate and edit it
+  **together**: presence avatars in the toolbar, each collaborator's cursor and
+  selection on the canvas in their own color, and element-level live changes that
+  never disturb your undo history.
+- **[Concurrent-save protection](building-sites/besigner/live-co-editing.md#when-saves-collide)** —
+  if someone else saves the document you're editing, the besigner pauses saving and
+  tells you **the moment it happens**, keeping everything on your canvas until you
+  reload. No silent overwrites, in either direction.
+- **[Local draft recovery](building-sites/besigner/live-co-editing.md#local-draft-recovery)** —
+  the besigner keeps a local draft of unsaved work in your browser; after a crash or an
+  accidental close, it offers the work back with **Restore** / **Discard**.
+- **[Apex custom domains](building-sites/custom-domains/connect-a-domain.md)** — connect
+  the bare `example.com`, not just `www`: an A record (or ALIAS) at your registrar
+  verifies in the same **Verify & connect** click as a CNAME.
+- **[Edit from the live site](building-sites/besigner/edit-from-the-live-site.md)**
+  *(rolling out)* — an admin bar on your published site that jumps from any live page
+  straight into the besigner for the screen serving it.
+
+## Besigner copy & paste
 
 - **[Copy and paste elements](building-sites/besigner/copy-paste.md)** — copy any element with
   its children and paste it somewhere else, **including into a different screen, layout,
