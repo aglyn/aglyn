@@ -21,6 +21,20 @@ import {
   hostCollectionKind,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  tenantDataTag,
+  withRenderCache,
+} from '@aglyn/tenant-data-admin/render-cache'
+
+/**
+ * Only the compose-time source is cached (AGL-1302): a Collection entries
+ * block in a shared layout re-read up to ~100 entry docs on EVERY page of
+ * the site. The routed-page reader (`getCollectionContent`) stays uncached —
+ * it is amortized by the page's own ISR entry, and its scheduled-entry flip
+ * (`flipDueEntry`) is a write a cache must not suppress. The 60s TTL means
+ * a scheduled entry's lazy flip waits at most one extra window.
+ */
+const COLLECTION_SOURCE_TTL_SECONDS = 60
 
 /**
  * Resolve a public content-collection slug (AGL-954). Commerce's product
@@ -219,6 +233,30 @@ async function listLiveEntries(
  * list so a renamed collection never takes a published screen down.
  */
 export async function getPublishedCollectionSource(options: {
+  hostId: string
+  collectionSlug: string
+}): Promise<{
+  entries: CollectionEntrySummary[]
+  categories: CollectionCategory[]
+}> {
+  try {
+    return await withRenderCache({
+      key: [
+        'tenant-collection-source',
+        options.hostId,
+        options.collectionSlug,
+      ],
+      revalidate: COLLECTION_SOURCE_TTL_SECONDS,
+      tags: [tenantDataTag(options.hostId)],
+      read: () => readPublishedCollectionSource(options),
+    })
+  } catch (error) {
+    console.error(error)
+    return readPublishedCollectionSource(options)
+  }
+}
+
+async function readPublishedCollectionSource(options: {
   hostId: string
   collectionSlug: string
 }): Promise<{

@@ -17,8 +17,9 @@
 
 import { registerPluginJob, screenRoutePathToUrl } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { tenantDataTag } from '@aglyn/tenant-data-admin/render-cache'
 import applyDuePublishSchedule from '@aglyn/tenant-runtime/apply-publish-schedule'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 
 /**
  * Apply due publish schedules on a beat, instead of waiting for a visitor
@@ -109,6 +110,13 @@ registerPluginJob({
             publishSchedule: doc.get('publishSchedule'),
           },
         })
+
+        // The beat just flipped a version pointer (or dropped a routing-map
+        // entry, for an unpublish) — bust the host's document cache so the
+        // page regeneration below reads the flip instead of a still-warm
+        // screen doc (AGL-1302). Once per host would suffice; per screen is
+        // harmless and keeps the failure isolation of this loop intact.
+        revalidateTag(tenantDataTag(hostId), 'max')
 
         const hostSnapshot = await readHost(hostId)
         if (!hostSnapshot.exists) continue

@@ -38,6 +38,7 @@ import {
   type OrgRole,
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
+import { cache } from 'react'
 import firebaseAdmin from './firebase-admin'
 import {
   deleteMemberHostProjections,
@@ -306,28 +307,42 @@ export async function changeOrgSlug(
   return { previousSlug }
 }
 
-/** Host → org resolution via the server-written `hostIndex` mirror. */
-export async function resolveOrgIdForHost(
-  hostId: string,
-): Promise<string | null> {
-  const snapshot = await firestore().collection('hostIndex').doc(hostId).get()
-  const orgId = snapshot.data()?.['orgId']
-  return typeof orgId === 'string' ? orgId : null
-}
+/**
+ * Host → org resolution via the server-written `hostIndex` mirror.
+ *
+ * `React.cache`-deduped PER REQUEST (AGL-1302): one tenant render resolved
+ * this hop up to five times — org billing, datasets, plugin installs, realm
+ * installs and the publish-schedule executor each re-read the same
+ * `hostIndex/{hostId}` doc. Per-request memoization is zero-staleness by
+ * construction; outside a React render (route handlers, jest) `cache` is a
+ * pass-through, so nothing changes for the console's authz paths.
+ */
+export const resolveOrgIdForHost = cache(
+  async (hostId: string): Promise<string | null> => {
+    const snapshot = await firestore().collection('hostIndex').doc(hostId).get()
+    const orgId = snapshot.data()?.['orgId']
+    return typeof orgId === 'string' ? orgId : null
+  },
+)
 
 /**
  * The org doc itself — billing, plan, entitlements and suspension (the
  * shape the legacy tenants/{uid} doc carried; orgs are the only billing
  * source since AGL-238). Null when the doc is missing.
  */
-export async function getOrgDoc(
-  orgId: string,
-): Promise<Partial<AglynOrganization> | null> {
-  const snapshot = await firestore().collection('orgs').doc(orgId).get()
-  return snapshot.exists
-    ? ({ $id: snapshot.id, ...snapshot.data() } as Partial<AglynOrganization>)
-    : null
-}
+/**
+ * `React.cache`-deduped per request like {@link resolveOrgIdForHost}
+ * (AGL-1302). NOTE: within one render every caller receives the SAME object
+ * — treat it as read-only, as every current caller already does.
+ */
+export const getOrgDoc = cache(
+  async (orgId: string): Promise<Partial<AglynOrganization> | null> => {
+    const snapshot = await firestore().collection('orgs').doc(orgId).get()
+    return snapshot.exists
+      ? ({ $id: snapshot.id, ...snapshot.data() } as Partial<AglynOrganization>)
+      : null
+  },
+)
 
 /**
  * Billing/entitlement source for a host (AGL-238): the owning org's doc

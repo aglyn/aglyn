@@ -17,6 +17,18 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  tenantDataTag,
+  withRenderCache,
+} from '@aglyn/tenant-data-admin/render-cache'
+
+/**
+ * Part of the per-host compose bundle every page render pays (AGL-1302):
+ * up to 200 docs per render before caching. Component publishes announce
+ * themselves through the console revalidate route, which busts
+ * `tenant-data:{hostId}`; 60s is the backstop for direct writes.
+ */
+const COMPONENTS_TTL_SECONDS = 60
 
 /**
  * Fetches the host's reusable component definitions keyed by id, in the
@@ -24,8 +36,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * empty map is returned (instances render as empty wrappers, the page still
  * serves).
  */
-export async function getComponents(options: { hostId: Aglyn.HostUid }) {
-  const { hostId } = options
+async function readComponents(hostId: Aglyn.HostUid) {
   const data = {
     definitions: {} as Record<string, Aglyn.ReusableComponentTree>,
     error: null as unknown,
@@ -57,6 +68,23 @@ export async function getComponents(options: { hostId: Aglyn.HostUid }) {
     })
 
   return data
+}
+
+export async function getComponents(options: { hostId: Aglyn.HostUid }) {
+  const { hostId } = options
+  try {
+    return await withRenderCache({
+      key: ['tenant-components', hostId as string],
+      revalidate: COMPONENTS_TTL_SECONDS,
+      tags: [tenantDataTag(hostId as string)],
+      read: () => readComponents(hostId),
+      // A failed read keeps its fail-open empty map per-request only.
+      store: (value) => !value.error,
+    })
+  } catch (error) {
+    console.error(error)
+    return readComponents(hostId)
+  }
 }
 
 export default getComponents

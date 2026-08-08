@@ -16,6 +16,18 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  tenantDataTag,
+  withRenderCache,
+} from '@aglyn/tenant-data-admin/render-cache'
+
+/**
+ * Cached as an ARRAY (a `Set` does not survive the cache's JSON round trip)
+ * and rehydrated at the boundary (AGL-1302). Publishing a template screen
+ * re-points a collection or the store settings, and both writes ride the
+ * same publish flow that busts `tenant-data:{hostId}`; 60s is the backstop.
+ */
+const TEMPLATE_SCREEN_IDS_TTL_SECONDS = 60
 
 /**
  * The three fields a CONTENT collection can point at a template screen with.
@@ -125,6 +137,25 @@ export function collectTemplateScreenIds(sources: {
  * entry template, or vice versa.
  */
 export async function getTemplateScreenIds(options: {
+  hostId: string
+}): Promise<Set<string>> {
+  try {
+    const ids = await withRenderCache({
+      key: ['tenant-template-screens', options.hostId],
+      revalidate: TEMPLATE_SCREEN_IDS_TTL_SECONDS,
+      tags: [tenantDataTag(options.hostId)],
+      read: async () => [...(await readTemplateScreenIds(options))],
+    })
+    return new Set(ids)
+  } catch (error) {
+    // The contract is "never rejects" — a cache failure degrades to the
+    // uncached read, which itself fails open to an empty set.
+    console.error('template screen lookup failed:', error)
+    return readTemplateScreenIds(options)
+  }
+}
+
+async function readTemplateScreenIds(options: {
   hostId: string
 }): Promise<Set<string>> {
   try {

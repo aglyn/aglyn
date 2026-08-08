@@ -45,9 +45,11 @@
 // `mock`-prefixed because a jest.mock factory is hoisted above the file and may
 // not close over an ordinary out-of-scope variable.
 const mockRevalidatePath = jest.fn()
+const mockRevalidateTag = jest.fn()
 jest.mock('next/cache', () => ({
   __esModule: true,
   revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
+  revalidateTag: (...args: unknown[]) => mockRevalidateTag(...args),
 }))
 
 import { POST } from '../app/api/revalidate/route'
@@ -81,7 +83,35 @@ const SITE_FANOUT = 48
 describe('tenant revalidate path cap (AGL-1161, AGL-1239)', () => {
   beforeEach(() => {
     mockRevalidatePath.mockClear()
+    mockRevalidateTag.mockClear()
     process.env['REVALIDATE_SECRET'] = SECRET
+  })
+
+  it('busts the host document cache alongside the paths (AGL-1302)', async () => {
+    // Dropping the page cache alone would make Next re-render the page from
+    // the still-warm `tenant-data:{hostId}` DOC cache — faithfully rebuilding
+    // it from the routing map and version pointers the publish just replaced.
+    const body = await (
+      await call({ host: 'demo', hostId: 'host-1', paths: ['/'] })
+    ).json()
+    expect(mockRevalidateTag).toHaveBeenCalledWith('tenant-data:host-1', 'max')
+    expect(mockRevalidateTag).toHaveBeenCalledWith('tenant-host:demo', 'max')
+    expect(body.revalidatedTags).toEqual([
+      'tenant-data:host-1',
+      'tenant-host:demo',
+    ])
+  })
+
+  it('degrades to the TTL backstop when the caller omits hostId (AGL-1302)', async () => {
+    // An older console build that does not send `hostId` must still get its
+    // paths dropped — the doc cache then expires by TTL instead of by tag.
+    const response = await call({ host: 'demo', paths: ['/'] })
+    expect(response.status).toBe(200)
+    expect(mockRevalidatePath).toHaveBeenCalledWith('/demo')
+    expect(mockRevalidateTag).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^tenant-data:/),
+      'max',
+    )
   })
 
   it('reports the overflow instead of swallowing it', async () => {

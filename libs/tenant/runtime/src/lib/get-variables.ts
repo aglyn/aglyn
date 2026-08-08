@@ -17,6 +17,37 @@
 
 import type * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  tenantDataTag,
+  withRenderCache,
+} from '@aglyn/tenant-data-admin/render-cache'
+
+/**
+ * Part of the per-host compose bundle every page render pays (AGL-1302):
+ * variables, functions and workflows were three ~100-doc queries per
+ * render. All three fail open, so a cache-layer failure degrades to the
+ * uncached read rather than an empty map. 60s matches the page's own ISR
+ * window; the publish path busts `tenant-data:{hostId}` on top.
+ */
+const HOST_BINDINGS_TTL_SECONDS = 60
+
+const cachedBindingsRead = async <T>(
+  name: string,
+  hostId: string,
+  read: () => Promise<Record<string, T>>,
+): Promise<Record<string, T>> => {
+  try {
+    return await withRenderCache({
+      key: [name, hostId],
+      revalidate: HOST_BINDINGS_TTL_SECONDS,
+      tags: [tenantDataTag(hostId)],
+      read,
+    })
+  } catch (error) {
+    console.error(error)
+    return read()
+  }
+}
 
 /**
  * Fetches the host's variables keyed by doc id (AGL-185/194) for
@@ -25,6 +56,14 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * literally/empty.
  */
 export async function getVariables(options: {
+  hostId: string
+}): Promise<Record<string, Aglyn.HostVariable>> {
+  return cachedBindingsRead('tenant-variables', options.hostId, () =>
+    readVariables(options),
+  )
+}
+
+async function readVariables(options: {
   hostId: string
 }): Promise<Record<string, Aglyn.HostVariable>> {
   const variables: Record<string, Aglyn.HostVariable> = {}
@@ -54,6 +93,14 @@ export async function getVariables(options: {
  * `{{fn:name(...)}}` bindings (AGL-93). Fail-open like variables.
  */
 export async function getFunctions(options: {
+  hostId: string
+}): Promise<Record<string, Aglyn.HostFunction>> {
+  return cachedBindingsRead('tenant-functions', options.hostId, () =>
+    readFunctions(options),
+  )
+}
+
+async function readFunctions(options: {
   hostId: string
 }): Promise<Record<string, Aglyn.HostFunction>> {
   const functions: Record<string, Aglyn.HostFunction> = {}
@@ -98,6 +145,14 @@ export default getVariables
  * function→workflow calls (AGL-129). Fail-open like variables.
  */
 export async function getWorkflows(options: {
+  hostId: string
+}): Promise<Record<string, Aglyn.HostWorkflow>> {
+  return cachedBindingsRead('tenant-workflows', options.hostId, () =>
+    readWorkflows(options),
+  )
+}
+
+async function readWorkflows(options: {
   hostId: string
 }): Promise<Record<string, Aglyn.HostWorkflow>> {
   const workflows: Record<string, Aglyn.HostWorkflow> = {}
