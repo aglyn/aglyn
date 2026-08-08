@@ -40,6 +40,7 @@ export type ReleaseFlagKey =
   | 'release_logic'
   | 'release_addon_store'
   | 'release_native_checkout'
+  | 'release_edit_bar'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -169,6 +170,18 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'Checkout instead of a redirect to checkout.stripe.com (AGL-1132). ' +
       'OFF by default: the redirect is the proven path, and this one cannot ' +
       'be verified without putting a real card through it.',
+    defaultEnabled: false,
+  },
+  {
+    key: 'release_edit_bar',
+    label: 'Site admin bar',
+    description:
+      'Edit-access admin bar on published sites: a signed-in editor can ' +
+      'jump from a live page straight into the besigner for the screen ' +
+      'serving it (admin edit bar, AGL-1302 follow-on). OFF by default ' +
+      'until the cross-origin connect flow is verified on a live tenant ' +
+      'domain; flipping it off also invalidates every outstanding edit ' +
+      'token at the verify site.',
     defaultEnabled: false,
   },
 ]

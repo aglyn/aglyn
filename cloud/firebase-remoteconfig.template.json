@@ -97,6 +97,13 @@
       },
       "description": "Pay for a plan without leaving the console - Stripe embedded Checkout instead of a redirect. OFF by default until a real card has been through it.",
       "valueType": "JSON"
+    },
+    "release_edit_bar": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Edit-access admin bar on published sites (admin edit bar, AGL-1302 follow-on). OFF until the cross-origin connect flow is verified on a live tenant domain; flipping off also invalidates outstanding edit tokens.",
+      "valueType": "JSON"
     }
   },
   "version": {
