@@ -29,6 +29,15 @@ export interface ComponentPromotionContextValue {
   onPromote?: (node: Aglyn.NodeSchema<any>) => void
   onDemote?: (node: Aglyn.NodeSchema<any>) => void
   /**
+   * "Edit component" on a selected instance (AGL-1303 phase 1): the
+   * console opens the component's own besigner in a new tab. Kills the
+   * dead end where the panel offered only Save-as/Detach and an author
+   * could not find where the component's truth lives. Phase 2's live
+   * propagation rides AGL-1301's co-editing on component documents — no
+   * extra plumbing here.
+   */
+  onEditComponent?: (node: Aglyn.NodeSchema<any>) => void
+  /**
    * The host's component definitions, keyed by id (AGL-1247/1251). The
    * designer stays storage-agnostic: the console reads them and passes them
    * down, exactly as it does the callbacks above.

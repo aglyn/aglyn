@@ -36,8 +36,11 @@ import {
   useHostResourceApi,
 } from '@aglyn/tenant-feature-instance'
 import { hasEntitlement } from '../constants/entitlements'
+import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import useHostComponentDefinitions from '../hooks/use-host-component-definitions'
+import { useOrgSlug } from '../hooks/use-org-scope'
+import { useHostSubdomain } from './host-id-provider'
 
 export interface ReusableComponentsProviderProps {
   hostId: string
@@ -76,6 +79,8 @@ export function ReusableComponentsProvider(
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const { org } = useCurrentOrg()
+  const orgSlug = useOrgSlug()
+  const hostSubdomain = useHostSubdomain()
   const [promoteNode, setPromoteNode] = useState<Aglyn.NodeSchema<any> | null>(
     null,
   )
@@ -274,6 +279,46 @@ export function ReusableComponentsProvider(
     [firestore, hostId, queueLoading, enqueueSnackbar],
   )
 
+  /**
+   * "Edit component" on a selected instance (AGL-1303 phase 1): opens the
+   * component's own besigner in a NEW TAB, same as the Preview button's
+   * window.open idiom — the author keeps their place on the page that
+   * uses it, and with AGL-1301's co-editing on component documents a save
+   * over there propagates live without extra plumbing here.
+   *
+   * The version to open follows the component detail page's own default:
+   * the working `versionId` pointer. A component that predates versioning
+   * has none and needs one MINTED before its besigner can open, and the
+   * detail page is the one place that knows what an initial version looks
+   * like — so those (rare, old) components land there, one click from the
+   * same besigner, rather than this callback growing a second minting
+   * path that could drift.
+   */
+  const handleEditComponent = useCallback(
+    (node: Aglyn.NodeSchema<any>) => {
+      const refId = (node?.props as any)?.refId as string | undefined
+      if (!refId || !orgSlug || !hostSubdomain) return
+      const definitionDoc = (componentDocs ?? []).find(
+        (definition: any) => definition?.$id === refId,
+      ) as { versionId?: string } | undefined
+      const versionId = definitionDoc?.versionId
+      const url = versionId
+        ? buildRoute(Route.COMPONENT_BESIGNER, {
+            orgSlug,
+            host: hostSubdomain,
+            componentId: refId,
+            versionId,
+          })
+        : buildRoute(Route.COMPONENT_DETAILS, {
+            orgSlug,
+            host: hostSubdomain,
+            componentId: refId,
+          })
+      window.open(url, '_blank', 'noopener,noreferrer')
+    },
+    [componentDocs, orgSlug, hostSubdomain],
+  )
+
   // The definitions the designer needs (AGL-1247/1251/1193): declared props
   // for the Attributes panel, the tree itself so the canvas can render an
   // instance instead of a dashed box, and the chosen icon. Straight off the
@@ -283,9 +328,10 @@ export function ReusableComponentsProvider(
     () => ({
       onPromote: handlePromote,
       onDemote: handleDemote,
+      onEditComponent: handleEditComponent,
       definitions,
     }),
-    [handlePromote, handleDemote, definitions],
+    [handlePromote, handleDemote, handleEditComponent, definitions],
   )
 
   return (

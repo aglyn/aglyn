@@ -529,7 +529,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
 
     // Reusable-component flows (AGL-35): actions appear only when the host
     // app provides callbacks; locked nodes (layout chrome) never promote.
-    const { onPromote, onDemote, definitions } = useContext(
+    const { onPromote, onDemote, onEditComponent, definitions } = useContext(
       ComponentPromotionContext,
     )
     const isInstance =
@@ -1044,6 +1044,22 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                       fullWidth
                     >
                       Save as reusable component
+                    </Button>
+                  </FormControl>
+                ) : null}
+                {/* Edit component (AGL-1303): navigation, not a mutation of
+                    THIS document, so unlike Detach it is not gated on the
+                    node being unlocked — locked layout-chrome instances
+                    need it most. */}
+                {onEditComponent && isInstance ? (
+                  <FormControl margin="none" fullWidth>
+                    <Button
+                      color="primary"
+                      onClick={() => onEditComponent(node)}
+                      sx={{ mt: 2 }}
+                      fullWidth
+                    >
+                      Edit component
                     </Button>
                   </FormControl>
                 ) : null}

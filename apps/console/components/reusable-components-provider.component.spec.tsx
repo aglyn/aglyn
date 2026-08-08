@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useContext, type Context } from 'react'
+import { HostSubdomainContext } from './host-id-provider'
 import ReusableComponentsProvider from './reusable-components-provider.component'
 
 /**
@@ -44,6 +45,7 @@ const { ComponentPromotionContext } = jest.requireMock(
   ComponentPromotionContext: Context<{
     onPromote?: (node: Aglyn.NodeSchema<any>) => void
     onDemote?: (node: Aglyn.NodeSchema<any>) => void
+    onEditComponent?: (node: Aglyn.NodeSchema<any>) => void
   }>
 }
 
@@ -109,9 +111,22 @@ jest.mock('../hooks/use-current-org', () => ({
   default: () => ({ org: { plan: 'pro' }, orgId: 'org1', ready: true }),
 }))
 
+let mockComponentDocs: Array<Record<string, unknown>> = []
 jest.mock('../hooks/use-firestore-collection', () => ({
   __esModule: true,
-  default: () => ({ data: [], status: 'success' }),
+  default: () => ({ data: mockComponentDocs, status: 'success' }),
+}))
+
+/**
+ * Link context for the Edit-component callback (AGL-1303): the org slug
+ * hook is stubbed (its context lives three providers up), while the host
+ * subdomain rides its REAL exported context so the wiring through
+ * `useHostSubdomain` is what's under test.
+ */
+jest.mock('../hooks/use-org-scope', () => ({
+  __esModule: true,
+  useOrgSlug: () => 'acme',
+  useOrgScope: () => ({}),
 }))
 
 let mockEntitled = true
@@ -257,5 +272,74 @@ describe('ReusableComponentsProvider — promotion swaps the source for an insta
       expect.stringContaining('Starter plan'),
       expect.objectContaining({ variant: 'warning' }),
     )
+  })
+})
+
+describe('ReusableComponentsProvider — Edit component (AGL-1303)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockEntitled = true
+    mockComponentDocs = []
+    mockCanvas.toJSON.mockImplementation(() => ({ nodes: {} }))
+  })
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  const instanceNode = (refId?: string) =>
+    ({
+      $id: 'i1',
+      componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+      props: refId ? { refId } : {},
+    }) as any
+
+  function setupEdit() {
+    let edit: ((node: any) => void) | undefined
+    function Probe() {
+      edit = useContext(ComponentPromotionContext).onEditComponent
+      return null
+    }
+    render(
+      <HostSubdomainContext.Provider value="marketing">
+        <ReusableComponentsProvider hostId="h1">
+          <Probe />
+        </ReusableComponentsProvider>
+      </HostSubdomainContext.Provider>,
+    )
+    return { edit: edit as (node: any) => void }
+  }
+
+  it("opens the component's besigner at its working version, in a new tab", () => {
+    mockComponentDocs = [{ $id: 'cta', versionId: 'v9' }]
+    const open = jest.spyOn(window, 'open').mockReturnValue(null)
+    const { edit } = setupEdit()
+    act(() => edit(instanceNode('cta')))
+    expect(open).toHaveBeenCalledWith(
+      '/acme/hosts/marketing/components/cta/versions/v9/besigner',
+      '_blank',
+      'noopener,noreferrer',
+    )
+  })
+
+  it('lands on the component detail page when no version exists yet', () => {
+    // Components that predate versioning carry no versionId; the detail
+    // page is the one place that mints an initial version, so the link
+    // goes there rather than growing a second minting path.
+    mockComponentDocs = [{ $id: 'cta' }]
+    const open = jest.spyOn(window, 'open').mockReturnValue(null)
+    const { edit } = setupEdit()
+    act(() => edit(instanceNode('cta')))
+    expect(open).toHaveBeenCalledWith(
+      '/acme/hosts/marketing/components/cta',
+      '_blank',
+      'noopener,noreferrer',
+    )
+  })
+
+  it('does nothing for a node without a refId', () => {
+    const open = jest.spyOn(window, 'open').mockReturnValue(null)
+    const { edit } = setupEdit()
+    act(() => edit(instanceNode()))
+    expect(open).not.toHaveBeenCalled()
   })
 })
