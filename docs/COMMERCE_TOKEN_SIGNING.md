@@ -17,6 +17,11 @@ possible, which is why there isn't one now.
 | `libs/plugins/commerce/src/lib/server/download.ts` | order download links (90-day TTL) — defines `tokenSigningSecret()` |
 | `libs/plugins/commerce/src/lib/server/billing-webhook.ts` | supplier tokens, gift-card codes |
 | `libs/plugins/commerce/src/lib/server/stream.ts` | gated-video stream URLs (15-min TTL) — AGL-689 |
+| `libs/tenant/data/admin/src/lib/server/media-signing.ts` | private media access signatures (15-min TTL) — AGL-1051 |
+| `libs/tenant/data/admin/src/lib/server/edit-access-token.ts` | tenant admin-bar edit tokens (30-min TTL, `edit-bar:` namespace) — AGL-1302 follow-on |
+
+Each consumer domain-separates its payloads with its own context prefix (`media:`,
+`edit-bar:`, …) so a token minted for one purpose can never verify as another.
 
 ## The two rules that bite
 
