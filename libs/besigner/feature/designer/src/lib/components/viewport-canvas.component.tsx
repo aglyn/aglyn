@@ -17,7 +17,7 @@
 
 import * as Besigner from '@aglyn/besigner'
 import { BesignerDeviceFlag } from '@aglyn/besigner'
-import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx'
+import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import clsx from 'clsx'
 import dynamic from 'next/dynamic'

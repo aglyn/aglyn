@@ -19,19 +19,8 @@ import {
   ICON_VARIANT_LEFT,
   ICON_VARIANT_MENU_DOWN,
 } from '@aglyn/shared-data-enums'
-import {
-  AglynBesignerLogoFull,
-  AglynConsoleLogoFull,
-  AppLink,
-  type AppLinkProps,
-  MdiIcon,
-  type MdiIconProps,
-  Menu,
-  type MenuItemProps,
-  type MenuProps,
-  ScrollReaction,
-  SrOnly,
-} from '@aglyn/shared-ui-jsx'
+import { AglynBesignerLogoFull, AglynConsoleLogoFull, AppLink, type AppLinkProps, MdiIcon, type MdiIconProps, Menu, type MenuItemProps, type MenuProps, SrOnly } from '@aglyn/shared-ui-jsx'
+import { ScrollReaction } from '@aglyn/shared-ui-jsx/components/scroll-reaction'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { _isArrEmpty } from '@aglyn/shared-util-tools'
 import {

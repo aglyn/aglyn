@@ -17,15 +17,8 @@
 'use client'
 
 import { APP_WWW, BUILD_ID, PACKAGE_VERSION } from '@aglyn/shared-data-enums'
-import {
-  AglynSvgLogo,
-  AppLink,
-  type AppLinkProps,
-  Container,
-  GridButtons,
-  type GridButtonsProps,
-  Menu,
-} from '@aglyn/shared-ui-jsx'
+import { AglynSvgLogo, AppLink, type AppLinkProps, Container, Menu } from '@aglyn/shared-ui-jsx'
+import { GridButtons, type GridButtonsProps } from '@aglyn/shared-ui-jsx/components/grid-buttons'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-jsx'
 import { useNextPageTitle } from '@aglyn/shared-ui-next'
 import { styled } from '@aglyn/shared-ui-theme'

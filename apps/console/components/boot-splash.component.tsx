@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { SplashScreenContent } from '@aglyn/shared-ui-jsx'
+import { SplashScreenContent } from '@aglyn/shared-ui-jsx/components/splash-screen'
 import { Box } from '@mui/material'
 
 /**

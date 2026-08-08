@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { ConfirmationProviderComponent } from '@aglyn/shared-ui-jsx'
+import { ConfirmationProviderComponent } from '@aglyn/shared-ui-jsx/components/confirmation-provider.component'
 import { LoadingLayoutAppComponent } from '@aglyn/shared-ui-jsx/components/loading-layout-app.component'
 import { SnackbarProvider } from '@aglyn/shared-ui-snackstack'
 import {

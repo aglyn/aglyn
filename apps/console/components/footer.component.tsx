@@ -17,12 +17,8 @@
 'use client'
 
 import { BUILD_ID, PACKAGE_VERSION } from '@aglyn/shared-data-enums'
-import {
-  AppLink,
-  Container,
-  GridButtons,
-  type GridButtonsProps,
-} from '@aglyn/shared-ui-jsx'
+import { AppLink, Container } from '@aglyn/shared-ui-jsx'
+import { GridButtons, type GridButtonsProps } from '@aglyn/shared-ui-jsx/components/grid-buttons'
 import { Box, Divider, Stack, Typography } from '@mui/material'
 import { forwardRef, type HTMLAttributes } from 'react'
 import CopyrightComponent from '../components/copyright.component'

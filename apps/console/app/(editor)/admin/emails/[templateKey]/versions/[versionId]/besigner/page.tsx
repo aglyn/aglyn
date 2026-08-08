@@ -34,11 +34,8 @@ import {
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
-import {
-  AppLink,
-  LOADING_OVERLAY_ELEMENT,
-  useLoading,
-} from '@aglyn/shared-ui-jsx'
+import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   SYSTEM_EMAIL_COLLECTION,

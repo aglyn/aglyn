@@ -15,9 +15,29 @@
  * limitations under the License.
  */
 
+// ── Barrel discipline (AGL-1290, extending AGL-1151) ────────────────────────
+// The tenant runtime reaches this barrel statically (the node renderer
+// imports ShadowDom/ErrorBoundary through it), and Turbopack cannot prove a
+// module with top-level `styled()`/`forwardRef()` calls side-effect-free —
+// so EVERY component re-exported here ships eagerly on EVERY published
+// customer page, used or not. Measured: RulerGuides, SplashScreen,
+// NavigationDrawer, DialogConfirm and the whole MUI Dialog/Drawer/Popper
+// stack were in /pricing's first-load chunks, imported by nothing.
+//
+// Rule: a component joins this barrel only if the tenant page graph or the
+// besigner needs it by name. Console-/www-only components are imported by
+// subpath instead: '@aglyn/shared-ui-jsx/components/<file>' (the tsconfig
+// wildcard path already resolves it — same pattern as DataTable/GridList
+// below). Pure modules (hooks, types, const data) are exempt: the bundler
+// proves them pure and drops the unused ones.
 export * from './lib/components/app-link'
-export * from './lib/components/aspect-ratio'
-export * from './lib/components/background-image.component'
+// aspect-ratio, background-image, children-function-prop, dialog-confirm +
+// confirmation-provider, ellipsis-pulse, grid-buttons, loading-layout,
+// loading-modal, loading-text, navigation-view, next-link, popper-styled,
+// resizeable-stack, ruler-guides, sandbox-frame, scroll-reaction,
+// splash-screen, emotion-cache-provider and const/prebuilt-components are
+// NOT in the barrel (AGL-1290) — subpath-import them (see rule above).
+// navigation-drawer is the one deliberate exception, below.
 export * from './lib/components/card-display'
 export * from './lib/components/card-list-item'
 // NOT in the barrel (AGL-1151). `DataTable` wraps MUI X DataGrid, which with
@@ -34,15 +54,8 @@ export * from './lib/components/card-list-item'
 // subpath already resolves. Kept out of the barrel rather than lazy-loaded
 // because `GridOverlay` is used at module scope inside `styled()`, so the
 // module cannot be deferred without splitting the component.
-export * from './lib/components/children-function-prop'
-export * from './lib/components/confirmation-provider.component'
 export * from './lib/components/container'
-export * from './lib/components/dialog-confirm'
-export * from './lib/components/ellipsis-pulse.component'
-export * from './lib/components/emotion-cache-provider'
-export type { EmotionCacheProps } from './lib/components/emotion-cache-provider'
 export * from './lib/components/error-boundary.component'
-export * from './lib/components/grid-buttons'
 export * from './lib/components/grid-items'
 // `grid-list` is deliberately NOT re-exported (AGL-1151). It is the only
 // consumer of `react-virtuoso`, and the tenant runtime imports this barrel —
@@ -51,21 +64,16 @@ export * from './lib/components/grid-items'
 // MUI X DataGrid in 828c43939. Import it from
 // `@aglyn/shared-ui-jsx/components/grid-list` instead.
 export * from './lib/components/help-tip.component'
-export * from './lib/components/loading-layout.component'
-export * from './lib/components/loading-modal'
-export * from './lib/components/loading-text.component'
 export * from './lib/components/menu'
 export * from './lib/components/mui-shadow-dom'
+// navigation-drawer stays IN the barrel for now, against the rule above: the
+// console screens page (apps/console/.../hosts/[host]/screens/page.tsx) was
+// mid-edit in a concurrent session when this prune landed and imports the
+// value by name. It keeps the MUI Drawer stack in the tenant's first-load
+// chunk — move that consumer (and the other drawer consumers) to the subpath
+// and drop this line to collect the rest of the win.
 export * from './lib/components/navigation-drawer.component'
-export * from './lib/components/navigation-view'
-export * from './lib/components/next-link'
-export * from './lib/components/popper-styled.component'
-export * from './lib/components/resizeable-stack'
-export * from './lib/components/ruler-guides.component'
-export * from './lib/components/sandbox-frame'
-export * from './lib/components/scroll-reaction'
 export * from './lib/components/shadow-dom'
-export * from './lib/components/splash-screen'
 export * from './lib/components/sr-only'
 export * from './lib/components/zoomable-panning-component'
 
@@ -99,7 +107,8 @@ export * from './lib/hooks/use-tag-name'
 export * from './lib/hooks/use-timeout'
 export * from './lib/hooks/use-timeout-delay'
 
-export * from './lib/const/prebuilt-components'
+// prebuilt-components is a module-scope `<LoadingModal open />` — rendering
+// at import time is exactly the impurity the rule above exists for.
 export * from './lib/const/svg-icons'
 
 export * from './lib/hocs/create-hoc-with-context-consumer'

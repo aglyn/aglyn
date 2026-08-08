@@ -35,7 +35,7 @@ import {
 import {
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
-import { LoadingTextComponent } from '@aglyn/shared-ui-jsx'
+import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
 import { Button, CircularProgress, Divider, Link, Stack, Typography } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import {

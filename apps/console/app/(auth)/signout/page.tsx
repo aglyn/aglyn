@@ -17,7 +17,7 @@
 
 'use client'
 
-import { LoadingTextComponent } from '@aglyn/shared-ui-jsx'
+import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
 import { CircularProgress } from '@mui/material'
 import { signOut } from 'firebase/auth'
 import { useEffect } from 'react'

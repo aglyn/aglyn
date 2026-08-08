@@ -16,7 +16,8 @@
  */
 'use client'
 
-import { SplashScreen, useLoading } from '@aglyn/shared-ui-jsx'
+import { useLoading } from '@aglyn/shared-ui-jsx'
+import { SplashScreen } from '@aglyn/shared-ui-jsx/components/splash-screen'
 import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
 import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useState } from 'react'

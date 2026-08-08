@@ -15,11 +15,8 @@
  * limitations under the License.
  */
 
-import {
-  BackgroundImageComponent,
-  type BackgroundImageComponentProps,
-  Container,
-} from '@aglyn/shared-ui-jsx'
+import { Container } from '@aglyn/shared-ui-jsx'
+import { BackgroundImageComponent, type BackgroundImageComponentProps } from '@aglyn/shared-ui-jsx/components/background-image.component'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { Grid, Stack, Typography, type TypographyProps } from '@mui/material'
