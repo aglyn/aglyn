@@ -2,6 +2,19 @@
 description: The nav chrome is LIVE — finish the marketing site: publish the footer brand block, build /product overview (11 sections, the applier refuses it by design), and land the stranded dropClearedProps fix
 ---
 
+> ⚠️ **CHARTER OVERRIDE (Zach, 2026-08-08) — supersedes anything below that
+> says otherwise.** The marketing site is built by CLICKING in the besigner, in
+> Zach's authenticated browser, exactly as a no-code subscriber would: screens,
+> layouts, reusable components, templates, the attribute/style panels. **No JSON
+> Editor, no Raw Markup, no custom CSS/sx, and no admin scripts that write node
+> data.** When the styles panel can't express something, the answer is a new
+> user-friendly style form field component (file it as a `Gap ·` issue), not a
+> workaround. One-shot scripts are not committed. The full charter is in the
+> Linear project description and in memory as `project_marketing_site_charter`.
+> In particular, ignore any "you do not need the besigner / use an admin script"
+> guidance below — that drift is exactly what this banner corrects.
+
+
 Pick up the aglyn.com rebuild. The nav chrome shipped on 2026-08-04; what is
 left is the footer, the `/product` index, and three decisions that are yours.
 
