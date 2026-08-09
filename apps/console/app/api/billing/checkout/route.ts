@@ -34,6 +34,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { configuredPriceFault } from '../../../../utils/stripe-price-fault'
 import { checkoutCustomerParams } from '../../../../utils/stripe-customer-identity'
+import { meteredPriceId } from '../../../../utils/server/billing-addons'
 
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
@@ -251,9 +252,30 @@ async function handler(request: Request): Promise<Response> {
     // actually lands on the invoice. Metered prices carry no quantity in
     // Checkout, and the item bills $0 until usage is reported, so it is safe
     // on every paid plan. Absent env (Stripe unprovisioned) → plan-only.
-    const meteredPriceId = process.env.STRIPE_PRICE_METERED
-    if (meteredPriceId) {
-      params.set('line_items[1][price]', meteredPriceId)
+    //
+    // MONTHLY ONLY (AGL-1340). `aglyn_metered_usage` is a monthly price, and
+    // Stripe forbids mixed `recurring.interval` on one subscription — proved
+    // read-only against live Stripe with `GET /v1/invoices/upcoming`:
+    // Starter monthly + metered previews at $25.00, Starter yearly alone at
+    // $192.00, Starter yearly + metered hard-errors. Attaching it
+    // unconditionally meant annual checkout worked in production only
+    // because STRIPE_PRICE_METERED happens to be UNSET there — setting it
+    // would have broken every annual sale. There is no yearly metered price
+    // to fall back to; minting one is a product call (AGL-1137).
+    const metered = meteredPriceId()
+    if (metered && interval === 'month') {
+      params.set('line_items[1][price]', metered)
+    } else if (metered) {
+      // Skipped, and SAID so. A silently absent metered item means reported
+      // usage never reaches an invoice and the org bills $0 of overage
+      // forever, with nothing anywhere explaining why.
+      console.warn('[billing/checkout] metered usage item not attached', {
+        orgId,
+        plan,
+        interval,
+        reason:
+          'STRIPE_PRICE_METERED is a monthly price; Stripe forbids mixed intervals on one subscription',
+      })
     }
 
     const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {

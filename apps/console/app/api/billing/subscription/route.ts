@@ -35,6 +35,8 @@ import {
   addonKindFromPriceId,
   addonPriceId,
   addonQuantitiesFromItems,
+  findPlanItem,
+  meteredPriceId,
   type AddonKind,
 } from '../../../../utils/server/billing-addons'
 
@@ -230,11 +232,13 @@ async function handler(request: Request): Promise<Response> {
       )
     }
     const items: any[] = subscription.items?.data ?? []
-    // The base plan item is the one no add-on price claims (AGL-528) —
-    // with add-on items on the subscription it need not be items[0].
-    const planItem =
-      items.find((item: any) => !addonKindFromPriceId(item?.price?.id)) ??
-      items[0]
+    // The base plan item, matched on its known plan price id (AGL-1340).
+    // This was "the item no add-on price claims" (AGL-528) — identification
+    // by elimination, which hands back an add-on or the metered item as soon
+    // as the subscription carries something the add-on map doesn't
+    // recognise, and then this route RE-PRICES that item as if it were the
+    // plan.
+    const planItem = findPlanItem<any>(items)
     const itemId = planItem?.id
     // Billing interval (AGL-532): the page's monthly/annual toggle rides
     // the request; absent, the subscription keeps its current interval.
@@ -279,12 +283,30 @@ async function handler(request: Request): Promise<Response> {
     // they gain it. A new item (no id, no quantity) — Stripe adds it; it
     // bills $0 until usage is reported, so it never moves the proration
     // preview. Skipped when already present or Stripe is unprovisioned.
-    const meteredPriceId = process.env.STRIPE_PRICE_METERED
-    if (
-      meteredPriceId &&
-      !items.some((item: any) => item?.price?.id === meteredPriceId)
-    ) {
-      itemChanges.push([['price', meteredPriceId]])
+    //
+    // MONTHLY ONLY (AGL-1340). `aglyn_metered_usage` is a monthly price and
+    // Stripe rejects a subscription whose items mix intervals — verified
+    // read-only against live Stripe: Starter yearly + metered fails with
+    // "All prices on a subscription must have the same recurring.interval".
+    // Attaching it to an annual switch would 502 the switch outright.
+    const metered = meteredPriceId()
+    const meteredItem = metered
+      ? items.find((item: any) => item?.price?.id === metered)
+      : undefined
+    if (metered && targetInterval === 'month') {
+      if (!meteredItem) itemChanges.push([['price', metered]])
+    } else if (metered) {
+      // Said out loud rather than skipped silently: without this item the
+      // reported usage never reaches an invoice, so an annual org bills $0
+      // of overage and nothing in the system says why.
+      console.warn('[billing/subscription] metered usage item not attached', {
+        orgId,
+        targetPlan,
+        targetInterval,
+        reason:
+          'STRIPE_PRICE_METERED is a monthly price; Stripe forbids mixed intervals on one subscription',
+        meteredAlreadyOnSubscription: Boolean(meteredItem),
+      })
     }
 
     if (action === 'switch') {

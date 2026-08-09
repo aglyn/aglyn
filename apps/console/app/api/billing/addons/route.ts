@@ -31,10 +31,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   ADDON_KINDS,
-  addonKindFromPriceId,
   addonPriceId,
   addonQuantitiesFromItems,
   addonUnitUsd,
+  findPlanItem,
   type AddonKind,
   type BillingInterval,
 } from '../../../../utils/server/billing-addons'
@@ -189,11 +189,13 @@ async function handler(request: Request): Promise<Response> {
       }
     }
     const items: any[] = subscription?.items?.data ?? []
-    // The base plan item is the one no add-on price claims; its price's
-    // recurring interval decides which add-on variants attach (Stripe
-    // allows one interval per subscription).
-    const planItem =
-      items.find((item) => !addonKindFromPriceId(item?.price?.id)) ?? items[0]
+    // The base plan item, matched on its known plan price id (AGL-1340) —
+    // not "the item no add-on price claims", which would happily pick the
+    // metered item and then read the whole page's billing interval off it.
+    // That interval decides which add-on variants attach (Stripe allows one
+    // interval per subscription), so getting it wrong sells a monthly add-on
+    // onto an annual subscription.
+    const planItem = findPlanItem<any>(items)
     const interval: BillingInterval =
       planItem?.price?.recurring?.interval === 'year' ? 'year' : 'month'
 

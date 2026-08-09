@@ -27,6 +27,8 @@ import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import { stripeCustomerIdentityParams } from '../../../../utils/stripe-customer-identity'
 import {
   addonQuantitiesFromItems,
+  findPlanItem,
+  planFromPriceId,
 } from '../../../../utils/server/billing-addons'
 
 /** Verifies a `Stripe-Signature` header against the signing secret. */
@@ -67,23 +69,13 @@ function verifyStripeSignature(
 
 
 /**
- * Maps a Stripe price id back to a plan via the STRIPE_PRICE_* env vars
- * (AGL-68) — fallback for subscriptions whose metadata lacks `plan`, e.g.
- * ones edited in the Stripe dashboard.
+ * `planFromPriceId` (AGL-68 — the fallback for subscriptions whose metadata
+ * lacks `plan`, e.g. ones edited in the Stripe dashboard) used to be a
+ * second copy of the price→plan map right here, with its own hand-written
+ * plan list. It now comes from `utils/server/billing-addons`, which is the
+ * one place the `STRIPE_PRICE_*` env names are spelled out (AGL-1340), so a
+ * new tier cannot be added to one list and forgotten in the other.
  */
-function planFromPriceId(priceId: string | undefined): string | undefined {
-  if (!priceId) return undefined
-  for (const plan of ['starter', 'pro', 'business', 'scale', 'advanced', 'agency']) {
-    const key = `STRIPE_PRICE_${plan.toUpperCase()}`
-    if (
-      priceId === process.env[key] ||
-      priceId === process.env[`${key}_YEARLY`]
-    ) {
-      return plan
-    }
-  }
-  return undefined
-}
 
 /**
  * The coupon riding a subscription, from either the legacy single `discount`
@@ -190,11 +182,12 @@ async function handler(request: Request): Promise<Response> {
         const canceled = type === 'customer.subscription.deleted'
         const items: any[] = object?.items?.data ?? []
         // With add-on items on the subscription (AGL-526), items[0] is no
-        // longer necessarily the plan item — find the one whose price maps
-        // to a plan; metadata.plan (set at checkout/switch) still wins.
-        const planItem = items.find(
-          (item: any) => planFromPriceId(item?.price?.id),
-        ) ?? items[0]
+        // longer necessarily the plan item — `findPlanItem` matches a known
+        // plan price id first and only then falls back (AGL-1340), so a
+        // metered or add-on item can never supply the `priceId` and
+        // `interval` mirrored below. metadata.plan (set at checkout/switch)
+        // still wins for the plan itself.
+        const planItem = findPlanItem<any>(items)
         const priceId = planItem?.price?.id
         const plan = canceled
           ? 'free'
