@@ -49,7 +49,7 @@ describe('Pagination element (AGL-1201)', () => {
 
   it('never receives children, being a self-closing element', () => {
     const { container } = render(
-      <PaginationElement count={3}>{'stray' as any}</PaginationElement>,
+      <PaginationElement count={3}>{'stray'}</PaginationElement>,
     )
     expect(container.textContent).not.toMatch(/stray/)
     expect(schema.flags?.selfClosing).toBeTruthy()

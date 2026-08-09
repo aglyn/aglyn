@@ -17,10 +17,10 @@
 
 /**
  * Markdown-lite (AGL-123): the tiny subset blog entries use — headings,
- * bold/italic, links, images, bullet lists, paragraphs, fenced code blocks,
- * tables and blockquotes. Parsed into plain data blocks that renderers turn into
- * elements themselves (no HTML string is ever produced, so there is nothing
- * to sanitize).
+ * bold/italic, links, images, bullet and numbered lists, paragraphs, fenced
+ * code blocks, tables and blockquotes. Parsed into plain data blocks that
+ * renderers turn into elements themselves (no HTML string is ever produced,
+ * so there is nothing to sanitize).
  */
 
 export type MarkdownInline =
@@ -45,6 +45,17 @@ export type MarkdownBlock =
   | { type: 'quote'; inlines: MarkdownInline[] }
   | { type: 'image'; src: string; alt: string }
   | { type: 'list'; items: MarkdownInline[][] }
+  /**
+   * A `1. ` / `1) ` numbered list (AGL-1320) — what a statute's enumerated
+   * elements need, and what `/legal/dmca` was flattening into run-on prose.
+   * `start` is the FIRST marker's number, so a notice continuing at `7.`
+   * keeps counting from seven; the rest renumber from it, which is how the
+   * serializer round-trips a `1. 1. 1.` source. A separate block rather than
+   * a flag on `list`, so the five renderers have to name it and no ordered
+   * list can silently render as bullets. NO nesting, like the rest of the
+   * dialect: indentation is trimmed, so a `  1. ` sub-item is a sibling.
+   */
+  | { type: 'orderedList'; start: number; items: MarkdownInline[][] }
   /** Fenced block. `text` is verbatim; `lang` is '' when none was given. */
   | { type: 'code'; lang: string; text: string }
   /**
@@ -146,6 +157,11 @@ function clampHeadingLevel(hashes: number): 2 | 3 {
 
 /** ```` ``` ```` or longer, optionally naming a language. */
 const FENCE_PATTERN = /^`{3,}\s*([^\s`]*)\s*$/
+/**
+ * An ordered-list marker (AGL-1320): `1. ` or `1) `, capped at nine digits
+ * like CommonMark so a stray year cannot become an absurd `start`.
+ */
+const ORDERED_ITEM_PATTERN = /^(\d{1,9})[.)]\s+/
 /** A delimiter cell of a GFM table's second row: `---`, `:--`, `:-:`, `--:`. */
 const DELIMITER_CELL = /^:?-+:?$/
 
@@ -228,6 +244,21 @@ function parseChunk(chunk: string): MarkdownBlock | null {
       type: 'list',
       items: lines.map((line) =>
         parseMarkdownInlines(line.trim().replace(/^[-*]\s+/, '')),
+      ),
+    }
+  }
+  // A numbered list under the same all-lines rule (AGL-1320), so prose that
+  // merely opens with `1997. A good year` mid-chunk stays prose. The FIRST
+  // marker sets `start`; the others only mark items, which is why a source
+  // numbered `1. 1. 1.` renumbers on the way out. Fences are cut out before
+  // chunking, so a `1. ` inside a snippet never reaches here.
+  if (lines.every((line) => ORDERED_ITEM_PATTERN.test(line.trim()))) {
+    const first = ORDERED_ITEM_PATTERN.exec(lines[0]?.trim() ?? '')
+    return {
+      type: 'orderedList',
+      start: Number(first?.[1] ?? 1),
+      items: lines.map((line) =>
+        parseMarkdownInlines(line.trim().replace(ORDERED_ITEM_PATTERN, '')),
       ),
     }
   }
@@ -412,6 +443,22 @@ export function serializeMarkdownLite(blocks: MarkdownBlock[]): string {
         .map((item) => serializeMarkdownInlines(item).trim())
         .filter(Boolean)
         .map((line) => `- ${line}`)
+      if (lines.length) chunks.push(lines.join('\n'))
+      continue
+    }
+    if (block.type === 'orderedList') {
+      // Markers are RE-NUMBERED from `start` (AGL-1320) rather than written
+      // back verbatim: the parser only reads the first one, so contiguous
+      // markers are the single form that re-parses to this exact model.
+      // A missing/absurd start falls back to 1, the way a hand-written list
+      // reads anyway.
+      const start = Number.isFinite(block.start)
+        ? Math.max(0, Math.trunc(block.start))
+        : 1
+      const lines = block.items
+        .map((item) => serializeMarkdownInlines(item).trim())
+        .filter(Boolean)
+        .map((line, index) => `${start + index}. ${line}`)
       if (lines.length) chunks.push(lines.join('\n'))
       continue
     }

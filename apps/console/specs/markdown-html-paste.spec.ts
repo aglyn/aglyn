@@ -78,6 +78,29 @@ describe('htmlToRows: code blocks and tables (AGL-981)', () => {
   })
 })
 
+describe('htmlToRows: ordered lists (AGL-1320)', () => {
+  it('maps an <ol> to numbered rows, a <ul> to bullets', () => {
+    const rows = htmlToRows(
+      '<ul><li>bullet</li></ul><ol><li>first</li><li><em>second</em></li></ol>',
+    )
+    expect(rows.map((row) => row.kind)).toEqual([
+      'listItem',
+      'orderedItem',
+      'orderedItem',
+    ])
+    expect(rowsToMarkdown(rows)).toBe('- bullet\n\n1. first\n2. *second*')
+  })
+
+  it('carries an <ol start> onto the first item that lands', () => {
+    // The empty leading <li> produces no row, so the run has to start
+    // counting from the one that does.
+    const rows = htmlToRows('<ol start="3"><li></li><li>third</li></ol>')
+    expect(rows).toHaveLength(1)
+    expect((rows[0] as { start?: number }).start).toBe(3)
+    expect(rowsToMarkdown(rows)).toBe('3. third')
+  })
+})
+
 describe('htmlToRows: blockquotes (AGL-1315)', () => {
   it('maps a flat blockquote to a quote row', () => {
     const rows = htmlToRows('<blockquote>To be or <em>not</em>.</blockquote>')

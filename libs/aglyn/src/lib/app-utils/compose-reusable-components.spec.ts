@@ -504,8 +504,16 @@ describe('root style overrides (AGL-1306)', () => {
       } as any,
       { cta: definition },
     )
-    expect(composed['cmp__a__root'].sx.backgroundColor).toBe('#0b4a6f')
-    expect(composed['cmp__b__root'].sx.backgroundColor).toBe('#101828')
+    // Read through `toHaveProperty`: `sx` is the full MUI union (array,
+    // callback, pseudo-selector map), so no dotted key is reachable on it.
+    expect(composed['cmp__a__root'].sx).toHaveProperty(
+      'backgroundColor',
+      '#0b4a6f',
+    )
+    expect(composed['cmp__b__root'].sx).toHaveProperty(
+      'backgroundColor',
+      '#101828',
+    )
   })
 
   it('survives a republished definition: the override rides the CURRENT root', () => {

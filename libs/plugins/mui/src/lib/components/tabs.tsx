@@ -64,6 +64,14 @@ export interface TabsElementProps {
    * Still destructured so an authored value never leaks onto the DOM.
    */
   lazyPanels?: boolean
+  /**
+   * Authored node styles, handed over by the renderer rather than typed into
+   * an attribute — the merge below reads it, so it belongs on the public
+   * interface. Leaving it undeclared (AGL-1284 added the reads, not the
+   * declaration) meant no typed caller could pass one, including the specs
+   * that exist to prove an authored `sx` survives (AGL-1323).
+   */
+  sx?: SxProps
   children?: ReactNode
 }
 
@@ -89,6 +97,8 @@ export interface TabPanelElementProps {
    * arrive this is gone and the placeholder with it (AGL-1287).
    */
   aglynDeferred?: boolean
+  /** Authored node styles, merged over the panel's own — see Tabs' `sx`. */
+  sx?: SxProps
   children?: ReactNode
 }
 
@@ -154,10 +164,6 @@ export const TabsContext = createContext<TabsContextValue | undefined>(
  */
 const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
   (props, ref) => {
-    // `sx` is not authored on this interface — the node renderer passes it
-    // through — but the merge below reads it, and without this the six
-    // `rest.sx` accesses across both components are type errors against the
-    // empty rest type (AGL-1284 added the reads, not the declaration).
     const {
       labels,
       orientation,
@@ -169,7 +175,7 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
       lazyPanels,
       children,
       ...rest
-    } = props as TabsElementProps & { sx?: SxProps }
+    } = props
     const { editorInert } = Aglyn.useScreenLink(undefined)
     const parsed = parseLabels(labels)
     const [active, setActive] = useState(0)
@@ -273,8 +279,7 @@ export const TabPanelElement = forwardRef<
   HTMLDivElement,
   TabPanelElementProps
 >((props, ref) => {
-  const { label, aglynDeferred, children, ...rest } = props as
-    TabPanelElementProps & { sx?: SxProps }
+  const { label, aglynDeferred, children, ...rest } = props
   const context = useContext(TabsContext)
   const selected = !context || labelsMatch(label, context.activeLabel)
   const visible = selected || !!context?.showAll

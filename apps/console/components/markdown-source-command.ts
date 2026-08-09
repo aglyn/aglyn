@@ -56,6 +56,8 @@ export function applyCommandToSource(
             ? `${blockPrefix}### ${selected || 'Heading'}`
             : command === 'list'
               ? `${blockPrefix}- ${selected || 'list item'}`
+              : command === 'orderedList'
+              ? `${blockPrefix}1. ${selected || 'list item'}`
               : command === 'quote'
               ? `${blockPrefix}> ${selected || 'quote'}`
               : command === 'link'
@@ -75,5 +77,5 @@ export function applyCommandToSource(
 /** Markdown-lite's syntax, as one line of helper text under a source box. */
 export const MARKDOWN_SOURCE_HINT =
   'Markdown-lite: **bold**, *italic*, # or ## headings, - lists, ' +
-  '[links](https:// or /page), ![images](https://), ``` code fences, ' +
-  '| pipe | tables |, > quotes.'
+  '1. numbered lists, [links](https:// or /page), ![images](https://), ' +
+  '``` code fences, | pipe | tables |, > quotes.'

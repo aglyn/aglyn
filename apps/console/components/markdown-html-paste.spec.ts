@@ -128,6 +128,14 @@ describe('htmlToRows (AGL-596)', () => {
     ])
   })
 
+  it('maps <ol> items to numbered rows, <ul> items stay bullets (AGL-1320)', () => {
+    expect(rowsOf('<ul><li>a</li></ul><ol><li>b</li><li>c</li></ol>')).toEqual([
+      { kind: 'listItem', inlines: [{ type: 'text', text: 'a' }] },
+      { kind: 'orderedItem', inlines: [{ type: 'text', text: 'b' }], start: 1 },
+      { kind: 'orderedItem', inlines: [{ type: 'text', text: 'c' }] },
+    ])
+  })
+
   it('recurses wrapper divs so they do not swallow content', () => {
     expect(
       rowsOf('<div><div><p>first</p></div><p>second</p></div>'),

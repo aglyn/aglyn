@@ -22,6 +22,7 @@ import Box from '@mui/material/Box'
 import MuiDrawer from '@mui/material/Drawer'
 import IconButton from '@mui/material/IconButton'
 import Stack from '@mui/material/Stack'
+import type { SxProps } from '@mui/material/styles'
 import Typography from '@mui/material/Typography'
 import {
   forwardRef,
@@ -52,6 +53,12 @@ export interface DrawerElementProps {
   anchor?: DrawerAnchor
   /** CSS width of the open panel (default 280px). Side anchors only. */
   width?: string
+  /**
+   * Authored node styles, handed over by the renderer rather than typed into
+   * an attribute — recomposed below so the panel's own sx is merged, not
+   * replaced (AGL-1323 declared it; the merge predates it).
+   */
+  sx?: SxProps
   children?: ReactNode
 }
 
@@ -137,9 +144,7 @@ const MARKER_SX = {
  */
 const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
   (props, ref) => {
-    const { anchor, width, children, sx, ...rest } = props as DrawerElementProps & {
-      sx?: unknown
-    }
+    const { anchor, width, children, sx, ...rest } = props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(sx) ? sx : sx ? [sx] : []
     const resolvedAnchor: DrawerAnchor = DRAWER_ANCHORS.includes(

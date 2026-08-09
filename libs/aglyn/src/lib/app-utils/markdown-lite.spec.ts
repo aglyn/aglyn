@@ -232,6 +232,108 @@ describe('markdown-lite', () => {
     ])
   })
 
+  it('parses a `1. ` line as an ordered list, not a paragraph (AGL-1320)', () => {
+    const blocks = parseMarkdownLite('1. Only step')
+    expect(blocks).toEqual([
+      {
+        type: 'orderedList',
+        start: 1,
+        items: [[{ type: 'text', text: 'Only step' }]],
+      },
+    ])
+  })
+
+  it('groups consecutive numbered lines into ONE ordered list (AGL-1320)', () => {
+    // The shape /legal/dmca needs: the statutory elements as items, not one
+    // run-on paragraph. `1)` is the same marker as `1.`.
+    const blocks = parseMarkdownLite('1. first\n2) second\n3. third')
+    expect(blocks).toEqual([
+      {
+        type: 'orderedList',
+        start: 1,
+        items: [
+          [{ type: 'text', text: 'first' }],
+          [{ type: 'text', text: 'second' }],
+          [{ type: 'text', text: 'third' }],
+        ],
+      },
+    ])
+  })
+
+  it('preserves an author start number other than 1 (AGL-1320)', () => {
+    const blocks = parseMarkdownLite('7. seven\n8. eight')
+    expect((blocks[0] as any).start).toBe(7)
+    expect((blocks[0] as any).items).toHaveLength(2)
+    // A counter-notice continuing at 7 must not silently restart at 1.
+    expect(serializeMarkdownLite(blocks)).toBe('7. seven\n8. eight')
+  })
+
+  it('keeps inline marks inside an item, and bullets apart from numbers (AGL-1320)', () => {
+    const blocks = parseMarkdownLite(
+      'Intro.\n\n- bullet\n\n1. A **bold** step\n2. a [link](https://x.io) step\n\nOutro.',
+    )
+    expect(blocks.map((block) => block.type)).toEqual([
+      'paragraph',
+      'list',
+      'orderedList',
+      'paragraph',
+    ])
+    expect((blocks[2] as any).items[0]).toEqual([
+      { type: 'text', text: 'A ' },
+      { type: 'bold', text: 'bold' },
+      { type: 'text', text: ' step' },
+    ])
+    expect((blocks[2] as any).items[1]).toEqual([
+      { type: 'text', text: 'a ' },
+      { type: 'link', text: 'link', href: 'https://x.io' },
+      { type: 'text', text: ' step' },
+    ])
+  })
+
+  it('a chunk merely containing a numbered line stays a paragraph (AGL-1320)', () => {
+    // Same all-lines rule the bullet and quote blocks use, which is what
+    // keeps prose opening `1997. A good year` out of the list.
+    expect(
+      parseMarkdownLite('prose line\n1. not a list here').map(
+        (block) => block.type,
+      ),
+    ).toEqual(['paragraph'])
+    // A marker needs its separating space, exactly like `#NoSpace`.
+    expect(parseMarkdownLite('1.no space').map((block) => block.type)).toEqual([
+      'paragraph',
+    ])
+  })
+
+  it('a `1. ` inside a code fence is snippet text, never a list (AGL-1320)', () => {
+    const blocks = parseMarkdownLite('```bash\n1. npm i thing\n2. done\n```')
+    expect(blocks).toEqual([
+      { type: 'code', lang: 'bash', text: '1. npm i thing\n2. done' },
+    ])
+  })
+
+  it('does not nest ordered items — an indented one is a sibling (AGL-1320)', () => {
+    // The dialect has no nesting anywhere; indentation is trimmed, so the
+    // sub-item degrades to a visible sibling rather than to prose.
+    const blocks = parseMarkdownLite('1. top\n    1. sub')
+    expect(blocks).toEqual([
+      {
+        type: 'orderedList',
+        start: 1,
+        items: [
+          [{ type: 'text', text: 'top' }],
+          [{ type: 'text', text: 'sub' }],
+        ],
+      },
+    ])
+  })
+
+  it('renumbers a `1. 1. 1.` source contiguously (AGL-1320)', () => {
+    // Only the FIRST marker is read, so the lazy markdown idiom normalizes.
+    const blocks = parseMarkdownLite('1. a\n1. b\n1. c')
+    expect((blocks[0] as any).start).toBe(1)
+    expect(serializeMarkdownLite(blocks)).toBe('1. a\n2. b\n3. c')
+  })
+
   it('classifies internal hrefs for AppLink rendering (AGL-582)', () => {
     expect(isInternalMarkdownHref('/blog/post')).toBe(true)
     expect(isInternalMarkdownHref('//evil.example')).toBe(false)
@@ -295,6 +397,19 @@ describe('serializeMarkdownLite (AGL-582)', () => {
     'multi-line quote joins to one line': '> line one\n> line two',
     'quote with inline marks': '> A **bold** and *slanted* [q](https://x.io)',
     'quote between paragraphs': 'Before.\n\n> The quote.\n\nAfter.',
+    'ordered list (AGL-1320)': '1. first\n2. second\n3. third',
+    'ordered list with a non-1 start': '7. seven\n8. eight',
+    'ordered list with `)` markers normalizes to `.`': '1) a\n2) b',
+    'lazy `1. 1. 1.` renumbers contiguously': '1. a\n1. b\n1. c',
+    'ordered items with inline marks':
+      '1. **bold** step\n2. a [link](https://example.com) step',
+    'ordered list between paragraphs':
+      'Before.\n\n1. step one\n2. step two\n\nAfter.',
+    'bullets and numbers stay separate blocks': '- bullet\n\n1. number',
+    'DMCA shape: heading, prose, enumerated elements':
+      '## Notice\n\nA notice must include:\n\n1. A **signature**.\n' +
+      '2. The work.\n3. The material.\n4. Your contact [details](/legal).\n' +
+      '5. A good-faith statement.\n6. A statement under penalty of perjury.',
     'README shape: heading, table, fence':
       '## Config\n\n| Prop | Default |\n| --- | --- |\n| size | 8 |\n\n' +
       '```ts\nregister({ size: 8 })\n```\n\nThat is all.',

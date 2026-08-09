@@ -18,7 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiFormatListNumbered } from '@aglyn/shared-data-mdi'
 import MuiPagination from '@mui/material/Pagination'
-import { forwardRef } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_DISABLED, FIELD_SIZE } from '../constants/field-presets'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -40,6 +40,14 @@ export interface PaginationElementProps {
   hidePrevButton?: boolean
   hideNextButton?: boolean
   disabled?: boolean
+  /**
+   * Accepted and dropped. The element is self-closing (see `flags`), so the
+   * editor never authors children — but the renderer builds elements from
+   * persisted props, and a stray child from an older document would reach
+   * MUI's Pagination and render beside the page list. Declared because the
+   * implementation deliberately discards it (AGL-1323).
+   */
+  children?: ReactNode
 }
 
 /** Number-typed attribute fields round-trip as strings. */
@@ -72,7 +80,7 @@ const PaginationElement = forwardRef<HTMLElement, PaginationElementProps>(
       boundaryCount,
       children: _children,
       ...rest
-    } = props as PaginationElementProps & { children?: unknown }
+    } = props
     const total = toCount(count, 10)
     return (
       <MuiPagination

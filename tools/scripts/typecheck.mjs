@@ -47,7 +47,18 @@ const SKIP = [
   'apps/docs/',
 ]
 
-const PRUNE = new Set(['node_modules', 'dist', '.next', '.docusaurus', '.git'])
+// `.claude` holds agent worktrees — separate checkouts of this same repo, each
+// with its own copy of every tsconfig and no `node_modules`. Walking them made
+// a clean run report 437 failures instead of 10, which is how a real one hides
+// (AGL-1323). A worktree type-checks itself, from its own root.
+const PRUNE = new Set([
+  'node_modules',
+  'dist',
+  '.next',
+  '.docusaurus',
+  '.git',
+  '.claude',
+])
 
 function findConfigs(dir, acc) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

@@ -37,11 +37,20 @@ const mockCanvas = {
   reset: jest.fn(),
   setNodes: jest.fn(),
   processNodesToDenormalized: jest.fn((value: unknown) => value),
-  updateInitialNodes: jest.fn(() => {
-    mockCanvas.didSetInitial = true
-  }),
+  // Both signatures mirror the real CanvasManager members, so the stub can be
+  // driven with what the hook actually passes: `updateInitialNodes` takes the
+  // confirmed-baseline options the AGL-1301/AGL-1262 cases read back off
+  // `mock.calls`, and `toJSON` returns a node MAP — an empty one is the whole
+  // point of the "never writes the empty canvas" case (AGL-1323).
+  updateInitialNodes: jest.fn(
+    (_nodes?: Record<string, unknown>, _options?: { confirmed?: boolean }) => {
+      mockCanvas.didSetInitial = true
+    },
+  ),
   applyNodes: jest.fn(),
-  toJSON: jest.fn(() => ({ nodes: { root: {} } })),
+  toJSON: jest.fn((): { nodes: Record<string, unknown> } => ({
+    nodes: { root: {} },
+  })),
 }
 
 jest.mock('@aglyn/aglyn', () => {

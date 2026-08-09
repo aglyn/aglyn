@@ -251,6 +251,24 @@ export function ListingReadme({ readme }: { readme: string }) {
                 ))}
               </Stack>
             )
+          // A README's install steps (AGL-1320) — a real `<ol>` carrying
+          // `start`, so step 4 of a continued run still reads as step 4.
+          case 'orderedList':
+            return (
+              <Stack
+                key={index}
+                component="ol"
+                start={block.start}
+                spacing={0.5}
+                sx={{ my: 0 }}
+              >
+                {block.items.map((item, itemIndex) => (
+                  <Typography key={itemIndex} component="li" variant="body2">
+                    {renderInlines(item)}
+                  </Typography>
+                ))}
+              </Stack>
+            )
           // A README's example snippet (AGL-974). Scrolls rather than wraps —
           // a wrapped command line reads as two commands.
           case 'code':

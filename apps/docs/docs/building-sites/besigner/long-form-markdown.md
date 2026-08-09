@@ -39,6 +39,8 @@ need to style anything for it to look right.
 | `**bold**`, `*italic*` | Bold and italic |
 | `[text](https://example.com)` | A link. `/pricing` works too, and navigates without a page reload |
 | `- item` | A bullet list (`*` works as well) |
+| `1. item` | A numbered list (`1)` works as well). Start at any number — `7.` counts from seven |
+| `> quoted` | A quote, set off behind a left accent |
 | `![alt](https://…)` | An image |
 | ` ```lang ` … ` ``` ` | A fenced code block |
 | `\| A \| B \|` … | A pipe table, with `:--`/`:-:`/`--:` alignment |

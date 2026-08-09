@@ -83,8 +83,8 @@ The shared **toolbar** works in both tabs:
   to pick one from your media library; the standalone **Insert image** button opens the
   media picker directly.
 
-Visual-mode shortcuts: type `# `, `## `, `### `, or `- ` at the start of a line to
-convert it to a heading or list item; **Enter** splits a block (and exits a list from
+Visual-mode shortcuts: type `# `, `## `, `### `, `- `, or `1. ` at the start of a line
+to convert it to a heading or list item; **Enter** splits a block (and exits a list from
 an empty item); **Backspace** at a line start demotes headings/list items and then
 merges paragraphs; `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` undo and redo. Pasting rich text
 (from a web page, Google Docs, etc.) keeps everything the markdown dialect can
@@ -92,8 +92,9 @@ express — bold, italic, links, headings, lists, and images — and flattens th
 plain text.
 
 Markdown supports `**bold**`, `*italic*`,
-`## headings`, `- lists`, `[links](https://…)` — including **site-relative links**
-(`[pricing](/pricing)`) that get client-side navigation — and `![images](https://…)`.
+`## headings`, `- lists`, `1. numbered lists`, `[links](https://…)` — including
+**site-relative links** (`[pricing](/pricing)`) that get client-side navigation — and
+`![images](https://…)`.
 
 There are **two heading sizes**. Any `#` run is read as a heading and clamped onto
 them: `#` becomes the larger one and `####` or deeper become the smaller one, so a

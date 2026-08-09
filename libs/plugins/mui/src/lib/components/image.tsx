@@ -19,7 +19,8 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiImage } from '@aglyn/shared-data-mdi'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
-import { forwardRef } from 'react'
+import type { SxProps } from '@mui/material/styles'
+import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -57,6 +58,18 @@ export interface ImageProps {
   screenId?: string
   /** External URL, used only when no `screenId` is set. */
   href?: string
+  /**
+   * Authored node styles, handed over by the renderer rather than typed into
+   * an attribute — recomposed below so the author's Styles-panel values are
+   * merged rather than replaced (AGL-1238).
+   */
+  sx?: SxProps
+  /**
+   * Accepted and dropped: an `<img>` is a void element and React throws on
+   * ANY children value reaching one, which 500'd whole pages (AGL-579).
+   * Declared because the implementation deliberately discards it (AGL-1323).
+   */
+  children?: ReactNode
 }
 
 // Only navigable protocols — mirrors ScreenLink's hardening.
@@ -90,7 +103,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     // were being discarded on every published page (AGL-1238).
     sx: nodeSxProp,
     ...rest
-  } = props as ImageProps & { children?: unknown; sx?: unknown }
+  } = props
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
   const nodeSx = Array.isArray(nodeSxProp) ? nodeSxProp : nodeSxProp ? [nodeSxProp] : []
   // Optional link mode (AGL-339): screen id first (rename-safe), external

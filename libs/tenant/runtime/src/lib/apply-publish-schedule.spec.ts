@@ -29,7 +29,9 @@
  * would look like the feature quietly not working.
  */
 
-const updateMock = jest.fn(async () => undefined)
+// Declares the update payload it is called with, so the cases below can read
+// `call[0]` — a zero-arg stub types `mock.calls` as `[][]` (AGL-1323).
+const updateMock = jest.fn(async (_data?: Record<string, unknown>) => undefined)
 let entitled = true
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
