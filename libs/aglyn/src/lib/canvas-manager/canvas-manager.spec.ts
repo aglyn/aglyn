@@ -580,6 +580,259 @@ describe('Aglyn: Screen Manager', () => {
     })
   })
 
+  /**
+   * AGL-1204: the Styles and custom-CSS panels assign `node.sx` directly,
+   * bypassing every mutator that records history. Undo after a style change
+   * therefore restored the last *recorded* snapshot — so the style edit
+   * vanished AND everything else done since went with it.
+   *
+   * The fix cannot be an unconditional snapshot: those panels apply live, one
+   * call per character typed and one per drag tick, so recording every call
+   * trades "undo steps back too far" for "undo steps back one character".
+   * Hence the coalescing, and hence the controls below — a `transact` that
+   * never recorded would satisfy the burst test on its own.
+   *
+   * `Date.now` is stubbed rather than using fake timers because the window is
+   * evaluated on call; there is no timer to advance.
+   */
+  describe('transact — style edits are undoable, and coalesced (AGL-1204)', () => {
+    let now = 1_000_000
+
+    beforeEach(() => {
+      now = 1_000_000
+      jest.spyOn(Date, 'now').mockImplementation(() => now)
+    })
+    afterEach(() => jest.restoreAllMocks())
+
+    const styled = () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+      return canvas
+    }
+    /** The panels' write, verbatim in shape: assign straight to the node. */
+    const setGap = (canvas: CanvasManager, value: number, key?: string) =>
+      canvas.transact(() => {
+        canvas.getNode('child1')!.sx = { gap: value } as any
+      }, key)
+
+    it('REGRESSION — one undo steps back one adjustment, not to the last recorded edit', () => {
+      const canvas = styled()
+      // A props edit records itself; before the fix this was the only
+      // snapshot on the stack, so the undo below landed here instead.
+      canvas.updateNodeProps(canvas.getNode('child1')!, { title: 'kept' })
+
+      setGap(canvas, 8, 'sx:child1:base:light:gap')
+      now += 5_000
+      setGap(canvas, 16, 'sx:child1:base:light:gap')
+
+      canvas.undo()
+
+      expect(canvas.getNode('child1')!.sx).toEqual({ gap: 8 })
+      // The load-bearing half: the props edit made BEFORE the style changes
+      // survives. Losing it is the part of this bug that destroys work.
+      expect(canvas.getNode('child1')!.props).toEqual({ title: 'kept' })
+    })
+
+    it('collapses a burst of same-key calls into ONE undo step', () => {
+      const canvas = styled()
+      // Typing "16" into Gap: three change events inside the window.
+      now += 40
+      setGap(canvas, 1, 'sx:child1:base:light:gap')
+      now += 40
+      setGap(canvas, 16, 'sx:child1:base:light:gap')
+      now += 40
+      setGap(canvas, 160, 'sx:child1:base:light:gap')
+
+      canvas.undo()
+
+      // Back to before the adjustment began, in one step — not back one
+      // keystroke, and not (as before the fix) not at all.
+      expect(canvas.getNode('child1')!.sx).toEqual({})
+      expect(canvas.canUndo).toBe(false)
+    })
+
+    it('CONTROL — a pause longer than the window starts a new step', () => {
+      const canvas = styled()
+      setGap(canvas, 8, 'sx:child1:base:light:gap')
+      now += CanvasManager.COALESCE_WINDOW_MS + 1
+      setGap(canvas, 16, 'sx:child1:base:light:gap')
+
+      canvas.undo()
+      expect(canvas.getNode('child1')!.sx).toEqual({ gap: 8 })
+    })
+
+    it('CONTROL — a different key inside the window is its own step', () => {
+      const canvas = styled()
+      setGap(canvas, 8, 'sx:child1:base:light:gap')
+      now += 10
+      // Moving from Gap to Padding is a second adjustment even mid-burst,
+      // which is why the key carries the field names and not just the node.
+      canvas.transact(() => {
+        canvas.getNode('child1')!.sx = { gap: 8, padding: 2 } as any
+      }, 'sx:child1:base:light:padding')
+
+      canvas.undo()
+      expect(canvas.getNode('child1')!.sx).toEqual({ gap: 8 })
+    })
+
+    it('CONTROL — no key records every call, however fast', () => {
+      const canvas = styled()
+      // Two visibility toggles flipped in the same tick: two decisions.
+      canvas.transact(() => {
+        canvas.getNode('child1')!.sx = { display: 'none' } as any
+      })
+      canvas.transact(() => {
+        canvas.getNode('child1')!.sx = { display: 'block' } as any
+      })
+
+      canvas.undo()
+      expect(canvas.getNode('child1')!.sx).toEqual({ display: 'none' })
+    })
+
+    it('closes an open burst on reset, so the next document records its first edit', () => {
+      const canvas = styled()
+      setGap(canvas, 8, 'sx:child1:base:light:gap')
+
+      canvas.reset()
+      canvas.setNodes(nodes)
+      // Same key, same tick — but a different editing session. Swallowing
+      // this into the previous document's burst would leave the new
+      // document's first style edit unrecorded.
+      setGap(canvas, 16, 'sx:child1:base:light:gap')
+
+      expect(canvas.canUndo).toBe(true)
+      canvas.undo()
+      expect(canvas.getNode('child1')!.sx).toEqual({})
+    })
+
+    it('returns what the mutation returns', () => {
+      const canvas = styled()
+      expect(canvas.transact(() => 'value')).toBe('value')
+    })
+
+    /**
+     * The second place a style edit can land (AGL-1306): on a reusable
+     * component INSTANCE the Styles panel writes `node.styleOverrides`, not
+     * `node.sx`. Undoability is not inherited from the sx case — the
+     * snapshot is `toJS` of the node map, so a field the snapshot or the
+     * restore dropped would leave exactly this path still eating work,
+     * silently, for the most common way an instance gets styled.
+     */
+    describe('the instance override layer is undoable too (AGL-1306)', () => {
+      const instanced = () => {
+        const canvas = new CanvasManager(undefined as any)
+        canvas.setNodes({
+          ...nodes,
+          inst: {
+            $id: 'inst',
+            type: NodeType.NODE,
+            parentId: NODE_ROOT_ID,
+            componentId: 'reusableInstance',
+            props: { refId: 'cta' },
+            nodes: [],
+          },
+        } as any)
+        return canvas
+      }
+      /** The panel's write on an instance: through the override slice. */
+      const setOverride = (
+        canvas: CanvasManager,
+        root: Record<string, any> | undefined,
+        key?: string,
+      ) =>
+        canvas.transact(() => {
+          canvas.getNode('inst')!.styleOverrides = root
+            ? { root }
+            : (undefined as any)
+        }, key)
+
+      it('REGRESSION — undo restores the previous override, not the last recorded edit', () => {
+        const canvas = instanced()
+        canvas.updateNodeProps(canvas.getNode('child1')!, { title: 'kept' })
+
+        setOverride(canvas, { backgroundColor: '#0b4a6f' }, 'sx:inst:bg')
+        now += 5_000
+        setOverride(canvas, { backgroundColor: '#101828' }, 'sx:inst:bg')
+
+        canvas.undo()
+
+        expect(canvas.getNode('inst')!.styleOverrides).toEqual({
+          root: { backgroundColor: '#0b4a6f' },
+        })
+        // Same load-bearing half as the sx case: unrelated work survives.
+        expect(canvas.getNode('child1')!.props).toEqual({ title: 'kept' })
+      })
+
+      it('undo brings back an override cleared by its chip', () => {
+        const canvas = instanced()
+        setOverride(canvas, { backgroundColor: '#0b4a6f' }, 'sx:inst:bg')
+        now += 5_000
+        // Clearing the last property removes the field entirely — the most
+        // destructive thing the override UI offers, and the one that most
+        // needs a way back.
+        setOverride(canvas, undefined)
+
+        expect(canvas.getNode('inst')!.styleOverrides).toBeUndefined()
+        canvas.undo()
+        expect(canvas.getNode('inst')!.styleOverrides).toEqual({
+          root: { backgroundColor: '#0b4a6f' },
+        })
+      })
+
+      it('collapses an override burst into ONE undo step', () => {
+        const canvas = instanced()
+        now += 40
+        setOverride(canvas, { py: 1 }, 'sx:inst:py')
+        now += 40
+        setOverride(canvas, { py: 12 }, 'sx:inst:py')
+
+        canvas.undo()
+
+        expect(canvas.getNode('inst')!.styleOverrides).toBeUndefined()
+        expect(canvas.canUndo).toBe(false)
+      })
+    })
+
+    /**
+     * Co-editing (AGL-1301/AGL-677) applies a collaborator's change through
+     * `setNodes`, which records no history — someone else's edit must never
+     * become a step on THIS author's undo stack. Asserted here because
+     * `transact` is the newest writer near that boundary.
+     */
+    describe('a remote application stays off the local undo stack', () => {
+      // A collaborator's map, distinguishable from the local one by a props
+      // value nothing local ever writes.
+      const remote = {
+        ...nodes,
+        child1: { ...nodes['child1'], props: { title: 'from a co-editor' } },
+      } as any
+
+      it('setNodes records nothing', () => {
+        const canvas = styled()
+        canvas.setNodes(remote)
+        expect(canvas.canUndo).toBe(false)
+      })
+
+      it('and it closes an open burst, so the next local edit records', () => {
+        const canvas = styled()
+        setGap(canvas, 8, 'sx:child1:base:light:gap')
+        // The collaborator's change lands mid-burst.
+        canvas.setNodes(remote)
+        now += 10
+        // Same key, same window — but the state this adjustment started
+        // from is gone. Folding into that snapshot would make ONE undo of a
+        // local style tweak revert the collaborator's edit as well.
+        setGap(canvas, 16, 'sx:child1:base:light:gap')
+
+        canvas.undo()
+        expect(canvas.getNode('child1')!.sx).toEqual({})
+        expect(canvas.getNode('child1')!.props).toEqual({
+          title: 'from a co-editor',
+        })
+      })
+    })
+  })
+
   describe('applyNodes history', () => {
     it('makes a raw-json replacement undoable and redoable', () => {
       const canvas = new CanvasManager(undefined as any)
