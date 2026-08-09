@@ -19,6 +19,7 @@ import {
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   PLAN_PRICING,
   POS_REGISTER_ADDON_MONTHLY_USD,
+  SELF_SERVE_PLANS,
   type OrgPlan,
   type OrgSeatAddons,
 } from '@aglyn/aglyn/server'
@@ -60,7 +61,28 @@ const FLAT_ENV_NAME: Partial<Record<AddonKind, string>> = {
   eventCalendar: 'EVENT_CALENDAR',
 }
 
-const PAID_PLANS: readonly OrgPlan[] = ['starter', 'pro', 'business', 'advanced']
+/**
+ * Every plan that is sold with a Stripe price — DERIVED, never hand-listed
+ * (AGL-1340).
+ *
+ * The literal that used to sit here listed starter, pro, business and
+ * advanced only — it predated the Scale and Agency tiers, so
+ * `addonKindFromPriceId()` could not recognise a single Scale/Agency add-on
+ * price coming back from Stripe. `addonPriceId()` still SOLD them (it only
+ * uppercases the plan), so the money moved and the read-back returned
+ * nothing: the webhook wrote `seatAddons: {all zeros}` for the
+ * highest-paying orgs on the next subscription event, and `seatAddons` is an
+ * ENTITLEMENT INPUT (`plan-entitlements.ts` — it raises `hostLimit` and
+ * `posRegisters`, and flips the `eventCalendar` feature).
+ *
+ * Deriving from `SELF_SERVE_PLANS` is what stops the next tier from
+ * reintroducing it: `free` has nothing to sell and `enterprise` is quoted
+ * per deal (no `STRIPE_PRICE_ENTERPRISE_*` exists), so everything else is
+ * by definition a paid, priced plan.
+ */
+export const PAID_PLANS: readonly OrgPlan[] = SELF_SERVE_PLANS.filter(
+  (plan) => plan !== 'free',
+)
 
 function env(name: string): string | null {
   const value = process.env[name]
@@ -104,6 +126,86 @@ export function addonKindFromPriceId(
     }
   }
   return null
+}
+
+/**
+ * The BASE plan's Stripe price id at an interval
+ * (`STRIPE_PRICE_{PLAN}[_YEARLY]`); null for `free`, for the custom-priced
+ * `enterprise`, and for an env that isn't configured. Read at call time, so
+ * it never freezes a stale value at module load the way the routes'
+ * `PRICE_ENV` maps do.
+ */
+export function planPriceId(
+  plan: OrgPlan,
+  interval: BillingInterval,
+): string | null {
+  if (!PAID_PLANS.includes(plan)) return null
+  const yearly = interval === 'year' ? '_YEARLY' : ''
+  return env(`STRIPE_PRICE_${plan.toUpperCase()}${yearly}`)
+}
+
+/**
+ * Which plan a subscription item's price sells; null for an add-on price,
+ * the metered price, an ad-hoc enterprise price, and anything unknown.
+ */
+export function planFromPriceId(
+  priceId: string | null | undefined,
+): OrgPlan | null {
+  if (!priceId) return null
+  for (const plan of PAID_PLANS) {
+    for (const interval of ['month', 'year'] as const) {
+      if (planPriceId(plan, interval) === priceId) return plan
+    }
+  }
+  return null
+}
+
+/**
+ * The shared metered-usage price (AGL-635) that makes reported usage
+ * billable. MONTHLY-only — the `aglyn_metered_usage` price recurs monthly
+ * and Stripe rejects a subscription whose items mix intervals — so
+ * every caller has to ask the interval before attaching it (AGL-1340).
+ * There is deliberately no `_YEARLY` fallback here: no such price exists.
+ */
+export function meteredPriceId(): string | null {
+  return env('STRIPE_PRICE_METERED')
+}
+
+/** Whether a price id is the shared metered-usage price. */
+export function isMeteredPriceId(priceId: string | null | undefined): boolean {
+  const metered = meteredPriceId()
+  return Boolean(metered && priceId === metered)
+}
+
+/**
+ * The subscription's BASE PLAN item, identified POSITIVELY (AGL-1340).
+ *
+ * This used to be "whatever no add-on price claims" — identification by
+ * elimination, which quietly returns the wrong item the moment a
+ * subscription carries anything the add-on map doesn't recognise: the
+ * metered item, a grandfathered v1 price, a coupon-era SKU, an item added
+ * by hand in the Stripe dashboard. Picking an add-on item as the plan item
+ * means a plan switch re-prices the ADD-ON, and reads the billing interval
+ * off it.
+ *
+ * So: match a known `STRIPE_PRICE_{PLAN}[_YEARLY]` first. Only when nothing
+ * matches — an enterprise deal bills on an ad-hoc price, and grandfathered
+ * subscriptions predate the current SKUs — fall back to the old rule,
+ * minus the metered item, and finally to `items[0]` so behaviour for those
+ * subscriptions is unchanged.
+ */
+export function findPlanItem<T extends { price?: { id?: string } | null }>(
+  items: readonly T[] | null | undefined,
+): T | null {
+  const list = items ?? []
+  const byPlanPrice = list.find((item) => planFromPriceId(item?.price?.id))
+  if (byPlanPrice) return byPlanPrice
+  const notAnAddon = list.find(
+    (item) =>
+      !addonKindFromPriceId(item?.price?.id) &&
+      !isMeteredPriceId(item?.price?.id),
+  )
+  return notAnAddon ?? list[0] ?? null
 }
 
 /**
