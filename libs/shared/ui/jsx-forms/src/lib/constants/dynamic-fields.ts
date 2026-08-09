@@ -23,6 +23,7 @@ import type { ToggleButtonProps } from '../components/toggle-button.component'
 import type {
   CheckboxProps,
   CssDimensionProps,
+  CssGradientProps,
   DatePickerProps,
   DualListSelectProps,
   FieldArrayProps,
@@ -64,6 +65,12 @@ export const FieldTextField = dynamic<TextFieldProps>(() =>
 )
 export const FieldCssDimension = dynamic<CssDimensionProps>(() =>
   import('../mapper/css-dimension').then((mod) => mod.default),
+)
+// Background fill editor (AGL-1331). `ssr: false` like the other pickers:
+// it mounts a Popper on an anchor element and the react-color picker.
+export const FieldCssGradient = dynamic<CssGradientProps>(
+  () => import('../mapper/css-gradient').then((mod) => mod.default),
+  { ssr: false },
 )
 export const FieldTextarea = dynamic<TextareaProps>(() =>
   import('../mapper/textarea').then((mod) => mod.default),

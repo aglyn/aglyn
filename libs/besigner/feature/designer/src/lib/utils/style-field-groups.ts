@@ -17,6 +17,7 @@
 
 import { FieldComponentType } from '@aglyn/aglyn'
 import { SX_SCHEME_DARK_KEY, type SxScheme } from '@aglyn/aglyn-node-renderer'
+import { describeCssColorProblem } from '@aglyn/shared-data-enums'
 import { besignerDocsUrl } from './docs-help'
 import { readSxValue, type SxBreakpoint, writeSxValue } from './responsive-sx'
 
@@ -160,6 +161,51 @@ const dimensionField = (
  */
 const muiSizing = { numberAs: 'mui-sizing' as const }
 
+/**
+ * Rejects a colour-field value that CSS would drop (AGL-1331).
+ *
+ * Every field in this panel applies live, on a debounce, and
+ * `ElementStylesFormTemplate` only schedules that commit while the form is
+ * `valid` — so returning a message here means the value is shown as an
+ * error under the field and NEVER reaches `sx`. That is the whole point:
+ * before this, a gradient typed into Background Color was accepted, stored
+ * as `background-color: linear-gradient(…)`, dropped by the CSS parser, and
+ * the element just went transparent with nothing to explain it.
+ *
+ * Rejecting rather than silently re-routing the value to `backgroundImage`
+ * is deliberate. These fields commit per KEYSTROKE, so a router would fire
+ * on `linear-gradient(2` and every prefix after it, moving half-typed
+ * values into a different sx key while the field the author is typing in
+ * blanks itself — a second kind of vanishing. A validator is inert until
+ * the value is complete, and its message names the field that CAN hold a
+ * gradient.
+ */
+const colorFieldValidator = (value: unknown) => describeCssColorProblem(value)
+
+/** A colour picker field, with the value guard every one of them needs. */
+const colorField = (
+  name: string,
+  label: string,
+  description: string,
+  presetColors: string[],
+  extra?: Record<string, unknown>,
+) => ({
+  component: FieldComponentType.COLOR_PICKER,
+  name,
+  label,
+  description,
+  presetColors,
+  validate: [colorFieldValidator],
+  // Show the message as soon as the value is invalid, not on blur. Every
+  // control in this panel applies live and an author typically moves
+  // straight to the canvas, so a touched-gated error would keep the value
+  // silently uncommitted for exactly as long as the old bug kept it
+  // silently dropped. It also explains an ALREADY-broken stored value the
+  // moment the field is opened.
+  validateOnMount: true,
+  ...extra,
+})
+
 const selectField = (
   name: string,
   label: string,
@@ -261,21 +307,34 @@ function styleFieldGroups(presetColors: string[]): StyleFieldGroup[] {
       $id: 'colors',
       label: 'Colors',
       fields: [
-        {
-          component: FieldComponentType.COLOR_PICKER,
-          name: 'color',
-          label: 'Text Color',
-          description: 'The text color of the element',
+        colorField(
+          'color',
+          'Text Color',
+          'The text color of the element',
           presetColors,
-          ...half,
-        },
-        {
-          component: FieldComponentType.COLOR_PICKER,
-          name: 'backgroundColor',
-          label: 'Background Color',
-          description: 'The background color of the element',
+          half,
+        ),
+        colorField(
+          'backgroundColor',
+          'Background Color',
+          'A solid background color, or a theme color that follows the site palette.',
           presetColors,
-          ...half,
+          half,
+        ),
+        // Gradient backgrounds (AGL-1331). A separate field rather than a
+        // mode of Background Color, because they are different CSS
+        // properties: this one writes `backgroundImage`, which paints OVER
+        // the solid colour, so an author can keep a solid fallback under a
+        // gradient. Solid here means "no background image" and clears it.
+        {
+          component: FieldComponentType.CSS_GRADIENT,
+          name: 'backgroundImage',
+          label: 'Background Fill',
+          description:
+            'Solid uses the Background Color above. A gradient paints over ' +
+            'it — set the angle and the color stops, and bind any stop to a ' +
+            'theme color so it follows the palette.',
+          presetColors,
         },
       ],
     },
@@ -374,14 +433,13 @@ function styleFieldGroups(presetColors: string[]): StyleFieldGroup[] {
           'Border shorthand, e.g. 1px solid or 2px dashed.',
           half,
         ),
-        {
-          component: FieldComponentType.COLOR_PICKER,
-          name: 'borderColor',
-          label: 'Border Color',
-          description: 'Color for the border shorthand above.',
+        colorField(
+          'borderColor',
+          'Border Color',
+          'Color for the border shorthand above.',
           presetColors,
-          ...half,
-        },
+          half,
+        ),
         // Per-side borders (AGL-1199). A divider under a bar, a rule
         // between columns and a left accent rail are all far more common
         // than a box outlined on four sides, and the shorthand above
@@ -624,6 +682,10 @@ export const SCHEME_SCOPED_STYLE_FIELDS = [
   'color',
   'backgroundColor',
   'borderColor',
+  // A gradient IS colour (AGL-1331), so it scopes like the rest. Its
+  // token-bound stops already follow the palette per scheme on their own;
+  // this is what lets an author give dark its own gradient outright.
+  'backgroundImage',
 ] as const
 
 const schemeScopedFields: ReadonlySet<string> = new Set(

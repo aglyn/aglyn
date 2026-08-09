@@ -27,6 +27,7 @@ import {
   FIELD_MAP_CHECKBOX,
   FIELD_MAP_COLOR_PICKER,
   FIELD_MAP_CSS_DIMENSION,
+  FIELD_MAP_CSS_GRADIENT,
   FIELD_MAP_ICON_PICKER,
   simpleComponentMapper,
   useFormApi,
@@ -190,6 +191,9 @@ export const elementPropsComponentMapper = {
   // height and friends were free text, so the author had to type the unit
   // and a bare `320` silently did nothing.
   [Aglyn.FieldComponentType.CSS_DIMENSION]: FIELD_MAP_CSS_DIMENSION,
+  // Background fill editor for gradient-capable attributes (AGL-1331);
+  // the Styles panel reaches it through the shared componentMapper.
+  [Aglyn.FieldComponentType.CSS_GRADIENT]: FIELD_MAP_CSS_GRADIENT,
   // Pill-rendering editor for token-capable free-text attributes
   // (AGL-586); the attributes memo rewrites TEXT_FIELD/TEXTAREA to it.
   [TOKEN_TEXT_FIELD_COMPONENT]: TokenTextField,

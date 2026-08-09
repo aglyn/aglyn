@@ -24,7 +24,7 @@ import { forwardRef, type HTMLAttributes, useContext } from 'react'
 import { isValidElementType } from 'react-is'
 import RendererComponents from '../contexts/renderer-components'
 import { LeafSxTransformContext } from '../contexts/leaf-sx-transform'
-import { resolveSchemeSx } from '../utils/scheme-sx'
+import { resolvePaletteVarsSx, resolveSchemeSx } from '../utils/scheme-sx'
 
 const DefaultComponent = styled('div')({})
 
@@ -78,13 +78,27 @@ export const Leaf = observer(
     // light/dark (tenant HostThemeProvider, canvas useAglynSiteTheme), so
     // '@scheme dark' sx slices resolve here against the ACTIVE theme's
     // palette mode — the one signal that is correct in both places.
-    const theme = useTheme() as { palette?: { mode?: string } } | null
+    const theme = useTheme() as {
+      palette?: { mode?: string } & Record<string, unknown>
+    } | null
     const activeScheme = theme?.palette?.mode === 'dark' ? 'dark' : 'light'
     // MUI array composition: later entries win on key conflicts, so the
     // node-level sx (Styles panel output) overrides props.sx.
-    const mergedSx = resolveSchemeSx(
-      mergeSxProps(sx as any, propsSx as any, node?.sx as any),
-      activeScheme,
+    //
+    // Palette token references (AGL-1331): the Background Fill field
+    // persists a token-bound gradient stop as
+    // `var(--mui-palette-primary-main, #00B0FF)`, because `backgroundImage`
+    // is NOT one of the sx keys MUI resolves against the palette. They are
+    // substituted here, against the site theme, so the canvas cannot pick
+    // up the console's `--mui-palette-*` and the tenant (whose theme has no
+    // CSS variables at all) still tracks palette changes. Values carrying
+    // no reference come back by identity.
+    const mergedSx = resolvePaletteVarsSx(
+      resolveSchemeSx(
+        mergeSxProps(sx as any, propsSx as any, node?.sx as any),
+        activeScheme,
+      ),
+      theme?.palette,
     )
 
     // Shared leaf attributes; self-closing components must receive NO
