@@ -22,6 +22,7 @@ import { type ReactNode } from 'react'
 import {
   useHostError,
   useHostId,
+  useHostOrgError,
   useHostReady,
   useHostRetry,
   useHostSubdomain,
@@ -43,12 +44,19 @@ import {
  * exist — a pasted deep link or refresh can hit `permission-denied` before the
  * ID token attaches. That case shows a retry, so a valid site is never
  * declared missing.
+ *
+ * The ORG read failing terminally lands here too (AGL-1260): resolution never
+ * runs without an org, so the provider settles readiness with the error flag
+ * up rather than leaving the spinner standing forever. The copy names the
+ * right failure — the workspaces couldn't load, not this workspace's sites —
+ * and "Try again" re-runs the membership listen.
  */
 export function HostGuard({ children }: { children?: ReactNode }) {
   const subdomain = useHostSubdomain()
   const ready = useHostReady()
   const hostId = useHostId()
   const errored = useHostError()
+  const orgErrored = useHostOrgError()
   const retry = useHostRetry()
 
   if (subdomain && !ready) {
@@ -72,8 +80,11 @@ export function HostGuard({ children }: { children?: ReactNode }) {
           }}
         >
           <Typography variant="body1" color="text.secondary">
-            {"Couldn't load this workspace's sites. Check your connection " +
-              'and try again.'}
+            {orgErrored
+              ? "Couldn't load your workspaces. Check your connection " +
+                'and try again.'
+              : "Couldn't load this workspace's sites. Check your " +
+                'connection and try again.'}
           </Typography>
           {/*
             Retries in place, never `window.location.reload()` (AGL-1200). A

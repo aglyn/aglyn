@@ -65,7 +65,12 @@ const HOST_ACCESS_ROLES = Object.keys(HOST_ACCESS_ROLE_KEYS) as HostAccessRole[]
  */
 const RETRY_BASE_DELAY_MS = 400
 const RETRY_MAX_DELAY_MS = 3200
-const MAX_RETRIES = 6
+/**
+ * Exported because the org-membership listen shares the budget (AGL-1260):
+ * it fails in the same cold-load window for the same reason, so the schedule
+ * that was tuned here is the schedule, not a coincidence to keep in sync.
+ */
+export const MAX_RETRIES = 6
 
 /** 400, 800, 1600, 3200, 3200, 3200 — see {@link RETRY_BASE_DELAY_MS}. */
 export function retryDelayMs(attempt: number): number {
