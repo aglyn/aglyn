@@ -64,6 +64,10 @@ import {
   TokenTextField,
   TOKEN_TEXT_FIELD_COMPONENT,
 } from './token-text-field.component'
+import {
+  ScreenLinkField,
+  SCREEN_LINK_FIELD_COMPONENT,
+} from './screen-link-field.component'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
 import {
   InteractionsContext,
@@ -197,6 +201,9 @@ export const elementPropsComponentMapper = {
   // Pill-rendering editor for token-capable free-text attributes
   // (AGL-586); the attributes memo rewrites TEXT_FIELD/TEXTAREA to it.
   [TOKEN_TEXT_FIELD_COMPONENT]: TokenTextField,
+  // Screen picker + external-URL escape hatch for `Link`-typed component
+  // props (AGL-1335), which were plain text boxes storing a raw path.
+  [SCREEN_LINK_FIELD_COMPONENT]: ScreenLinkField,
   // A placed plugin's declared settings as real fields (AGL-1049); the
   // attributes memo rewrites the plugin's JSON attribute to it.
   [PLUGIN_SETTINGS_FIELD_COMPONENT]: PluginSettingsField,
@@ -241,9 +248,26 @@ export function buildInstancePropFields(
             component: Aglyn.FieldComponentType.TEXT_FIELD,
             type: 'number',
           }
+        case 'href':
+          // The screen picker the Button's own "Link to screen" field uses
+          // (AGL-1335). A `Link` prop was a text box at both ends, so nine
+          // live CTAs stored the literal `/pricing` and a rename of that
+          // screen would have broken all nine silently — the exact
+          // regression the prop introduced against the field it replaced.
+          return {
+            ...base,
+            component: SCREEN_LINK_FIELD_COMPONENT,
+            // The default travels under its own key, and the generic
+            // `Defaults to "…"` text is dropped: the picker names it
+            // itself, resolving a screen reference to the screen's NAME.
+            // `defaultValue` is NOT the key to use — data-driven-forms
+            // treats that as an initial value, which would persist the
+            // component's default onto every instance that touched it.
+            propDefault: prop.defaultValue,
+            description: undefined,
+          }
         case 'richText':
         case 'text':
-        case 'href':
         case 'image':
         default:
           // Token-capable, so an override can itself carry a `{{var:id}}`:

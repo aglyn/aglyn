@@ -17,6 +17,7 @@
 
 import { PLUGIN_SETTINGS_FIELD_COMPONENT } from './plugin-settings-field.component'
 import { TOKEN_TEXT_FIELD_COMPONENT } from './token-text-field.component'
+import { SCREEN_LINK_FIELD_COMPONENT } from './screen-link-field.component'
 import { act, renderHook } from '@testing-library/react'
 
 import * as Aglyn from '@aglyn/aglyn'
@@ -227,6 +228,20 @@ describe('buildInstancePropFields (AGL-1247)', () => {
       { name: 'ok_name', type: 'text' as const },
     ])
     expect(fields.map((field) => field.name)).toEqual(['propValues.ok_name'])
+  })
+
+  it('gives a Link prop the screen picker, not a text box (AGL-1335)', () => {
+    // The defect: `Link` behaved identically to `Text` at both ends, so an
+    // author who reasonably assumed rename-safety got a hardcoded path.
+    const fields = buildInstancePropFields([
+      { name: 'secondaryLink', type: 'href' as const },
+    ])
+    expect(fields[0].component).toBe(SCREEN_LINK_FIELD_COMPONENT)
+    expect(fields[0].component).not.toBe(TOKEN_TEXT_FIELD_COMPONENT)
+    // AGL-584 again: an unregistered editor blanks the whole panel.
+    expect(String(fields[0].component) in elementPropsComponentMapper).toBe(
+      true,
+    )
   })
 
   it('negative control: an unparameterised definition adds no fields', () => {

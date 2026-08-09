@@ -16,9 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import {
-  mdiGestureTapButton,
-} from '@aglyn/shared-data-mdi'
+import { mdiGestureTapButton } from '@aglyn/shared-data-mdi'
 import { getMdiIconPath } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import Button, { type ButtonProps } from '@mui/material/Button'
@@ -66,14 +64,15 @@ function iconFromId(iconId?: string, iconPath?: string) {
   return path ? <MdiIcon path={path} fontSize="small" /> : undefined
 }
 
-// Only navigable protocols — mirrors ScreenLink's hardening.
-const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
-
 /**
  * Button with optional link mode (AGL-139): a screen id or external URL
  * renders through AppLink exactly like the Screen Link component —
  * degrading to a plain button in the besigner/preview and when the id
  * doesn't resolve.
+ *
+ * Resolution (id-vs-URL precedence, protocol hardening) is `useLinkTarget`
+ * so a `Link`-typed component prop bound into EITHER field resolves the
+ * same way here as in Screen Link, Link Box and Image (AGL-1335).
  */
 const LinkableButton = forwardRef<any, LinkableButtonProps>((props, ref) => {
   const {
@@ -93,13 +92,10 @@ const LinkableButton = forwardRef<any, LinkableButtonProps>((props, ref) => {
     startIcon: iconFromId(startIconId, startIconPath),
     endIcon: iconFromId(endIconId, endIconPath),
   }
-  const { href: resolvedHref, suppressNavigation } =
-    Aglyn.useScreenLink(screenId)
-  const safeExternalHref =
-    externalHref && SAFE_HREF.test(externalHref.trim())
-      ? externalHref.trim()
-      : undefined
-  const href = screenId ? resolvedHref : safeExternalHref
+  const { href, suppressNavigation } = Aglyn.useLinkTarget(
+    screenId,
+    externalHref,
+  )
 
   if (!href || suppressNavigation) {
     return <Button ref={ref} {...iconProps} {...rest} />

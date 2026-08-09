@@ -20,8 +20,10 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiDelete, mdiPlus } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { ScreenLinkValuePicker } from '@aglyn/besigner-ui'
 import {
   Alert,
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -194,16 +196,34 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
                 }
                 sx={{ flex: 1 }}
               />
-              <TextField
-                label="Default"
-                size="small"
-                value={prop.defaultValue ?? ''}
-                helperText="Used where a page sets nothing"
-                onChange={(event) =>
-                  update(index, { defaultValue: event.target.value })
-                }
-                sx={{ flex: 1 }}
-              />
+              {prop.type === 'href' ? (
+                // A `Link` default is a screen, not a path (AGL-1335): the
+                // picker stores the screen id, so the component's fallback
+                // link survives a rename of the screen it points at — which
+                // is what "Link" promised and a text box could not deliver.
+                <Box sx={{ flex: 1 }}>
+                  <ScreenLinkValuePicker
+                    label="Default"
+                    value={prop.defaultValue ?? ''}
+                    emptyLabel="No default"
+                    helperText="Used where a page sets nothing"
+                    onChange={(next) =>
+                      update(index, { defaultValue: next })
+                    }
+                  />
+                </Box>
+              ) : (
+                <TextField
+                  label="Default"
+                  size="small"
+                  value={prop.defaultValue ?? ''}
+                  helperText="Used where a page sets nothing"
+                  onChange={(event) =>
+                    update(index, { defaultValue: event.target.value })
+                  }
+                  sx={{ flex: 1 }}
+                />
+              )}
               <IconButton
                 aria-label={`Remove ${prop.name || 'property'}`}
                 onClick={() =>

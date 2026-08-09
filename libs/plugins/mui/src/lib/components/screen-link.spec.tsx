@@ -111,6 +111,61 @@ describe('ScreenLink renderAs (AGL-1195)', () => {
     }
   })
 
+  it('resolves a prop-fed screen reference wherever it lands', () => {
+    // What a `Link`-typed component prop substitutes into whichever field
+    // the author bound it to (AGL-1335). Both slots must resolve, or the
+    // prop is rename-safe on one field and silently dead on the other.
+    const site = (ui: React.ReactElement, screens: Record<string, string>) =>
+      render(
+        <Aglyn.ScreenLinkContext.Provider value={{ screens }}>
+          {ui}
+        </Aglyn.ScreenLinkContext.Provider>,
+      )
+    const screens = { s1: 'pricing' }
+    const { container, unmount } = site(
+      <ScreenLink renderAs="link" href="screen:s1">
+        {'Plans'}
+      </ScreenLink>,
+      screens,
+    )
+    expect(container.querySelector('a')?.getAttribute('href')).toBe('/pricing')
+    unmount()
+
+    // The point of the id: rename the screen and the link follows.
+    const renamed = site(
+      <ScreenLink renderAs="link" href="screen:s1">
+        {'Plans'}
+      </ScreenLink>,
+      { s1: 'plans-and-pricing' },
+    )
+    expect(renamed.container.querySelector('a')?.getAttribute('href')).toBe(
+      '/plans-and-pricing',
+    )
+  })
+
+  it('keeps a legacy raw-string value rendering exactly as it did', () => {
+    // The nine live `/product/*` CTAs hold a literal path in a `Link` prop.
+    // Backwards compatibility is the whole constraint: no routing map is
+    // consulted, the string IS the href.
+    const { container } = render(
+      <Aglyn.ScreenLinkContext.Provider value={{ screens: { s1: 'pricing' } }}>
+        <ScreenLink renderAs="link" href="/pricing">
+          {'Plans'}
+        </ScreenLink>
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+    expect(container.querySelector('a')?.getAttribute('href')).toBe('/pricing')
+  })
+
+  it('still refuses a script URL after the resolution moved (AGL-1335)', () => {
+    render(
+      <ScreenLink renderAs="link" href="javascript:alert(1)">
+        {'Nope'}
+      </ScreenLink>,
+    )
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
   it('leaves the shared field presets unmutated', () => {
     // The schema spreads FIELD_SIZE/FIELD_FULL_WIDTH rather than editing
     // them; mutating would put a `renderAs` condition on every Button,

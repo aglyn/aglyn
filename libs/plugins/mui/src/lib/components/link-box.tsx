@@ -43,12 +43,6 @@ export interface LinkBoxProps {
   children?: ReactNode
 }
 
-// Same guard as Screen Link: a stored `javascript:`/`data:` href would
-// execute in visitors' browsers.
-const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
-/** Of those, the ones that actually leave the site — see `newTab`. */
-const LEAVES_SITE = /^(https?:\/\/|mailto:|tel:)/i
-
 /**
  * A container that IS the link — icon, heading and description inside one
  * anchor, instead of a tile whose only clickable part is its title.
@@ -65,30 +59,22 @@ const LEAVES_SITE = /^(https?:\/\/|mailto:|tel:)/i
  * wrap it in one of these.
  */
 const LinkBox = forwardRef<HTMLElement, LinkBoxProps>((props, ref) => {
-  const {
-    screenId,
-    href: externalHref,
-    newTab,
-    children,
-    sx,
-    ...rest
-  } = props
+  const { screenId, href: externalHref, newTab, children, sx, ...rest } = props
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
   // Spreading `rest` with `sx` still inside it would REPLACE the baseline
   // below rather than merge with it, so every styled tile would quietly lose
   // `textDecoration: none` and get the browser's underlined-blue anchor.
   const nodeSx = Array.isArray(sx) ? sx : sx ? [sx] : []
-  const { href: resolvedHref, suppressNavigation } = Aglyn.useScreenLink(screenId)
-  const safeExternalHref =
-    externalHref && SAFE_HREF.test(externalHref.trim())
-      ? externalHref.trim()
-      : undefined
-  const href = screenId ? resolvedHref : safeExternalHref
+  // Shared resolution (AGL-1335): screen id first, `javascript:`/`data:`
+  // hrefs refused, `screen:`-prefixed prop values understood in either slot.
   // "External" means it leaves the site, not merely "typed by hand": a
   // site-relative `/pricing` in the href field must stay in the tab, or the
   // visitor loses their history for nothing.
-  const external =
-    !screenId && Boolean(safeExternalHref) && LEAVES_SITE.test(safeExternalHref!)
+  const {
+    href,
+    suppressNavigation,
+    leavesSite: external,
+  } = Aglyn.useLinkTarget(screenId, externalHref)
 
   // The unresolved and suppressed cases keep the same ELEMENT, not just the
   // same box (AGL-1268): this used to render a `<div>` here and an `<a>` when

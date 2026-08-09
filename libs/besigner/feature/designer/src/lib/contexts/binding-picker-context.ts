@@ -54,6 +54,17 @@ export interface BindingPickerContextValue {
    */
   variables?: Record<string, import('@aglyn/aglyn').HostVariable>
   functions?: Record<string, import('@aglyn/aglyn').HostFunction>
+  /**
+   * Props declared by the reusable component being edited (AGL-1335), so
+   * `{{prop.*}}` is offered in the insert picker like every other binding.
+   *
+   * Set ONLY inside a component editor — everywhere else the tokens would
+   * resolve to nothing, and offering a binding that cannot resolve is worse
+   * than not offering it. That is why this is a context value rather than
+   * something the designer derives: nothing on the canvas says which
+   * definition it belongs to.
+   */
+  componentProps?: import('@aglyn/aglyn').ReusableComponentProp[]
 }
 
 export const BindingPickerContext = createContext<BindingPickerContextValue>(

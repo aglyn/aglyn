@@ -52,6 +52,7 @@ export function useInsertTokenOptions(
     options: bindingOptions,
     variables: bindingVariables,
     functions: bindingFunctions,
+    componentProps,
   } = useContext(BindingPickerContext)
   const entityOptions = useContext(Aglyn.EntityPickerContext)
 
@@ -90,6 +91,29 @@ export function useInsertTokenOptions(
 
   const options = useMemo(() => {
     const assembled: BindingOption[] = [...(bindingOptions ?? [])]
+    /**
+     * The component's own declared props (AGL-1335), first because they are
+     * the nearest scope — inside a component definition, `{{prop.x}}` is
+     * what the author reaches for most.
+     *
+     * They were absent from this picker entirely, so binding one meant
+     * typing `{{prop.name}}` by hand while a `{}` button sat next to the
+     * field implying otherwise. Names are filtered by the SAME pattern the
+     * graft requires, so the picker cannot offer a token that would never
+     * substitute.
+     */
+    for (const prop of componentProps ?? []) {
+      if (!Aglyn.COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? '')) continue
+      assembled.push({
+        group: 'Properties',
+        groupHint: 'Set per page in the Attributes panel of each instance',
+        label: prop.label || prop.name,
+        token: `{{${Aglyn.COMPONENT_PROP_TOKEN_PREFIX}${prop.name}}}`,
+        preview: prop.defaultValue
+          ? `Defaults to "${prop.defaultValue}"`
+          : 'No default — renders as nothing until a page sets it',
+      })
+    }
     const entryHint = insertContext.inCollectionEntries
       ? undefined
       : 'Resolves in Collection entries blocks and on entry pages'
@@ -122,7 +146,7 @@ export function useInsertTokenOptions(
       })
     }
     return assembled
-  }, [bindingOptions, insertContext])
+  }, [bindingOptions, componentProps, insertContext])
 
   const labelContext = useMemo<TokenLabelContext>(
     () => ({
