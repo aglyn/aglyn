@@ -19,7 +19,7 @@ Aglyn emits the right tags, sitemap, and structured data automatically.
 
 Every screen's detail page has an **SEO** card with three fields:
 
-- **Search title** — up to 60 characters; overrides the site title on this page.
+- **Search title** — up to 60 characters, published exactly as you type it.
 - **Search description** — up to 155 characters, the meta description.
 - **Social image** — the picture shown when the page is shared. Press **Choose
   image** to pick one from your [media library](../../content-and-data/media/overview.md)
@@ -35,16 +35,36 @@ with a new version keeps every card that references it working.
 
 <!-- screenshot: seo/screen-seo-card.png per SCREENSHOT_PLAN.md -->
 
-Anything you leave blank falls back sensibly: the title falls back to the screen's
-display name (joined to the site title with your separator), the description to the
-screen's own description and then the site's, and the social image to the site-wide one.
+Anything you leave blank falls back sensibly: the description falls back to the
+screen's own description and then the site's, and the social image to the site-wide
+one.
+
+### How a page title is built
+
+A **search title** you write is the whole title — nothing is appended to it. That is
+what lets you keep every page inside the ~60 characters a search result shows, and
+say the brand once rather than twice.
+
+A page with no search title of its own is titled from its **name** — the screen's
+display name, a blog post's headline, a collection's name — joined to the site
+**Title** with your **Separator**:
+
+| Page | Rendered title |
+| --- | --- |
+| Search title `About Aglyn — one platform for the open web` | `About Aglyn — one platform for the open web` |
+| Screen named `Contact`, no search title | `Contact – Acme Widgets` |
+| Neither | `Acme Widgets` |
+
+Your brand still travels with every share regardless: the site title is published as
+`og:site_name` on every page.
 
 ### Site-wide defaults
 
 **Setup → SEO** holds the site-level fields every screen inherits: the site **Title**
-and **Description**, the **Separator** used to join page and site titles (default
-`–`), the **Favicon**, a **Social image**, and an **Entity** block (Organization or
-Person, with a name and logo) that feeds the site's structured data.
+and **Description**, the **Separator** used to join a page's name to the site title
+when that page has no search title of its own (default `–`), the **Favicon**, a
+**Social image**, and an **Entity** block (Organization or Person, with a name and
+logo) that feeds the site's structured data.
 
 The **Social image** card is the default card for the whole site — every page that
 sets none of its own uses it, including collection lists and blog entries with no

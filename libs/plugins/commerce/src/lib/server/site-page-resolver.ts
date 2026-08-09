@@ -124,9 +124,20 @@ export const commerceSitePageResolver: SitePageResolver = async ({
                   screen: {
                     data: {
                       ...templateRes.screen,
+                      // The product NAMES this page; the template's own name
+                      // ("Product detail") describes none of the products it
+                      // renders. Kept distinct from the SEO title because the
+                      // head treats an authored title as verbatim and a name
+                      // as the side the site title joins (AGL-1341) — so a
+                      // product with its own SEO title gets exactly that, and
+                      // one without gets "Blue Widget – Acme Store".
+                      displayName: product.name,
                       seo: {
                         ...((templateRes.screen as any).seo ?? {}),
-                        title: product.seo?.title ?? product.name,
+                        // Only when the PRODUCT authored one: inheriting the
+                        // template screen's title would give every product
+                        // page in the store the same `<title>`.
+                        title: product.seo?.title ?? undefined,
                         description:
                           product.seo?.description ??
                           product.description ??
@@ -191,9 +202,15 @@ export const commerceSitePageResolver: SitePageResolver = async ({
                   screen: {
                     data: {
                       ...templateRes.screen,
+                      // As on the PDP above: the catalog collection names the
+                      // page, and a name takes the site title after it while
+                      // an authored SEO title would not (AGL-1341). A shop
+                      // collection has no SEO title field of its own, so the
+                      // template's must not stand in for one.
+                      displayName: shopCollection.name,
                       seo: {
                         ...((templateRes.screen as any).seo ?? {}),
-                        title: shopCollection.name,
+                        title: undefined,
                         description:
                           shopCollection.description ?? undefined,
                       },

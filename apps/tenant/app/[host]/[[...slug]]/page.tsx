@@ -62,15 +62,31 @@ function buildMetadata(props: Props): Metadata {
   const host = props.data?.host as any
   const screen = props.data?.screen?.data as any
   const siteTitle: string | undefined = host?.seo?.title ?? host?.displayName
-  const separator: string = host?.seo?.separator ?? ' – '
+  const separator: string | undefined = host?.seo?.separator
   // White-label (White-Label Phase 2): the generic title fallback reads the
   // org's resolved brand name rather than a hard-coded "Aglyn", so a
   // white-label site with no SEO/display title never leaks the Aglyn brand
   // into its <title>/OG. `branding` is Aglyn defaults for non-white-label
   // orgs and absent surfaces, resolved through the one shared resolver.
   const brandName = props.branding?.productName ?? 'Aglyn'
-  const withSite = (title?: string) =>
-    [title, siteTitle].filter(Boolean).join(separator) || `${brandName} site`
+  /**
+   * One title rule for every branch below (AGL-1341).
+   *
+   * `title` is an authored SEO title and wins VERBATIM; `name` is what the
+   * page is otherwise called and is the side the site title joins. The host
+   * title was previously appended unconditionally, so every page read the
+   * brand twice and ran to ~95 characters against a ~60-character budget.
+   *
+   * Kept as a local so the four branches cannot drift apart again: whichever
+   * one a future surface copies, it copies the rule with it.
+   */
+  const titleFor = (parts: { title?: string; name?: string }) =>
+    Aglyn.resolveSeoTitle({
+      ...parts,
+      siteTitle,
+      separator,
+      fallback: `${brandName} site`,
+    })
 
   // Site-wide "discourage search engines" (AGL-1263). Read up here, above the
   // early returns, because it has to reach the CONTENT branch too: collection
@@ -79,23 +95,34 @@ function buildMetadata(props: Props): Metadata {
   // to from elsewhere.
   const searchDiscouraged = Aglyn.isSearchDiscouraged(host)
 
-  // Gated / fixed surfaces stay out of search (AGL-87/109/131).
+  // Gated / fixed surfaces stay out of search (AGL-87/109/131). Their titles
+  // are NAMES we generate, not titles anyone authored, so they take the site
+  // title the same way an untitled screen does — "Sign in" alone names no
+  // site, and a browser with eight tabs open is exactly where that matters.
   if (props.membershipPage) {
     return {
-      title:
-        props.membershipPage === 'signup'
-          ? 'Sign up'
-          : props.membershipPage === 'recover'
-            ? 'Reset your password'
-            : 'Sign in',
+      title: titleFor({
+        name:
+          props.membershipPage === 'signup'
+            ? 'Sign up'
+            : props.membershipPage === 'recover'
+              ? 'Reset your password'
+              : 'Sign in',
+      }),
       robots: { index: false, follow: true },
     }
   }
   if (props.maintenanceFallback) {
-    return { title: 'Temporarily unavailable', robots: { index: false } }
+    return {
+      title: titleFor({ name: 'Temporarily unavailable' }),
+      robots: { index: false },
+    }
   }
   if (props.memberScreen) {
-    return { title: 'Members only', robots: { index: false, follow: true } }
+    return {
+      title: titleFor({ name: 'Members only' }),
+      robots: { index: false, follow: true },
+    }
   }
 
   // Content collections (AGL-81/117): entry metadata drives the head.
@@ -107,8 +134,13 @@ function buildMetadata(props: Props): Metadata {
     // A category listing is its own page and needs its own title (AGL-1321) —
     // five URLs all titled "Blog" are five duplicate results in a SERP.
     const category = content.category
-    const title = entry
-      ? entry.seoTitle || entry.title
+    // Same rule as a screen (AGL-1341): the entry's own `seoTitle` is the
+    // authored one and renders verbatim, while a headline or a list name is
+    // what the page is CALLED and still earns the site title after it. An
+    // entry page never inherits the TEMPLATE screen's SEO title — one authored
+    // title would then name every post in the collection.
+    const name = entry
+      ? entry.title
       : category
         ? [category.name, content.collection?.displayName]
             .filter(Boolean)
@@ -130,7 +162,7 @@ function buildMetadata(props: Props): Metadata {
       sources: [{ image: entry?.coverImage }, screen?.seo, host?.seo],
       host,
     })
-    const fullTitle = withSite(title)
+    const fullTitle = titleFor({ title: entry?.seoTitle, name })
     // Collection pages had NO canonical at all (AGL-1272). This branch returns
     // before the screen path builds one, so every `/blog` and `/blog/{entry}`
     // shipped without the tag — on a site reachable at two origins, that is
@@ -194,8 +226,15 @@ function buildMetadata(props: Props): Metadata {
   }
 
   // Screen render (SEO Toolkit): screen fields with host-level fallbacks.
-  const pageTitle: string | undefined = screen?.seo?.title || screen?.displayName
-  const fullTitle = withSite(pageTitle)
+  // The screen's own SEO title is the authored one and is emitted exactly as
+  // typed (AGL-1341); `displayName` is the internal name of the screen, so a
+  // screen nobody wrote a title for renders "Contact – Acme" rather than a
+  // bare "Contact" or — worse — the site title alone, which every untitled
+  // screen would then share.
+  const fullTitle = titleFor({
+    title: screen?.seo?.title,
+    name: screen?.displayName,
+  })
   const description: string | undefined =
     screen?.seo?.description || screen?.description || host?.seo?.description
   // Screen image, then the site default (AGL-1337). Clearing a screen's

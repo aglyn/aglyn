@@ -169,8 +169,11 @@ const seoSchema: FormSchema = {
       name: 'seo.title',
       label: 'Title',
       type: 'text',
+      helperText:
+        'Fallback for screens with no SEO title of their own — a screen ' +
+        'that sets one publishes it verbatim',
       help: docsHelp('seo', {
-        anchor: '#per-screen-seo',
+        anchor: '#how-a-page-title-is-built',
         excerpt:
           'Default title emitted in the page head and browser tab — ' +
           'screens without their own SEO title fall back to it.',
@@ -251,10 +254,14 @@ const seoSchema: FormSchema = {
       name: 'seo.separator',
       label: 'Separator',
       type: 'text',
+      helperText:
+        'Joins a screen’s NAME to the site title above, for screens with ' +
+        'no SEO title, e.g. "|" or "·"',
       help: docsHelp('seo', {
+        anchor: '#how-a-page-title-is-built',
         excerpt:
-          'Character placed between a screen title and the site title ' +
-          'in the browser tab, e.g. "|" or "·".',
+          'Character placed between a screen’s name and the site title ' +
+          'when the screen sets no SEO title of its own, e.g. "|" or "·".',
       }),
       isRequired: true,
       validate: [

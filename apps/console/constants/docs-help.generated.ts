@@ -650,7 +650,7 @@ export const DOCS_HELP_ANCHORS = {
   screens: ['#screens--routing', '#layouts', '#nested-layouts', '#used-by', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],
   securityAndCompliance: ['#what-it-covers', '#why-the-gaps-are-listed-first', '#reporting-a-vulnerability'],
   selfHosting: ['#the-short-version', '#the-full-runbook', '#optional-keys', '#honest-limits'],
-  seo: ['#per-screen-seo', '#site-wide-defaults', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
+  seo: ['#per-screen-seo', '#how-a-page-title-is-built', '#site-wide-defaults', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
   serverApis: ['#an-api-route', '#webhooks-with-signature-verification', '#platform-billing-events', '#scheduled-jobs', '#troubleshooting'],
   siteProtection: ['#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#configure-it', '#related'],
