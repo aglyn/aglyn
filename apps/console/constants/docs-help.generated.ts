@@ -136,7 +136,7 @@ export const DOCS_HELP_TOPICS = {
   connectADomain: {
     path: '/building-sites/custom-domains/connect-a-domain',
     title: 'Connect a domain',
-    excerpt: 'Point your own domain at your Aglyn site — CNAME or apex A record — and verify with one click.',
+    excerpt: 'Point your own domain at your Aglyn site — a CNAME for a subdomain, an ALIAS for a bare apex — and verify with one click.',
   },
   consoleAndSite: {
     path: '/developers/plugins/guides/console-and-site',

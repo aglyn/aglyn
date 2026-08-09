@@ -20,7 +20,8 @@ site's Setup page.
 
 1. In **Setup**, open the **Custom Domain** tab.
 2. Add **one DNS record** at your registrar — a **CNAME** to `sites.aglyn.app` for a
-   subdomain, or an **A record** (or ALIAS) for a bare apex.
+   subdomain, or an **ALIAS/ANAME** to the same hostname for a bare apex (an **A record**
+   where your registrar offers no ALIAS).
 3. Type the domain into the **Domain** field and press **Verify & connect**. Aglyn
    checks DNS and connects the domain in the same click; SSL provisions automatically.
 
@@ -29,7 +30,8 @@ and **Disconnect** actions beside it. Once it serves, your `*.aglyn.app` subdoma
 redirects to it, path preserved, so old links keep working.
 
 :::tip How-tos
-- [Connect a domain](connect-a-domain.md) — steps, apex records, and what happens after
+- [Connect a domain](connect-a-domain.md) — steps, apex records (ALIAS first, A as the
+  fallback), and what happens after
 - [Troubleshoot verification](troubleshooting.md)
 :::
 

@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Connect a domain
-description: Point your own domain at your Aglyn site — CNAME or apex A record — and verify with one click.
+description: Point your own domain at your Aglyn site — a CNAME for a subdomain, an ALIAS for a bare apex — and verify with one click.
 ---
 
 # Connect a domain
@@ -19,17 +19,20 @@ Starter plan — see Billing to upgrade."*
 ## Steps
 
 1. In the site's **Setup** page, open the **Custom Domain** tab. The card explains:
-   *"Point your domain at Aglyn, then verify. A subdomain like www uses a CNAME; a bare
-   apex uses an A record — either verifies"*, and shows both records with your domain
-   filled in.
-2. At your registrar's DNS settings, add **one** of the two records — see the
+   *"Point your domain at Aglyn, then verify. A subdomain like www uses a CNAME. A bare
+   apex cannot carry a CNAME, so point it at the same hostname with an ALIAS — or use the
+   A record if your registrar has no ALIAS. Any one of these verifies"*, and lists the
+   records with your domain filled in, each with a line saying when it's the right one.
+   Type a bare apex and the **ALIAS** line comes first; type a subdomain and the
+   **CNAME** line does.
+2. At your registrar's DNS settings, add **one** of those records — see the
    [quick reference](#registrar-quick-reference) below.
 3. Back in Aglyn, type your domain into the **Domain** field and press
    **Verify & connect**. Aglyn checks DNS from public resolvers and, if the record
    checks out, connects the domain in the same click.
 4. On success the card confirms *"your-domain.com" connected* and shows the domain as a
-   green chip. An apex connected by its A record gets an extra note — *"Apex verified by
-   its A record."*
+   green chip. An apex — connected by ALIAS or by A record, since both are checked the
+   same way — gets an extra note: *"Apex verified by the addresses it resolves to."*
 
 If DNS hasn't propagated yet, **Verify & connect** tells you what it found instead —
 either the record it saw and what it expected, or that no record exists yet — and asks
@@ -75,7 +78,7 @@ minute or so. The redirect is temporary by design so that reversal always works.
 
 ## Registrar quick reference
 
-The exact screen differs by registrar, but the record is one of these two:
+The exact screen differs by registrar, but you only ever add **one** record:
 
 **A subdomain** (`www.example.com`, `shop.example.com`, …):
 
@@ -86,7 +89,16 @@ The exact screen differs by registrar, but the record is one of these two:
 | Value / Target | `sites.aglyn.app` |
 | TTL | default is fine |
 
-**A bare apex** (`example.com`):
+**A bare apex** (`example.com`) — first choice:
+
+| Field | Value |
+| --- | --- |
+| Type | `ALIAS` (also called `ANAME`, or "CNAME flattening") |
+| Name / Host | `@` |
+| Value / Target | `sites.aglyn.app` |
+| TTL | default is fine |
+
+**A bare apex, if your registrar has no ALIAS** — fallback:
 
 | Field | Value |
 | --- | --- |
@@ -95,10 +107,20 @@ The exact screen differs by registrar, but the record is one of these two:
 | Value | `216.198.79.1` |
 | TTL | default is fine |
 
-An apex can't carry a `CNAME` (that's a DNS rule, not an Aglyn one), which is why it uses
-an `A` record instead. If your DNS host offers an **ALIAS/ANAME** record, aliasing the
-apex to `sites.aglyn.app` works too — it resolves to the same addresses and verifies the
-same way.
+An apex can't carry a `CNAME` (that's a DNS rule, not an Aglyn one), which is why it needs
+one of these two instead. Prefer the **ALIAS**: it names `sites.aglyn.app` rather than an
+address, so your registrar resolves it to wherever Aglyn is serving from at the time, and
+nothing in your zone has to change if those addresses ever do.
+
+The **A record** is there because plenty of registrars offer no ALIAS/ANAME and no
+flattening — for those, it is the only way to point an apex, and it verifies exactly the
+same. Its one cost is that the address is pinned in your zone by hand: keep it in mind if
+you ever see the domain stop resolving long after it was working.
+
+:::note Cloudflare and other proxies
+CNAME flattening at the apex works, but leave the record **DNS only** (grey cloud) until
+verification succeeds — a proxied record resolves to the proxy's addresses, not Aglyn's.
+:::
 
 :::tip Want both `www` and the apex?
 Aglyn serves **one connected domain per site**. Connect the one you want as your
@@ -118,8 +140,8 @@ connected to another site"*. Disconnect it from the old site first.
 there is no confirmation step — and the Aglyn subdomain resumes serving within a minute
 or so. Disconnecting requires the **site admin** role.
 
-Aglyn never touches your DNS: the CNAME or A record at your registrar is yours, so
-remember to remove or repoint it yourself after disconnecting.
+Aglyn never touches your DNS: the CNAME, ALIAS, or A record at your registrar is yours,
+so remember to remove or repoint it yourself after disconnecting.
 
 ## Related
 

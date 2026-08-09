@@ -24,9 +24,12 @@ If **Verify & connect** won't go green, it's almost always DNS. Work through the
    whole diagnosis.
 3. **Match the record to the name.**
    - A **subdomain** (`www.example.com`) needs a **CNAME** to `sites.aglyn.app`.
-   - A **bare apex** (`example.com`) needs an **A record** to `216.198.79.1` (or an
-     ALIAS/ANAME to `sites.aglyn.app`) — an apex cannot carry a CNAME, and Aglyn
-     verifies it by its A record instead.
+   - A **bare apex** (`example.com`) needs an **ALIAS/ANAME** to `sites.aglyn.app` — an
+     apex cannot carry a CNAME, and Aglyn verifies it by the addresses it resolves to.
+   - If your registrar offers no ALIAS/ANAME, use an **A record** to `216.198.79.1`
+     instead. It verifies the same way. If an apex that used to work has stopped
+     resolving, check this address is still the one in your zone — an ALIAS never needs
+     that check, which is why it's the first choice.
 4. **Remove conflicting records.** Delete any old A/AAAA/CNAME records for the same
    host that point elsewhere. Two cases bite hardest:
    - An apex with a **wrong CNAME** (some DNS hosts allow one) never falls through to

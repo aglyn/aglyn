@@ -62,9 +62,17 @@ export const HOST_APEX_ADDRESSES = (
   .filter(Boolean)
 
 /**
- * The single address to put in front of a customer. The accepted list spans the
- * host's whole pool plus the legacy address, but instructions need exactly one
- * value, and any one address in the pool routes correctly.
+ * The single address to put in front of a customer *when an address is all the
+ * registrar can express*. The accepted list spans the host's whole pool plus the
+ * legacy address, but an A record holds exactly one value, and any one address
+ * in the pool routes correctly.
+ *
+ * This is the FALLBACK, not the recommendation: pinning it in a customer zone
+ * re-creates by hand the coupling the verify route refuses to make, whose own
+ * comment warns that pinning edge IPs "would turn a routine infrastructure
+ * change into every customer's domain reporting itself broken". Prefer the
+ * ALIAS instruction below, which names `CNAME_TARGET` and so follows the pool
+ * (AGL-1327).
  */
 export const RECOMMENDED_APEX_ADDRESS = HOST_APEX_ADDRESSES[0] ?? '216.198.79.1'
 
@@ -123,4 +131,111 @@ export function isApexDomain(domain: string): boolean {
   const lastTwo = labels.slice(-2).join('.')
   if (MULTI_LABEL_PUBLIC_SUFFIXES.includes(lastTwo)) return labels.length === 3
   return labels.length === 2
+}
+
+/** One DNS record the customer may create, as their registrar labels it. */
+export interface DnsInstruction {
+  /** Record type. `ALIAS` covers ANAME and CNAME flattening. */
+  type: 'CNAME' | 'ALIAS' | 'A'
+  /** The name the record goes on. */
+  name: string
+  /** What the record points at — a hostname, or an address for `A`. */
+  value: string
+  /** When this is the record to create. Plainly conditional, not clever. */
+  note: string
+}
+
+/**
+ * The intro that precedes the records. Lives here rather than in the card so
+ * the docs pages which quote it verbatim have one string to be checked against.
+ */
+export const DNS_INSTRUCTIONS_INTRO =
+  'Point your domain at Aglyn, then verify. A subdomain like www uses a ' +
+  'CNAME. A bare apex cannot carry a CNAME, so point it at the same hostname ' +
+  'with an ALIAS — or use the A record if your registrar has no ALIAS. Any ' +
+  'one of these verifies:'
+
+const CNAME_NOTE = 'For a subdomain like www — the usual choice.'
+
+const ALIAS_NOTE =
+  'For a bare apex. Your registrar may call it ANAME or CNAME flattening. ' +
+  'It follows our hostname, so it keeps working if our addresses change.'
+
+const APEX_A_NOTE =
+  'For a bare apex, only if your registrar offers no ALIAS/ANAME. It pins one ' +
+  'address, so it needs updating by hand if ours ever change.'
+
+/**
+ * The records the connect-a-domain card offers for the name typed so far.
+ *
+ * ALIAS leads for a bare apex (AGL-1327). The card used to print a single
+ * `A → 216.198.79.1` for every apex — one member of the platform's anycast
+ * pool, pinned into the customer's zone. The verify route deliberately accepts
+ * the WHOLE pool (`HOST_APEX_ADDRESSES`, AGL-1264) so no single address is
+ * load-bearing, and an ALIAS to `CNAME_TARGET` needs no address at all: the
+ * registrar flattens it to whatever that hostname currently resolves to, which
+ * is exactly the intersection the route already checks. So a pool change costs
+ * an ALIAS customer nothing, while an A customer must edit their zone.
+ *
+ * The A record STAYS, because plenty of registrars have no ALIAS/ANAME and no
+ * flattening — for them it is the only way to point an apex at all. It is
+ * presented as the fallback rather than deleted or hidden.
+ *
+ * Each record shows the SHAPE of name it applies to, derived from the typed
+ * value rather than echoing it into every line (the echo claimed a CNAME for a
+ * bare apex and an apex record for a www — both wrong). Apex detection is
+ * `isApexDomain`, not a label count: counting labels calls `example.co.uk` a
+ * subdomain, so a UK customer typing their bare domain was handed the CNAME —
+ * the one record a zone root cannot carry (AGL-1275).
+ */
+export function dnsInstructionsFor(domain: string): DnsInstruction[] {
+  const typed = domain.trim().toLowerCase()
+  const bareApex = isApexDomain(typed)
+  const startsWithWww = /^www\./.test(typed)
+  // A bare apex gains `www.` on the CNAME line; a www-prefixed name sheds it
+  // on the apex lines; a deeper subdomain keeps the typed value on the CNAME
+  // line while the apex lines keep their placeholder, since an apex guessed
+  // from `shop.example.co.uk` would be exactly that — a guess.
+  const subdomainName = !typed
+    ? 'www.your-domain.com'
+    : bareApex
+      ? `www.${typed}`
+      : typed
+  const apexName = !typed
+    ? 'your-domain.com'
+    : bareApex
+      ? typed
+      : startsWithWww
+        ? typed.replace(/^www\./, '')
+        : 'your-domain.com'
+  const cname: DnsInstruction = {
+    type: 'CNAME',
+    name: subdomainName,
+    value: CNAME_TARGET,
+    note: CNAME_NOTE,
+  }
+  const alias: DnsInstruction = {
+    type: 'ALIAS',
+    name: apexName,
+    value: CNAME_TARGET,
+    note: ALIAS_NOTE,
+  }
+  const apexAddress: DnsInstruction = {
+    type: 'A',
+    name: apexName,
+    value: RECOMMENDED_APEX_ADDRESS,
+    note: APEX_A_NOTE,
+  }
+  // Order by what was typed: an apex customer reads the ALIAS first, everyone
+  // else still reads the CNAME first, exactly as before.
+  return bareApex ? [alias, apexAddress, cname] : [cname, alias, apexAddress]
+}
+
+/**
+ * A record rendered as the single monospace line the card shows and the docs
+ * quote — `CNAME  www.example.com  →  sites.aglyn.app`. Padding keeps the
+ * three type names in one column.
+ */
+export function formatDnsInstruction(record: DnsInstruction): string {
+  return `${record.type.padEnd(5)}  ${record.name}  →  ${record.value}`
 }

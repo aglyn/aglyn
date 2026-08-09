@@ -25,8 +25,9 @@ for the how-to.
   the besigner keeps a local draft of unsaved work in your browser; after a crash or an
   accidental close, it offers the work back with **Restore** / **Discard**.
 - **[Apex custom domains](building-sites/custom-domains/connect-a-domain.md)** — connect
-  the bare `example.com`, not just `www`: an A record (or ALIAS) at your registrar
-  verifies in the same **Verify & connect** click as a CNAME.
+  the bare `example.com`, not just `www`: an ALIAS/ANAME to `sites.aglyn.app` (or an A
+  record, where your registrar has no ALIAS) verifies in the same **Verify & connect**
+  click as a CNAME.
 - **[Edit from the live site](building-sites/besigner/edit-from-the-live-site.md)**
   *(rolling out)* — an admin bar on your published site that jumps from any live page
   straight into the besigner for the screen serving it.
