@@ -141,7 +141,20 @@ export async function composeCollectionTemplatePage(options: {
         description: entry.seoDescription || entry.excerpt || undefined,
         image: entry.coverImage || screenSeo.image || undefined,
       }
-    : { ...screenSeo, title: screenSeo.title ?? collection.displayName }
+    : // A LIST passes its screen's own SEO through UNTOUCHED (AGL-1345).
+      //
+      // This used to default `title` to `collection.displayName`, which reads
+      // like a harmless fallback and is not: it made an authored title
+      // indistinguishable from a generated one by the time the head was built.
+      // The title rule (AGL-1341) turns on exactly that distinction — an
+      // authored title renders VERBATIM, a name joins the site title — so a
+      // consumer reading this could only choose between dropping the site
+      // title off every untitled list ("Changelog") or ignoring the author's
+      // title on every titled one ("Changelog – Acme" over the sentence they
+      // wrote). The collection name is still the fallback; it just belongs to
+      // the title resolver, as the page's `name`, alongside every other
+      // surface's fallback rather than baked into stored SEO here.
+      screenSeo
   return {
     screen: { ...(templateRes.screen as any), seo },
     nodes,

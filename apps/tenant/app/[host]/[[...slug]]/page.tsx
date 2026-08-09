@@ -146,9 +146,48 @@ function buildMetadata(props: Props): Metadata {
             .filter(Boolean)
             .join(' · ')
         : content.collection?.displayName
+    /**
+     * A collection LIST is somebody's screen, and its SEO is read here
+     * (AGL-1345).
+     *
+     * `/changelog` emitted no screen metadata at all — the collection's name
+     * as the title and the platform boilerplate from the root layout as the
+     * description — while `/blog` and `/press`, structurally identical pages
+     * on the same host, resolved theirs correctly. The difference is not in
+     * the pages but in how each is ROUTED: `/changelog`'s screen is also its
+     * collection's `listScreenId`, and a template screen is deliberately
+     * dropped from the routing map (AGL-1267), so the request falls past the
+     * screen branch into this one. `/blog` and `/press` are ordinary screens,
+     * so they reach the screen branch below and always did.
+     *
+     * That made this branch the head for a page whose body it never described:
+     * the screen composes the body (`composeCollectionTemplatePage` hands its
+     * doc through as `data.screen`), and only the collection reached the head.
+     * Same screen, two answers — the very thing being fixed is that the head
+     * and the body now read one record.
+     *
+     * The ENTRY case is untouched and must stay that way: an entry's `seoTitle`
+     * is its own, and inheriting the template's would title every post in the
+     * collection identically. A CATEGORY listing likewise keeps its composed
+     * name (AGL-1321) — an authored title applied to five filtered URLs is the
+     * same duplication in a new place. Both still take the screen's
+     * description, which is a summary of the list they are showing and is
+     * strictly better than falling through to a site-wide default that is
+     * every bit as duplicated and says nothing about the page.
+     */
+    const listScreenSeo = entry ? undefined : screen?.seo
+    const authoredTitle = entry
+      ? entry.seoTitle
+      : category
+        ? undefined
+        : listScreenSeo?.title
+    // The same chain the screen branch uses, so the two cannot disagree about
+    // where a description comes from.
     const description: string | undefined = entry
       ? entry.seoDescription || entry.excerpt || undefined
-      : undefined
+      : listScreenSeo?.description ||
+        screen?.description ||
+        host?.seo?.description
     // The card image (AGL-1337). The entry's own cover wins, then the
     // template screen's, then the site default — the same precedence list the
     // screen branch uses, through the same resolver, so a collection list (an
@@ -162,7 +201,7 @@ function buildMetadata(props: Props): Metadata {
       sources: [{ image: entry?.coverImage }, screen?.seo, host?.seo],
       host,
     })
-    const fullTitle = titleFor({ title: entry?.seoTitle, name })
+    const fullTitle = titleFor({ title: authoredTitle, name })
     // Collection pages had NO canonical at all (AGL-1272). This branch returns
     // before the screen path builds one, so every `/blog` and `/blog/{entry}`
     // shipped without the tag — on a site reachable at two origins, that is
