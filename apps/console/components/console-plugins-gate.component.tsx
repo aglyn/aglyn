@@ -20,12 +20,14 @@ import {
   filterPluginsByReleaseFlags,
   listConsoleProviders,
   resolveEnabledPlugins,
+  subtractDisabledPlugins,
 } from '@aglyn/aglyn'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import type React from 'react'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import BootSplash from './boot-splash.component'
 import { consolePluginLoader } from '../constants/console-plugin-loader'
+import { useHostDisabledPlugins } from './host-id-provider'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useReleaseFlags } from '../hooks/use-release-flags'
 import { loadOrgRealmPlugins } from '../utils/realm-plugins.client'
@@ -57,9 +59,17 @@ function useEffectiveEnabledPlugins(): { flagsReady: boolean; enabledKey: string
  */
 export function useEnabledPluginIds(): string[] {
   const { enabledKey } = useEffectiveEnabledPlugins()
+  // Per-site enablement (AGL-1014): inside a host route the site's
+  // `disabledPlugins` deny-list is subtracted, so nav tabs, plugin pages
+  // and widget slots all read the per-site set. [] off host routes.
+  const hostDisabled = useHostDisabledPlugins()
   return useMemo(
-    () => enabledKey.split(',').filter(Boolean),
-    [enabledKey],
+    () =>
+      subtractDisabledPlugins(
+        enabledKey.split(',').filter(Boolean),
+        hostDisabled,
+      ),
+    [enabledKey, hostDisabled],
   )
 }
 

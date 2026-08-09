@@ -55,7 +55,7 @@ full backup from its **Settings → Backup**.
 ## Deleting a single site
 
 To remove just one site (not the whole organization), open the site's
-**Setup → Basic details** and use **Delete site** at the bottom. A site admin
+**Admin → Danger zone** and use **Delete site**. A site admin
 types the site name to confirm, and it's deleted **immediately** — its screens,
 media, and settings are permanently removed and its address stops resolving.
 Unlike an organization deletion there's no hold, so **export a backup first**

@@ -62,6 +62,8 @@ jest.mock('@aglyn/aglyn/server', () => {
     resolveSitePage: jest.fn(async () => undefined),
     runSitePageEnrichers: jest.fn(async () => ({})),
     resolveEnabledPlugins: jest.fn(() => []),
+  // Per-site enablement (AGL-1014): the loader now resolves per host.
+  resolveHostEnabledPlugins: jest.fn(() => []),
     resolveOrgEntitlements: jest.fn(() => ({ features: {} })),
     resolveBrandingProfile: jest.fn(() => ({})),
     checkEntitlement: jest.fn(() => true),

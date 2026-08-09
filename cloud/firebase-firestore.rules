@@ -533,11 +533,17 @@ service cloud.firestore {
       // last working origin down with it.
       // Those keys are Admin-SDK-only (org APIs bypass rules); staff keep
       // full control for tooling.
+      // `disabledPlugins` is the per-site plugin boundary (AGL-1014) — an
+      // owner/admin control, so an editor (or collaborator) must not be able
+      // to widen their own site's plugin set by rewriting the deny-list.
       allow update: if isStaff() ||
         (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['memberRoles', 'orgId', 'admins', 'hosts', 'subdomain',
-                     'cname']));
+                     'cname']) &&
+          (hostMemberRole(hostId) == 'admin' ||
+            !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['disabledPlugins'])));
       allow delete: if isStaff() ||
         (hostMemberRole(hostId) == 'admin' && !hostOrgSuspended(hostId));
       // Screen/layout DOC creates are API-only (AGL-473): /api/hosts/

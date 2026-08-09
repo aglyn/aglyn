@@ -53,9 +53,13 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
   // Stable identities, as reactfire provides — effect deps include these.
   const firestore = {}
   const user = { data: { uid: 'user-1' } }
+  // The host plugin-policy bridge (AGL-1014) reads the host doc once a
+  // hostId resolves; a loading doc is the honest default here.
+  const hostDoc = { doc: { data: undefined, status: 'loading' } }
   return {
     useFirestore: () => firestore,
     useUser: () => user,
+    useHost: () => hostDoc,
   }
 })
 

@@ -364,7 +364,11 @@ const loadPageDataCached = cache(
             // published-screen path below).
             const authEnabledPlugins =
               await filterEnabledPluginsByReleaseFlags(
-                Aglyn.resolveEnabledPlugins(orgRes.org as never),
+                // Per-site enablement (AGL-1014): org set minus this host's deny-list.
+              Aglyn.resolveHostEnabledPlugins(
+                orgRes.org as never,
+                hostRes.host as never,
+              ),
                 {
                   subjectId:
                     (orgRes.org as { $id?: string })?.$id ?? hostId,
@@ -475,7 +479,11 @@ const loadPageDataCached = cache(
           // published screens so shared-layout chrome renders faithfully.
           const collectionEnabledPlugins =
             await filterEnabledPluginsByReleaseFlags(
-              Aglyn.resolveEnabledPlugins(orgRes.org as never),
+              // Per-site enablement (AGL-1014): org set minus this host's deny-list.
+              Aglyn.resolveHostEnabledPlugins(
+                orgRes.org as never,
+                hostRes.host as never,
+              ),
               {
                 subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId,
               },
@@ -748,7 +756,11 @@ const loadPageDataCached = cache(
     // rollout verdicts match the console's. Site visitors get no staff
     // bypass; fail-open inside falls back to registry defaults.
     const enabledPlugins = await filterEnabledPluginsByReleaseFlags(
-      Aglyn.resolveEnabledPlugins(orgRes.org as never),
+      // Per-site enablement (AGL-1014): org set minus this host's deny-list.
+              Aglyn.resolveHostEnabledPlugins(
+                orgRes.org as never,
+                hostRes.host as never,
+              ),
       { subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId },
     )
     timer.mark('filterEnabledPluginsByReleaseFlags')

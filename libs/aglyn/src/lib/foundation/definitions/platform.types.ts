@@ -192,6 +192,14 @@ export interface AglynHost extends AglynDocument {
   errorScreens?: HostErrorScreens
   /** Maintenance mode (AGL-131): every path renders the 503 screen. */
   maintenance?: boolean
+  /**
+   * Per-site plugin deny-list (AGL-1014): plugin ids the org has enabled
+   * but this site switches OFF. Subtracted from the org's resolved set by
+   * `resolveHostEnabledPlugins` — the host can only ever narrow, never
+   * widen, and an absent field means every org-enabled plugin runs here.
+   * Writable by site ADMINS only (rules); always-on ids are ignored.
+   */
+  disabledPlugins?: string[]
   /** Site languages (AGL-164), e.g. ['en', 'es']; first is the default
    * unless `defaultLocale` says otherwise. */
   locales?: string[]
