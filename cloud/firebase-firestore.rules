@@ -87,16 +87,38 @@ service cloud.firestore {
       // the install API after entitlement + kill-switch checks (AGL-501) —
       // it must stay out of every client-writable branch, or an admin can
       // enable gated/paid plugins for free.
+      //
+      // The same reasoning reaches four more keys the list had drifted past
+      // (AGL-1354). None of them looks commercial, and all four are the input
+      // to a decision made somewhere else:
+      //  - `brandingProfile` — what `resolveBrandingProfile` applies behind
+      //    the `whiteLabel` entitlement, written only by /api/orgs/settings
+      //    `update-branding` after `checkEntitlement(org, 'whiteLabel')`.
+      //    White-label is Enterprise/Agency; the console gates it, but the
+      //    console is not a boundary, and AGL-1099 turns
+      //    `brandingProfile.customConsoleDomain` into a ROUTING input — a
+      //    client-writable hostname deciding which org a domain serves;
+      //  - `sso` — the GCIP tenant/provider `sso-lookup` and `sso-jit` sign
+      //    the org in through, written only by /api/orgs/sso behind the
+      //    `ssoEnabled` entitlement. Client-writable, it is an auth-routing
+      //    field, not a settings field;
+      //  - `discount`/`enterprise` — staff-set commercial markers. They grant
+      //    no entitlement, but they are what the billing page and the staff
+      //    MRR rollup report, so a self-served value quietly falsifies
+      //    revenue.
+      // Every console surface writes all four through an Admin-SDK route, so
+      // denying them client-side costs the product nothing.
       allow update: if isSuperStaff() ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['slug', 'ownerUid', 'hosts', 'enabledPlugins',
+            ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
              'suspendedAt', 'suspendedReason', 'erasureRequestedAt'])) ||
         (canManageOrg() && orgNotSuspended() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
              'enabledPlugins', 'seatAddons', 'stripeCustomerId', 'subscription',
-             'billingStatus',
+             'billingStatus', 'brandingProfile', 'sso', 'discount',
+             'enterprise',
              'suspendedAt', 'suspendedReason', 'erasureRequestedAt']));
 
       /**

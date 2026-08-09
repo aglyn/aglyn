@@ -161,6 +161,76 @@ describe('org docs', () => {
     await assertFails(setDoc(doc(authed(OWNER), 'orgs', 'org-new'), { name: 'X' }))
   })
 
+  /**
+   * The entitlement-bearing keys the org doc carries besides `plan` and
+   * `entitlements` (AGL-1354). Each is written ONLY by an Admin-SDK route
+   * that checks something first, and each was missing from the key diff
+   * above — so an org admin with nothing but the Firebase client SDK could
+   * set them on any plan:
+   *
+   *  - `brandingProfile` — the input `resolveBrandingProfile` reads behind
+   *    the `whiteLabel` entitlement, and the field AGL-1099 will route the
+   *    custom console domain on;
+   *  - `sso` — decides which GCIP tenant signs the org in (`sso-lookup`,
+   *    `sso-jit`), gated on `ssoEnabled` by /api/orgs/sso;
+   *  - `discount` / `enterprise` — staff-set commercial markers that decide
+   *    what the MRR and plan surfaces report.
+   *
+   * The console writes all four through server routes, so denying them
+   * client-side costs the product nothing.
+   */
+  it('entitlement-bearing keys are server-only (AGL-1354)', async () => {
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), {
+        brandingProfile: {
+          productName: 'Acme Cloud',
+          customConsoleDomain: 'app.acme.test',
+        },
+      }),
+    )
+    // A nested field path is the same top-level diff and must not slip past.
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), {
+        'brandingProfile.productName': 'Acme Cloud',
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), {
+        sso: { status: 'active', tenantId: 'tenant-attacker' },
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), {
+        discount: { percentOff: 100 },
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { enterprise: true }),
+    )
+    // Denying the keys must not deny the branch — an admin still renames.
+    await assertSucceeds(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { name: 'Acme Cloud Inc' }),
+    )
+  })
+
+  /**
+   * Positive control for the legitimate path (AGL-1354): /api/orgs/settings
+   * `update-branding` writes through the Admin SDK after
+   * `checkEntitlement(org, 'whiteLabel')`, and the Admin SDK is not subject
+   * to rules — `withSecurityRulesDisabled` is that path in the emulator. The
+   * new key diff closes the client door without closing the server one, and
+   * every member still READS the profile the console chrome renders from.
+   */
+  it('the server branding path still writes, and members read it (AGL-1354)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'orgs', ORG), {
+        brandingProfile: { productName: 'Acme Cloud' },
+      })
+    })
+    const snapshot = await getDoc(doc(authed(VIEWER), 'orgs', ORG))
+    assert.equal(snapshot.data().brandingProfile.productName, 'Acme Cloud')
+  })
+
   it('suspended members cannot rename', async () => {
     await env.withSecurityRulesDisabled(async (context) => {
       await updateDoc(
