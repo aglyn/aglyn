@@ -71,6 +71,20 @@ Dropdown, radio, and checkbox fields take their choices from the field's
 Blank entries are ignored. The **Required?** switch works per type: a required
 checkbox group needs at least one box ticked.
 
+### Labels and placeholders
+
+Every field has a **Label** — the visible name of the input, and the one screen
+readers announce. A field can also carry a **Placeholder**: a grey example
+inside the empty input, such as `you@company.com` or "Tell us about your setup".
+Set one and the label moves above the box so both are readable at once; leave it
+empty and the label keeps its floating behaviour.
+
+A placeholder is a hint, never a substitute for the label — it vanishes the
+moment a visitor starts typing, and a field labelled only by its placeholder is
+unusable with a screen reader. Text, email, and multiline fields show it inside
+the input; a dropdown displays it until a choice is made; radio, checkbox, and
+rating fields ignore it. Clearing the setting removes the hint.
+
 ### Example: a quick survey
 
 Build a feedback survey with four fields:

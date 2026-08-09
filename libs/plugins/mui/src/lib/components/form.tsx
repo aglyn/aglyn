@@ -341,6 +341,15 @@ export interface FormFieldProps {
    */
   datasetFieldId?: string
   label?: string
+  /**
+   * Grey hint shown inside the empty input (AGL-1330) — the frames pair a
+   * label above the control with a placeholder inside it. A placeholder is
+   * NOT a label: it disappears the moment the visitor types, so the label
+   * stays the field's accessible name and is never replaced by this.
+   * Ignored by radio, checkbox, and rating fields, which have no text input
+   * to hint inside of.
+   */
+  placeholder?: string
   fieldType?:
     | 'text'
     | 'email'
@@ -372,11 +381,37 @@ export const parseFieldOptions = (options?: string): string[] =>
  * radio, checkbox group, and star rating — are AGL-544.
  */
 const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
-  const { fieldName, datasetFieldId, label, fieldType, options, required, ...rest } =
-    props
+  const {
+    fieldName,
+    datasetFieldId,
+    label,
+    placeholder,
+    fieldType,
+    options,
+    required,
+    ...rest
+  } = props
   const name = fieldName || 'field'
   const fieldLabel = label || fieldName || 'Field'
   const choices = parseFieldOptions(options)
+  // A CLEARED placeholder must render as no placeholder (AGL-1330). The
+  // attributes form persists a cleared text field by dropping the key
+  // (ddf maps an emptied field to its clearedValue and final-form's parse
+  // turns `''` into `undefined`), and `updateNodeProps` REPLACES the props
+  // object — so cleared reaches us as absent. Older documents can still
+  // carry `''`/`null`, and a blank string would otherwise reach the DOM as
+  // an empty `placeholder` attribute, so blank is normalized to absent too.
+  const hint = typeof placeholder === 'string' && placeholder.trim()
+    ? placeholder
+    : undefined
+  // MUI hides a placeholder for as long as the label still sits inside the
+  // box, so the hint is only visible once the label is shrunk — and an
+  // outlined input with a shrunk label must notch its outline or the label
+  // crosses the border. Both are applied ONLY when there is a placeholder,
+  // so fields without one keep the historical floating-label behavior.
+  const hintSlotProps = hint
+    ? { inputLabel: { shrink: true }, input: { notched: true } }
+    : undefined
   // Checkbox groups count ticked boxes so "required" can mean "at least
   // one": native `required` is only asserted while none are ticked.
   const [checkedCount, setCheckedCount] = useState(0)
@@ -405,6 +440,25 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
           defaultValue=""
           fullWidth
           size="small"
+          // A Select has no native placeholder: the hint is what the closed
+          // control displays while nothing is chosen, which needs
+          // `displayEmpty` (MUI renders nothing for `''` without it).
+          slotProps={
+            hint
+              ? {
+                  ...hintSlotProps,
+                  select: {
+                    displayEmpty: true,
+                    renderValue: (value: unknown) =>
+                      value ? (
+                        String(value)
+                      ) : (
+                        <span style={{ opacity: 0.6 }}>{hint}</span>
+                      ),
+                  },
+                }
+              : undefined
+          }
           {...rest}
         >
           {choices.map((choice, index) => (
@@ -490,12 +544,14 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
         ref={ref}
         name={name}
         label={fieldLabel}
+        placeholder={hint}
         type={fieldType === 'email' ? 'email' : 'text'}
         required={Boolean(required)}
         multiline={fieldType === 'textarea'}
         minRows={fieldType === 'textarea' ? 3 : undefined}
         fullWidth
         size="small"
+        slotProps={hintSlotProps}
         {...rest}
       />
       {mapInput}
@@ -623,6 +679,16 @@ export const formFieldSchema: Aglyn.ComponentSchema<FormFieldProps> = {
       description: 'Visible input label.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Label',
+    },
+    {
+      name: 'placeholder',
+      description:
+        'Grey hint inside the empty input — "you@company.com" (AGL-1330). ' +
+        'It is not a label: it disappears as soon as the visitor types, so ' +
+        'always keep Label set. Ignored by radio, checkbox, and rating ' +
+        'fields. Clearing it removes the hint.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Placeholder',
     },
     {
       name: 'fieldType',

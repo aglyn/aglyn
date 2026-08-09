@@ -168,6 +168,157 @@ describe('form survey fields (AGL-544)', () => {
     })
   })
 
+  /**
+   * AGL-1330: the frames pair a label ABOVE the control with a grey
+   * placeholder inside it, and Form Field had no placeholder at all — the
+   * copy on /contact and /contact-sales simply could not be published.
+   */
+  describe('field placeholder (AGL-1330)', () => {
+    it('renders the placeholder on a text input', () => {
+      const { container } = render(
+        <FormField
+          fieldName="email"
+          label="Work email"
+          fieldType="email"
+          placeholder="you@company.com"
+        />,
+      )
+      const input = container.querySelector(
+        'input[name="email"]',
+      ) as HTMLInputElement
+      expect(input.getAttribute('placeholder')).toBe('you@company.com')
+    })
+
+    it('renders the placeholder on a multiline field', () => {
+      const { container } = render(
+        <FormField
+          fieldName="message"
+          label="Message"
+          fieldType="textarea"
+          placeholder="How can we help?"
+        />,
+      )
+      const textarea = container.querySelector(
+        'textarea[name="message"]',
+      ) as HTMLTextAreaElement
+      expect(textarea.getAttribute('placeholder')).toBe('How can we help?')
+    })
+
+    it('renders NO placeholder attribute when none is set', () => {
+      const { container } = render(<FormField fieldName="name" label="Name" />)
+      const input = container.querySelector(
+        'input[name="name"]',
+      ) as HTMLInputElement
+      expect(input.hasAttribute('placeholder')).toBe(false)
+    })
+
+    /**
+     * Clearing must persist as cleared. The attributes form drops an
+     * emptied text field's key entirely and `updateNodeProps` REPLACES the
+     * props object, so a cleared placeholder reaches the component as
+     * absent — but pre-existing documents can still carry `''`/`null`, and
+     * neither may reach the DOM as an empty `placeholder` attribute.
+     */
+    it('treats a cleared or blank placeholder as no placeholder', () => {
+      for (const cleared of ['', '   ', null, undefined]) {
+        const { container, unmount } = render(
+          <FormField
+            fieldName="name"
+            label="Name"
+            placeholder={cleared as unknown as string}
+          />,
+        )
+        const input = container.querySelector(
+          'input[name="name"]',
+        ) as HTMLInputElement
+        expect(input.hasAttribute('placeholder')).toBe(false)
+        // The label is untouched by clearing — it is a separate prop.
+        expect(screen.getByRole('textbox', { name: 'Name' })).toBe(input)
+        unmount()
+      }
+    })
+
+    it('keeps the label as the accessible name — a placeholder is not a label', () => {
+      const { container } = render(
+        <FormField
+          fieldName="message"
+          label="Message"
+          placeholder="How can we help?"
+        />,
+      )
+      // The placeholder never becomes the name…
+      expect(
+        screen.queryByRole('textbox', { name: 'How can we help?' }),
+      ).toBeNull()
+      const input = screen.getByRole('textbox', { name: 'Message' })
+      expect(input.getAttribute('placeholder')).toBe('How can we help?')
+      // …and both are visible at once: MUI hides the placeholder while the
+      // label still sits inside the box, so the label must be shrunk.
+      expect(container.querySelector('label')?.className).toContain(
+        'MuiInputLabel-shrink',
+      )
+    })
+
+    it('leaves the floating label alone when there is no placeholder', () => {
+      const { container } = render(
+        <FormField fieldName="message" label="Message" />,
+      )
+      expect(container.querySelector('label')?.className).not.toContain(
+        'MuiInputLabel-shrink',
+      )
+    })
+
+    it('shows the placeholder as a dropdown’s empty display value', () => {
+      render(
+        <FormField
+          fieldName="teamSize"
+          label="Team size"
+          fieldType="select"
+          options={'1-10\n11-50'}
+          placeholder="Select"
+        />,
+      )
+      // A Select has no native placeholder; it displays the hint until a
+      // choice is made (needs `displayEmpty` — MUI renders nothing for '').
+      expect(screen.getByRole('combobox').textContent).toBe('Select')
+    })
+
+    it('never leaks the placeholder onto choice fields, which have no input', () => {
+      for (const fieldType of ['radio', 'checkbox', 'rating'] as const) {
+        const { container, unmount } = render(
+          <FormField
+            fieldName="size"
+            label="Size"
+            fieldType={fieldType}
+            options="Small, Large"
+            placeholder="Pick one"
+          />,
+        )
+        expect(container.querySelector('[placeholder]')).toBeNull()
+        unmount()
+      }
+    })
+
+    it('exposes Placeholder as a free-text attribute alongside Label', () => {
+      const byName = Object.fromEntries(
+        (formFieldSchema.attributes ?? []).map((attribute) => [
+          attribute.name,
+          attribute,
+        ]),
+      )
+      expect(byName['placeholder']?.label).toBe('Placeholder')
+      expect(byName['placeholder']?.component).toBe(
+        Aglyn.FieldComponentType.TEXT_FIELD,
+      )
+      // Free text, not a choice list: the AGL-1191 trap (an option whose
+      // value is `''` can never persist) needs an option to bite, and
+      // clearing free text is exactly how the hint is removed.
+      expect(byName['placeholder']?.options).toBeUndefined()
+      // The label attribute survives — the placeholder never replaces it.
+      expect(byName['label']?.label).toBe('Label')
+    })
+  })
+
   describe('Form submission', () => {
     it('joins multiple checkbox values under one field name', async () => {
       const { form } = renderForm(

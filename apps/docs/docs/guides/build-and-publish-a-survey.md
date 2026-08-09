@@ -92,6 +92,7 @@ Select each Form Field and set its properties in the inspector:
 | **Field name** | The key the value is stored under in submissions (and in the inbox copy). |
 | **Maps to schema field** | Which of the dataset's schema fields this value is stored under. The dropdown lists the fields of the dataset chosen on the Form (see step 5) and stores the stable **field id**, so renaming the field later never breaks the mapping. Left on **None**, the value matches a dataset field by name instead. |
 | **Label** | The visible input label ("How satisfied are you?"). |
+| **Placeholder** | An optional grey hint inside the empty input ("you@company.com"). It is not a label — it disappears as soon as someone types, so always keep **Label** set. Radio, checkbox, and rating fields ignore it; a dropdown shows it until a choice is made. Clear it to remove the hint. |
 | **Type** | **Text** (default), **Email**, **Multiline**, **Dropdown**, **Radio choice**, **Checkboxes**, or **Star rating**. |
 | **Options** | Choices for dropdown, radio, and checkbox fields — one per line or comma-separated. Ignored by other types. |
 | **Required?** | Whether the field must be filled; a required checkbox group needs at least one box ticked. |
