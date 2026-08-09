@@ -16,6 +16,9 @@
  */
 
 import { APP_CONSOLE } from '@aglyn/shared-data-enums'
+// Deep import (not the barrel) so this Server Component doesn't pull the theme
+// lib's createContext HOCs into the RSC graph (AGL-405).
+import { APP_EMOTION_CACHE_OPTIONS } from '@aglyn/shared-ui-theme/util/emotion-cache'
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
 import type { Metadata, Viewport } from 'next'
 import type { ReactNode } from 'react'
@@ -27,6 +30,13 @@ import type { ReactNode } from 'react'
  * the streamed emotion styles during App Router SSR. Per-host theming and
  * fonts live one level down in `[host]/layout` (they depend on the
  * resolved tenant host), so this layout stays host-agnostic.
+ *
+ * The cache options are named rather than defaulted (AGL-1266). Emotion's
+ * class name is `${cache.key}-${hash}`, so a surface that renders under a
+ * different cache emits `css-13b992c` where this one emits `mui-13b992c` —
+ * identical styles, different prefix — and React discards the entire server
+ * tree at hydration over it. `APP_EMOTION_CACHE_OPTIONS` is the single place
+ * that key is decided, shared with the console's root layout.
  */
 export const metadata: Metadata = {
   description: APP_CONSOLE.DESCRIPTION,
@@ -41,7 +51,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <AppRouterCacheProvider options={{ enableCssLayer: true }}>
+        <AppRouterCacheProvider options={APP_EMOTION_CACHE_OPTIONS}>
           {children}
         </AppRouterCacheProvider>
       </body>

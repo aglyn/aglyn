@@ -77,6 +77,36 @@ const CHECKS = [
   },
 ]
 
+/**
+ * AGL-1266: the served HTML must carry the app's emotion cache key, not
+ * emotion's fallback.
+ *
+ * Emotion names classes `${cache.key}-${hash}`. When a SERVER render loses
+ * the cache context, `@emotion/react`'s non-browser build does not throw — it
+ * quietly builds `createCache({ key: 'css' })` and renders on. The page looks
+ * perfect; the browser then hydrates under the real `mui` cache, every class
+ * disagrees by its prefix alone, and React throws the whole server tree away.
+ * That is the entire SSR/ISR benefit of the tenant, lost silently.
+ *
+ * This lives in the production smoke rather than a unit test on purpose. The
+ * trigger is module-graph duplication — two instances of `@emotion/react` in
+ * one render — which only a real `next build` can produce and only a real
+ * render can reveal. Jest resolves one instance and would always pass.
+ *
+ * `expectPrefix` is the paired positive: an "absent css-" assertion passes
+ * trivially against a page with no emotion styles at all, so the run also has
+ * to prove the right prefix IS there.
+ */
+const EMOTION_FALLBACK_CLASS = /class="[^"]*\bcss-[a-z0-9]{5,}/
+const EMOTION_EXPECTED_STYLE_TAG = 'data-emotion="mui'
+const emotionCheck = (body) => {
+  const fallback = body.match(EMOTION_FALLBACK_CLASS)
+  if (fallback) return `emotion FALLBACK key on the server — ${fallback[0]}…`
+  if (!body.includes(EMOTION_EXPECTED_STYLE_TAG))
+    return `no ${EMOTION_EXPECTED_STYLE_TAG}" styles — cannot prove the key`
+  return null
+}
+
 // `next start` on the dist artifact does NOT load apps/tenant/.env*
 // (Next reads env from the directory it starts, and nx serve loads the
 // project's files) — without them firebase-admin never initializes and
@@ -205,12 +235,15 @@ for (const { path, marker, absent } of CHECKS) {
     // A leak is a failure even on a 200 with the right marker — the page
     // renders correctly AND carries a row it must never have loaded.
     const okAbsent = !absent || !body.includes(absent)
-    const ok = okStatus && okMarker && okAbsent
+    // Only meaningful on a 200 — an error page proves nothing about the key.
+    const emotionProblem = okStatus ? emotionCheck(body) : null
+    const ok = okStatus && okMarker && okAbsent && !emotionProblem
     if (!ok) failures += 1
     console.log(
       `${ok ? 'PASS' : 'FAIL'}  ${path} — HTTP ${res.status}` +
         `${okMarker ? '' : ` (marker "${marker}" missing)`}` +
-        `${okAbsent ? '' : ` (LEAKED "${absent}")`}`,
+        `${okAbsent ? '' : ` (LEAKED "${absent}")`}` +
+        `${emotionProblem ? ` (${emotionProblem})` : ''}`,
     )
     if (!okStatus) {
       // Surface the server-side error the way the outage presented.
