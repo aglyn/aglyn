@@ -47,6 +47,8 @@ export interface MemberSignupProps {
 const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
   (props, ref) => {
     const { heading, signinPath, continueFallback, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const [displayName, setDisplayName] = useState('')
@@ -95,15 +97,18 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            p: 3,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            color: 'text.secondary',
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              p: 3,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              color: 'text.secondary',
+              fontSize: 13,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'Member sign-up — the create-account form renders here'}
         </Box>
@@ -111,7 +116,7 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
     }
 
     return (
-      <Box ref={ref} {...rest} sx={{ maxWidth: 420 }}>
+      <Box ref={ref} {...rest} sx={[{ maxWidth: 420 }, ...nodeSx]}>
         {heading ? (
           <Typography variant="h5" gutterBottom>
             {heading}

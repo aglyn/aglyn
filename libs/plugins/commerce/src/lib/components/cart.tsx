@@ -268,6 +268,8 @@ function CartLines(props: {
  */
 const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   const { variant, checkoutLabel, showCoupon, emptyText, ...rest } = props
+  // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { hostId } = Aglyn.useSite()
   const siteFetch = Aglyn.useSiteFetch()
   const [cart, setCart] = useState<CartView | null>(null)
@@ -313,16 +315,19 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
       <Box
         ref={ref}
         {...rest}
-        sx={{
-          p: variant === 'inline' ? 3 : 1,
-          border: '1px dashed',
-          borderColor: 'divider',
-          borderRadius: 1,
-          color: 'text.secondary',
-          fontSize: 13,
-          fontFamily: 'system-ui, sans-serif',
-          display: 'inline-block',
-        }}
+        sx={[
+          {
+            p: variant === 'inline' ? 3 : 1,
+            border: '1px dashed',
+            borderColor: 'divider',
+            borderRadius: 1,
+            color: 'text.secondary',
+            fontSize: 13,
+            fontFamily: 'system-ui, sans-serif',
+            display: 'inline-block',
+          },
+          ...nodeSx,
+        ]}
       >
         {variant === 'inline' ? 'Cart — lines render here' : '🛒 Cart'}
       </Box>
@@ -345,7 +350,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   }
 
   return (
-    <Box ref={ref} {...rest} sx={{ display: 'inline-flex' }}>
+    <Box ref={ref} {...rest} sx={[{ display: 'inline-flex' }, ...nodeSx]}>
       <IconButton aria-label="Cart" onClick={() => setOpen(true)}>
         <Badge badgeContent={cart?.count ?? 0} color="primary">
           <SvgIcon>

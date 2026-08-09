@@ -185,6 +185,8 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       pageSize,
       ...rest
     } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
     const { hostId } = site
     // Server-rendered first page (AGL-659). The site-page enricher ran this
@@ -570,7 +572,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
 
     if (visible && visible.length === 0 && !hasCatalogControls) {
       return (
-        <Box ref={ref} {...rest} sx={{ p: 3, textAlign: 'center' }}>
+        <Box ref={ref} {...rest} sx={[{ p: 3, textAlign: 'center' }, ...nodeSx]}>
           <Typography variant="body2" color="text.secondary">
             {emptyText || 'No products here yet — check back soon.'}
           </Typography>

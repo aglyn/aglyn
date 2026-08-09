@@ -43,6 +43,8 @@ export interface GatedVideoProps {
 const GatedVideo = forwardRef<HTMLDivElement, GatedVideoProps>(
   (props, ref) => {
     const { productId, videoIndex, lockedText, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const [src, setSrc] = useState<string | null>(null)
@@ -84,17 +86,20 @@ const GatedVideo = forwardRef<HTMLDivElement, GatedVideoProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            aspectRatio: '16 / 9',
-            bgcolor: 'action.hover',
-            borderRadius: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'text.secondary',
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              aspectRatio: '16 / 9',
+              bgcolor: 'action.hover',
+              borderRadius: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'text.secondary',
+              fontSize: 13,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'▶ Members-only video'}
         </Box>
@@ -106,16 +111,19 @@ const GatedVideo = forwardRef<HTMLDivElement, GatedVideoProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            aspectRatio: '16 / 9',
-            bgcolor: 'action.hover',
-            borderRadius: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          sx={[
+            {
+              aspectRatio: '16 / 9',
+              bgcolor: 'action.hover',
+              borderRadius: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              alignItems: 'center',
+              justifyContent: 'center',
+            },
+            ...nodeSx,
+          ]}
         >
           <Typography variant="body2" color="text.secondary">
             {lockedText || '🔒 Sign in with an active subscription to watch'}

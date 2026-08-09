@@ -273,20 +273,17 @@ const baseOptions: ThemeOptions = {
       },
     },
     // MuiMenu: {},
-    // Tabs mark the selected tab with `primary`, but in the dark scheme
-    // primary is #2C3540 — a SURFACE tone, not an accent — so the selected
-    // tab rendered near-invisible against a dark background while the
-    // unselected ones stayed at 87% white. Three call sites had already
-    // hand-set `textColor="primary"` to work around it; making it the
-    // default fixes the ones that had not (the theme editor's own light/dark
-    // switch) and matches MuiButton and MuiLink, which already default to
-    // secondary.
     // No accent defaults live here any more (AGL-1186). Tabs, checkboxes,
     // radios, switches, sliders, progress and badges each briefly carried
     // `color: 'secondary'` to escape a `primary` that was a surface tone.
     // Now that `primary` IS the accent they render correctly on MUI's own
     // default, and a per-component default is exactly what the rotation
     // exists to remove.
+    //
+    // That includes the `MuiTabs` default AGL-1181 records as its fix: it
+    // was removed here deliberately, not reverted. The rotation fixed the
+    // root cause the default was papering over, so a reader who finds
+    // nothing at that issue's write-up is looking at the right file.
     MuiToolbar: {
       styleOverrides: {
         // Honour `disableGutters` (AGL-1230). This override targets the ROOT

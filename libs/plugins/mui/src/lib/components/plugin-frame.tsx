@@ -18,6 +18,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import Box from '@mui/material/Box'
+import type { SxProps } from '@mui/material/styles'
 import {
   forwardRef,
   useEffect,
@@ -70,6 +71,12 @@ export interface PluginFrameProps {
   revoked?: boolean
   scheme?: 'light' | 'dark'
   title?: string
+  /**
+   * Authored node styles, handed over by the renderer rather than typed
+   * into an attribute — recomposed below so the Styles panel's values are
+   * merged rather than replaced (AGL-1284).
+   */
+  sx?: SxProps
 }
 
 type FrameState = 'loading' | 'ready' | 'error'
@@ -130,6 +137,8 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
       title,
       ...rest
     } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const frameRef = useRef<HTMLIFrameElement | null>(null)
     const [state, setState] = useState<FrameState>('loading')
     const [height, setHeight] = useState<number>(
@@ -308,13 +317,18 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
             loading="lazy"
             onError={() => setState('error')}
             {...rest}
-            sx={{
-              width: '100%',
-              height,
-              border: 0,
-              display: 'block',
-              ...(state === 'loading' ? { visibility: 'hidden' } : {}),
-            }}
+            // MERGE, never replace (AGL-1284). The spread in the old literal
+            // LOOKED like a merge and merged nothing — it folded in a local
+            // conditional, not the node's `sx`, so every style an author set
+            // on a plugin element was discarded. Order matters: the frame's
+            // own box goes first so the author can override it, and the
+            // load-time hide goes LAST so an authored `visibility` can never
+            // reveal a frame that has not finished loading.
+            sx={[
+              { width: '100%', height, border: 0, display: 'block' },
+              ...nodeSx,
+              ...(state === 'loading' ? [{ visibility: 'hidden' }] : []),
+            ]}
           />
         )}
       </Box>

@@ -42,6 +42,8 @@ export interface NewsletterSignupProps {
 const NewsletterSignup = forwardRef<HTMLDivElement, NewsletterSignupProps>(
   (props, ref) => {
     const { heading, buttonLabel, successText, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const [email, setEmail] = useState('')
@@ -66,7 +68,7 @@ const NewsletterSignup = forwardRef<HTMLDivElement, NewsletterSignupProps>(
 
     if (state === 'done') {
       return (
-        <Box ref={ref} {...rest} sx={{ py: 1 }}>
+        <Box ref={ref} {...rest} sx={[{ py: 1 }, ...nodeSx]}>
           <Typography variant="body2">
             {successText || 'You’re on the list — thanks!'}
           </Typography>

@@ -48,6 +48,8 @@ interface FeedPost {
 const MemberFeed = forwardRef<HTMLDivElement, MemberFeedProps>(
   (props, ref) => {
     const { heading, emptyText, maxItems, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
     const [posts, setPosts] = useState<FeedPost[] | null | 'anonymous'>(null)
 
@@ -76,15 +78,18 @@ const MemberFeed = forwardRef<HTMLDivElement, MemberFeedProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            p: 3,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            color: 'text.secondary',
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              p: 3,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              color: 'text.secondary',
+              fontSize: 13,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'Member feed — updates for subscribers render here'}
         </Box>

@@ -46,6 +46,8 @@ export interface GateProps {
  */
 const Gate = forwardRef<HTMLDivElement, GateProps>((props, ref) => {
   const { productId, teaserText, ctaLabel, ctaHref, children, ...rest } = props
+  // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { hostId } = Aglyn.useSite()
   const [state, setState] = useState<
     'checking' | 'entitled' | 'blocked' | 'anonymous'
@@ -84,12 +86,15 @@ const Gate = forwardRef<HTMLDivElement, GateProps>((props, ref) => {
       <Box
         ref={ref}
         {...rest}
-        sx={{
-          border: '1px dashed',
-          borderColor: 'primary.main',
-          borderRadius: 1,
-          p: 1,
-        }}
+        sx={[
+          {
+            border: '1px dashed',
+            borderColor: 'primary.main',
+            borderRadius: 1,
+            p: 1,
+          },
+          ...nodeSx,
+        ]}
       >
         <Typography variant="caption" color="primary">
           {'🔒 Members only — visitors see the teaser'}
@@ -110,13 +115,16 @@ const Gate = forwardRef<HTMLDivElement, GateProps>((props, ref) => {
     <Box
       ref={ref}
       {...rest}
-      sx={{
-        p: 4,
-        textAlign: 'center',
-        border: 1,
-        borderColor: 'divider',
-        borderRadius: 1,
-      }}
+      sx={[
+        {
+          p: 4,
+          textAlign: 'center',
+          border: 1,
+          borderColor: 'divider',
+          borderRadius: 1,
+        },
+        ...nodeSx,
+      ]}
     >
       <Typography variant="h6" gutterBottom>
         {'🔒 Members only'}

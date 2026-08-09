@@ -232,6 +232,8 @@ const CollectionEntryBody = forwardRef<
   CollectionEntryBodyProps
 >((props, ref) => {
   const { markdown, ...rest } = props
+  // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
   const source = (markdown ?? '').trim()
   const unresolved = !source || UNRESOLVED_TOKEN.test(source)
@@ -247,14 +249,17 @@ const CollectionEntryBody = forwardRef<
       <Box
         ref={ref}
         {...rest}
-        sx={{
-          p: 2,
-          border: '1px dashed',
-          borderColor: 'divider',
-          color: 'text.secondary',
-          fontSize: 12,
-          fontFamily: 'system-ui, sans-serif',
-        }}
+        sx={[
+          {
+            p: 2,
+            border: '1px dashed',
+            borderColor: 'divider',
+            color: 'text.secondary',
+            fontSize: 12,
+            fontFamily: 'system-ui, sans-serif',
+          },
+          ...nodeSx,
+        ]}
       >
         {'Entry body — the {{entry.body}} markdown renders here'}
       </Box>
@@ -472,6 +477,8 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
     // `limit` is compose-time: the tenant resolves it while stamping
     // `entries`; strip it so it never hits the DOM.
     const { heading, limit, entries, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
     if (!entries?.length) {
       if (!suppressNavigation) return <Box ref={ref} {...rest} />
@@ -479,14 +486,17 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            p: 2,
-            border: '1px dashed',
-            borderColor: 'divider',
-            color: 'text.secondary',
-            fontSize: 12,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              p: 2,
+              border: '1px dashed',
+              borderColor: 'divider',
+              color: 'text.secondary',
+              fontSize: 12,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'Related posts — entries sharing this entry’s category or ' +
             'tags render here'}
@@ -707,6 +717,8 @@ const CollectionEntryMeta = forwardRef<
     showTags,
     ...rest
   } = props
+  // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
   const dateValue = showDate !== false ? metaValue(date, suppressNavigation) : ''
   const categoryValue =
@@ -723,14 +735,17 @@ const CollectionEntryMeta = forwardRef<
       <Box
         ref={ref}
         {...rest}
-        sx={{
-          p: 1,
-          border: '1px dashed',
-          borderColor: 'divider',
-          color: 'text.secondary',
-          fontSize: 12,
-          fontFamily: 'system-ui, sans-serif',
-        }}
+        sx={[
+          {
+            p: 1,
+            border: '1px dashed',
+            borderColor: 'divider',
+            color: 'text.secondary',
+            fontSize: 12,
+            fontFamily: 'system-ui, sans-serif',
+          },
+          ...nodeSx,
+        ]}
       >
         {'Entry meta — date · category · tags render here'}
       </Box>
@@ -863,6 +878,8 @@ const CollectionCategories = forwardRef<
   // `collectionSlug`/`allLabel` are compose-time: the tenant resolves them
   // while stamping `items`; strip so they never hit the DOM.
   const { collectionSlug, allLabel, items, ...rest } = props
+  // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
   if (!items?.length) {
     if (!suppressNavigation) return <Box ref={ref} {...rest} />
@@ -870,14 +887,17 @@ const CollectionCategories = forwardRef<
       <Box
         ref={ref}
         {...rest}
-        sx={{
-          p: 2,
-          border: '1px dashed',
-          borderColor: 'divider',
-          color: 'text.secondary',
-          fontSize: 12,
-          fontFamily: 'system-ui, sans-serif',
-        }}
+        sx={[
+          {
+            p: 2,
+            border: '1px dashed',
+            borderColor: 'divider',
+            color: 'text.secondary',
+            fontSize: 12,
+            fontFamily: 'system-ui, sans-serif',
+          },
+          ...nodeSx,
+        ]}
       >
         {'Category pills — All + one pill per collection category render here'}
       </Box>

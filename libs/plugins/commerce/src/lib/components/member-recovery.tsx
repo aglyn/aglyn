@@ -47,6 +47,8 @@ export interface MemberRecoveryProps {
 const MemberRecovery = forwardRef<HTMLDivElement, MemberRecoveryProps>(
   (props, ref) => {
     const { heading, signinPath, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     // Read post-hydration only: the block server-renders inside published
@@ -112,15 +114,18 @@ const MemberRecovery = forwardRef<HTMLDivElement, MemberRecoveryProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            p: 3,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            color: 'text.secondary',
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              p: 3,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              color: 'text.secondary',
+              fontSize: 13,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'Password recovery — request and reset forms render here'}
         </Box>
@@ -128,7 +133,7 @@ const MemberRecovery = forwardRef<HTMLDivElement, MemberRecoveryProps>(
     }
 
     return (
-      <Box ref={ref} {...rest} sx={{ maxWidth: 420 }}>
+      <Box ref={ref} {...rest} sx={[{ maxWidth: 420 }, ...nodeSx]}>
         <Typography variant="h5" gutterBottom>
           {heading || 'Reset your password'}
         </Typography>

@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiCodeTags } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
+import type { SxProps } from '@mui/material/styles'
 import Typography from '@mui/material/Typography'
 import DOMPurify from 'dompurify'
 import { forwardRef, useEffect, useState } from 'react'
@@ -43,6 +44,12 @@ export interface CustomHtmlProps {
   embedMode?: boolean
   /** Iframe height (px) in embed mode. */
   embedHeight?: number
+  /**
+   * Authored node styles, handed over by the renderer rather than typed
+   * into an attribute — recomposed below so the Styles panel's values are
+   * merged rather than replaced (AGL-1284).
+   */
+  sx?: SxProps
 }
 
 /**
@@ -67,6 +74,8 @@ export function sanitizeCustomHtml(html: string): string {
 const CustomHtml = forwardRef<HTMLDivElement, CustomHtmlProps>(
   (props, ref) => {
     const { html, css, embedMode, embedHeight, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
 
     // Same shape as typography's rich text (AGL-1268): DOMPurify needs a
@@ -85,15 +94,20 @@ const CustomHtml = forwardRef<HTMLDivElement, CustomHtmlProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            p: 3,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            color: 'text.secondary',
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          // MERGE, never replace (AGL-1284): the placeholder's own look goes
+          // first so an author who styles the empty state can override it.
+          sx={[
+            {
+              p: 3,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              color: 'text.secondary',
+              fontSize: 13,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'</> Custom HTML — add markup in the attributes panel'}
         </Box>

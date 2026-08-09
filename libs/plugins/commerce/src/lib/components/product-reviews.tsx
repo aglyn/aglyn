@@ -68,6 +68,8 @@ async function resolveProductIdFromSlug(hostId: string): Promise<string> {
 const ProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
   (props, ref) => {
     const { productId: productIdProp, heading, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const [productId, setProductId] = useState(productIdProp ?? '')
@@ -125,15 +127,18 @@ const ProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            p: 3,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            color: 'text.secondary',
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              p: 3,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              color: 'text.secondary',
+              fontSize: 13,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'★★★★★ Product reviews render here'}
         </Box>
@@ -141,7 +146,7 @@ const ProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
     }
 
     return (
-      <Box ref={ref} {...rest} sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box ref={ref} {...rest} sx={[{ display: 'flex', flexDirection: 'column', gap: 1.5 }, ...nodeSx]}>
         {/* No JSON-LD here any more (AGL-686). This block used to emit a
             free-standing `AggregateRating` node, which schema.org ignores —
             a rating has to be a PROPERTY of the Product it rates. The PDP's
