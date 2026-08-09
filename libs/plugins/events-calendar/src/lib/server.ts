@@ -28,6 +28,7 @@ import {
   checkEntitlement,
   isSiteEventType,
   registerPluginApiRoute,
+  resolveSocialImage,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
@@ -75,6 +76,14 @@ const eventsListHandler: PluginApiHandler = async (req, res) => {
             .where('startsAtMs', '>=', nowMs)
             .orderBy('startsAtMs', 'asc')
             .limit(50)
+    // The site's own identity, for absolutizing the cover below (AGL-1351).
+    // The host doc is already in hand — this costs no read.
+    const host = {
+      $id: hostId,
+      cname: hostSnapshot.get('cname') ?? null,
+      subdomain: hostSnapshot.get('subdomain') ?? null,
+    }
+
     const snapshot = await eventsQuery.get()
     const events = snapshot.docs
       .filter(
@@ -88,7 +97,24 @@ const eventsListHandler: PluginApiHandler = async (req, res) => {
         location: doc.get('location') ?? null,
         organizer: doc.get('organizer') ?? null,
         description: doc.get('description') ?? null,
-        coverImage: doc.get('coverImage') ?? null,
+        // ABSOLUTE, resolved here rather than shipped as stored (AGL-1351).
+        //
+        // "Cover image URL" is a free text field, so what an author types is
+        // frequently a site-relative path — which the browser resolves against
+        // the page and a crawler reading the `Event` JSON-LD cannot resolve at
+        // all. That is the AGL-1337/AGL-1343 defect a third time over, and it
+        // is fixed HERE because this is the only place that knows which site
+        // the events belong to: `EventList` is a client block whose
+        // `useSite()` carries a `hostId` and no origin, and in Preview the
+        // page origin is the console's, not the site's.
+        //
+        // Absolutizing also repairs the visible thumbnail on that surface: a
+        // relative cover in Preview resolved against the console and 404'd.
+        coverImage:
+          resolveSocialImage({
+            sources: [{ image: doc.get('coverImage') }],
+            host,
+          })?.url ?? null,
       }))
     // Cacheable: published events change rarely; CDN may hold for a minute.
     res.setHeader('Cache-Control', 'public, s-maxage=60')
