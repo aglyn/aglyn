@@ -166,8 +166,10 @@ in the block library:
 - **Category Pills** — the collection's categories as a row of links: **All** plus one
   pill per category. Drop it on the **list template screen**, above the Collection
   Entries block. Attributes: **Collection slug** (blank = the collection from the URL)
-  and **All label** — the text of the unfiltered pill, default "All". Renders nothing
-  until the collection has categories.
+  and **All label** — the text of the unfiltered pill, default "All". Clear the All
+  label box to drop that pill and leave only the category pills; the box then reads
+  `none`, which is the value that actually persists — typing `none` yourself does the
+  same thing. Renders nothing until the collection has categories.
 
 ### Category filtering
 

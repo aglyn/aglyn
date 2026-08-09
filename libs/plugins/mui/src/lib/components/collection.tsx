@@ -813,7 +813,11 @@ export interface CollectionCategoriesProps extends StackProps {
    * routed by the current URL on list-template screens.
    */
   collectionSlug?: string
-  /** Label for the unfiltered pill; empty string omits it (default "All"). */
+  /**
+   * Label for the unfiltered pill (default "All"). Clearing the field
+   * persists `Aglyn.COLLECTION_ALL_PILL_NONE`, which omits the pill —
+   * `''` cannot be stored at all (AGL-1336).
+   */
   allLabel?: string
   /**
    * Server-stamped pill links (`expandCollectionCategories`); never set by
@@ -934,8 +938,23 @@ export const collectionCategoriesSchema: Aglyn.ComponentSchema<CollectionCategor
         label: 'All label',
         description:
           'Label for the unfiltered pill, which links to the collection ' +
-          'root (default "All"). Clear it to omit that pill.',
+          'root (default "All"). Clear the box to omit that pill — it then ' +
+          'reads "none", which is what makes the omission stick. Typing ' +
+          '"none" does the same thing.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
+        // Without this the emptied field persists NOTHING (AGL-1336): ddf
+        // maps an emptied value to `clearedValue`, final-form's parse turns
+        // `''` into `undefined`, and the missing key takes the runtime
+        // default — so "clear it to omit that pill" was undoable by
+        // clicking. Same shape as FIELD_COLOR_ALT1's `'default'` (AGL-1191):
+        // a value that means something has to BE something.
+        //
+        // ddf only substitutes `clearedValue` when the field HAD an initial
+        // value (`enhancedOnChange`'s `typeof initial !== 'undefined'`),
+        // which is why the preset below seeds `allLabel` and why the
+        // sentinel is a word an author can also type. A block that never
+        // carried the prop has an already-empty box and nothing to clear.
+        clearedValue: Aglyn.COLLECTION_ALL_PILL_NONE,
       },
     ],
   }
@@ -1052,7 +1071,10 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: CATEGORIES_ID,
       pluginId: BUNDLE_ID,
-      props: { allLabel: 'All' },
+      // Seeded, not left to the runtime default: an explicit initial value
+      // is what lets the attributes form substitute the cleared sentinel
+      // when the author empties the box (AGL-1336).
+      props: { allLabel: Aglyn.COLLECTION_ALL_PILL_DEFAULT },
     },
   },
   {

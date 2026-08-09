@@ -254,6 +254,37 @@ describe('Category pills block (AGL-1321)', () => {
     expect(container.textContent).toBe('')
   })
 
+  /**
+   * AGL-1336. The attribute told authors to clear the box to omit the All
+   * pill, and the form could not persist an emptied text field at all —
+   * ddf maps it to `clearedValue`, which was undefined, so the key vanished
+   * and the runtime default put the pill straight back.
+   */
+  it('clears the All label to a sentinel that can actually persist', () => {
+    const allLabel = (collectionCategoriesSchema.attributes ?? []).find(
+      (attribute) => attribute.name === 'allLabel',
+    )
+    expect(allLabel?.component).toBe(Aglyn.FieldComponentType.TEXT_FIELD)
+    // Not `''`: that is exactly the value the form cannot store (AGL-1191).
+    expect(allLabel?.clearedValue).toBe(Aglyn.COLLECTION_ALL_PILL_NONE)
+    expect(allLabel?.clearedValue).toBeTruthy()
+    expect(Aglyn.resolveCollectionAllLabel(allLabel?.clearedValue as string))
+      .toBe('')
+    // The description has to name the sentinel, since the box shows it.
+    expect(allLabel?.description).toContain('none')
+  })
+
+  it('seeds the preset with a label, so clearing it has something to clear', () => {
+    // `clearedValue` only fires when the field HAD an initial value, so a
+    // preset that shipped the prop absent could never be cleared.
+    const preset = collectionPresets.find(
+      (item) => item.data.componentId === Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID,
+    )
+    expect((preset?.data.props as any)?.allLabel).toBe(
+      Aglyn.COLLECTION_ALL_PILL_DEFAULT,
+    )
+  })
+
   it('shows an affordance inside editing surfaces', () => {
     render(
       <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>

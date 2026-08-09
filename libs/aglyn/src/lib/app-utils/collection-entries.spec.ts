@@ -17,6 +17,8 @@
 
 import type { CollectionEntriesSource } from './collection-entries'
 import {
+  COLLECTION_ALL_PILL_DEFAULT,
+  COLLECTION_ALL_PILL_NONE,
   buildCollectionCategoryLinks,
   collectionCategorySlug,
   collectionEntryTokens,
@@ -28,6 +30,7 @@ import {
   expandCollectionEntries,
   expandCollectionRelated,
   parseCollectionRoute,
+  resolveCollectionAllLabel,
   resolveCollectionCategoryBySlug,
   resolveEntryCategoryName,
   selectRelatedEntries,
@@ -464,6 +467,96 @@ describe('buildCollectionCategoryLinks (AGL-1321)', () => {
       buildCollectionCategoryLinks({ collectionSlug: 'blog', categories: [] }),
     ).toEqual([])
     expect(buildCollectionCategoryLinks({ collectionSlug: 'blog' })).toEqual([])
+  })
+})
+
+/**
+ * AGL-1336. "Clear it to omit that pill" was undoable by clicking: the
+ * attributes form cannot persist `''`, so the emptied field's key vanished
+ * and the default put the pill straight back. The field now clears to the
+ * `none` sentinel, which is the only value that survives the round trip.
+ */
+describe('the All pill cleared value (AGL-1336)', () => {
+  const pillNodes = () =>
+    ({
+      root: { $id: 'root', componentId: 'div', nodes: ['pills'] },
+      pills: {
+        $id: 'pills',
+        componentId: 'collectionCategories',
+        parentId: 'root',
+        props: {} as Record<string, unknown>,
+      },
+    }) as any
+  const pillSource: CollectionEntriesSource = {
+    slug: 'blog',
+    entries: [],
+    categories: taxonomy,
+  }
+
+  it('defaults only when the label was never set', () => {
+    expect(resolveCollectionAllLabel(undefined)).toBe('All')
+    expect(resolveCollectionAllLabel(COLLECTION_ALL_PILL_DEFAULT)).toBe('All')
+  })
+
+  it.each([COLLECTION_ALL_PILL_NONE, 'None', ' none ', '', '   ', null])(
+    'omits the pill for %p',
+    (value) => {
+      expect(resolveCollectionAllLabel(value as any)).toBe('')
+    },
+  )
+
+  it('keeps any other label, trimmed', () => {
+    expect(resolveCollectionAllLabel('Everything')).toBe('Everything')
+    expect(resolveCollectionAllLabel('  Everything  ')).toBe('Everything')
+    // Not a prefix or substring match — only the whole word is the sentinel.
+    expect(resolveCollectionAllLabel('None of the above')).toBe(
+      'None of the above',
+    )
+  })
+
+  it('drops the All pill from the built row, keeping the categories', () => {
+    const links = buildCollectionCategoryLinks({
+      collectionSlug: 'blog',
+      categories: taxonomy,
+      allLabel: COLLECTION_ALL_PILL_NONE,
+    })
+    expect(links.map((link) => link.label)).toEqual(['Product', 'Open source'])
+  })
+
+  it('survives the round trip a stamped block makes', () => {
+    // set → clear → reload: what the console persists after the ✕-less
+    // "empty the box" gesture is the sentinel, and the tenant honours it on
+    // every subsequent render.
+    const nodes = pillNodes()
+    nodes['pills'].props.allLabel = COLLECTION_ALL_PILL_NONE
+    const stamped = expandCollectionCategories(
+      nodes,
+      { blog: pillSource },
+      'blog',
+    ) as any
+    expect(stamped['pills'].props.items).toEqual([
+      { label: 'Product', href: '/blog/category/product', active: false },
+      { label: 'Open source', href: '/blog/category/opensrc', active: false },
+    ])
+  })
+
+  it('still defaults when the prop is absent, and omits on a null', () => {
+    const absent = expandCollectionCategories(
+      pillNodes(),
+      { blog: pillSource },
+      'blog',
+    ) as any
+    expect(absent['pills'].props.items[0].label).toBe('All')
+
+    const cleared = pillNodes()
+    cleared['pills'].props.allLabel = null
+    const stamped = expandCollectionCategories(
+      cleared,
+      { blog: pillSource },
+      'blog',
+    ) as any
+    // `String(null)` would have labelled the pill "null" (AGL-1336).
+    expect(stamped['pills'].props.items[0].label).toBe('Product')
   })
 })
 
