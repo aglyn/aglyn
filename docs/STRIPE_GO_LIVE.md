@@ -138,8 +138,58 @@ subscription product, Stripe records them and charges no one.
    needed (verified against a test-mode subscription — usage lives on the
    meter, not on the item).
 
-   ⚠️ The Billing card's annual caption still says the subscription "carries
-   no metered item today". Update
-   `components/billing/billing-metered-estimate.component.tsx` in the same
-   change as `STRIPE_PRICE_METERED_YEARLY` — it is a client component and
-   cannot read the env var to notice on its own.
+   The Billing card's annual caption was updated with the yearly price
+   (`components/billing/billing-metered-estimate.component.tsx`) and now states
+   the settlement *cadence* rather than claiming the subscription "carries no
+   metered item today". It keys off the subscription's own interval, because it
+   is a client component and cannot read the env var — which is the other
+   reason to set both prices or neither.
+
+7. **Attaching the metered item is not the same as every subscription having
+   one** (AGL-1352). Only checkout and the in-app plan switch attach it.
+   Everything that changes a subscription on Stripe's side — the customer
+   portal, a hand edit in the dashboard — reports back through the webhook,
+   and every subscription created *before* these prices were set has no
+   metered item at all. Such a subscription is paying, entitled, and bills no
+   usage overage whatsoever, with no visible symptom: plan, entitlements and
+   invoice all look correct.
+
+   The webhook therefore back-fills the item (`utils/server/metered-backfill.ts`).
+   **When** it does is a money decision, controlled by `STRIPE_METERED_BACKFILL`:
+
+   | value | behaviour |
+   | -- | -- |
+   | *(unset)* / `boundary` | attach only within 72h of a period start — DEFAULT |
+   | `immediate` | attach as soon as the item is seen missing |
+   | `off` | attach nothing |
+
+   ⚠️ **A mid-period attach retroactively prices the whole period.** Stripe
+   aggregates a meter over the *item's* billing period, and an item added
+   mid-period inherits the subscription's period start — so it bills every
+   event already recorded in that period, including any computed under rates
+   that have since been corrected. `boundary` exists so the item's window
+   starts empty; a renewal emits `customer.subscription.updated`, so the window
+   comes round every cycle without a cron. Its cost is at most one unmetered
+   period, which on an annual plan is a year — switch to `immediate` once no
+   pre-correction events remain on the meter.
+
+   Enterprise is deliberately excluded: it bills on a negotiated ad-hoc price,
+   and adding usage billing to a signed agreement is not a bug fix.
+
+8. **Audit the population, not just the code.**
+
+   ```
+   STRIPE_SECRET_KEY=sk_… node tools/scripts/audit-metered-coverage.mjs
+   ```
+
+   Read-only (GET only). Reports paying subscriptions with no metered item,
+   metered items whose interval does not match the plan, and whether the
+   customer portal is allowed to change plans — enabling
+   `subscription_update` there opens a subscription-mutating path with one
+   dashboard click and no code review. Exits non-zero when anything is
+   flagged, so it can run as a scheduled check.
+
+   Its CI counterpart is `apps/console/specs/metered-coverage.spec.ts`, which
+   fails the build if a *new* route creates or re-prices a subscription
+   without resolving the metered price. That spec guards the code; the script
+   guards the data.

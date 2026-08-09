@@ -30,6 +30,10 @@ import {
   findPlanItem,
   planFromPriceId,
 } from '../../../../utils/server/billing-addons'
+import {
+  backfillMeteredItem,
+  meteredBackfillDecision,
+} from '../../../../utils/server/metered-backfill'
 
 /** Verifies a `Stripe-Signature` header against the signing secret. */
 function verifyStripeSignature(
@@ -275,6 +279,53 @@ async function handler(request: Request): Promise<Response> {
               : null,
           },
         } as never)
+
+        // Back-fill the metered usage item (AGL-1352).
+        //
+        // Checkout and the in-app switch both attach it; NOTHING that changes
+        // a subscription on Stripe's side does — the customer portal, a hand
+        // edit in the dashboard, and every subscription created before the
+        // metered prices were configured. Such a subscription is paying,
+        // entitled, and bills no usage overage at all, with no visible
+        // symptom, so the webhook is the only place that sees every path.
+        //
+        // Deferred to the period boundary by default: a mid-period attach
+        // retroactively prices the whole period, history included. The policy
+        // — including that default and its `STRIPE_METERED_BACKFILL` override
+        // — lives in `metered-backfill.ts`, not here.
+        //
+        // Best-effort, exactly like the two Stripe writes around it: a throw
+        // would 500 the webhook and make Stripe redeliver the whole event,
+        // re-applying every mirror above for nothing. It re-runs on every
+        // subscription event and at each renewal, so it self-heals.
+        //
+        // No loop: the attach emits another `customer.subscription.updated`,
+        // and that delivery sees the item present and stops.
+        if (object?.id && process.env.STRIPE_SECRET_KEY) {
+          const decision = meteredBackfillDecision({
+            items,
+            plan,
+            status: object?.status,
+            canceled,
+            currentPeriodStart: object?.current_period_start,
+          })
+          if (decision.warning) {
+            console.warn('[billing/webhook] metered usage item not attached', {
+              orgId,
+              plan,
+              interval: decision.interval,
+              reason: decision.warning,
+            })
+          }
+          if (decision.attach && decision.priceId) {
+            await backfillMeteredItem({
+              secretKey: process.env.STRIPE_SECRET_KEY,
+              subscriptionId: String(object.id),
+              priceId: decision.priceId,
+              orgId: String(orgId),
+            })
+          }
+        }
 
         // Stamp the workspace onto the CUSTOMER (AGL-941).
         //
