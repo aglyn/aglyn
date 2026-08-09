@@ -21,17 +21,21 @@
  */
 
 /**
- * `STRIPE_PRICE_METERED` is a MONTHLY price attached to every checkout
- * (AGL-1340) — a latent annual-sales killer.
+ * The metered price must recur the way the plan does (AGL-1340, completed in
+ * AGL-1280).
  *
  * Stripe forbids mixed `recurring.interval` on one subscription. Verified
  * read-only against LIVE Stripe with `GET /v1/invoices/upcoming` while
- * diagnosing AGL-1137: Starter monthly + metered previews at $25.00, Starter
- * yearly alone at $192.00, and Starter yearly + metered returns
- * `invalid_request_error` — "All prices on a subscription must have the same
- * recurring.interval…". Annual checkout works in production TODAY only because
- * that env var happens to be unset there, so the obvious next step (copying the
- * full price block into Vercel) would have broken every annual sale.
+ * diagnosing AGL-1137: Starter monthly + monthly metered previews at $25.00,
+ * Starter yearly alone at $192.00, and Starter yearly + MONTHLY metered
+ * returns `invalid_request_error` — "All prices on a subscription must have
+ * the same recurring.interval…".
+ *
+ * AGL-1340 avoided that by attaching the metered item to monthly checkouts
+ * only, which left annual subscriptions with no metered item at all — metered
+ * on paper, billed $0 in fact. AGL-1280 minted `aglyn_metered_usage_yearly`
+ * on the same meter, so each interval now has its own price and the crash is
+ * unrepresentable rather than merely avoided.
  *
  * No live Stripe call happens in this file: `fetch` is mocked and the captured
  * request body is the assertion surface.
@@ -165,45 +169,75 @@ afterEach(() => {
   jest.restoreAllMocks()
 })
 
-describe('the metered usage item follows the plan interval (AGL-1340)', () => {
-  it('attaches it to a MONTHLY checkout when configured', async () => {
-    const post = loadCheckout({ STRIPE_PRICE_METERED: 'price_metered_usage' })
+const BOTH = {
+  STRIPE_PRICE_METERED: 'price_metered_usage',
+  STRIPE_PRICE_METERED_YEARLY: 'price_metered_usage_yearly',
+}
+
+describe('the metered usage item follows the plan interval (AGL-1340/AGL-1280)', () => {
+  it('attaches the MONTHLY metered price to a monthly checkout', async () => {
+    const post = loadCheckout(BOTH)
     const response = await checkout(post, 'month')
     expect(response.status).toBe(200)
     expect(capturedBody?.get('line_items[0][price]')).toBe(
       'price_starter_monthly',
     )
     expect(capturedBody?.get('line_items[1][price]')).toBe('price_metered_usage')
+    expect(warnings).toHaveLength(0)
   })
 
-  it('leaves it off an ANNUAL checkout — the request Stripe rejects', async () => {
-    const post = loadCheckout({ STRIPE_PRICE_METERED: 'price_metered_usage' })
+  it('attaches the YEARLY metered price to an annual checkout', async () => {
+    const post = loadCheckout(BOTH)
     const response = await checkout(post, 'year')
-    // The whole point: with the var SET, annual checkout still succeeds.
     expect(response.status).toBe(200)
     expect(capturedBody?.get('line_items[0][price]')).toBe(
       'price_starter_yearly',
     )
+    expect(capturedBody?.get('line_items[1][price]')).toBe(
+      'price_metered_usage_yearly',
+    )
+    expect(warnings).toHaveLength(0)
+  })
+
+  it('NEVER puts the monthly metered price on an annual subscription', async () => {
+    // The mixed-interval crash, asserted as an absence rather than trusted to
+    // the branch above: whatever else annual checkout does, `line_items[1]`
+    // must not be the monthly id. Stripe rejects such a subscription outright
+    // ("All prices on a subscription must have the same recurring.interval"),
+    // so this is the one assertion that has to hold under any refactor.
+    for (const env of [BOTH, { STRIPE_PRICE_METERED: 'price_metered_usage' }]) {
+      const post = loadCheckout(env)
+      await checkout(post, 'year')
+      expect(capturedBody?.get('line_items[1][price]')).not.toBe(
+        'price_metered_usage',
+      )
+    }
+  })
+
+  it('skips, and warns, when only the OTHER interval is configured', async () => {
+    // Asymmetric configuration is the real fault: one interval's customers
+    // bill for overage and the other's silently do not, which no screen shows.
+    const post = loadCheckout({ STRIPE_PRICE_METERED: 'price_metered_usage' })
+    const response = await checkout(post, 'year')
+    expect(response.status).toBe(200)
     expect(capturedBody?.get('line_items[1][price]')).toBeNull()
-    // Nothing anywhere else records this, and a missing metered item means
-    // reported usage never reaches an invoice — so it has to say why.
     const note = warnings.find((args) =>
       String(args[0]).includes('metered usage item not attached'),
     )
     expect(note).toBeDefined()
-    expect(JSON.stringify(note?.[1])).toContain('mixed intervals')
+    expect(JSON.stringify(note?.[1])).toContain('STRIPE_PRICE_METERED_YEARLY')
     expect((note?.[1] as { interval?: string })?.interval).toBe('year')
   })
 
-  it('does not throw — or warn — on either interval when the var is unset', async () => {
+  it('does not throw — or warn — on either interval when BOTH are unset', async () => {
     for (const interval of ['month', 'year'] as const) {
       const post = loadCheckout()
       const response = await checkout(post, interval)
       expect(response.status).toBe(200)
       expect(capturedBody?.get('line_items[1][price]')).toBeNull()
     }
-    // Unset is the production state and a deliberate configuration, not a
-    // fault: warning on it would train everyone to ignore the warning.
+    // Both unset is Stripe simply unprovisioned — a deliberate configuration,
+    // not a fault: warning on it would train everyone to ignore the warning.
     expect(warnings).toHaveLength(0)
   })
 })

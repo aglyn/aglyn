@@ -36,6 +36,7 @@ import {
   addonPriceId,
   addonQuantitiesFromItems,
   findPlanItem,
+  isMeteredPriceId,
   meteredPriceId,
   type AddonKind,
 } from '../../../../utils/server/billing-addons'
@@ -284,29 +285,52 @@ async function handler(request: Request): Promise<Response> {
     // bills $0 until usage is reported, so it never moves the proration
     // preview. Skipped when already present or Stripe is unprovisioned.
     //
-    // MONTHLY ONLY (AGL-1340). `aglyn_metered_usage` is a monthly price and
-    // Stripe rejects a subscription whose items mix intervals — verified
-    // read-only against live Stripe: Starter yearly + metered fails with
-    // "All prices on a subscription must have the same recurring.interval".
-    // Attaching it to an annual switch would 502 the switch outright.
-    const metered = meteredPriceId()
-    const meteredItem = metered
-      ? items.find((item: any) => item?.price?.id === metered)
-      : undefined
-    if (metered && targetInterval === 'month') {
-      if (!meteredItem) itemChanges.push([['price', metered]])
-    } else if (metered) {
-      // Said out loud rather than skipped silently: without this item the
-      // reported usage never reaches an invoice, so an annual org bills $0
-      // of overage and nothing in the system says why.
-      console.warn('[billing/subscription] metered usage item not attached', {
-        orgId,
-        targetPlan,
-        targetInterval,
-        reason:
-          'STRIPE_PRICE_METERED is a monthly price; Stripe forbids mixed intervals on one subscription',
-        meteredAlreadyOnSubscription: Boolean(meteredItem),
-      })
+    // INTERVAL-MATCHED (AGL-1340, completed in AGL-1280). Stripe rejects a
+    // subscription whose items mix `recurring.interval` — verified read-only
+    // against live Stripe: Starter yearly + monthly metered fails with "All
+    // prices on a subscription must have the same recurring.interval".
+    //
+    // So the metered item is re-priced to follow the target interval, exactly
+    // as the add-on items above are. Matching on `isMeteredPriceId` rather
+    // than on the target id is the whole point: on an interval SWITCH the
+    // item present recurs on the OTHER interval, and an equality check
+    // against the target would miss it, add a second metered item, and make
+    // the update mix intervals — the precise crash this is avoiding.
+    const metered = meteredPriceId(targetInterval)
+    const meteredItem = items.find((item: any) =>
+      isMeteredPriceId(item?.price?.id),
+    )
+    if (metered) {
+      if (!meteredItem) {
+        itemChanges.push([['price', metered]])
+      } else if (meteredItem?.price?.id !== metered) {
+        itemChanges.push([['id', String(meteredItem.id)], ['price', metered]])
+      }
+    } else {
+      // No metered price configured for the target interval. An item already
+      // on the subscription therefore recurs on the other one, and LEAVING
+      // it would 502 the switch outright, so it has to go — a customer who
+      // cannot change plan is worse than one whose overage stops accruing.
+      if (meteredItem) {
+        itemChanges.push([['id', String(meteredItem.id)], ['deleted', 'true']])
+      }
+      // Said out loud, but only when the OTHER interval IS configured — that
+      // asymmetry is the real fault, and it is invisible from every screen.
+      // Both unset is Stripe simply unprovisioned; warning on it would train
+      // everyone to ignore the warning.
+      if (meteredPriceId(targetInterval === 'year' ? 'month' : 'year')) {
+        console.warn('[billing/subscription] metered usage item not attached', {
+          orgId,
+          targetPlan,
+          targetInterval,
+          reason: `${
+            targetInterval === 'year'
+              ? 'STRIPE_PRICE_METERED_YEARLY'
+              : 'STRIPE_PRICE_METERED'
+          } is unset while the other interval's metered price IS set, so ${targetInterval}ly subscriptions accrue usage that reaches no invoice`,
+          removedMismatchedMeteredItem: Boolean(meteredItem),
+        })
+      }
     }
 
     if (action === 'switch') {

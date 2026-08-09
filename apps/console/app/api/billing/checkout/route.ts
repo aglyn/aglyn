@@ -253,28 +253,37 @@ async function handler(request: Request): Promise<Response> {
     // Checkout, and the item bills $0 until usage is reported, so it is safe
     // on every paid plan. Absent env (Stripe unprovisioned) → plan-only.
     //
-    // MONTHLY ONLY (AGL-1340). `aglyn_metered_usage` is a monthly price, and
-    // Stripe forbids mixed `recurring.interval` on one subscription — proved
-    // read-only against live Stripe with `GET /v1/invoices/upcoming`:
-    // Starter monthly + metered previews at $25.00, Starter yearly alone at
-    // $192.00, Starter yearly + metered hard-errors. Attaching it
-    // unconditionally meant annual checkout worked in production only
-    // because STRIPE_PRICE_METERED happens to be UNSET there — setting it
-    // would have broken every annual sale. There is no yearly metered price
-    // to fall back to; minting one is a product call (AGL-1137).
-    const metered = meteredPriceId()
-    if (metered && interval === 'month') {
+    // INTERVAL-MATCHED (AGL-1340, completed in AGL-1280). Stripe forbids
+    // mixed `recurring.interval` on one subscription — proved read-only
+    // against live Stripe with `GET /v1/invoices/upcoming`: Starter monthly +
+    // monthly metered previews at $25.00, Starter yearly alone at $192.00,
+    // and Starter yearly + MONTHLY metered hard-errors.
+    //
+    // AGL-1340 handled that by attaching the metered item to monthly
+    // checkouts only, which left annual subscriptions carrying no metered
+    // item at all — metered on paper, billed $0 in fact. Now each interval
+    // has its own price on the same meter, so the item follows the plan and
+    // the mixed-interval crash is structurally impossible: the yearly
+    // subscription can only ever be handed the yearly id.
+    const metered = meteredPriceId(interval)
+    if (metered) {
       params.set('line_items[1][price]', metered)
-    } else if (metered) {
-      // Skipped, and SAID so. A silently absent metered item means reported
-      // usage never reaches an invoice and the org bills $0 of overage
-      // forever, with nothing anywhere explaining why.
+    } else if (meteredPriceId(interval === 'year' ? 'month' : 'year')) {
+      // Skipped, and SAID so — but only when the OTHER interval is configured.
+      // That asymmetry is the actual fault: it means one interval's customers
+      // are billed for overage and the other's silently are not, which is
+      // invisible from every screen. Both unset is Stripe simply being
+      // unprovisioned (local dev, a fresh environment) and warning on it
+      // would train everyone to ignore the warning.
       console.warn('[billing/checkout] metered usage item not attached', {
         orgId,
         plan,
         interval,
-        reason:
-          'STRIPE_PRICE_METERED is a monthly price; Stripe forbids mixed intervals on one subscription',
+        reason: `${
+          interval === 'year'
+            ? 'STRIPE_PRICE_METERED_YEARLY'
+            : 'STRIPE_PRICE_METERED'
+        } is unset while the other interval's metered price IS set, so ${interval}ly subscriptions accrue usage that reaches no invoice`,
       })
     }
 

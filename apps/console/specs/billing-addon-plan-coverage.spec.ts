@@ -44,6 +44,8 @@ import {
   addonKindFromPriceId,
   addonQuantitiesFromItems,
   findPlanItem,
+  isMeteredPriceId,
+  meteredPriceId,
   PAID_PLANS,
   planFromPriceId,
 } from '../utils/server/billing-addons'
@@ -69,6 +71,7 @@ PRICE_ENV['STRIPE_PRICE_POS_REGISTER_YEARLY'] = 'price_pos_register_yearly'
 PRICE_ENV['STRIPE_PRICE_EVENT_CALENDAR'] = 'price_event_calendar'
 PRICE_ENV['STRIPE_PRICE_EVENT_CALENDAR_YEARLY'] = 'price_event_calendar_yearly'
 PRICE_ENV['STRIPE_PRICE_METERED'] = 'price_metered_usage'
+PRICE_ENV['STRIPE_PRICE_METERED_YEARLY'] = 'price_metered_usage_yearly'
 
 const ORIGINAL_ENV = process.env
 
@@ -212,5 +215,44 @@ describe('the base plan item is identified explicitly (AGL-1340)', () => {
     expect(planFromPriceId('price_metered_usage')).toBeNull()
     expect(planFromPriceId('price_scale_extra_host')).toBeNull()
     expect(planFromPriceId(undefined)).toBeNull()
+  })
+})
+
+describe('the metered price is chosen by billing interval (AGL-1280)', () => {
+  it('returns the price whose recurrence matches the plan', () => {
+    // Stripe rejects a subscription whose items mix `recurring.interval`, so
+    // this mapping is the whole defence: hand a yearly subscription the
+    // monthly id and the update fails outright.
+    expect(meteredPriceId('month')).toBe('price_metered_usage')
+    expect(meteredPriceId('year')).toBe('price_metered_usage_yearly')
+  })
+
+  it('answers null for an interval whose price is unset, not the other one', () => {
+    // The dangerous fallback: silently returning the monthly id when
+    // STRIPE_PRICE_METERED_YEARLY is missing would reintroduce the crash
+    // under the appearance of a working configuration.
+    delete process.env.STRIPE_PRICE_METERED_YEARLY
+    expect(meteredPriceId('year')).toBeNull()
+    expect(meteredPriceId('month')).toBe('price_metered_usage')
+  })
+
+  it('recognises EITHER metered price, so an annual item is excluded too', () => {
+    // `isMeteredPriceId` exists to keep the metered item out of plan/add-on
+    // reasoning. Matching only the monthly id would make an annual
+    // subscription's metered item look like a candidate plan item.
+    expect(isMeteredPriceId('price_metered_usage')).toBe(true)
+    expect(isMeteredPriceId('price_metered_usage_yearly')).toBe(true)
+    expect(isMeteredPriceId('price_starter_yearly')).toBe(false)
+    expect(isMeteredPriceId(undefined)).toBe(false)
+  })
+
+  it('never mistakes an annual metered item for the plan item', () => {
+    const plan = item('price_pro_yearly', undefined, 'year')
+    expect(
+      findPlanItem([
+        item('price_metered_usage_yearly', undefined, 'year'),
+        plan,
+      ]),
+    ).toBe(plan)
   })
 })

@@ -30,10 +30,14 @@ export function configuredPriceFault(
   if (!error || error.code !== 'resource_missing') return null
   const param = String(error.param ?? '')
   if (!param.includes('price')) return null
-  // line_items[1] is the shared metered price; [0] is the plan itself.
+  // line_items[1] is the shared metered price; [0] is the plan itself. Both
+  // are interval-suffixed, the metered one since AGL-1280 gave it a yearly
+  // twin — naming the monthly var for a failed ANNUAL checkout would send
+  // someone to fix a variable that was never consulted.
+  const yearly = interval === 'year' ? '_YEARLY' : ''
   const envVar = param.includes('[1]')
-    ? 'STRIPE_PRICE_METERED'
-    : `STRIPE_PRICE_${plan.toUpperCase()}${interval === 'year' ? '_YEARLY' : ''}`
+    ? `STRIPE_PRICE_METERED${yearly}`
+    : `STRIPE_PRICE_${plan.toUpperCase()}${yearly}`
   return (
     `Billing is misconfigured: ${envVar} points at a price that does not ` +
     `exist in this Stripe account/mode. This is the shape you get when the ` +

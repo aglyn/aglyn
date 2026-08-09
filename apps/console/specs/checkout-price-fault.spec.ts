@@ -74,6 +74,18 @@ describe('configuredPriceFault (AGL-1137)', () => {
     expect(message).not.toContain('STRIPE_PRICE_PRO')
   })
 
+  it('names the YEARLY metered var when the annual toggle was used', () => {
+    // The metered price gained a yearly twin in AGL-1280, so a failed ANNUAL
+    // checkout must not send someone to STRIPE_PRICE_METERED — a variable
+    // that was never consulted for that request.
+    const message = configuredPriceFault(
+      { ...REAL_DEAD_PRICE_ERROR, param: 'line_items[1][price]' },
+      'pro',
+      'year',
+    )
+    expect(message).toContain('STRIPE_PRICE_METERED_YEARLY')
+  })
+
   it('stays out of the way of every other Stripe failure', () => {
     // The control that keeps this honest: if it matched broadly, a genuine
     // outage would be relabelled as a config fault and nobody would look at
