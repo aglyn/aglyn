@@ -25,6 +25,7 @@ import AccordionElement, {
   AccordionSummaryElement,
   accordionPresets,
   accordionSchema,
+  accordionSummarySchema,
 } from './accordion'
 
 /** Static besigner canvas: navigation suppressed AND interactions inert. */
@@ -110,6 +111,119 @@ describe('Accordion element (AGL-1201)', () => {
     expect(
       container.querySelector('.MuiAccordionSummary-expandIconWrapper svg'),
     ).toBeTruthy()
+  })
+})
+
+describe('Accordion summary with a linked header (AGL-1232)', () => {
+  /** Live site: the routing map resolves, nothing is suppressed. */
+  const renderSite = (ui: React.ReactElement) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider
+        value={{ screens: { scr_product: 'product' } }}
+      >
+        {ui}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  const linkedPanel = (screenId = 'scr_product') => (
+    <AccordionElement>
+      <AccordionSummaryElement screenId={screenId}>
+        {'Product'}
+      </AccordionSummaryElement>
+      <AccordionDetailsElement>{'Hidden details'}</AccordionDetailsElement>
+    </AccordionElement>
+  )
+
+  it('renders the header as a real anchor pointing at the screen', () => {
+    // The whole bug: in the mobile drawer this row could only toggle, so
+    // /product and /solutions had no mobile entry point at all.
+    renderSite(linkedPanel())
+    const link = screen.getByRole('link', { name: 'Product' })
+    expect(link.tagName).toBe('A')
+    expect(link.getAttribute('href')).toBe('/product')
+  })
+
+  it('never nests the anchor inside the toggle button', () => {
+    // Invalid markup that browsers unnest, and nested interactive content
+    // is unreachable with a keyboard or a screen reader — which is why the
+    // row is split rather than wrapped.
+    const { container } = renderSite(linkedPanel())
+    const link = container.querySelector('a') as HTMLElement
+    expect(link.closest('button')).toBeNull()
+    expect(container.querySelector('button a')).toBeNull()
+    expect(container.querySelector('a button')).toBeNull()
+  })
+
+  it('still toggles the panel from the chevron', () => {
+    renderSite(linkedPanel())
+    const toggle = screen.getByRole('button', { name: /Toggle Product/ })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(toggle)
+    expect(detailsExpanded()).toBe(true)
+  })
+
+  it('leaves the label and the toggle each reachable by keyboard', () => {
+    const { container } = renderSite(linkedPanel())
+    const link = container.querySelector('a') as HTMLElement
+    const toggle = screen.getByRole('button', { name: /Toggle Product/ })
+    // A native anchor with an href and a native button are both in the tab
+    // order unless something removes them.
+    expect(link.getAttribute('href')).toBeTruthy()
+    expect(link.getAttribute('tabindex')).not.toBe('-1')
+    expect(toggle.tagName).toBe('BUTTON')
+    expect(toggle.getAttribute('tabindex')).not.toBe('-1')
+  })
+
+  it('keeps the split shape where navigation is suppressed', () => {
+    // The canvas and Preview must not show a row that behaves differently
+    // from the one that ships — but neither may navigate.
+    renderEditor(linkedPanel())
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByText('Product')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Toggle Product/ })).toBeTruthy()
+  })
+
+  it('degrades to plain text when the screen no longer resolves', () => {
+    // Unpublished or deleted target: no dead link, and the panel still opens.
+    renderSite(linkedPanel('scr_deleted'))
+    expect(screen.queryByRole('link')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Toggle Product/ }))
+    expect(detailsExpanded()).toBe(true)
+  })
+
+  it('composes the author sx after its own layout, never before', () => {
+    const { container } = renderSite(
+      <AccordionElement>
+        <AccordionSummaryElement screenId="scr_product" sx={{ display: 'grid' }}>
+          {'Product'}
+        </AccordionSummaryElement>
+        <AccordionDetailsElement>{'Hidden details'}</AccordionDetailsElement>
+      </AccordionElement>,
+    )
+    const row = container.querySelector('a')?.parentElement as HTMLElement
+    expect(getComputedStyle(row).display).toBe('grid')
+  })
+
+  it('leaves an unlinked summary exactly as it was', () => {
+    // One control, whole row toggles, no anchor anywhere — the shape every
+    // accordion authored before this has.
+    const { container } = renderSite(panel())
+    expect(container.querySelectorAll('a')).toHaveLength(0)
+    expect(container.querySelectorAll('.MuiAccordionSummary-root')).toHaveLength(
+      1,
+    )
+    const header = screen.getByRole('button', { name: /Header/ })
+    expect(header.tagName).toBe('BUTTON')
+    fireEvent.click(header)
+    expect(detailsExpanded()).toBe(true)
+  })
+
+  it('offers the destination in the attributes panel', () => {
+    const field = accordionSummarySchema.attributes.find(
+      (a: any) => a.name === 'screenId',
+    )
+    expect(field).toBeTruthy()
+    expect((field as any).component).toBe(Aglyn.FieldComponentType.SCREEN_SELECT)
   })
 })
 

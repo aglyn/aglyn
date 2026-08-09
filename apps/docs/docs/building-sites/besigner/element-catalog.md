@@ -68,6 +68,13 @@ the panel is always shown open regardless — collapsed details can't be selecte
 **Preview** and the published site both behave the way you configured it, so what ships is
 never in doubt.
 
+**Accordion Summary** takes an optional **Header links to**. Leave it empty and the whole
+header row toggles the panel, which is what every accordion does by default. Point it at a
+screen and the row splits in two: the header text becomes a link to that screen, and the
+chevron beside it becomes the toggle. That split is the only way a header can do both — a
+link placed inside the toggle button is invalid markup and unreachable by keyboard. It is
+what lets a mobile drawer offer *Product* both as a group to open and as a page to visit.
+
 The **FAQ** preset drops three complete panels at once.
 
 ## Navigation
