@@ -160,6 +160,11 @@ function ensureAccessibleShades(
     if (provided && typeof provided === 'object' && !('main' in provided)) {
       continue
     }
+    // Read with brackets, not dots: these keys come from an index signature,
+    // and `json-editor` compiles this file under
+    // `noPropertyAccessFromIndexSignature` (paths resolve to source, so a
+    // consumer's flags check its dependencies). Dot access reds that build
+    // while this project's own stays green — AGL-1323.
     const explicit = (provided ?? {}) as Record<string, unknown>
     const isForeground = (FOREGROUND_COLOR_KEYS as readonly string[]).includes(
       key,
@@ -168,7 +173,7 @@ function ensureAccessibleShades(
     try {
       if (
         isForeground &&
-        !explicit.dark &&
+        !explicit['dark'] &&
         typeof color.dark === 'string' &&
         !meetsContrast(color.dark, backgrounds)
       ) {
@@ -179,14 +184,14 @@ function ensureAccessibleShades(
       if (
         isForeground &&
         mode === 'dark' &&
-        !explicit.light &&
+        !explicit['light'] &&
         typeof color.light === 'string' &&
         !meetsContrast(color.light, backgrounds)
       ) {
         color.light = accessibleShade(color.light, backgrounds, 'lighten')
       }
       if (
-        !explicit.contrastText &&
+        !explicit['contrastText'] &&
         typeof color.contrastText === 'string' &&
         !meetsContrast(color.contrastText, [color.main])
       ) {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { FieldComponentMap } from '../types'
+import type { ExtendedMapperComponent } from '../vendor/data-driven-forms'
 import optionIsEqualToValue from '../utils/option-is-equal-to-value'
 import {
   FieldCheckbox,
@@ -44,7 +44,15 @@ export const fieldSharedOptions = {
   color: 'primary',
 }
 
-export const FIELD_MAP_SELECT: FieldComponentMap = {
+/*
+ * Each of these is `ExtendedMapperComponent` — `{ component, ...defaultProps }`
+ * — and not the wider `FieldComponentMap`. That alias is the mapper's VALUE
+ * type, so it also admits a bare `React.ElementType`, i.e. a string like
+ * `'div'`; a spread of one is then TS2698 and no test could extend a preset
+ * with `{ ...FIELD_MAP_SELECT, component: Select }` (AGL-1323).
+ */
+
+export const FIELD_MAP_SELECT: ExtendedMapperComponent = {
   size: fieldSharedOptions.size,
   component: FieldSelect,
   isClearable: true,
@@ -54,83 +62,83 @@ export const FIELD_MAP_SELECT: FieldComponentMap = {
   },
   isOptionEqualToValue: optionIsEqualToValue,
 }
-export const FIELD_MAP_SWITCH: FieldComponentMap = {
+export const FIELD_MAP_SWITCH: ExtendedMapperComponent = {
   color: fieldSharedOptions.color,
   // size: 'medium',
   component: FieldSwitch,
 }
-export const FIELD_MAP_TEXT_FIELD: FieldComponentMap = {
+export const FIELD_MAP_TEXT_FIELD: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   // size: 'small',
   component: FieldTextField,
 }
 /** Number box + unit picker for CSS length attributes (AGL-1219). */
-export const FIELD_MAP_CSS_DIMENSION: FieldComponentMap = {
+export const FIELD_MAP_CSS_DIMENSION: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldCssDimension,
 }
-export const FIELD_MAP_TEXTAREA: FieldComponentMap = {
+export const FIELD_MAP_TEXTAREA: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldTextarea,
 }
-export const FIELD_MAP_PLAIN_TEXT: FieldComponentMap = {
+export const FIELD_MAP_PLAIN_TEXT: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldPlainText,
 }
-export const FIELD_MAP_SLIDER: FieldComponentMap = {
+export const FIELD_MAP_SLIDER: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldSlider,
 }
-export const FIELD_MAP_TIME_PICKER: FieldComponentMap = {
+export const FIELD_MAP_TIME_PICKER: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldTimePicker,
 }
-export const FIELD_MAP_DATE_PICKER: FieldComponentMap = {
+export const FIELD_MAP_DATE_PICKER: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldDatePicker,
 }
-export const FIELD_MAP_RADIO: FieldComponentMap = {
+export const FIELD_MAP_RADIO: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldRadio,
 }
-export const FIELD_MAP_CHECKBOX: FieldComponentMap = {
+export const FIELD_MAP_CHECKBOX: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldCheckbox,
 }
-export const FIELD_MAP_FIELD_ARRAY: FieldComponentMap = {
+export const FIELD_MAP_FIELD_ARRAY: ExtendedMapperComponent = {
   component: FieldFieldArray,
 }
-export const FIELD_MAP_TABS: FieldComponentMap = {
+export const FIELD_MAP_TABS: ExtendedMapperComponent = {
   color: fieldSharedOptions.color,
   component: FieldTabs,
 }
-export const FIELD_MAP_WIZARD: FieldComponentMap = {
+export const FIELD_MAP_WIZARD: ExtendedMapperComponent = {
   component: FieldWizard,
 }
-export const FIELD_MAP_DUAL_LIST_SELECT: FieldComponentMap = {
+export const FIELD_MAP_DUAL_LIST_SELECT: ExtendedMapperComponent = {
   component: FieldDualListSelect,
 }
-export const FIELD_MAP_ICON_PICKER: FieldComponentMap = {
+export const FIELD_MAP_ICON_PICKER: ExtendedMapperComponent = {
   size: fieldSharedOptions.size,
   component: FieldIconSelect,
   isClearable: true,
   isOptionEqualToValue: optionIsEqualToValue,
 }
-export const FIELD_MAP_COLOR_PICKER: FieldComponentMap = {
+export const FIELD_MAP_COLOR_PICKER: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldColorPicker,
   FormControlProps: {
     ...fieldSharedOptions,
   },
 }
-export const FIELD_MAP_TOGGLE_BUTTON: FieldComponentMap = {
+export const FIELD_MAP_TOGGLE_BUTTON: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldToggleButton,
   FormControlProps: {
     ...fieldSharedOptions,
   },
 }
-export const FIELD_SUB_FORM: FieldComponentMap = {
+export const FIELD_SUB_FORM: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldSubForm,
 }
