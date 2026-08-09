@@ -161,7 +161,8 @@ async function hostUsage(
  * Monthly usage rollup + metered billing report (AGL-41, org-keyed since
  * the AGL-238 cutover). Invoke from a scheduler (Vercel cron / GitHub
  * Action) with `x-cron-secret`: sums host counters (storage bytes, month
- * page views, month form submissions) at cost × 1.30, writes audit
+ * page views, month form submissions), prices whatever exceeds the plan's
+ * included bands at cost × 1.30 (AGL-1280), writes audit
  * rollups per tenant (legacy) and per org, and — when Stripe is
  * configured — sends one idempotent Billing Meter event per ORG-month
  * against the org's mirrored Stripe customer. Re-runs skip
@@ -262,21 +263,21 @@ async function handler(request: Request): Promise<Response> {
         // org — contacts are org-scoped (AGL-237).
         orgRef.collection('contacts').count().get(),
       ])
-      const estimate = estimateMonthlyUsageCost(usage)
+      // One read of the org doc for every quota decision below — the four
+      // meters must agree about which plan they are pricing against.
+      const orgData = orgSnapshot.data() as any
+      // Only usage BEYOND the plan's included storage/bandwidth/form bands
+      // is billed (AGL-1280) — `billedCents` is the excess; `costUsd` stays
+      // the gross figure the COGS model and staff views read.
+      const estimate = estimateMonthlyUsageCost(usage, orgData)
       const dataStorageMb =
         Math.round((datasetBytes / (1024 * 1024)) * 10) / 10
       const siteSizeMb = Math.round((siteSizeBytes / (1024 * 1024)) * 10) / 10
-      const dataQuota = checkDataStorageQuota(
-        orgSnapshot.data() as any,
-        dataStorageMb,
-      )
+      const dataQuota = checkDataStorageQuota(orgData, dataStorageMb)
       const apiRequests = Number(apiUsageSnap.get('count') ?? 0)
-      const apiQuota = checkApiRequestQuota(orgSnapshot.data() as any, apiRequests)
+      const apiQuota = checkApiRequestQuota(orgData, apiRequests)
       const contactsCount = Number(contactsSnap.data().count ?? 0)
-      const contactQuota = checkContactQuota(
-        orgSnapshot.data() as any,
-        contactsCount,
-      )
+      const contactQuota = checkContactQuota(orgData, contactsCount)
       const billedCents =
         estimate.billedCents +
         Math.round(dataQuota.overageMonthlyUsd * 100) +
@@ -323,6 +324,9 @@ async function handler(request: Request): Promise<Response> {
           pageViews: estimate.pageViews,
           formSubmissions: estimate.formSubmissions,
           costUsd: estimate.costUsd,
+          // The excess only, at cost (AGL-1280) — `billedCents` is this
+          // number marked up, plus the three plan-priced overages.
+          billableCostUsd: estimate.billableCostUsd,
           siteSizeMb,
           dataStorageMb,
           dataOverageUsd: dataQuota.overageMonthlyUsd,

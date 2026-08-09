@@ -15,30 +15,131 @@
  * limitations under the License.
  */
 
-import { estimateMonthlyUsageCost } from './usage-metering'
+import {
+  ESTIMATED_PAGE_TRANSFER_BYTES,
+  estimateMonthlyUsageCost,
+  meteredIncludedAllowance,
+} from './usage-metering'
+
+const GB = 1024 * 1024 * 1024
+
+/**
+ * Starter: 1 site × 2048 MB storage, 50 GB bandwidth, 200 form submissions.
+ * Pro is the multi-site case (3 × 10240 MB, 3 × 1000 submissions), which is
+ * what proves the org-wide expansion rather than assuming it.
+ */
+const starter = { plan: 'starter' } as any
+const pro = { plan: 'pro' } as any
+const free = { plan: 'free' } as any
+
+describe('meteredIncludedAllowance', () => {
+  it('expands per-site bands org-wide and converts bandwidth to page views', () => {
+    const included = meteredIncludedAllowance(starter)
+    expect(included.metered).toBe(true)
+    expect(included.storageGb).toBeCloseTo(2048 / 1024)
+    expect(included.pageViews).toBeCloseTo(
+      (50 * GB) / ESTIMATED_PAGE_TRANSFER_BYTES,
+    )
+    expect(included.formSubmissions).toBe(200)
+    // Pro allows 3 sites, so its org-wide bands are three times the per-site
+    // figures — bandwidth excepted, which is already an org-level number.
+    const multi = meteredIncludedAllowance(pro)
+    expect(multi.storageGb).toBeCloseTo((3 * 10240) / 1024)
+    expect(multi.formSubmissions).toBe(3 * 1000)
+    expect(multi.pageViews).toBeCloseTo(
+      (250 * GB) / ESTIMATED_PAGE_TRANSFER_BYTES,
+    )
+  })
+
+  it('meters nothing on free or on an unknown org', () => {
+    expect(meteredIncludedAllowance(free).metered).toBe(false)
+    expect(meteredIncludedAllowance(null).metered).toBe(false)
+    expect(meteredIncludedAllowance(undefined).metered).toBe(false)
+  })
+
+  it('leaves enterprise bands unlimited', () => {
+    const included = meteredIncludedAllowance({ plan: 'enterprise' } as any)
+    expect(included.storageGb).toBe(Number.POSITIVE_INFINITY)
+    expect(included.pageViews).toBe(Number.POSITIVE_INFINITY)
+    expect(included.formSubmissions).toBe(Number.POSITIVE_INFINITY)
+  })
+})
 
 describe('estimateMonthlyUsageCost', () => {
-  it('prices summed usage at cost times the markup', () => {
-    const estimate = estimateMonthlyUsageCost([
-      {
-        storageBytes: 10 * 1024 * 1024 * 1024, // 10 GB → $0.30
-        pageViews: 10000, // → $1.00
-        formSubmissions: 200, // → $0.10
-      },
-      { storageBytes: 0, pageViews: 5000, formSubmissions: 0 }, // → $0.50
-    ])
-    expect(estimate.storageGb).toBeCloseTo(10)
-    expect(estimate.pageViews).toBe(15000)
-    expect(estimate.costUsd).toBeCloseTo(1.9)
-    expect(estimate.billedCents).toBe(247) // 1.9 × 1.3 = 2.47
+  it('prices only usage BEYOND the included band, per meter (AGL-1280)', () => {
+    const included = meteredIncludedAllowance(starter)
+    const estimate = estimateMonthlyUsageCost(
+      [
+        {
+          // 10 GB past the 2 GB band → $0.30
+          storageBytes: (included.storageGb + 10) * GB,
+          // exactly the band → free, and it must not drag storage down
+          pageViews: included.pageViews,
+          // 200 past the 200 band → $0.10
+          formSubmissions: included.formSubmissions + 200,
+        },
+      ],
+      starter,
+    )
+    expect(estimate.billableStorageGb).toBeCloseTo(10)
+    expect(estimate.billablePageViews).toBe(0)
+    expect(estimate.billableFormSubmissions).toBe(200)
+    expect(estimate.billableCostUsd).toBeCloseTo(0.4)
+    expect(estimate.billedCents).toBe(52) // 0.4 × 1.3
+    // Gross cost is untouched — it is our COGS, which no band reduces.
+    expect(estimate.costUsd).toBeGreaterThan(estimate.billableCostUsd)
+  })
+
+  it('charges nothing at exactly the included amount', () => {
+    const included = meteredIncludedAllowance(starter)
+    const estimate = estimateMonthlyUsageCost(
+      [
+        {
+          storageBytes: included.storageGb * GB,
+          pageViews: included.pageViews,
+          formSubmissions: included.formSubmissions,
+        },
+      ],
+      starter,
+    )
+    expect(estimate.billableStorageGb).toBe(0)
+    expect(estimate.billablePageViews).toBe(0)
+    expect(estimate.billableFormSubmissions).toBe(0)
+    expect(estimate.billedCents).toBe(0)
+  })
+
+  it('sums the counters across sites before subtracting the band', () => {
+    const included = meteredIncludedAllowance(starter)
+    const half = included.formSubmissions / 2
+    const estimate = estimateMonthlyUsageCost(
+      [
+        { storageBytes: 0, pageViews: 0, formSubmissions: half + 100 },
+        { storageBytes: 0, pageViews: 0, formSubmissions: half + 100 },
+      ],
+      starter,
+    )
+    // Two sites each over their own share, but the BAND is org-wide.
+    expect(estimate.formSubmissions).toBe(included.formSubmissions + 200)
+    expect(estimate.billableFormSubmissions).toBe(200)
+  })
+
+  it('bills a free or unknown org nothing, however much it uses', () => {
+    const heavy = [
+      { storageBytes: 500 * GB, pageViews: 5_000_000, formSubmissions: 90_000 },
+    ]
+    expect(estimateMonthlyUsageCost(heavy, free).billedCents).toBe(0)
+    expect(estimateMonthlyUsageCost(heavy).billedCents).toBe(0)
+    // …but the gross cost is still reported, because we really did pay it.
+    expect(estimateMonthlyUsageCost(heavy, free).costUsd).toBeGreaterThan(0)
   })
 
   it('handles empty and negative-garbage input', () => {
-    expect(estimateMonthlyUsageCost([]).billedCents).toBe(0)
+    expect(estimateMonthlyUsageCost([], starter).billedCents).toBe(0)
     expect(
-      estimateMonthlyUsageCost([
-        { storageBytes: -5, pageViews: NaN as any, formSubmissions: 0 },
-      ]).billedCents,
+      estimateMonthlyUsageCost(
+        [{ storageBytes: -5, pageViews: NaN as any, formSubmissions: 0 }],
+        starter,
+      ).billedCents,
     ).toBe(0)
   })
 })

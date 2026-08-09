@@ -23,6 +23,8 @@ import {
   checkDatasetQuota,
   checkDiscountMargin,
   checkEntitlement,
+  checkFormSubmissionQuota,
+  planMetersInfraOverage,
   isBillingSubscription,
   isCustomPricedPlan,
   isEnterpriseOrg,
@@ -197,6 +199,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: null,
+        meteredInfraPassThrough: false,
       },
       starter: {
         basePriceMonthlyUsd: 25,
@@ -208,6 +211,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: 1,
+        meteredInfraPassThrough: true,
       },
       pro: {
         basePriceMonthlyUsd: 56,
@@ -219,6 +223,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: 0.75,
+        meteredInfraPassThrough: true,
       },
       business: {
         basePriceMonthlyUsd: 139,
@@ -230,6 +235,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.5,
         extraContactsUsdPer1k: 0.5,
+        meteredInfraPassThrough: true,
       },
       scale: {
         basePriceMonthlyUsd: 249,
@@ -241,6 +247,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.35,
         extraContactsUsdPer1k: 0.4,
+        meteredInfraPassThrough: true,
       },
       advanced: {
         basePriceMonthlyUsd: 399,
@@ -252,6 +259,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.2,
         extraContactsUsdPer1k: 0.25,
+        meteredInfraPassThrough: true,
       },
       agency: {
         basePriceMonthlyUsd: 799,
@@ -263,6 +271,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.15,
         extraContactsUsdPer1k: 0.2,
+        meteredInfraPassThrough: true,
       },
       // Enterprise (AGL-1118) is quoted per deal — these zeros/nulls are the
       // "no list price" sentinel, NOT a $0 offer. `isCustomPricedPlan` is how
@@ -277,6 +286,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
         extraContactsUsdPer1k: null,
+        meteredInfraPassThrough: false,
       },
     })
     expect(isCustomPricedPlan('enterprise')).toBe(true)
@@ -676,6 +686,43 @@ describe('plan entitlements', () => {
     )
     expect(dead.allowed).toBe(false)
     expect(dead.included).toBe(100)
+  })
+
+  it('checkFormSubmissionQuota meters on paid plans, walls free (AGL-1280)', () => {
+    // Starter includes 200/site/month and carries the infra pass-through, so
+    // the 201st submission is accepted and metered — a lead is never dropped.
+    const starter = checkFormSubmissionQuota({ plan: 'starter' } as any, 250)
+    expect(starter.allowed).toBe(true)
+    expect(starter.metered).toBe(true)
+    expect(starter.included).toBe(200)
+    expect(starter.overageSubmissions).toBe(50)
+    expect(starter.remaining).toBe(0)
+    // Within the band nothing is over and the remainder is tracked.
+    const within = checkFormSubmissionQuota({ plan: 'pro' } as any, 400)
+    expect(within.overageSubmissions).toBe(0)
+    expect(within.remaining).toBe(600)
+    // Free has no subscription to meter onto — the band stays a hard wall,
+    // and the wall is AT the included count, not one past it.
+    const freeAt = checkFormSubmissionQuota({ plan: 'free' } as any, 20)
+    expect(freeAt.allowed).toBe(false)
+    expect(freeAt.metered).toBe(false)
+    expect(checkFormSubmissionQuota({ plan: 'free' } as any, 19).allowed).toBe(
+      true,
+    )
+    // An org with no plan at all resolves as free and is walled, not metered.
+    expect(checkFormSubmissionQuota(null, 20).allowed).toBe(false)
+    expect(planMetersInfraOverage(null)).toBe(false)
+    // A dead subscription drops a paid org back to free's wall (AGL-247).
+    const dead = checkFormSubmissionQuota(
+      { plan: 'pro', subscription: { status: 'canceled' } } as any,
+      500,
+    )
+    expect(dead.allowed).toBe(false)
+    expect(dead.included).toBe(20)
+    // Enterprise is unlimited, so the wall never comes up regardless.
+    expect(
+      checkFormSubmissionQuota({ plan: 'enterprise' } as any, 1e9).allowed,
+    ).toBe(true)
   })
 
   it('gates commerce features per the AGL-278 matrix', () => {

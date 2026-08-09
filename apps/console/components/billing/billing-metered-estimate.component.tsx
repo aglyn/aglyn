@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { type AglynOrgBilling } from '@aglyn/aglyn'
 import {
   estimateMonthlyUsageCost,
   type HostUsageSnapshot,
@@ -29,17 +30,28 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 
 export interface BillingMeteredEstimateProps {
   hosts: any[]
+  /**
+   * The org, for its included bands. Without it the estimate resolves as
+   * free and shows $0 — deliberately, so a loading org can never flash a
+   * charge (`feedback_loading_default_answers_a_question`).
+   */
+  org?: Partial<AglynOrgBilling> | null
 }
 
 /**
  * Month-to-date metered cost estimate (AGL-41): mirrors the report-usage
  * rollup's math (shared `estimateMonthlyUsageCost`) over the same counters
  * so workspaces see the number before it lands on an invoice.
+ *
+ * Shares the included-band subtraction with the rollup (AGL-1280) rather
+ * than reproducing it — the whole point of this card is that it agrees with
+ * the invoice, and it could only do that by accident while it priced from
+ * unit zero and the published terms promised overage-only.
  */
 export function BillingMeteredEstimateComponent(
   props: BillingMeteredEstimateProps,
 ) {
-  const { hosts } = props
+  const { hosts, org } = props
   const firestore = useFirestore()
   const [snapshots, setSnapshots] = useState<HostUsageSnapshot[] | null>(null)
   const month = new Date().toISOString().slice(0, 7)
@@ -80,7 +92,19 @@ export function BillingMeteredEstimateComponent(
     }
   }, [hosts, firestore, month])
 
-  const estimate = estimateMonthlyUsageCost(snapshots ?? [])
+  const estimate = estimateMonthlyUsageCost(snapshots ?? [], org)
+  const { included } = estimate
+  // `UNLIMITED` is Infinity, and a band derived from it stays Infinity —
+  // `Number.isFinite` catches both that and a NaN from bad override data.
+  const band = (value: number, digits = 0) =>
+    Number.isFinite(value) ? value.toFixed(digits) : '∞'
+  // AGL-1340 attaches the metered price to MONTHLY checkouts only (Stripe
+  // forbids mixed intervals on one subscription and `aglyn_metered_usage` is
+  // monthly), so an annual subscription carries no metered item at all. Say
+  // so rather than quoting an annual customer a figure their invoice will
+  // never show — a console that disagrees with the invoice is the exact
+  // failure this card exists to prevent.
+  const annual = (org as any)?.subscription?.interval === 'year'
   return (
     <Stack spacing={0.5}>
       <Typography variant="h5">
@@ -90,13 +114,22 @@ export function BillingMeteredEstimateComponent(
       </Typography>
       <Typography variant="body2" color="text.secondary">
         {`Month to date (${month}): ` +
-          `${estimate.storageGb.toFixed(2)} GB stored · ` +
-          `${estimate.pageViews} page views · ` +
-          `${estimate.formSubmissions} form submissions`}
+          `${estimate.storageGb.toFixed(2)} of ` +
+          `${band(included.storageGb, 2)} GB stored · ` +
+          `${estimate.pageViews} of ${band(included.pageViews)} page views · ` +
+          `${estimate.formSubmissions} of ` +
+          `${band(included.formSubmissions)} form submissions`}
       </Typography>
       <Typography variant="caption" color="text.secondary">
-        {`Infra cost passed through at cost × ${METERED_MARKUP}. Billed ` +
-          'monthly alongside your subscription once metered billing is live.'}
+        {included.metered
+          ? `Only usage beyond your plan's included storage, bandwidth and ` +
+            `form submissions is metered, at our cost × ${METERED_MARKUP}. ` +
+            (annual
+              ? 'Your subscription is annual, which carries no metered item ' +
+                'today — this is an estimate, not a charge.'
+              : 'Billed monthly alongside your subscription.')
+          : "Your plan's storage, bandwidth and form submissions are " +
+            'included caps, not meters — no usage charges.'}
       </Typography>
     </Stack>
   )

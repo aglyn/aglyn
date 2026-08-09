@@ -56,7 +56,20 @@ The script prints the env block to paste into the console app's environment
 - Customer portal (self-service cancel/downgrade) is not built yet; the
   Free card is intentionally non-purchasable.
 
-## 5. Metered usage billing (AGL-41, optional)
+## 5. Metered usage billing (AGL-41)
+
+**What the code does** (AGL-1280): only usage **beyond the plan's included
+storage, bandwidth and form submissions** is priced, at our cost × 1.30. The
+bands come from `PLAN_ENTITLEMENTS` — `hostLimit × storagePerHostMb`,
+`bandwidthGb` converted to page views, `hostLimit × formSubmissionsPerMonth`
+— and each meter is independent. Plans whose `meteredInfraPassThrough` is
+false (free, enterprise) are billed nothing however much they use. This
+matches the published pricing terms; it did not before, when every unit was
+priced from zero.
+
+**Nothing bills until step 1 below is done in the Stripe dashboard.** The
+rollup emits meter events, but with no metered price attached to a
+subscription product, Stripe records them and charges no one.
 
 1. In Stripe, create a **Billing Meter** with event name
    `aglyn_metered_usage` (or set `STRIPE_METER_EVENT_NAME`), aggregation
@@ -65,13 +78,20 @@ The script prints the env block to paste into the console app's environment
 2. Set `CRON_SECRET` and schedule `POST /api/billing/report-usage` with the
    `x-cron-secret` header monthly (e.g. Vercel cron on the 1st); it rolls
    up the previous month per tenant into `tenants/{id}/usageRollups/{month}`
-   and emits one idempotent meter event per tenant (value = cost × 1.30 in
-   cents).
-3. The Billing page shows the same month-to-date estimate to tenants.
+   and emits one idempotent meter event per tenant (value = the OVERAGE at
+   cost × 1.30, in cents, plus the dataset/API/contact plan overages).
+3. The Billing page shows the same month-to-date estimate to tenants, from
+   the same function, so the card and the invoice cannot disagree.
 4. Optional usage email (AGL-98): set `RESEND_API_KEY` and
    `USAGE_EMAIL_FROM`, then schedule `POST /api/billing/usage-email` (same
    `x-cron-secret` header) after the rollup; it emails each plan-gated
    tenant one summary per month and stamps `emailedAt` on the rollup.
 5. **Validate the rate table** (`METERED_UNIT_RATES_USD` in
-   `libs/aglyn/.../usage-metering.ts`) against a real Firebase + Vercel
+   `apps/console/utils/usage-metering.ts`) against a real Firebase + Vercel
    invoice month before attaching the metered price in live mode.
+6. **Annual subscriptions carry no metered item.** `aglyn_metered_usage` is
+   a monthly price and Stripe forbids mixed `recurring.interval` on one
+   subscription, so AGL-1340 attaches it to monthly checkouts only. Until a
+   yearly metered price exists (or flexible billing mode is enabled), annual
+   customers accrue rollups and meter events that reach no invoice. Decide
+   that before telling annual customers they are metered.

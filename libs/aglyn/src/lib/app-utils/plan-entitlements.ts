@@ -742,6 +742,23 @@ export interface PlanPricing {
    * never dropped); free is null and hard-bands at the included count.
    */
   extraContactsUsdPer1k: number | null
+  /**
+   * Whether the plan carries the metered infrastructure pass-through
+   * (AGL-41, turned on in AGL-1280): media storage, bandwidth (page views)
+   * and form submissions BEYOND the plan's included bands, billed at
+   * cost × `METERED_MARKUP`. The rates are platform-wide, not per-plan —
+   * this flag only says whether a plan is subject to them at all, which is
+   * why it is a boolean rather than another `extra*` rate.
+   *
+   * Free is `false` because there is no subscription to hang a metered item
+   * on; its bands stay hard caps, which is also what stops "metered means
+   * you're never cut off" from becoming unlimited free capacity.
+   *
+   * Enterprise is `false` because every band it has is `UNLIMITED` and its
+   * price is negotiated (`isCustomPricedPlan`) — there is no published
+   * pass-through to apply, and an overage can never arise anyway.
+   */
+  meteredInfraPassThrough: boolean
 }
 
 /**
@@ -760,6 +777,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
     extraContactsUsdPer1k: null,
+    meteredInfraPassThrough: false,
   },
   starter: {
     basePriceMonthlyUsd: 25,
@@ -771,6 +789,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: null,
     extraContactsUsdPer1k: 1,
+    meteredInfraPassThrough: true,
   },
   pro: {
     basePriceMonthlyUsd: 56,
@@ -782,6 +801,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: null,
     extraContactsUsdPer1k: 0.75,
+    meteredInfraPassThrough: true,
   },
   business: {
     basePriceMonthlyUsd: 139,
@@ -793,6 +813,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.5,
     extraContactsUsdPer1k: 0.5,
+    meteredInfraPassThrough: true,
   },
   scale: {
     basePriceMonthlyUsd: 249,
@@ -804,6 +825,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.35,
     extraContactsUsdPer1k: 0.4,
+    meteredInfraPassThrough: true,
   },
   advanced: {
     basePriceMonthlyUsd: 399,
@@ -815,6 +837,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.2,
     extraContactsUsdPer1k: 0.25,
+    meteredInfraPassThrough: true,
   },
   agency: {
     basePriceMonthlyUsd: 799,
@@ -826,6 +849,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.15,
     extraContactsUsdPer1k: 0.2,
+    meteredInfraPassThrough: true,
   },
   // Enterprise (AGL-1118) has NO list price — every figure here is the
   // "not for sale" sentinel, not a $0 offer (`isCustomPricedPlan`). The org's
@@ -845,6 +869,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
     extraContactsUsdPer1k: null,
+    meteredInfraPassThrough: false,
   },
 }
 
@@ -1881,5 +1906,71 @@ export function checkContactQuota(
         ? 0
         : Math.round((overageContacts / 1000) * overageRateUsd * 100) / 100,
     overageRateUsd,
+  }
+}
+
+/**
+ * Is this org's plan subject to the metered infrastructure pass-through
+ * (AGL-1280)? The single answer behind three otherwise-unrelated behaviours:
+ * whether storage/bandwidth/form usage past the included band is BILLED, and
+ * whether the form-submission cap is a wall or a meter.
+ *
+ * Deliberately a plan-level question, not an org-level one — an org with no
+ * plan resolves as free, so an unknown org meters nothing. Billing usage to
+ * someone with no subscription is the one error direction with no recovery.
+ */
+export function planMetersInfraOverage(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return PLAN_PRICING[resolvePlan(org)].meteredInfraPassThrough
+}
+
+export interface FormSubmissionQuotaResult {
+  /**
+   * False only when the plan hard-caps (no metered pass-through) and usage
+   * has reached the included count; metered plans always accept and bill
+   * the excess.
+   */
+  allowed: boolean
+  /** Included submissions this month for this site. */
+  included: number
+  used: number
+  /** Remaining included submissions; 0 once into overage. */
+  remaining: number
+  /** Submissions beyond the included count (0 within the plan). */
+  overageSubmissions: number
+  /** True when overage meters instead of blocking. */
+  metered: boolean
+}
+
+/**
+ * Monthly form-submission meter (AGL-76, made coherent in AGL-1280).
+ *
+ * Submissions were BOTH hard-capped at `formSubmissionsPerMonth` (429) and
+ * metered at $0.65/1k — which made the published promise that usage past the
+ * included band is billed rather than cut off false for the one meter where
+ * being cut off costs the customer a lead. Now it mirrors the other three
+ * overage meters exactly: a plan with the metered pass-through always accepts
+ * and prices the excess (`estimateMonthlyUsageCost`); free has no
+ * subscription to bill, so its included count stays a hard wall.
+ *
+ * Priced per ORG at cost-plus, but capped per SITE, because that is where the
+ * counter lives (`hosts/{id}/counters/formSubmissions`). Callers gating a
+ * single submission pass that site's month count.
+ */
+export function checkFormSubmissionQuota(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  usedThisMonth: number,
+): FormSubmissionQuotaResult {
+  const included = resolveOrgEntitlements(org).formSubmissionsPerMonth
+  const metered = planMetersInfraOverage(org)
+  const used = Math.max(0, usedThisMonth)
+  return {
+    allowed: metered ? true : used < included,
+    included,
+    used,
+    remaining: Math.max(0, included - used),
+    overageSubmissions: Math.max(0, used - included),
+    metered,
   }
 }

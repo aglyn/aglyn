@@ -36,9 +36,10 @@ const MAX_PAYLOAD_CHARS = 10000
 // Per-IP submission limit (AGL-794). Previously a per-instance Map, which on
 // serverless resets each cold start and is held per concurrent instance — so
 // a spammer got roughly RATE_MAX × instances and could widen it by going
-// wider. The monthly plan quota is still the hard cap, but it is the wrong
-// thing to be defended BY: burning a site's whole allowance is the damage,
-// not the protection. This counter is global, keyed per (site, IP).
+// wider. The monthly plan quota was never the right thing to be defended BY:
+// burning a site's whole allowance is the damage, not the protection — and
+// since AGL-1280 it is not even a wall on a paid plan, it meters. This
+// counter is global, keyed per (site, IP), and is what actually stops abuse.
 const RATE_WINDOW_MS = 60_000
 const RATE_MAX = 10
 
@@ -46,9 +47,10 @@ const json = (body: unknown, status = 200) => Response.json(body, { status })
 
 /**
  * Lead-capture submissions endpoint (AGL-76): validates the target host,
- * drops honeypot hits silently, enforces the plan's monthly submission
- * quota via a per-month counter, and stores the submission for the console
- * inbox. Writes go through the admin SDK, so client rules never allow
+ * drops honeypot hits silently, applies the plan's monthly submission quota
+ * via a per-month counter — a hard wall on free, a meter on plans that carry
+ * the infra pass-through (AGL-1280) — and stores the submission for the
+ * console inbox. Writes go through the admin SDK, so client rules never allow
  * arbitrary submission writes.
  */
 export async function POST(request: Request): Promise<Response> {
@@ -109,13 +111,15 @@ export async function POST(request: Request): Promise<Response> {
     const counterRef = hostRef.collection('counters').doc('formSubmissions')
     {
       // Plan-less orgs resolve as free (AGL-247) — the cap always runs.
-      const org = orgBilling
-      const limit = Aglyn.resolveOrgEntitlements(
-        org as any,
-      ).formSubmissionsPerMonth
       const counterSnapshot = await counterRef.get()
       const used = Number(counterSnapshot.get(monthKey) ?? 0)
-      if (used >= limit) {
+      // AGL-1280: a plan with the metered infra pass-through is never cut
+      // off — submissions past the included count bill at cost × 1.3 like
+      // storage, API requests and contacts already do. Free keeps the hard
+      // wall, because there is no subscription to meter onto. A dropped
+      // submission is a lost lead, so this is the meter where being wrong
+      // in the "cut them off" direction costs the customer the most.
+      if (!Aglyn.checkFormSubmissionQuota(orgBilling as any, used).allowed) {
         return json({ error: 'Submission limit reached' }, 429)
       }
     }
