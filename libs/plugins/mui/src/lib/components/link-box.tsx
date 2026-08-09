@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiLinkBoxOutline } from '@aglyn/shared-data-mdi'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import MuiBox from '@mui/material/Box'
+import type { SxProps } from '@mui/material/styles'
 import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -33,6 +34,12 @@ export interface LinkBoxProps {
   href?: string
   /** Opens in a new tab. External destinations only. */
   newTab?: boolean
+  /**
+   * Authored node styles, handed over by the renderer rather than typed into
+   * an attribute. Declared because the merge below reads it: undeclared, no
+   * typed caller could style a tile (AGL-1323).
+   */
+  sx?: SxProps
   children?: ReactNode
 }
 
@@ -65,7 +72,7 @@ const LinkBox = forwardRef<HTMLElement, LinkBoxProps>((props, ref) => {
     children,
     sx,
     ...rest
-  } = props as LinkBoxProps & { sx?: unknown }
+  } = props
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
   // Spreading `rest` with `sx` still inside it would REPLACE the baseline
   // below rather than merge with it, so every styled tile would quietly lose

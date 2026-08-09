@@ -43,9 +43,12 @@ const renderEditor = (ui: React.ReactElement) =>
  * jest-dom is not set up in this project, so visibility is read from the
  * panel's own `hidden` attribute — which is also what assistive tech and
  * the browser act on.
+ *
+ * Coerced because the IDL property is `boolean | 'until-found'`, and every
+ * one of those states is hidden as far as these cases are concerned.
  */
 const panelHidden = (text: string): boolean =>
-  (screen.getByText(text).closest('[role=tabpanel]') as HTMLElement).hidden
+  Boolean((screen.getByText(text).closest('[role=tabpanel]') as HTMLElement).hidden)
 
 /**
  * `ssrPanels` so every panel is in the tree: these cases are about the strip,

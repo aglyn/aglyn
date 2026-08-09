@@ -57,8 +57,15 @@ describe('dropClearedProps (AGL-1226)', () => {
  * non-string. React does not substitute a default for an explicit null.
  */
 describe('the throw this exists to prevent', () => {
+  /**
+   * Typed as the node renderer sees it — an untyped prop bag spread onto a
+   * component — because that is the path that produced the bug. MUI's own
+   * props type cannot express `color: null`, which is the whole point: the
+   * value reaching it is one no typed caller could have written.
+   */
+  const AsRendered = Button as React.ComponentType<Record<string, unknown>>
   const renderButton = (props: Record<string, unknown>) =>
-    render(<Button {...(props as never)}>Go</Button>)
+    render(<AsRendered {...props}>Go</AsRendered>)
 
   it('MUI really does throw on a null color', () => {
     // Guard the premise: if MUI ever stops throwing, the fix is moot and this

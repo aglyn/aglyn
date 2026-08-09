@@ -160,7 +160,7 @@ describe('Drawer element (AGL-562)', () => {
     // design is exactly what ships" has to hold for elements that ship
     // invisible too.
     const { container } = renderEditor(
-      <DrawerElement anchor="right" width={320} {...{ 'data-aglyn': 'leaf:drawer-6' }}>
+      <DrawerElement anchor="right" width="320px" {...{ 'data-aglyn': 'leaf:drawer-6' }}>
         <span>{'Editable contents'}</span>
       </DrawerElement>,
     )

@@ -51,6 +51,13 @@ const HOVER_CLOSE_DELAY_MS = 150
 export interface NavMenuProps {
   /** Visible trigger text of the nav item. */
   label?: string
+  /**
+   * Authored node styles, handed over by the renderer rather than typed into
+   * an attribute. It lands on the element root and the trigger inherits, which
+   * is what lets an author override the default text transform (AGL-1198) —
+   * so it has to be expressible by a typed caller too (AGL-1323).
+   */
+  sx?: SxProps
   children?: ReactNode
 }
 
@@ -58,6 +65,8 @@ export interface MegaMenuProps {
   label?: string
   /** Panel width preset: content-sized, wide (720px), or full-bleed. */
   panelWidth?: MegaMenuPanelWidth
+  /** Authored node styles — see `NavMenuProps.sx`. */
+  sx?: SxProps
   children?: ReactNode
 }
 
