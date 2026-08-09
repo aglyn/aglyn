@@ -24,6 +24,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  resolveUidsToPeople,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -121,6 +122,54 @@ async function handler(request: Request): Promise<Response> {
       ? (serialize(billingSnap.data() ?? {}) as Record<string, unknown>)
       : null
 
+    // The audit slice, read here rather than by the page's rule-gated
+    // `adminAudit` listener (AGL-938). Two reasons: a staff surface should
+    // not lean on a client rule at all (the AGL-929 argument), and the actor
+    // uids have to be known server-side to be resolved to people. Same shape
+    // the page computed: the latest 200 entries, filtered to this org,
+    // top 20. Fail-soft to null — a failed read must present as a failed
+    // read, never as an empty history.
+    let audit:
+      | Array<{
+          $id: string
+          action: string | null
+          target: string | null
+          actorUid: string | null
+          at: unknown
+        }>
+      | null = null
+    try {
+      const auditSnap = await db
+        .collection('adminAudit')
+        .orderBy('at', 'desc')
+        .limit(200)
+        .get()
+      audit = auditSnap.docs
+        .filter((doc) => String(doc.get('target') ?? '').includes(orgId))
+        .slice(0, 20)
+        .map((doc) => ({
+          $id: doc.id,
+          action: doc.get('action') ?? null,
+          target: doc.get('target') ?? null,
+          actorUid: doc.get('actorUid') ?? null,
+          at: serialize(doc.get('at') ?? null),
+        }))
+    } catch (error) {
+      console.error('org-detail audit slice failed', error)
+    }
+
+    // Owner + audit actors resolved to people across all three identity
+    // stores — auth pools, then this org's member roster (AGL-938). The
+    // helper fails soft per uid, so an unresolvable actor (`system:cron`,
+    // an erased account) arrives marked unresolved rather than absent.
+    const people = await resolveUidsToPeople(
+      [
+        typeof org['ownerUid'] === 'string' ? (org['ownerUid'] as string) : null,
+        ...(audit ?? []).map((entry) => entry.actorUid),
+      ],
+      { orgId },
+    )
+
     return Response.json(
       {
         // Merged the way the page already merged the two reads, so the shape
@@ -128,6 +177,8 @@ async function handler(request: Request): Promise<Response> {
         // resolving from billing first.
         org: { ...org, ...(billing ?? {}), $id: orgSnap.id },
         hasBilling: billingSnap.exists,
+        audit,
+        people,
       },
       { status: 200 },
     )
