@@ -227,6 +227,25 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
             </Box>
           )
         }
+        // A numbered list (AGL-1320): the same measure as the bullet list,
+        // as a real `<ol>` carrying `start` — a legal document's enumerated
+        // elements are the reason this block exists.
+        if (block.type === 'orderedList') {
+          return (
+            <Box
+              key={index}
+              component="ol"
+              start={block.start}
+              sx={{ ...BODY_SX, my: 2, pl: 3, '& li': { mb: 1 } }}
+            >
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>
+                  {renderInlines(item, suppressNavigation)}
+                </li>
+              ))}
+            </Box>
+          )
+        }
         // Code and tables scroll rather than wrap, like every other
         // markdown-lite renderer here (AGL-974): a wrapped command line
         // reads as two commands, and a squeezed table column loses the
@@ -557,9 +576,10 @@ export const markdownSchema: Aglyn.ComponentSchema<MarkdownProps> = {
       label: 'Content',
       description:
         'The document, as markdown. Headings (## and ###), paragraphs, ' +
-        'bold/italic, links, bullet lists, images, fenced code, pipe ' +
-        'tables and > quotes. Paste the whole source file — a Table of contents element ' +
-        'on the same screen lists the ## and ### headings automatically.',
+        'bold/italic, links, bullet and 1. numbered lists, images, fenced ' +
+        'code, pipe tables and > quotes. Paste the whole source file — a ' +
+        'Table of contents element on the same screen lists the ## and ### ' +
+        'headings automatically.',
       component: Aglyn.FieldComponentType.TEXTAREA,
     },
   ],

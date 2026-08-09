@@ -33,4 +33,16 @@ describe('MarkdownLiteView (markdown-lite parity)', () => {
     expect(quote?.querySelector('strong')?.textContent).toBe('quoted')
     expect(container.textContent).not.toContain('>')
   })
+
+  it('renders a numbered group as an <ol> with its start (AGL-1320)', () => {
+    const { container } = render(
+      <MarkdownLiteView source={'Steps:\n\n5. do **this**\n6. then that'} />,
+    )
+    const list = container.querySelector('ol')
+    expect(list?.getAttribute('start')).toBe('5')
+    expect(list?.querySelectorAll('li')).toHaveLength(2)
+    expect(list?.querySelector('strong')?.textContent).toBe('this')
+    // The console preview must not show the raw markers as prose either.
+    expect(container.textContent).toBe('Steps:do thisthen that')
+  })
 })

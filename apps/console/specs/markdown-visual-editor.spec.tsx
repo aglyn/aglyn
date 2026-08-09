@@ -126,6 +126,41 @@ describe('markdownToRows / rowsToMarkdown', () => {
     expect(rowsToMarkdown(rows)).toBe(source)
   })
 
+  it('carries numbered items as rows and round-trips them (AGL-1320)', () => {
+    const source = 'Intro.\n\n1. step **one**\n2. step two\n\nOutro.'
+    const rows = markdownToRows(source)
+    expect(rows.map((row) => row.kind)).toEqual([
+      'paragraph',
+      'orderedItem',
+      'orderedItem',
+      'paragraph',
+    ])
+    expect(rowsToMarkdown(rows)).toBe(source)
+  })
+
+  it('keeps a non-1 start on the row that opens the run (AGL-1320)', () => {
+    // Without this the flat row model would silently renumber a notice that
+    // resumes at 7 down to 1 on the author's next save.
+    const source = '7. seven\n8. eight'
+    const rows = markdownToRows(source)
+    expect(rows.map((row) => (row as { start?: number }).start)).toEqual([
+      7,
+      undefined,
+    ])
+    expect(rowsToMarkdown(rows)).toBe(source)
+  })
+
+  it('regroups adjacent numbered rows into one list, bullets apart (AGL-1320)', () => {
+    const source = '- bullet\n\n1. number\n2. another'
+    const rows = markdownToRows(source)
+    expect(rows.map((row) => row.kind)).toEqual([
+      'listItem',
+      'orderedItem',
+      'orderedItem',
+    ])
+    expect(rowsToMarkdown(rows)).toBe(source)
+  })
+
   it('yields a single empty paragraph for an empty document', () => {
     const rows = markdownToRows('')
     expect(rows).toHaveLength(1)
@@ -330,6 +365,42 @@ describe('MarkdownVisualEditor', () => {
     fireEvent.input(row)
     expect(rowEls()[0]?.dataset['rowKind']).toBe('quote')
     expect(lastEmitted(handleChange)).toBe('> wisdom')
+  })
+
+  it('renders numbered source as numbered rows, seeding the run (AGL-1320)', () => {
+    // The fifth renderer of the block union. Rows are siblings rather than
+    // children of an <ol>, so the run's start rides on the opener as a
+    // counter seed — `7.` means the counter starts one below seven.
+    renderEditor('Intro.\n\n7. seven\n8. eight')
+    const rows = rowEls()
+    expect(rows.map((row) => row.dataset['rowKind'])).toEqual([
+      'paragraph',
+      'orderedItem',
+      'orderedItem',
+    ])
+    expect(rows[1]?.style.counterReset).toBe('md-ordered 6')
+    expect(rows[2]?.style.counterReset).toBe('')
+    // No literal marker leaks into the editable text.
+    expect(rows[1]?.textContent).toBe('seven')
+  })
+
+  it('converts a "1. " prefix to a numbered row (AGL-1320)', () => {
+    const { handleChange } = renderEditor('')
+    const row = rowEls()[0] as HTMLElement
+    row.textContent = '1. first step'
+    fireEvent.input(row)
+    expect(rowEls()[0]?.dataset['rowKind']).toBe('orderedItem')
+    expect(lastEmitted(handleChange)).toBe('1. first step')
+  })
+
+  it('opens a numbered run at the number that was typed (AGL-1320)', () => {
+    const { handleChange } = renderEditor('')
+    const row = rowEls()[0] as HTMLElement
+    row.textContent = '4) fourth step'
+    fireEvent.input(row)
+    expect(rowEls()[0]?.dataset['rowKind']).toBe('orderedItem')
+    // `)` normalizes to `.`, and the typed number survives as the start.
+    expect(lastEmitted(handleChange)).toBe('4. fourth step')
   })
 
   it('converts a "# " prefix to a heading too (AGL-1082)', () => {

@@ -33,4 +33,16 @@ describe('ListingReadme (markdown-lite parity)', () => {
     expect(quote?.querySelector('strong')?.textContent).toBe('quoted')
     expect(container.textContent).not.toContain('>')
   })
+
+  it('renders install steps as an <ol> with its start number (AGL-1320)', () => {
+    const { container } = render(
+      <ListingReadme readme={'Install:\n\n1. Run **npm i**\n2. Register it'} />,
+    )
+    const list = container.querySelector('ol')
+    expect(list?.getAttribute('start')).toBe('1')
+    expect(list?.querySelectorAll('li')).toHaveLength(2)
+    expect(list?.querySelector('strong')?.textContent).toBe('npm i')
+    // The markers belong to the <ol>, not to the README's prose.
+    expect(container.textContent).toBe('Install:Run npm iRegister it')
+  })
 })

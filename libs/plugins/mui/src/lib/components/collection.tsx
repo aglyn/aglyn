@@ -293,6 +293,25 @@ const CollectionEntryBody = forwardRef<
             </Box>
           )
         }
+        // A numbered list (AGL-1320) — a real `<ol>`, so the markers are the
+        // browser's and `start` survives: a notice that resumes at 7 has to
+        // read as 7 for the enumeration to mean anything.
+        if (block.type === 'orderedList') {
+          return (
+            <Box
+              key={index}
+              component="ol"
+              start={block.start}
+              sx={{ lineHeight: 1.7, pl: 3 }}
+            >
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>
+                  {renderInlines(item, suppressNavigation)}
+                </li>
+              ))}
+            </Box>
+          )
+        }
         // Code blocks and tables (AGL-974). Both scroll rather than wrap:
         // a wrapped code line or a squeezed table column loses the very
         // structure that made the block worth writing.

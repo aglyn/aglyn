@@ -98,6 +98,24 @@ export function MarkdownLiteView({ source }: MarkdownLiteViewProps) {
                 ))}
               </Stack>
             )
+          // A numbered list (AGL-1320) — a real `<ol>` with `start`, so the
+          // console preview counts the same way the published page does.
+          case 'orderedList':
+            return (
+              <Stack
+                key={index}
+                component="ol"
+                start={block.start}
+                spacing={0.5}
+                sx={{ my: 0 }}
+              >
+                {block.items.map((item, itemIndex) => (
+                  <Typography key={itemIndex} component="li" variant="body2">
+                    {renderInlines(item)}
+                  </Typography>
+                ))}
+              </Stack>
+            )
           case 'code':
             return (
               <Box

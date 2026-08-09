@@ -70,6 +70,7 @@ export type MarkdownEditorCommand =
   | 'heading'
   | 'heading3'
   | 'list'
+  | 'orderedList'
   | 'link'
   | 'image'
   | 'code'
@@ -84,7 +85,14 @@ export type MarkdownEditorCommand =
 export interface MarkdownEditorContext {
   bold: boolean
   italic: boolean
-  kind: 'paragraph' | 'heading2' | 'heading3' | 'listItem' | 'quote' | null
+  kind:
+    | 'paragraph'
+    | 'heading2'
+    | 'heading3'
+    | 'listItem'
+    | 'orderedItem'
+    | 'quote'
+    | null
 }
 
 export interface MarkdownVisualEditorHandle {
@@ -111,12 +119,27 @@ export interface MarkdownVisualEditorProps {
   maxHeight?: number | string
 }
 
-type TextRowKind = 'paragraph' | 'heading2' | 'heading3' | 'listItem' | 'quote'
+type TextRowKind =
+  | 'paragraph'
+  | 'heading2'
+  | 'heading3'
+  | 'listItem'
+  | 'orderedItem'
+  | 'quote'
 
 type TextRow = {
   key: string
   kind: TextRowKind
   inlines: Aglyn.MarkdownInline[]
+  /**
+   * An ordered list's start number, carried on the row that OPENS the run
+   * (AGL-1320). The row model is flat, so this is the only place a non-1
+   * start can live — without it, editing a notice that resumes at `7.` would
+   * silently renumber it to `1.` on the next save, the same way an
+   * unrepresentable block used to be dropped. A row that does not open a run
+   * ignores it; if the opener is deleted, the run restarts at 1.
+   */
+  start?: number
 }
 type ImageRow = { key: string; kind: 'image'; src: string; alt: string }
 type CodeRow = { key: string; kind: 'code'; lang: string; text: string }
@@ -180,6 +203,17 @@ export function markdownToRows(markdown: string): EditorRow[] {
         header: block.header,
         rows: block.rows,
       })
+    } else if (block.type === 'orderedList') {
+      // The start rides on the first item row only (AGL-1320) — the run's
+      // opener is what `rowsToMarkdown` reads it back from.
+      block.items.forEach((item, index) => {
+        rows.push({
+          key: nextRowKey(),
+          kind: 'orderedItem',
+          inlines: item,
+          ...(index === 0 ? { start: block.start } : {}),
+        })
+      })
     } else {
       for (const item of block.items) {
         rows.push({ key: nextRowKey(), kind: 'listItem', inlines: item })
@@ -209,6 +243,17 @@ export function rowsToMarkdown(rows: EditorRow[]): string {
       const last = blocks[blocks.length - 1]
       if (last?.type === 'list') last.items.push(row.inlines)
       else blocks.push({ type: 'list', items: [row.inlines] })
+    } else if (row.kind === 'orderedItem') {
+      const last = blocks[blocks.length - 1]
+      if (last?.type === 'orderedList') last.items.push(row.inlines)
+      // Only the row that OPENS a run can set the start (AGL-1320); a row
+      // that inherited one from a split keeps counting from the opener.
+      else
+        blocks.push({
+          type: 'orderedList',
+          start: row.start ?? 1,
+          items: [row.inlines],
+        })
     } else if (row.kind === 'paragraph') {
       blocks.push({ type: 'paragraph', inlines: row.inlines })
     } else if (row.kind === 'quote') {
@@ -450,6 +495,14 @@ const TextRowView = memo(function TextRowView(props: TextRowViewProps) {
       spellCheck
       data-row-key={row.key}
       data-row-kind={row.kind}
+      // The opener of a numbered run seeds the counter (AGL-1320). Reset
+      // runs before increment on the same element, so this row itself shows
+      // `start` and the rest of the run counts up from it.
+      style={
+        row.kind === 'orderedItem' && row.start != null
+          ? { counterReset: `md-ordered ${row.start - 1}` }
+          : undefined
+      }
       onInput={onInput}
       onKeyDown={onKeyDown}
       onPaste={onPaste}
@@ -1244,6 +1297,7 @@ const MarkdownVisualEditor = forwardRef<
       if (command === 'heading') return toggleKind('heading2')
       if (command === 'heading3') return toggleKind('heading3')
       if (command === 'list') return toggleKind('listItem')
+      if (command === 'orderedList') return toggleKind('orderedItem')
       if (command === 'quote') return toggleKind('quote')
       if (command === 'link') {
         dialogTargetRef.current = target
@@ -1323,8 +1377,10 @@ const MarkdownVisualEditor = forwardRef<
       // Markdown shortcuts (AGL-582): "## " / "### " / "- " at the start
       // of a paragraph convert it to a heading or list item. "# " joins them
       // (AGL-1082) so typing a heading agrees with pasting one — the parser
-      // clamps a single `#` to the top rendered level too.
+      // clamps a single `#` to the top rendered level too. "1. " / "1) "
+      // opens a numbered list at the number that was typed (AGL-1320).
       if (row.kind === 'paragraph') {
+        const numbered = /^(\d{1,9})[.)] /.exec(text)
         const shortcut = text.startsWith('### ')
           ? { kind: 'heading3' as const, trim: 4 }
           : text.startsWith('## ')
@@ -1335,7 +1391,13 @@ const MarkdownVisualEditor = forwardRef<
                 ? { kind: 'listItem' as const, trim: 2 }
                 : text.startsWith('> ')
                   ? { kind: 'quote' as const, trim: 2 }
-                  : null
+                  : numbered
+                    ? {
+                        kind: 'orderedItem' as const,
+                        trim: numbered[0].length,
+                        start: Number(numbered[1]),
+                      }
+                    : null
         if (shortcut) {
           const caret =
             selectionOffsetsWithin(rowEl)?.start ?? text.length
@@ -1344,6 +1406,7 @@ const MarkdownVisualEditor = forwardRef<
             key: row.key,
             kind: shortcut.kind,
             inlines: sliceInlines(inlines, shortcut.trim, Infinity),
+            ...('start' in shortcut ? { start: shortcut.start } : {}),
           }
           commit({ key: row.key, start: offset, end: offset })
           return
@@ -1402,7 +1465,10 @@ const MarkdownVisualEditor = forwardRef<
         current[index] = { ...row, inlines } as EditorRow
         pushHistory()
         // Enter on an empty list item exits the list into a paragraph.
-        if (row.kind === 'listItem' && length === 0) {
+        if (
+          (row.kind === 'listItem' || row.kind === 'orderedItem') &&
+          length === 0
+        ) {
           current[index] = { key: row.key, kind: 'paragraph', inlines: [] }
           commit({ key: row.key, start: 0, end: 0 })
           return
@@ -1410,8 +1476,12 @@ const MarkdownVisualEditor = forwardRef<
         const before = sliceInlines(inlines, 0, offsets.start)
         const after = sliceInlines(inlines, offsets.end, Infinity)
         // Splitting a heading leaves prose behind; lists continue as items.
+        // The continuation deliberately carries NO `start` (AGL-1320) — only
+        // the row that opens a run numbers it.
         const nextKind: TextRowKind =
-          row.kind === 'listItem' ? 'listItem' : 'paragraph'
+          row.kind === 'listItem' || row.kind === 'orderedItem'
+            ? row.kind
+            : 'paragraph'
         const newRow: TextRow = {
           key: nextRowKey(),
           kind: nextKind,
@@ -1779,6 +1849,9 @@ const MarkdownVisualEditor = forwardRef<
           maxHeight,
           overflow: 'auto',
           cursor: 'text',
+          // Seeds the numbered-row counter (AGL-1320) so a document that
+          // OPENS with `1. ` has one to increment.
+          counterReset: 'md-ordered 0',
           '&:focus-within': { borderColor: 'primary.main' },
           // Typography mirrors the tenant's Entry Body rendering (AGL-551)
           // so the editing surface reads like the published article.
@@ -1805,6 +1878,31 @@ const MarkdownVisualEditor = forwardRef<
             listStyleType: 'disc',
             ml: 3,
             my: 0.25,
+          },
+          // Numbered rows (AGL-1320). Rows are siblings, not children of an
+          // `<ol>`, so the markers come from an explicit counter rather than
+          // `list-style-type: decimal` — the implicit list-item counter is
+          // shared with the bullet rows above and would keep counting through
+          // them. Every non-ordered row RESETS it, which is what ends a run:
+          // a counter-reset scopes to the element and its following siblings.
+          // The run's opener additionally seeds it from `start` inline.
+          '& [data-row-kind]:not([data-row-kind="orderedItem"])': {
+            counterReset: 'md-ordered 0',
+          },
+          '& [data-row-kind="orderedItem"]': {
+            typography: 'body1',
+            lineHeight: 1.7,
+            counterIncrement: 'md-ordered',
+            position: 'relative',
+            ml: 3,
+            my: 0.25,
+            '&::before': {
+              content: 'counter(md-ordered) ". "',
+              position: 'absolute',
+              right: '100%',
+              pr: 0.5,
+              color: 'text.secondary',
+            },
           },
           // The tenant's pull-quote treatment (AGL-1315), at editor scale.
           '& [data-row-kind="quote"]': {

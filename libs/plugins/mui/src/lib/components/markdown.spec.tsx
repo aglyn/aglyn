@@ -77,6 +77,19 @@ describe('Markdown element (AGL-1162)', () => {
   })
 
 
+  it('renders a numbered group as one <ol> carrying its start (AGL-1320)', () => {
+    const { container } = render(
+      <Markdown content={'Prose.\n\n2. step *two*\n3) step three'} />,
+    )
+    const lists = container.querySelectorAll('ol')
+    expect(lists).toHaveLength(1)
+    expect(lists[0]?.getAttribute('start')).toBe('2')
+    expect(lists[0]?.querySelectorAll('li')).toHaveLength(2)
+    expect(lists[0]?.querySelector('em')?.textContent).toBe('two')
+    // Numbers come from the <ol>, never from literal text in the document.
+    expect(container.textContent).toBe('Prose.step twostep three')
+  })
+
   it('renders real headings, not a paragraph painted to look like one', () => {
     // The trap the marketing applier already hit: an sx fontSize with no
     // `component` screenshots correctly and leaves the page with no

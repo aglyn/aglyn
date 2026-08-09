@@ -101,6 +101,20 @@ describe('Entry body block (AGL-551)', () => {
     expect(container.textContent).not.toContain('>')
   })
 
+  it('renders `1. ` lines as an <ol>, keeping the start number (AGL-1320)', () => {
+    const { container } = render(
+      <CollectionEntryBody
+        markdown={'Before.\n\n3. A **numbered** step\n4. Another one'}
+      />,
+    )
+    const list = container.querySelector('ol')
+    expect(list?.getAttribute('start')).toBe('3')
+    expect(list?.querySelectorAll('li')).toHaveLength(2)
+    expect(list?.querySelector('strong')?.textContent).toBe('numbered')
+    // The raw markers must not leak into the article as prose.
+    expect(container.textContent).toBe('Before.A numbered stepAnother one')
+  })
+
   it('renders nothing on the site for an unresolved token', () => {
     const { container } = render(
       <CollectionEntryBody markdown="{{entry.body}}" />,

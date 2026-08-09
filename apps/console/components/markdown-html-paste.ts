@@ -20,9 +20,9 @@
  * (AGL-596). Pure functions with no editor state: `htmlToRows` parses a
  * `text/html` clipboard payload and maps it onto the editor's row model,
  * keeping only what the markdown-lite dialect can express — bold, italic,
- * links, h2/h3 headings, flat lists, images, blockquotes (AGL-1315), and
- * (AGL-981) code blocks and tables, the two blocks a pasted README is made
- * of. Everything else flattens
+ * links, h2/h3 headings, flat bullet and numbered lists (AGL-1320), images,
+ * blockquotes (AGL-1315), and (AGL-981) code blocks and tables, the two
+ * blocks a pasted README is made of. Everything else flattens
  * to plain text; nested marks flatten to the OUTERMOST mark. Row keys are
  * module-local placeholders — the editor re-keys converted rows with its
  * own key sequence on ingest.
@@ -175,11 +175,24 @@ export function htmlToRows(html: string): EditorRow[] {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const rows: EditorRow[] = []
   const pushTextRow = (
-    kind: 'paragraph' | 'heading2' | 'heading3' | 'listItem' | 'quote',
+    kind:
+      | 'paragraph'
+      | 'heading2'
+      | 'heading3'
+      | 'listItem'
+      | 'orderedItem'
+      | 'quote',
     inlines: MarkdownInline[],
+    /** Seeds a numbered run from `<ol start>` (AGL-1320). */
+    start?: number,
   ): void => {
     if (inlines.length === 0) return
-    rows.push({ key: nextHtmlRowKey(), kind, inlines })
+    rows.push({
+      key: nextHtmlRowKey(),
+      kind,
+      inlines,
+      ...(start == null ? {} : { start }),
+    })
   }
   const visitBlock = (el: Element): void => {
     const tag = el.tagName.toLowerCase()
@@ -192,10 +205,28 @@ export function htmlToRows(html: string): EditorRow[] {
       return
     }
     if (tag === 'ul' || tag === 'ol') {
+      // An `<ol>` becomes numbered rows (AGL-1320), carrying `start` on the
+      // first item that actually lands — an empty leading `<li>` produces no
+      // row, and the run has to start counting from the one that does.
+      const ordered = tag === 'ol'
+      const startAttr = el.getAttribute('start')
+      const parsedStart = Number(startAttr)
+      let pending = !ordered
+        ? undefined
+        : startAttr && Number.isFinite(parsedStart)
+          ? Math.max(0, Math.trunc(parsedStart))
+          : 1
       for (const child of Array.from(el.children)) {
         const childTag = child.tagName.toLowerCase()
-        if (childTag === 'li') pushTextRow('listItem', htmlToInlines(child))
-        else if (childTag === 'ul' || childTag === 'ol') visitBlock(child)
+        if (childTag === 'li') {
+          const before = rows.length
+          pushTextRow(
+            ordered ? 'orderedItem' : 'listItem',
+            htmlToInlines(child),
+            pending,
+          )
+          if (rows.length > before) pending = undefined
+        } else if (childTag === 'ul' || childTag === 'ol') visitBlock(child)
       }
       return
     }
