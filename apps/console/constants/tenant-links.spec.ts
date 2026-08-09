@@ -20,6 +20,7 @@ import {
   hostDisplayDomain,
   isLocalConsole,
   isPreviewConsole,
+  resolveScreenLiveUrl,
 } from './tenant-links'
 
 const host = {
@@ -82,7 +83,87 @@ describe('tenant-links', () => {
     })
   })
 
+describe('resolveScreenLiveUrl (AGL-1271)', () => {
+    const hostname = 'app.aglyn.com'
+    const notTemplate = { isTemplate: false, routes: undefined }
+
+    it('is byte-identical to buildScreenLiveUrl for an ordinary screen', () => {
+      expect(
+        resolveScreenLiveUrl(host, 'scr-1' as any, notTemplate, hostname),
+      ).toEqual({ url: 'https://aglyn-marketing.aglyn.app/product/besigner' })
+      // Unpublished stays reason-less: the affordance is simply absent,
+      // matching every other unpublished screen.
+      expect(
+        resolveScreenLiveUrl(host, 'scr-missing' as any, notTemplate, hostname),
+      ).toEqual({ url: undefined })
+    })
+
+    it('routes a LIST template to the collection slug, not its own entry', () => {
+      // The screen also has a (dead) routing-map entry of its own — the
+      // collection route must win over it, because AGL-1267 stopped serving
+      // the template at its slug while the list page still renders it.
+      const templateHost = {
+        subdomain: 'aglyn-marketing',
+        screens: { 'scr-list': '/blog-list-template' },
+      } as any
+      expect(
+        resolveScreenLiveUrl(
+          templateHost,
+          'scr-list' as any,
+          {
+            isTemplate: true,
+            routes: [{ role: 'list', collectionSlug: 'blog' } as any],
+          },
+          hostname,
+        ),
+      ).toEqual({ url: 'https://aglyn-marketing.aglyn.app/blog' })
+    })
+
+    it('an ENTRY template gets a reason instead of a dead link', () => {
+      const resolved = resolveScreenLiveUrl(
+        host,
+        'scr-entry' as any,
+        {
+          isTemplate: true,
+          routes: [{ role: 'entry', collectionSlug: 'blog' } as any],
+        },
+        hostname,
+      )
+      expect(resolved.url).toBeUndefined()
+      expect(resolved.unavailableReason).toContain('/blog/{entry}')
+      expect(resolved.unavailableReason).toContain('no single live address')
+    })
+
+    it('a designated-but-routeless template says why instead of vanishing', () => {
+      const resolved = resolveScreenLiveUrl(
+        host,
+        'scr-superseded' as any,
+        { isTemplate: true, routes: undefined },
+        hostname,
+      )
+      expect(resolved.url).toBeUndefined()
+      expect(resolved.unavailableReason).toContain('no live address')
+    })
+
+    it('a list template on a host with no domain stays url-less, no reason', () => {
+      // Same absence semantics as an ordinary screen on a domainless host.
+      const bare = { screens: {} } as any
+      expect(
+        resolveScreenLiveUrl(
+          bare,
+          'scr-list' as any,
+          {
+            isTemplate: true,
+            routes: [{ role: 'list', collectionSlug: 'blog' } as any],
+          },
+          hostname,
+        ),
+      ).toEqual({ url: undefined })
+    })
+  })
+
   it('hostDisplayDomain prefers the custom domain', () => {
+
     expect(hostDisplayDomain({ cname: 'aglyn.com', subdomain: 'x' })).toBe(
       'aglyn.com',
     )

@@ -20,12 +20,10 @@ import * as Aglyn from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack } from '@mui/material'
 import CreateArtifactDrawer from '../../../../../../components/create-artifact-drawer.component'
 import TemplateGalleryDialog from '../../../../../../components/templates/template-gallery-dialog.component'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { doc, setDoc } from 'firebase/firestore'
+import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -47,7 +45,6 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
-  const firestore = useFirestore()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
 
@@ -59,6 +56,7 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
   const [creating, setCreating] = useState(false)
   // Name first, then create (AGL-700) — writing "Untitled component" and
   // navigating left the library full of rows nobody could tell apart.
+  const createHostResource = useHostResourceApi()
   const [createOpen, setCreateOpen] = useState(false)
   const [createError, setCreateError] = useState<unknown>(null)
   const handleCreate = useCallback(
@@ -68,23 +66,31 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
     setCreateError(null)
     try {
       const componentId = Aglyn.createResourceUid()
-      const timestamp = Timestamp.now()
-      await setDoc(doc(firestore, 'hosts', hostId, 'components', componentId), {
+      // Component DOC creation is API-only by rule (`allow create: if
+      // isStaff()`), same as screens/layouts/templates — the resources route
+      // enforces the reusableComponents entitlement server-side (AGL-473).
+      // This wrote setDoc directly and every click died on a rules denial;
+      // the besigner's save-as-reusable path never hit it because it goes
+      // through the API.
+      await createHostResource({
         hostId,
-        displayName: values.displayName,
-        description: values.description ?? '',
-        // A canvas needs a ROOT node to render — an empty `{}` renders as
-        // "Invalid node" in the besigner (AGL-693).
-        rootId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
-        nodes: {
-          [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
-            $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
-            componentId: 'div',
-            nodes: [],
+        resource: 'reusableComponent',
+        id: componentId,
+        data: {
+          hostId,
+          displayName: values.displayName,
+          description: values.description ?? '',
+          // A canvas needs a ROOT node to render — an empty `{}` renders as
+          // "Invalid node" in the besigner (AGL-693).
+          rootId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+          nodes: {
+            [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
+              $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+              componentId: 'div',
+              nodes: [],
+            },
           },
         },
-        createdAt: timestamp,
-        updatedAt: timestamp,
       })
       setCreateOpen(false)
       router.push(
@@ -101,7 +107,7 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
       setCreating(false)
     }
     },
-    [creating, firestore, hostId, router, orgSlug, host, enqueueSnackbar],
+    [creating, createHostResource, hostId, router, orgSlug, host, enqueueSnackbar],
   )
 
   return (

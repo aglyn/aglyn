@@ -361,6 +361,91 @@ describe('validateListingContent (AGL-430)', () => {
   })
 })
 
+describe('validatePublisherProfileContent (AGL-1009)', () => {
+  const { validatePublisherProfileContent, safePublisherHref } =
+    require('./marketplace') as typeof import('./marketplace')
+
+  it('accepts a full, valid payload', () => {
+    const verdict = validatePublisherProfileContent({
+      avatarUrl: 'https://cdn.example.com/logo.png',
+      website: 'https://example.com',
+      supportEmail: 'help@example.com',
+      supportUrl: 'https://example.com/support',
+      githubUrl: 'https://github.com/example',
+      xUrl: 'https://x.com/example',
+      linkedinUrl: 'https://www.linkedin.com/company/example',
+    })
+    expect(verdict.ok).toBe(true)
+    expect(verdict.content?.githubUrl).toBe('https://github.com/example')
+  })
+
+  it('rejects javascript: and plain-http URLs — https or nothing', () => {
+    expect(
+      validatePublisherProfileContent({
+        avatarUrl: 'javascript:alert(1)',
+      }).ok,
+    ).toBe(false)
+    expect(
+      validatePublisherProfileContent({ website: 'http://example.com' }).ok,
+    ).toBe(false)
+    expect(
+      validatePublisherProfileContent({
+        supportUrl: 'data:text/html,hi',
+      }).ok,
+    ).toBe(false)
+  })
+
+  it('pins each social link to its own host', () => {
+    expect(
+      validatePublisherProfileContent({
+        githubUrl: 'https://evil.example.com/github.com',
+      }).ok,
+    ).toBe(false)
+    // A lookalike subdomain of another registrable domain must not pass.
+    expect(
+      validatePublisherProfileContent({
+        githubUrl: 'https://github.com.evil.example.com/x',
+      }).ok,
+    ).toBe(false)
+    expect(
+      validatePublisherProfileContent({
+        xUrl: 'https://twitter.com/example',
+      }).ok,
+    ).toBe(true)
+    expect(
+      validatePublisherProfileContent({
+        linkedinUrl: 'https://linkedin.com/in/example',
+      }).ok,
+    ).toBe(true)
+  })
+
+  it('rejects a malformed support email and overlong URLs', () => {
+    expect(
+      validatePublisherProfileContent({ supportEmail: 'not-an-email' }).ok,
+    ).toBe(false)
+    expect(
+      validatePublisherProfileContent({
+        website: `https://example.com/${'x'.repeat(500)}`,
+      }).ok,
+    ).toBe(false)
+  })
+
+  it('passes an explicit empty string through as a clear, absent as no-op', () => {
+    const verdict = validatePublisherProfileContent({ website: '' })
+    expect(verdict.ok).toBe(true)
+    expect(verdict.content).toEqual({ website: '' })
+    expect(validatePublisherProfileContent({}).content).toEqual({})
+  })
+
+  it('safePublisherHref only ever emits https hrefs', () => {
+    expect(safePublisherHref('https://example.com')).toBe('https://example.com')
+    expect(safePublisherHref('javascript:alert(1)')).toBeUndefined()
+    expect(safePublisherHref('http://example.com')).toBeUndefined()
+    expect(safePublisherHref(undefined)).toBeUndefined()
+    expect(safePublisherHref(42)).toBeUndefined()
+  })
+})
+
 /**
  * Pre-publication review stays plugin-only — plugins execute code, so they
  * earn the wait, while a component or template is inert until installed.

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { GridButtons } from '@aglyn/shared-ui-jsx'
+import { GridButtons } from '@aglyn/shared-ui-jsx/components/grid-buttons'
 import {
   mdiChartSankeyVariant,
   mdiCheckNetwork,

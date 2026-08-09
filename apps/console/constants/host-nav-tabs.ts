@@ -39,6 +39,13 @@ export function hostNavTabItems(
    * Omitted only by callers with no org context.
    */
   enabledPluginIds?: readonly string[],
+  /**
+   * Whether the signed-in user is an ADMIN of this host (AGL-1014). The
+   * Admin tab (per-site plugins, Danger zone) renders only for them — a
+   * site collaborator must not see it; the page and the rules enforce the
+   * same boundary for anyone who navigates by URL anyway.
+   */
+  options?: { hostAdmin?: boolean },
 ) {
   const staticTabs = [
     {
@@ -113,6 +120,17 @@ export function hostNavTabItems(
       label: 'Setup',
       href: buildRoute(Route.HOST_SETUP, { orgSlug, host }),
     },
+    // Host Admin area (AGL-1014): owner/admin-only — per-site plugin
+    // enablement and the Danger zone moved out of Setup.
+    ...(options?.hostAdmin
+      ? [
+          {
+            id: 'nav-tab-admin',
+            label: 'Admin',
+            href: buildRoute(Route.HOST_ADMIN, { orgSlug, host }),
+          },
+        ]
+      : []),
   ]
 
   // Plugin-contributed tabs from the ConsoleExtension registry. The href

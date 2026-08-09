@@ -21,6 +21,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
+  BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
@@ -34,11 +35,8 @@ import {
   ICON_VARIANT_MODIFY_SAVE,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
-import {
-  AppLink,
-  LOADING_OVERLAY_ELEMENT,
-  useLoading,
-} from '@aglyn/shared-ui-jsx'
+import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -52,7 +50,7 @@ import {
   useHostTemplateRef,
   useHostActivityLogger,
 } from '@aglyn/tenant-feature-instance'
-import { Alert, Button, Stack, Typography } from '@mui/material'
+import { Stack, Typography } from '@mui/material'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
@@ -498,24 +496,7 @@ function TemplateBesignerPage(props) {
                 after twenty more minutes of editing is the bad version of
                 this (AGL-674). */}
             {remoteChanged ? (
-              <Alert
-                severity="warning"
-                sx={{ borderRadius: 0, position: 'relative', zIndex: 'appBar' }}
-                action={
-                  <Button
-                    color="inherit"
-                    size="small"
-                    onClick={() => window.location.reload()}
-                  >
-                    {'Reload'}
-                  </Button>
-                }
-              >
-                {'Someone else saved this layout while you were editing. ' +
-                  'Saving is paused so their work is not overwritten — ' +
-                  'reload to pick up their changes. Nothing you have done ' +
-                  'here is lost until you do.'}
-              </Alert>
+              <BesignerConflictAlertComponent noun="template" />
             ) : null}
             <WorkspaceEditorComponent>
               <ViewportRootComponent>

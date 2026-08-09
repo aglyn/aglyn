@@ -15,23 +15,9 @@
  * limitations under the License.
  */
 
-import {
-  ICON_VARIANT_LEFT,
-  ICON_VARIANT_MENU_DOWN,
-} from '@aglyn/shared-data-enums'
-import {
-  AglynBesignerLogoFull,
-  AglynConsoleLogoFull,
-  AppLink,
-  type AppLinkProps,
-  MdiIcon,
-  type MdiIconProps,
-  Menu,
-  type MenuItemProps,
-  type MenuProps,
-  ScrollReaction,
-  SrOnly,
-} from '@aglyn/shared-ui-jsx'
+import { ICON_VARIANT_LEFT } from '@aglyn/shared-data-enums'
+import { AglynBesignerLogoFull, AglynConsoleLogoFull, AppLink, type AppLinkProps, MdiIcon, type MdiIconProps, Menu, type MenuItemProps, type MenuProps, SrOnly } from '@aglyn/shared-ui-jsx'
+import { ScrollReaction } from '@aglyn/shared-ui-jsx/components/scroll-reaction'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { _isArrEmpty } from '@aglyn/shared-util-tools'
 import {
@@ -50,6 +36,7 @@ import {
   Typography,
 } from '@mui/material'
 import { Fragment } from 'react'
+import AppBarMenubarComponent from './app-bar-menubar.component'
 import { buildRoute, Route } from '../../constants/route-links'
 import useBranding from '../../hooks/use-branding'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -60,8 +47,10 @@ import NotificationsMenu from '../notifications-menu.component'
 import OrgSwitcherNav from '../org-switcher-nav.component'
 import UserMenu from '../user-menu.component'
 
-// eslint-disable-next-line react/display-name
-const buildNav = (type?: 'icon' | 'text') => (item, i) => {
+// Icon-only quick actions. The center nav used to come through here too, as a
+// `type: 'text'` branch; it is a Base UI menubar now (AGL-1222), so this is
+// down to the one shape it still serves.
+const buildNav = () => (item, i) => {
   // Escape hatch for a fully custom action (AGL-858: the redesigned UserMenu),
   // rendered in place instead of squeezed through the icon/menu item shape.
   if (typeof item?.render === 'function') {
@@ -71,51 +60,26 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
   const isMenu = !_isArrEmpty(items)
   const itemKey = key || id || i
 
-  const rendered =
-    type === 'text' ? (
-      <Button
-        key={key}
-        id={id}
-        color="inherit"
-        startIcon={!icon?.path ? icon : <MdiIcon {...icon} />}
-        endIcon={
-          !isMenu ? undefined : <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />
-        }
-        {...(!rest.href
-          ? {}
-          : { component: AppLink, componentVariant: 'button', nativeButton: false })}
-        {...rest}
-        sx={mergeSxProps(
-          {
-            '& .MuiButton-endIcon': { marginLeft: 0 },
-            '& .MuiButton-endIcon>*:nth-of-type(1)': { fontSize: `1.7em` },
-          },
-          rest?.sx,
-        )}
-      >
-        {children}
-      </Button>
-    ) : (
-      <IconButton
-        key={itemKey}
-        color="inherit"
-        // AGL-752: an `href` or a custom `component` resolves this to an <a>,
-        // same as the text branch above.
-        {...(rest.href || rest.component ? { nativeButton: false } : {})}
-        {...rest}
-      >
-        {!avatar ? (
-          !icon?.path ? (
-            icon
-          ) : (
-            <MdiIcon {...icon} />
-          )
+  const rendered = (
+    <IconButton
+      key={itemKey}
+      color="inherit"
+      // AGL-752: an `href` or a custom `component` resolves this to an <a>.
+      {...(rest.href || rest.component ? { nativeButton: false } : {})}
+      {...rest}
+    >
+      {!avatar ? (
+        !icon?.path ? (
+          icon
         ) : (
-          <Avatar {...avatar} />
-        )}
-        {children}
-      </IconButton>
-    )
+          <MdiIcon {...icon} />
+        )
+      ) : (
+        <Avatar {...avatar} />
+      )}
+      {children}
+    </IconButton>
+  )
 
   return isMenu ? (
     <Menu
@@ -339,7 +303,14 @@ const TopAppBar = (props: TopAppBarProps) => {
                     justifyContent: "flex-start"
                   }}>
                   {centerPrefix}
-                  {customCenter || centerNavigationItems.map(buildNav('text'))}
+                  {/* The center nav is the besigner's FILE / EDIT / INSERT
+                      bar, and it is a real menubar now (AGL-1222) — roving
+                      focus across the triggers, hover-to-switch, typeahead
+                      that crosses menus. The item data is unchanged; only the
+                      mechanics moved. Quick actions keep the plain `Menu`. */}
+                  {customCenter || (
+                    <AppBarMenubarComponent entries={centerNavigationItems} />
+                  )}
                 </Stack>
               )}
             </Stack>
@@ -363,7 +334,7 @@ const TopAppBar = (props: TopAppBarProps) => {
                   alignItems: "center",
                   justifyContent: "flex-start"
                 }}>
-                {(quickActions ?? []).map(buildNav('icon'))}
+                {(quickActions ?? []).map(buildNav())}
               </Stack>
             )}
           </Toolbar>

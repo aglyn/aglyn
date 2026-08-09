@@ -25,6 +25,8 @@ import {
   isPluginEnabled,
   pluginForReleaseFlag,
   resolveEnabledPlugins,
+  resolveHostEnabledPlugins,
+  subtractDisabledPlugins,
 } from './enabled-plugins'
 
 describe('resolveEnabledPlugins (AGL-416)', () => {
@@ -60,6 +62,63 @@ describe('resolveEnabledPlugins (AGL-416)', () => {
     expect(isPluginEnabled({ enabledPlugins: ['data'] }, 'data')).toBe(true)
     expect(isPluginEnabled({ enabledPlugins: ['data'] }, 'email')).toBe(false)
     expect(isPluginEnabled(undefined, 'email')).toBe(true)
+  })
+})
+
+describe('resolveHostEnabledPlugins (AGL-1014)', () => {
+  it('an org-installed plugin the host disables is NOT in the set', () => {
+    const enabled = resolveHostEnabledPlugins(
+      { enabledPlugins: ['bookings', 'commerce'] },
+      { disabledPlugins: ['commerce'] },
+    )
+    expect(enabled).toContain('bookings')
+    expect(enabled).not.toContain('commerce')
+  })
+
+  it('defaults to the full org set: absent deny-list disables nothing', () => {
+    const org = { enabledPlugins: ['bookings', 'acme-widgets'] }
+    expect(resolveHostEnabledPlugins(org, undefined)).toEqual(
+      resolveEnabledPlugins(org),
+    )
+    expect(resolveHostEnabledPlugins(org, {})).toEqual(
+      resolveEnabledPlugins(org),
+    )
+  })
+
+  it('is narrow-only: a host id outside the org set cannot widen it', () => {
+    // The deny-list can only subtract — there is no per-host allow field,
+    // so an org-disabled plugin stays off no matter what the host stores.
+    const enabled = resolveHostEnabledPlugins(
+      { enabledPlugins: ['bookings'] },
+      { disabledPlugins: [] },
+    )
+    expect(enabled).not.toContain('commerce')
+  })
+
+  it('always-on plugins survive a per-site disable', () => {
+    const enabled = resolveHostEnabledPlugins(
+      { enabledPlugins: ['mui', 'data'] },
+      { disabledPlugins: ['mui', 'data'] },
+    )
+    expect(enabled).toContain('mui')
+    expect(enabled).not.toContain('data')
+  })
+
+  it('subtracts marketplace listing ids the same as bundle ids', () => {
+    const enabled = resolveHostEnabledPlugins(
+      { enabledPlugins: ['bookings', 'acme-widgets'] },
+      { disabledPlugins: ['acme-widgets'] },
+    )
+    expect(enabled).toContain('bookings')
+    expect(enabled).not.toContain('acme-widgets')
+  })
+
+  it('subtractDisabledPlugins keeps order and copies on no-op', () => {
+    const ids = ['mui', 'bookings', 'data']
+    const untouched = subtractDisabledPlugins(ids, [])
+    expect(untouched).toEqual(ids)
+    expect(untouched).not.toBe(ids)
+    expect(subtractDisabledPlugins(ids, ['bookings'])).toEqual(['mui', 'data'])
   })
 })
 

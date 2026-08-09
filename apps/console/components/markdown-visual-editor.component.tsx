@@ -74,6 +74,7 @@ export type MarkdownEditorCommand =
   | 'image'
   | 'code'
   | 'table'
+  | 'quote'
 
 /**
  * What the caret is sitting in (AGL-984), so a toolbar can show its state.
@@ -83,7 +84,7 @@ export type MarkdownEditorCommand =
 export interface MarkdownEditorContext {
   bold: boolean
   italic: boolean
-  kind: 'paragraph' | 'heading2' | 'heading3' | 'listItem' | null
+  kind: 'paragraph' | 'heading2' | 'heading3' | 'listItem' | 'quote' | null
 }
 
 export interface MarkdownVisualEditorHandle {
@@ -110,7 +111,7 @@ export interface MarkdownVisualEditorProps {
   maxHeight?: number | string
 }
 
-type TextRowKind = 'paragraph' | 'heading2' | 'heading3' | 'listItem'
+type TextRowKind = 'paragraph' | 'heading2' | 'heading3' | 'listItem' | 'quote'
 
 type TextRow = {
   key: string
@@ -165,6 +166,8 @@ export function markdownToRows(markdown: string): EditorRow[] {
       })
     } else if (block.type === 'paragraph') {
       rows.push({ key: nextRowKey(), kind: 'paragraph', inlines: block.inlines })
+    } else if (block.type === 'quote') {
+      rows.push({ key: nextRowKey(), kind: 'quote', inlines: block.inlines })
     } else if (block.type === 'image') {
       rows.push({ key: nextRowKey(), kind: 'image', src: block.src, alt: block.alt })
     } else if (block.type === 'code') {
@@ -208,6 +211,8 @@ export function rowsToMarkdown(rows: EditorRow[]): string {
       else blocks.push({ type: 'list', items: [row.inlines] })
     } else if (row.kind === 'paragraph') {
       blocks.push({ type: 'paragraph', inlines: row.inlines })
+    } else if (row.kind === 'quote') {
+      blocks.push({ type: 'quote', inlines: row.inlines })
     } else {
       blocks.push({
         type: 'heading',
@@ -1239,6 +1244,7 @@ const MarkdownVisualEditor = forwardRef<
       if (command === 'heading') return toggleKind('heading2')
       if (command === 'heading3') return toggleKind('heading3')
       if (command === 'list') return toggleKind('listItem')
+      if (command === 'quote') return toggleKind('quote')
       if (command === 'link') {
         dialogTargetRef.current = target
         setUrlDialog({
@@ -1327,7 +1333,9 @@ const MarkdownVisualEditor = forwardRef<
               ? { kind: 'heading2' as const, trim: 2 }
               : text.startsWith('- ')
                 ? { kind: 'listItem' as const, trim: 2 }
-                : null
+                : text.startsWith('> ')
+                  ? { kind: 'quote' as const, trim: 2 }
+                  : null
         if (shortcut) {
           const caret =
             selectionOffsetsWithin(rowEl)?.start ?? text.length
@@ -1797,6 +1805,16 @@ const MarkdownVisualEditor = forwardRef<
             listStyleType: 'disc',
             ml: 3,
             my: 0.25,
+          },
+          // The tenant's pull-quote treatment (AGL-1315), at editor scale.
+          '& [data-row-kind="quote"]': {
+            typography: 'body1',
+            lineHeight: 1.6,
+            fontStyle: 'italic',
+            borderLeft: '3px solid',
+            borderColor: 'primary.main',
+            pl: 2,
+            my: 1,
           },
           '& [data-md-link]': {
             color: 'primary.main',

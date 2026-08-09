@@ -17,11 +17,8 @@
 
 'use client'
 
-import {
-  AppLink,
-  LoadingTextComponent,
-  useLoading,
-} from '@aglyn/shared-ui-jsx'
+import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
 import { useContinueUrl } from '@aglyn/shared-util-next'
 import { Button, CircularProgress, Link, Stack, Typography } from '@mui/material'
 import { applyActionCode } from 'firebase/auth'

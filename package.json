@@ -77,6 +77,7 @@
     "worktree:new": "node tools/scripts/new-worktree.mjs"
   },
   "dependencies": {
+    "@base-ui/react": "1.6.0",
     "@codemirror/lang-json": "^6.0.1",
     "@data-driven-forms/common": "^4.2.0",
     "@data-driven-forms/react-form-renderer": "^4.2.0",
@@ -101,6 +102,8 @@
     "@mui/x-data-grid": "^9.10.1",
     "@mui/x-date-pickers": "^9.10.1",
     "@react-aria/utils": "^3.34.1",
+    "@simplewebauthn/browser": "13.3.0",
+    "@simplewebauthn/server": "13.3.2",
     "@stripe/react-stripe-js": "^3.10.0",
     "@stripe/stripe-js": "^5.10.0",
     "@swc/helpers": "0.5.23",

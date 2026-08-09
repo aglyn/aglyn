@@ -33,6 +33,7 @@ import { observer } from 'mobx-react-lite'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { SxBreakpoint } from '../utils/responsive-sx'
 import { readSxValue, writeSxValue } from '../utils/responsive-sx'
+import { getNodeStyleTarget } from '../utils/style-target'
 
 /**
  * Curated, grouped suggestions for the builder's property picker
@@ -99,7 +100,10 @@ type BuilderRow = { property: string; value: string }
  */
 export const CustomCssForm = observer((props: CustomCssFormProps) => {
   const { node, breakpoint } = props
-  const nodeSx = (node?.sx ?? {}) as Record<string, any>
+  // Same target the rest of the Styles panel writes (AGL-1306): a plain
+  // node's own sx, or an instance's root override slice.
+  const target = useMemo(() => getNodeStyleTarget(node), [node])
+  const nodeSx = (target.sx ?? {}) as Record<string, any>
   const [mode, setMode] = useState<'builder' | 'css' | 'json'>('builder')
   const [cssDraft, setCssDraft] = useState('')
   const [jsonDraft, setJsonDraft] = useState('')
@@ -135,22 +139,24 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
     (property: string, value: string | undefined) => {
       if (!node || !property) return
       action(() => {
-        node.sx = writeSxValue(
-          (node.sx ?? {}) as Record<string, any>,
-          property,
-          value === '' ? undefined : value,
-          breakpoint,
-        ) as any
+        target.setSx(
+          writeSxValue(
+            (target.sx ?? {}) as Record<string, any>,
+            property,
+            value === '' ? undefined : value,
+            breakpoint,
+          ),
+        )
       })()
     },
-    [node, breakpoint],
+    [node, target, breakpoint],
   )
 
   const applyCss = useCallback(() => {
     if (!node) return
     const parsed = parseCssDeclarations(cssDraft)
     action(() => {
-      let sx = (node.sx ?? {}) as Record<string, any>
+      let sx = (target.sx ?? {}) as Record<string, any>
       // Clear scalar declarations no longer present, then write the rest.
       for (const row of rows) {
         if (!(row.property in parsed)) {
@@ -160,10 +166,10 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
       for (const [property, value] of Object.entries(parsed)) {
         sx = writeSxValue(sx, property, value, breakpoint)
       }
-      node.sx = sx as any
+      target.setSx(sx)
     })()
     setError(null)
-  }, [node, cssDraft, rows, breakpoint])
+  }, [node, target, cssDraft, rows, breakpoint])
 
   const applyJson = useCallback(() => {
     if (!node) return
@@ -173,13 +179,13 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
         throw new Error('The sx value must be a JSON object')
       }
       action(() => {
-        node.sx = parsed
+        target.setSx(parsed)
       })()
       setError(null)
     } catch (parseError: any) {
       setError(parseError?.message ?? 'Invalid JSON')
     }
-  }, [node, jsonDraft])
+  }, [node, target, jsonDraft])
 
   return (
     <Stack spacing={1.5}>

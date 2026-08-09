@@ -20,9 +20,9 @@ import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import {
   Container,
   MdiIcon,
-  NavigationDrawerComponent,
   SrOnly,
 } from '@aglyn/shared-ui-jsx'
+import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import { Button, IconButton, Typography } from '@mui/material'
 import AuthErrorAlertComponent from './auth-error-alert.component'

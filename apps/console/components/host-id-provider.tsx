@@ -18,8 +18,15 @@
 
 import { collection, getDocs, limit, query, where } from 'firebase/firestore'
 import { useParams, usePathname, useRouter } from 'next/navigation'
-import { createContext, useContext, useEffect, useRef } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react'
+import { useFirestore, useHost, useUser } from '@aglyn/tenant-feature-instance'
 import { useHostResolution } from '../hooks/use-host-resolution'
 import { useOrgScope } from '../hooks/use-org-scope'
 
@@ -46,21 +53,84 @@ export const HostErrorContext = createContext<boolean>(false)
  * so the error state was permanent in practice. This retries in place.
  */
 export const HostRetryContext = createContext<() => void>(() => undefined)
+/**
+ * Whether the failure behind HostErrorContext was the ORG read rather than
+ * host resolution (AGL-1260). The guard's copy hangs on this — "your
+ * workspaces" failed to load, not this workspace's sites — and the retry it
+ * is handed re-runs the membership listen, not subdomain resolution.
+ */
+export const HostOrgErrorContext = createContext<boolean>(false)
+
+/**
+ * The current host's per-site plugin deny-list (AGL-1014), [] off host
+ * routes or while the doc loads. `useEnabledPluginIds` subtracts it so
+ * every host-scoped consumer of the ConsoleExtension registry — nav tabs,
+ * plugin pages, widget slots — reads the per-site set from one place.
+ */
+export const HostDisabledPluginsContext = createContext<readonly string[]>([])
+/**
+ * Whether the signed-in user is an ADMIN of the current host (AGL-1014):
+ * `memberRoles[uid] === 'admin'`, false off host routes or while loading.
+ * Gates the host Admin tab and page; the rules enforce the same boundary.
+ */
+export const HostAdminContext = createContext<boolean>(false)
 
 export const useHostId = () => useContext(HostIdContext)
+export const useHostDisabledPlugins = () =>
+  useContext(HostDisabledPluginsContext)
+export const useIsHostAdmin = () => useContext(HostAdminContext)
 export const useHostSubdomain = () => useContext(HostSubdomainContext)
 export const useHostReady = () => useContext(HostReadyContext)
 /** Whether host resolution gave up after retries (AGL-813). */
 export const useHostError = () => useContext(HostErrorContext)
 /** Re-run host resolution after it gave up (AGL-1200). */
 export const useHostRetry = () => useContext(HostRetryContext)
+/** Whether the ORG read (not host resolution) gave up (AGL-1260). */
+export const useHostOrgError = () => useContext(HostOrgErrorContext)
+
+/**
+ * Reads the resolved host's doc and provides its plugin policy (AGL-1014):
+ * the per-site `disabledPlugins` deny-list and whether the signed-in user
+ * is a site admin. Mounted only once a hostId exists — `useHost` needs a
+ * real doc path, and off host routes the contexts' defaults ([] / false)
+ * are already the right answer.
+ */
+function HostPluginPolicyBridge({
+  hostId,
+  uid,
+  children,
+}: {
+  hostId: string
+  uid?: string
+  children: ReactNode
+}) {
+  const {
+    doc: { data: host },
+  } = useHost({ hostId })
+  const disabledPlugins = useMemo(
+    () =>
+      Array.isArray(host?.disabledPlugins)
+        ? host.disabledPlugins.map(String)
+        : [],
+    [host?.disabledPlugins],
+  )
+  const isAdmin = Boolean(uid && host?.memberRoles?.[uid] === 'admin')
+  return (
+    <HostDisabledPluginsContext.Provider value={disabledPlugins}>
+      <HostAdminContext.Provider value={isAdmin}>
+        {children}
+      </HostAdminContext.Provider>
+    </HostDisabledPluginsContext.Provider>
+  )
+}
+HostPluginPolicyBridge.displayName = 'HostPluginPolicyBridge'
 
 export function HostIdProvider({ children }) {
   const params = useParams<{ orgSlug?: string; host?: string }>()
   const hostSubdomain = typeof params?.host === 'string' ? params.host : null
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { currentOrg, orgs } = useOrgScope()
+  const { currentOrg, orgs, error: orgError, retry: orgRetry } = useOrgScope()
   const router = useRouter()
   const pathname = usePathname()
 
@@ -75,7 +145,15 @@ export function HostIdProvider({ children }) {
     user?.uid,
     currentOrg?.$id ?? undefined,
   )
-  const hostReady = !hostSubdomain || Boolean(currentOrg && ready)
+  // The org read is resolution's prerequisite: useHostResolution holds while
+  // `orgId` is undefined, so when the membership listen died `hostReady`
+  // stayed false FOREVER and the guard span indefinitely (AGL-1260). A
+  // terminal org failure now SETTLES readiness with the error flag raised —
+  // the same "errored is settled, never a false 404" shape resolution itself
+  // uses (AGL-813) — and hands the guard the org read's retry instead.
+  const orgFailed = Boolean(hostSubdomain) && !currentOrg && orgError
+  const hostReady =
+    !hostSubdomain || Boolean(currentOrg && ready) || orgFailed
 
   // Cross-org deep links (AGL-628). A subdomain belonging to ANOTHER org the
   // user is a member of resolves to nothing above — the org-scoped resolution
@@ -126,14 +204,24 @@ export function HostIdProvider({ children }) {
 
   return (
     <HostReadyContext.Provider value={hostReady}>
-      <HostErrorContext.Provider value={Boolean(hostSubdomain) && error}>
-        <HostRetryContext.Provider value={retry}>
-          <HostSubdomainContext.Provider value={hostSubdomain}>
-            <HostIdContext.Provider value={hostId ?? null}>
-              {children}
-            </HostIdContext.Provider>
-          </HostSubdomainContext.Provider>
-        </HostRetryContext.Provider>
+      <HostErrorContext.Provider
+        value={(Boolean(hostSubdomain) && error) || orgFailed}
+      >
+        <HostOrgErrorContext.Provider value={orgFailed}>
+          <HostRetryContext.Provider value={orgFailed ? orgRetry : retry}>
+            <HostSubdomainContext.Provider value={hostSubdomain}>
+              <HostIdContext.Provider value={hostId ?? null}>
+                {hostId ? (
+                  <HostPluginPolicyBridge hostId={hostId} uid={user?.uid}>
+                    {children}
+                  </HostPluginPolicyBridge>
+                ) : (
+                  children
+                )}
+              </HostIdContext.Provider>
+            </HostSubdomainContext.Provider>
+          </HostRetryContext.Provider>
+        </HostOrgErrorContext.Provider>
       </HostErrorContext.Provider>
     </HostReadyContext.Provider>
   )

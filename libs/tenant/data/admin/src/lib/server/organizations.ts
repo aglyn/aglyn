@@ -361,6 +361,20 @@ export async function getOrgForHost(hostId: string): Promise<{
 }
 
 /**
+ * The host's per-site plugin deny-list (AGL-1014), for API dispatch and any
+ * other server consumer of `resolveHostEnabledPlugins`. `React.cache`-deduped
+ * per request like {@link resolveOrgIdForHost}. Fail-open to [] — an absent
+ * host doc or field means "nothing disabled here", never a lockout.
+ */
+export const getHostDisabledPlugins = cache(
+  async (hostId: string): Promise<string[]> => {
+    const snapshot = await firestore().collection('hosts').doc(hostId).get()
+    const disabled = snapshot.data()?.['disabledPlugins']
+    return Array.isArray(disabled) ? disabled.map(String) : []
+  },
+)
+
+/**
  * Billing/entitlement source for a user without host context (account-
  * level APIs): the explicit workspace org when given, else the first org
  * from the reverse index. Null for accounts with no org yet.

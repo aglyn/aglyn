@@ -21,6 +21,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
+  BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
   LayoutChromeContext,
   PropertiesDialogComponent,
@@ -40,11 +41,8 @@ import {
   ICON_VARIANT_MODIFY_SAVE,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
-import {
-  AppLink,
-  LOADING_OVERLAY_ELEMENT,
-  useLoading,
-} from '@aglyn/shared-ui-jsx'
+import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   getGoogleFontsUrl,
@@ -104,7 +102,7 @@ import {
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
-import { buildScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
+import { resolveScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
 import {
   collectionTemplatePublishMessage,
   collectionTemplateRoutesSummary,
@@ -322,9 +320,19 @@ function BesignerPage(props) {
   })
   clearMirrorRef.current = coediting.clearMirror
 
-  const liveUrl = useMemo(
-    () => buildScreenLiveUrl(hostResult?.data, screenId),
-    [hostResult?.data, screenId],
+  // Publishing a collection's list/entry template is what makes the compose
+  // pipeline use it, but the template is not a page of the site (AGL-1267):
+  // its routing-map slug 404s, so nothing here may name it (AGL-1269).
+  const { templateScreenIds, routesByScreenId } = useCollectionTemplates(hostId)
+  // AGL-1271: a template's live URL is decided by the collection that
+  // renders it, not its own (dropped) routing-map entry.
+  const { url: liveUrl, unavailableReason: liveUnavailableReason } = useMemo(
+    () =>
+      resolveScreenLiveUrl(hostResult?.data, screenId, {
+        isTemplate: templateScreenIds.has(screenId),
+        routes: routesByScreenId.get(screenId),
+      }),
+    [hostResult?.data, screenId, templateScreenIds, routesByScreenId],
   )
   // The site's theme with this site's overrides resolved over it
   // (AGL-1021). The editor must render exactly what the tenant will.
@@ -451,10 +459,6 @@ function BesignerPage(props) {
     | Record<string, string>
     | undefined
 
-  // Publishing a collection's list/entry template is what makes the compose
-  // pipeline use it, but the template is not a page of the site (AGL-1267):
-  // its routing-map slug 404s, so nothing here may name it (AGL-1269).
-  const { templateScreenIds, routesByScreenId } = useCollectionTemplates(hostId)
   const isCollectionTemplate = templateScreenIds.has(screenId)
   const templateRoutes = collectionTemplateRoutesSummary(
     routesByScreenId.get(screenId),
@@ -1016,6 +1020,7 @@ function BesignerPage(props) {
               onSave={handleSave}
               onPreview={handlePreview}
               liveUrl={liveUrl}
+              liveUnavailableReason={liveUnavailableReason}
               onPropertiesEdit={() => setScreenDialog(true)}
               saveAvailable={saveAvailable}
             />
@@ -1023,24 +1028,7 @@ function BesignerPage(props) {
                 out after twenty more minutes of editing is the bad
                 version of this (AGL-674). */}
             {remoteChanged ? (
-              <Alert
-                severity="warning"
-                sx={{ borderRadius: 0, position: 'relative', zIndex: 'appBar' }}
-                action={
-                  <Button
-                    color="inherit"
-                    size="small"
-                    onClick={() => window.location.reload()}
-                  >
-                    {'Reload'}
-                  </Button>
-                }
-              >
-                {'Someone else saved this screen while you were editing. ' +
-                  'Saving is paused so their work is not overwritten — ' +
-                  'reload to pick up their changes. Nothing you have done ' +
-                  'here is lost until you do.'}
-              </Alert>
+              <BesignerConflictAlertComponent noun="screen" />
             ) : null}
             {layoutId ? (
               <Alert

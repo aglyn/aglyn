@@ -32,6 +32,7 @@ import CodeIcon from '@mui/icons-material/Code'
 import FormatBoldIcon from '@mui/icons-material/FormatBold'
 import FormatItalicIcon from '@mui/icons-material/FormatItalic'
 import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted'
+import FormatQuoteIcon from '@mui/icons-material/FormatQuote'
 import ImageIcon from '@mui/icons-material/Image'
 import InsertLinkIcon from '@mui/icons-material/InsertLink'
 import TableChartIcon from '@mui/icons-material/TableChart'
@@ -163,6 +164,13 @@ export function MarkdownEditorToolbar({
           icon={<FormatListBulletedIcon fontSize="small" />}
           onCommand={onCommand}
           selected={kind === 'listItem'}
+        />
+        <ToolbarButton
+          command="quote"
+          label="Quote"
+          icon={<FormatQuoteIcon fontSize="small" />}
+          onCommand={onCommand}
+          selected={kind === 'quote'}
         />
       </ToggleButtonGroup>
 

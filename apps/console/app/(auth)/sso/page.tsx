@@ -18,11 +18,8 @@
 'use client'
 
 import { FIELD_SCHEMA_EMAIL } from '@aglyn/shared-data-forms'
-import {
-  AppLink,
-  LoadingTextComponent,
-  useLoading,
-} from '@aglyn/shared-ui-jsx'
+import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import { CircularProgress, Typography } from '@mui/material'

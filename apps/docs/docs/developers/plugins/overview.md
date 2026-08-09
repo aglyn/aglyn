@@ -83,6 +83,11 @@ installing.
   to your environment.
 - See [Sandbox security model](reference/sandbox-security.md) for what that isolation
   actually enforces — including the per-plugin network policy — if you're writing one.
+- Your workspace decides which plugins are enabled at all, and a **site admin can narrow
+  that further per site** from the site's **Admin → Plugins** page. A plugin disabled for
+  a site disappears from that site's navigation, editor, published pages, and API — other
+  sites in the workspace are unaffected, and a site can never enable a plugin the
+  workspace has switched off.
 
 ## Configure
 

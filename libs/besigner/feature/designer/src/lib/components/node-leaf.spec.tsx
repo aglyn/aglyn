@@ -458,6 +458,42 @@ describe('component instance preview (AGL-1251)', () => {
     const canvasIds = Object.keys(Aglyn.canvas.toJSON()?.nodes ?? {})
     expect(canvasIds.some((id) => id.startsWith('cmp__'))).toBe(false)
   })
+
+  it("renders the ROOT with this instance's style overrides merged in (AGL-1306)", () => {
+    const styledDefinition = {
+      rootId: 'root',
+      nodes: {
+        root: {
+          $id: 'root',
+          componentId: 'div',
+          sx: { backgroundColor: '#101828', paddingTop: '64px' },
+          nodes: [],
+        },
+      },
+    } as any
+    const node = {
+      $id: 'inst1',
+      type: 'node',
+      componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+      props: { refId: 'hero' },
+      styleOverrides: {
+        [Aglyn.STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#0b4a6f' },
+      },
+      sx: {},
+      nodes: [],
+    } as any
+    const { baseElement } = renderInstance(node, { hero: styledDefinition })
+    const root = baseElement.querySelector(
+      '[data-aglyn="leaf:cmp__inst1__root"]',
+    ) as HTMLElement
+    expect(root).toBeTruthy()
+    const css = emotionCssFor(root)
+    // The overridden leaf wins; the component's untouched sibling survives
+    // — the same merged result compose hands Preview and tenant SSR.
+    expect(css).toContain('background-color:#0b4a6f')
+    expect(css).toContain('padding-top:64px')
+    expect(css).not.toContain('background-color:#101828')
+  })
 })
 
 describe('denormalizeTree', () => {

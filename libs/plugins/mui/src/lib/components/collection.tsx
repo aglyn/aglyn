@@ -364,6 +364,30 @@ const CollectionEntryBody = forwardRef<
             </Box>
           )
         }
+        // The article template's pull-quote (AGL-1315, Figma 170:225):
+        // larger italic prose behind a left accent. Palette tokens only, so
+        // it follows the site theme in both modes.
+        if (block.type === 'quote') {
+          return (
+            <Typography
+              key={index}
+              component="blockquote"
+              sx={{
+                my: 3,
+                mx: 0,
+                pl: 2.5,
+                borderLeft: '3px solid',
+                borderColor: 'primary.main',
+                fontStyle: 'italic',
+                fontSize: '1.25em',
+                lineHeight: 1.6,
+                color: 'text.primary',
+              }}
+            >
+              {renderInlines(block.inlines, suppressNavigation)}
+            </Typography>
+          )
+        }
         return (
           <Typography
             key={index}

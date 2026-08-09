@@ -38,11 +38,11 @@ import {
   AppLink,
   AppLinkNakedLinkProps,
   Container,
-  NavigationDrawerComponent,
   SrOnly,
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
+import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -62,6 +62,7 @@ import {
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -101,7 +102,7 @@ import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
-import { buildScreenLiveUrl } from '../../../../../../constants/tenant-links'
+import { resolveScreenLiveUrl } from '../../../../../../constants/tenant-links'
 import {
   publishScreenRoute,
   syncScreenRouteEntries,
@@ -565,9 +566,17 @@ function Screens(props) {
 
   const renderRowActions = useCallback(
     (row: ScreenHierarchyRow) => {
-      // AGL-374: buildScreenLiveUrl handles slug→path normalization,
-      // custom domains, and preview-console ?tenantHost= links.
-      const liveUrl = buildScreenLiveUrl(hostData, row.$id)
+      // AGL-374: slug→path normalization, custom domains, preview links;
+      // AGL-1271: a collection template's live URL is decided by the
+      // collection that renders it, not its own (dropped) routing entry.
+      const { url: liveUrl, unavailableReason } = resolveScreenLiveUrl(
+        hostData,
+        row.$id,
+        {
+          isTemplate: collectionTemplates.templateScreenIds.has(row.$id),
+          routes: collectionTemplates.routesByScreenId.get(row.$id),
+        },
+      )
       return (
       <>
         {liveUrl ? (
@@ -581,6 +590,15 @@ function Screens(props) {
           >
             <MdiIcon path={mdiOpenInNew.path} size={0.8} />
           </AppLink>
+        ) : unavailableReason ? (
+          <Tooltip title={unavailableReason}>
+            {/* span: a disabled button emits no events for the tooltip */}
+            <span>
+              <IconButton size="small" aria-label="No single live page" disabled>
+                <MdiIcon path={mdiOpenInNew.path} size={0.8} />
+              </IconButton>
+            </span>
+          </Tooltip>
         ) : null}
         {hostLocales.length ? (
           <IconButton
@@ -644,6 +662,7 @@ function Screens(props) {
       hostData,
       routingMap,
       buildTemplateSource,
+      collectionTemplates,
     ],
   )
 

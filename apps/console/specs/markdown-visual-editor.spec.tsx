@@ -115,6 +115,17 @@ describe('markdownToRows / rowsToMarkdown', () => {
     expect(rowsToMarkdown(rows)).toBe(source)
   })
 
+  it('carries quotes as editable rows and round-trips them (AGL-1315)', () => {
+    const source = 'Intro.\n\n> A **pull** quote.\n\nOutro.'
+    const rows = markdownToRows(source)
+    expect(rows.map((row) => row.kind)).toEqual([
+      'paragraph',
+      'quote',
+      'paragraph',
+    ])
+    expect(rowsToMarkdown(rows)).toBe(source)
+  })
+
   it('yields a single empty paragraph for an empty document', () => {
     const rows = markdownToRows('')
     expect(rows).toHaveLength(1)
@@ -310,6 +321,15 @@ describe('MarkdownVisualEditor', () => {
     listRow.textContent = '- item'
     fireEvent.input(listRow)
     expect(lastEmitted(listChange)).toBe('- item')
+  })
+
+  it('converts a "> " prefix to a quote row (AGL-1315)', () => {
+    const { handleChange } = renderEditor('')
+    const row = rowEls()[0] as HTMLElement
+    row.textContent = '> wisdom'
+    fireEvent.input(row)
+    expect(rowEls()[0]?.dataset['rowKind']).toBe('quote')
+    expect(lastEmitted(handleChange)).toBe('> wisdom')
   })
 
   it('converts a "# " prefix to a heading too (AGL-1082)', () => {

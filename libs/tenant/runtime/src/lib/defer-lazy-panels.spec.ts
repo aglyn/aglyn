@@ -23,13 +23,15 @@ import {
 /** Tabs with `panels` labels, each panel holding `depth` nested children. */
 const doc = (opts: {
   labels?: string
+  ssrPanels?: boolean
   lazyPanels?: boolean
   panelLabels?: string[]
   panelOrder?: string[]
 }): Record<string, any> => {
   const {
     labels = 'One\nTwo\nThree',
-    lazyPanels = true,
+    ssrPanels = false,
+    lazyPanels = false,
     panelLabels = ['One', 'Two', 'Three'],
   } = opts
   const order = opts.panelOrder ?? panelLabels
@@ -39,7 +41,11 @@ const doc = (opts: {
       $id: 'tabs',
       componentId: 'muiTabs',
       parentId: 'root',
-      props: { labels, ...(lazyPanels ? { lazyPanels: true } : {}) },
+      props: {
+        labels,
+        ...(ssrPanels ? { ssrPanels: true } : {}),
+        ...(lazyPanels ? { lazyPanels: true } : {}),
+      },
       nodes: order.map((l) => `panel-${l}`),
     },
   }
@@ -93,11 +99,24 @@ describe('deferLazyPanelNodes (AGL-1285)', () => {
     expect(nodes['panel-Two'].nodes).toEqual([])
   })
 
-  it('does nothing when lazyPanels is off', () => {
-    const input = doc({ lazyPanels: false })
+  it('defers by default — no opt-in required (AGL-1283 option 3)', () => {
+    // `doc({})` authors NO mounting prop at all; deferral is the default.
+    const result = deferLazyPanelNodes(doc({}))
+    expect(result.removed).toBe(4)
+  })
+
+  it('does nothing when the author set ssrPanels — the SEO escape hatch', () => {
+    const input = doc({ ssrPanels: true })
     const result = deferLazyPanelNodes(input)
     expect(result.removed).toBe(0)
     expect(result.nodes).toBe(input)
+  })
+
+  it('still defers documents carrying the legacy lazyPanels opt-in', () => {
+    // Authored while lazy was opt-in (AGL-1283); the prop is subsumed by the
+    // default and must not change the outcome.
+    const result = deferLazyPanelNodes(doc({ lazyPanels: true }))
+    expect(result.removed).toBe(4)
   })
 
   /**

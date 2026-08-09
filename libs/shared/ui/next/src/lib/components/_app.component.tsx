@@ -16,7 +16,7 @@
  */
 
 import { HAS_DOCUMENT } from '@aglyn/shared-data-enums'
-import { EmotionCacheProvider } from '@aglyn/shared-ui-jsx'
+import { EmotionCacheProvider } from '@aglyn/shared-ui-jsx/components/emotion-cache-provider'
 import Head from 'next/head'
 import {
   Fragment,

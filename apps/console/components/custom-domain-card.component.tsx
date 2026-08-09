@@ -69,6 +69,29 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
   )
   const connected = host?.cname as string | undefined
   const [domain, setDomain] = useState('')
+  // Each record line shows the SHAPE of name it applies to, derived from the
+  // typed value rather than echoing it into both (the echo claimed a CNAME
+  // for a bare apex and an A record for a www — both wrong). A bare apex
+  // gains www. on the CNAME line; a www-prefixed name sheds it on the A
+  // line; deeper subdomains keep the typed value on the CNAME line and the
+  // A line keeps its placeholder, since an apex example derived from
+  // shop.example.co.uk would just be a guess.
+  const typed = domain.trim().toLowerCase()
+  const labels = typed ? typed.split('.').filter(Boolean) : []
+  const isBareApex = labels.length === 2
+  const startsWithWww = /^www\./.test(typed)
+  const cnameExample = !typed
+    ? 'www.your-domain.com'
+    : isBareApex
+      ? `www.${typed}`
+      : typed
+  const apexExample = !typed
+    ? 'your-domain.com'
+    : isBareApex
+      ? typed
+      : startsWithWww
+        ? typed.replace(/^www\./, '')
+        : 'your-domain.com'
   const [checking, setChecking] = useState(false)
   const entitled = hasEntitlement('custom-domain', org)
 
@@ -298,7 +321,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
                 fontFamily: 'monospace',
               }}
             >
-              {`CNAME  ${domain.trim() || 'www.your-domain.com'}  →  ${CNAME_TARGET}`}
+              {`CNAME  ${cnameExample}  →  ${CNAME_TARGET}`}
             </Typography>
             <Typography
               variant="body2"
@@ -310,7 +333,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
                 fontFamily: 'monospace',
               }}
             >
-              {`A      ${domain.trim() || 'your-domain.com'}  →  ${APEX_A_TARGET}`}
+              {`A      ${apexExample}  →  ${APEX_A_TARGET}`}
             </Typography>
             <Stack direction="row" spacing={1}>
               <TextField

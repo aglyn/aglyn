@@ -22,6 +22,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   Alert,
+  Avatar,
   Button,
   Chip,
   Divider,
@@ -50,6 +51,8 @@ import { useOrgSlug } from '../hooks/use-org-scope'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import EditListingDialog from './marketplace/edit-listing-dialog.component'
+import MediaPickerDialog from './media/media-picker-dialog.component'
+import mediaSrc from '../utils/media-src'
 
 const HANDLE_PATTERN = /^[a-z0-9][a-z0-9-]{2,29}$/
 
@@ -163,11 +166,40 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const [handle, setHandle] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
+  // Logo, support contact and social links (AGL-1009). `avatarUrl` and
+  // `website` existed server-side already — they just had no form input and
+  // no rendering, so they were dead fields until now.
+  const [avatarUrl, setAvatarUrl] = useState('')
+  const [website, setWebsite] = useState('')
+  const [supportEmail, setSupportEmail] = useState('')
+  const [supportUrl, setSupportUrl] = useState('')
+  const [githubUrl, setGithubUrl] = useState('')
+  const [xUrl, setXUrl] = useState('')
+  const [linkedinUrl, setLinkedinUrl] = useState('')
+  const [logoPickerOpen, setLogoPickerOpen] = useState(false)
   useEffect(() => {
     setHandle(profile?.handle ?? '')
     setDisplayName(profile?.displayName ?? '')
     setBio(profile?.bio ?? '')
-  }, [profile?.handle, profile?.displayName, profile?.bio])
+    setAvatarUrl(profile?.avatarUrl ?? '')
+    setWebsite(profile?.website ?? '')
+    setSupportEmail(profile?.supportEmail ?? '')
+    setSupportUrl(profile?.supportUrl ?? '')
+    setGithubUrl(profile?.githubUrl ?? '')
+    setXUrl(profile?.xUrl ?? '')
+    setLinkedinUrl(profile?.linkedinUrl ?? '')
+  }, [
+    profile?.handle,
+    profile?.displayName,
+    profile?.bio,
+    profile?.avatarUrl,
+    profile?.website,
+    profile?.supportEmail,
+    profile?.supportUrl,
+    profile?.githubUrl,
+    profile?.xUrl,
+    profile?.linkedinUrl,
+  ])
 
   const validHandle = HANDLE_PATTERN.test(handle)
 
@@ -190,6 +222,15 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           handle,
           displayName: displayName.trim(),
           bio: bio.trim(),
+          // AGL-1009: validated server-side (https-only, fixed social
+          // hosts) — an empty string explicitly clears the stored field.
+          avatarUrl: avatarUrl.trim(),
+          website: website.trim(),
+          supportEmail: supportEmail.trim(),
+          supportUrl: supportUrl.trim(),
+          githubUrl: githubUrl.trim(),
+          xUrl: xUrl.trim(),
+          linkedinUrl: linkedinUrl.trim(),
         }),
       })
       const payload = await response.json().catch(() => null)
@@ -207,7 +248,22 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         allowDuplicate: true,
       })
     }
-  }, [orgId, validHandle, handle, displayName, bio, user, enqueueSnackbar])
+  }, [
+    orgId,
+    validHandle,
+    handle,
+    displayName,
+    bio,
+    avatarUrl,
+    website,
+    supportEmail,
+    supportUrl,
+    githubUrl,
+    xUrl,
+    linkedinUrl,
+    user,
+    enqueueSnackbar,
+  ])
 
   // The publisher agreement (AGL-1077). `none` and `outdated` get different
   // copy on purpose: "you never agreed" and "the terms moved" are different
@@ -400,6 +456,88 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
             size="small"
             multiline
             minRows={2}
+          />
+          {/* Logo (AGL-1009): picked from the media library like every
+              other image the console chooses — never a pasted URL. */}
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+            <Avatar
+              src={avatarUrl || undefined}
+              alt={displayName || 'Publisher logo'}
+              sx={{ width: 56, height: 56 }}
+              variant="rounded"
+            >
+              {(displayName || handle || '?').slice(0, 1).toUpperCase()}
+            </Avatar>
+            <Stack direction="row" spacing={1}>
+              <Button size="small" onClick={() => setLogoPickerOpen(true)}>
+                {avatarUrl ? 'Replace logo' : 'Choose logo from library'}
+              </Button>
+              {avatarUrl ? (
+                <Button
+                  size="small"
+                  color="error"
+                  onClick={() => setAvatarUrl('')}
+                >
+                  {'Remove'}
+                </Button>
+              ) : null}
+            </Stack>
+          </Stack>
+          {/* Support contact (AGL-1009): buyers of a paid plugin need
+              somewhere to go, and a reviewer needs it more. */}
+          <TextField
+            label="Support email"
+            value={supportEmail}
+            onChange={(event) => setSupportEmail(event.target.value)}
+            size="small"
+            type="email"
+          />
+          <TextField
+            label="Support URL"
+            value={supportUrl}
+            onChange={(event) => setSupportUrl(event.target.value)}
+            size="small"
+            helperText="https:// only"
+          />
+          <TextField
+            label="Website"
+            value={website}
+            onChange={(event) => setWebsite(event.target.value)}
+            size="small"
+            helperText="https:// only"
+          />
+          {/* Fixed social set (AGL-1009): the storefront renders these as
+              icons, so it is a known trio rather than a free-form list. */}
+          <TextField
+            label="GitHub"
+            value={githubUrl}
+            onChange={(event) => setGithubUrl(event.target.value)}
+            size="small"
+            helperText="https://github.com/…"
+          />
+          <TextField
+            label="X"
+            value={xUrl}
+            onChange={(event) => setXUrl(event.target.value)}
+            size="small"
+            helperText="https://x.com/…"
+          />
+          <TextField
+            label="LinkedIn"
+            value={linkedinUrl}
+            onChange={(event) => setLinkedinUrl(event.target.value)}
+            size="small"
+            helperText="https://linkedin.com/…"
+          />
+          <MediaPickerDialog
+            orgId={orgId}
+            open={logoPickerOpen}
+            onClose={() => setLogoPickerOpen(false)}
+            onPick={(media) => {
+              setLogoPickerOpen(false)
+              const url = mediaSrc(media)
+              if (url) setAvatarUrl(url)
+            }}
           />
           <Button
             variant="contained"

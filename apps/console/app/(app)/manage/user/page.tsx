@@ -82,6 +82,7 @@ import {
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import CardDisplayFormTemplate from '../../../../components/card-display-form-template'
 import CloseAccountCard from '../../../../components/close-account-card.component'
+import PasskeysCard from '../../../../components/passkeys-card.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -713,12 +714,23 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     { id: 'account', label: 'Account', content: accountCard },
     { id: 'profile', label: 'Profile image', content: profileCard },
     { id: 'basic', label: 'Basic info', content: formPanel(basicSchema, handleBasicSave) },
-    ...(hasPassword
+    // Security is no longer password-only (AGL-662): passkeys apply to every
+    // project-pool account, so the tab shows whenever there is a password to
+    // change OR a passkey to manage. SSO-governed accounts get neither —
+    // passkeys are project-pool only and their IdP owns the credentials.
+    ...(hasPassword || !ssoGoverned
       ? [
           {
             id: 'security',
             label: 'Security',
-            content: formPanel(securitySchema, handleSecuritySave),
+            content: (
+              <Stack spacing={3}>
+                {hasPassword
+                  ? formPanel(securitySchema, handleSecuritySave)
+                  : null}
+                <PasskeysCard />
+              </Stack>
+            ),
           },
         ]
       : []),

@@ -17,10 +17,8 @@
 'use client'
 
 import { Alert, Button } from '@mui/material'
-import { signOut } from 'firebase/auth'
 import { useEffect, useState } from 'react'
-import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { markInteractiveSignOut } from '../utils/interactive-signin'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
   probePublicRead,
   type PublicReadProbe,
@@ -29,6 +27,10 @@ import {
   subscribeSessionHealth,
   type SessionHealthState,
 } from '../utils/session-health'
+import {
+  captureReauthIdentity,
+  requestSessionReauth,
+} from '../utils/session-reauth'
 
 /**
  * "Your session needs refreshing" (AGL-1063).
@@ -49,7 +51,6 @@ import {
  */
 export function SessionHealthBanner() {
   const { data: user } = useUser()
-  const auth = useAuth()
   const firestore = useFirestore()
   // Which layer is refusing us — measured, not guessed (AGL-1143).
   const [probe, setProbe] = useState<PublicReadProbe | null>(null)
@@ -141,17 +142,13 @@ export function SessionHealthBanner() {
           color="inherit"
           size="small"
           onClick={() => {
-            // Same contract as the impersonation exit: mark the sign-out as
-            // intentional so the session hook retires the shared cookie
-            // instead of restoring from it (AGL-543).
-            markInteractiveSignOut()
-            void signOut(auth).then(() =>
-              window.location.assign(
-                `/signin?continue=${encodeURIComponent(
-                  window.location.pathname + window.location.search,
-                )}`,
-              ),
-            )
+            // In-place re-auth (AGL-664) instead of the old sign-out +
+            // hard redirect: the dialog performs the same full
+            // sign-out/sign-in cycle — the only heal for a stale session —
+            // but the route and any unsaved work stay on screen. Still
+            // user-initiated: the heuristic only ever raises this banner,
+            // never the modal itself.
+            requestSessionReauth('stale', captureReauthIdentity(user as any))
           }}
         >
           {'Sign in again'}

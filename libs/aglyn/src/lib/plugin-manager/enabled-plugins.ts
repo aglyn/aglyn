@@ -124,6 +124,45 @@ export function resolveEnabledPlugins(
   return Array.from(new Set([...ALWAYS_ON, ...base]))
 }
 
+/**
+ * Subtracts a host's per-site deny-list from an enabled set (AGL-1014).
+ * Always-on ids survive — the base component library cannot be switched
+ * off per site any more than per org. Order of the surviving ids is kept.
+ */
+export function subtractDisabledPlugins(
+  pluginIds: readonly string[],
+  disabledPlugins?: readonly string[] | null,
+): string[] {
+  if (!Array.isArray(disabledPlugins) || !disabledPlugins.length)
+    return [...pluginIds]
+  const disabled = new Set(disabledPlugins.map(String))
+  return pluginIds.filter(
+    (id) => ALWAYS_ON.includes(id) || !disabled.has(id),
+  )
+}
+
+/**
+ * A HOST's effective enabled-plugin set (AGL-1014): the org's resolved set
+ * minus the host's `disabledPlugins` deny-list. This is the single source
+ * of truth for per-site enablement — console navigation, the editor,
+ * published sites, and API dispatch must all read it, or a "disabled"
+ * plugin is merely hidden, not off.
+ *
+ * Semantics are narrow-only by construction: a host stores what it turns
+ * OFF, so it can never widen beyond what the org enables, and an absent
+ * field means every org-enabled plugin runs (newly installed plugins
+ * default to enabled per site until a host admin disables them).
+ */
+export function resolveHostEnabledPlugins(
+  org?: { enabledPlugins?: string[] } | null,
+  host?: { disabledPlugins?: string[] } | null,
+): string[] {
+  return subtractDisabledPlugins(
+    resolveEnabledPlugins(org),
+    host?.disabledPlugins,
+  )
+}
+
 export function isPluginEnabled(
   org: { enabledPlugins?: string[] } | null | undefined,
   pluginId: string,

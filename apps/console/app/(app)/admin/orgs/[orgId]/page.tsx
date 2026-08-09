@@ -47,6 +47,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { signInWithCustomToken } from 'firebase/auth'
@@ -55,9 +56,7 @@ import {
   doc,
   getCountFromServer,
   limit,
-  orderBy,
   query,
-  where,
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -71,16 +70,25 @@ import { docsHelp } from '../../../../../constants/docs-links'
 import MediaUrlField from '../../../../../components/media-url-field.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import StaffOrgActions from '../../../../../components/staff-org-actions.component'
+import StaffOrgUsageTable, {
+  type StaffOrgUsageMonth,
+} from '../../../../../components/staff-org-usage-table.component'
+import StaffOrgSummaryCard, {
+  staffPersonLabel,
+  type StaffPerson,
+} from '../../../../../components/staff-org-summary-card.component'
 import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 
 /**
- * Read-only organization detail for staff (AGL-207/238). Support surface
- * WITHOUT session impersonation: staff read privileges render the org's
- * sites, member roster, effective entitlements, and the audit slice for
- * this org — no minted tokens, no write surface, so there is nothing to
- * lock down. Mutations stay on the audited Organizations list page.
+ * Organization detail for staff (AGL-207/238): the org's sites, member
+ * roster, effective entitlements, metered usage and the audit slice for
+ * this org. Since AGL-939 it also carries the audited org actions —
+ * plan/entitlement override, suspend/unsuspend and erasure request — via
+ * the same shared StaffOrgActions the Organizations list uses, so staff
+ * no longer bounce back to the list to act.
  */
 /**
  * A human label for whatever payment method is on file (AGL-940). Checkout
@@ -135,6 +143,13 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const [orgReady, setOrgReady] = useState(false)
   const [orgError, setOrgError] = useState(false)
   const [orgNonce, setOrgNonce] = useState(0)
+  /**
+   * The audit slice and the uid → person map, joined by the same endpoint
+   * (AGL-938). `orgAudit === null` means "the slice could not be read",
+   * which the card renders as a failure — never as an empty history.
+   */
+  const [orgAudit, setOrgAudit] = useState<any[] | null>(null)
+  const [people, setPeople] = useState<Record<string, StaffPerson>>({})
   useEffect(() => {
     if (!isStaff || !orgId) return undefined
     let active = true
@@ -156,7 +171,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         }
         if (!response.ok) throw new Error(String(response.status))
         const payload = await response.json()
-        if (active) setOrgDoc(payload?.org ?? null)
+        if (active) {
+          setOrgDoc(payload?.org ?? null)
+          setOrgAudit(payload?.audit ?? null)
+          setPeople(payload?.people ?? {})
+        }
       } catch {
         // Failure is reported as failure, never as an empty org — the alert
         // below tells staff not to act on what they are looking at.
@@ -232,23 +251,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     [firestore, orgId],
     { idField: '$id' },
   )
-  const { data: auditDocs } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'adminAudit'),
-        orderBy('at', 'desc'),
-        limit(200),
-      ),
-    [firestore],
-    { idField: '$id' },
-  )
-  const orgAudit = useMemo(
-    () =>
-      (auditDocs ?? [])
-        .filter((entry: any) => String(entry.target ?? '').includes(orgId))
-        .slice(0, 20),
-    [auditDocs, orgId],
-  )
+  // The audit slice used to be a rule-gated client listener over
+  // `adminAudit` here; it now arrives joined onto `/api/admin/org-detail`
+  // with each actor uid resolved to a person (AGL-938) — the same move off
+  // the client that AGL-929/937 made for hosts and the org itself.
 
   // Stripe billing detail (AGL-245): invoices + payment method.
   const [billing, setBilling] = useState<{
@@ -299,6 +305,40 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         setBilling(payload)
       } catch {
         if (active) setBillingError('Billing lookup failed')
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [isStaff, orgId, user])
+
+  // Metered usage (AGL-939): the last 12 monthly rollups from
+  // /api/admin/org-usage — the endpoint the list page's Usage dialog already
+  // calls, rendered here so the plan, its limits and actual consumption are
+  // visible together. `null` months = the read failed (rendered as a
+  // failure, never as "no usage").
+  const [usageMonths, setUsageMonths] = useState<StaffOrgUsageMonth[] | null>(
+    null,
+  )
+  const [usageReady, setUsageReady] = useState(false)
+  useEffect(() => {
+    if (!isStaff || !orgId || !user) return undefined
+    let active = true
+    setUsageReady(false)
+    void (async () => {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch(
+          `/api/admin/org-usage?orgId=${encodeURIComponent(orgId)}`,
+          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
+        )
+        if (!response.ok) throw new Error(String(response.status))
+        const payload = await response.json()
+        if (active) setUsageMonths(payload.months ?? [])
+      } catch {
+        if (active) setUsageMonths(null)
+      } finally {
+        if (active) setUsageReady(true)
       }
     })()
     return () => {
@@ -783,111 +823,62 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
               </Alert>
             ) : null}
             <Alert severity="info" sx={{ mb: 3 }}>
-              {'Plan/entitlement overrides happen on the Organizations ' +
-                'page; profile edits below are audited to the org ' +
-                'activity log (AGL-358).'}
+              {'Every action here is audited — overrides, suspension and ' +
+                'erasure to adminAudit; profile edits to the org activity ' +
+                'log (AGL-358).'}
             </Alert>
+            {/* The audited org actions (AGL-939), shared with the
+                Organizations list. Status chips make the current state
+                visible before staff act on it. */}
+            <CardDisplay
+              header={'Staff actions'}
+              help={docsHelp('billing', {
+                anchor: '#tiers--entitlements',
+                excerpt:
+                  'Audited staff controls for this organization — override the plan and entitlements, suspend its sites, or flag GDPR erasure.',
+              })}
+              contentGutterX
+              contentGutterY
+              sx={{ mb: 3 }}
+            >
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+              >
+                {org?.suspendedAt ? (
+                  <Chip label="suspended" size="small" color="error" />
+                ) : null}
+                {org?.erasureRequestedAt ? (
+                  <Chip
+                    label="erasure requested"
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                  />
+                ) : null}
+                <StaffOrgActions
+                  org={org}
+                  onChanged={() => setOrgNonce((nonce) => nonce + 1)}
+                />
+              </Stack>
+            </CardDisplay>
             <GridItems
               spacing={3}
               items={[
                 {
                   size: { xs: 12, md: 6 },
                   children: (
-                    <CardDisplay
-                      header={'Summary'}
-                      help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt:
-                          'Plan, subscription, and suspension state at a glance. Impersonating the owner replaces your session and is audited.',
-                      })}
-                      contentGutterX
-                      contentGutterY
-                    >
-                      <Stack spacing={1}>
-                        <Stack direction="row" spacing={1}>
-                          <Chip
-                            label={org?.plan ?? 'no plan'}
-                            size="small"
-                            color={org?.plan ? 'primary' : 'default'}
-                          />
-                          {org?.suspendedAt ? (
-                            <Chip
-                              label={`suspended${
-                                org?.suspendedReason
-                                  ? `: ${org.suspendedReason}`
-                                  : ''
-                              }`}
-                              size="small"
-                              color="error"
-                            />
-                          ) : null}
-                          {org?.subscription?.status ? (
-                            <Chip
-                              label={org.subscription.status}
-                              size="small"
-                              variant="outlined"
-                            />
-                          ) : null}
-                        </Stack>
-                        <Typography variant="body2">
-                          {org?.name ?? '—'}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ fontFamily: 'monospace' }}
-                        >
-                          {`${orgId} · ${org?.slug ?? 'no slug'}`}
-                        </Typography>
-                        {/* The owner uid is the one identifier on this
-                            card that has a page of its own (AGL-244). */}
-                        {org?.ownerUid ? (
-                          <AppLink
-                            variant="caption"
-                            color="text.secondary"
-                            underline="hover"
-                            sx={{ fontFamily: 'monospace' }}
-                            href={buildRoute(Route.ADMIN_USER_DETAIL, {
-                              uid: org.ownerUid,
-                            })}
-                          >
-                            {`Owner: ${org.ownerUid}`}
-                          </AppLink>
-                        ) : (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ fontFamily: 'monospace' }}
-                          >
-                            {'Owner: —'}
-                          </Typography>
-                        )}
-                        <Typography variant="caption" color="text.secondary">
-                          {`Stripe: ${org?.stripeCustomerId ?? '—'}`}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {`Created ${
-                            org?.createdAt?.seconds
-                              ? new Date(
-                                  org.createdAt.seconds * 1000,
-                                ).toLocaleDateString()
-                              : '—'
-                          }`}
-                        </Typography>
-                        {org?.ownerUid ? (
-                          // Org impersonation (AGL-357).
-                          <Button
-                            size="small"
-                            color="warning"
-                            variant="outlined"
-                            sx={{ alignSelf: 'flex-start' }}
-                            onClick={() => void handleImpersonateOwner()}
-                          >
-                            {'Impersonate owner (replaces your session)'}
-                          </Button>
-                        ) : null}
-                      </Stack>
-                    </CardDisplay>
+                    // Labelled + grouped, owner resolved to a person, org id
+                    // copyable (AGL-938).
+                    <StaffOrgSummaryCard
+                      orgId={orgId}
+                      org={org}
+                      owner={
+                        org?.ownerUid ? (people[org.ownerUid] ?? null) : null
+                      }
+                      onImpersonateOwner={() => void handleImpersonateOwner()}
+                    />
                   ),
                 },
                 {
@@ -1262,6 +1253,37 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           </TableBody>
                         </Table>
                       ) : null}
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    // Metered usage (AGL-939): consumption alongside the
+                    // plan and its limits — the thing staff open this page
+                    // to see.
+                    <CardDisplay
+                      header={'Metered usage'}
+                      help={docsHelp('billing', {
+                        anchor: '#tiers--entitlements',
+                        excerpt:
+                          "The organization's monthly usage rollups — page views, storage, form submissions and cost — with month-over-month deltas.",
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      {!usageReady ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {'Loading…'}
+                        </Typography>
+                      ) : usageMonths == null ? (
+                        <Alert severity="warning">
+                          {'Could not read the usage rollups — a failed ' +
+                            'read, not zero usage.'}
+                        </Alert>
+                      ) : (
+                        <StaffOrgUsageTable months={usageMonths} />
+                      )}
                     </CardDisplay>
                   ),
                 },
@@ -1686,7 +1708,17 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       contentGutterY
                     >
                       <Stack spacing={1}>
-                        {orgAudit.length === 0 ? (
+                        {orgAudit == null ? (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                          >
+                            {orgReady
+                              ? 'Could not read the audit slice — a failed ' +
+                                'read, not an empty history.'
+                              : 'Loading…'}
+                          </Typography>
+                        ) : orgAudit.length === 0 ? (
                           <Typography
                             variant="body2"
                             color="text.secondary"
@@ -1695,28 +1727,45 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                               'organization in the latest 200.'}
                           </Typography>
                         ) : (
-                          orgAudit.map((entry: any) => (
-                            <Stack
-                              key={entry.$id}
-                              direction="row"
-                              spacing={1}
-                              sx={{ justifyContent: 'space-between' }}
-                            >
-                              <Chip label={entry.action} size="small" />
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
+                          orgAudit.map((entry: any) => {
+                            // The actor as a person (AGL-938); the uid
+                            // survives as the tooltip, and an unresolved
+                            // actor (`system:cron`, an erased account)
+                            // stays legible as its raw id.
+                            const actor = staffPersonLabel(
+                              entry.actorUid
+                                ? people[entry.actorUid]
+                                : null,
+                            )
+                            return (
+                              <Stack
+                                key={entry.$id}
+                                direction="row"
+                                spacing={1}
+                                sx={{ justifyContent: 'space-between' }}
                               >
-                                {`${entry.actorUid} · ${
-                                  entry.at?.seconds
-                                    ? new Date(
-                                        entry.at.seconds * 1000,
-                                      ).toLocaleString()
-                                    : '—'
-                                }`}
-                              </Typography>
-                            </Stack>
-                          ))
+                                <Chip label={entry.action} size="small" />
+                                <Tooltip
+                                  title={
+                                    actor ? (entry.actorUid ?? '') : ''
+                                  }
+                                >
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
+                                    {`${actor ?? entry.actorUid ?? '—'} · ${
+                                      entry.at?.seconds
+                                        ? new Date(
+                                            entry.at.seconds * 1000,
+                                          ).toLocaleString()
+                                        : '—'
+                                    }`}
+                                  </Typography>
+                                </Tooltip>
+                              </Stack>
+                            )
+                          })
                         )}
                       </Stack>
                     </CardDisplay>

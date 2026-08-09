@@ -22,7 +22,10 @@ import {
   ToggleButtonFormControl,
 } from '../form-fields'
 import { FieldComponentType } from '@aglyn/aglyn'
-import { useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
+import {
+  SX_SCHEME_DARK_KEY,
+  useAglynSiteTheme,
+} from '@aglyn/aglyn-node-renderer'
 import {
   ICON_VARIANT_ALIGN_CENTER,
   ICON_VARIANT_ALIGN_JUSTIFY,
@@ -100,6 +103,7 @@ import {
   pickStyleValues,
   styleGroupFieldNames,
 } from '../utils/style-field-groups'
+import { getNodeStyleTarget } from '../utils/style-target'
 import {
   readHiddenBands,
   VISIBILITY_BAND_LABELS,
@@ -519,7 +523,14 @@ const ElementStylesForm = observer(
   forwardRef<any, ElementStylesFormProps>((props, ref) => {
     const { node } = props
     const deleteElementCallback = useDeleteElementCallback()
-    const nodeSx = node?.sx
+    // Where edits land (AGL-1306): a plain node's own sx, or — for a
+    // reusable-component instance — the root slice of its styleOverrides,
+    // so the whole panel styles the instance without touching the
+    // component. Reads go through the same target, so the panel shows
+    // exactly what THIS instance overrides (empty = the component's own
+    // look), the same way a fresh plain node starts empty.
+    const target = useMemo(() => getNodeStyleTarget(node), [node])
+    const nodeSx = target.sx
     const hostThemeDoc = useHostThemeDocument()
     const siteTheme = useAglynSiteTheme({ theme: hostThemeDoc })
 
@@ -562,15 +573,17 @@ const ElementStylesForm = observer(
       (partial: Record<string, unknown>) => {
         action(() => {
           if (!node) return
-          node.sx = applyStylePartialToSx(
-            (node.sx ?? {}) as Record<string, any>,
-            partial,
-            activeBreakpoint,
-            activeScheme,
-          ) as any
+          target.setSx(
+            applyStylePartialToSx(
+              (target.sx ?? {}) as Record<string, any>,
+              partial,
+              activeBreakpoint,
+              activeScheme,
+            ),
+          )
         })()
       },
-      [node, activeBreakpoint, activeScheme],
+      [node, target, activeBreakpoint, activeScheme],
     )
 
     // Effective scalar values at the active breakpoint + scheme — feeds
@@ -639,15 +652,37 @@ const ElementStylesForm = observer(
         (event: ChangeEvent<HTMLInputElement>) => {
           action(() => {
             if (!node) return
-            node.sx = writeHiddenBand(
-              (node.sx ?? {}) as Record<string, any>,
-              band,
-              event.target.checked,
-            ) as any
+            target.setSx(
+              writeHiddenBand(
+                (target.sx ?? {}) as Record<string, any>,
+                band,
+                event.target.checked,
+              ),
+            )
           })()
         },
-      [node],
+      [node, target],
     )
+
+    // Per-property clear for the instance override list (AGL-1306):
+    // removing the top-level key returns this instance to the component's
+    // own value for that property. Clearing the last one removes the
+    // override field entirely (see NodeStyleTarget.setSx).
+    const handleClearOverride = useCallback(
+      (property: string) => () => {
+        action(() => {
+          const next = { ...(target.sx ?? {}) } as Record<string, any>
+          delete next[property]
+          target.setSx(next)
+        })()
+      },
+      [target],
+    )
+    // Read during render (observer): the list tracks the live override
+    // record, so it updates as edits land or chips clear.
+    const overrideProperties = target.isInstanceOverride
+      ? Object.keys(target.sx ?? {})
+      : []
 
     // Re-seeds a group form's initial values when the selection or the
     // artboard scope changes (AGL-540/588).
@@ -700,6 +735,54 @@ const ElementStylesForm = observer(
             </Tooltip>
           ) : null}
         </Container>
+        {/* Instance override layer (AGL-1306): on a component instance the
+            whole panel writes per-instance overrides, never the component.
+            The chip names the mode; each overridden property lists as a
+            deletable chip whose ✕ returns that property to the
+            component's own value. */}
+        {target.isInstanceOverride ? (
+          <Container gutterY={[1]} dense>
+            <Tooltip
+              title={
+                'This element is a component instance: style edits here ' +
+                'apply to this instance only, layered over the ' +
+                "component's own styles. Other placements keep the " +
+                'component look, and component updates still flow ' +
+                'through. Use "Edit component" on the Attributes tab to ' +
+                'change the component for everyone.'
+              }
+            >
+              <Chip
+                size="small"
+                color={overrideProperties.length ? 'secondary' : 'default'}
+                label={
+                  overrideProperties.length
+                    ? `Instance overrides: ${overrideProperties.length}`
+                    : 'Styling this instance'
+                }
+              />
+            </Tooltip>
+            {overrideProperties.map((property) => (
+              <Tooltip
+                key={property}
+                title={
+                  'Clear this override — the instance returns to the ' +
+                  "component's own value"
+                }
+              >
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  sx={{ ml: 1, mt: 0.5 }}
+                  label={
+                    property === SX_SCHEME_DARK_KEY ? 'dark scheme' : property
+                  }
+                  onDelete={handleClearOverride(property)}
+                />
+              </Tooltip>
+            ))}
+          </Container>
+        ) : null}
         <Container gutterY={[2]} dense sx={{ position: 'relative' }}>
           <HelpTip
             title="Margin & padding"

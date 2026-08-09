@@ -30,7 +30,7 @@ import {
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { Button, type ButtonProps, Divider, Stack } from '@mui/material'
+import { Button, type ButtonProps, Divider, Stack, Tooltip } from '@mui/material'
 import { forwardRef } from 'react'
 import SecondaryAppBarComponent, {
   type SecondaryAppBarProps,
@@ -39,6 +39,8 @@ import SecondaryAppBarComponent, {
 export interface BesignerAppBarProps extends SecondaryAppBarProps {
   detailsUrl: string
   liveUrl?: string
+  /** Why there is no live URL (AGL-1271) — shown instead of a bare disabled button. */
+  liveUnavailableReason?: string
   onSave: ButtonProps['onClick']
   onPreview?: ButtonProps['onClick']
   onPropertiesEdit?: ButtonProps['onClick']
@@ -60,6 +62,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
     const {
       documentSwitcher,
       liveUrl,
+      liveUnavailableReason,
       presence,
       onPreview,
       onPropertiesEdit,
@@ -110,18 +113,23 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             })}
             flexItem
           />
-          <AppLink
-            componentVariant="button"
-            href={liveUrl || ''}
-            target="_blank"
-            rel="noopener noreferrer"
-            size="small"
-            color="primary"
-            disabled={!liveUrl}
-            endIcon={<MdiIcon path={ICON_VARIANT_PAGES.path} />}
-          >
-            {'Live'}
-          </AppLink>
+          <Tooltip title={!liveUrl && liveUnavailableReason ? liveUnavailableReason : ''}>
+            {/* span: a disabled control emits no events for the tooltip */}
+            <span>
+              <AppLink
+                componentVariant="button"
+                href={liveUrl || ''}
+                target="_blank"
+                rel="noopener noreferrer"
+                size="small"
+                color="primary"
+                disabled={!liveUrl}
+                endIcon={<MdiIcon path={ICON_VARIANT_PAGES.path} />}
+              >
+                {'Live'}
+              </AppLink>
+            </span>
+          </Tooltip>
           {/* Disabled without a handler (AGL-1203): components, layouts and
               templates rendered an enabled Preview button that silently did
               nothing, which reads as a broken feature rather than a missing

@@ -19,10 +19,12 @@ import { IS_PRODUCTION, LINK_PREF, LINK_PRIORITY, META_PREF, } from '@aglyn/shar
 import { makeLinkElements, makeMetaElements } from '@aglyn/shared-ui-jsx'
 import {
   createEmotionCache,
-  createEmotionServer,
   type EmotionCache,
   getConsoleMetaThemeColor,
 } from '@aglyn/shared-ui-theme'
+// AGL-1238: imported from the package directly (server-only file) — the theme
+// vendor barrel no longer re-exports it, to keep it out of client bundles.
+import createEmotionServer from '@emotion/server/create-instance'
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import { getInitColorSchemeScript } from '@mui/material/styles'

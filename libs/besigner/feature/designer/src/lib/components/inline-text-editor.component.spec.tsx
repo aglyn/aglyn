@@ -153,6 +153,92 @@ describe('InlineTextEditorComponent pills (AGL-586)', () => {
     expect(inlineTextEdit.node).toBeUndefined()
   })
 
+  // Instance prop overrides (AGL-1304): opened with a propTarget, the same
+  // surface edits the INSTANCE's propValues[propName] — the double-clicked
+  // leaf is a grafted preview node, not a canvas node.
+  describe('instance prop overrides (AGL-1304)', () => {
+    const instanceNode = (propValues?: Record<string, unknown>) =>
+      ({
+        $id: 'agl1304-inst',
+        type: 'node',
+        componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'hero', ...(propValues && { propValues }) },
+        componentSchema: { flags: {} },
+        nodes: [],
+      }) as any
+
+    const openPropEditor = async (node: any, initialText: string) => {
+      render(<InlineTextEditorComponent />)
+      act(() =>
+        inlineTextEdit.open(node, rect, {
+          propName: 'headline',
+          initialText,
+        }),
+      )
+      // Always the PLAIN surface — prop values substitute as strings.
+      const surface = await screen.findByRole('textbox', { name: 'Edit text' })
+      await waitFor(() => expect(surface.textContent).toBe(initialText))
+      return surface
+    }
+
+    it('opens with the effective text and commits to propValues, keeping refId', async () => {
+      const node = instanceNode()
+      const surface = await openPropEditor(node, 'Headline goes here')
+      surface.textContent = 'Ship faster'
+      fireEvent.keyDown(surface, { key: 'Enter' })
+      expect(updateNodeProps).toHaveBeenCalledWith(
+        node,
+        expect.objectContaining({
+          refId: 'hero',
+          [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: { headline: 'Ship faster' },
+        }),
+      )
+      expect(inlineTextEdit.node).toBeUndefined()
+      expect(inlineTextEdit.propTarget).toBeUndefined()
+    })
+
+    it('preserves sibling prop overrides on commit', async () => {
+      const node = instanceNode({ headline: 'Old', image: '/keep.png' })
+      const surface = await openPropEditor(node, 'Old')
+      surface.textContent = 'New'
+      fireEvent.keyDown(surface, { key: 'Enter' })
+      expect(updateNodeProps).toHaveBeenCalledWith(
+        node,
+        expect.objectContaining({
+          [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: {
+            headline: 'New',
+            image: '/keep.png',
+          },
+        }),
+      )
+    })
+
+    it('an emptied edit removes the override — and the container when it was the last', async () => {
+      const node = instanceNode({ headline: 'Old' })
+      const surface = await openPropEditor(node, 'Old')
+      surface.textContent = ''
+      fireEvent.keyDown(surface, { key: 'Enter' })
+      // The graft treats '' as unset (the component default returns), so a
+      // cleared instance must serialize identically to a never-overridden
+      // one — no propValues key at all.
+      const props = updateNodeProps.mock.calls[0]?.[1] as Record<
+        string,
+        unknown
+      >
+      expect(props['refId']).toBe('hero')
+      expect(
+        Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY in props,
+      ).toBe(false)
+    })
+
+    it('cancels without committing on Escape', async () => {
+      const surface = await openPropEditor(instanceNode(), 'Keep me')
+      fireEvent.keyDown(surface, { key: 'Escape' })
+      expect(updateNodeProps).not.toHaveBeenCalled()
+      expect(inlineTextEdit.propTarget).toBeUndefined()
+    })
+  })
+
   it('rich mode: pills render inside markup and serialize back on Done', async () => {
     const node = richNode('Hi Message', '<b>Hi {{var:v1}}</b>')
     const surface = await openEditor(node)

@@ -16,9 +16,14 @@
  */
 'use client'
 
-import { continueParam } from '@aglyn/shared-util-next'
-import { usePathname, useRouter } from 'next/navigation'
+import { signOut } from 'firebase/auth'
 import { useEffect, useRef } from 'react'
+import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
+import { markInteractiveSignOut } from '../utils/interactive-signin'
+import {
+  captureReauthIdentity,
+  requestSessionReauth,
+} from '../utils/session-reauth'
 
 const IDLE_TIMEOUT_MINUTES = Number(
   process.env.NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES ?? '60',
@@ -98,12 +103,16 @@ async function readServerActivity(): Promise<number> {
 
 /**
  * Idle session expiry (AGL-464): after `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES`
- * (default 60, ≤0 disables) without user activity, route to /signout with the
- * current path as the `continue` param — the signout page retires the shared
- * session cookie and forwards the param to /signin, so re-authenticating
- * resumes where the user left off. Checks run on an interval and when the tab
- * becomes visible again, so a laptop waking from sleep expires immediately
- * rather than waiting a full tick.
+ * (default 60, ≤0 disables) without user activity, expire the session IN
+ * PLACE (AGL-664): sign out with the interactive marker set — which routes
+ * the shared-cookie tombstone and the service-worker cache purge through
+ * `useSessionCookie`'s convergence branch, exactly as the /signout page's
+ * sign-out does — and raise the "Sign in again to verify your device"
+ * prompt over the current route instead of navigating away, so
+ * re-authenticating resumes where the user left off with no lost context.
+ * Checks run on an interval and when the tab becomes visible again, so a
+ * laptop waking from sleep expires immediately rather than waiting a full
+ * tick.
  *
  * Because that sign-out is GLOBAL — it retires the cross-subdomain `__session`
  * cookie for every `.aglyn.com` tab — a tab that looks idle locally must first
@@ -113,10 +122,12 @@ async function readServerActivity(): Promise<number> {
  * session genuinely expire, preserving AGL-464's intent.
  */
 export function useIdleLogout(enabled: boolean): void {
-  const router = useRouter()
-  const pathname = usePathname()
-  const pathnameRef = useRef(pathname)
-  pathnameRef.current = pathname
+  const auth = useAuth()
+  const { data: user } = useUser()
+  // Captured through a ref so arming/expiry never re-runs on user identity
+  // churn — the effect below must only cycle on `enabled`.
+  const userRef = useRef(user)
+  userRef.current = user
 
   useEffect(() => {
     if (!enabled || IDLE_TIMEOUT_MS <= 0) return
@@ -141,8 +152,12 @@ export function useIdleLogout(enabled: boolean): void {
     const expire = () => {
       if (expired) return
       expired = true
-      const path = pathnameRef.current || '/'
-      router.push(`/signout?${continueParam(encodeURIComponent(path))}`)
+      // Prompt first, then sign out (AGL-664): the layout must already see
+      // the pending re-auth when the signed-out beat lands, or it would
+      // redirect to /signin and lose the page anyway.
+      requestSessionReauth('idle', captureReauthIdentity(userRef.current))
+      markInteractiveSignOut()
+      void signOut(auth).catch(() => undefined)
     }
 
     const check = async () => {
@@ -185,7 +200,7 @@ export function useIdleLogout(enabled: boolean): void {
       document.removeEventListener('visibilitychange', handleVisibility)
       window.clearInterval(interval)
     }
-  }, [enabled, router])
+  }, [auth, enabled])
 }
 
 export default useIdleLogout

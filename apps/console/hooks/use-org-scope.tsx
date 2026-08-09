@@ -36,6 +36,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { MAX_RETRIES, retryDelayMs } from './use-host-resolution'
 
 const SELECTED_ORG_STORAGE_KEY = 'aglyn.selectedOrgId'
 
@@ -79,6 +80,14 @@ export interface OrgScopeContextValue {
   confirmed: boolean
   /** `false` only when `orgSlugs/{slug}` confirmed the slug does not exist. */
   slugExists: boolean | null
+  /**
+   * The membership listen gave up after retries (AGL-1260). Distinct from a
+   * confirmed empty list: an errored read says nothing about what orgs exist,
+   * so consumers must offer a retry, never a 404 or a Free-tier default.
+   */
+  error: boolean
+  /** Re-runs the membership listen after it gave up (AGL-1260). */
+  retry: () => void
 }
 
 const OrgScopeContext = createContext<OrgScopeContextValue>({
@@ -90,6 +99,8 @@ const OrgScopeContext = createContext<OrgScopeContextValue>({
   loading: true,
   confirmed: false,
   slugExists: null,
+  error: false,
+  retry: () => undefined,
 })
 
 /**
@@ -115,6 +126,11 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
   const [slugExists, setSlugExists] = useState<boolean | null>(null)
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
   const [subdomainOrgId, setSubdomainOrgId] = useState<string | null>(null)
+  const [error, setError] = useState(false)
+  // Bumping this re-runs the membership effect below — the whole mechanism
+  // behind `retry`, same shape as useHostResolution's (AGL-1200).
+  const [attempt, setAttempt] = useState(0)
+  const retry = useCallback(() => setAttempt((value) => value + 1), [])
   const orgSlug = useMemo(subdomainSlugFromLocation, [])
 
   useEffect(() => {
@@ -122,36 +138,68 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       setOrgs([])
       setLoading(false)
       setConfirmed(false)
+      setError(false)
       return undefined
     }
     setLoading(true)
     setConfirmed(false)
+    setError(false)
     // Metadata changes included so the cache→server confirmation is
     // delivered even when the data is identical (AGL-886): without it, a
     // cache-served empty that the server agrees with would never re-fire,
     // and the guard below could neither 404 nor stop spinning.
     let seeded = false
-    return onSnapshot(
-      query(collection(firestore, 'users', user.uid, 'orgs'), limit(50)),
-      { includeMetadataChanges: true },
-      (snapshot) => {
-        if (!snapshot.metadata.fromCache) setConfirmed(true)
-        // Metadata-only ticks carry no doc changes — skip the list write so
-        // the whole app doesn't re-render on the confirmation event.
-        if (!seeded || snapshot.docChanges().length) {
-          seeded = true
-          setOrgs(
-            snapshot.docs.map(
-              (entry) =>
-                ({ $id: entry.id, ...entry.data() }) as UserOrgMembership,
-            ),
-          )
-        }
-        setLoading(false)
-      },
-      () => setLoading(false),
-    )
-  }, [firestore, user?.uid])
+    let retried = 0
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let unsubscribe: (() => void) | null = null
+
+    const subscribe = () => {
+      unsubscribe = onSnapshot(
+        query(collection(firestore, 'users', user.uid, 'orgs'), limit(50)),
+        { includeMetadataChanges: true },
+        (snapshot) => {
+          // A delivered snapshot re-arms the budget: a listen that worked and
+          // later dies is a fresh outage, not attempt seven of this one.
+          retried = 0
+          if (!snapshot.metadata.fromCache) setConfirmed(true)
+          // Metadata-only ticks carry no doc changes — skip the list write so
+          // the whole app doesn't re-render on the confirmation event.
+          if (!seeded || snapshot.docChanges().length) {
+            seeded = true
+            setOrgs(
+              snapshot.docs.map(
+                (entry) =>
+                  ({ $id: entry.id, ...entry.data() }) as UserOrgMembership,
+              ),
+            )
+          }
+          setLoading(false)
+        },
+        () => {
+          // Firestore TERMINATES a listener on error — `permission-denied`
+          // on a cold load, before the restored session's ID token attaches
+          // (AGL-216/1179). This used to `setLoading(false)` and stop: no
+          // data, no listener, no error surface, which host routes rendered
+          // as an indefinite spinner (AGL-1260). Resubscribe on the shared
+          // backoff schedule; only an exhausted budget latches `error`, so a
+          // single transient denial never flashes an error screen.
+          unsubscribe?.()
+          if (retried < MAX_RETRIES) {
+            timer = setTimeout(subscribe, retryDelayMs(retried))
+            retried += 1
+          } else {
+            setError(true)
+            setLoading(false)
+          }
+        },
+      )
+    }
+    subscribe()
+    return () => {
+      if (timer) clearTimeout(timer)
+      unsubscribe?.()
+    }
+  }, [firestore, user?.uid, attempt])
 
   useEffect(() => {
     setSelectedOrgId(
@@ -228,8 +276,10 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       loading,
       confirmed,
       slugExists,
+      error,
+      retry,
     }),
-    [orgs, currentOrg, selectOrg, orgSlug, pathOrgSlug, loading, confirmed, slugExists],
+    [orgs, currentOrg, selectOrg, orgSlug, pathOrgSlug, loading, confirmed, slugExists, error, retry],
   )
 
   return (

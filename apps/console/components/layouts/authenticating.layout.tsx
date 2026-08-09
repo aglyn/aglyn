@@ -16,10 +16,7 @@
  */
 'use client'
 
-import {
-  BackgroundImageComponent,
-  type BackgroundImageComponentProps,
-} from '@aglyn/shared-ui-jsx'
+import { BackgroundImageComponent, type BackgroundImageComponentProps } from '@aglyn/shared-ui-jsx/components/background-image.component'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { parseOnboardingPlanIntent } from '@aglyn/aglyn'
 import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'

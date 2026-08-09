@@ -17,12 +17,13 @@
 
 import {
   pluginIdForRegisteredApiPath,
-  resolveEnabledPlugins,
+  resolveHostEnabledPlugins,
   resolvePluginApiRoute,
   runLegacyHandler,
 } from '@aglyn/aglyn/server'
 import {
   filterEnabledPluginsByReleaseFlags,
+  getHostDisabledPlugins,
   getOrgForHost,
 } from '@aglyn/tenant-data-admin'
 import { ensureRemoteServerBundles } from '../../../utils/remote-server-bundles'
@@ -68,10 +69,18 @@ async function dispatch(
       }
     }
     if (hostId) {
-      const resolved = await getOrgForHost(hostId)
+      // Per-site enablement (AGL-1014): the org set minus the host's
+      // deny-list — a plugin disabled for THIS site has no API surface for
+      // it, exactly like an org-disabled one.
+      const [resolved, disabledPlugins] = await Promise.all([
+        getOrgForHost(hostId),
+        getHostDisabledPlugins(hostId),
+      ])
       if (
         resolved &&
-        !resolveEnabledPlugins(resolved.org).includes(pluginId)
+        !resolveHostEnabledPlugins(resolved.org, { disabledPlugins }).includes(
+          pluginId,
+        )
       ) {
         return Response.json({ error: 'Not found' }, { status: 404 })
       }

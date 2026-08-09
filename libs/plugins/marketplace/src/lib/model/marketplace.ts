@@ -781,6 +781,105 @@ export function validateListingContent(input: Record<string, unknown>): {
   return { ok: true, content }
 }
 
+/**
+ * Publisher-profile fields beyond the identity trio (AGL-1009): the logo,
+ * the support contact, and a FIXED set of external links. Fixed on purpose —
+ * the storefront renders each as a known icon, and a free-form list would
+ * turn the trust panel into a link farm.
+ */
+export interface PublisherProfileContent {
+  avatarUrl?: string
+  website?: string
+  supportEmail?: string
+  supportUrl?: string
+  githubUrl?: string
+  xUrl?: string
+  linkedinUrl?: string
+}
+
+/** Social keys whose URL must live on the network's own host. */
+const PUBLISHER_SOCIAL_HOSTS: Record<string, readonly string[]> = {
+  githubUrl: ['github.com'],
+  xUrl: ['x.com', 'twitter.com'],
+  linkedinUrl: ['linkedin.com'],
+}
+
+const SUPPORT_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/**
+ * Validates the publisher-profile extras (AGL-1009), sharing
+ * `validateListingContent`'s URL discipline: https only, length capped,
+ * validated on the save route (server-owned like the handle — no client
+ * write path carries these). An explicit empty string comes back as `''` so
+ * the save route can distinguish "clear this field" from "left untouched".
+ */
+export function validatePublisherProfileContent(
+  input: Record<string, unknown>,
+): { ok: boolean; error?: string; content?: PublisherProfileContent } {
+  const content: PublisherProfileContent = {}
+  const urlKeys = [
+    'avatarUrl',
+    'website',
+    'supportUrl',
+    'githubUrl',
+    'xUrl',
+    'linkedinUrl',
+  ] as const
+  for (const key of urlKeys) {
+    const value = input[key]
+    if (value === undefined) continue
+    if (value === '') {
+      content[key] = ''
+      continue
+    }
+    // The same https-or-nothing rule as listing URLs: `javascript:`, `data:`
+    // and plain http all fail the one test.
+    if (typeof value !== 'string' || !HTTPS_URL.test(value) || value.length > 500) {
+      return { ok: false, error: `${key} must be an https URL` }
+    }
+    const hosts = PUBLISHER_SOCIAL_HOSTS[key]
+    if (hosts) {
+      let host = ''
+      try {
+        host = new URL(value).hostname.toLowerCase()
+      } catch {
+        return { ok: false, error: `${key} must be an https URL` }
+      }
+      if (!hosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) {
+        return { ok: false, error: `${key} must link to ${hosts[0]}` }
+      }
+    }
+    content[key] = value
+  }
+  const supportEmail = input['supportEmail']
+  if (supportEmail !== undefined) {
+    if (supportEmail === '') {
+      content.supportEmail = ''
+    } else if (
+      typeof supportEmail !== 'string' ||
+      supportEmail.length > 200 ||
+      !SUPPORT_EMAIL.test(supportEmail)
+    ) {
+      return { ok: false, error: 'supportEmail must be an email address' }
+    } else {
+      content.supportEmail = supportEmail
+    }
+  }
+  return { ok: true, content }
+}
+
+/**
+ * Render-time guard for publisher links (AGL-1009): only an `https://` URL
+ * is ever emitted as an href. The save route already refuses anything else,
+ * but the doc is client-updatable on its cosmetic fields historically, so
+ * the renderer must not trust stored data it did not write.
+ */
+export function safePublisherHref(url: unknown): string | undefined {
+  return typeof url === 'string' && /^https:\/\//i.test(url) && url.length <= 500
+    ? url
+    : undefined
+}
+
 /** Platform revenue share on paid listings (AGL-46). */
 export const MARKETPLACE_PLATFORM_FEE_PERCENT = 20
 /** Free-plan publishers pay a higher share. */

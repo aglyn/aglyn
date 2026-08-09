@@ -91,6 +91,10 @@ export enum Route {
   HOST_CONTACTS = '/[orgSlug]/hosts/[host]/contacts',
   HOST_MEDIA = '/[orgSlug]/hosts/[host]/media',
   HOST_SETUP = '/[orgSlug]/hosts/[host]/setup',
+  // Host Admin area (AGL-1014): owner/admin-only controls — per-site plugin
+  // enablement and the Danger zone — out of the Setup page collaborators
+  // legitimately visit.
+  HOST_ADMIN = '/[orgSlug]/hosts/[host]/admin',
   HOST_THEME = '/[orgSlug]/hosts/[host]/theme',
   HOST_WORKFLOWS = '/[orgSlug]/hosts/[host]/workflows',
   HOST_DATA = '/[orgSlug]/hosts/[host]/data',
@@ -214,6 +218,7 @@ export interface RoutePayload {
   [Route.HOST_INBOX]: { orgSlug: string; host: string }
   [Route.HOST_CONTACTS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN]: { orgSlug: string; host: string }
   [Route.HOST_PLUGIN]: { orgSlug: string; host: string; pluginSlug: string }
   [Route.HOST_MEDIA]: { orgSlug: string; host: string }
   [Route.HOST_THEME]: { orgSlug: string; host: string }

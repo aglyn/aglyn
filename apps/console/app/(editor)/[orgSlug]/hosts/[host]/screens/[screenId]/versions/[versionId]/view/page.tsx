@@ -90,7 +90,7 @@ import { hasEntitlement } from '../../../../../../../../../../constants/entitlem
 import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
-import { buildScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
+import { resolveScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
 import {
   publishScreenRoute,
   unpublishScreenRoute,
@@ -209,9 +209,13 @@ function ScreenDetails() {
     routesByScreenId.get(screenId),
   )
   const routingMap = hostData?.screens as Record<ScreenUid, string> | undefined
-  // AGL-374: buildScreenLiveUrl normalizes the slug into a path and knows
-  // custom domains + preview consoles.
-  const liveUrl = buildScreenLiveUrl(hostData, screenId)
+  // AGL-374: slug→path normalization, custom domains, preview links;
+  // AGL-1271: templates resolve through the collection that renders them.
+  const { url: liveUrl, unavailableReason: liveUnavailableReason } =
+    resolveScreenLiveUrl(hostData, screenId, {
+      isTemplate: templateScreenIds.has(screenId),
+      routes: routesByScreenId.get(screenId),
+    })
   const publishedPath = routingMap?.[screenId]
   const isRoutePublished = publishedPath != null
   const screensById = useMemo(() => {
@@ -752,6 +756,15 @@ function ScreenDetails() {
               >
                 {'View'}
               </AppLink>
+            ) : liveUnavailableReason ? (
+              <Tooltip title={liveUnavailableReason}>
+                {/* span: a disabled button emits no events for the tooltip */}
+                <span>
+                  <Button size="small" variant="outlined" disabled>
+                    {'View'}
+                  </Button>
+                </span>
+              </Tooltip>
             ) : null}
             <Button
               size="small"

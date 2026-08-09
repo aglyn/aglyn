@@ -22,7 +22,7 @@ export {
 } from '@emotion/cache'
 
 export { CacheProvider, withEmotionCache } from '@emotion/react'
-export {
-  default as createEmotionServer,
-  type EmotionServer,
-} from '@emotion/server/create-instance'
+// AGL-1238: `@emotion/server/create-instance` is deliberately NOT re-exported
+// here. This barrel reaches client bundles, and that package unconditionally
+// imports stream shims whose vendored `is-generator-function` eval probe trips
+// the enforcing CSP. Server-side consumers import it from the package directly.

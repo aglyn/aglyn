@@ -60,7 +60,6 @@ import ErrorScreensCard from '../../../../../../components/error-screens-card.co
 import LanguagesCard from '../../../../../../components/languages-card.component'
 import SiteBackupCard from '../../../../../../components/site-backup-card.component'
 import SiteTemplateCard from '../../../../../../components/site-template-card.component'
-import DeleteSiteCard from '../../../../../../components/delete-site-card.component'
 import ThemeEditor from '../../../../../../components/theme-editor/theme-editor.component'
 import ThemeOverridesCard from '../../../../../../components/theme-editor/theme-overrides-card.component'
 import ThemeSourceCard from '../../../../../../components/theme-editor/theme-source-card.component'
@@ -687,9 +686,10 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                             <div style={{ marginTop: 24 }}>
                               <SiteTemplateCard hostId={hostId} />
                             </div>
-                            <div style={{ marginTop: 24 }}>
-                              <DeleteSiteCard hostId={hostId} />
-                            </div>
+                            {/* Delete site moved to the host Admin area's
+                                Danger zone (AGL-1014) — destructive actions
+                                no longer sit in a page collaborators
+                                otherwise have reason to visit. */}
                           </>
                         ) : null}
                         {schema.id === 'hostSeo' ? (

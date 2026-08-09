@@ -27,6 +27,7 @@ import {
   resolveOrgInstallSummary,
   resolvePluginInstallState,
   resolveUninstallTargets,
+  safePublisherHref,
   type InstallTargeting,
   type UninstallTarget,
 } from '../model/marketplace'
@@ -41,7 +42,16 @@ import {
   type MarkdownBlock,
   type MarkdownInline,
 } from '@aglyn/aglyn'
-import { mdiCheckCircle, mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
+import {
+  mdiCheckCircle,
+  mdiEmailOutline,
+  mdiGithub,
+  mdiLifebuoy,
+  mdiLinkedin,
+  mdiStorefrontOutline,
+  mdiTwitter,
+  mdiWeb,
+} from '@aglyn/shared-data-mdi'
 import {
   AppLink,
   CardDisplay,
@@ -53,6 +63,7 @@ import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-pr
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Checkbox,
@@ -67,6 +78,7 @@ import {
   FormGroup,
   FormHelperText,
   FormLabel,
+  IconButton,
   Link as MuiLink,
   Stack,
   Tooltip,
@@ -194,7 +206,8 @@ function ListingChangelog({
   )
 }
 
-function ListingReadme({ readme }: { readme: string }) {
+// Exported for the renderer-parity spec (AGL-1315).
+export function ListingReadme({ readme }: { readme: string }) {
   const blocks = useMemo<MarkdownBlock[]>(
     () => parseMarkdownLite(readme.slice(0, LISTING_README_MAX_CHARS)),
     [readme],
@@ -315,6 +328,27 @@ function ListingReadme({ readme }: { readme: string }) {
                   </tbody>
                 </Box>
               </Box>
+            )
+          // A README quote (AGL-1315) — the surface's body size, italic
+          // behind a left accent in the theme's divider tone.
+          case 'quote':
+            return (
+              <Typography
+                key={index}
+                component="blockquote"
+                variant="body2"
+                sx={{
+                  my: 0,
+                  mx: 0,
+                  pl: 1.5,
+                  borderLeft: 3,
+                  borderColor: 'divider',
+                  fontStyle: 'italic',
+                  color: 'text.secondary',
+                }}
+              >
+                {renderInlines(block.inlines)}
+              </Typography>
             )
           default:
             return (
@@ -1556,6 +1590,21 @@ export function MarketplaceListingContent({
                         contentGutterY
                       >
                         <Stack spacing={0.5}>
+                          {/* Logo (AGL-1009): https-guarded at render even
+                              though the save route enforces it — the doc
+                              predates the guard. Falls back to an initial. */}
+                          <Avatar
+                            src={safePublisherHref(profile?.avatarUrl)}
+                            alt={profile?.displayName ?? 'Publisher'}
+                            variant="rounded"
+                            sx={{ width: 40, height: 40, mb: 0.5 }}
+                          >
+                            {String(
+                              profile?.displayName ?? profile?.handle ?? '?',
+                            )
+                              .slice(0, 1)
+                              .toUpperCase()}
+                          </Avatar>
                           {/* Link to the publisher's storefront (AGL-869):
                               the org-scope publisher page at org scope, the
                               per-site publisher page otherwise. */}
@@ -1613,6 +1662,87 @@ export function MarketplaceListingContent({
                               {profile.bio}
                             </Typography>
                           ) : null}
+                          {/* Support contact and social links (AGL-1009):
+                              a fixed icon set, every href https-guarded so
+                              a `javascript:` URL renders as nothing. */}
+                          {(() => {
+                            const links = [
+                              {
+                                key: 'website',
+                                label: 'Website',
+                                icon: mdiWeb.path,
+                                href: safePublisherHref(profile?.website),
+                              },
+                              {
+                                key: 'support',
+                                label: 'Support',
+                                icon: mdiLifebuoy.path,
+                                href: safePublisherHref(profile?.supportUrl),
+                              },
+                              {
+                                key: 'github',
+                                label: 'GitHub',
+                                icon: mdiGithub.path,
+                                href: safePublisherHref(profile?.githubUrl),
+                              },
+                              {
+                                key: 'x',
+                                label: 'X',
+                                icon: mdiTwitter.path,
+                                href: safePublisherHref(profile?.xUrl),
+                              },
+                              {
+                                key: 'linkedin',
+                                label: 'LinkedIn',
+                                icon: mdiLinkedin.path,
+                                href: safePublisherHref(profile?.linkedinUrl),
+                              },
+                            ].filter((entry) => entry.href)
+                            const email =
+                              typeof profile?.supportEmail === 'string' &&
+                              /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                                profile.supportEmail,
+                              )
+                                ? profile.supportEmail
+                                : undefined
+                            if (!links.length && !email) return null
+                            return (
+                              <Stack direction="row" spacing={0.5}>
+                                {email ? (
+                                  <Tooltip title={`Support: ${email}`}>
+                                    <IconButton
+                                      size="small"
+                                      component="a"
+                                      href={`mailto:${email}`}
+                                      aria-label={`Email support at ${email}`}
+                                    >
+                                      <MdiIcon
+                                        path={mdiEmailOutline.path}
+                                        fontSize="small"
+                                      />
+                                    </IconButton>
+                                  </Tooltip>
+                                ) : null}
+                                {links.map((entry) => (
+                                  <Tooltip key={entry.key} title={entry.label}>
+                                    <IconButton
+                                      size="small"
+                                      component="a"
+                                      href={entry.href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      aria-label={entry.label}
+                                    >
+                                      <MdiIcon
+                                        path={entry.icon}
+                                        fontSize="small"
+                                      />
+                                    </IconButton>
+                                  </Tooltip>
+                                ))}
+                              </Stack>
+                            )
+                          })()}
                         </Stack>
                       </CardDisplay>
                       {listing?.homepageUrl || listing?.repositoryUrl ? (

@@ -19,7 +19,11 @@
 import { usePathname } from 'next/navigation'
 import { useMemo } from 'react'
 import { useEnabledPluginIds } from '../components/console-plugins-gate.component'
-import { useHostId, useHostReady } from '../components/host-id-provider'
+import {
+  useHostId,
+  useHostReady,
+  useIsHostAdmin,
+} from '../components/host-id-provider'
 import adminNavTabItems from '../constants/admin-nav-tabs'
 import hostNavTabItems from '../constants/host-nav-tabs'
 import manageNavTabItems from '../constants/manage-nav-tabs'
@@ -204,6 +208,8 @@ export function useSecondaryNav(): {
   const hostId = useHostId()
   // Scopes the plugin-contributed tabs to this workspace (AGL-758).
   const enabledPluginIds = useEnabledPluginIds()
+  // The Admin tab renders for site admins only (AGL-1014).
+  const hostAdmin = useIsHostAdmin()
   const isStaff = useIsStaff()
   // A site collaborator gets no org strip at all (AGL-1032) — the tab set is
   // the one place to do this, since the bar mounts once for every route.
@@ -230,6 +236,7 @@ export function useSecondaryNav(): {
           section.orgSlug ?? '',
           section.host ?? '',
           enabledPluginIds,
+          { hostAdmin },
         )
       case 'org':
         // Sites, Team, Media, Data, Billing, Settings — none of which a
@@ -257,6 +264,7 @@ export function useSecondaryNav(): {
     section,
     orgNavTabItems,
     enabledPluginIds,
+    hostAdmin,
     isStaff,
     orgWide,
     reachReady,

@@ -235,6 +235,31 @@ export default [
     },
   },
   {
+    // Base UI (AGL-1222) is a pre-1.x-shaped dependency whose parts compose
+    // by hand; it earns its keep for the besigner menubar and nothing else so
+    // far. Keeping every import in one module means a breaking upgrade is a
+    // one-file change instead of a search-and-replace across the console.
+    files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
+    ignores: ['apps/console/components/layouts/app-bar-menubar.component.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            // Repeated from the shared overrides: a later `rules` entry
+            // replaces the whole option object rather than merging into it.
+            { group: ['@mui/*/*/*', '!@mui/material/test-utils/*'] },
+            {
+              group: ['@base-ui/react', '@base-ui/react/*'],
+              message:
+                'Base UI stays inside apps/console/components/layouts/app-bar-menubar.component.tsx (AGL-1222) so a breaking upgrade is one file.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     ignores: [
       '.github',
       '/workspace.json',

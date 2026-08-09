@@ -37,6 +37,12 @@ import {
   WORKSPACE_DOMAIN,
   workspaceSlugFromHost,
 } from '../../../../constants/workspace-domain'
+import {
+  DEVICE_COOKIE,
+  DEVICE_COOKIE_MAX_AGE_S,
+  describeSignInClient,
+  recordDeviceAndMaybeAlert,
+} from '../../_lib/security-alerts'
 
 export const dynamic = 'force-dynamic'
 
@@ -216,6 +222,10 @@ async function handler(request: Request): Promise<Response> {
       // tenant token fine and exposes `firebase.tenant`; the mint below then
       // re-validates against that tenant.
       let tenantId: string | undefined
+      // Captured for the new-device security alert (AGL-665). Null when the
+      // sign-in should not touch the device registry at all — staff
+      // impersonation must never mail the customer "new device sign-in".
+      let signInIdentity: { uid: string; email: string | null } | null = null
       try {
         const decoded = await auth.verifyIdToken(idToken)
         if (!decoded.email_verified && !isImpersonationSession(decoded)) {
@@ -226,6 +236,12 @@ async function handler(request: Request): Promise<Response> {
           return unverified
         }
         tenantId = decoded.firebase?.tenant
+        if (!isImpersonationSession(decoded)) {
+          signInIdentity = {
+            uid: decoded.uid,
+            email: decoded.email ? String(decoded.email) : null,
+          }
+        }
         // Seed the personal profile doc (AGL-1127). No account-creation path
         // wrote `users/{uid}` — it was born the first time someone saved
         // Basic info — so Manage Account rendered its form against a document
@@ -299,12 +315,38 @@ async function handler(request: Request): Promise<Response> {
           clearTombstone,
         )
       }
+      // New-device recognition (AGL-665): a long-lived HttpOnly device-id
+      // cookie, re-set on every mint so an active browser never lapses. The
+      // Firestore lookup, the device record and any alert email all run in
+      // `after()` — sign-in latency and sign-in success owe nothing to them.
+      const knownDeviceId = readCookie(request, DEVICE_COOKIE)
+      const deviceId =
+        signInIdentity && (knownDeviceId || crypto.randomUUID())
+      if (signInIdentity && deviceId) {
+        const identity = signInIdentity
+        const client = describeSignInClient(request.headers)
+        after(async () => {
+          await recordDeviceAndMaybeAlert({
+            firestore: firebaseAdmin.app().firestore(),
+            uid: identity.uid,
+            email: identity.email,
+            deviceId,
+            client,
+            nowMs: Date.now(),
+          })
+        })
+      }
       // Pair the session cookie with the tenant sidecar (set to the tenant, or
       // cleared for a default-tenant session so a stale tenant cookie from a
       // prior SSO login can't mis-route this one).
       return jsonWithCookie({ ok: true }, 200, [
         `${SESSION_COOKIE}=${sessionCookie}; ${cookieAttributes(request, SESSION_TTL_MS / 1000)}`,
         `${SESSION_TENANT_COOKIE}=${tenantId ?? ''}; ${cookieAttributes(request, tenantId ? SESSION_TTL_MS / 1000 : 0)}`,
+        ...(deviceId
+          ? [
+              `${DEVICE_COOKIE}=${deviceId}; ${cookieAttributes(request, DEVICE_COOKIE_MAX_AGE_S)}`,
+            ]
+          : []),
       ])
     }
 

@@ -37,10 +37,21 @@ export const FIELD_COLOR: AglynAttributeSchema = {
     { value: 'warning', label: 'Warning' },
   ],
 }
+/**
+ * App Bar theme colors. Unlike the base FIELD_COLOR (where "Default" means
+ * "unset — let the component decide"), MUI AppBar's `color="default"` is a
+ * real value DISTINCT from its implicit default (`primary`), so the option
+ * must persist. An empty-string option value never can: the attributes form
+ * strips `''` on change (ddf's enhancedOnChange maps an emptied field to its
+ * clearedValue, and final-form's default parse turns `''` into `undefined`),
+ * so the prop key vanished before save and the pick silently reverted on
+ * reload (AGL-1191). Persist the explicit `'default'` sentinel instead; an
+ * author who wants "unset" clears the field with the ✕ affordance.
+ */
 export const FIELD_COLOR_ALT1: AglynAttributeSchema = {
   ...FIELD_COLOR,
   options: [
-    { value: '', label: 'Default' },
+    { value: 'default', label: 'Default' },
     { value: 'inherit', label: 'Inherit' },
     { value: 'transparent', label: 'Transparent' },
     { value: 'primary', label: 'Primary' },

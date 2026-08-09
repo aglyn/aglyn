@@ -215,6 +215,12 @@ export const NodeLeaf = observer(
             // Plain snapshot: props are MobX observables and the graft
             // reads nested `propValues` off them.
             props: JSON.parse(JSON.stringify(node.props ?? {})),
+            // Root style overrides (AGL-1306) ride the same snapshot so
+            // the canvas renders the SAME merged root sx the published
+            // page will — the graft is the one merge point.
+            ...(node.styleOverrides && {
+              styleOverrides: JSON.parse(JSON.stringify(node.styleOverrides)),
+            }),
             nodes: [],
           } as any,
         },
@@ -222,9 +228,14 @@ export const NodeLeaf = observer(
       )
       const graftedRootId = (composed[node.$id]?.nodes as string[])?.[0]
       return graftedRootId ? denormalizeTree(composed, graftedRootId) : undefined
-      // Observable props: the JSON string keys the memo, as above.
+      // Observable props/overrides: the JSON strings key the memo, as above.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [node, JSON.stringify(node?.props ?? {}), definitions])
+    }, [
+      node,
+      JSON.stringify(node?.props ?? {}),
+      JSON.stringify(node?.styleOverrides ?? {}),
+      definitions,
+    ])
 
     return (
       <DraggableDroppable

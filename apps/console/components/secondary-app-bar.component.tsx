@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { ScrollReaction } from '@aglyn/shared-ui-jsx'
+import { ScrollReaction } from '@aglyn/shared-ui-jsx/components/scroll-reaction'
 import { _isArrEmpty } from '@aglyn/shared-util-tools'
 import {
   AppBar,

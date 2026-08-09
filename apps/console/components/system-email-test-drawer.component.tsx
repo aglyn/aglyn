@@ -20,9 +20,9 @@ import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import {
   Container,
   MdiIcon,
-  NavigationDrawerComponent,
   SrOnly,
 } from '@aglyn/shared-ui-jsx'
+import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { SystemEmailTemplateDefinition } from '@aglyn/shared-util-email'
 import { useUser } from '@aglyn/tenant-feature-instance'

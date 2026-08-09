@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
+  BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
   CloseableDrawerComponent,
   useAddElementDrawerCallback,
@@ -33,11 +34,8 @@ import {
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
-import {
-  AppLink,
-  LOADING_OVERLAY_ELEMENT,
-  useLoading,
-} from '@aglyn/shared-ui-jsx'
+import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   SYSTEM_EMAIL_COLLECTION,
@@ -435,29 +433,8 @@ function SystemEmailBesignerPage() {
                 onPropertiesEdit={() => setPropertiesOpen(true)}
               />
               <BesignerDraftAlertComponent draft={draft} noun="email" />
-            {remoteChanged ? (
-                <Alert
-                  severity="warning"
-                  sx={{
-                    borderRadius: 0,
-                    position: 'relative',
-                    zIndex: 'appBar',
-                  }}
-                  action={
-                    <Button
-                      color="inherit"
-                      size="small"
-                      onClick={() => window.location.reload()}
-                    >
-                      {'Reload'}
-                    </Button>
-                  }
-                >
-                  {'Someone else saved this email while you were editing. ' +
-                    'Saving is paused so their work is not overwritten — ' +
-                    'reload to pick up their changes. Nothing you have done ' +
-                    'here is lost until you do.'}
-                </Alert>
+              {remoteChanged ? (
+                <BesignerConflictAlertComponent noun="email" />
               ) : null}
               <WorkspaceEditorComponent>
                 <ViewportRootComponent>
