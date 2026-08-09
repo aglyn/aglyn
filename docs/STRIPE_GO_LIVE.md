@@ -88,10 +88,58 @@ subscription product, Stripe records them and charges no one.
    tenant one summary per month and stamps `emailedAt` on the rollup.
 5. **Validate the rate table** (`METERED_UNIT_RATES_USD` in
    `apps/console/utils/usage-metering.ts`) against a real Firebase + Vercel
-   invoice month before attaching the metered price in live mode.
-6. **Annual subscriptions carry no metered item.** `aglyn_metered_usage` is
-   a monthly price and Stripe forbids mixed `recurring.interval` on one
-   subscription, so AGL-1340 attaches it to monthly checkouts only. Until a
-   yearly metered price exists (or flexible billing mode is enabled), annual
-   customers accrue rollups and meter events that reach no invoice. Decide
-   that before telling annual customers they are metered.
+   invoice month.
+
+   **Done once, against LIST rates, 2026-08-09 (AGL-1280) — and it still
+   needs redoing against a real invoice.** There was no paid month to
+   measure: GCP's July 2026 invoice totalled **$0.03**, with every storage
+   and egress SKU inside the free tier, and the Vercel team is on **Hobby**,
+   which produces no invoice at all. Two rates were wrong and both were
+   corrected, because the markup is applied to the figures in that table —
+   so a wrong rate does not make us expensive, it makes the published
+   "cost + 30%" claim false:
+
+   | rate | was | now | basis |
+   | -- | -- | -- | -- |
+   | `storagePerGbMonth` | $0.03 | **$0.026** | GCS Standard US multi-region list — the SKU actually on our invoice |
+   | `perPageView` | $0.0001 | **$0.0001** (kept) | validated +2% against a real 627 KB cold tenant page load |
+   | `perFormSubmission` | $0.0005 | **$0.00005** | ~12 Firestore reads + ~9 writes + 1 invocation; no email, no reCAPTCHA |
+
+   `ORG_COGS_UNIT_RATES_USD` in `plan-entitlements.ts` carries the same three
+   figures and was changed with it — they must never drift.
+
+   **Re-validate this table once a real paid month exists**, i.e. once the
+   Vercel team is off Hobby and GCP usage clears the free tier. Until then
+   the rates are list-derived estimates, not measurements.
+6. **One metered price PER BILLING INTERVAL — set both env vars or neither.**
+   Stripe forbids mixed `recurring.interval` on one subscription, so AGL-1340
+   originally attached the monthly `aglyn_metered_usage` to monthly checkouts
+   only, and annual customers accrued meter events that reached no invoice.
+   AGL-1280 closed that: `aglyn_metered_usage_yearly` now exists on the SAME
+   meter, same product, also $0.01/unit.
+
+   | interval | lookup key | env var | live price id |
+   | -- | -- | -- | -- |
+   | monthly | `aglyn_metered_usage` | `STRIPE_PRICE_METERED` | `price_1TyhiDDYHP4psn7hRvgSrIvO` |
+   | annual | `aglyn_metered_usage_yearly` | `STRIPE_PRICE_METERED_YEARLY` | `price_1U2eZLDYHP4psn7h2EQGEnvV` |
+
+   Checkout and the plan switch pick the price matching the plan's interval
+   and skip only when that one is unset. Setting just one means that
+   interval's customers silently accrue usage that reaches no invoice — the
+   routes warn on exactly that asymmetry, and on nothing else.
+
+   Neither price encodes a rate: the rollup posts an already-computed value
+   in **cents**, so changing `METERED_UNIT_RATES_USD` never makes them stale.
+
+   ⚠️ **Setting these makes money move.** Do it only against a deployment
+   that already carries the current rate table — verify the bytes at
+   `origin/production`, not the branch name. A monthly→annual plan switch
+   re-prices the metered item in the same update; `clear_usage` is NOT
+   needed (verified against a test-mode subscription — usage lives on the
+   meter, not on the item).
+
+   ⚠️ The Billing card's annual caption still says the subscription "carries
+   no metered item today". Update
+   `components/billing/billing-metered-estimate.component.tsx` in the same
+   change as `STRIPE_PRICE_METERED_YEARLY` — it is a client component and
+   cannot read the env var to notice on its own.

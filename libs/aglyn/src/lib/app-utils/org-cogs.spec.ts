@@ -36,7 +36,7 @@ describe('orgMonthlyCogsUsd', () => {
       contactsCount: 2,
     }
     const expectedMeasured =
-      0.00018016155809164047 * 0.03 + // storage
+      0.00018016155809164047 * 0.026 + // storage (AGL-1280: was 0.03)
       2 * 0.0002 // two contacts
     const result = orgMonthlyCogsUsd(rollup, 2)
 
@@ -63,10 +63,11 @@ describe('orgMonthlyCogsUsd', () => {
       { pageViews: 5_000_000, storageGb: 50, apiRequests: 2_000_000 },
       1,
     )
-    // 5M views × $0.0001 = $500, plus $1.50 storage, plus $4 API.
-    expect(result.measuredUsd).toBeCloseTo(500 + 1.5 + 4, 6)
+    // 5M views × $0.0001 = $500, plus 50 GB × $0.026 = $1.30 storage
+    // (AGL-1280 corrected the rate from $0.03), plus $4 API.
+    expect(result.measuredUsd).toBeCloseTo(500 + 1.3 + 4, 6)
     expect(result.basis).toBe('measured')
-    expect(result.cogsUsd).toBeCloseTo(505.5, 6)
+    expect(result.cogsUsd).toBeCloseTo(505.3, 6)
   })
 
   it('prices the three meters the old costUsd ignored', () => {

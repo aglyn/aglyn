@@ -119,6 +119,34 @@ describe('plugins-mui', () => {
     }
   })
 
+  it('authors preset styling on `sx`, never inside props (AGL-1346)', () => {
+    // A node can carry TWO sx records: `props.sx` and its own `sx`. Both
+    // render — `Leaf` composes `(sx, props.sx, node.sx)` and later wins —
+    // but the Styles panel reads and writes `node.sx`. So a preset that
+    // styled through `props.sx` shipped values an author could see on the
+    // canvas and never change or clear by clicking: inserting the Dropdown
+    // Panel authored `position: absolute`, `zIndex: 1300` and a 1328px cap
+    // that no control in the editor could reach (AGL-1339).
+    //
+    // The renderer composes `node.sx` LAST, so moving a preset's styles
+    // there renders identically. This is the guard that keeps it that way;
+    // documents already carrying `props.sx` are unaffected and are handled
+    // by the panel, which now composes both records.
+    const offenders: string[] = []
+    for (const entry of MUI_BUNDLE) {
+      for (const preset of entry.presets ?? []) {
+        const walk = (node: any) => {
+          if (node?.props && 'sx' in node.props) {
+            offenders.push(`${preset.$id} → ${node.componentId}`)
+          }
+          for (const child of node?.nodes ?? []) walk(child)
+        }
+        walk(preset.data)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
   it('keeps the persisted legacy component ids in the plugin', () => {
     const schemas = [
       appBar,

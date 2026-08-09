@@ -177,13 +177,13 @@ export const presets: Aglyn.PresetSchema[] = [
       pluginId: BUNDLE_ID,
       // Ships with padding and a hover tint: an empty, zero-height anchor
       // dropped on the canvas looks like nothing happened.
-      props: {
-        sx: {
-          display: 'block',
-          p: 2,
-          borderRadius: 1,
-          '&:hover': { backgroundColor: 'action.hover' },
-        },
+      props: {},
+      // Node-level sx (AGL-1346) — the record the Styles panel edits.
+      sx: {
+        display: 'block',
+        p: 2,
+        borderRadius: 1,
+        '&:hover': { backgroundColor: 'action.hover' },
       },
     },
   },

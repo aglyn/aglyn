@@ -307,32 +307,58 @@ env['STRIPE_METER_EVENT_NAME'] = METER_EVENT_NAME
 
 // A metered price on that meter: the posted value is already in cents, so
 // 1¢ per aggregated unit reproduces the billed amount exactly.
-const meteredExisting = await findPriceByLookupKey('aglyn_metered_usage')
-let meteredPrice = meteredExisting
-if (!meteredPrice && DRY_RUN) {
-  dryRunMissing += 1
-  console.log('! aglyn_metered_usage MISSING (would be created)')
-  meteredPrice = { id: '<MISSING:aglyn_metered_usage>' }
-} else if (!meteredPrice) {
-  const product = await stripe('products', {
-    name: 'Aglyn metered usage',
-    'metadata[plan]': 'metered',
-  })
-  meteredPrice = await stripe('prices', {
-    product: product.id,
+//
+// ONE PER BILLING INTERVAL (AGL-1280). Stripe forbids mixed
+// `recurring.interval` on a subscription, so an annual plan needs a yearly
+// metered price or it carries no metered item at all — metered on paper,
+// billed $0 in fact. Both prices are $0.01/unit on the SAME meter: the value
+// is computed in cents by the rollup, so the interval is the only difference,
+// and nothing about the rate table is encoded in either price. A rate change
+// can therefore never make these stale.
+//
+// The two share a product. The monthly price is created first and the yearly
+// one reuses `meteredPrice.product`, so re-running this never mints a second
+// "Aglyn metered usage" product beside the first — the shape you get from
+// creating a product unconditionally, and unfixable afterwards because a
+// Stripe product with prices cannot be deleted, only archived.
+let meteredProductId = null
+async function ensureMeteredPrice(lookupKey, interval) {
+  const existing = await findPriceByLookupKey(lookupKey)
+  if (existing) {
+    console.log(`= ${lookupKey} already exists (${existing.id})`)
+    meteredProductId ??= existing.product
+    return existing
+  }
+  if (DRY_RUN) {
+    dryRunMissing += 1
+    console.log(`! ${lookupKey} MISSING (would be created)`)
+    return { id: `<MISSING:${lookupKey}>` }
+  }
+  meteredProductId ??= (
+    await stripe('products', {
+      name: 'Aglyn metered usage',
+      'metadata[plan]': 'metered',
+    })
+  ).id
+  const price = await stripe('prices', {
+    product: meteredProductId,
     currency: 'usd',
     unit_amount: '1',
-    'recurring[interval]': 'month',
+    'recurring[interval]': interval,
     'recurring[usage_type]': 'metered',
     'recurring[meter]': meter.id,
-    lookup_key: 'aglyn_metered_usage',
+    lookup_key: lookupKey,
     'metadata[plan]': 'metered',
   })
-  console.log(`+ created metered price (${meteredPrice.id})`)
-} else {
-  console.log(`= metered price already exists (${meteredExisting.id})`)
+  console.log(`+ created ${lookupKey} (${price.id}, per ${interval})`)
+  return price
 }
-env['STRIPE_PRICE_METERED'] = meteredPrice.id
+env['STRIPE_PRICE_METERED'] = (
+  await ensureMeteredPrice('aglyn_metered_usage', 'month')
+).id
+env['STRIPE_PRICE_METERED_YEARLY'] = (
+  await ensureMeteredPrice('aglyn_metered_usage_yearly', 'year')
+).id
 
 console.log(
   DRY_RUN

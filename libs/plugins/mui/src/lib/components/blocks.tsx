@@ -262,18 +262,37 @@ export const socialLinksSchema: Aglyn.ComponentSchema<SocialLinksProps> = {
 
 /* ── Section presets (composed from existing components) ────────────────── */
 
-const text = (variant: string, children: string, extra?: object) => ({
-  $id: null,
-  componentId: 'muiTypography',
-  pluginId: BUNDLE_ID,
-  props: { variant, children, ...extra },
-})
+/**
+ * Preset styling is authored on the node's OWN `sx`, never inside `props`
+ * (AGL-1346).
+ *
+ * Both records render — `Leaf` composes `(sx, props.sx, node.sx)` — but
+ * only `node.sx` is the one the Styles panel writes, so a preset that put
+ * its styling in `props.sx` authored values the panel could display but no
+ * click could ever change or clear. The renderer composes `node.sx` LAST,
+ * so moving a preset's styles here changes nothing about how a fresh
+ * insert looks; it only makes them editable. Existing documents keep their
+ * `props.sx` and still render from it.
+ *
+ * `plugin.spec.ts` holds every preset in this bundle to that rule.
+ */
+const text = (variant: string, children: string, extra?: object) => {
+  const { sx, ...props } = (extra ?? {}) as Record<string, unknown>
+  return {
+    $id: null,
+    componentId: 'muiTypography',
+    pluginId: BUNDLE_ID,
+    props: { variant, children, ...props },
+    ...(sx ? { sx } : {}),
+  }
+}
 
 const testimonialCard = (quote: string, name: string) => ({
   $id: null,
   componentId: 'muiStack',
   pluginId: BUNDLE_ID,
-  props: { spacing: 1, sx: { flex: 1, p: 3 } },
+  props: { spacing: 1 },
+  sx: { flex: 1, p: 3 },
   nodes: [
     text('body1', `“${quote}”`),
     text('subtitle2', `— ${name}`),
@@ -289,18 +308,16 @@ const pricingColumn = (
   $id: null,
   componentId: 'muiStack',
   pluginId: BUNDLE_ID,
-  props: {
-    spacing: 1,
-    sx: {
-      flex: 1,
-      p: 3,
-      alignItems: 'center',
-      ...(highlighted && {
-        border: '2px solid',
-        borderColor: 'primary.main',
-        borderRadius: 2,
-      }),
-    },
+  props: { spacing: 1 },
+  sx: {
+    flex: 1,
+    p: 3,
+    alignItems: 'center',
+    ...(highlighted && {
+      border: '2px solid',
+      borderColor: 'primary.main',
+      borderRadius: 2,
+    }),
   },
   nodes: [
     text('h5', tier),
@@ -335,7 +352,8 @@ const featureColumn = (title: string, body: string) => ({
   $id: null,
   componentId: 'muiStack',
   pluginId: BUNDLE_ID,
-  props: { spacing: 1, sx: { flex: 1, minWidth: 220, p: 2 } },
+  props: { spacing: 1 },
+  sx: { flex: 1, minWidth: 220, p: 2 },
   nodes: [text('h5', title), text('body1', body)],
 })
 
@@ -393,7 +411,8 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: { direction: 'row', spacing: 2, sx: { py: 4 } },
+      props: { direction: 'row', spacing: 2 },
+      sx: { py: 4 },
       nodes: [1, 2, 3].map((index) => ({
         $id: null,
         componentId: 'image',
@@ -414,7 +433,8 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: { direction: 'row', spacing: 2, sx: { py: 4 } },
+      props: { direction: 'row', spacing: 2 },
+      sx: { py: 4 },
       nodes: [
         testimonialCard(
           'Exactly what our team needed to ship the site fast.',
@@ -443,7 +463,8 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: { direction: 'row', spacing: 2, sx: { py: 4 } },
+      props: { direction: 'row', spacing: 2 },
+      sx: { py: 4 },
       nodes: [
         pricingColumn('Basic', '$9', ['One project', 'Email support']),
         pricingColumn(
@@ -472,7 +493,8 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: { spacing: 1, sx: { py: 4, maxWidth: 720 } },
+      props: { spacing: 1 },
+      sx: { py: 4, maxWidth: 720 },
       nodes: [
         text('h4', 'Frequently asked questions', { gutterBottom: true }),
         ...faqItem(
@@ -502,17 +524,14 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: {
-        direction: 'row',
-        spacing: 2,
-        sx: {
-          py: 1,
-          px: 2,
-          alignItems: 'center',
-          justifyContent: 'center',
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-        },
+      props: { direction: 'row', spacing: 2 },
+      sx: {
+        py: 1,
+        px: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        bgcolor: 'primary.main',
+        color: 'primary.contrastText',
       },
       nodes: [
         text('body2', 'Big news — announce a launch, sale, or update here.'),
@@ -576,7 +595,8 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: { spacing: 2, sx: { py: 10, px: 4, alignItems: 'center' } },
+      props: { spacing: 2 },
+      sx: { py: 10, px: 4, alignItems: 'center' },
       nodes: [
         text('h2', 'A headline that sells your idea', { align: 'center' }),
         text('h6', 'One clear sentence about the value you deliver.', {
@@ -607,11 +627,8 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: {
-        direction: 'row',
-        spacing: 2,
-        sx: { px: 4, py: 6, flexWrap: 'wrap' },
-      },
+      props: { direction: 'row', spacing: 2 },
+      sx: { px: 4, py: 6, flexWrap: 'wrap' },
       nodes: [
         featureColumn('Fast', 'Explain the first reason customers pick you.'),
         featureColumn(
@@ -637,17 +654,15 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: {
-        direction: 'row',
-        spacing: 4,
-        sx: { px: 4, py: 6, alignItems: 'center', flexWrap: 'wrap' },
-      },
+      props: { direction: 'row', spacing: 4 },
+      sx: { px: 4, py: 6, alignItems: 'center', flexWrap: 'wrap' },
       nodes: [
         {
           $id: null,
           componentId: 'muiStack',
           pluginId: BUNDLE_ID,
-          props: { sx: { flex: 1, minWidth: 280 } },
+          props: {},
+          sx: { flex: 1, minWidth: 280 },
           nodes: [
             {
               $id: null,
@@ -661,7 +676,8 @@ export const blockPresets: Aglyn.PresetSchema[] = [
           $id: null,
           componentId: 'muiStack',
           pluginId: BUNDLE_ID,
-          props: { spacing: 2, sx: { flex: 1, minWidth: 280 } },
+          props: { spacing: 2 },
+          sx: { flex: 1, minWidth: 280 },
           nodes: [
             text('h4', 'Show, then tell'),
             text(
@@ -692,15 +708,13 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: {
-        spacing: 2,
-        sx: {
-          py: 8,
-          px: 4,
-          alignItems: 'center',
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-        },
+      props: { spacing: 2 },
+      sx: {
+        py: 8,
+        px: 4,
+        alignItems: 'center',
+        bgcolor: 'primary.main',
+        color: 'primary.contrastText',
       },
       nodes: [
         text('h4', 'Ready to get started?', { align: 'center' }),
@@ -733,7 +747,8 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: { spacing: 2, sx: { px: 4, py: 6, maxWidth: 560 } },
+      props: { spacing: 2 },
+      sx: { px: 4, py: 6, maxWidth: 560 },
       nodes: [
         text('h4', 'Get in touch'),
         {
@@ -766,11 +781,8 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'section',
       pluginId: BUNDLE_ID,
-      props: {
-        element: 'footer',
-        ariaLabel: 'Site footer',
-        sx: { px: 4, py: 6, borderTop: 1, borderColor: 'divider' },
-      },
+      props: { element: 'footer', ariaLabel: 'Site footer' },
+      sx: { px: 4, py: 6, borderTop: 1, borderColor: 'divider' },
       nodes: [
         {
           $id: null,
@@ -782,14 +794,11 @@ export const blockPresets: Aglyn.PresetSchema[] = [
               $id: null,
               componentId: 'muiStack',
               pluginId: BUNDLE_ID,
-              props: {
-                direction: 'row',
-                spacing: 2,
-                sx: {
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                },
+              props: { direction: 'row', spacing: 2 },
+              sx: {
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
               },
               nodes: [
                 text('h6', 'Your Brand'),

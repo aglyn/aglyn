@@ -98,12 +98,22 @@ export function BillingMeteredEstimateComponent(
   // `Number.isFinite` catches both that and a NaN from bad override data.
   const band = (value: number, digits = 0) =>
     Number.isFinite(value) ? value.toFixed(digits) : '∞'
-  // AGL-1340 attaches the metered price to MONTHLY checkouts only (Stripe
-  // forbids mixed intervals on one subscription and `aglyn_metered_usage` is
-  // monthly), so an annual subscription carries no metered item at all. Say
+  // An annual subscription used to carry no metered item at all: AGL-1340
+  // attached the monthly-only `aglyn_metered_usage` to monthly checkouts,
+  // because Stripe forbids mixed intervals on one subscription. So this says
   // so rather than quoting an annual customer a figure their invoice will
   // never show — a console that disagrees with the invoice is the exact
   // failure this card exists to prevent.
+  //
+  // ⚠️ THIS SENTENCE GOES STALE THE MOMENT `STRIPE_PRICE_METERED_YEARLY` IS
+  // SET IN PRODUCTION. AGL-1280 minted `aglyn_metered_usage_yearly` on the
+  // same meter and checkout now picks the price matching the interval, so an
+  // annual subscription WILL carry a metered item — settling on the yearly
+  // renewal invoice, since the meter aggregates over the billing period.
+  // This card is a client component and cannot read that server env var, so
+  // the copy cannot detect the flip on its own. Whoever sets that variable
+  // must update this line in the same change, or the console will tell
+  // paying annual customers they are not being charged while they are.
   const annual = (org as any)?.subscription?.interval === 'year'
   return (
     <Stack spacing={0.5}>

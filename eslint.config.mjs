@@ -7,6 +7,7 @@ import eslintPluginMobx from 'eslint-plugin-mobx'
 import reactPlugin from 'eslint-plugin-react'
 import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import eslintPluginTsdoc from 'eslint-plugin-tsdoc'
+import noCrossGraphImport from './tools/eslint-rules/no-cross-graph-import.mjs'
 import noPlanGatedEntitlement from './tools/eslint-rules/no-plan-gated-entitlement.mjs'
 import noSxAfterSpread from './tools/eslint-rules/no-sx-after-spread.mjs'
 import noUnguardedLoadingHook from './tools/eslint-rules/no-unguarded-loading-hook.mjs'
@@ -14,6 +15,7 @@ import noUnguardedLoadingHook from './tools/eslint-rules/no-unguarded-loading-ho
 // Local rules that guard Aglyn-specific invariants (not published as a plugin).
 const aglynPlugin = {
   rules: {
+    'no-cross-graph-import': noCrossGraphImport,
     'no-plan-gated-entitlement': noPlanGatedEntitlement,
     'no-sx-after-spread': noSxAfterSpread,
     'no-unguarded-loading-hook': noUnguardedLoadingHook,
@@ -93,6 +95,10 @@ export default [
       // neither — taking the value alone is AGL-1047/1061/1064, three times
       // the same defect.
       'aglyn/no-unguarded-loading-hook': 'error',
+      // App Router's two module graphs. An import that crosses them
+      // typechecks clean and passes every unit test, so it surfaces only at
+      // `nx build` — i.e. at promotion time (AGL-1349, which took main down).
+      'aglyn/no-cross-graph-import': 'error',
       'mobx/exhaustive-make-observable': 'off',
       'mobx/unconditional-make-observable': 'off',
       'mobx/missing-make-observable': 'off',

@@ -620,17 +620,18 @@ export const presets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: Aglyn.MUI_BUNDLE_ID,
-      props: { spacing: 4, sx: { py: 2 } },
+      props: { spacing: 4 },
+      // Styling on the node's own sx, never in props (AGL-1346): both
+      // records render, but only `node.sx` is the one the Styles panel can
+      // read, edit or clear.
+      sx: { py: 2 },
       nodes: [
         {
           $id: null,
           componentId: 'muiStack',
           pluginId: Aglyn.MUI_BUNDLE_ID,
-          props: {
-            direction: 'row',
-            spacing: 1,
-            sx: { alignItems: 'center' },
-          },
+          props: { direction: 'row', spacing: 1 },
+          sx: { alignItems: 'center' },
           nodes: [
             {
               $id: null,

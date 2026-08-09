@@ -454,7 +454,10 @@ const megaColumn = (title: string, links: string[]) => ({
   $id: null,
   componentId: 'muiStack',
   pluginId: BUNDLE_ID,
-  props: { spacing: 0.5, sx: { minWidth: 180, alignItems: 'flex-start' } },
+  props: { spacing: 0.5 },
+  // Styling goes on the node's own sx, never in props (AGL-1346) — that is
+  // the record the Styles panel edits.
+  sx: { minWidth: 180, alignItems: 'flex-start' },
   nodes: [
     {
       $id: null,
@@ -506,9 +509,8 @@ export const navMenuPresets: Aglyn.PresetSchema[] = [
       presetRef: 'wrapper',
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: {
-        sx: { position: 'relative', display: 'inline-flex' },
-      },
+      props: {},
+      sx: { position: 'relative', display: 'inline-flex' },
       nodes: [
         {
           $id: null,
@@ -526,19 +528,24 @@ export const navMenuPresets: Aglyn.PresetSchema[] = [
             className: 'aglyn-hidden',
             direction: 'row',
             spacing: 4,
-            sx: {
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              zIndex: 1300,
-              p: 3,
-              minWidth: 560,
-              flexWrap: 'wrap',
-              bgcolor: 'background.paper',
-              color: 'text.primary',
-              boxShadow: 8,
-              borderRadius: 1,
-            },
+          },
+          // The panel's whole positioning. It lived in `props.sx` on the
+          // documents this preset seeded, where the Styles panel could
+          // neither show nor clear it (AGL-1339/AGL-1346); a fresh insert
+          // now puts it where a click can reach it. Same keys, same order,
+          // and `node.sx` composes last — the panel renders identically.
+          sx: {
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            zIndex: 1300,
+            p: 3,
+            minWidth: 560,
+            flexWrap: 'wrap',
+            bgcolor: 'background.paper',
+            color: 'text.primary',
+            boxShadow: 8,
+            borderRadius: 1,
           },
           nodes: [
             megaColumn('Shop', ['New arrivals', 'Best sellers', 'Sale']),
@@ -589,11 +596,8 @@ export const navMenuPresets: Aglyn.PresetSchema[] = [
           $id: null,
           componentId: 'muiStack',
           pluginId: BUNDLE_ID,
-          props: {
-            direction: 'row',
-            spacing: 4,
-            sx: { flexWrap: 'wrap' },
-          },
+          props: { direction: 'row', spacing: 4 },
+          sx: { flexWrap: 'wrap' },
           nodes: [
             megaColumn('Shop', ['New arrivals', 'Best sellers', 'Sale']),
             megaColumn('Company', ['About', 'Careers', 'Press']),

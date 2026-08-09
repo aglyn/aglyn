@@ -391,15 +391,18 @@ describe('drawer schemas & presets (AGL-562)', () => {
     const [toggle, links, drawer] = (mobileNav.data.nodes ?? []) as any[]
     expect(toggle.componentId).toBe('muiDrawerToggle')
     // Hamburger hidden on desktop; inline links hidden below desktop.
-    expect(
-      toggle.props.sx[Aglyn.VISIBILITY_BAND_MEDIA.desktop],
-    ).toEqual({ display: 'none' })
-    expect(
-      links.props.sx[Aglyn.VISIBILITY_BAND_MEDIA.mobile],
-    ).toEqual({ display: 'none' })
-    expect(
-      links.props.sx[Aglyn.VISIBILITY_BAND_MEDIA.tablet],
-    ).toEqual({ display: 'none' })
+    // On the node's own `sx`, which is the record the panel's Visibility
+    // switches read and write (AGL-1346) — these bands were authored into
+    // `props.sx`, where that control could neither show nor change them.
+    expect(toggle.sx[Aglyn.VISIBILITY_BAND_MEDIA.desktop]).toEqual({
+      display: 'none',
+    })
+    expect(links.sx[Aglyn.VISIBILITY_BAND_MEDIA.mobile]).toEqual({
+      display: 'none',
+    })
+    expect(links.sx[Aglyn.VISIBILITY_BAND_MEDIA.tablet]).toEqual({
+      display: 'none',
+    })
     expect(drawer.componentId).toBe('muiDrawer')
     expect((drawer.nodes ?? []).length).toBeGreaterThan(0)
   })

@@ -162,19 +162,40 @@ export function planFromPriceId(
 
 /**
  * The shared metered-usage price (AGL-635) that makes reported usage
- * billable. MONTHLY-only — the `aglyn_metered_usage` price recurs monthly
- * and Stripe rejects a subscription whose items mix intervals — so
- * every caller has to ask the interval before attaching it (AGL-1340).
- * There is deliberately no `_YEARLY` fallback here: no such price exists.
+ * billable, for a given billing interval.
+ *
+ * Stripe rejects a subscription whose items mix `recurring.interval`, so the
+ * metered item has to recur the same way the plan does. There are two prices
+ * — `aglyn_metered_usage` (monthly) and `aglyn_metered_usage_yearly` — and
+ * both bill $0.01 per aggregated unit against the SAME meter, because the
+ * rollup posts an already-computed value in CENTS. The interval is therefore
+ * the only thing that differs, and it is the only thing a caller must get
+ * right.
+ *
+ * `interval` is REQUIRED on purpose (AGL-1280). It used to be monthly-only
+ * with no argument, so the failure mode of forgetting it was attaching a
+ * monthly price to a yearly subscription — the exact mixed-interval crash
+ * this signature now makes unrepresentable. A default would hand that
+ * footgun straight back.
  */
-export function meteredPriceId(): string | null {
-  return env('STRIPE_PRICE_METERED')
+export function meteredPriceId(interval: 'month' | 'year'): string | null {
+  return env(
+    interval === 'year' ? 'STRIPE_PRICE_METERED_YEARLY' : 'STRIPE_PRICE_METERED',
+  )
 }
 
-/** Whether a price id is the shared metered-usage price. */
+/**
+ * Whether a price id is EITHER shared metered-usage price.
+ *
+ * Interval-agnostic by design: callers ask this to exclude the metered item
+ * from plan/add-on reasoning, and an annual subscription's metered item must
+ * be excluded just as thoroughly as a monthly one.
+ */
 export function isMeteredPriceId(priceId: string | null | undefined): boolean {
-  const metered = meteredPriceId()
-  return Boolean(metered && priceId === metered)
+  if (!priceId) return false
+  return (
+    priceId === meteredPriceId('month') || priceId === meteredPriceId('year')
+  )
 }
 
 /**

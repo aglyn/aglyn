@@ -981,12 +981,21 @@ export const collectionCategoriesSchema: Aglyn.ComponentSchema<CollectionCategor
 
 /* ── Presets ────────────────────────────────────────────────────────────── */
 
-const entryText = (variant: string, children: string, extra?: object) => ({
-  $id: null,
-  componentId: 'muiTypography',
-  pluginId: BUNDLE_ID,
-  props: { variant, children, ...extra },
-})
+/**
+ * Styling rides the node's own `sx`, never `props.sx` (AGL-1346): both
+ * render, but only `node.sx` is the record the Styles panel can edit or
+ * clear. `Leaf` composes `node.sx` last, so this is the same result.
+ */
+const entryText = (variant: string, children: string, extra?: object) => {
+  const { sx, ...props } = (extra ?? {}) as Record<string, unknown>
+  return {
+    $id: null,
+    componentId: 'muiTypography',
+    pluginId: BUNDLE_ID,
+    props: { variant, children, ...props },
+    ...(sx ? { sx } : {}),
+  }
+}
 
 export const collectionPresets: Aglyn.PresetSchema[] = [
   {
@@ -1024,8 +1033,8 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
                 children: 'Read more',
                 href: '{{entry.url}}',
                 size: 'small',
-                sx: { alignSelf: 'flex-start' },
               },
+              sx: { alignSelf: 'flex-start' },
             },
           ],
         },

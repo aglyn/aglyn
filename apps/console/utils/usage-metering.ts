@@ -45,13 +45,39 @@ import {
 export const METERED_MARKUP = 1.3
 
 /**
- * Unit rates in USD. `perPageView` folds together bandwidth (~0.6 MB avg
- * transfer at ~$0.15/GB) and the Firestore reads behind a render.
+ * Unit rates in USD — OUR marginal cost, before `METERED_MARKUP`.
+ *
+ * The published terms are "at cost + 30%", and the markup is applied to the
+ * figures in THIS table, so a wrong rate here does not make us expensive, it
+ * makes the published claim false. Corrected 2026-08-09 (AGL-1280).
+ *
+ * **Validated against LIST rates, not an invoice**, because no paid month
+ * exists to measure: GCP's July 2026 invoice (5653085482) totalled **$0.03**
+ * with every storage and egress SKU inside the free tier, and the Vercel team
+ * is on **Hobby**, which produces no invoice at all. List rates are the honest
+ * substitute — `docs/STRIPE_GO_LIVE.md` §5 step 5 still stands, and this table
+ * must be re-validated once a real paid month exists.
+ *
+ * - `storagePerGbMonth` **0.026** (2026-08-09) — GCS Standard **US
+ *   multi-region** list, the SKU actually on our invoice. Was 0.03, ~15% over.
+ * - `perPageView` **0.0001** (2026-08-09) — folds bandwidth (~0.6 MB avg
+ *   transfer at ~$0.15/GB, see `ESTIMATED_PAGE_TRANSFER_BYTES`) together with
+ *   the Firestore reads behind a render. Measured against a real cold tenant
+ *   page load — 24 requests, **627 KB encoded** — giving ~$0.000088 transfer +
+ *   ~40 reads @ $3e-7 + edge/ISR ≈ **$0.000102**, i.e. +2%. This is the one
+ *   well-calibrated rate; leave it alone.
+ * - `perFormSubmission` **0.00005** (2026-08-09) — measured from
+ *   `apps/tenant/app/api/forms/submit/route.ts`: ~12 Firestore reads, ~9
+ *   writes, one ~0.4s function invocation. No email is sent
+ *   (`notifyHostManagers` is in-app only) and there is no reCAPTCHA
+ *   assessment — spam control is a honeypot plus a Firestore rate limiter.
+ *   Was 0.0005, 8-13x over; the invoice corroborates it directly, since the
+ *   whole platform's 2,790 July entity writes billed $0.000000.
  */
 export const METERED_UNIT_RATES_USD = {
-  storagePerGbMonth: 0.03,
+  storagePerGbMonth: 0.026,
   perPageView: 0.0001,
-  perFormSubmission: 0.0005,
+  perFormSubmission: 0.00005,
 }
 
 /**

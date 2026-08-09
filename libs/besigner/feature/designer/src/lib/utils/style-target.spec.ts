@@ -91,6 +91,260 @@ describe('getNodeStyleTarget (AGL-1306)', () => {
 })
 
 /**
+ * The second sx record (AGL-1346). Every node can carry `props.sx` as well
+ * as `node.sx`; the renderer composes `(sx, props.sx, node.sx)` so
+ * `node.sx` shadows `props.sx` key by key, and the panel used to read
+ * `node.sx` alone — displaying "default" over values that were genuinely
+ * in the layout, and offering no way to clear what a preset had written.
+ *
+ * The panel now reads the COMPOSED record and splits its write back across
+ * the two. The invariant every case below leans on: writing back an
+ * unchanged composed record must leave BOTH stored records byte-identical.
+ */
+describe('a node carrying props.sx as well as sx (AGL-1346)', () => {
+  /**
+   * The real shape, from the Site nav mega-menu panels: all of the
+   * positioning lives in `props.sx`, and `sx` shadows exactly one key of
+   * it (the 1392px cap that replaced a dead 1328px one — AGL-1339).
+   */
+  const panelNode = () =>
+    ({
+      $id: 'panel',
+      componentId: 'muiStack',
+      props: {
+        className: 'aglyn-hidden',
+        direction: 'row',
+        spacing: 4,
+        sx: {
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          zIndex: 1300,
+          p: 3,
+          bgcolor: 'background.paper',
+          color: 'text.primary',
+          marginInline: 'auto',
+          width: '100%',
+          maxWidth: '1328px',
+        },
+      },
+      sx: { maxWidth: '1392px' },
+    }) as any
+
+  it('SHOWS what renders: props.sx under node.sx, winner first', () => {
+    const target = getNodeStyleTarget(panelNode())
+    // The value the panel used to report as "default on all four edges".
+    expect(target.sx?.['marginInline']).toBe('auto')
+    expect(target.sx?.['position']).toBe('absolute')
+    expect(target.sx?.['zIndex']).toBe(1300)
+    // Where both records set a key, the panel shows the one that wins.
+    expect(target.sx?.['maxWidth']).toBe('1392px')
+  })
+
+  it('an unrelated edit leaves both records byte-identical but for it', () => {
+    // The whole safety argument: the panel always writes back the full
+    // composed record, so anything that copied it wholesale into node.sx
+    // would migrate the positioning into a later cascade slot. Only the
+    // touched key may move.
+    const node = panelNode()
+    const target = getNodeStyleTarget(node)
+    target.setSx({ ...(target.sx as Record<string, any>), gap: 2 })
+
+    expect(node.sx).toEqual({ maxWidth: '1392px', gap: 2 })
+    expect(Object.keys(node.sx)).toEqual(['maxWidth', 'gap'])
+    expect(node.props.sx).toEqual(panelNode().props.sx)
+    expect(Object.keys(node.props.sx)).toEqual(
+      Object.keys(panelNode().props.sx),
+    )
+  })
+
+  it('a no-op round trip changes nothing at all', () => {
+    const node = panelNode()
+    const target = getNodeStyleTarget(node)
+    target.setSx({ ...(target.sx as Record<string, any>) })
+    expect(node.sx).toEqual({ maxWidth: '1392px' })
+    expect(node.props.sx).toEqual(panelNode().props.sx)
+  })
+
+  it('editing a props.sx-only value writes node.sx, which wins', () => {
+    // `props.sx` is left exactly as it was — the new value is authored
+    // where the panel's output has always gone, and shadows it.
+    const node = panelNode()
+    const target = getNodeStyleTarget(node)
+    target.setSx({ ...(target.sx as Record<string, any>), zIndex: 1400 })
+
+    expect(node.sx['zIndex']).toBe(1400)
+    expect(node.props.sx['zIndex']).toBe(1300)
+    expect(getNodeStyleTarget(node).sx?.['zIndex']).toBe(1400)
+  })
+
+  it('CLEARING a props.sx-only value removes it — the write-only gap', () => {
+    // The one thing no click could do before: unauthor what a preset (or
+    // whatever wrote the node) put in props.sx.
+    const node = panelNode()
+    const target = getNodeStyleTarget(node)
+    const { marginInline, ...cleared } = target.sx as Record<string, any>
+    target.setSx(cleared)
+
+    expect(node.props.sx['marginInline']).toBeUndefined()
+    expect(getNodeStyleTarget(node).sx?.['marginInline']).toBeUndefined()
+    // Everything the dropdown's positioning depends on survives.
+    expect(node.props.sx).toMatchObject({
+      position: 'absolute',
+      top: '100%',
+      left: 0,
+      zIndex: 1300,
+      p: 3,
+      bgcolor: 'background.paper',
+    })
+  })
+
+  it('clearing a SHADOWED key clears both records, not just the winner', () => {
+    // AGL-1339's trap: clearing the sx cap used to reveal the dead 1328px
+    // one underneath, with no visible cause in the panel.
+    const node = panelNode()
+    const target = getNodeStyleTarget(node)
+    const { maxWidth, ...cleared } = target.sx as Record<string, any>
+    target.setSx(cleared)
+
+    expect(node.sx['maxWidth']).toBeUndefined()
+    expect(node.props.sx['maxWidth']).toBeUndefined()
+    expect(getNodeStyleTarget(node).sx?.['maxWidth']).toBeUndefined()
+  })
+
+  it('emptying the last props.sx key drops the key from props entirely', () => {
+    const node = {
+      $id: 'a',
+      componentId: 'muiStack',
+      props: { spacing: 1, sx: { flex: 1 } },
+    } as any
+    getNodeStyleTarget(node).setSx({})
+    expect('sx' in node.props).toBe(false)
+    expect(node.props).toEqual({ spacing: 1 })
+    expect(getNodeStyleTarget(node).sx).toEqual({})
+  })
+
+  it('composes responsive and dark slices with the house merge', () => {
+    // Same semantics as the instance graft (AGL-1306): a partial
+    // breakpoint override keeps the widths below it, and a dark slice
+    // merges key by key rather than replacing.
+    const node = {
+      $id: 'a',
+      componentId: 'muiStack',
+      props: {
+        sx: {
+          p: { xs: 1, md: 4 },
+          '@scheme dark': { color: '#fff', backgroundColor: '#000' },
+        },
+      },
+      sx: { p: { md: 6 }, '@scheme dark': { backgroundColor: '#101828' } },
+    } as any
+    expect(getNodeStyleTarget(node).sx).toEqual({
+      p: { xs: 1, md: 6 },
+      '@scheme dark': { color: '#fff', backgroundColor: '#101828' },
+    })
+  })
+
+  it('leaves a node with no props.sx on the original path, by identity', () => {
+    const sx = { py: 2 }
+    const node = { $id: 'a', componentId: 'muiStack', props: { spacing: 1 }, sx } as any
+    expect(getNodeStyleTarget(node).sx).toBe(sx)
+    getNodeStyleTarget(node).setSx({ py: 4 })
+    expect(node.sx).toEqual({ py: 4 })
+    expect(node.props).toEqual({ spacing: 1 })
+  })
+
+  it('an ARRAY sx composes rather than merges, so it is left alone', () => {
+    const node = {
+      $id: 'a',
+      componentId: 'muiStack',
+      props: { sx: { p: 1 } },
+      sx: [{ py: 2 }],
+    } as any
+    expect(getNodeStyleTarget(node).sx).toEqual([{ py: 2 }])
+    getNodeStyleTarget(node).setSx({ py: 4 })
+    expect(node.sx).toEqual({ py: 4 })
+    expect(node.props.sx).toEqual({ p: 1 })
+  })
+
+  it('an instance override slice is NOT composed with the node props', () => {
+    // Empty means "whatever the component does" there (AGL-1338); merging
+    // a base into the reading would erase that distinction.
+    const node = {
+      $id: 'a',
+      componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+      props: { refId: 'cta', sx: { p: 2 } },
+    } as any
+    expect(getNodeStyleTarget(node).sx).toBeUndefined()
+  })
+})
+
+/**
+ * The same loop the panel runs, on a real MobX canvas node, through save
+ * and reload (AGL-1346) — the layer where an observable props bag and the
+ * `toJSON` write boundary get their say.
+ */
+describe('a props.sx edit survives save and reload (AGL-1346)', () => {
+  const loaded = () => {
+    const canvas = new Aglyn.CanvasManager(undefined as any)
+    canvas.setNodes({
+      [Aglyn.NODE_ROOT_ID]: {
+        $id: Aglyn.NODE_ROOT_ID,
+        type: Aglyn.NodeType.NODE,
+        componentId: 'div',
+        nodes: ['panel'],
+      },
+      panel: {
+        $id: 'panel',
+        type: Aglyn.NodeType.NODE,
+        parentId: Aglyn.NODE_ROOT_ID,
+        componentId: 'muiStack',
+        props: {
+          spacing: 4,
+          sx: { position: 'absolute', zIndex: 1300, maxWidth: '1328px' },
+        },
+        sx: { maxWidth: '1392px' },
+        nodes: [],
+      },
+    } as any)
+    return canvas
+  }
+
+  it('clears the shadowed cap from the stored document, keeping the rest', () => {
+    const canvas = loaded()
+    const target = getNodeStyleTarget(canvas.getNode('panel'))
+    const { maxWidth, ...cleared } = target.sx as Record<string, any>
+    canvas.transact(() => target.setSx(cleared))
+
+    const saved = (canvas.toJSON().nodes as Record<string, any>)['panel']
+    expect(saved.props.sx).toEqual({ position: 'absolute', zIndex: 1300 })
+    expect(saved.sx).toBeUndefined()
+
+    const reloaded = new Aglyn.CanvasManager(undefined as any)
+    reloaded.setNodes(canvas.toJSON().nodes as any)
+    expect(getNodeStyleTarget(reloaded.getNode('panel')).sx).toEqual({
+      position: 'absolute',
+      zIndex: 1300,
+    })
+  })
+
+  it('is one undo step, and undo brings the props record back', () => {
+    const canvas = loaded()
+    const target = getNodeStyleTarget(canvas.getNode('panel'))
+    const { zIndex, ...cleared } = target.sx as Record<string, any>
+    canvas.transact(() => target.setSx(cleared))
+    expect(canvas.getNode('panel')!.props['sx']['zIndex']).toBeUndefined()
+
+    canvas.undo()
+    expect(canvas.getNode('panel')!.props['sx']).toEqual({
+      position: 'absolute',
+      zIndex: 1300,
+      maxWidth: '1328px',
+    })
+  })
+})
+
+/**
  * Per-leaf targets (AGL-1332). The panel picks a leaf inside the instance
  * and every writer routes through the same target — so what has to hold
  * here is that the key it writes is the DEFINITION's node id, and that
