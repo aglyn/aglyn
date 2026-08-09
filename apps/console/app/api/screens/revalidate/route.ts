@@ -42,6 +42,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   screenIdsUsingComponentDeep,
   screenIdsUsingLayoutDeep,
@@ -52,6 +53,86 @@ export const dynamic = 'force-dynamic'
 
 /** Roles that may publish, and therefore may bust a cache. */
 const EDITORS = new Set(['admin', 'editor'])
+
+/**
+ * May this caller drop cached pages for this site? (AGL-1326)
+ *
+ * There are TWO populations who can publish here, and this route only knew
+ * about one. `hosts/{hostId}.memberRoles` is a PROJECTION of the org roster
+ * (`projectHostMemberRoles`), written by the membership APIs so the Firestore
+ * rules can authorize host content with the host-doc read they already do. It
+ * is a fast path, not the source of truth. The truth lives on
+ * `orgs/{orgId}/members/{uid}`, and it covers people the projection can miss:
+ * an org owner or admin reaches every site in the workspace BY ROLE — they are
+ * frequently never added to an individual site — and a projection that is
+ * stale, or was never written for a host created outside the membership APIs,
+ * locks the actual owner of the site out of revalidating their own pages.
+ *
+ * The fallback is `resolveOrgPermissions` with a host in context, the same
+ * helper `/api/hosts/members` authorizes against, and the same gate
+ * `/api/presence/token` and `/api/edit-access/token` apply for a host-scoped
+ * WRITE. Asking it with `hostId` matters: it answers the site-level question
+ * (`hostRole`, via `hostRoleFor`) rather than the org-level one, so a site
+ * collaborator scoped to two sites cannot bust a third, and it fails CLOSED on
+ * a lookup error (AGL-506).
+ *
+ * Deliberately not a hand-rolled roster read. `hostRoleFor` is the single
+ * predicate the rules projection, the org gate and this route have to agree
+ * on; a fourth copy of "may this person write this site" is how they drift.
+ */
+async function mayRevalidate(
+  decoded: { uid: string; [claim: string]: unknown },
+  hostSnapshot: FirebaseFirestore.DocumentSnapshot,
+): Promise<boolean> {
+  if (decoded['staff']) return true
+  const projected = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+  if (EDITORS.has(String(projected))) return true
+  const { hostRole } = await resolveOrgPermissions(decoded.uid, {
+    hostId: hostSnapshot.id,
+  })
+  return EDITORS.has(String(hostRole))
+}
+
+/**
+ * The 404 for a `hostId` that resolves to no site — with the one diagnosis
+ * worth a query (AGL-1326).
+ *
+ * `hostId` is a document id, but every console URL addresses a site by its
+ * SUBDOMAIN, so "sent what the address bar says" is the caller error this
+ * route actually sees, and answering it with "Unknown site" reads as *your
+ * site is gone* rather than *wrong identifier* — the ambiguity that cost this
+ * issue two conflicting bug reports. When the value names a real site and the
+ * caller may edit it, say so and hand back the id they needed.
+ *
+ * Gated on that authorization for the reason the role branch below answers 404
+ * instead of 403: a caller who cannot edit a site should not learn it exists.
+ * Someone probing subdomains gets the flat refusal.
+ */
+async function unknownSiteResponse(
+  firestore: FirebaseFirestore.Firestore,
+  decoded: { uid: string; [claim: string]: unknown },
+  hostId: string,
+): Promise<Response> {
+  const bySubdomain = await firestore
+    .collection('hosts')
+    .where('subdomain', '==', hostId)
+    .limit(1)
+    .get()
+  const candidate = bySubdomain.docs[0]
+  if (candidate && (await mayRevalidate(decoded, candidate))) {
+    return Response.json(
+      {
+        error:
+          `"${hostId}" is a site subdomain, not a site id — ` +
+          `send hostId "${candidate.id}"`,
+        reason: 'subdomain-not-id',
+        hostId: candidate.id,
+      },
+      { status: 404 },
+    )
+  }
+  return Response.json({ error: 'Unknown site' }, { status: 404 })
+}
 
 /**
  * Every live screen that renders inside `layoutId`, however deep (AGL-1150).
@@ -197,16 +278,15 @@ export async function POST(request: Request): Promise<Response> {
 
     const hostSnapshot = await firestore.collection('hosts').doc(hostId).get()
     if (!hostSnapshot.exists) {
-      return Response.json({ error: 'Unknown site' }, { status: 404 })
+      return unknownSiteResponse(firestore, decoded, hostId)
     }
 
     // Re-checked here rather than trusted from the client. The Admin SDK
     // bypasses rules, so this route has to re-derive the same membership the
     // rules would have enforced — the standing pattern for every Admin-SDK
-    // path in this app.
-    const isStaff = Boolean(decoded['staff'])
-    const role = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!isStaff && !EDITORS.has(String(role))) {
+    // path in this app. See `mayRevalidate`: the host `memberRoles` projection
+    // is one of the two ways in, never the only one (AGL-1326).
+    if (!(await mayRevalidate(decoded, hostSnapshot))) {
       // 404 rather than 403: a caller who cannot edit this site should not
       // learn that it exists.
       return Response.json({ error: 'Unknown site' }, { status: 404 })
