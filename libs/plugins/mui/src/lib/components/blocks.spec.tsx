@@ -154,6 +154,53 @@ describe('mui block presets', () => {
     expect(fieldNames).toEqual(['name', 'email', 'message'])
   })
 
+  /**
+   * Inserting a preset must land its styling where the Styles panel can
+   * reach it (AGL-1346) — on the node's own `sx`, not in `props.sx`. Both
+   * records render, so this is invisible on the canvas and only shows up
+   * when an author tries to change the value: before this, inserting a
+   * section authored padding no click could ever remove.
+   *
+   * Driven through the canvas rather than read off the literal, because
+   * insertion is where the shape has to survive: `addNodeFromPreset`
+   * duplicates, denormalizes and re-instantiates every node in the
+   * subtree, and `AglynNode` DROPS top-level fields it does not name.
+   */
+  it('inserts its styling onto node.sx, where the panel can edit it', () => {
+    const canvas = new Aglyn.CanvasManager(undefined as any)
+    canvas.setNodes({
+      [Aglyn.NODE_ROOT_ID]: {
+        $id: Aglyn.NODE_ROOT_ID,
+        type: Aglyn.NodeType.NODE,
+        componentId: 'div',
+        nodes: [],
+      },
+    } as any)
+    const hero = blockPresets.find((preset) => preset.displayName === 'Hero')
+    const inserted = canvas.addNodeFromPreset(
+      hero as any,
+      canvas.getNode(Aglyn.NODE_ROOT_ID)!,
+    )
+
+    expect(inserted.sx).toEqual({ py: 10, px: 4, alignItems: 'center' })
+    expect(inserted.props).toEqual({ spacing: 2 })
+    // …and it survives the save boundary, which omits an empty sx.
+    const saved = (canvas.toJSON().nodes as Record<string, any>)[inserted.$id]
+    expect(saved.sx).toEqual({ py: 10, px: 4, alignItems: 'center' })
+    expect(saved.props?.sx).toBeUndefined()
+  })
+
+  it('never authors a props.sx anywhere in a subtree (AGL-1346)', () => {
+    // The bundle-wide guard lives in plugin.spec; this one keeps the
+    // section library — the presets that carry the most styling — honest
+    // in the file where they are written.
+    for (const preset of blockPresets) {
+      walk(preset.data as PresetNode, (node) => {
+        expect((node as any).props ?? {}).not.toHaveProperty('sx')
+      })
+    }
+  })
+
   it('keeps the nav bar in page flow with brand and screen links', () => {
     const navBar = blockPresets.find(
       (preset) => preset.displayName === 'Nav Bar',

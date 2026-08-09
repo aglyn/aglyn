@@ -110,14 +110,15 @@ export const presets: Aglyn.PresetSchema[] = [
       pluginId: BUNDLE_ID,
       // Ships with padding and a visible outline: an empty, zero-height
       // div is dropped onto the canvas and appears to have done nothing.
-      props: {
-        component: 'div',
-        sx: {
-          p: 2,
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 1,
-        },
+      props: { component: 'div' },
+      // On the node's own sx, not in props (AGL-1346): the Styles panel
+      // edits `node.sx`, so an outline authored in `props.sx` was one no
+      // click could remove.
+      sx: {
+        p: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
       },
     },
   },

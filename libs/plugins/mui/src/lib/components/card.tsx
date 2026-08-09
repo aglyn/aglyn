@@ -213,7 +213,9 @@ export const cardPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: CARD_ID,
       pluginId: BUNDLE_ID,
-      props: { sx: { maxWidth: 360 } },
+      props: {},
+      // Node-level sx (AGL-1346) — the record the Styles panel edits.
+      sx: { maxWidth: 360 },
       nodes: [
         // The existing Image element rather than MUI's CardMedia: it
         // already carries the media-CDN srcSet, the lazy loading and the
@@ -276,7 +278,8 @@ export const cardPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: CARD_ID,
       pluginId: BUNDLE_ID,
-      props: { variant: 'outlined', sx: { maxWidth: 360 } },
+      props: { variant: 'outlined' },
+      sx: { maxWidth: 360 },
       nodes: [
         {
           $id: null,

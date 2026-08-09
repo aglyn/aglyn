@@ -134,7 +134,9 @@ export const presets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: ID,
       pluginId: BUNDLE_ID,
-      props: { elevation: 1, sx: { p: 2 } },
+      props: { elevation: 1 },
+      // Node-level sx (AGL-1346) — the record the Styles panel edits.
+      sx: { p: 2 },
       nodes: [
         {
           $id: null,
@@ -160,7 +162,8 @@ export const presets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: ID,
       pluginId: BUNDLE_ID,
-      props: { variant: 'outlined', sx: { p: 2 } },
+      props: { variant: 'outlined' },
+      sx: { p: 2 },
       nodes: [
         {
           $id: null,

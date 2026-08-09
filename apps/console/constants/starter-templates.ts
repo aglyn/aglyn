@@ -138,6 +138,15 @@ type NodeSpec = {
   /** Bundle owning the component; defaults to 'mui' (AGL-300). */
   pluginId?: string
   props?: Record<string, unknown>
+  /**
+   * Node-level styles — a SIBLING of props, never `props.sx` (AGL-1346).
+   *
+   * Both records render (`Leaf` composes `(sx, props.sx, node.sx)`, later
+   * wins), but the Styles panel edits `node.sx`. A starter that seeded its
+   * styling into `props.sx` handed the author a document full of values
+   * the panel could show but no click could change or clear.
+   */
+  sx?: Record<string, unknown>
   children?: NodeSpec[]
 }
 
@@ -157,6 +166,7 @@ function buildNodes(children: NodeSpec[]): Record<string, any> {
       pluginId: spec.pluginId ?? 'mui',
       parentId,
       props: spec.props ?? {},
+      ...(spec.sx ? { sx: spec.sx } : {}),
       nodes: (spec.children ?? []).map((child) => child.id),
     }
     for (const child of spec.children ?? []) walk(child, spec.id)
@@ -179,7 +189,8 @@ const text = (
 const heroSection = (prefix: string, headline: string, tagline: string) => ({
   id: `${prefix}hero`,
   componentId: 'muiStack',
-  props: { spacing: 2, sx: { py: 10, px: 4, alignItems: 'center' } },
+  props: { spacing: 2 },
+  sx: { py: 10, px: 4, alignItems: 'center' },
   children: [
     text(`${prefix}heroTitle`, 'h2', headline, { align: 'center' }),
     text(`${prefix}heroSub`, 'h6', tagline, { align: 'center' }),
@@ -194,7 +205,8 @@ const heroSection = (prefix: string, headline: string, tagline: string) => ({
 const featureColumn = (id: string, title: string, body: string): NodeSpec => ({
   id,
   componentId: 'muiStack',
-  props: { spacing: 1, sx: { flex: 1, p: 2 } },
+  props: { spacing: 1 },
+  sx: { flex: 1, p: 2 },
   children: [text(`${id}T`, 'h5', title), text(`${id}B`, 'body1', body)],
 })
 
@@ -347,7 +359,8 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
           {
             id: 'l_features',
             componentId: 'muiStack',
-            props: { direction: 'row', spacing: 2, sx: { px: 4, py: 6 } },
+            props: { direction: 'row', spacing: 2 },
+            sx: { px: 4, py: 6 },
             children: [
               featureColumn(
                 'l_f1',
@@ -369,7 +382,8 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
           {
             id: 'l_contact',
             componentId: 'muiStack',
-            props: { spacing: 2, sx: { px: 4, py: 6, maxWidth: 560 } },
+            props: { spacing: 2 },
+            sx: { px: 4, py: 6, maxWidth: 560 },
             children: [
               text('l_contactTitle', 'h4', 'Get in touch'),
               contactForm('l_'),
@@ -400,7 +414,8 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
           {
             id: 'b_services',
             componentId: 'muiStack',
-            props: { direction: 'row', spacing: 2, sx: { px: 4, py: 6 } },
+            props: { direction: 'row', spacing: 2 },
+            sx: { px: 4, py: 6 },
             children: [
               featureColumn('b_s1', 'Service one', 'Describe this service.'),
               featureColumn('b_s2', 'Service two', 'Describe this service.'),
@@ -418,7 +433,8 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
           {
             id: 'a_wrap',
             componentId: 'muiStack',
-            props: { spacing: 2, sx: { px: 4, py: 8, maxWidth: 720 } },
+            props: { spacing: 2 },
+            sx: { px: 4, py: 8, maxWidth: 720 },
             children: [
               text('a_title', 'h3', 'About us'),
               text(
@@ -440,7 +456,8 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
           {
             id: 'c_wrap',
             componentId: 'muiStack',
-            props: { spacing: 2, sx: { px: 4, py: 8, maxWidth: 560 } },
+            props: { spacing: 2 },
+            sx: { px: 4, py: 8, maxWidth: 560 },
             children: [
               text('c_title', 'h3', 'Contact us'),
               text(
@@ -476,7 +493,8 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
           {
             id: 'p_grid',
             componentId: 'muiStack',
-            props: { direction: 'row', spacing: 2, sx: { px: 4, py: 6 } },
+            props: { direction: 'row', spacing: 2 },
+            sx: { px: 4, py: 6 },
             children: [
               {
                 id: 'p_img1',
@@ -498,7 +516,8 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
           {
             id: 'p_contact',
             componentId: 'muiStack',
-            props: { spacing: 2, sx: { px: 4, py: 6, maxWidth: 560 } },
+            props: { spacing: 2 },
+            sx: { px: 4, py: 6, maxWidth: 560 },
             children: [
               text('p_contactTitle', 'h4', 'Work with me'),
               contactForm('p_'),

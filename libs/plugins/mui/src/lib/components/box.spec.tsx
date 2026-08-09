@@ -57,9 +57,11 @@ describe('Box element (AGL-1201)', () => {
 
   it('ships a preset that is visible when dropped', () => {
     // A bare div has zero height and no border: the drop would look like
-    // nothing happened.
-    const props = (presets[0].data as any).props
-    expect(props.sx.p).toBeTruthy()
-    expect(props.sx.border).toBeTruthy()
+    // nothing happened. On the node's own `sx` (AGL-1346) — in `props.sx`
+    // the outline rendered but no click could clear it.
+    const data = presets[0].data as any
+    expect(data.sx.p).toBeTruthy()
+    expect(data.sx.border).toBeTruthy()
+    expect(data.props).not.toHaveProperty('sx')
   })
 })

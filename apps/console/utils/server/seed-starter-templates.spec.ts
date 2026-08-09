@@ -225,4 +225,28 @@ describe('starter template documents', () => {
       }
     }
   })
+
+  // A node can carry two sx records — `props.sx` and its own `sx` — and
+  // both render, but the Styles panel edits `node.sx` (AGL-1346). A
+  // starter that seeded its styling into `props.sx` handed every author
+  // who picked it a page full of padding and alignment they could see and
+  // never change by clicking. The renderer composes `node.sx` last, so
+  // these seed identical-looking pages.
+  it('seeds styling on the node sx, never in props (AGL-1346)', () => {
+    const offenders: string[] = []
+    for (const entry of buildAllStarterTemplateDocs()) {
+      const nodes = entry.data['nodes'] as Record<string, any>
+      for (const [id, node] of Object.entries(nodes ?? {})) {
+        if (node?.props && 'sx' in node.props) offenders.push(`${entry.id}:${id}`)
+      }
+    }
+    expect(offenders).toEqual([])
+    // …and the styling did not simply vanish in the move.
+    const styled = buildAllStarterTemplateDocs().flatMap((entry) =>
+      Object.values((entry.data['nodes'] ?? {}) as Record<string, any>).filter(
+        (node) => node?.sx && Object.keys(node.sx).length > 0,
+      ),
+    )
+    expect(styled.length).toBeGreaterThan(0)
+  })
 })

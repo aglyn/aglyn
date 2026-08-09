@@ -425,7 +425,10 @@ const drawerLinkStack = {
   $id: null,
   componentId: 'muiStack',
   pluginId: BUNDLE_ID,
-  props: { spacing: 1, sx: { alignItems: 'stretch' } },
+  props: { spacing: 1 },
+  // On the node's own sx, not in props (AGL-1346): `props.sx` renders but
+  // the Styles panel cannot edit or clear it.
+  sx: { alignItems: 'stretch' },
   nodes: [navLink('Home'), navLink('About'), navLink('Contact')],
 }
 
@@ -481,35 +484,30 @@ export const drawerPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: 'muiStack',
       pluginId: BUNDLE_ID,
-      props: {
-        direction: 'row',
-        spacing: 1,
-        sx: { alignItems: 'center' },
-      },
+      props: { direction: 'row', spacing: 1 },
+      sx: { alignItems: 'center' },
       nodes: [
         {
           $id: null,
           componentId: DRAWER_TOGGLE_ID,
           pluginId: BUNDLE_ID,
-          props: {
-            ariaLabel: 'Open menu',
-            // Hidden where the inline links show.
-            sx: {
-              [Aglyn.VISIBILITY_BAND_MEDIA.desktop]: { display: 'none' },
-            },
+          props: { ariaLabel: 'Open menu' },
+          // Hidden where the inline links show. On `sx`, which is what the
+          // panel's Visibility switches read and write (AGL-1346) — in
+          // `props.sx` this band was invisible to the very control the
+          // comment below promises authors can adjust it with.
+          sx: {
+            [Aglyn.VISIBILITY_BAND_MEDIA.desktop]: { display: 'none' },
           },
         },
         {
           $id: null,
           componentId: 'muiStack',
           pluginId: BUNDLE_ID,
-          props: {
-            direction: 'row',
-            spacing: 1,
-            sx: {
-              [Aglyn.VISIBILITY_BAND_MEDIA.mobile]: { display: 'none' },
-              [Aglyn.VISIBILITY_BAND_MEDIA.tablet]: { display: 'none' },
-            },
+          props: { direction: 'row', spacing: 1 },
+          sx: {
+            [Aglyn.VISIBILITY_BAND_MEDIA.mobile]: { display: 'none' },
+            [Aglyn.VISIBILITY_BAND_MEDIA.tablet]: { display: 'none' },
           },
           nodes: [navLink('Home'), navLink('About'), navLink('Contact')],
         },

@@ -37,4 +37,24 @@ describe('commerce plugin', () => {
       expect(id).toMatch(/^[a-z0-9-]+$/)
     }
   })
+
+  it('authors preset styling on `sx`, never inside props (AGL-1346)', () => {
+    // Same rule the mui bundle is held to: `props.sx` renders but the
+    // Styles panel edits `node.sx`, so styling authored into props is
+    // styling no click can change or clear. The renderer composes
+    // `node.sx` last, so this is a pure relocation.
+    const offenders: string[] = []
+    for (const entry of COMMERCE_BUNDLE) {
+      for (const preset of entry.presets ?? []) {
+        const walk = (node: any) => {
+          if (node?.props && 'sx' in node.props) {
+            offenders.push(`${preset.$id} → ${node.componentId}`)
+          }
+          for (const child of node?.nodes ?? []) walk(child)
+        }
+        walk(preset.data)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
 })
