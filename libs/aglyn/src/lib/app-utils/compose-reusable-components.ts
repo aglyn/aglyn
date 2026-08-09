@@ -43,40 +43,165 @@ export const REUSABLE_INSTANCE_PROP_VALUES_KEY = 'propValues'
 
 /**
  * `styleOverrides` key addressing the component ROOT (AGL-1306). Persisted
- * in screen documents — never rename. Phase 2 adds component-internal node
- * ids beside it; the definition root is addressed by this constant rather
- * than its id so the same override survives a republish that reroots the
- * definition.
+ * in screen documents — never rename. Component-internal node ids key the
+ * per-leaf overrides beside it (AGL-1332); the definition root is addressed
+ * by this constant rather than its id so the same override survives a
+ * republish that reroots the definition.
  */
 export const STYLE_OVERRIDES_ROOT_KEY = 'root'
 
+const isStyleRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Object.keys(value).length > 0
+
 /**
- * The sx-shaped root style override carried by an instance node, or
- * `undefined` when the node is not an instance or carries none.
+ * Every per-instance style override an instance node carries, keyed the way
+ * it is stored (AGL-1332): {@link STYLE_OVERRIDES_ROOT_KEY} for the
+ * component root, and a DEFINITION-internal node id for each overridden
+ * leaf. Empty for a node that is not an instance or carries none.
+ *
+ * Keyed on the definition's own id, never the grafted `cmp__…` id: the
+ * graft id is DERIVED from the instance id, so keying on it would break the
+ * moment a subtree was duplicated or an instance re-keyed, and two
+ * instances of one component could not share the same authoring vocabulary.
+ * Entries that are not a non-empty plain object are dropped here rather
+ * than at each call site — a `null`, a string, or a cleared `{}` must read
+ * as "no override" identically in the graft, in detach and in the panel.
  *
  * Deliberately here rather than in a render surface: this file owns what
  * an instance node looks like, and the graft below is the ONE place the
- * override is applied — canvas, Preview and tenant SSR all call
+ * overrides are applied — canvas, Preview and tenant SSR all call
  * {@link composeReusableComponentNodes}, so they cannot disagree about
  * what an override means.
+ */
+export function getInstanceStyleOverrides(
+  node: { componentId?: string; styleOverrides?: unknown } | undefined | null,
+): Record<string, Record<string, unknown>> {
+  if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) return {}
+  const overrides = node?.styleOverrides as Record<string, unknown> | undefined
+  if (!isStyleRecord(overrides)) return {}
+  const clean: Record<string, Record<string, unknown>> = {}
+  for (const [key, value] of Object.entries(overrides)) {
+    if (key && isStyleRecord(value)) clean[key] = value
+  }
+  return clean
+}
+
+/**
+ * The sx-shaped ROOT style override carried by an instance node, or
+ * `undefined` when the node is not an instance or carries none — the
+ * AGL-1306 half of {@link getInstanceStyleOverrides}.
  */
 export function getInstanceRootStyleOverride(
   node: { componentId?: string; styleOverrides?: unknown } | undefined | null,
 ): Record<string, unknown> | undefined {
-  if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) return undefined
-  const overrides = node?.styleOverrides as
-    | Record<string, unknown>
-    | undefined
-  const root = overrides?.[STYLE_OVERRIDES_ROOT_KEY]
-  if (
-    typeof root !== 'object' ||
-    root === null ||
-    Array.isArray(root) ||
-    Object.keys(root).length === 0
-  ) {
-    return undefined
+  return getInstanceStyleOverrides(node)[STYLE_OVERRIDES_ROOT_KEY]
+}
+
+/**
+ * The `{ sx }` patch one definition node takes from an instance's
+ * overrides, or `undefined` when none applies (AGL-1332).
+ *
+ * Two layers, coarse first: the root slice when this node IS the
+ * definition root, then the node's own definition-id slice. Both go
+ * through `mergeNodeSx`, so a per-leaf override gets exactly the cascade
+ * semantics the root one already had — a `{ md: … }` slice keeps the
+ * base's narrower widths, an `@scheme dark` slice merges key-by-key, and
+ * a plain property replaces only the leaf it names.
+ *
+ * A key naming a node the definition no longer has is simply never
+ * consulted: this runs per definition node, so a component edited after
+ * the override was written degrades to the component's own styling rather
+ * than throwing on a page nobody has opened since.
+ *
+ * Returned as a patch object rather than a value so the caller can spread
+ * nothing at all — writing `sx: undefined` onto a node that never had one
+ * would materialize the key on every grafted leaf.
+ */
+function instanceSxPatch(
+  baseSx: unknown,
+  overrides: Record<string, Record<string, unknown>>,
+  defId: NodeId,
+  rootId: NodeId | undefined,
+): { sx: unknown } | undefined {
+  // The root is addressed by the constant, so a definition node whose id
+  // merely happens to BE `root` without being the root gets nothing from
+  // the root slice — the alternative is styling an arbitrary leaf from the
+  // panel's root target.
+  const rootSlice =
+    defId === rootId ? overrides[STYLE_OVERRIDES_ROOT_KEY] : undefined
+  const leafSlice =
+    defId === STYLE_OVERRIDES_ROOT_KEY ? undefined : overrides[defId]
+  if (!rootSlice && !leafSlice) return undefined
+  let sx = baseSx
+  if (rootSlice) sx = mergeNodeSx(sx, rootSlice)
+  if (leafSlice) sx = mergeNodeSx(sx, leafSlice)
+  return { sx }
+}
+
+/** One styleable target inside an instance — see {@link listInstanceStyleTargets}. */
+export interface InstanceStyleTarget {
+  /** The `styleOverrides` key this target reads and writes. */
+  key: string
+  /** The definition-internal node id it styles. */
+  componentInternalId: NodeId
+  /** 0 for the component root, +1 per level down — the picker indents by it. */
+  depth: number
+  /** The definition node's `componentId`, so a picker can label it. */
+  componentId?: string
+  /** The definition node's own `name`, when the component author set one. */
+  name?: string
+  /** True for the component root (the AGL-1306 target). */
+  isRoot: boolean
+}
+
+/**
+ * The styleable targets inside one component definition, in tree order
+ * (root first, then depth-first through each node's `nodes`) — what the
+ * Styles panel offers when a component instance is selected (AGL-1332).
+ *
+ * Beside the graft on purpose: the panel must write the SAME keys the
+ * graft reads, and a second walker that disagreed would offer authors
+ * targets no renderer consults. Cycle-safe and unreachable-safe: a node
+ * the root cannot reach is not offered, because the graft would never
+ * render it either.
+ */
+export function listInstanceStyleTargets(
+  definition:
+    | Pick<ReusableComponentTree<any>, 'rootId' | 'nodes'>
+    | null
+    | undefined,
+): InstanceStyleTarget[] {
+  const rootId = definition?.rootId
+  const nodes = definition?.nodes
+  if (!rootId || !nodes?.[rootId]) return []
+  const targets: InstanceStyleTarget[] = []
+  const seen = new Set<NodeId>()
+  const walk = (id: NodeId, depth: number) => {
+    const node = nodes[id]
+    // `seen` is what bounds the walk: a definition that referenced an
+    // ancestor would otherwise recurse until the stack gave out.
+    if (!node || seen.has(id)) return
+    seen.add(id)
+    const isRoot = id === rootId
+    targets.push({
+      key: isRoot ? STYLE_OVERRIDES_ROOT_KEY : id,
+      componentInternalId: id,
+      depth,
+      componentId: (node as { componentId?: string }).componentId,
+      name: (node as { name?: string }).name,
+      isRoot,
+    })
+    const children = (node as { nodes?: unknown }).nodes
+    if (!Array.isArray(children)) return
+    for (const childId of children as NodeId[]) {
+      if (typeof childId === 'string') walk(childId, depth + 1)
+    }
   }
-  return root as Record<string, unknown>
+  walk(rootId, 0)
+  return targets
 }
 
 /**
@@ -311,14 +436,18 @@ export function composeReusableComponentNodes<
       const definition = definitionsById[refId] as ReusableComponentTree<N>
       const prefix = instancePrefix(instanceId)
       const prefixId = (id: NodeId) => `${prefix}${id}`
-      // Root style override (AGL-1306): merged over the definition ROOT's
-      // own sx as this instance's copy is grafted — per-instance scope
-      // exists only here, exactly like the declared-prop substitution
-      // below. Merging into the graft (rather than a renderer patch) is
-      // what gives canvas/Preview/tenant parity for free, and reading the
-      // definition's CURRENT root each pass is why an override can never
-      // pin the instance to an old component version.
-      const rootStyleOverride = getInstanceRootStyleOverride(
+      // Style overrides (AGL-1306 root, AGL-1332 per leaf): merged over
+      // each definition node's own sx as this instance's copy is grafted —
+      // per-instance scope exists only here, exactly like the declared-prop
+      // substitution below. Merging into the graft (rather than a renderer
+      // patch) is what gives canvas/Preview/tenant parity for free, and
+      // reading the definition's CURRENT nodes each pass is why an override
+      // can never pin the instance to an old component version.
+      //
+      // Per-leaf is not a nicety: a component's text leaves usually set
+      // their OWN colour, so a root-level `color` never reaches them and an
+      // instance given a white background renders white-on-white (AGL-1318).
+      const styleOverrides = getInstanceStyleOverrides(
         instanceNode as { componentId?: string; styleOverrides?: unknown },
       )
 
@@ -339,9 +468,12 @@ export function composeReusableComponentNodes<
               typeof childId === 'string' ? prefixId(childId) : childId,
             ),
           }),
-          ...(defId === definition.rootId && rootStyleOverride
-            ? { sx: mergeNodeSx(defNode.sx, rootStyleOverride) as any }
-            : {}),
+          ...((instanceSxPatch(
+            defNode.sx,
+            styleOverrides,
+            defId,
+            definition.rootId,
+          ) ?? {}) as any),
         }
       }
       // Declared props (AGL-1247) substitute HERE, on this instance's copy
@@ -411,9 +543,11 @@ function collectDescendantIds<N extends AglynNodeSchema>(
  *   override, else the definition's default. Every string prop is walked,
  *   so an image's `src` bakes to the bound media for free — the token is
  *   substituted by name, not by which prop happens to hold it.
- * - The root style override (AGL-1306) merges over the definition root's
- *   own sx, so the copy keeps the look the page was showing rather than
- *   snapping back to the component's base styling.
+ * - The style overrides (AGL-1306 root, AGL-1332 per leaf) merge over the
+ *   matching definition node's own sx, so the copy keeps the look the page
+ *   was showing rather than snapping back to the component's base styling.
+ *   Every node is patched, not just the root: an instance re-coloured to a
+ *   white band with black copy must detach as a white band with black copy.
  * - Ids are FRESH (`createId`), never the `cmp__…` graft namespace: a
  *   detached copy is an ordinary subtree, and leaving graft ids behind
  *   would collide the next time an instance of the same definition
@@ -465,7 +599,7 @@ export function detachInstanceSubtree<
     idMap[defId] = fresh
   }
 
-  const rootStyleOverride = getInstanceRootStyleOverride(
+  const styleOverrides = getInstanceStyleOverrides(
     instanceNode as { componentId?: string; styleOverrides?: unknown },
   )
   const copied: NormalizedNodes<N> = {}
@@ -486,9 +620,12 @@ export function detachInstanceSubtree<
           typeof childId === 'string' ? (idMap[childId] ?? childId) : childId,
         ),
       }),
-      ...(defId === rootId && rootStyleOverride
-        ? { sx: mergeNodeSx(defNode.sx, rootStyleOverride) as any }
-        : {}),
+      // The SAME patch the graft applies, node for node (AGL-1332) — the
+      // detached copy has to look identical to what the page was showing,
+      // and a per-leaf override baked only at the root would repaint every
+      // headline the moment an author detached.
+      ...((instanceSxPatch(defNode.sx, styleOverrides, defId, rootId) ??
+        {}) as any),
     }
   }
 

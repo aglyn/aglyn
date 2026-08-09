@@ -49,10 +49,14 @@ properties:
 - **Flexbox & Grids** — the container controls: alignment and
   direction toggles plus the gap, row-gap, and column-gap fields.
 - **Layout** — display variant and float.
-- **Colors** — text color and background color. Both pickers open on
-  **theme color references** first (see
+- **Colors** — text color, background color, and **Background Fill**
+  (see [gradient backgrounds](#gradient-backgrounds)). Both pickers open
+  on **theme color references** first (see
   [scheme-scoped colors](#scheme-scoped-colors)); a *Custom color*
-  step reveals the full picker.
+  step reveals the full picker. The two color fields hold a *color* — a
+  hex, an `rgb()`/`hsl()` value, or a theme reference. Paste anything
+  else (a gradient, a `url(…)`) and the field says so and refuses it,
+  rather than saving a value the browser would silently drop.
 - **Sizing** — width, height, and the min/max bounds for both.
 - **Typography** — font size, weight, family, line height, letter
   spacing, text transform, and text decoration.
@@ -87,6 +91,40 @@ field). There is no Save button in the styles panel; undo/redo covers
 you as usual. Everything writes through the same responsive pipeline,
 so the active breakpoint scope applies — and each group saves only its
 own properties, never touching values you set elsewhere.
+
+## Gradient backgrounds
+
+**Background Fill** in the Colors group builds a gradient by clicking —
+no custom CSS.
+
+1. Set **Fill** to *Linear gradient* (or *Radial gradient*). It starts
+   from your theme's primary and secondary colors so you see a gradient
+   immediately; *Solid color* clears it again and hands the element back
+   to the Background Color field above.
+2. Set the **Angle** in degrees for a linear fill — `180` runs top to
+   bottom, `90` left to right.
+3. Edit the **color stops**. Each stop is a color button plus a position
+   in percent. The color button opens the same two-stage picker as every
+   other color field, so a stop can be a **theme color** (it then follows
+   your palette, in both light and dark) or a literal hex. One gradient
+   can mix the two — bind the ends to Primary and Secondary and drop a
+   literal mid-tone between them. **Add stop** inserts one between the
+   last two; a gradient always keeps at least two.
+
+Background Fill writes `background-image`, which paints *over* the
+Background Color — so a solid color set there still shows through
+anywhere the gradient is transparent, and stays as the fallback if you
+switch the fill back to solid.
+
+Like the other color fields, Background Fill is
+[scheme-scoped](#scheme-scoped-colors): theme-color stops adapt on their
+own, and while the artboard previews dark you can give dark a different
+gradient outright.
+
+A background richer than the stop editor can show — a `conic-gradient`,
+a `to bottom right` direction, several stacked images — opens as an
+editable CSS box instead, and is never rewritten. Edit it back to a plain
+linear or radial gradient and the stop controls come back.
 
 ## Visibility per device band
 

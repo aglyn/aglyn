@@ -33,7 +33,6 @@ import {
 import {
   Box,
   Button,
-  ButtonBase,
   ClickAwayListener,
   type FormControlProps as MuiFormControlProps,
   type GridProps,
@@ -46,7 +45,6 @@ import {
   type PopperProps,
   TextField as MuiTextField,
   type TextFieldProps,
-  Typography,
 } from '@mui/material'
 import {
   type FocusEvent,
@@ -58,7 +56,10 @@ import {
   useState,
 } from 'react'
 import {
+  ColorTokenGrid,
   type ColorPickerTokenOption,
+  rgbColorToCss,
+  type RgbColorValue,
   TokenSwatch,
   useColorPickerTokenOptions,
 } from './color-picker-tokens'
@@ -107,68 +108,6 @@ const TextFieldColorSwatch = forwardRef<any, TextFieldColorSwatchProps>(
 )
 TextFieldColorSwatch.displayName = 'AglynTextFieldColorSwatch'
 
-/**
- * Default stage of the two-stage picker (AGL-588): the site theme's
- * palette references. Each split swatch previews the token's light and
- * dark resolutions; selecting one stores the TOKEN PATH (not a hex), so
- * the color keeps adapting when the site switches schemes.
- */
-const ThemeColorTokenGrid = (props: {
-  options: ColorPickerTokenOption[]
-  value: string
-  onSelect: (tokenPath: string, e: any) => void
-  onCustom: () => void
-}) => {
-  const { options, value, onSelect, onCustom } = props
-  return (
-    <Paper sx={{ p: 1, width: 248 }}>
-      <Typography
-        variant="overline"
-        component="div"
-        color="text.secondary"
-        sx={{ px: 0.5, lineHeight: 2 }}
-      >
-        Theme colors
-      </Typography>
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 0.25,
-        }}
-      >
-        {options.map((option) => (
-          <ButtonBase
-            key={option.value}
-            aria-label={option.label}
-            aria-pressed={option.value === value}
-            onClick={(e) => onSelect(option.value, e)}
-            sx={{
-              justifyContent: 'flex-start',
-              gap: 0.75,
-              px: 0.5,
-              py: 0.5,
-              borderRadius: 1,
-              border: 1,
-              borderColor:
-                option.value === value ? 'primary.main' : 'transparent',
-              '&:hover': { backgroundColor: 'action.hover' },
-            }}
-          >
-            <TokenSwatch light={option.light} dark={option.dark} size={18} />
-            <Typography variant="caption" noWrap>
-              {option.label}
-            </Typography>
-          </ButtonBase>
-        ))}
-      </Box>
-      <Button size="small" fullWidth sx={{ mt: 0.5 }} onClick={onCustom}>
-        Custom color…
-      </Button>
-    </Paper>
-  )
-}
-
 type InternalColorPickerProps = Partial<TextFieldProps> & {
   /** Contextual help tooltip, same contract as every other field. */
   help?: FormFieldGridProps['help']
@@ -182,19 +121,7 @@ type InternalColorPickerProps = Partial<TextFieldProps> & {
 export type ColorPickerProps = InternalColorPickerProps &
   UseFieldApiComponentConfig
 
-type RGBColor = {
-  r: number
-  g: number
-  b: number
-  a: number
-}
-
-const getStrValue = (value: RGBColor | string) => {
-  if (typeof value === 'string') return value
-  const { r, g, b, a } = { ...(value as RGBColor) }
-  if (a < 1) return `rgba(${r || 0}, ${g || 0}, ${b || 0}, ${a || 0})`
-  return `rgb(${r || 0}, ${g || 0}, ${b || 0})`
-}
+type RGBColor = RgbColorValue
 
 export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
   (props, ref) => {
@@ -236,7 +163,7 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
 
     const handleChange = useCallback(
       (value: RGBColor | string, e: any) => {
-        const val = getStrValue(value || '') || ''
+        const val = rgbColorToCss(value || '') || ''
         input?.onChange && input?.onChange(val)
         inputProps?.onChange && inputProps?.onChange(e, val)
         onChange && onChange(e, val)
@@ -355,7 +282,7 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
               {...PopperProps}
             >
               {effectiveStage === 'tokens' ? (
-                <ThemeColorTokenGrid
+                <ColorTokenGrid
                   options={tokenOptions}
                   value={value}
                   onSelect={handleTokenSelect}

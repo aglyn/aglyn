@@ -16,6 +16,7 @@
  */
 
 import { styled, useTheme } from '@aglyn/shared-ui-theme'
+import { Box, Button, ButtonBase, Paper, Typography } from '@mui/material'
 import { createContext, useContext, useMemo } from 'react'
 
 /**
@@ -196,3 +197,93 @@ export const TokenSwatch = styled('span', {
   },
 )
 TokenSwatch.displayName = 'AglynColorTokenSwatch'
+
+/** The `{ r, g, b, a }` shape react-color hands back on every change. */
+export interface RgbColorValue {
+  r: number
+  g: number
+  b: number
+  a: number
+}
+
+/**
+ * The CSS colour string a picker value stands for. Lives here rather than
+ * inside the colour FIELD because the gradient field's stop editor commits
+ * through the same picker (AGL-1331) and must not grow a second, subtly
+ * different conversion.
+ */
+export function rgbColorToCss(value: RgbColorValue | string): string {
+  if (typeof value === 'string') return value
+  const { r, g, b, a } = { ...value }
+  if (a < 1) return `rgba(${r || 0}, ${g || 0}, ${b || 0}, ${a || 0})`
+  return `rgb(${r || 0}, ${g || 0}, ${b || 0})`
+}
+
+/**
+ * Default stage of the two-stage picker (AGL-588): the site theme's palette
+ * references. Each split swatch previews the token's light and dark
+ * resolutions; selecting one stores the TOKEN PATH (not a hex), so the
+ * colour keeps adapting when the site switches schemes.
+ *
+ * Shared by the colour field and by each gradient stop (AGL-1331) — one
+ * grid, so the token list, the selected-state ring and the "Custom color…"
+ * escape hatch cannot drift between the two places an author picks a colour.
+ */
+export const ColorTokenGrid = (props: {
+  options: ColorPickerTokenOption[]
+  value: string
+  onSelect: (tokenPath: string, event: unknown) => void
+  onCustom: () => void
+  /** Overrides the "Theme colors" heading. */
+  title?: string
+}) => {
+  const { options, value, onSelect, onCustom, title = 'Theme colors' } = props
+  return (
+    <Paper sx={{ p: 1, width: 248 }}>
+      <Typography
+        variant="overline"
+        component="div"
+        color="text.secondary"
+        sx={{ px: 0.5, lineHeight: 2 }}
+      >
+        {title}
+      </Typography>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 0.25,
+        }}
+      >
+        {options.map((option) => (
+          <ButtonBase
+            key={option.value}
+            aria-label={option.label}
+            aria-pressed={option.value === value}
+            onClick={(event) => onSelect(option.value, event)}
+            sx={{
+              justifyContent: 'flex-start',
+              gap: 0.75,
+              px: 0.5,
+              py: 0.5,
+              borderRadius: 1,
+              border: 1,
+              borderColor:
+                option.value === value ? 'primary.main' : 'transparent',
+              '&:hover': { backgroundColor: 'action.hover' },
+            }}
+          >
+            <TokenSwatch light={option.light} dark={option.dark} size={18} />
+            <Typography variant="caption" noWrap>
+              {option.label}
+            </Typography>
+          </ButtonBase>
+        ))}
+      </Box>
+      <Button size="small" fullWidth sx={{ mt: 0.5 }} onClick={onCustom}>
+        Custom color…
+      </Button>
+    </Paper>
+  )
+}
+ColorTokenGrid.displayName = 'AglynColorTokenGrid'

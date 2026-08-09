@@ -79,6 +79,9 @@ describe('style field groups (AGL-540/587)', () => {
       // Colors (ex loose base form, AGL-587).
       'color',
       'backgroundColor',
+      // Gradient backgrounds (AGL-1331) — the panel had no way to express
+      // one, so `backgroundImage` had no home at all.
+      'backgroundImage',
       'width',
       'height',
       'minWidth',
@@ -252,12 +255,112 @@ describe('style field groups (AGL-540/587)', () => {
   })
 
   it('feeds the theme palette into every color picker', () => {
-    for (const fieldName of ['borderColor', 'color', 'backgroundColor']) {
+    for (const fieldName of [
+      'borderColor',
+      'color',
+      'backgroundColor',
+      // The gradient stops open the same picker, so they get the same
+      // swatches (AGL-1331).
+      'backgroundImage',
+    ]) {
       const field = groups
         .flatMap((group) => group.fields)
         .find((candidate) => candidate.name === fieldName) as any
       expect(field?.presetColors).toEqual(['#123456'])
     }
+  })
+
+  /**
+   * The authoring hole and the silent-accept bug behind it (AGL-1331).
+   *
+   * Colors offered *Text Color* and *Background Color* and nothing else, so
+   * a gradient could not be built by clicking at all; and typing one into
+   * Background Color was accepted, stored as
+   * `background-color: linear-gradient(…)`, and dropped by the CSS parser —
+   * the band went transparent with no error anywhere.
+   */
+  describe('background fill (AGL-1331)', () => {
+    const colors = groups.find((group) => group.$id === 'colors')!
+    const field = (name: string) =>
+      colors.fields.find((candidate) => candidate.name === name) as any
+
+    it('gives the Colors group a gradient control that writes backgroundImage', () => {
+      const fill = field('backgroundImage')
+      expect(fill?.component).toBe(FieldComponentType.CSS_GRADIENT)
+      expect(fill?.label).toBe('Background Fill')
+      // NOT backgroundColor: MUI declares that key with `themeKey: 'palette'`
+      // and it only ever renders a `<color>`.
+      expect(styleGroupFieldNames(colors)).toEqual([
+        'color',
+        'backgroundColor',
+        'backgroundImage',
+      ])
+    })
+
+    it('rejects a gradient typed into a colour field instead of storing it', () => {
+      for (const name of ['color', 'backgroundColor', 'borderColor']) {
+        const validate = (field(name) ??
+          groups
+            .flatMap((group) => group.fields)
+            .find((candidate) => candidate.name === name)) as any
+        const [validator] = validate.validate
+        const message = validator(
+          'linear-gradient(242deg, #00B0FF 0%, #7A5CF0 55%, #E040FB 100%)',
+        )
+        expect(message).toContain('not a color')
+        // The message has to point at the field that CAN hold one.
+        expect(message).toContain('Background Fill')
+      }
+    })
+
+    it('still accepts every solid value these fields have always taken', () => {
+      const [validator] = field('backgroundColor').validate
+      for (const value of [
+        '',
+        '#161C21',
+        '#fff',
+        'rgb(0, 176, 255)',
+        'rgba(0, 0, 0, 0.5)',
+        'transparent',
+        'currentColor',
+        // Palette token paths — what the picker's theme stage stores.
+        'primary.main',
+        'background.paper',
+        'grey.300',
+        // And whatever CSS adds next: any function form but an image one.
+        'color-mix(in srgb, #fff 50%, #000)',
+        'oklch(0.7 0.1 200)',
+      ]) {
+        expect(validator(value)).toBeUndefined()
+      }
+    })
+
+    it('scopes the gradient to the previewed scheme like the other colours', () => {
+      const sx = applyStylePartialToSx(
+        {},
+        { backgroundImage: 'linear-gradient(180deg, #000 0%, #fff 100%)' },
+        null,
+        'dark',
+      )
+      expect(sx['backgroundImage']).toBeUndefined()
+      expect(sx[SX_SCHEME_DARK_KEY]).toEqual({
+        backgroundImage: 'linear-gradient(180deg, #000 0%, #fff 100%)',
+      })
+    })
+
+    it('round-trips through the responsive-sx pipeline like any other field', () => {
+      const gradient =
+        'linear-gradient(242deg, var(--mui-palette-primary-main, #00B0FF) 0%, ' +
+        '#7A5CF0 55%, var(--mui-palette-secondary-main, #E040FB) 100%)'
+      const sx = applyStylePartialToSx({}, { backgroundImage: gradient }, null, null)
+      expect(sx['backgroundImage']).toBe(gradient)
+      expect(
+        computeEffectiveStyleValues(sx, null, null)['backgroundImage'],
+      ).toBe(gradient)
+      // And clearing it (Solid) removes the property rather than pinning ''.
+      const cleared = applyStylePartialToSx(sx, { backgroundImage: '' }, null, null)
+      expect(cleared['backgroundImage']).toBeUndefined()
+    })
   })
 
   describe('computeStylePartial', () => {
@@ -314,6 +417,8 @@ describe('style field groups (AGL-540/587)', () => {
     it('declares exactly the color-bearing panel fields as scheme-scoped', () => {
       expect([...SCHEME_SCOPED_STYLE_FIELDS].sort()).toEqual([
         'backgroundColor',
+        // A gradient is colour too (AGL-1331).
+        'backgroundImage',
         'borderColor',
         'color',
       ])

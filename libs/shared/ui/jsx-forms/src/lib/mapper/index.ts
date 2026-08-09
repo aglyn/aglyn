@@ -26,6 +26,7 @@
 
 export { default as Checkbox, SingleCheckbox, type CheckboxProps, type SingleCheckboxProps } from './checkbox'
 export { default as CssDimension, CssDimensionField, seedDimensionDraft, serializeDimensionDraft, type CssDimensionProps } from './css-dimension'
+export { default as CssGradient, CssGradientField, seedGradientDraft, serializeGradientDraft, type CssGradientProps } from './css-gradient'
 export { default as DatePicker, type DatePickerProps } from './date-picker'
 export { default as DualListSelect, type DualListSelectProps } from './dual-list-select'
 export { default as FieldArray, DynamicArray, type FieldArrayProps } from './field-array'

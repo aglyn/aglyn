@@ -308,18 +308,26 @@ export interface NodeSchema<P = JSX.AnyProps> extends NodeI<P> {
   /**
    * Per-instance style overrides on a reusable-component instance node
    * (AGL-1306), keyed by target: `root` (see `STYLE_OVERRIDES_ROOT_KEY`)
-   * holds an sx-shaped record merged over the component ROOT's own sx at
-   * graft time (`composeReusableComponentNodes` → `mergeNodeSx`), so one
-   * page's CTA can change its background without widening the component's
-   * declared props or detaching. Phase 2 adds component-internal node ids
-   * as keys.
+   * addresses the component ROOT, and any other key is a DEFINITION-internal
+   * node id addressing one leaf inside the component (AGL-1332). Each slice
+   * is an sx-shaped record merged over that node's own sx at graft time
+   * (`composeReusableComponentNodes` → `mergeNodeSx`), so one page's CTA can
+   * switch to a white background AND repaint its headline without widening
+   * the component's declared props or detaching.
+   *
+   * Keyed on the definition's id, never the grafted `cmp__{instance}__{def}`
+   * id: the graft id is derived per placement, so it would not survive a
+   * duplicate or a re-key, and the same component could not offer two
+   * instances the same authoring vocabulary. A key naming a node the
+   * definition no longer has is ignored — a component edited later degrades
+   * to its own styling instead of taking a page down.
    *
    * A first-class node field, NOT a prop: `AglynNode`'s constructor drops
    * unknown top-level keys, and anything in `props` is spread onto the
    * instance's wrapper DOM element. Lives on the instance node in the
    * document that places it — it survives component republish and never
    * pins the instance to an old component version, because the graft
-   * always merges it over the definition's CURRENT root.
+   * always merges it over the definition's CURRENT nodes.
    */
   styleOverrides?: Record<string, JSX.SxProps>
   /**

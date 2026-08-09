@@ -71,7 +71,9 @@ import {
   FormControlLabel,
   FormHelperText,
   FormLabel,
+  MenuItem,
   Switch,
+  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
@@ -84,8 +86,11 @@ import {
   forwardRef,
   type SyntheticEvent,
   useCallback,
+  useContext,
   useMemo,
+  useState,
 } from 'react'
+import ComponentPromotionContext from '../contexts/component-promotion-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 import { besignerDocsUrl } from '../utils/docs-help'
@@ -522,13 +527,56 @@ const ElementStylesForm = observer(
   forwardRef<any, ElementStylesFormProps>((props, ref) => {
     const { node } = props
     const deleteElementCallback = useDeleteElementCallback()
-    // Where edits land (AGL-1306): a plain node's own sx, or — for a
-    // reusable-component instance — the root slice of its styleOverrides,
-    // so the whole panel styles the instance without touching the
-    // component. Reads go through the same target, so the panel shows
-    // exactly what THIS instance overrides (empty = the component's own
-    // look), the same way a fresh plain node starts empty.
-    const target = useMemo(() => getNodeStyleTarget(node), [node])
+
+    // The definition behind a selected instance (AGL-1332): the panel needs
+    // its node tree to offer the leaves an author may style. Read from the
+    // same context the canvas renders instances through, so the picker can
+    // only ever offer targets the graft will actually consult.
+    const { definitions } = useContext(ComponentPromotionContext)
+    const definition = useMemo(() => {
+      if (node?.componentId !== Aglyn.REUSABLE_INSTANCE_COMPONENT_ID) {
+        return undefined
+      }
+      const refId = (node?.props as { refId?: string } | undefined)?.refId
+      return refId ? definitions?.[refId] : undefined
+    }, [node, definitions])
+    const styleTargets = useMemo(
+      () => Aglyn.listInstanceStyleTargets(definition),
+      [definition],
+    )
+
+    // Which target inside the instance the panel is editing. Held per
+    // selection rather than in an effect: switching nodes must land on the
+    // component root, and deriving that from the current `node.$id` cannot
+    // render one frame aimed at the PREVIOUS instance's leaf.
+    const [picked, setPicked] = useState<{ nodeId?: string; key: string }>({
+      key: Aglyn.STYLE_OVERRIDES_ROOT_KEY,
+    })
+    const pickedKey =
+      picked.nodeId && picked.nodeId === node?.$id
+        ? picked.key
+        : Aglyn.STYLE_OVERRIDES_ROOT_KEY
+    // A leaf the component no longer has falls back to the root instead of
+    // aiming the panel at a slice nothing renders (the definition may have
+    // been edited since). An unloaded definition offers nothing yet, so it
+    // is not evidence the key is stale.
+    const overrideKey =
+      !styleTargets.length ||
+      styleTargets.some((entry) => entry.key === pickedKey)
+        ? pickedKey
+        : Aglyn.STYLE_OVERRIDES_ROOT_KEY
+
+    // Where edits land (AGL-1306 root, AGL-1332 leaves): a plain node's own
+    // sx, or — for a reusable-component instance — one slice of its
+    // styleOverrides, so the whole panel styles the instance without
+    // touching the component. Reads go through the same target, so the
+    // panel shows exactly what THIS instance overrides for THIS target
+    // (empty = the component's own look), the same way a fresh plain node
+    // starts empty.
+    const target = useMemo(
+      () => getNodeStyleTarget(node, overrideKey),
+      [node, overrideKey],
+    )
     const nodeSx = target.sx
     const hostThemeDoc = useHostThemeDocument()
     const siteTheme = useAglynSiteTheme({ theme: hostThemeDoc })
@@ -707,11 +755,39 @@ const ElementStylesForm = observer(
     const overrideProperties = target.isInstanceOverride
       ? Object.keys(target.sx ?? {})
       : []
+    // Which targets this instance has overridden at all, so the picker can
+    // mark them — an author restyling a CTA needs to see that the headline
+    // already carries a colour without opening every leaf.
+    const overriddenKeys = target.isInstanceOverride
+      ? new Set(
+          Object.keys(
+            (node?.styleOverrides as Record<string, any> | undefined) ?? {},
+          ),
+        )
+      : new Set<string>()
 
-    // Re-seeds a group form's initial values when the selection or the
-    // artboard scope changes (AGL-540/588).
+    /** The picker's name for one target — the author's word, then the component's. */
+    const styleTargetLabel = useCallback(
+      (entry: Aglyn.InstanceStyleTarget) =>
+        entry.isRoot
+          ? 'Component root'
+          : entry.name ||
+            (entry.componentId && Aglyn.components.getLabel(entry.componentId)) ||
+            entry.componentInternalId,
+      [],
+    )
+
+    const handleStyleTargetChange = useCallback(
+      (event: ChangeEvent<HTMLInputElement>) => {
+        setPicked({ nodeId: node?.$id, key: event.target.value })
+      },
+      [node?.$id],
+    )
+
+    // Re-seeds a group form's initial values when the selection, the
+    // override target or the artboard scope changes (AGL-540/588/1332).
     const formSeedKey =
-      `${node?.$id ?? ''}:${activeBreakpoint ?? 'base'}` +
+      `${node?.$id ?? ''}:${overrideKey}:${activeBreakpoint ?? 'base'}` +
       `:${activeScheme ?? 'light'}`
 
     return (
@@ -766,6 +842,48 @@ const ElementStylesForm = observer(
             component's own value. */}
         {target.isInstanceOverride ? (
           <Container gutterY={[1]} dense>
+            {/* Which part of the component this instance is restyling
+                (AGL-1332). Root-only overrides could change an instance's
+                background but never the colour its headline sets for
+                itself, so a white band rendered white-on-white; picking the
+                headline here writes a slice keyed by that leaf's definition
+                id, merged over the leaf at graft time. Content stays the
+                component's — this styles the instance's copy, it does not
+                unlock the component's text. */}
+            {styleTargets.length > 1 ? (
+              <TextField
+                select
+                fullWidth
+                size="small"
+                margin="dense"
+                label="Style target"
+                value={overrideKey}
+                onChange={handleStyleTargetChange}
+                helperText={
+                  target.isLeafOverride
+                    ? 'Styling one element inside the component, on this ' +
+                      'instance only. Its content still comes from the ' +
+                      'component.'
+                    : "Styling the component's outer element on this " +
+                      'instance. Pick an element inside it to restyle that ' +
+                      'part — a headline that sets its own colour ignores ' +
+                      'one set out here.'
+                }
+              >
+                {styleTargets.map((entry) => (
+                  <MenuItem
+                    key={entry.key}
+                    value={entry.key}
+                    // Nesting reads as nesting: the definition's tree is the
+                    // only map an author has of what is inside a component.
+                    sx={{ pl: 2 + entry.depth * 1.5 }}
+                  >
+                    {styleTargetLabel(entry)}
+                    {overriddenKeys.has(entry.key) ? ' •' : ''}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : null}
             <Tooltip
               title={
                 'This element is a component instance: style edits here ' +
@@ -989,7 +1107,14 @@ const ElementStylesForm = observer(
           }}
         >
           <ElementClassesField node={node} />
-          <CustomCssForm node={node} breakpoint={activeBreakpoint} />
+          {/* Same override target as the rest of the panel (AGL-1332) — a
+              raw sx edit must land on the leaf the picker names, not
+              silently back on the component root. */}
+          <CustomCssForm
+            node={node}
+            breakpoint={activeBreakpoint}
+            overrideKey={overrideKey}
+          />
         </Accordion>
 
         <Container gutterY={[2]} dense>

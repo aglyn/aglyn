@@ -21,6 +21,8 @@ export enum FieldComponentType {
   COLOR_PICKER = 'color-picker',
   /** Number + unit editor for a CSS length; persists one string (AGL-1219). */
   CSS_DIMENSION = 'css-dimension',
+  /** Fill type + angle + colour stops; persists one CSS string (AGL-1331). */
+  CSS_GRADIENT = 'css-gradient',
   DATE_PICKER = 'date-picker',
   DUAL_LIST_SELECT = 'dual-list-select',
   FIELD_ARRAY = 'field-array',

@@ -21,6 +21,7 @@ import {
   FieldCheckbox,
   FieldColorPicker,
   FieldCssDimension,
+  FieldCssGradient,
   FieldDatePicker,
   FieldDualListSelect,
   FieldFieldArray,
@@ -76,6 +77,11 @@ export const FIELD_MAP_TEXT_FIELD: ExtendedMapperComponent = {
 export const FIELD_MAP_CSS_DIMENSION: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldCssDimension,
+}
+/** Fill type + angle + colour stops, persisted as one string (AGL-1331). */
+export const FIELD_MAP_CSS_GRADIENT: ExtendedMapperComponent = {
+  ...fieldSharedOptions,
+  component: FieldCssGradient,
 }
 export const FIELD_MAP_TEXTAREA: ExtendedMapperComponent = {
   ...fieldSharedOptions,

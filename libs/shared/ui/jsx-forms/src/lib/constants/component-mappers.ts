@@ -20,6 +20,7 @@ import {
   FIELD_MAP_CHECKBOX,
   FIELD_MAP_COLOR_PICKER,
   FIELD_MAP_CSS_DIMENSION,
+  FIELD_MAP_CSS_GRADIENT,
   FIELD_MAP_DATE_PICKER,
   FIELD_MAP_DUAL_LIST_SELECT,
   FIELD_MAP_FIELD_ARRAY,
@@ -59,6 +60,7 @@ export const componentMapper: ComponentMapper = {
   [FieldComponentType.COLOR_PICKER]: FIELD_MAP_COLOR_PICKER,
   [FieldComponentType.TOGGLE_BUTTON]: FIELD_MAP_TOGGLE_BUTTON,
   [FieldComponentType.CSS_DIMENSION]: FIELD_MAP_CSS_DIMENSION,
+  [FieldComponentType.CSS_GRADIENT]: FIELD_MAP_CSS_GRADIENT,
 }
 
 export const simpleComponentMapper = {
