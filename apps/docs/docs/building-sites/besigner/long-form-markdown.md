@@ -49,6 +49,14 @@ Blank lines separate blocks. `#` and `####` and deeper are still headings — th
 the two levels above rather than being read as ordinary text, so a document that opens with
 a single `# Title` renders the way you'd expect.
 
+A list can start directly under the line that introduces it, with no blank line between —
+`A notice must include:` followed straight away by `1.`, `2.`, `3.` gives you the sentence
+and then the list. The list ends at the first line that isn't an item, and that line starts
+a new paragraph. One deliberate exception keeps prose safe: a numbered list can only break
+into a paragraph this way when it starts at **1**, so a sentence ending `…the web grew up in`
+and continuing `1997. A good year for the web.` stays a sentence. Leave a blank line before
+the list if you really do want it to start at another number.
+
 Anything the dialect doesn't recognise stays as **words**. That includes HTML: paste
 `<script>` into a document and visitors read `<script>`, they don't run it. This isn't a
 setting you can turn off — the element never builds an HTML string in the first place, so
