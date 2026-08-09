@@ -26,4 +26,12 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
   coverageDirectory: '../../coverage/apps/console',
+  // The suite's heavy RTL specs (full MUI trees under emotion) cost 1-2 s of
+  // CPU per test even on an idle machine. Under parallel workers a starved
+  // worker blows jest's default 5 s testTimeout on whichever of them loses
+  // the CPU lottery that run — captured as "Exceeded timeout of 5000 ms" on
+  // reusable-components-provider (AGL-1257) and publish-plugin-form. The
+  // timeout exists to catch hangs, not to race the scheduler: 30 s still
+  // fails a genuine hang, and assertion failures are unaffected.
+  testTimeout: 30000,
 }
