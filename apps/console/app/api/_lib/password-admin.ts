@@ -16,7 +16,8 @@
  */
 
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { generateAuthActionLink } from './auth-action-link'
+import { resolveAuthActionOrigin } from './auth-action-url'
 import { renderSystemEmail } from './render-system-email'
 
 // The password rules live in @aglyn/aglyn/server so the commerce plugin's
@@ -94,11 +95,20 @@ export async function blockedReasonForOrgSetPassword(
   return null
 }
 
-/** Console origin for links in the mail, from the request that triggered it. */
+/**
+ * Console origin for links in the mail.
+ *
+ * The request headers are a hint; the answer comes from server config unless
+ * the hint is allowlisted. These links go to someone who is about to be asked
+ * to trust them with a password, so the host in them is not the caller's to
+ * choose — even on a staff-authenticated route.
+ */
 export function originFromHeaders(
   headers: Partial<Record<string, string>>,
 ): string {
-  return headers.origin ?? `https://${headers.host ?? 'app.aglyn.com'}`
+  return resolveAuthActionOrigin(
+    headers.origin ?? (headers.host ? `https://${headers.host}` : ''),
+  )
 }
 
 export interface PasswordMailOptions {
@@ -135,13 +145,12 @@ export async function sendAuthPasswordResetEmail(
   const { email, origin, actorName } = options
   if (!isEmailConfigured()) return false
   try {
-    const resetUrl = await firebaseAdmin
-      .app()
-      .auth()
-      .generatePasswordResetLink(email, {
-        url: `${origin}/signin`,
-        handleCodeInApp: false,
-      })
+    // Was the raw Admin-SDK link, which lands on
+    // `aglyn-main.firebaseapp.com/__/auth/action` — the locked handler whose
+    // template still reads `[aglyn.io]`. The comment above already claimed
+    // this landed on `/reset-password`; going through the shared minter is
+    // what makes that true, and it is the same one-time code either way.
+    const resetUrl = await generateAuthActionLink('resetPassword', email, origin)
     const fallbackText =
       `${actorName} started a password reset for your Aglyn account. ` +
       'Choose a new password here:\n\n' +

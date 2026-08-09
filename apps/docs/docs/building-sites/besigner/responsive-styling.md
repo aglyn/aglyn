@@ -97,7 +97,8 @@ own properties, never touching values you set elsewhere.
 **Background Fill** in the Colors group builds a gradient by clicking —
 no custom CSS.
 
-1. Set **Fill** to *Linear gradient* (or *Radial gradient*). It starts
+1. Set **Background Fill** to *Linear gradient* (or *Radial
+   gradient*) — the field opens as that one select. It starts
    from your theme's primary and secondary colors so you see a gradient
    immediately; *Solid color* clears it again and hands the element back
    to the Background Color field above.
@@ -108,8 +109,9 @@ no custom CSS.
    other color field, so a stop can be a **theme color** (it then follows
    your palette, in both light and dark) or a literal hex. One gradient
    can mix the two — bind the ends to Primary and Secondary and drop a
-   literal mid-tone between them. **Add stop** inserts one between the
-   last two; a gradient always keeps at least two.
+   literal mid-tone between them. **Add stop** adds one near the end of
+   the ramp, ready to be positioned; a gradient always keeps at least
+   two, so the remove button greys out at two.
 
 Background Fill writes `background-image`, which paints *over* the
 Background Color — so a solid color set there still shows through
@@ -121,10 +123,17 @@ Like the other color fields, Background Fill is
 own, and while the artboard previews dark you can give dark a different
 gradient outright.
 
-A background richer than the stop editor can show — a `conic-gradient`,
-a `to bottom right` direction, several stacked images — opens as an
-editable CSS box instead, and is never rewritten. Edit it back to a plain
-linear or radial gradient and the stop controls come back.
+A background richer than the stop editor can show — a `conic-gradient`, a
+`to bottom right` direction, a `url()` image, or **several comma-separated
+layers** — opens as an editable CSS box instead, and is never rewritten.
+Edit it back to a plain linear or radial gradient and the stop controls
+come back.
+
+That includes a stack: `linear-gradient(…), url(/hero.jpg)` is a tint over
+a photo, and Background Fill keeps it exactly as written rather than
+offering stop controls that could only describe the first layer. You can
+edit the stack in that box, or build one in
+[custom CSS](#custom-css-sx).
 
 ## Visibility per device band
 

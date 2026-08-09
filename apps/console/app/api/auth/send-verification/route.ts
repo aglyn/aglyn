@@ -82,11 +82,15 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Email is not configured' }, { status: 501 })
     }
 
-    const origin = headers.origin ?? (headers.host ? `https://${headers.host}` : '')
-    if (!origin) {
-      return Response.json({ error: 'Missing origin' }, { status: 400 })
-    }
-    const verifyUrl = await generateAuthActionLink('verifyEmail', email, origin)
+    // A hint only — see the note in send-password-reset. Resolved server-side,
+    // so a missing Origin is no longer a 400 that blocks verification.
+    const requestOrigin =
+      headers.origin ?? (headers.host ? `https://${headers.host}` : '')
+    const verifyUrl = await generateAuthActionLink(
+      'verifyEmail',
+      email,
+      requestOrigin,
+    )
 
     const fallbackText =
       'Confirm this address to finish setting up your Aglyn account:\n\n' +

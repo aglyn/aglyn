@@ -395,6 +395,47 @@ export interface CollectionCategoryLink {
   active: boolean
 }
 
+/** Label the unfiltered pill carries when the author never named one. */
+export const COLLECTION_ALL_PILL_DEFAULT = 'All'
+
+/**
+ * The value that persists "no All pill" (AGL-1336).
+ *
+ * The attribute documented "clear it to omit that pill" and could not do it:
+ * the attributes form strips an emptied text field's KEY (ddf maps an
+ * emptied field to its `clearedValue`, final-form's default parse turns
+ * `''` into `undefined`, and `updateNodeProps` replaces the props object),
+ * so the absent key took {@link COLLECTION_ALL_PILL_DEFAULT} and the pill
+ * came straight back. `''` is therefore not a value this field can hold —
+ * the same AGL-1191 trap that made the App Bar's "Default" unpersistable.
+ *
+ * So the field carries this as its `clearedValue`: clearing the box writes
+ * the word `none`, which survives the round trip and is honoured here.
+ * Deliberately a readable word rather than a magic character — an author who
+ * reopens the panel sees `none` in the All-label box and can read what it
+ * did. Removing the prop entirely (the ✕ affordance) still means "unset",
+ * and restores the default.
+ */
+export const COLLECTION_ALL_PILL_NONE = 'none'
+
+/**
+ * What the unfiltered pill should be labelled, or `''` to omit it — the ONE
+ * place the {@link COLLECTION_ALL_PILL_NONE} sentinel is interpreted
+ * (AGL-1336). Matched case-insensitively on the trimmed value, because the
+ * sentinel is typed by a human only when they are re-entering it by hand.
+ *
+ * `undefined` is UNSET and takes the default. `null` is CLEARED and omits —
+ * it reaches here only from a hand-edited or imported document, but the two
+ * are different questions and must not collapse into one answer.
+ */
+export function resolveCollectionAllLabel(value?: string | null): string {
+  if (value === undefined) return COLLECTION_ALL_PILL_DEFAULT
+  if (value === null) return ''
+  const text = `${value}`.trim()
+  if (!text) return ''
+  return text.toLowerCase() === COLLECTION_ALL_PILL_NONE ? '' : text
+}
+
 /**
  * The pill row for a collection (AGL-1321): "All" pointing at the canonical
  * unfiltered listing, then one pill per taxonomy category.
@@ -408,8 +449,11 @@ export function buildCollectionCategoryLinks(options: {
   collectionSlug: string
   categories?: readonly CollectionCategory[]
   activeCategorySlug?: string
-  /** Label for the unfiltered pill; empty string omits it. */
-  allLabel?: string
+  /**
+   * Label for the unfiltered pill. Absent takes the default; `''` or the
+   * {@link COLLECTION_ALL_PILL_NONE} sentinel omits the pill.
+   */
+  allLabel?: string | null
 }): CollectionCategoryLink[] {
   const { collectionSlug } = options
   const active = collectionCategorySlug(options.activeCategorySlug)
@@ -428,7 +472,7 @@ export function buildCollectionCategoryLinks(options: {
   // A lone "All" pill is not a filter, it is decoration — a collection with
   // no taxonomy gets no row at all.
   if (!links.length) return []
-  const allLabel = options.allLabel ?? 'All'
+  const allLabel = resolveCollectionAllLabel(options.allLabel)
   return allLabel
     ? [
         {
@@ -625,7 +669,12 @@ export function expandCollectionCategories<
       collectionSlug: source.slug,
       categories: source.categories,
       ...(slug === defaultSlug ? { activeCategorySlug } : {}),
-      ...(allLabel === undefined ? {} : { allLabel: String(allLabel) }),
+      // Absent means "never set" and takes the default; `null` is a cleared
+      // value and is forwarded AS null, because `String(null)` would have
+      // labelled the pill "null" (AGL-1336).
+      ...(allLabel === undefined
+        ? {}
+        : { allLabel: allLabel === null ? null : String(allLabel) }),
     })
     if (!items.length) continue
     next[containerId] = {

@@ -101,13 +101,19 @@ label typo you can see. Preview and the published site show one at a time.
 
 A row like **Blog · Changelog · Newsroom** isn't really a tab strip — it's navigation
 between three separate screens. Give a tab a screen and it becomes one: pick the target in
-**Tab 1 link**, **Tab 2 link** and so on, one picker per tab you've named. Those tabs
-render as real links, so they open in a new tab, they're followed by search engines, and
-they no longer switch panels.
+**Tab 1 link**, **Tab 2 link** and so on. A picker appears for each tab you've named, up
+to the first eight. Those tabs render as real links — a visitor can ⌘-click or middle-click
+one into a new tab, and search engines follow them — and they stop switching panels.
 
 Leave the link **unset** for the tab of the page the row is already on — a page that links
-to itself helps nobody — and that tab is marked as the current one. Mixing the two is
-fine: unlinked tabs keep revealing their own Tab Panel.
+to itself helps nobody. The **first** tab with no link is the one the row opens on and
+marks as the current page, so give that tab the name of the screen you're placing the row
+on. Mixing the two is fine: unlinked tabs keep revealing their own Tab Panel.
+
+Link **every** tab and there is no current one to mark: the row renders with no indicator.
+That's the signal you've linked the tab you're standing on. A tab pointing at a screen
+that has since been deleted goes inert — no link, and no panel either — so re-point it
+after you remove a screen.
 
 As soon as one tab has a link the whole row is marked up as **navigation** rather than as a
 tab list, which is what it now is. Give it a name in **Accessible label** so it doesn't
