@@ -20,8 +20,9 @@
  * (AGL-596). Pure functions with no editor state: `htmlToRows` parses a
  * `text/html` clipboard payload and maps it onto the editor's row model,
  * keeping only what the markdown-lite dialect can express — bold, italic,
- * links, h2/h3 headings, flat lists, images, and (AGL-981) code blocks and
- * tables, the two blocks a pasted README is made of. Everything else flattens
+ * links, h2/h3 headings, flat lists, images, blockquotes (AGL-1315), and
+ * (AGL-981) code blocks and tables, the two blocks a pasted README is made
+ * of. Everything else flattens
  * to plain text; nested marks flatten to the OUTERMOST mark. Row keys are
  * module-local placeholders — the editor re-keys converted rows with its
  * own key sequence on ingest.
@@ -174,7 +175,7 @@ export function htmlToRows(html: string): EditorRow[] {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const rows: EditorRow[] = []
   const pushTextRow = (
-    kind: 'paragraph' | 'heading2' | 'heading3' | 'listItem',
+    kind: 'paragraph' | 'heading2' | 'heading3' | 'listItem' | 'quote',
     inlines: MarkdownInline[],
   ): void => {
     if (inlines.length === 0) return
@@ -272,12 +273,18 @@ export function htmlToRows(html: string): EditorRow[] {
       }
       return
     }
-    if (
-      tag === 'p' ||
-      tag === 'div' ||
-      tag === 'section' ||
-      tag === 'blockquote'
-    ) {
+    // A quote keeps its quoteness (AGL-1315): each paragraph of the
+    // blockquote becomes its own quote row; a flat blockquote is one.
+    if (tag === 'blockquote') {
+      const paragraphs = Array.from(el.querySelectorAll('p'))
+      if (paragraphs.length) {
+        for (const p of paragraphs) pushTextRow('quote', htmlToInlines(p))
+      } else {
+        pushTextRow('quote', htmlToInlines(el))
+      }
+      return
+    }
+    if (tag === 'p' || tag === 'div' || tag === 'section') {
       // A container with block children is a wrapper — recurse so the
       // inner structure survives; otherwise it is one paragraph.
       const wrapsBlocks = Array.from(el.children).some(isBlockElement)

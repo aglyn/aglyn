@@ -118,12 +118,12 @@ describe('htmlToRows (AGL-596)', () => {
     ])
   })
 
-  it('maps h1 to heading2 and blockquote/section to paragraphs', () => {
+  it('maps h1 to heading2, blockquote to a quote (AGL-1315), section to a paragraph', () => {
     expect(
       rowsOf('<h1>Top</h1><blockquote>quoted</blockquote><section>s</section>'),
     ).toEqual([
       { kind: 'heading2', inlines: [{ type: 'text', text: 'Top' }] },
-      { kind: 'paragraph', inlines: [{ type: 'text', text: 'quoted' }] },
+      { kind: 'quote', inlines: [{ type: 'text', text: 'quoted' }] },
       { kind: 'paragraph', inlines: [{ type: 'text', text: 's' }] },
     ])
   })

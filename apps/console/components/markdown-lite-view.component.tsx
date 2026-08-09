@@ -171,6 +171,27 @@ export function MarkdownLiteView({ source }: MarkdownLiteViewProps) {
                 </Box>
               </Box>
             )
+          // A quote (AGL-1315): italic behind a left accent, the muted
+          // console idiom of the tenant's pull-quote.
+          case 'quote':
+            return (
+              <Typography
+                key={index}
+                component="blockquote"
+                variant="body2"
+                sx={{
+                  my: 0,
+                  mx: 0,
+                  pl: 1.5,
+                  borderLeft: 3,
+                  borderColor: 'divider',
+                  fontStyle: 'italic',
+                  color: 'text.secondary',
+                }}
+              >
+                {renderInlines(block.inlines)}
+              </Typography>
+            )
           default:
             return (
               <Typography key={index} variant="body2">

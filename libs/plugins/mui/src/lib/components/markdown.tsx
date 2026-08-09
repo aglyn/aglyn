@@ -301,6 +301,30 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
             </Box>
           )
         }
+        // A pull-quote (AGL-1315): the document's body measure, one size up
+        // and italic, behind a left accent — palette tokens keep it right in
+        // both modes.
+        if (block.type === 'quote') {
+          return (
+            <Typography
+              key={index}
+              component="blockquote"
+              sx={{
+                ...BODY_SX,
+                my: 3,
+                mx: 0,
+                pl: 2.5,
+                borderLeft: '3px solid',
+                borderColor: 'primary.main',
+                fontStyle: 'italic',
+                fontSize: 21,
+                lineHeight: 1.6,
+              }}
+            >
+              {renderInlines(block.inlines, suppressNavigation)}
+            </Typography>
+          )
+        }
         return (
           <Typography key={index} component="p" sx={{ ...BODY_SX, my: 2 }}>
             {renderInlines(block.inlines, suppressNavigation)}
@@ -533,8 +557,8 @@ export const markdownSchema: Aglyn.ComponentSchema<MarkdownProps> = {
       label: 'Content',
       description:
         'The document, as markdown. Headings (## and ###), paragraphs, ' +
-        'bold/italic, links, bullet lists, images, fenced code and pipe ' +
-        'tables. Paste the whole source file — a Table of contents element ' +
+        'bold/italic, links, bullet lists, images, fenced code, pipe ' +
+        'tables and > quotes. Paste the whole source file — a Table of contents element ' +
         'on the same screen lists the ## and ### headings automatically.',
       component: Aglyn.FieldComponentType.TEXTAREA,
     },

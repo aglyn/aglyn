@@ -90,6 +90,17 @@ describe('Entry body block (AGL-551)', () => {
     expect(container.querySelectorAll('li')).toHaveLength(2)
   })
 
+  it('renders a `> ` line as a styled blockquote, not literal text (AGL-1315)', () => {
+    const { container } = render(
+      <CollectionEntryBody markdown={'Before.\n\n> Pull **this** quote.'} />,
+    )
+    const quote = container.querySelector('blockquote')
+    expect(quote?.textContent).toBe('Pull this quote.')
+    expect(quote?.querySelector('strong')?.textContent).toBe('this')
+    // The raw marker must not leak into the article.
+    expect(container.textContent).not.toContain('>')
+  })
+
   it('renders nothing on the site for an unresolved token', () => {
     const { container } = render(
       <CollectionEntryBody markdown="{{entry.body}}" />,

@@ -17,8 +17,8 @@
 
 /**
  * Markdown-lite (AGL-123): the tiny subset blog entries use — headings,
- * bold/italic, links, images, bullet lists, paragraphs, fenced code blocks
- * and tables. Parsed into plain data blocks that renderers turn into
+ * bold/italic, links, images, bullet lists, paragraphs, fenced code blocks,
+ * tables and blockquotes. Parsed into plain data blocks that renderers turn into
  * elements themselves (no HTML string is ever produced, so there is nothing
  * to sanitize).
  */
@@ -36,6 +36,13 @@ export type MarkdownTableAlign = 'left' | 'center' | 'right'
 export type MarkdownBlock =
   | { type: 'heading'; level: 2 | 3; inlines: MarkdownInline[] }
   | { type: 'paragraph'; inlines: MarkdownInline[] }
+  /**
+   * A `> ` quote (AGL-1315) — the article template's pull-quote. Like a
+   * paragraph, one inline run: consecutive `> ` lines of a chunk join with
+   * spaces (a bare `>` continues the group and contributes nothing). The
+   * dialect has NO nesting — a second `>` is just text of the quote.
+   */
+  | { type: 'quote'; inlines: MarkdownInline[] }
   | { type: 'image'; src: string; alt: string }
   | { type: 'list'; items: MarkdownInline[][] }
   /** Fenced block. `text` is verbatim; `lang` is '' when none was given. */
@@ -205,6 +212,17 @@ function parseChunk(chunk: string): MarkdownBlock | null {
   const lines = trimmed.split('\n')
   const table = parseTable(lines)
   if (table) return table
+  // A quote when EVERY line of the chunk is `>`-prefixed, same shape as the
+  // list rule below — a paragraph merely mentioning `>` stays a paragraph.
+  // Fenced code never reaches here (fences are cut out before chunking), so
+  // a `> ` inside a snippet is snippet text, not a quote (AGL-1315).
+  if (lines.every((line) => /^>(\s|$)/.test(line.trim()))) {
+    const text = lines
+      .map((line) => line.trim().replace(/^>\s?/, ''))
+      .filter(Boolean)
+      .join(' ')
+    return { type: 'quote', inlines: parseMarkdownInlines(text) }
+  }
   if (lines.every((line) => /^[-*]\s+/.test(line.trim()))) {
     return {
       type: 'list',
@@ -442,7 +460,11 @@ export function serializeMarkdownLite(blocks: MarkdownBlock[]): string {
     const line = serializeMarkdownInlines(block.inlines).trim()
     if (!line) continue
     chunks.push(
-      block.type === 'heading' ? `${'#'.repeat(block.level)} ${line}` : line,
+      block.type === 'heading'
+        ? `${'#'.repeat(block.level)} ${line}`
+        : block.type === 'quote'
+          ? `> ${line}`
+          : line,
     )
   }
   return chunks.join('\n\n')

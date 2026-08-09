@@ -206,7 +206,8 @@ function ListingChangelog({
   )
 }
 
-function ListingReadme({ readme }: { readme: string }) {
+// Exported for the renderer-parity spec (AGL-1315).
+export function ListingReadme({ readme }: { readme: string }) {
   const blocks = useMemo<MarkdownBlock[]>(
     () => parseMarkdownLite(readme.slice(0, LISTING_README_MAX_CHARS)),
     [readme],
@@ -327,6 +328,27 @@ function ListingReadme({ readme }: { readme: string }) {
                   </tbody>
                 </Box>
               </Box>
+            )
+          // A README quote (AGL-1315) — the surface's body size, italic
+          // behind a left accent in the theme's divider tone.
+          case 'quote':
+            return (
+              <Typography
+                key={index}
+                component="blockquote"
+                variant="body2"
+                sx={{
+                  my: 0,
+                  mx: 0,
+                  pl: 1.5,
+                  borderLeft: 3,
+                  borderColor: 'divider',
+                  fontStyle: 'italic',
+                  color: 'text.secondary',
+                }}
+              >
+                {renderInlines(block.inlines)}
+              </Typography>
             )
           default:
             return (

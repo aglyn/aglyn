@@ -77,3 +77,19 @@ describe('htmlToRows: code blocks and tables (AGL-981)', () => {
     expect(outer.rows[0][0]).toEqual([{ type: 'text', text: 'inner' }])
   })
 })
+
+describe('htmlToRows: blockquotes (AGL-1315)', () => {
+  it('maps a flat blockquote to a quote row', () => {
+    const rows = htmlToRows('<blockquote>To be or <em>not</em>.</blockquote>')
+    expect(rows.map((row) => row.kind)).toEqual(['quote'])
+    expect(rowsToMarkdown(rows)).toBe('> To be or *not*.')
+  })
+
+  it('maps each paragraph of a blockquote to its own quote row', () => {
+    const rows = htmlToRows(
+      '<blockquote><p>first</p><p>second</p></blockquote>',
+    )
+    expect(rows.map((row) => row.kind)).toEqual(['quote', 'quote'])
+    expect(rowsToMarkdown(rows)).toBe('> first\n\n> second')
+  })
+})

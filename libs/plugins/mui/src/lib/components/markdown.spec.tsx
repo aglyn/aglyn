@@ -66,6 +66,17 @@ const fillCanvas = (
 afterEach(() => Aglyn.canvas.clearNodes())
 
 describe('Markdown element (AGL-1162)', () => {
+  it('renders a `> ` group as one blockquote element (AGL-1315)', () => {
+    const { container } = render(
+      <Markdown content={'Prose.\n\n> quoted line one\n> and *two*'} />,
+    )
+    const quotes = container.querySelectorAll('blockquote')
+    expect(quotes).toHaveLength(1)
+    expect(quotes[0]?.textContent).toBe('quoted line one and two')
+    expect(quotes[0]?.querySelector('em')?.textContent).toBe('two')
+  })
+
+
   it('renders real headings, not a paragraph painted to look like one', () => {
     // The trap the marketing applier already hit: an sx fontSize with no
     // `component` screenshots correctly and leaves the page with no

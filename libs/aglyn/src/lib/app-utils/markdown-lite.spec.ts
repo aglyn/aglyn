@@ -175,6 +175,63 @@ describe('markdown-lite', () => {
     }
   })
 
+  it('parses a `> ` line as a quote, not literal text (AGL-1315)', () => {
+    const blocks = parseMarkdownLite('> To be or not to be.')
+    expect(blocks).toEqual([
+      { type: 'quote', inlines: [{ type: 'text', text: 'To be or not to be.' }] },
+    ])
+  })
+
+  it('groups consecutive `> ` lines into ONE quote, joined like a paragraph (AGL-1315)', () => {
+    const blocks = parseMarkdownLite('> line one\n> line two\n>\n> line three')
+    expect(blocks).toEqual([
+      {
+        type: 'quote',
+        inlines: [{ type: 'text', text: 'line one line two line three' }],
+      },
+    ])
+  })
+
+  it('keeps quotes and paragraphs apart, with inline marks inside the quote (AGL-1315)', () => {
+    const blocks = parseMarkdownLite(
+      'Before.\n\n> A **bold** quote\n\nAfter.',
+    )
+    expect(blocks.map((block) => block.type)).toEqual([
+      'paragraph',
+      'quote',
+      'paragraph',
+    ])
+    expect((blocks[1] as any).inlines).toEqual([
+      { type: 'text', text: 'A ' },
+      { type: 'bold', text: 'bold' },
+      { type: 'text', text: ' quote' },
+    ])
+  })
+
+  it('a chunk merely containing a `>` line stays a paragraph (AGL-1315)', () => {
+    const blocks = parseMarkdownLite('prose line\n> not a quote here')
+    expect(blocks).toEqual([
+      {
+        type: 'paragraph',
+        inlines: [{ type: 'text', text: 'prose line > not a quote here' }],
+      },
+    ])
+  })
+
+  it('a `> ` inside a code fence is snippet text, never a quote (AGL-1315)', () => {
+    const blocks = parseMarkdownLite('```\n> quoted-looking line\n```')
+    expect(blocks).toEqual([
+      { type: 'code', lang: '', text: '> quoted-looking line' },
+    ])
+  })
+
+  it('does not nest quotes — a second `>` is text of the quote (AGL-1315)', () => {
+    const blocks = parseMarkdownLite('> > deep')
+    expect(blocks).toEqual([
+      { type: 'quote', inlines: [{ type: 'text', text: '> deep' }] },
+    ])
+  })
+
   it('classifies internal hrefs for AppLink rendering (AGL-582)', () => {
     expect(isInternalMarkdownHref('/blog/post')).toBe(true)
     expect(isInternalMarkdownHref('//evil.example')).toBe(false)
@@ -234,6 +291,10 @@ describe('serializeMarkdownLite (AGL-582)', () => {
       '| Prop | Docs |\n| --- | --- |\n| **size** | [read](https://example.com) |',
     'table with an empty cell': '| A | B |\n| --- | --- |\n|  | 2 |',
     'pipes in prose are not a table': 'a | b\nc | d',
+    'single-line quote (AGL-1315)': '> To be or not to be.',
+    'multi-line quote joins to one line': '> line one\n> line two',
+    'quote with inline marks': '> A **bold** and *slanted* [q](https://x.io)',
+    'quote between paragraphs': 'Before.\n\n> The quote.\n\nAfter.',
     'README shape: heading, table, fence':
       '## Config\n\n| Prop | Default |\n| --- | --- |\n| size | 8 |\n\n' +
       '```ts\nregister({ size: 8 })\n```\n\nThat is all.',
