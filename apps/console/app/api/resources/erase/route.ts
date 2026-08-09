@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-import { hostCollectionKind, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  collectionDeleteDenial,
+  collectionTemplateBindings,
+  hostCollectionKind,
+  pluginRequestFromWeb,
+  type CollectionTemplateScreen,
+  type CollectionTemplateSource,
+} from '@aglyn/aglyn/server'
 // Shared, unit-tested scope decision lives in _lib: route.ts may only
 // export handlers.
 import { eraseScopeDenial } from '../../_lib/erase-scope'
@@ -32,6 +39,71 @@ import {
 const ORG_WRITER_ROLES = new Set(['owner', 'admin', 'editor'])
 /** Roles allowed to delete host content — mirrors canWriteHostContent(). */
 const HOST_WRITER_ROLES = new Set(['admin', 'editor'])
+/**
+ * Deleting a whole COLLECTION is a site-structural act, not a content edit
+ * (AGL-1324): it removes the `/{slug}` and `/{slug}/{entry}` routes the site
+ * publishes, which is the same grade of action as deleting the site — and
+ * that has always been admin-only (`DeleteSiteCard`). Hosts have no `owner`
+ * role; `admin` IS the top of the site role model, so this is the
+ * "owner/admin only" gate the issue asks for.
+ *
+ * This tightens the commerce catalog card too, which reached the same route
+ * with the same kind as an `editor`. Deliberate: one resource, one gate.
+ */
+const HOST_ADMIN_ROLES = new Set(['admin'])
+
+/**
+ * The AGL-1324 dependency reads behind {@link collectionDeleteDenial}: how
+ * many entries the collection still holds, and which of its template screens
+ * are still alive. One aggregation query plus at most two document gets, and
+ * only for a collection — every other kind skips this entirely.
+ *
+ * The reads live here and the decision lives in `@aglyn/aglyn`, so the rule
+ * itself is unit-tested and the console dialog can show the same blockers
+ * before it arms its button.
+ */
+async function collectionDependencyDenial(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  snapshot: FirebaseFirestore.DocumentSnapshot,
+) {
+  const data = (snapshot.data() ?? {}) as CollectionTemplateSource & {
+    displayName?: unknown
+    name?: unknown
+  }
+  const boundIds = [...new Set(
+    [data.listScreenId, data.entryScreenId, data.templateScreenId]
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value) => value.length > 0),
+  )]
+  const screensRef = firestore.collection('hosts').doc(hostId).collection('screens')
+  const [entryCount, screenDocs] = await Promise.all([
+    snapshot.ref
+      .collection('entries')
+      .count()
+      .get()
+      .then((result) => Number(result.data().count ?? 0)),
+    boundIds.length
+      ? firestore.getAll(...boundIds.map((screenId) => screensRef.doc(screenId)))
+      : Promise.resolve([] as FirebaseFirestore.DocumentSnapshot[]),
+  ])
+
+  const screens: Record<string, CollectionTemplateScreen | undefined> = {}
+  for (const screen of screenDocs) {
+    if (!screen.exists) continue
+    screens[screen.id] = {
+      displayName: screen.get('displayName') as string | undefined,
+      deletedAt: screen.get('deletedAt'),
+    }
+  }
+
+  return collectionDeleteDenial({
+    // Content collections name themselves `displayName`, catalog ones `name`.
+    displayName: String(data.displayName ?? data.name ?? ''),
+    entryCount,
+    bindings: collectionTemplateBindings(data, screens),
+  })
+}
 
 /**
  * Recursive delete for the org/host resources that own subcollections.
@@ -138,9 +210,15 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Unknown site' }, { status: 404 })
       }
       const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-      if (!HOST_WRITER_ROLES.has(String(memberRole))) {
+      // A collection delete takes published routes with it, so it needs the
+      // admin gate rather than the content-editor one (AGL-1324).
+      const isCollection = kind === 'collections'
+      const requiredRoles = isCollection ? HOST_ADMIN_ROLES : HOST_WRITER_ROLES
+      if (!requiredRoles.has(String(memberRole))) {
         return Response.json({
-          error: 'Deleting site content requires the editor role',
+          error: isCollection
+            ? 'Deleting a collection requires the site admin role'
+            : 'Deleting site content requires the editor role',
         }, { status: 403 })
       }
       const orgId = hostSnapshot.get('orgId') as string | undefined
@@ -159,7 +237,7 @@ async function handler(request: Request): Promise<Response> {
     // checked here — the catalog card must not be able to recursiveDelete a
     // content collection's `entries`, however stale its list is.
     const expectedCollectionKind = body?.collectionKind
-    if (kind === 'collections' && expectedCollectionKind) {
+    if (kind === 'collections') {
       // Reuses the org-scope read above when there was one — `collections`
       // is host-scoped, so in practice this fetches; the guard just avoids
       // a second read of the identical doc if that ever changes.
@@ -171,13 +249,30 @@ async function handler(request: Request): Promise<Response> {
           .collection(kind)
           .doc(id)
           .get())
-      if (
-        snapshot.exists &&
-        hostCollectionKind(snapshot.data()) !== expectedCollectionKind
-      ) {
-        return Response.json({
-          error: 'That collection belongs to a different part of the console',
-        }, { status: 409 })
+      if (snapshot.exists) {
+        if (
+          expectedCollectionKind &&
+          hostCollectionKind(snapshot.data()) !== expectedCollectionKind
+        ) {
+          return Response.json({
+            error: 'That collection belongs to a different part of the console',
+          }, { status: 409 })
+        }
+        // Nothing may depend on it (AGL-1324). Enforced here and not only in
+        // the dialog: the console computes the same blockers for fast
+        // feedback, but a stale client — or a direct call — must not be able
+        // to cascade a published page or a shelf of entries out of existence.
+        const denial = await collectionDependencyDenial(
+          firestore,
+          scopeId,
+          snapshot,
+        )
+        if (denial) {
+          return Response.json({
+            error: denial.error,
+            blockers: denial.blockers,
+          }, { status: denial.status })
+        }
       }
     }
 
