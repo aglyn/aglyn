@@ -222,17 +222,33 @@ const selectField = (
   ],
 })
 
+/** Panel context a few fields word themselves against (AGL-1338). */
+export interface StyleFieldGroupOptions {
+  /**
+   * The panel is editing a component INSTANCE's override slice rather
+   * than a node's own sx (AGL-1332). Only the Background Fill control
+   * cares so far, and it cares a lot: an unset field there means "the
+   * component's own fill keeps painting", not "nothing paints", so the
+   * unset choice has to be named for what it does.
+   */
+  isInstanceOverride?: boolean
+}
+
 /**
  * Builds the style accordion groups. `presetColors` feeds the color
  * pickers with the site theme's palette, mirroring the base styles form.
  */
 export function buildStyleFieldGroups(
   presetColors: string[],
+  options?: StyleFieldGroupOptions,
 ): StyleFieldGroup[] {
-  return styleFieldGroups(presetColors).map(withStyleFieldHelp)
+  return styleFieldGroups(presetColors, options).map(withStyleFieldHelp)
 }
 
-function styleFieldGroups(presetColors: string[]): StyleFieldGroup[] {
+function styleFieldGroups(
+  presetColors: string[],
+  options?: StyleFieldGroupOptions,
+): StyleFieldGroup[] {
   return [
     {
       $id: 'layout',
@@ -325,15 +341,27 @@ function styleFieldGroups(presetColors: string[]): StyleFieldGroup[] {
         // mode of Background Color, because they are different CSS
         // properties: this one writes `backgroundImage`, which paints OVER
         // the solid colour, so an author can keep a solid fallback under a
-        // gradient. Solid here means "no background image" and clears it.
+        // gradient. Solid here writes `none` — an explicit "paint no
+        // image", which is what lets ONE instance of a component whose
+        // default IS a gradient go back to a flat band (AGL-1338).
         {
           component: FieldComponentType.CSS_GRADIENT,
           name: 'backgroundImage',
           label: 'Background Fill',
-          description:
-            'Solid uses the Background Color above. A gradient paints over ' +
-            'it — set the angle and the color stops, and bind any stop to a ' +
-            'theme color so it follows the palette.',
+          description: options?.isInstanceOverride
+            ? 'Inherited keeps the fill the component paints. Solid ' +
+              'replaces it with the Background Color above — that is how ' +
+              'one placement drops a gradient the component sets. A ' +
+              'gradient here paints this instance only.'
+            : 'Solid paints no image and lets the Background Color above ' +
+              'show. A gradient paints over it — set the angle and the ' +
+              'color stops, and bind any stop to a theme color so it ' +
+              'follows the palette.',
+          // On an instance the unset state is not "nothing", it is "the
+          // component's fill" — and saying so is half the AGL-1338 fix:
+          // the control read as already-Solid, so choosing Solid changed
+          // nothing and looked like a broken field.
+          unsetLabel: options?.isInstanceOverride ? 'Inherited' : 'Default',
           presetColors,
         },
       ],

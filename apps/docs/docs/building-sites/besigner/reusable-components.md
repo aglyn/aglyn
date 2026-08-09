@@ -140,6 +140,13 @@ to a white band without also targeting the headline gives you white text on whit
 the background on the outer element, then pick the headline and the sub-copy and set
 their colours too.
 
+**Taking off a gradient.** If the component's background is a gradient, setting
+*Background Color* on the instance is not enough — `background-image` paints over
+`background-color`, so the gradient still wins. Set **Background Fill** to *Solid color*
+as well: that records "paint no image" for this placement and your colour shows. The
+field's first choice, *Inherited*, is the way back — it drops the override and the
+component's gradient returns. Overriding to a *different* gradient works the same way.
+
 Styling is all an override does. The **content** of an element inside a component stays
 the component's — text and images come from the component or from its
 [properties](#properties). If one page needs different words, add a property for the

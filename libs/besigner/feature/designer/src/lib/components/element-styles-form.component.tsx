@@ -590,9 +590,18 @@ const ElementStylesForm = observer(
     )
     // Accordion field groups (AGL-540/587): layout, colors, sizing,
     // typography, borders & shadows, position & overflow, grid/flex-child.
+    //
+    // The override mode is passed in (AGL-1338) because a field whose
+    // "empty" state is meaningful has to say what empty MEANS here: on an
+    // instance an unset Background Fill is the component's gradient, not
+    // no gradient, and the control that could not tell those apart was
+    // the bug.
     const styleGroups = useMemo(
-      () => buildStyleFieldGroups(presetColors),
-      [presetColors],
+      () =>
+        buildStyleFieldGroups(presetColors, {
+          isInstanceOverride: target.isInstanceOverride,
+        }),
+      [presetColors, target.isInstanceOverride],
     )
     // Container gap controls, rendered inside Flexbox & Grids (AGL-587).
     const gapGroup = useMemo(() => buildFlexGapGroup(), [])

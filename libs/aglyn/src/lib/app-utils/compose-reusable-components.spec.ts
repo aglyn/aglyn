@@ -356,6 +356,54 @@ describe('declared props (AGL-1247)', () => {
     expect(hero.nodes.h.props.children).toBe('{{prop.headline}}')
   })
 
+  it('carries a Link prop\'s screen reference through to the href (AGL-1335)', () => {
+    // The graft is a string substitution, so a picked screen has to reach
+    // the node as a REFERENCE and be resolved by the renderer against the
+    // routing map. Baking a path here is the bug: the value would be frozen
+    // at the moment of composition and a rename would break it again.
+    const cta = {
+      rootId: 'root',
+      nodes: {
+        root: {
+          $id: 'root',
+          componentId: 'muiButton',
+          props: { href: '{{prop.secondaryLink}}' },
+        },
+      },
+      props: [
+        { name: 'secondaryLink', type: 'href', defaultValue: 'screen:contact' },
+      ],
+    } as any
+    const instance = (propValues?: Record<string, unknown>) => ({
+      a: {
+        $id: 'a',
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'cta', ...(propValues && { propValues }) },
+        nodes: [] as string[],
+      },
+    })
+
+    expect(
+      composeReusableComponentNodes(instance() as any, { cta })[
+        'cmp__a__root'
+      ].props.href,
+    ).toBe('screen:contact')
+    expect(
+      composeReusableComponentNodes(
+        instance({ secondaryLink: 'screen:pricing' }) as any,
+        { cta },
+      )['cmp__a__root'].props.href,
+    ).toBe('screen:pricing')
+    // Backwards compatibility: the nine live CTAs hold a raw path, which
+    // must keep arriving verbatim as a literal href.
+    expect(
+      composeReusableComponentNodes(
+        instance({ secondaryLink: '/pricing' }) as any,
+        { cta },
+      )['cmp__a__root'].props.href,
+    ).toBe('/pricing')
+  })
+
   it('falls back to the declared default where an instance sets nothing', () => {
     const composed = composeReusableComponentNodes(
       { a: heroInstance('a') } as any,
@@ -958,6 +1006,198 @@ describe('per-leaf style overrides (AGL-1332)', () => {
     expect(again['cmp__a__root'].sx).toEqual(first['cmp__a__root'].sx)
     expect(again['cmp__b__headline'].sx).toHaveProperty('color', '#B7BEC8')
     expect(again['cmp__b__root'].sx).toEqual(cta.nodes.root.sx)
+  })
+})
+
+/**
+ * Overriding the BACKGROUND FILL of one instance (AGL-1338).
+ *
+ * The Marketing CTA's default is the brand gradient — right for ~30 of the
+ * ~37 surfaces that place it. The rest are variants: a white band, the
+ * `/developers-home` dark terminal band, a plain careers block. Those are
+ * expressible only if an instance can override `backgroundImage`, and only
+ * if "solid" is a VALUE rather than an absent key: `background-image`
+ * paints OVER `background-color`, so an instance that merely sets a colour
+ * underneath still renders the gradient. That is exactly what
+ * `/developers-home` was doing — its `#161C21` override was stored and
+ * inert, and the page shared one emotion class with a gradient placement.
+ *
+ * The graft needs no special case for it; the point of these specs is that
+ * `none` behaves as an ordinary override on the way through, so the fill
+ * gets the cascade and detach semantics every other property already has.
+ */
+describe('background fill overrides (AGL-1338)', () => {
+  const GRADIENT =
+    'linear-gradient(242deg, #00B0FF 0%, #7A5CF0 55%, #E040FB 100%)'
+  const TERMINAL = 'linear-gradient(180deg, #161C21 0%, #0B0F12 100%)'
+
+  /** The CTA as it now ships: a gradient root over a white headline. */
+  const cta = {
+    rootId: 'root',
+    nodes: {
+      root: {
+        $id: 'root',
+        componentId: 'muiStack',
+        sx: { backgroundColor: '#101828', backgroundImage: GRADIENT, py: 8 },
+        nodes: ['headline'],
+      },
+      headline: {
+        $id: 'headline',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        sx: { color: 'common.white' },
+      },
+    },
+  } as any
+
+  const instanceWith = (id: string, styleOverrides?: any) => ({
+    $id: id,
+    componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+    props: { refId: 'cta' },
+    nodes: [] as string[],
+    ...(styleOverrides && { styleOverrides }),
+  })
+
+  /** The `/developers-home` override, as the panel now writes it. */
+  const solidBand = {
+    [STYLE_OVERRIDES_ROOT_KEY]: {
+      backgroundColor: '#161C21',
+      backgroundImage: 'none',
+    },
+  }
+
+  it('an explicit none CLEARS the component gradient on that instance', () => {
+    const composed = composeReusableComponentNodes(
+      { a: instanceWith('a', solidBand) } as any,
+      { cta },
+    )
+    // The whole point: not "a colour under a gradient" but no image at
+    // all, so the colour is what paints.
+    expect(composed['cmp__a__root'].sx).toEqual({
+      backgroundColor: '#161C21',
+      backgroundImage: 'none',
+      py: 8,
+    })
+    // Everything else the component says is untouched.
+    expect(composed['cmp__a__headline'].sx).toEqual({ color: 'common.white' })
+  })
+
+  it('an override to a DIFFERENT gradient renders that one', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWith('a', {
+          [STYLE_OVERRIDES_ROOT_KEY]: { backgroundImage: TERMINAL },
+        }),
+      } as any,
+      { cta },
+    )
+    expect(composed['cmp__a__root'].sx).toHaveProperty(
+      'backgroundImage',
+      TERMINAL,
+    )
+  })
+
+  it('no override still inherits the component gradient', () => {
+    const composed = composeReusableComponentNodes(
+      { a: instanceWith('a') } as any,
+      { cta },
+    )
+    expect(composed['cmp__a__root'].sx).toEqual(cta.nodes.root.sx)
+  })
+
+  it('keeps two placements of one component disjoint', () => {
+    // The regression that reported this bug was two pages resolving to a
+    // single emotion class — proof the override had produced no distinct
+    // style at all.
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWith('a', solidBand),
+        b: instanceWith('b'),
+      } as any,
+      { cta },
+    )
+    expect(composed['cmp__a__root'].sx).toHaveProperty('backgroundImage', 'none')
+    expect(composed['cmp__b__root'].sx).toHaveProperty(
+      'backgroundImage',
+      GRADIENT,
+    )
+    expect(composed['cmp__a__root'].sx).not.toEqual(composed['cmp__b__root'].sx)
+    expect(cta.nodes.root.sx.backgroundImage).toBe(GRADIENT)
+  })
+
+  it('cascades like any other property: dark slice, breakpoint slice', () => {
+    // Scheme- and breakpoint-scoped edits reach the fill through the same
+    // merge as every colour field, so an instance can go flat in dark
+    // while light keeps the component's gradient.
+    const scoped = {
+      rootId: 'root',
+      nodes: {
+        root: {
+          $id: 'root',
+          componentId: 'muiStack',
+          sx: {
+            backgroundImage: GRADIENT,
+            py: 8,
+            '@scheme dark': { backgroundImage: TERMINAL, color: '#fff' },
+          },
+          nodes: [],
+        },
+      },
+    } as any
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWith('a', {
+          [STYLE_OVERRIDES_ROOT_KEY]: {
+            '@scheme dark': { backgroundImage: 'none' },
+          },
+        }),
+        b: instanceWith('b', {
+          [STYLE_OVERRIDES_ROOT_KEY]: { backgroundImage: { md: 'none' } },
+        }),
+      } as any,
+      { cta: scoped },
+    )
+    // Dark goes flat; light keeps the gradient and the slice's siblings.
+    expect(composed['cmp__a__root'].sx).toEqual({
+      backgroundImage: GRADIENT,
+      py: 8,
+      '@scheme dark': { backgroundImage: 'none', color: '#fff' },
+    })
+    // A partial breakpoint override keeps the narrower widths.
+    expect(composed['cmp__b__root'].sx).toHaveProperty('backgroundImage', {
+      xs: GRADIENT,
+      md: 'none',
+    })
+  })
+
+  it('detach bakes the fill that was RENDERING, not the component gradient', () => {
+    // Otherwise detaching repaints the band — the escape hatch undoing the
+    // variant, one page at a time.
+    const nodes = {
+      _root_: { $id: '_root_', componentId: 'div', nodes: ['a'] },
+      a: { ...instanceWith('a', solidBand), parentId: '_root_' },
+    } as any
+    const composed = composeReusableComponentNodes(nodes, { cta })
+    let n = 0
+    const detached = detachInstanceSubtree(nodes, 'a', cta, () => `new${++n}`)
+    expect(detached['a'].sx).toEqual((composed['cmp__a__root'] as any).sx)
+    expect(detached['a'].sx).toEqual({
+      backgroundColor: '#161C21',
+      backgroundImage: 'none',
+      py: 8,
+    })
+    expect((detached['a'] as any).styleOverrides).toBeUndefined()
+  })
+
+  it('a cleared override reverts to the component gradient', () => {
+    // What the panel's ✕ leaves behind — an empty slice reads as no
+    // override at all, so the fill comes back rather than sticking at
+    // `none`.
+    const composed = composeReusableComponentNodes(
+      { a: instanceWith('a', { [STYLE_OVERRIDES_ROOT_KEY]: {} }) } as any,
+      { cta },
+    )
+    expect(composed['cmp__a__root'].sx).toEqual(cta.nodes.root.sx)
   })
 })
 

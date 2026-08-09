@@ -357,9 +357,94 @@ describe('style field groups (AGL-540/587)', () => {
       expect(
         computeEffectiveStyleValues(sx, null, null)['backgroundImage'],
       ).toBe(gradient)
-      // And clearing it (Solid) removes the property rather than pinning ''.
+      // And unsetting it removes the property rather than pinning ''.
       const cleared = applyStylePartialToSx(sx, { backgroundImage: '' }, null, null)
       expect(cleared['backgroundImage']).toBeUndefined()
+    })
+
+    /**
+     * Why Solid had to become a VALUE (AGL-1338).
+     *
+     * `applyStylePartialToSx` skips a write whose value already matches
+     * what the target reads — the guard that stops a form round-trip from
+     * pinning inherited readings into a breakpoint slice. On a component
+     * instance the target is the override SLICE, which starts empty, so
+     * the old Solid encoding (`''` → undefined) matched the empty slice
+     * and was skipped: no write, no dirty document, no override. The
+     * gradient the component painted therefore could not be taken off any
+     * one placement (`/developers-home`).
+     */
+    describe('solid over an inherited gradient (AGL-1338)', () => {
+      it('records Solid as an explicit none, even against an empty slice', () => {
+        expect(
+          applyStylePartialToSx({}, { backgroundImage: 'none' }, null, null),
+        ).toEqual({ backgroundImage: 'none' })
+      })
+
+      it('writes nothing for the unset choice — that IS "no override"', () => {
+        // The same call with the shipped encoding. Identical to never
+        // having touched the field, which is correct for unset and was
+        // the bug for Solid.
+        expect(
+          applyStylePartialToSx({}, { backgroundImage: '' }, null, null),
+        ).toEqual({})
+      })
+
+      it('reads a stored none straight back out for the control', () => {
+        const sx = applyStylePartialToSx(
+          { backgroundColor: '#161C21' },
+          { backgroundImage: 'none' },
+          null,
+          null,
+        )
+        expect(computeEffectiveStyleValues(sx, null, null)).toEqual({
+          backgroundColor: '#161C21',
+          backgroundImage: 'none',
+        })
+      })
+
+      it('scopes a Solid override to the dark slice while previewing dark', () => {
+        // It is colour-bearing like the gradient it replaces, so the
+        // scheme routing applies unchanged — dark can go flat while light
+        // keeps the component's gradient.
+        const sx = applyStylePartialToSx(
+          {},
+          { backgroundImage: 'none' },
+          null,
+          'dark',
+        )
+        expect(sx['backgroundImage']).toBeUndefined()
+        expect(sx[SX_SCHEME_DARK_KEY]).toEqual({ backgroundImage: 'none' })
+      })
+
+      it('scopes a Solid override to the active breakpoint', () => {
+        const sx = applyStylePartialToSx(
+          { backgroundImage: 'linear-gradient(180deg, #000 0%, #fff 100%)' },
+          { backgroundImage: 'none' },
+          'md',
+          null,
+        )
+        expect(sx['backgroundImage']).toEqual({
+          xs: 'linear-gradient(180deg, #000 0%, #fff 100%)',
+          md: 'none',
+        })
+      })
+
+      it('names the unset choice for the panel it is rendered in', () => {
+        const fill = (opts?: { isInstanceOverride?: boolean }) =>
+          buildStyleFieldGroups(['#123456'], opts)
+            .find((group) => group.$id === 'colors')!
+            .fields.find((candidate) => candidate.name === 'backgroundImage') as any
+        // On a plain node an unset fill paints nothing; on an instance it
+        // paints the COMPONENT's fill, and a control that called that
+        // state "Default" (or worse, "Solid color") is what made the
+        // field look broken when Solid was picked and nothing happened.
+        expect(fill().unsetLabel).toBe('Default')
+        expect(fill({ isInstanceOverride: true }).unsetLabel).toBe('Inherited')
+        expect(fill({ isInstanceOverride: true }).description).toContain(
+          'Inherited keeps the fill the component paints',
+        )
+      })
     })
   })
 

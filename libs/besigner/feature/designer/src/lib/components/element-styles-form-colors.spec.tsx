@@ -42,8 +42,11 @@ import ElementStylesFormTemplate from './element-styles-form-template.component'
  * control is the way to say it; the validator is what stops the value that
  * would vanish.
  */
-const groups = buildStyleFieldGroups(['#123456'])
-const colors = groups.find((group) => group.$id === 'colors')!
+const colorsGroup = (options?: { isInstanceOverride?: boolean }) =>
+  buildStyleFieldGroups(['#123456'], options).find(
+    (group) => group.$id === 'colors',
+  )!
+const colors = colorsGroup()
 const colorNames = styleGroupFieldNames(colors)
 
 const CTA = 'linear-gradient(242deg, #00B0FF 0%, #7A5CF0 55%, #E040FB 100%)'
@@ -54,6 +57,7 @@ interface Harness {
 
 const renderColors = async (
   initialSx: Record<string, any> = {},
+  group = colors,
 ): Promise<Harness> => {
   const harness: Harness = { sx: initialSx }
   render(
@@ -72,7 +76,7 @@ const renderColors = async (
         colorNames,
         computeEffectiveStyleValues(initialSx, null, null),
       )}
-      schema={{ fields: colors.fields }}
+      schema={{ fields: group.fields }}
     />,
   )
   // The field editors are code-split (next/dynamic).
@@ -84,6 +88,20 @@ const type = (label: string, value: string) => {
   fireEvent.change(screen.getByLabelText(label), { target: { value } })
   act(() => jest.advanceTimersByTime(ATTRIBUTE_COMMIT_DEBOUNCE_MS))
 }
+
+const pickFill = (label: string) => {
+  act(() => {
+    fireEvent.mouseDown(document.querySelector('.MuiSelect-select') as Element)
+  })
+  act(() => {
+    fireEvent.click(screen.getByRole('option', { name: label }))
+  })
+  act(() => jest.advanceTimersByTime(ATTRIBUTE_COMMIT_DEBOUNCE_MS))
+}
+
+/** What the fill select currently reads. */
+const fillValue = () =>
+  (document.querySelector('.MuiSelect-select') as HTMLElement).textContent
 
 describe('styles panel Colors group (AGL-1331)', () => {
   beforeEach(() => jest.useFakeTimers())
@@ -156,5 +174,67 @@ describe('styles panel Colors group (AGL-1331)', () => {
     expect(
       (screen.getByLabelText('Stop 2 position') as HTMLInputElement).value,
     ).toBe('55')
+  })
+})
+
+/**
+ * Background Fill on a component INSTANCE (AGL-1338) — the same panel
+ * wiring, but the sx it edits is the instance's override slice rather than
+ * a node's own styles (AGL-1332), so it starts EMPTY however the component
+ * is painted.
+ *
+ * That is what broke: the Marketing CTA's default became the brand
+ * gradient, `/developers-home` needed its designed `#161C21` terminal band
+ * back, and picking *Solid color* on that instance did nothing at all —
+ * the control already read as Solid (empty slice), so no change event
+ * fired, and the value it would have written (`''`) matched the empty
+ * slice anyway and was skipped. `background-image` paints over
+ * `background-color`, so the instance's stored `#161C21` never showed.
+ */
+describe('Background Fill on a component instance (AGL-1338)', () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => {
+    jest.runOnlyPendingTimers()
+    jest.useRealTimers()
+  })
+
+  const instanceColors = colorsGroup({ isInstanceOverride: true })
+
+  it('opens an unoverridden instance on Inherited, not on Solid', async () => {
+    await renderColors({}, instanceColors)
+    // Naming the empty state is what makes Solid a change the control can
+    // report at all.
+    expect(fillValue()).toBe('Inherited')
+  })
+
+  it('records Solid as an override that clears the component gradient', async () => {
+    // The instance already carries the dark colour; only the fill is
+    // missing, and until it lands the component's gradient paints over it.
+    const harness = await renderColors(
+      { backgroundColor: '#161C21' },
+      instanceColors,
+    )
+    pickFill('Solid color')
+    expect(harness.sx['backgroundImage']).toBe('none')
+    expect(harness.sx['backgroundColor']).toBe('#161C21')
+  })
+
+  it('can override to a DIFFERENT gradient instead', async () => {
+    const harness = await renderColors({}, instanceColors)
+    pickFill('Linear gradient')
+    expect(harness.sx['backgroundImage']).toMatch(/^linear-gradient\(180deg,/)
+  })
+
+  it('goes back to the component fill on Inherited', async () => {
+    const harness = await renderColors(
+      { backgroundImage: 'none' },
+      instanceColors,
+    )
+    expect(fillValue()).toBe('Solid color')
+    pickFill('Inherited')
+    // No key at all — which is exactly how "this instance does not
+    // override the fill" is stored, so the graft leaves the component's
+    // gradient alone.
+    expect(harness.sx).not.toHaveProperty('backgroundImage')
   })
 })
