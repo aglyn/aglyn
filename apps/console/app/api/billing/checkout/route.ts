@@ -29,9 +29,11 @@ import {
   getServerReleaseFlagValues,
   isImpersonationSession,
   memberHasOrgPermission,
+  readOrgBilling,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { configuredPriceFault } from '../../../../utils/stripe-price-fault'
+import { checkoutCustomerParams } from '../../../../utils/stripe-customer-identity'
 
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
@@ -136,6 +138,14 @@ async function handler(request: Request): Promise<Response> {
       ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
       : '/'
 
+    // The customer this org already has, if any (AGL-941). Read here rather
+    // than inside the params so a Firestore hiccup cannot silently fall back
+    // to `customer_email` and mint a duplicate — an absent id is a first
+    // subscribe, and only that.
+    const existingCustomerId = (await readOrgBilling(orgId)).stripeCustomerId as
+      | string
+      | undefined
+
     // In-page checkout (AGL-1132), behind `release_native_checkout` and OFF by
     // default. Embedded mode was chosen for the console over the Payment
     // Element deliberately: this is our own chrome, so nobody expects the form
@@ -216,7 +226,23 @@ async function handler(request: Request): Promise<Response> {
       // which covers them. Measured before shipping, not assumed: a live
       // session created with this flag was accepted.
       'automatic_tax[enabled]': 'true',
-      ...(decoded.email ? { customer_email: decoded.email } : {}),
+      // The org's own Stripe customer, reused for life (AGL-941).
+      //
+      // `customer_email` does NOT reuse anything — it mints a fresh Customer
+      // on every checkout. An org that subscribed, cancelled and resubscribed
+      // therefore accumulated duplicates, while `stripeCustomerId` only ever
+      // pointed at the most recent one, so earlier invoices scattered onto
+      // customers the Billing page never queries. That is a plausible cause
+      // of invoices appearing "missing".
+      //
+      // The two are mutually exclusive — Stripe rejects a session carrying
+      // both — which is why the choice is a tested function rather than an
+      // inline ternary: getting it wrong breaks every upgrade.
+      ...checkoutCustomerParams(existingCustomerId, decoded.email),
+      // Also on the SESSION, not only the subscription: `client_reference_id`
+      // is a single opaque string, and session metadata is what the Payments
+      // view can be filtered by.
+      'metadata[orgId]': orgId,
     })
 
     // Attach the shared metered price (AGL-635) as a second subscription

@@ -157,8 +157,20 @@ const ALLOWED = new Map<string, string>([
   ],
 
   // ---- Third-party package names we do not control. ----
+  //
+  // All THREE lockfiles, and the missing third is why this list exists in its
+  // current form. Only the first two were exempted, so when the rename swept
+  // every tracked file it did not skip cloud/functions/package-lock.json — it
+  // "fixed" it, rewriting @eslint-community/regexpp and
+  // @eslint-community/eslint-utils to an @eslint-marketplace scope that has
+  // never existed on npm. Every npm ci in cloud/functions 404'd from that
+  // commit until it was restored, and because the scope is unregistered, the
+  // lockfile was one `npm publish` by a stranger away from resolving hostile
+  // code. An exemption missing from this map does not weaken the sweep; it
+  // points the sweep at a file that cannot survive it.
   ['package-lock.json', '@eslint-community/*, ansi-html-community.'],
   ['apps/docs/package-lock.json', 'Same third-party packages.'],
+  ['cloud/functions/package-lock.json', '@eslint-community/* via eslint.'],
 ])
 
 /** Anything whose bytes are not text we can meaningfully read. */
