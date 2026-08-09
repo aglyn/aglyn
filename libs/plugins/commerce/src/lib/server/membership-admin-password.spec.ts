@@ -13,6 +13,27 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * @jest-environment node
+ */
+
+/**
+ * Runs on `node`, not the plugins-commerce project default of `jsdom`
+ * (AGL-1333). The `route registration` case below imports the commerce
+ * server barrel, which reaches `next/cache` through
+ * site-page-resolver -> compose-screen-nodes -> get-components ->
+ * @aglyn/tenant-data-admin/render-cache (AGL-1302). Loading `next/cache`
+ * evaluates `class NextRequest extends Request`, and jsdom implements no
+ * Fetch API, so `Request` is undefined there and the whole file dies at
+ * import with `Class extends value undefined` before a single assertion
+ * runs. jest.setup.js already records the trap: its fetch polyfill is a
+ * no-op inside the jsdom sandbox, so "a spec that can run on `node`
+ * already has the real ones".
+ *
+ * These are server handlers with no DOM in them, so `node` is the honest
+ * environment regardless. Keep the pragma inside THIS docblock — jest
+ * only parses the first comment in the file, so a pragma placed below the
+ * license header is silently ignored.
  */
 
 import {
