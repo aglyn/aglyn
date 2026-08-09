@@ -77,6 +77,8 @@ const EXCEPTIONS: Record<string, string> = {
     'Enterprise custom-billing card (AGL-1110) provisions ONE org\'s custom price and shows its net margin from the entered amount; the "MRR" mention is a doc comment. It reads the truthful subscription.customMonthlyUsd, never sums PLAN_PRICING[plan] across orgs.',
   'libs/aglyn/src/lib/app-utils/org-billing-doc.ts':
     'Path constants, types and field pickers for the manager-gated billing doc (AGL-1028). It computes no figure at all — the `plan` mentions are prose explaining WHY plan/entitlements stayed on the org doc while the Stripe keys moved.',
+  'apps/console/utils/server/metered-backfill.ts':
+    'Decides WHETHER a subscription gets the metered usage item (AGL-1352) and adds it. It computes no figure — it reads `plan` only to check membership of PAID_PLANS, and the one "revenue" mention is prose about why an unmetered subscription is a problem.',
 }
 
 function walk(dir: string, out: string[] = []): string[] {
