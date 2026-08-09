@@ -120,8 +120,10 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
   // subcollection. This used to keep them out by requiring a non-empty
   // `name`, which held only because the Content page happens to write
   // `displayName` — a content doc that ever acquired a `name` (an import, a
-  // hand edit) would land in this list, and its Delete now cascades into
-  // `entries` (AGL-947). The shared classifier is the real check (AGL-954).
+  // hand edit) would land in this list, and its Delete reached the
+  // recursiveDelete route (AGL-947). The shared classifier is the real
+  // check (AGL-954); the route re-checks it, and AGL-1324 now refuses any
+  // collection with entries besides.
   const commerceCollections: CollectionRow[] = useMemo(
     () => (collectionDocs ?? []).filter(Aglyn.isHostCollectionKind('catalog')),
     [collectionDocs],
@@ -287,9 +289,16 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     (row: CollectionRow) => async () => {
       const confirmed = await confirm({
         title: 'Delete this collection?',
+        // NOT a cascade any more (AGL-1324/AGL-1336): the route REFUSES a
+        // collection anything still depends on. Promising to take the
+        // entries with it was the opposite of what happens, and the two
+        // blockers are the whole point of the feature — say them before the
+        // button is armed, not in a 409 afterwards.
         description:
-          `Storefront blocks pointing at "${row.name}" go empty, and any ` +
-          'content entries published under it are deleted with it.',
+          `Storefront blocks pointing at "${row.name}" go empty. The delete ` +
+          'is refused while the collection still has entries, or while a ' +
+          'screen uses it as a list or entry template — empty it and detach ' +
+          'those screens first. It also takes the site admin role.',
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
@@ -300,7 +309,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
       // published entries) and Firestore doesn't cascade, so deleting the
       // doc from here stranded them — still editor-writable through the
       // host catch-all rule, just unreachable. recursiveDelete is
-      // Admin-SDK-only, hence the route (AGL-947).
+      // Admin-SDK-only, hence the route (AGL-947). Since AGL-1324 the route
+      // also refuses rather than cascading; the 409's message names the
+      // blockers and is surfaced by the catch below.
       try {
         const idToken = await (user as any)?.getIdToken?.()
         const response = await fetch('/api/resources/erase', {
