@@ -44,6 +44,14 @@ export function useCurrentOrg(): {
    * Upgrade CTA) until this is true, or a failed read masquerades as Free.
    */
   ready: boolean
+  /**
+   * The entitlements came from the local cache and the server has not
+   * confirmed them (AGL-1066). Deliberately NOT folded into `ready`: a
+   * transient blip must not blank plan-dependent UI or bounce anyone to an
+   * Upgrade CTA. Use it to hold back an irreversible, entitlement-priced
+   * action, not to decide what to render.
+   */
+  entitlementsFromCache: boolean
 } {
   const firestore = useFirestore()
   const { currentOrg, loading: orgsLoading } = useOrgScope()
@@ -52,11 +60,21 @@ export function useCurrentOrg(): {
   // signups pre first host) resolve undefined, which the entitlement
   // helpers treat as the pre-billing fail-open, same as before.
   const orgId = currentOrg?.$id
-  const { data: org, ready } = useConfirmedDoc<Partial<AglynOrgBilling>>(
+  const {
+    data: org,
+    ready,
+    fromCache,
+  } = useConfirmedDoc<Partial<AglynOrgBilling>>(
     firestore,
     orgsLoading || !orgId ? null : ['orgs', orgId],
+    // The one document in the console where a cache-served HIT is worth a
+    // server read (AGL-1066): this is the sole entitlement source, so a copy
+    // held from before a plan change renders the org at the wrong tier.
+    // AGL-887 closed the tombstone direction of this; that left the
+    // stale-exists direction, which the base contract trusts on sight.
+    { confirmCachedHit: true },
   )
-  return { org, orgId, ready }
+  return { org, orgId, ready, entitlementsFromCache: fromCache }
 }
 
 export default useCurrentOrg

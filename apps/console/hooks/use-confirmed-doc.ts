@@ -40,7 +40,44 @@ export interface ConfirmedDocState<T> {
   ready: boolean
   /** True only when retries were exhausted — offer a retry, never a 404. */
   error: boolean
+  /**
+   * `data` is being served from the local cache and the server has not
+   * confirmed it (AGL-1066). Never a reason to withhold the value — only a
+   * reason not to let it decide something irreversible.
+   */
+  fromCache: boolean
 }
+
+export interface UseConfirmedDocOptions {
+  /**
+   * Also confirm a cache-served hit that EXISTS, not just a miss (AGL-1066).
+   *
+   * The base contract trusts any snapshot that exists, whatever its source.
+   * That is right for ordinary content — the value was legitimately the
+   * user's a moment ago, and blanking it costs more than it buys. It is NOT
+   * right for the entitlement doc: `orgs/{orgId}` is the only plan source
+   * (AGL-238), and a cached copy from before a plan change renders the org
+   * at the wrong tier for as long as the session stays stale. AGL-887 closed
+   * the tombstone direction of exactly this fault (a Business workspace
+   * rendering as Free); this closes the stale-EXISTS direction.
+   *
+   * Opt-in because it can cost one extra server read, and only when the
+   * listener has actually failed to reach the server — see the deferral in
+   * the implementation. Enable it for entitlement-shaped documents only.
+   */
+  confirmCachedHit?: boolean
+}
+
+/**
+ * How long a cached hit is allowed to stand before it is confirmed.
+ *
+ * Not zero, and this is the whole reason the option is affordable: on a
+ * healthy load the first snapshot is routinely from cache and the server
+ * snapshot follows within milliseconds. Confirming immediately would bill an
+ * extra read on every mount for every user; waiting means the confirm fires
+ * only when the server genuinely did not answer.
+ */
+const CONFIRM_CACHED_HIT_DELAY_MS = 1_500
 
 /**
  * A doc listen that never presents an unconfirmed miss (AGL-928).
@@ -75,34 +112,42 @@ export interface ConfirmedDocState<T> {
 export function useConfirmedDoc<T extends Record<string, unknown>>(
   firestore: Firestore,
   segments: readonly [string, ...string[]] | null,
+  options: UseConfirmedDocOptions = {},
 ): ConfirmedDocState<T> {
   const [state, setState] = useState<ConfirmedDocState<T>>({
     data: undefined,
     ready: false,
     error: false,
+    fromCache: true,
   })
   // Effect key: a new path must tear down and restart the listen.
   const pathKey = segments ? segments.join('/') : null
+  const confirmCachedHit = options.confirmCachedHit
 
   useEffect(() => {
-    setState({ data: undefined, ready: false, error: false })
+    setState({ data: undefined, ready: false, error: false, fromCache: true })
     if (!pathKey) return
 
     let cancelled = false
     let unsubscribe: (() => void) | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     let attempt = 0
+    // One confirm per mount, and never once the server has answered.
+    let confirmTimer: ReturnType<typeof setTimeout> | null = null
+    let confirmRequested = false
     const ref = doc(firestore, pathKey)
 
     const deliver = (
       exists: boolean,
       id: string,
       payload: Record<string, unknown> | undefined,
+      fromCache: boolean,
     ) =>
       setState({
         data: exists ? ({ $id: id, ...payload } as unknown as T) : undefined,
         ready: true,
         error: false,
+        fromCache,
       })
 
     const subscribe = () => {
@@ -112,6 +157,11 @@ export function useConfirmedDoc<T extends Record<string, unknown>>(
           if (cancelled) return
           attempt = 0
           const fromCache = snapshot.metadata.fromCache
+          if (!fromCache && confirmTimer) {
+            // The server answered on its own; nothing left to confirm.
+            clearTimeout(confirmTimer)
+            confirmTimer = null
+          }
           if (!snapshot.exists() && fromCache) {
             // Unconfirmed miss: ask the server before believing it. On
             // failure stay un-ready — the listener remains subscribed and
@@ -119,12 +169,43 @@ export function useConfirmedDoc<T extends Record<string, unknown>>(
             void getDocFromServer(ref)
               .then((server) => {
                 if (cancelled) return
-                deliver(server.exists(), server.id, server.data())
+                deliver(server.exists(), server.id, server.data(), false)
               })
               .catch(() => undefined)
             return
           }
-          deliver(snapshot.exists(), snapshot.id, snapshot.data())
+          deliver(snapshot.exists(), snapshot.id, snapshot.data(), fromCache)
+
+          /**
+           * Unconfirmed HIT (AGL-1066), for entitlement-shaped docs only.
+           *
+           * The value is already delivered above and stays on screen
+           * whatever happens here — this never blanks the page and never
+           * holds `ready` false, because a transient blip must not become a
+           * wrong tier OR a 404. It only replaces a cached answer with the
+           * server's when the server can be reached.
+           */
+          if (
+            confirmCachedHit &&
+            fromCache &&
+            snapshot.exists() &&
+            !confirmRequested &&
+            !confirmTimer
+          ) {
+            confirmTimer = setTimeout(() => {
+              confirmTimer = null
+              confirmRequested = true
+              void getDocFromServer(ref)
+                .then((server) => {
+                  if (cancelled) return
+                  deliver(server.exists(), server.id, server.data(), false)
+                })
+                // Could not reach the server: keep showing the cached value,
+                // still flagged `fromCache`. Refusing to answer would be the
+                // stale-`ready` false-404 this hook exists to prevent.
+                .catch(() => undefined)
+            }, CONFIRM_CACHED_HIT_DELAY_MS)
+          }
         },
         () => {
           if (cancelled) return
@@ -137,7 +218,12 @@ export function useConfirmedDoc<T extends Record<string, unknown>>(
             attempt += 1
             timer = setTimeout(subscribe, delay)
           } else {
-            setState({ data: undefined, ready: true, error: true })
+            setState({
+              data: undefined,
+              ready: true,
+              error: true,
+              fromCache: true,
+            })
           }
         },
       )
@@ -147,9 +233,10 @@ export function useConfirmedDoc<T extends Record<string, unknown>>(
     return () => {
       cancelled = true
       if (timer) clearTimeout(timer)
+      if (confirmTimer) clearTimeout(confirmTimer)
       unsubscribe?.()
     }
-  }, [firestore, pathKey])
+  }, [firestore, pathKey, confirmCachedHit])
 
   return state
 }
