@@ -15,14 +15,32 @@
  * limitations under the License.
  */
 
-import { render } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import React from 'react'
 
-import MuiShadowDom from './mui-shadow-dom'
+import MuiShadowDom, { MuiShadowDomRenderer } from './mui-shadow-dom'
 
 describe('MuiShadowDom', () => {
   it('should render successfully', () => {
     const { baseElement } = render(<MuiShadowDom.div />)
     expect(baseElement).toBeTruthy()
+  })
+
+  it('renders children through the client (non-ssr) emotion cache path', () => {
+    render(
+      <MuiShadowDomRenderer container={document.createElement('div')}>
+        <span>shadow-child</span>
+      </MuiShadowDomRenderer>,
+    )
+    expect(screen.getByText('shadow-child')).toBeTruthy()
+  })
+
+  // AGL-1316: a static `react-dom/server` import here ships the full server
+  // renderer in the shared client chunk. Keep the module free of it.
+  it('does not import react-dom/server (keeps the server renderer out of client bundles)', () => {
+    const source = readFileSync(join(__dirname, 'mui-shadow-dom.tsx'), 'utf8')
+    expect(source).not.toMatch(/from 'react-dom\/server'|require\('react-dom\/server'\)/)
   })
 })

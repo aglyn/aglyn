@@ -26,11 +26,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { renderToString } from 'react-dom/server'
 import { useMergeRefs } from '../hooks/use-merge-refs'
-// AGL-1238: vendored, stream-free port — the real @emotion/server entry drags
-// stream polyfills (and an eval-based feature probe) into every client bundle.
-import { renderStylesToString } from '../vendor/emotion-render-styles-to-string'
 import EmotionCacheProvider from './emotion-cache-provider'
 
 export type MuiShadowRendererProps = {
@@ -155,12 +151,12 @@ export function createMuiShadowDomProxy(
   })
 }
 
-function getStyles(children: JSX.Children) {
-  return renderStylesToString(renderToString(<>{children}</>))
-}
-
 export const MuiShadowDomRenderer = (props: MuiShadowRendererProps) => {
-  const { ssr, container, children } = props
+  // AGL-1316: the `ssr` branch (renderToString + emotion style extraction) was
+  // removed — it was dormant (no consumer passes `ssr`) and its static
+  // `react-dom/server` import shipped the full server renderer in the shared
+  // client chunk. Reintroduce via `await import('react-dom/server')` if ever needed.
+  const { container, children } = props
   const cache = !cacheMap.has(container)
     ? (() => {
         if (cacheMap.has(container)) return cacheMap.get(container)
@@ -173,15 +169,6 @@ export const MuiShadowDomRenderer = (props: MuiShadowRendererProps) => {
         return cache
       })()
     : cacheMap.get(container)
-
-  if (ssr) {
-    return (
-      <>
-        <style type="text/css">{getStyles(children)}</style>
-        {children}
-      </>
-    )
-  }
 
   return (
     <EmotionCacheProvider emotionCache={cache}>
