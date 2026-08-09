@@ -449,26 +449,39 @@ const loadPageDataCached = cache(
       })
       if (resolved) return resolved as never
 
-      // Content collections fallback (AGL-81): /{collection} and
-      // /{collection}/{entry} paths that aren't screens render the themed
-      // blog surfaces.
+      // Content collections fallback (AGL-81): /{collection},
+      // /{collection}/{entry}, the paginated list /{collection}/page/{n}
+      // (AGL-620) and the category-filtered list
+      // /{collection}/category/{slug}[/page/{n}] (AGL-1321). The shapes live
+      // in one pure parser so the loader and its tests cannot disagree about
+      // what the route table is.
+      //
+      // Category is a PATH SEGMENT, not `?category=`, and the reason is this
+      // very function: it is ISR-cached per URL PATH, and a query string is
+      // not part of that key — `/blog?category=product` and
+      // `/blog?category=guides` would share one cache entry and serve
+      // whichever category happened to render first to everybody. Reading
+      // `searchParams` at all would opt the entire tenant catch-all out of
+      // static rendering, which is the opposite of AGL-1152's whole point.
       const segments = path.split('/').filter(Boolean)
-      // /{collection} (list), /{collection}/{entry} (entry), and the paginated
-      // list /{collection}/page/{n} (AGL-620). `page` is reserved as a list
-      // sub-path.
-      const isPagedList =
-        segments.length === 3 &&
-        segments[1] === 'page' &&
-        /^[1-9]\d*$/.test(segments[2])
-      if ((segments.length >= 1 && segments.length <= 2) || isPagedList) {
-        const entrySlug = segments.length === 2 ? segments[1] : undefined
+      const route = Aglyn.parseCollectionRoute(segments)
+      if (route) {
+        const entrySlug = route.entrySlug
         const isList = !entrySlug
-        const page = isPagedList ? Number(segments[2]) : 1
+        const page = route.page
         const content = await getCollectionContent({
           hostId,
-          collectionSlug: segments[0],
+          collectionSlug: route.collectionSlug,
           entrySlug,
-          ...(isList ? { page, perPage: Aglyn.COLLECTION_LIST_PAGE_SIZE } : {}),
+          ...(isList
+            ? {
+                page,
+                perPage: Aglyn.COLLECTION_LIST_PAGE_SIZE,
+                ...(route.categorySlug
+                  ? { categorySlug: route.categorySlug }
+                  : {}),
+              }
+            : {}),
         })
         // A paged list beyond the last page 404s (page 1 always renders).
         const pageInRange =

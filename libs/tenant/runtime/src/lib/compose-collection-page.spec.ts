@@ -205,8 +205,36 @@ describe('composeCollectionTemplatePage (AGL-551)', () => {
     expect(composeArgs.tokens).toEqual({
       'collection.name': 'Blog',
       'collection.slug': 'blog',
+      // Empty on the unfiltered listing, so a template can bind them
+      // unconditionally (AGL-1321).
+      'collection.category': '',
+      'collection.categorySlug': '',
     })
     expect(result?.screen['seo'].title).toBe('Blog')
+  })
+
+  it('hands the routed category and page to the list template (AGL-1321)', async () => {
+    const data = content({
+      category: { slug: 'open-source', id: 'opensrc', name: 'Open source', known: true },
+      pagination: { page: 2, perPage: 10, totalPages: 3, totalEntries: 21 },
+    })
+    data.collection!.listScreenId = 'list-screen'
+    data.collection!.categories = [{ id: 'opensrc', name: 'Open source' }]
+    await composeCollectionTemplatePage({ hostId: 'host-1', content: data })
+    const composeArgs = composeScreenNodesMock.mock.calls[0][0]
+    // `entries` arrive ALREADY filtered by the reader; the block repeats
+    // what the route resolved. The page rides along so a template listing
+    // renders page 2 instead of re-serving page 1 at a second URL, and the
+    // category slug marks the current pill.
+    expect(composeArgs.collection).toEqual({
+      slug: 'blog',
+      entries: data.entries,
+      categories: [{ id: 'opensrc', name: 'Open source' }],
+      page: 2,
+      categorySlug: 'open-source',
+    })
+    expect(composeArgs.tokens['collection.category']).toBe('Open source')
+    expect(composeArgs.tokens['collection.categorySlug']).toBe('open-source')
   })
 
   it('falls through when the template fails to compose', async () => {
@@ -248,6 +276,64 @@ describe('composeCollectionFallbackPage (AGL-551)', () => {
     )
     expect(componentIds).toContain(Aglyn.COLLECTION_ENTRIES_COMPONENT_ID)
     expect(result?.nodes).toEqual({ root: {} })
+  })
+
+  it('gives the built-in list a pill row when the collection has categories (AGL-1321)', async () => {
+    const data = content()
+    data.collection!.categories = [{ id: 'opensrc', name: 'Open source' }]
+    await composeCollectionFallbackPage({ hostId: 'host-1', host, content: data })
+    const chromeArgs = composeNodesWithChromeMock.mock.calls[0][0]
+    const componentIds = Object.values(chromeArgs.screenNodes).map(
+      (node: any) => node.componentId,
+    )
+    expect(componentIds).toContain(Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID)
+  })
+
+  it('renders an honest empty state for a category with no entries (AGL-1321)', async () => {
+    const data = content({
+      entries: [],
+      category: { slug: 'guides', name: 'Guides', known: true },
+    })
+    data.collection!.categories = [{ id: 'guides', name: 'Guides' }]
+    await composeCollectionFallbackPage({ hostId: 'host-1', host, content: data })
+    const nodes = Object.values(
+      composeNodesWithChromeMock.mock.calls[0][0].screenNodes,
+    ) as any[]
+    const componentIds = nodes.map((node) => node.componentId)
+    // No repeater at all — an empty grid is what a "broken" listing looks
+    // like; a sentence naming the category is what an empty one looks like.
+    expect(componentIds).not.toContain(Aglyn.COLLECTION_ENTRIES_COMPONENT_ID)
+    expect(
+      nodes.some((node) =>
+        String(node.props?.children ?? '').includes(
+          'Nothing published in Guides yet.',
+        ),
+      ),
+    ).toBe(true)
+    // The pills survive the empty state, or the reader has no way back.
+    expect(componentIds).toContain(Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID)
+    // The heading names the slice, not just the collection.
+    expect(
+      nodes.some((node) => node.props?.children === 'Blog · Guides'),
+    ).toBe(true)
+  })
+
+  it('keeps the pager inside the category it is paging (AGL-1321)', async () => {
+    const data = content({
+      category: { slug: 'guides', name: 'Guides', known: true },
+      pagination: { page: 2, perPage: 10, totalPages: 3, totalEntries: 21 },
+    })
+    await composeCollectionFallbackPage({ hostId: 'host-1', host, content: data })
+    const nodes = Object.values(
+      composeNodesWithChromeMock.mock.calls[0][0].screenNodes,
+    ) as any[]
+    const hrefs = nodes
+      .map((node) => node.props?.href)
+      .filter((href): href is string => typeof href === 'string')
+    // A "next" that dropped the filter would silently return the reader to
+    // the unfiltered list.
+    expect(hrefs).toContain('/blog/category/guides')
+    expect(hrefs).toContain('/blog/category/guides/page/3')
   })
 
   it('renders entries through the markdown Entry body block', async () => {

@@ -217,15 +217,29 @@ export interface FallbackListPagination {
   totalPages: number
 }
 
+/** The routed category for a filtered listing (AGL-1321). */
+export interface FallbackListCategory {
+  slug: string
+  name: string
+}
+
 /** Prev/next + "Page X of Y" nav linking to /{slug}/page/{n} (AGL-620). */
 function paginationNodes(
   collection: FallbackCollection,
   pagination: FallbackListPagination,
+  category?: FallbackListCategory,
 ): { childId: string; nodes: NodesMap } {
   const { page, totalPages } = pagination
-  // Page 1 lives at the bare /{slug}; deeper pages at /{slug}/page/{n}.
+  // Page 1 lives at the bare listing; deeper pages at .../page/{n}. Built
+  // through the shared URL builder so the pager stays inside the category it
+  // is paging (AGL-1321) — a "next" that dropped the filter would silently
+  // return the reader to the unfiltered list.
   const href = (n: number) =>
-    n <= 1 ? `/${collection.slug}` : `/${collection.slug}/page/${n}`
+    Aglyn.collectionListUrl({
+      collectionSlug: collection.slug,
+      ...(category ? { categorySlug: category.slug } : {}),
+      page: n,
+    })
   const children: string[] = []
   const nodes: NodesMap = {}
   if (page > 1) {
@@ -287,21 +301,44 @@ export function buildCollectionListFallbackNodes(
   collection: FallbackCollection,
   hasEntries: boolean,
   pagination?: FallbackListPagination,
+  category?: FallbackListCategory,
 ): NodesMap {
   const [titleId, title] = typography('title', {
     variant: 'h3',
     component: 'h1',
-    children: collection.displayName,
+    // A filtered listing says which slice it is (AGL-1321) — a page of
+    // Guides whose only heading reads "Blog" tells the reader nothing about
+    // why the other posts vanished.
+    children: category
+      ? `${collection.displayName} · ${category.name}`
+      : collection.displayName,
   })
+  // Category pills (AGL-1321): stamped by `expandCollectionCategories` during
+  // compose, from the same taxonomy this node's collection carries. Present
+  // in the EMPTY case too — a filtered listing with no entries whose pills
+  // vanished would be a dead end with no way back to "All".
+  const pills = collection.categories?.length
+    ? {
+        $id: id('pills'),
+        componentId: Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID,
+        pluginId: 'mui',
+        parentId: id('stack'),
+        props: { allLabel: 'All', sx: { pb: 1 } },
+      }
+    : null
+  const lead = pills ? [titleId, id('pills')] : [titleId]
   if (!hasEntries) {
     const [emptyId, empty] = typography('empty', {
       variant: 'body1',
-      children: 'Nothing published yet.',
+      children: category
+        ? `Nothing published in ${category.name} yet.`
+        : 'Nothing published yet.',
       sx: { color: 'text.secondary' },
     })
     return {
-      ...shell([titleId, emptyId]),
+      ...shell([...lead, emptyId]),
       [titleId]: title,
+      ...(pills ? { [id('pills')]: pills } : {}),
       [emptyId]: empty,
     }
   }
@@ -314,13 +351,16 @@ export function buildCollectionListFallbackNodes(
   })
   const pager =
     pagination && pagination.totalPages > 1
-      ? paginationNodes(collection, pagination)
+      ? paginationNodes(collection, pagination, category)
       : null
   return {
     ...shell(
-      pager ? [titleId, id('entries'), pager.childId] : [titleId, id('entries')],
+      pager
+        ? [...lead, id('entries'), pager.childId]
+        : [...lead, id('entries')],
     ),
     [titleId]: title,
+    ...(pills ? { [id('pills')]: pills } : {}),
     [id('entries')]: {
       $id: id('entries'),
       componentId: Aglyn.COLLECTION_ENTRIES_COMPONENT_ID,
@@ -383,6 +423,7 @@ export function buildCollectionFallbackNodes(content: {
   entries: FallbackEntry[]
   entry: FallbackEntry | null
   pagination?: FallbackListPagination | null
+  category?: FallbackListCategory | null
 }): NodesMap {
   return content.entry
     ? buildCollectionEntryFallbackNodes(content.collection, content.entry)
@@ -390,6 +431,7 @@ export function buildCollectionFallbackNodes(content: {
         content.collection,
         content.entries.length > 0,
         content.pagination ?? undefined,
+        content.category ?? undefined,
       )
 }
 

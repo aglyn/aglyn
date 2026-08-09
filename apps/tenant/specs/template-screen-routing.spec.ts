@@ -63,6 +63,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   SCREEN_ROOT_PATH: '/',
   COLLECTION_LIST_PAGE_SIZE: 10,
+  // The REAL parser (AGL-1321), reached by file path so the stub stays light.
+  // Faking it would mean writing the collection route table a second time in
+  // a test whose entire subject is which paths reach which branch — the two
+  // copies would drift, and this suite would keep passing while they did.
+  parseCollectionRoute: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+  ).parseCollectionRoute,
   HostScreenVisibility: { AUTHENTICATED: 'authenticated' },
   // None of these hosts has a custom domain, so the canonical-origin branch
   // (AGL-1272) is never taken — but the loader CALLS this on every render, and

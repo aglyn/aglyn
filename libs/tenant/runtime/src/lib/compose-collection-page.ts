@@ -43,13 +43,22 @@ export function resolveCollectionTemplateScreenId(
   return collection.entryScreenId || collection.templateScreenId || undefined
 }
 
-/** Page-level `{{collection.*}}` tokens for template screens (AGL-551). */
+/**
+ * Page-level `{{collection.*}}` tokens for template screens (AGL-551), plus
+ * the routed category (AGL-1321) so a list template can name what it is
+ * showing — "Guides" rather than a heading that says "Blog" on every filtered
+ * URL. Both category tokens resolve to the empty string on the unfiltered
+ * listing, which is what makes them safe to bind unconditionally.
+ */
 export function collectionTokens(
   collection: Pick<CollectionDoc, 'displayName' | 'slug'>,
+  category?: CollectionContent['category'],
 ): Record<string, string> {
   return {
     'collection.name': collection.displayName,
     'collection.slug': collection.slug,
+    'collection.category': category?.name ?? '',
+    'collection.categorySlug': category?.slug ?? '',
   }
 }
 
@@ -94,7 +103,7 @@ export async function composeCollectionTemplatePage(options: {
           collection.categories,
         ),
       }
-    : collectionTokens(collection)
+    : collectionTokens(collection, content.category)
   const nodes = await composeScreenNodes({
     hostId,
     screenId,
@@ -109,8 +118,16 @@ export async function composeCollectionTemplatePage(options: {
       ? { slug: collection.slug, entry, categories: collection.categories }
       : {
           slug: collection.slug,
+          // Already filtered to the routed category (AGL-1321) — the block
+          // repeats what the ROUTE resolved, so a designer-pinned
+          // `filterCategory` on the block narrows it further rather than
+          // fighting it.
           entries: content.entries,
           categories: collection.categories,
+          ...(content.pagination?.page
+            ? { page: content.pagination.page }
+            : {}),
+          ...(content.category ? { categorySlug: content.category.slug } : {}),
         },
   })
   if (!nodes) return null
@@ -163,6 +180,7 @@ export async function composeCollectionFallbackPage(options: {
       entries: content.entries,
       entry: content.entry,
       pagination: content.pagination,
+      category: content.category,
     })
     const nodes = await composeNodesWithChrome({
       hostId,
@@ -183,6 +201,12 @@ export async function composeCollectionFallbackPage(options: {
             slug: collection.slug,
             entries: content.entries,
             categories: collection.categories,
+            ...(content.pagination?.page
+              ? { page: content.pagination.page }
+              : {}),
+            ...(content.category
+              ? { categorySlug: content.category.slug }
+              : {}),
           },
     })
     return nodes ? { nodes } : null

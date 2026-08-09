@@ -18,11 +18,13 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { render, screen } from '@testing-library/react'
 import {
+  CollectionCategories,
   CollectionEntries,
   CollectionEntryBody,
   CollectionEntryMeta,
   CollectionRelated,
   CollectionShare,
+  collectionCategoriesSchema,
   collectionEntriesSchema,
   collectionEntryBodySchema,
   collectionEntryMetaSchema,
@@ -47,6 +49,9 @@ describe('Collection entries block (AGL-551)', () => {
     )
     expect(collectionEntryMetaSchema.$id).toBe(
       Aglyn.COLLECTION_ENTRY_META_COMPONENT_ID,
+    )
+    expect(collectionCategoriesSchema.$id).toBe(
+      Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID,
     )
   })
 
@@ -199,6 +204,73 @@ describe('Related posts block (AGL-582)', () => {
       </Aglyn.ScreenLinkContext.Provider>,
     )
     expect(screen.getByText(/Related posts — entries sharing/)).toBeTruthy()
+  })
+})
+
+describe('Category pills block (AGL-1321)', () => {
+  const items = [
+    { label: 'All', href: '/blog', active: false },
+    { label: 'Product', href: '/blog/category/product', active: true },
+    { label: 'Open source', href: '/blog/category/opensrc', active: false },
+  ]
+
+  it('renders every pill as a REAL anchor', () => {
+    // Anchors, not click handlers: a JS-only toggle is invisible to
+    // crawlers, unopenable in a new tab and unlinkable.
+    const { container } = render(<CollectionCategories items={items} />)
+    const hrefs = Array.from(container.querySelectorAll('a')).map((anchor) =>
+      anchor.getAttribute('href'),
+    )
+    expect(hrefs).toEqual([
+      '/blog',
+      '/blog/category/product',
+      '/blog/category/opensrc',
+    ])
+    expect(screen.getByText('Open source')).toBeTruthy()
+  })
+
+  it('marks the routed pill with aria-current in the SERVER markup', () => {
+    const { container } = render(<CollectionCategories items={items} />)
+    const current = container.querySelectorAll('[aria-current="page"]')
+    expect(current).toHaveLength(1)
+    expect(current[0].getAttribute('href')).toBe('/blog/category/product')
+  })
+
+  it('keeps the compose-time props off the DOM', () => {
+    const { container } = render(
+      <CollectionCategories
+        collectionSlug="blog"
+        allLabel="All"
+        items={items}
+      />,
+    )
+    const root = container.firstElementChild as HTMLElement
+    expect(root.getAttribute('collectionSlug')).toBeNull()
+    expect(root.getAttribute('allLabel')).toBeNull()
+  })
+
+  it('renders nothing on the site without stamped items', () => {
+    const { container } = render(<CollectionCategories />)
+    expect(container.textContent).toBe('')
+  })
+
+  it('shows an affordance inside editing surfaces', () => {
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        <CollectionCategories />
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+    expect(screen.getByText(/Category pills — All \+ one pill/)).toBeTruthy()
+  })
+
+  it('never navigates the canvas away from an editing surface', () => {
+    const { container } = render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        <CollectionCategories items={items} />
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+    expect(container.querySelectorAll('a')).toHaveLength(0)
+    expect(screen.getByText('Product')).toBeTruthy()
   })
 })
 

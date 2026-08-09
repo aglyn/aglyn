@@ -16,6 +16,8 @@
  */
 
 import {
+  collectionCategorySlug,
+  collectionListUrl,
   hostCollectionKind,
   hostPublicOrigin,
   isScreenIndexable,
@@ -266,6 +268,18 @@ async function buildSitemapUrls(
       const collectionSlug = raw.slug
       if (!collectionSlug) continue
       urls.push(`${base}/${collectionSlug}`)
+      // Category listings (AGL-1321). Free: `categories` is a field on the
+      // collection doc this loop already read, so no extra round trip — and
+      // a filtered listing that no page links to from a crawlable position
+      // would otherwise depend entirely on the pill row being reached.
+      const categories = Array.isArray(raw.categories) ? raw.categories : []
+      for (const category of categories) {
+        const categorySlug =
+          collectionCategorySlug(category?.id) ||
+          collectionCategorySlug(category?.name)
+        if (!categorySlug) continue
+        urls.push(`${base}${collectionListUrl({ collectionSlug, categorySlug })}`)
+      }
       const entries = await docSnapshot.ref
         .collection('entries')
         .where('status', '==', 'published')

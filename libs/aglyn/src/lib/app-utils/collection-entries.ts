@@ -41,6 +41,21 @@ export const COLLECTION_SHARE_COMPONENT_ID = 'collectionShare'
 /** Persisted component id of the entry-meta block (plugins-mui, AGL-582). */
 export const COLLECTION_ENTRY_META_COMPONENT_ID = 'collectionEntryMeta'
 
+/**
+ * Persisted component id of the "Category Pills" block (plugins-mui,
+ * AGL-1321). Like the entries repeater, the id lives here so the tenant
+ * compose pipeline can stamp the block's links without importing the bundle.
+ */
+export const COLLECTION_CATEGORIES_COMPONENT_ID = 'collectionCategories'
+
+/**
+ * Reserved list sub-paths (AGL-620 `page`, AGL-1321 `category`). Both are
+ * only reserved as the HEAD of a longer path, so an entry legitimately
+ * slugged `page` or `category` keeps serving at `/{collection}/{entry}`.
+ */
+export const COLLECTION_PAGE_ROUTE_SEGMENT = 'page'
+export const COLLECTION_CATEGORY_ROUTE_SEGMENT = 'category'
+
 /** Namespaces cloned template ids per container/entry (cf. `rep__`). */
 export const COLLECTION_ENTRIES_NODE_ID_PREFIX = 'centry__'
 
@@ -118,6 +133,14 @@ export interface CollectionEntriesSource {
   entries: CollectionEntryRecord[]
   /** The collection's category taxonomy (AGL-582), for name resolution. */
   categories?: CollectionCategory[]
+  /**
+   * The page the ROUTE asked for (AGL-1321), set only for the collection the
+   * URL resolved. Fills in a block that declares `perPage` but no `page` —
+   * which is every block a designer can author, since design time cannot
+   * know which page a visitor is on. A block that names its own `page` still
+   * wins: that is a deliberately pinned window, not a paginated list.
+   */
+  page?: number
 }
 
 /**
@@ -129,7 +152,9 @@ export interface CollectionEntriesSource {
  */
 export function resolveEntryCategoryName(
   entry: Pick<CollectionEntryRecord, 'categoryId' | 'category'>,
-  categories?: CollectionCategory[],
+  // `readonly` because this only reads (AGL-1321): the route helpers hold
+  // the taxonomy as readonly and would otherwise have to copy it to ask.
+  categories?: readonly CollectionCategory[],
 ): string | undefined {
   const categoryId = (entry.categoryId ?? '').trim()
   if (categoryId) {
@@ -206,6 +231,216 @@ export function entryMatchesFilter(
   return true
 }
 
+/* ── Category routes (AGL-1321) ─────────────────────────────────────────── */
+
+/**
+ * URL form of a category id or display name (AGL-1321): lowercase, runs of
+ * non-alphanumerics collapsed to a single `-`, no leading/trailing dash.
+ *
+ * Deliberately lossy and idempotent, so the same category addresses the same
+ * URL whether the author typed the taxonomy id, the display name, or the URL
+ * segment itself. `Open source` → `open-source` → `open-source`.
+ */
+export function collectionCategorySlug(value: string | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+/**
+ * The taxonomy category a URL segment addresses (AGL-1321), matched on the
+ * stable `id` OR the slugified display name — an author linking
+ * `/blog/category/open-source` should not have to know which of the two the
+ * data happens to store, and an `id` that survives a rename is exactly why
+ * the taxonomy has one. `undefined` = the segment names no known category;
+ * the caller renders an empty listing rather than crashing.
+ */
+export function resolveCollectionCategoryBySlug(
+  categories: readonly CollectionCategory[] | undefined,
+  slug: string | undefined,
+): CollectionCategory | undefined {
+  const wanted = collectionCategorySlug(slug)
+  if (!wanted) return undefined
+  return (categories ?? []).find(
+    (category) =>
+      collectionCategorySlug(category.id) === wanted ||
+      collectionCategorySlug(category.name) === wanted,
+  )
+}
+
+/**
+ * The canonical URL of a collection listing (AGL-1321). ONE builder, because
+ * the pills, the pager, the `<link rel="canonical">`, the JSON-LD and the
+ * sitemap must all agree on the shape or the filter quietly becomes a
+ * duplicate-content generator.
+ *
+ * The unfiltered page-1 listing is the bare `/{collection}` — there is no
+ * `/{collection}/category/all` and no `?category=all`, so "All" cannot become
+ * a second address for the page that already exists.
+ */
+export function collectionListUrl(options: {
+  collectionSlug: string
+  categorySlug?: string | null
+  page?: number | null
+}): string {
+  const scoped = options.categorySlug
+    ? `/${options.collectionSlug}/${COLLECTION_CATEGORY_ROUTE_SEGMENT}/` +
+      collectionCategorySlug(options.categorySlug)
+    : `/${options.collectionSlug}`
+  const page = Number(options.page)
+  return Number.isFinite(page) && page > 1
+    ? `${scoped}/${COLLECTION_PAGE_ROUTE_SEGMENT}/${Math.floor(page)}`
+    : scoped
+}
+
+/** A content-collection path resolved to what it addresses (AGL-1321). */
+export interface CollectionRoute {
+  collectionSlug: string
+  /** Set only for `/{collection}/{entry}`. */
+  entrySlug?: string
+  /** Set only for `/{collection}/category/{slug}[/page/{n}]`. */
+  categorySlug?: string
+  /** 1-based list page; always 1 for entry routes. */
+  page: number
+}
+
+const POSITIVE_INTEGER = /^[1-9]\d*$/
+
+/**
+ * Parses a non-screen path against the content-collection route shapes
+ * (AGL-81/620/1321), or `null` when it is none of them and the caller should
+ * fall through to the 404 chain:
+ *
+ * ```
+ * /{collection}                                list, page 1, all categories
+ * /{collection}/{entry}                        one entry
+ * /{collection}/page/{n}                       list page n
+ * /{collection}/category/{slug}                filtered list, page 1
+ * /{collection}/category/{slug}/page/{n}       filtered list, page n
+ * ```
+ *
+ * Pure, and shared by the tenant loader and its tests, because the route
+ * table IS the ISR cache key here: the tenant catch-all caches by PATH, so a
+ * listing variant that lives in the path gets its own cache entry for free,
+ * while one that lived in a query string would share `/blog`'s entry and
+ * serve one category's HTML for another.
+ */
+export function parseCollectionRoute(
+  segments: readonly string[],
+): CollectionRoute | null {
+  const [collectionSlug, ...rest] = segments
+  if (!collectionSlug) return null
+  if (!rest.length) return { collectionSlug, page: 1 }
+  if (rest.length === 1) return { collectionSlug, entrySlug: rest[0], page: 1 }
+  if (rest.length === 2 && rest[0] === COLLECTION_PAGE_ROUTE_SEGMENT) {
+    return POSITIVE_INTEGER.test(rest[1])
+      ? { collectionSlug, page: Number(rest[1]) }
+      : null
+  }
+  if (rest.length === 2 && rest[0] === COLLECTION_CATEGORY_ROUTE_SEGMENT) {
+    const categorySlug = collectionCategorySlug(rest[1])
+    return categorySlug ? { collectionSlug, categorySlug, page: 1 } : null
+  }
+  if (
+    rest.length === 4 &&
+    rest[0] === COLLECTION_CATEGORY_ROUTE_SEGMENT &&
+    rest[2] === COLLECTION_PAGE_ROUTE_SEGMENT &&
+    POSITIVE_INTEGER.test(rest[3])
+  ) {
+    const categorySlug = collectionCategorySlug(rest[1])
+    return categorySlug
+      ? { collectionSlug, categorySlug, page: Number(rest[3]) }
+      : null
+  }
+  return null
+}
+
+/**
+ * Does this entry belong to the category a URL segment addresses (AGL-1321)?
+ *
+ * Every spelling the route could plausibly mean is slugified into one set and
+ * checked against both of the entry's own spellings — the stable `categoryId`
+ * and the RESOLVED display name. So `/blog/category/open-source` answers for
+ * a taxonomy whose id is `opensource`, for one whose id is opaque but whose
+ * name is "Open source", and for a legacy free-typed entry that predates the
+ * taxonomy entirely. `entryMatchesFilter` cannot stand in: it compares raw
+ * trimmed strings, so it would miss every multi-word category name.
+ */
+export function entryMatchesCategoryRoute(
+  entry: CollectionEntryRecord,
+  route: { slug: string; category?: CollectionCategory },
+  categories?: readonly CollectionCategory[],
+): boolean {
+  const wanted = new Set(
+    [route.slug, route.category?.id, route.category?.name]
+      .map((value) => collectionCategorySlug(value))
+      .filter(Boolean),
+  )
+  if (!wanted.size) return false
+  const entryId = collectionCategorySlug(entry.categoryId)
+  if (entryId && wanted.has(entryId)) return true
+  const entryName = collectionCategorySlug(
+    resolveEntryCategoryName(entry, categories),
+  )
+  return Boolean(entryName) && wanted.has(entryName)
+}
+
+/** One category pill as stamped onto a Category Pills block (AGL-1321). */
+export interface CollectionCategoryLink {
+  label: string
+  href: string
+  /** The pill for the listing currently being rendered. */
+  active: boolean
+}
+
+/**
+ * The pill row for a collection (AGL-1321): "All" pointing at the canonical
+ * unfiltered listing, then one pill per taxonomy category.
+ *
+ * Each pill addresses its category by the STABLE id where there is one, so a
+ * rename moves the label without breaking the link. Active state is decided
+ * through the same resolver the route used, not by string equality, because
+ * the URL may legitimately have named the category by either spelling.
+ */
+export function buildCollectionCategoryLinks(options: {
+  collectionSlug: string
+  categories?: readonly CollectionCategory[]
+  activeCategorySlug?: string
+  /** Label for the unfiltered pill; empty string omits it. */
+  allLabel?: string
+}): CollectionCategoryLink[] {
+  const { collectionSlug } = options
+  const active = collectionCategorySlug(options.activeCategorySlug)
+  const links: CollectionCategoryLink[] = []
+  for (const category of options.categories ?? []) {
+    const idSlug = collectionCategorySlug(category.id)
+    const nameSlug = collectionCategorySlug(category.name)
+    const slug = idSlug || nameSlug
+    if (!slug) continue
+    links.push({
+      label: category.name,
+      href: collectionListUrl({ collectionSlug, categorySlug: slug }),
+      active: Boolean(active) && (idSlug === active || nameSlug === active),
+    })
+  }
+  // A lone "All" pill is not a filter, it is decoration — a collection with
+  // no taxonomy gets no row at all.
+  if (!links.length) return []
+  const allLabel = options.allLabel ?? 'All'
+  return allLabel
+    ? [
+        {
+          label: allLabel,
+          href: collectionListUrl({ collectionSlug }),
+          active: !active,
+        },
+        ...links,
+      ]
+    : links
+}
+
 /**
  * Collection entries blocks (AGL-551): a `collectionEntries` container
  * treats its children as the item template and renders them once per
@@ -218,8 +453,9 @@ export function entryMatchesFilter(
  *   never collide; run AFTER grafting and BEFORE binding resolution.
  * - Rows are bounded by `props.entriesLimit` and
  *   {@link COLLECTION_ENTRIES_MAX}.
- * - Unknown collections or empty entry lists leave the node untouched
- *   (fail-open: a renamed collection must never take a screen down).
+ * - An UNKNOWN collection leaves the node untouched (fail-open: a renamed
+ *   collection must never take a screen down). A known collection with no
+ *   matching entries renders zero rows — never the unsubstituted template.
  * - Inputs are never mutated; template nodes stay in the map unreferenced.
  */
 export function expandCollectionEntries<
@@ -240,7 +476,17 @@ export function expandCollectionEntries<
       String((container.props as any)?.collectionSlug ?? '').trim() ||
       defaultSlug
     const source = slug ? sourcesBySlug[slug] : undefined
-    if (!source?.entries?.length) continue
+    // An UNKNOWN collection leaves the node untouched — fail-open, so a
+    // renamed collection never takes a published screen down.
+    //
+    // A KNOWN collection with nothing to show is a different question, and
+    // used to get the same answer (AGL-1321). Leaving the template in place
+    // renders it once, with its `{{entry.title}}` / `{{entry.url}}` tokens
+    // never substituted, so the page shipped a ghost row of literal braces.
+    // That was rare while the only way to empty a list was to publish an
+    // empty collection; a category filter makes it reachable from any pill
+    // whose category has no posts yet. Zero entries now means zero rows.
+    if (!source) continue
     const limitRaw = Number((container.props as any)?.entriesLimit)
     const limit =
       Number.isFinite(limitRaw) && limitRaw > 0
@@ -255,8 +501,19 @@ export function expandCollectionEntries<
       Number.isFinite(perPageRaw) && perPageRaw > 0
         ? Math.min(Math.floor(perPageRaw), COLLECTION_ENTRIES_MAX)
         : undefined
+    // The block's own `page` wins; otherwise the ROUTE's page applies, so
+    // `/blog/page/2` and `/blog/category/guides/page/2` render page 2 of a
+    // template listing instead of silently re-serving page 1 at a second URL
+    // (AGL-1321). Only ever the routed collection: `source.page` is set
+    // nowhere else.
     const pageRaw = Number((container.props as any)?.page)
-    const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1
+    const routedPage = Number(source.page)
+    const page =
+      Number.isFinite(pageRaw) && pageRaw >= 1
+        ? Math.floor(pageRaw)
+        : Number.isFinite(routedPage) && routedPage >= 1
+          ? Math.floor(routedPage)
+          : 1
     const templateIds = Array.isArray(container.nodes)
       ? (container.nodes as NodeId[])
       : []
@@ -325,6 +582,56 @@ export function expandCollectionEntries<
       )
     })
     next[containerId] = { ...container, nodes: childIds }
+  }
+  return next
+}
+
+/**
+ * Category Pills blocks (AGL-1321): stamps each `collectionCategories` node
+ * with its collection's pill row as a serializable `items` prop the component
+ * renders as real anchors — the same server-stamped shape Related posts uses,
+ * and for the same reason: the block owns its markup, so there is no template
+ * to clone.
+ *
+ * `activeCategorySlug` marks a pill only on the ROUTED collection. A pills
+ * block pointing at some other collection is not what this URL filters, so
+ * marking one of its pills current would be a lie in the HTML.
+ *
+ * A collection with no taxonomy leaves its block untouched, so the component's
+ * besigner affordance / empty site render applies. Inputs are never mutated.
+ */
+export function expandCollectionCategories<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(
+  nodes: Record<NodeId, N>,
+  sourcesBySlug: Record<string, CollectionEntriesSource | undefined>,
+  defaultSlug?: string,
+  activeCategorySlug?: string,
+): Record<NodeId, N> {
+  const containers = Object.entries(nodes).filter(
+    ([, node]) => node?.componentId === COLLECTION_CATEGORIES_COMPONENT_ID,
+  )
+  if (!containers.length) return nodes
+
+  const next: Record<NodeId, N> = { ...nodes }
+  for (const [containerId, container] of containers) {
+    const slug =
+      String((container.props as any)?.collectionSlug ?? '').trim() ||
+      defaultSlug
+    const source = slug ? sourcesBySlug[slug] : undefined
+    if (!source) continue
+    const allLabel = (container.props as any)?.allLabel
+    const items = buildCollectionCategoryLinks({
+      collectionSlug: source.slug,
+      categories: source.categories,
+      ...(slug === defaultSlug ? { activeCategorySlug } : {}),
+      ...(allLabel === undefined ? {} : { allLabel: String(allLabel) }),
+    })
+    if (!items.length) continue
+    next[containerId] = {
+      ...container,
+      props: { ...(container.props as any), items },
+    }
   }
   return next
 }

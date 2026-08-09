@@ -104,9 +104,16 @@ function buildMetadata(props: Props): Metadata {
   if (props.content) {
     const content = props.content as any
     const entry = content.entry
+    // A category listing is its own page and needs its own title (AGL-1321) —
+    // five URLs all titled "Blog" are five duplicate results in a SERP.
+    const category = content.category
     const title = entry
       ? entry.seoTitle || entry.title
-      : content.collection?.displayName
+      : category
+        ? [category.name, content.collection?.displayName]
+            .filter(Boolean)
+            .join(' · ')
+        : content.collection?.displayName
     const description: string | undefined = entry
       ? entry.seoDescription || entry.excerpt || undefined
       : undefined
@@ -123,6 +130,11 @@ function buildMetadata(props: Props): Metadata {
     // Derived, not passed: entry routing is `/{collection}/{entry}` and lists
     // are `/{collection}` (`/{collection}/page/{n}` beyond page 1), the same
     // derivation `buildJsonLd` already makes from this payload.
+    //
+    // Category listings join the same derivation through the shared URL
+    // builder (AGL-1321), so the canonical, the pills and the pager cannot
+    // disagree about the shape — and "All" resolves to the bare
+    // `/{collection}`, never a second address for a page that already exists.
     const collectionBase = Aglyn.hostPublicOrigin(host)
     const collectionSlug: string | undefined = content.collection?.slug
     const listPage = Number(content.pagination?.page) || 1
@@ -130,14 +142,27 @@ function buildMetadata(props: Props): Metadata {
       collectionBase && collectionSlug
         ? entry?.slug
           ? `${collectionBase}/${collectionSlug}/${entry.slug}`
-          : listPage > 1
-            ? `${collectionBase}/${collectionSlug}/page/${listPage}`
-            : `${collectionBase}/${collectionSlug}`
+          : collectionBase +
+            Aglyn.collectionListUrl({
+              collectionSlug,
+              ...(category ? { categorySlug: category.slug } : {}),
+              page: listPage,
+            })
         : undefined
+    // A category segment that names nothing in the taxonomy AND turned up no
+    // entries is an address for content that does not exist — infinitely many
+    // of them, since anyone can type one. It renders (honestly, as an empty
+    // state, rather than crashing or 404ing a category an author may be about
+    // to fill), but it must not invite indexing.
+    const unknownCategory = Boolean(
+      category && !category.known && !content.entries?.length,
+    )
     return {
       title: fullTitle,
       ...(description ? { description } : {}),
-      ...(searchDiscouraged ? { robots: { index: false, follow: true } } : {}),
+      ...(searchDiscouraged || unknownCategory
+        ? { robots: { index: false, follow: true } }
+        : {}),
       ...(contentCanonical
         ? { alternates: { canonical: contentCanonical } }
         : {}),
@@ -270,12 +295,25 @@ function buildJsonLd(props: Props): string[] {
         ? content.entries
         : []
       if (!canonicalBase || !collectionSlug || entries.length === 0) return []
+      // The list a filtered URL describes is the FILTERED one (AGL-1321):
+      // naming and addressing it as the whole collection would tell a crawler
+      // that five different pages are all the same list.
+      const listCategory = content.category
       return [
         Aglyn.safeJsonLd({
           '@context': 'https://schema.org',
           '@type': 'ItemList',
-          name: content.collection?.displayName ?? collectionSlug,
-          url: `${canonicalBase}/${collectionSlug}`,
+          name: listCategory
+            ? [listCategory.name, content.collection?.displayName]
+                .filter(Boolean)
+                .join(' · ')
+            : (content.collection?.displayName ?? collectionSlug),
+          url:
+            canonicalBase +
+            Aglyn.collectionListUrl({
+              collectionSlug,
+              ...(listCategory ? { categorySlug: listCategory.slug } : {}),
+            }),
           numberOfItems: entries.length,
           itemListElement: entries.map((item, index) => ({
             '@type': 'ListItem',

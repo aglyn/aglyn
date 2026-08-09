@@ -100,6 +100,8 @@ export const MUI_BUNDLE: Array<{
     { component: Collection.CollectionRelated, schema: Collection.collectionRelatedSchema },
     { component: Collection.CollectionShare, schema: Collection.collectionShareSchema },
     { component: Collection.CollectionEntryMeta, schema: Collection.collectionEntryMetaSchema },
+    // Category pills (AGL-1321): real anchors to /{collection}/category/{slug}.
+    { component: Collection.CollectionCategories, schema: Collection.collectionCategoriesSchema },
     { component: Image.default, schema: Image.schema, presets: Image.presets },
     { component: Video.default, schema: Video.schema, presets: Video.presets },
     { component: Icon.default, schema: Icon.schema, presets: Icon.presets },

@@ -15,12 +15,20 @@
  * limitations under the License.
  */
 
+import type { CollectionEntriesSource } from './collection-entries'
 import {
+  buildCollectionCategoryLinks,
+  collectionCategorySlug,
   collectionEntryTokens,
+  collectionListUrl,
   collectionTotalPages,
+  entryMatchesCategoryRoute,
   entryMatchesFilter,
+  expandCollectionCategories,
   expandCollectionEntries,
   expandCollectionRelated,
+  parseCollectionRoute,
+  resolveCollectionCategoryBySlug,
   resolveEntryCategoryName,
   selectRelatedEntries,
 } from './collection-entries'
@@ -248,6 +256,293 @@ describe('collectionTotalPages (AGL-620)', () => {
   })
 })
 
+/* ── Category routes (AGL-1321) ─────────────────────────────────────────── */
+
+const taxonomy = [
+  { id: 'product', name: 'Product' },
+  { id: 'opensrc', name: 'Open source' },
+]
+
+describe('parseCollectionRoute (AGL-1321)', () => {
+  it('reads every listing and entry shape', () => {
+    expect(parseCollectionRoute(['blog'])).toEqual({
+      collectionSlug: 'blog',
+      page: 1,
+    })
+    expect(parseCollectionRoute(['blog', 'hello'])).toEqual({
+      collectionSlug: 'blog',
+      entrySlug: 'hello',
+      page: 1,
+    })
+    expect(parseCollectionRoute(['blog', 'page', '3'])).toEqual({
+      collectionSlug: 'blog',
+      page: 3,
+    })
+    expect(parseCollectionRoute(['blog', 'category', 'product'])).toEqual({
+      collectionSlug: 'blog',
+      categorySlug: 'product',
+      page: 1,
+    })
+    expect(
+      parseCollectionRoute(['blog', 'category', 'open-source', 'page', '2']),
+    ).toEqual({
+      collectionSlug: 'blog',
+      categorySlug: 'open-source',
+      page: 2,
+    })
+  })
+
+  it('refuses everything else so the caller falls through to 404', () => {
+    expect(parseCollectionRoute([])).toBeNull()
+    expect(parseCollectionRoute(['blog', 'page', '0'])).toBeNull()
+    expect(parseCollectionRoute(['blog', 'page', 'two'])).toBeNull()
+    expect(parseCollectionRoute(['blog', 'category', 'x', 'page', '0'])).toBeNull()
+    expect(parseCollectionRoute(['blog', 'category', 'x', 'y'])).toBeNull()
+    expect(parseCollectionRoute(['a', 'b', 'c', 'd', 'e', 'f'])).toBeNull()
+  })
+
+  it('reserves page/category only as the HEAD of a longer path', () => {
+    // An entry legitimately slugged "category" or "page" keeps its URL —
+    // reserving the words outright would silently 404 published articles.
+    expect(parseCollectionRoute(['blog', 'category'])).toEqual({
+      collectionSlug: 'blog',
+      entrySlug: 'category',
+      page: 1,
+    })
+    expect(parseCollectionRoute(['blog', 'page'])).toEqual({
+      collectionSlug: 'blog',
+      entrySlug: 'page',
+      page: 1,
+    })
+  })
+})
+
+describe('collectionListUrl (AGL-1321)', () => {
+  it('makes the bare collection the canonical unfiltered URL', () => {
+    // "All" is /blog — never /blog/category/all, never ?category=all.
+    expect(collectionListUrl({ collectionSlug: 'blog' })).toBe('/blog')
+    expect(collectionListUrl({ collectionSlug: 'blog', page: 1 })).toBe('/blog')
+    expect(
+      collectionListUrl({ collectionSlug: 'blog', categorySlug: null, page: 1 }),
+    ).toBe('/blog')
+  })
+
+  it('composes category and page into one path', () => {
+    expect(collectionListUrl({ collectionSlug: 'blog', page: 2 })).toBe(
+      '/blog/page/2',
+    )
+    expect(
+      collectionListUrl({ collectionSlug: 'blog', categorySlug: 'Open source' }),
+    ).toBe('/blog/category/open-source')
+    expect(
+      collectionListUrl({
+        collectionSlug: 'blog',
+        categorySlug: 'product',
+        page: 3,
+      }),
+    ).toBe('/blog/category/product/page/3')
+  })
+
+  it('gives every category a DISTINCT path — the ISR cache key', () => {
+    const urls = ['product', 'opensrc', 'guides'].map((categorySlug) =>
+      collectionListUrl({ collectionSlug: 'blog', categorySlug }),
+    )
+    expect(new Set([...urls, '/blog']).size).toBe(4)
+  })
+})
+
+describe('collectionCategorySlug / resolveCollectionCategoryBySlug (AGL-1321)', () => {
+  it('slugifies idempotently', () => {
+    expect(collectionCategorySlug('Open source')).toBe('open-source')
+    expect(collectionCategorySlug('open-source')).toBe('open-source')
+    expect(collectionCategorySlug('  C++ & Rust!  ')).toBe('c-rust')
+    expect(collectionCategorySlug(undefined)).toBe('')
+  })
+
+  it('resolves a segment by stable id OR slugified display name', () => {
+    expect(resolveCollectionCategoryBySlug(taxonomy, 'product')?.id).toBe(
+      'product',
+    )
+    expect(resolveCollectionCategoryBySlug(taxonomy, 'opensrc')?.id).toBe(
+      'opensrc',
+    )
+    // The URL named the category by its display name; the id is opaque.
+    expect(resolveCollectionCategoryBySlug(taxonomy, 'open-source')?.id).toBe(
+      'opensrc',
+    )
+    expect(resolveCollectionCategoryBySlug(taxonomy, 'nope')).toBeUndefined()
+    expect(resolveCollectionCategoryBySlug(undefined, 'product')).toBeUndefined()
+  })
+})
+
+describe('entryMatchesCategoryRoute (AGL-1321)', () => {
+  const category = taxonomy[1] // { id: 'opensrc', name: 'Open source' }
+
+  it('matches an entry by its stable categoryId', () => {
+    expect(
+      entryMatchesCategoryRoute(
+        { categoryId: 'opensrc' },
+        { slug: 'open-source', category },
+        taxonomy,
+      ),
+    ).toBe(true)
+  })
+
+  it('matches a legacy free-typed entry with no taxonomy at all', () => {
+    // The multi-word case `entryMatchesFilter` cannot do: it compares raw
+    // trimmed strings, so "Open source" never equals "open-source".
+    expect(
+      entryMatchesCategoryRoute({ category: 'Open source' }, {
+        slug: 'open-source',
+      }),
+    ).toBe(true)
+    expect(entryMatchesFilter({ category: 'Open source' }, {
+      category: 'open-source',
+    })).toBe(false)
+  })
+
+  it('rejects other categories and uncategorised entries', () => {
+    expect(
+      entryMatchesCategoryRoute(
+        { categoryId: 'product' },
+        { slug: 'open-source', category },
+        taxonomy,
+      ),
+    ).toBe(false)
+    expect(
+      entryMatchesCategoryRoute({}, { slug: 'open-source', category }, taxonomy),
+    ).toBe(false)
+    // An unknown segment matches nothing rather than throwing.
+    expect(
+      entryMatchesCategoryRoute({ categoryId: 'product' }, { slug: 'ghosts' }),
+    ).toBe(false)
+    expect(entryMatchesCategoryRoute({ categoryId: 'product' }, { slug: '' })).toBe(
+      false,
+    )
+  })
+})
+
+describe('buildCollectionCategoryLinks (AGL-1321)', () => {
+  it('leads with All at the canonical URL and marks it current when unfiltered', () => {
+    const links = buildCollectionCategoryLinks({
+      collectionSlug: 'blog',
+      categories: taxonomy,
+    })
+    expect(links[0]).toEqual({ label: 'All', href: '/blog', active: true })
+    expect(links.slice(1)).toEqual([
+      { label: 'Product', href: '/blog/category/product', active: false },
+      { label: 'Open source', href: '/blog/category/opensrc', active: false },
+    ])
+  })
+
+  it('marks the routed pill current through either spelling', () => {
+    const byId = buildCollectionCategoryLinks({
+      collectionSlug: 'blog',
+      categories: taxonomy,
+      activeCategorySlug: 'opensrc',
+    })
+    expect(byId.map((link) => link.active)).toEqual([false, false, true])
+    // Same category, addressed by its display name.
+    const byName = buildCollectionCategoryLinks({
+      collectionSlug: 'blog',
+      categories: taxonomy,
+      activeCategorySlug: 'open-source',
+    })
+    expect(byName.map((link) => link.active)).toEqual([false, false, true])
+  })
+
+  it('omits All on request, and the whole row without a taxonomy', () => {
+    expect(
+      buildCollectionCategoryLinks({
+        collectionSlug: 'blog',
+        categories: taxonomy,
+        allLabel: '',
+      }),
+    ).toHaveLength(2)
+    // A lone "All" pill is decoration, not a filter.
+    expect(
+      buildCollectionCategoryLinks({ collectionSlug: 'blog', categories: [] }),
+    ).toEqual([])
+    expect(buildCollectionCategoryLinks({ collectionSlug: 'blog' })).toEqual([])
+  })
+})
+
+describe('expandCollectionCategories (AGL-1321)', () => {
+  const pillNodes = () =>
+    ({
+      root: { $id: 'root', componentId: 'div', nodes: ['pills'] },
+      pills: {
+        $id: 'pills',
+        componentId: 'collectionCategories',
+        parentId: 'root',
+        props: {},
+      },
+    }) as any
+  const source: CollectionEntriesSource = {
+    slug: 'blog',
+    entries: [],
+    categories: taxonomy,
+  }
+
+  it('stamps the pill row onto the block', () => {
+    const nodes = expandCollectionCategories(
+      pillNodes(),
+      { blog: source },
+      'blog',
+      'product',
+    ) as any
+    expect(nodes['pills'].props.items).toEqual([
+      { label: 'All', href: '/blog', active: false },
+      { label: 'Product', href: '/blog/category/product', active: true },
+      { label: 'Open source', href: '/blog/category/opensrc', active: false },
+    ])
+  })
+
+  it('never marks a pill current on a block bound elsewhere', () => {
+    const nodes = pillNodes()
+    nodes['pills'].props.collectionSlug = 'news'
+    const news: CollectionEntriesSource = {
+      slug: 'news',
+      entries: [],
+      categories: taxonomy,
+    }
+    const expanded = expandCollectionCategories(
+      nodes,
+      { blog: source, news },
+      'blog',
+      'product',
+    ) as any
+    // /blog/category/product does not filter the NEWS listing.
+    expect(
+      expanded['pills'].props.items.some((item: any) => item.active),
+    ).toBe(true) // "All" — news is unfiltered here
+    expect(expanded['pills'].props.items[0]).toEqual({
+      label: 'All',
+      href: '/news',
+      active: true,
+    })
+  })
+
+  it('fails open on an unknown collection or empty taxonomy', () => {
+    const untouched = pillNodes()
+    expect(expandCollectionCategories(untouched, {}, 'blog')).toEqual(untouched)
+    expect(
+      expandCollectionCategories(
+        pillNodes(),
+        { blog: { slug: 'blog', entries: [] } },
+        'blog',
+      )['pills'].props.items,
+    ).toBeUndefined()
+  })
+
+  it('never mutates the input map', () => {
+    const nodes = pillNodes()
+    const snapshot = JSON.parse(JSON.stringify(nodes))
+    expandCollectionCategories(nodes, { blog: source }, 'blog', 'product')
+    expect(nodes).toEqual(snapshot)
+  })
+})
+
 describe('expandCollectionEntries (AGL-551)', () => {
   it('clones the template once per entry with per-entry tokens', () => {
     const nodes = expandCollectionEntries(baseNodes(), { blog }, 'blog')
@@ -309,6 +604,41 @@ describe('expandCollectionEntries (AGL-551)', () => {
     expect(pageCount(4)).toBe(0) // past the end
   })
 
+  it("falls back to the ROUTE's page when the block names none (AGL-1321)", () => {
+    const many = (page?: number) => ({
+      slug: 'blog',
+      ...(page ? { page } : {}),
+      entries: Array.from({ length: 5 }, (_, i) => ({
+        $id: `e${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+      })),
+    })
+    const window = (routePage?: number, blockPage?: number) => {
+      const nodes = baseNodes()
+      nodes['list'].props.perPage = 2
+      if (blockPage) nodes['list'].props.page = blockPage
+      const expanded = expandCollectionEntries(
+        nodes,
+        { blog: many(routePage) },
+        'blog',
+      )
+      return (expanded['list'].nodes as string[]).map((childId) => {
+        const titleId = `${childId.replace(/item$/, '')}title`
+        return expanded[titleId].props.children
+      })
+    }
+    // Design time cannot know which page a visitor is on, so /blog/page/2
+    // used to re-serve page 1 at a second URL.
+    expect(window(2)).toEqual(['Post 2 — ', 'Post 3 — '])
+    expect(window(3)).toEqual(['Post 4 — '])
+    // A block that pins its own page still wins — that is a deliberate
+    // window (a "latest three" strip), not a paginated list.
+    expect(window(3, 1)).toEqual(['Post 0 — ', 'Post 1 — '])
+    // No route page: unchanged, page 1.
+    expect(window()).toEqual(['Post 0 — ', 'Post 1 — '])
+  })
+
   it('perPage takes precedence over entriesLimit (AGL-620)', () => {
     const nodes = baseNodes()
     nodes['list'].props.entriesLimit = 1
@@ -318,15 +648,22 @@ describe('expandCollectionEntries (AGL-551)', () => {
     expect(expandCollectionEntries(nodes, { blog }, 'blog')['list'].nodes).toHaveLength(2)
   })
 
-  it('fails open when the collection is unknown or empty', () => {
+  it('fails open when the collection is UNKNOWN', () => {
     const untouched = baseNodes()
     expect(expandCollectionEntries(untouched, {}, 'blog')).toEqual(untouched)
+  })
+
+  it('renders zero rows — not the raw template — when empty (AGL-1321)', () => {
+    // A known collection with nothing to show used to keep its template
+    // child, which then rendered `{{entry.title}}` as body text. Rare while
+    // only an empty collection could cause it; reachable from any category
+    // pill with no posts yet once the route filters.
     const empty = expandCollectionEntries(
       baseNodes(),
       { blog: { slug: 'blog', entries: [] } },
       'blog',
     )
-    expect(empty['list'].nodes).toEqual(['item'])
+    expect(empty['list'].nodes).toEqual([])
   })
 
   it('never mutates the input map', () => {
