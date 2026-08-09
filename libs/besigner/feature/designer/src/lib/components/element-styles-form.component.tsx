@@ -78,7 +78,6 @@ import {
 } from '@mui/material'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
-import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import {
   type ChangeEvent,
@@ -571,17 +570,36 @@ const ElementStylesForm = observer(
      */
     const applyStyleValues = useCallback(
       (partial: Record<string, unknown>) => {
-        action(() => {
-          if (!node) return
-          target.setSx(
-            applyStylePartialToSx(
-              (target.sx ?? {}) as Record<string, any>,
-              partial,
-              activeBreakpoint,
-              activeScheme,
-            ),
-          )
-        })()
+        if (!node) return
+        // Undoable, and coalesced (AGL-1204). Every control here applies
+        // live — one call per character typed, one per drag tick — so the
+        // key ends the burst when the adjustment changes, not when the
+        // writing stops: the field names are in it, so moving from Gap to
+        // Padding is a second undo step even mid-burst.
+        //
+        // The write itself goes through the style target (AGL-1306), so the
+        // step is recorded whether the edit lands in the node's own sx or in
+        // a component instance's root override slice — the history snapshot
+        // carries `styleOverrides` like any other node field.
+        Aglyn.canvas.transact(
+          () => {
+            target.setSx(
+              applyStylePartialToSx(
+                (target.sx ?? {}) as Record<string, any>,
+                partial,
+                activeBreakpoint,
+                activeScheme,
+              ),
+            )
+          },
+          [
+            'sx',
+            node.$id,
+            activeBreakpoint ?? 'base',
+            activeScheme ?? 'light',
+            Object.keys(partial).sort().join(','),
+          ].join(':'),
+        )
       },
       [node, target, activeBreakpoint, activeScheme],
     )
@@ -650,8 +668,11 @@ const ElementStylesForm = observer(
     const handleVisibilityChange = useCallback(
       (band: (typeof VISIBILITY_BANDS)[number]) =>
         (event: ChangeEvent<HTMLInputElement>) => {
-          action(() => {
-            if (!node) return
+          if (!node) return
+          // No coalesce key: a band switch is one discrete decision, so it
+          // gets its own undo step even when two are flipped in quick
+          // succession (AGL-1204).
+          Aglyn.canvas.transact(() => {
             target.setSx(
               writeHiddenBand(
                 (target.sx ?? {}) as Record<string, any>,
@@ -659,7 +680,7 @@ const ElementStylesForm = observer(
                 event.target.checked,
               ),
             )
-          })()
+          })
         },
       [node, target],
     )
@@ -670,11 +691,14 @@ const ElementStylesForm = observer(
     // override field entirely (see NodeStyleTarget.setSx).
     const handleClearOverride = useCallback(
       (property: string) => () => {
-        action(() => {
+        // Undoable and uncoalesced (AGL-1204): clearing a chip is a discrete
+        // decision, and it DISCARDS an override — the one edit in this panel
+        // that most needs a way back.
+        Aglyn.canvas.transact(() => {
           const next = { ...(target.sx ?? {}) } as Record<string, any>
           delete next[property]
           target.setSx(next)
-        })()
+        })
       },
       [target],
     )

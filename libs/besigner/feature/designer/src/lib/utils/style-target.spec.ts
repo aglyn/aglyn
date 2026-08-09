@@ -156,3 +156,131 @@ describe('panel → save → reload → render round trip (AGL-1306)', () => {
     })
   })
 })
+
+/**
+ * The panel's write is `canvas.transact(() => target.setSx(...), key)`
+ * (AGL-1204 over AGL-1306). Both halves have their own specs — the canvas
+ * manager's `transact` coalescing, `getNodeStyleTarget` above — but the
+ * defect this pair exists to close lives in their SEAM: a style edit that
+ * does not record history makes Cmd+Z restore the last recorded snapshot and
+ * take everything since with it. So these drive the exact composed call, on
+ * a real MobX canvas, for BOTH targets: a plain node's own sx and an
+ * instance's override slice.
+ */
+describe('a panel style edit is undoable on either target (AGL-1204)', () => {
+  let now = 2_000_000
+  beforeEach(() => {
+    now = 2_000_000
+    jest.spyOn(Date, 'now').mockImplementation(() => now)
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  const loaded = () => {
+    const canvas = new Aglyn.CanvasManager(undefined as any)
+    canvas.setNodes({
+      [Aglyn.NODE_ROOT_ID]: {
+        $id: Aglyn.NODE_ROOT_ID,
+        type: Aglyn.NodeType.NODE,
+        componentId: 'div',
+        nodes: ['plain', 'inst'],
+      },
+      plain: {
+        $id: 'plain',
+        type: Aglyn.NodeType.NODE,
+        parentId: Aglyn.NODE_ROOT_ID,
+        componentId: 'muiStack',
+        props: {},
+        sx: {},
+        nodes: [],
+      },
+      inst: {
+        $id: 'inst',
+        type: Aglyn.NodeType.NODE,
+        parentId: Aglyn.NODE_ROOT_ID,
+        componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'cta' },
+        nodes: [],
+      },
+    } as any)
+    return canvas
+  }
+  /** `applyStyleValues`, composed exactly as the Styles panel composes it. */
+  const applyStyleValue = (
+    canvas: Aglyn.CanvasManager,
+    nodeId: string,
+    partial: Record<string, unknown>,
+  ) => {
+    const node = canvas.getNode(nodeId)
+    const target = getNodeStyleTarget(node)
+    canvas.transact(
+      () => target.setSx({ ...(target.sx ?? {}), ...partial }),
+      ['sx', nodeId, 'base', 'light', Object.keys(partial).sort().join(',')].join(
+        ':',
+      ),
+    )
+  }
+
+  it('DIRECT SX — undo steps back over the edit and keeps unrelated work', () => {
+    const canvas = loaded()
+    canvas.updateNodeProps(canvas.getNode('plain')!, { title: 'kept' })
+
+    applyStyleValue(canvas, 'plain', { gap: 2 })
+    now += 5_000
+    applyStyleValue(canvas, 'plain', { gap: 4 })
+
+    canvas.undo()
+
+    expect(canvas.getNode('plain')!.sx).toEqual({ gap: 2 })
+    expect(canvas.getNode('plain')!.props).toEqual({ title: 'kept' })
+  })
+
+  it('INSTANCE OVERRIDE — the same, through styleOverrides', () => {
+    const canvas = loaded()
+    canvas.updateNodeProps(canvas.getNode('plain')!, { title: 'kept' })
+
+    applyStyleValue(canvas, 'inst', { backgroundColor: '#0b4a6f' })
+    now += 5_000
+    applyStyleValue(canvas, 'inst', { backgroundColor: '#101828' })
+
+    canvas.undo()
+
+    // The instance's own sx is never the target here — the edit lives in
+    // the override slice, and that is what has to come back.
+    expect(canvas.getNode('inst')!.styleOverrides).toEqual({
+      [Aglyn.STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#0b4a6f' },
+    })
+    expect(canvas.getNode('plain')!.props).toEqual({ title: 'kept' })
+  })
+
+  it('INSTANCE OVERRIDE — undo restores an override cleared to nothing', () => {
+    const canvas = loaded()
+    applyStyleValue(canvas, 'inst', { backgroundColor: '#0b4a6f' })
+    now += 5_000
+
+    // The override chip's ✕: clearing the last property removes the field.
+    const target = getNodeStyleTarget(canvas.getNode('inst'))
+    canvas.transact(() => target.setSx({}))
+    expect(canvas.getNode('inst')!.styleOverrides).toBeUndefined()
+
+    canvas.undo()
+    expect(canvas.getNode('inst')!.styleOverrides).toEqual({
+      [Aglyn.STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#0b4a6f' },
+    })
+  })
+
+  it('a burst on either target is ONE undo step', () => {
+    const canvas = loaded()
+    // Typing into a field: three change events inside the window.
+    now += 40
+    applyStyleValue(canvas, 'inst', { py: 1 })
+    now += 40
+    applyStyleValue(canvas, 'inst', { py: 12 })
+    now += 40
+    applyStyleValue(canvas, 'inst', { py: 120 })
+
+    canvas.undo()
+
+    expect(canvas.getNode('inst')!.styleOverrides).toBeUndefined()
+    expect(canvas.canUndo).toBe(false)
+  })
+})
