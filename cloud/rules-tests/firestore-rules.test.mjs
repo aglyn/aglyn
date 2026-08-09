@@ -47,6 +47,56 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url))
 
+const RULES_SOURCE = readFileSync(
+  join(here, '..', 'firebase-firestore.rules'),
+  'utf8',
+)
+
+/**
+ * The org-admin deny list, parsed out of the rules rather than retyped
+ * (AGL-1355). Retyping it would make this suite a copy of the thing it is
+ * testing: both would drift together and agree the whole way down.
+ *
+ * Comments go first — the org block's own prose names all four keys AGL-1354
+ * closed, so parsing with it in place would read the explanation as the rule.
+ * Path variables become angle brackets so block depth can be counted by
+ * braces alone.
+ */
+const ORG_ADMIN_DENIED = (() => {
+  const rules = RULES_SOURCE.replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '')
+    .replace(/\{([A-Za-z_][A-Za-z0-9_]*(?:=\*\*)?)\}/g, '<$1>')
+  const header = 'match /orgs/<orgId> {'
+  const at = rules.indexOf(header)
+  assert.ok(at >= 0, 'no `match /orgs/{orgId}` block in the rules')
+  let depth = 1
+  let body = ''
+  for (let index = at + header.length; index < rules.length; index += 1) {
+    const character = rules[index]
+    if (character === '{') depth += 1
+    else if (character === '}') {
+      depth -= 1
+      if (depth === 0) break
+    } else if (depth === 1) body += character
+  }
+  assert.equal(depth, 0, 'the org rules block never closes')
+  const updates = body
+    .split(';')
+    .filter((statement) => /\ballow\b[^:]*\bupdate\b/.test(statement))
+  assert.equal(
+    updates.length,
+    1,
+    'expected exactly one `allow … update` under match /orgs/{orgId}',
+  )
+  const branches = updates[0]
+    .split('||')
+    .filter((branch) => branch.includes('canManageOrg()'))
+  assert.equal(branches.length, 1, 'expected one canManageOrg() update branch')
+  const list = branches[0].match(/hasAny\(\s*\[([^\]]*)\]/)
+  assert.ok(list, 'the canManageOrg() branch has no hasAny([…]) key diff')
+  return [...list[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1])
+})()
+
 /** @type {import('@firebase/rules-unit-testing').RulesTestEnvironment} */
 let env
 
@@ -70,7 +120,7 @@ before(async () => {
   env = await initializeTestEnvironment({
     projectId: 'demo-rules-check',
     firestore: {
-      rules: readFileSync(join(here, '..', 'firebase-firestore.rules'), 'utf8'),
+      rules: RULES_SOURCE,
     },
   })
 })
@@ -229,6 +279,41 @@ describe('org docs', () => {
     })
     const snapshot = await getDoc(doc(authed(VIEWER), 'orgs', ORG))
     assert.equal(snapshot.data().brandingProfile.productName, 'Acme Cloud')
+  })
+
+  /**
+   * Every key on the org-admin deny list is ENFORCED, one emulator write per
+   * key, driven off the list parsed out of the rules (AGL-1355).
+   *
+   * The tests above name their keys, which means they can only fail for a key
+   * somebody already remembered — the exact shape of the gap AGL-1354 left
+   * behind. This one cannot go stale: adding a key to the rules adds a case
+   * here on the same commit, and a key that is listed but not actually denied
+   * (mis-scoped branch, typo, a looser sibling rule OR'ing it back open) fails
+   * by name.
+   *
+   * The static companion is
+   * `libs/aglyn/src/lib/foundation/definitions/org-write-deny-coverage.spec.ts`,
+   * which asks the other half of the question: whether the list is COMPLETE.
+   * A complete list nothing enforces and an enforced list that is missing four
+   * keys are the same bug, and neither test finds the other's version of it.
+   */
+  it('every key on the parsed deny list is actually denied (AGL-1355)', async () => {
+    assert.ok(
+      ORG_ADMIN_DENIED.length >= 15,
+      `Parsed only ${ORG_ADMIN_DENIED.length} keys off the org-update rule; ` +
+        `the parser has rotted and this test is proving nothing.`,
+    )
+    for (const key of ORG_ADMIN_DENIED) {
+      await assertFails(
+        updateDoc(doc(authed(OWNER), 'orgs', ORG), { [key]: 'agl-1355-probe' }),
+      )
+    }
+    // The branch itself still works — a rule that denies everything would
+    // pass every line above and break the product.
+    await assertSucceeds(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { name: 'Acme Renamed' }),
+    )
   })
 
   it('suspended members cannot rename', async () => {
