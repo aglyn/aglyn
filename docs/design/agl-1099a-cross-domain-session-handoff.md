@@ -350,12 +350,20 @@ for custom domains would guarantee drift. Three changes to that route, no more:
    ```ts
    ...(onWorkspaceDomain ? [`Domain=.${WORKSPACE_DOMAIN}`, 'Secure'] : [])
    ```
-   Two independent questions collapsed into one ternary. "Should this cookie be
-   parent-scoped?" and "is this connection HTTPS?" have the same answer today
-   only because the only non-workspace host is localhost. On
-   `console.acme-agency.com` this emits a session cookie **without `Secure`**.
-   `Secure` must key on the request being HTTPS (or on `NODE_ENV === 'production'`),
-   never on the domain.
+   Two independent questions collapsed into one ternary: "should this cookie be
+   parent-scoped?" and "is this connection HTTPS?". They are not the same
+   question, and — measured on production 2026-08-09, not inferred — they
+   already disagree:
+
+   ```
+   DELETE https://aglyn-console-aglyn.vercel.app/api/auth/session
+     set-cookie: __session=signed-out:…; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax
+                                                      ↑ no Domain, and no Secure
+   ```
+
+   `Secure` must key on the request being HTTPS (or on
+   `NODE_ENV === 'production'`), never on the domain. See §5 for why this is
+   currently harmless and why that stops being true on a custom domain.
 3. **A host gate for custom domains.** `rejectUnknownWorkspaceHost` returns
    `null` for any host that is not `*.aglyn.com` — so a custom domain sails past
    it today. It needs a sibling that resolves `consoleDomains/{host}` and 421s an
@@ -634,6 +642,57 @@ canvas, the preview — then the *tenant* app's `frame-ancestors` would have to
 include the custom console domain, or that iframe is blocked. I did not verify
 whether the tenant app emits the same policy. Scope 1099d around **that**
 question, not around Firebase authorized domains.
+
+### Are the two defects in D6 latent or live? Measured 2026-08-09: **live, and currently harmless**
+
+Worth settling, because if a non-`*.aglyn.com` host can reach the cookie path
+today then the missing `Secure` is a present exposure rather than a future one.
+
+The `aglyn-console` Vercel project (`prj_gEzxEXc0Lhs81rmaXIg2a1GbsDfl`) carries
+fourteen domains, of which three classes are not `*.aglyn.com`. Each was probed:
+
+| Host class | `GET /` | `POST /api/auth/session` | Verdict |
+| --- | --- | --- | --- |
+| `*.aglyn.io` — incl. apex, `app.`, `auth.`, `console.`, `admin.`, and invented labels | 308/307 → `.aglyn.com` | 308/307 → `.aglyn.com` | **safe** — redirected at the edge, the app never runs on a `.io` host |
+| `app-aglyn-io.vercel.app` | 307 → `app.aglyn.com` | — | **safe** |
+| `aglyn-console-aglyn.vercel.app`, `aglyn-console-git-production-aglyn.vercel.app` | **200** | **401 `Unauthenticated`** | **reachable — both defects fire** |
+
+On that last pair, `GET /signin` returns `200` with `<title>Sign in · Aglyn</title>`
+and `x-matched-path: /signin` — a real console — the `401` proves
+`rejectUnknownWorkspaceHost` returned `null` and the request reached the handler,
+and the `DELETE` probe above shows `cookieAttributes` omitting `Secure`.
+
+**Note the `*.aglyn.io` wildcard is still attached** and looks like AGL-1135
+waiting to repeat. It is not: `billing-security-update.aglyn.io/signin` returns
+`308 → https://app.aglyn.com/signin`, so the wildcard resolves to a redirect
+rule, not to the app. That is a materially different posture from the
+`*.aglyn.com` wildcard AGL-1135 removed, which served the console directly.
+
+**Why the missing `Secure` is not exploitable today, and why that is not
+reassuring.** The host sends
+`strict-transport-security: max-age=63072000; includeSubDomains; preload`,
+`http://` 308s to `https://`, and `hstspreload.org` reports `vercel.app` as
+`"status": "preloaded"`. So no browser will ever issue a plaintext request to it,
+and `vercel.app` is on the Public Suffix List, so a sibling `*.vercel.app` cannot
+set cookies for it either. **Vercel's preload entry is doing the job our flag
+should be doing.** That protection is not ours and does not transfer to
+`console.acme-agency.com`, where a customer's DNS and TLS posture are outside our
+control. Fix the flag before the first custom domain, not after.
+
+The second defect is genuinely inert today for a different reason:
+`rejectUnknownWorkspaceHost` waving through a `vercel.app` host harvests nothing,
+because a browser will not attach a `.aglyn.com` cookie to a different
+registrable domain. The guard's stated purpose is intact. Its gap is only that it
+has **no opinion at all** about non-workspace hosts — fine while none of them
+route, wrong the moment one does.
+
+**One live-relevant finding that is not mine to fix:**
+`aglyn-console-aglyn.vercel.app` is a fully functional second console on a
+non-`aglyn.com` hostname — the AGL-1135 shape on a less credible name. It works
+end to end because bare `vercel.app` sits in Firebase's authorized-domain list
+(**AGL-1344**, already open) *and* in the App Check reCAPTCHA allowlist. If
+AGL-1344 is scoped only to the Firebase list, the reCAPTCHA entry is its second
+half and should be removed in the same pass.
 
 ### Host → org resolution today, which custom domains must mirror
 
