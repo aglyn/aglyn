@@ -164,6 +164,20 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
         // arrives, which looks like "empty pages with zero errors"
         // (the AGL-217 mystery). Production keeps the default transport
         // and persistent cache.
+        //
+        // ⚠️ CONSEQUENCE, and it will cost you hours if you do not know it
+        // (AGL-1066): every stale-session/stale-cache fault is UNREPRODUCIBLE
+        // locally through the app, because the cache that causes them is off
+        // in exactly the configuration you would reach for to reproduce one.
+        // A listener that keeps serving arbitrarily-old data while the server
+        // refuses it, a `noDocument` tombstone that 404s a live host, the
+        // retry budget that never spends because a cached emission resets it
+        // — none of them can happen here. Test that behaviour with the unit
+        // seams instead (`use-firestore-collection-cached-retry.spec.ts`
+        // drives cached emissions and denials directly), or against a
+        // deployed environment. Do NOT "fix" it by turning the cache on for
+        // the emulator: the AGL-217 empty-pages-with-zero-errors mystery is
+        // what that produces.
         initializeFirestore(
           app,
           FIREBASE_FIRESTORE_EMULATOR_ENABLED

@@ -37,8 +37,15 @@
 
 import { act, renderHook } from '@testing-library/react'
 import { useFirestoreCollection } from './use-firestore-collection'
+import {
+  DENIAL_STREAK_TO_REPORT,
+  setFirestoreSessionReporters,
+} from './firestore-denial-reporter'
 
-type Handler = { onNext: (snap: unknown) => void; onError: () => void }
+type Handler = {
+  onNext: (snap: unknown) => void
+  onError: (err?: { code?: string }) => void
+}
 let mockHandlers: Handler[] = []
 
 jest.mock('firebase/firestore', () => ({
@@ -153,5 +160,121 @@ describe('useFirestoreCollection under persistentLocalCache (AGL-1066)', () => {
     })
 
     expect(result.current.status).toBe('error')
+  })
+})
+
+/**
+ * Listener-side reporting into `session-health` (AGL-1066).
+ *
+ * The verdict used to be fed only by one-shot reads, which the console
+ * barely uses — so on listener-only pages it could never be reached. These
+ * pin the three properties that make listener reporting safe to trust.
+ */
+describe('useFirestoreCollection denial reporting (AGL-1066)', () => {
+  let reported: Array<string | undefined> = []
+  let serverReads = 0
+
+  beforeEach(() => {
+    mockHandlers = []
+    reported = []
+    serverReads = 0
+    jest.useFakeTimers()
+    setFirestoreSessionReporters({
+      onDenied: (collection) => reported.push(collection),
+      onServerRead: () => (serverReads += 1),
+    })
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    setFirestoreSessionReporters(null)
+  })
+
+  const denied = { code: 'permission-denied' }
+
+  const denyCycles = (count: number, err: { code?: string } = denied) =>
+    act(() => {
+      for (let i = 0; i < count; i += 1) {
+        const handler = mockHandlers[mockHandlers.length - 1]
+        handler.onNext(cached)
+        handler.onError(err)
+        jest.advanceTimersByTime(RETRY_DELAY_MS)
+      }
+    })
+
+  it('reports once a refusal streak survives the budget, and only once', () => {
+    renderHook(() => useFirestoreCollection(buildQuery, [], { idField: '$id' }))
+
+    denyCycles(DENIAL_STREAK_TO_REPORT - 1)
+    // Below the bar this is still indistinguishable from the AGL-216
+    // post-sign-in token race, which resolves in well under two seconds.
+    expect(reported).toHaveLength(0)
+
+    denyCycles(1)
+    expect(reported).toHaveLength(1)
+
+    // A dead session denies forever; the banner must not be re-armed on a
+    // timer by one listener shouting every 400ms.
+    denyCycles(20)
+    expect(reported).toHaveLength(1)
+  })
+
+  /**
+   * The guarantee the whole mechanism rests on. A lost network produces no
+   * error callback at all, but if some other code ever does surface one, it
+   * carries `unavailable` — and that must not be read as a dead session.
+   */
+  it('ignores anything that is not permission-denied', () => {
+    renderHook(() => useFirestoreCollection(buildQuery, [], { idField: '$id' }))
+    denyCycles(DENIAL_STREAK_TO_REPORT * 3, { code: 'unavailable' })
+    expect(reported).toHaveLength(0)
+  })
+
+  /**
+   * A server snapshot is proof the session can read. Without this reset a
+   * page that recovered would stay one refusal away from re-accusing a
+   * perfectly healthy session for the rest of its life.
+   */
+  it('re-arms only after the SERVER answers', () => {
+    renderHook(() => useFirestoreCollection(buildQuery, [], { idField: '$id' }))
+
+    denyCycles(DENIAL_STREAK_TO_REPORT)
+    expect(reported).toHaveLength(1)
+
+    act(() =>
+      mockHandlers[mockHandlers.length - 1].onNext({
+        empty: true,
+        docs: [],
+        metadata: { fromCache: false, hasPendingWrites: false },
+      }),
+    )
+    // The cached emissions inside `denyCycles` must NOT have done this —
+    // only the server answer above did.
+    denyCycles(DENIAL_STREAK_TO_REPORT)
+    expect(reported).toHaveLength(2)
+  })
+
+  /**
+   * The other half of the seam, and the reason listener reporting is safe to
+   * enable at all: a scoped collaborator (AGL-1041) has collections they may
+   * not read BY DESIGN, and could otherwise accumulate two denied
+   * collections and be told their session is dead. Their other listens keep
+   * being answered by the server, and one such answer clears the evidence.
+   * A genuinely dead session has no answer to offer.
+   */
+  it('reports a SERVER answer, and never a cached one', () => {
+    renderHook(() => useFirestoreCollection(buildQuery, [], { idField: '$id' }))
+
+    // Twenty cached emissions are not evidence of anything.
+    denyCycles(4)
+    expect(serverReads).toBe(0)
+
+    act(() =>
+      mockHandlers[mockHandlers.length - 1].onNext({
+        empty: false,
+        docs: [{ id: 'live', data: () => ({ name: 'live' }) }],
+        metadata: { fromCache: false, hasPendingWrites: false },
+      }),
+    )
+    expect(serverReads).toBe(1)
   })
 })

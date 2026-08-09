@@ -23,6 +23,12 @@ import {
   type FirestoreError,
 } from 'firebase/firestore'
 import { useEffect, useRef, useState, type DependencyList } from 'react'
+import {
+  DENIAL_STREAK_TO_REPORT,
+  denialLabelForQuery,
+  reportFirestoreDenial,
+  reportFirestoreServerRead,
+} from './firestore-denial-reporter'
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
@@ -96,6 +102,11 @@ export function useFirestoreDoc<T = DocumentData>(
     let unsubscribe: (() => void) | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     let attempt = 0
+    // Refusals since the last SERVER snapshot (AGL-1066) — see the note on
+    // `DENIAL_STREAK_TO_REPORT` for why this is not `attempt`.
+    let deniedStreak = 0
+    let denialReported = false
+    const denialLabel = denialLabelForQuery(ref)
 
     const subscribe = () => {
       unsubscribe = onSnapshot(
@@ -107,6 +118,15 @@ export function useFirestoreDoc<T = DocumentData>(
           setError(undefined)
           setHasPendingWrites(snapshot.metadata.hasPendingWrites)
           setFromCache(snapshot.metadata.fromCache)
+          // Only the SERVER answering is evidence the session can read.
+          if (!snapshot.metadata.fromCache) {
+            deniedStreak = 0
+            denialReported = false
+            // Proof the session can read — stronger than any accumulated
+            // denial, and what stops a scoped collaborator's by-design
+            // denials from ever adding up to a re-auth prompt.
+            reportFirestoreServerRead()
+          }
           if (!snapshot.exists()) {
             setData(undefined)
             return
@@ -118,6 +138,15 @@ export function useFirestoreDoc<T = DocumentData>(
         (err) => {
           if (cancelled) return
           unsubscribe?.()
+          // Say so once per outage, and only for a refusal — a lost network
+          // produces no error callback at all, so this cannot fire offline.
+          if (err?.code === 'permission-denied') {
+            deniedStreak += 1
+            if (deniedStreak >= DENIAL_STREAK_TO_REPORT && !denialReported) {
+              denialReported = true
+              reportFirestoreDenial(denialLabel)
+            }
+          }
           if (attempt < MAX_RETRIES) {
             attempt += 1
             timer = setTimeout(subscribe, RETRY_DELAY_MS)

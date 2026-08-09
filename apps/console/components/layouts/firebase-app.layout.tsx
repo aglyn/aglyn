@@ -20,6 +20,7 @@ import {
   fbClientAppOptions,
   FIREBASE_CLIENT_APP_NAME,
   FirebaseServicesProvider,
+  setFirestoreSessionReporters,
   useAnalytics,
   useUser,
 } from '@aglyn/tenant-feature-instance'
@@ -31,6 +32,27 @@ import { OrgScopeProvider } from '../../hooks/use-org-scope'
 import BootSplash from '../boot-splash.component'
 import useSessionCookie from '../../hooks/use-session-cookie'
 import { ReleaseFlagsProvider } from '../../hooks/use-release-flags'
+import {
+  reportDeniedRead,
+  reportSuccessfulRead,
+} from '../../utils/session-health'
+
+/**
+ * Let listeners feed the stale-session verdict (AGL-1066).
+ *
+ * `session-health` lives in the app and the listener hooks live in the
+ * library, so the library cannot import it — this is the registration side
+ * of that seam. Done at module scope rather than in an effect because a
+ * listener can be refused before any effect has run, and a denial that
+ * arrives before the reporter exists is simply lost.
+ *
+ * Only the console registers one. The tenant runtime has no client
+ * Firestore at all, so its reporter stays null and every report is a no-op.
+ */
+setFirestoreSessionReporters({
+  onDenied: reportDeniedRead,
+  onServerRead: reportSuccessfulRead,
+})
 
 function AnalyticsGlobalEvents({ children }) {
   // Cross-subdomain session cookie sync (AGL-236).
