@@ -98,22 +98,25 @@ export function BillingMeteredEstimateComponent(
   // `Number.isFinite` catches both that and a NaN from bad override data.
   const band = (value: number, digits = 0) =>
     Number.isFinite(value) ? value.toFixed(digits) : '∞'
-  // An annual subscription used to carry no metered item at all: AGL-1340
-  // attached the monthly-only `aglyn_metered_usage` to monthly checkouts,
-  // because Stripe forbids mixed intervals on one subscription. So this says
-  // so rather than quoting an annual customer a figure their invoice will
-  // never show — a console that disagrees with the invoice is the exact
-  // failure this card exists to prevent.
+  // An annual subscription used to carry no metered item at all, and this
+  // caption said so: AGL-1340 attached the monthly-only `aglyn_metered_usage`
+  // to monthly checkouts, because Stripe forbids mixed intervals on one
+  // subscription. AGL-1280 minted `aglyn_metered_usage_yearly` on the same
+  // meter, so both intervals now carry one and the caption states CADENCE
+  // instead of absence.
   //
-  // ⚠️ THIS SENTENCE GOES STALE THE MOMENT `STRIPE_PRICE_METERED_YEARLY` IS
-  // SET IN PRODUCTION. AGL-1280 minted `aglyn_metered_usage_yearly` on the
-  // same meter and checkout now picks the price matching the interval, so an
-  // annual subscription WILL carry a metered item — settling on the yearly
-  // renewal invoice, since the meter aggregates over the billing period.
-  // This card is a client component and cannot read that server env var, so
-  // the copy cannot detect the flip on its own. Whoever sets that variable
-  // must update this line in the same change, or the console will tell
-  // paying annual customers they are not being charged while they are.
+  // Cadence, not "billed monthly", because the meter aggregates over the
+  // SUBSCRIPTION PERIOD: an annual subscription's overage accrues across the
+  // year and settles once, on the renewal invoice. Telling an annual customer
+  // their usage is "billed monthly" would be a different wrong answer from
+  // the one this replaces.
+  //
+  // Deliberately keyed off the subscription's own interval rather than off
+  // `STRIPE_PRICE_METERED{,_YEARLY}`: this is a client component and cannot
+  // read a server env var. The two must therefore be set together — see
+  // docs/STRIPE_GO_LIVE.md §5 step 6, which says set both or neither. Setting
+  // only the monthly one puts this caption back in the position of promising
+  // annual customers a settlement that never arrives.
   const annual = (org as any)?.subscription?.interval === 'year'
   return (
     <Stack spacing={0.5}>
@@ -135,8 +138,8 @@ export function BillingMeteredEstimateComponent(
           ? `Only usage beyond your plan's included storage, bandwidth and ` +
             `form submissions is metered, at our cost × ${METERED_MARKUP}. ` +
             (annual
-              ? 'Your subscription is annual, which carries no metered item ' +
-                'today — this is an estimate, not a charge.'
+              ? 'Your subscription is annual, so usage accrues across the ' +
+                'year and settles on your renewal invoice.'
               : 'Billed monthly alongside your subscription.')
           : "Your plan's storage, bandwidth and form submissions are " +
             'included caps, not meters — no usage charges.'}
