@@ -17,6 +17,7 @@
 
 import {
   composeReusableComponentNodes,
+  detachInstanceSubtree,
   getInstanceEffectivePropText,
   getInstanceRootStyleOverride,
   matchComponentPropToken,
@@ -774,5 +775,276 @@ describe('instance leaf hit-test (AGL-1304)', () => {
       ).toBe('')
       expect(getInstanceEffectivePropText(undefined, undefined, 'headline')).toBe('')
     })
+  })
+})
+
+describe('detachInstanceSubtree (AGL-1314)', () => {
+  /** A hero shaped like the real one: prop-fed copy, prop-fed media. */
+  const hero = {
+    rootId: 'root',
+    nodes: {
+      root: {
+        $id: 'root',
+        componentId: 'muiStack',
+        sx: { backgroundColor: '#101828', py: 8 },
+        nodes: ['eyebrow', 'h', 'img'],
+      },
+      eyebrow: {
+        $id: 'eyebrow',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        props: { children: '{{prop.eyebrow}}' },
+      },
+      h: {
+        $id: 'h',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        props: { children: '{{prop.headline}}', title: 'About {{prop.headline}}' },
+      },
+      img: {
+        $id: 'img',
+        componentId: 'muiImage',
+        parentId: 'root',
+        props: { src: '{{prop.image}}', alt: 'Hero — {{prop.headline}}' },
+      },
+    },
+    props: [
+      { name: 'eyebrow', defaultValue: 'PRESS' },
+      { name: 'headline', defaultValue: 'Headline goes here' },
+      { name: 'image', type: 'image', defaultValue: '/placeholder.png' },
+    ],
+  } as any
+
+  /** A page holding one instance under an ordinary section. */
+  const page = (propValues?: Record<string, unknown>, extra?: any) =>
+    ({
+      _root_: { $id: '_root_', componentId: 'div', nodes: ['sec'] },
+      sec: {
+        $id: 'sec',
+        componentId: 'muiBox',
+        parentId: '_root_',
+        nodes: ['a'],
+      },
+      a: {
+        $id: 'a',
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+        parentId: 'sec',
+        props: { refId: 'hero', ...(propValues && { propValues }) },
+        nodes: [] as string[],
+        ...extra,
+      },
+    }) as any
+
+  /** Deterministic fresh ids, so a spec can name what it asserts on. */
+  const ids = () => {
+    let n = 0
+    return () => `new${++n}`
+  }
+
+  /** Every string a node map holds, for "no token survived" assertions. */
+  const allStrings = (nodes: Record<string, any>) => JSON.stringify(nodes)
+
+  it('bakes the instance\'s resolved prop values into the copy', () => {
+    const nodes = page({ eyebrow: 'NEWSROOM', headline: 'Ship faster' })
+    const detached = detachInstanceSubtree(nodes, 'a', hero, ids())
+
+    // The bug: the copy used to carry the definition's raw markers.
+    expect(allStrings(detached)).not.toContain('{{prop.')
+    const byContent = Object.values<any>(detached).map(
+      (node) => node?.props?.children,
+    )
+    expect(byContent).toContain('NEWSROOM')
+    expect(byContent).toContain('Ship faster')
+    // Partial feeds resolve too, exactly as the renderer does it.
+    expect(
+      Object.values<any>(detached).some(
+        (node) => node?.props?.title === 'About Ship faster',
+      ),
+    ).toBe(true)
+  })
+
+  it('renders what the INSTANCE rendered: leaf-for-leaf parity with the graft', () => {
+    const nodes = page({ eyebrow: 'PRESS & BRAND', headline: 'Ship faster' })
+    const composed = composeReusableComponentNodes(nodes, { hero })
+    const detached = detachInstanceSubtree(nodes, 'a', hero, ids())
+
+    // Same definition leaves, different ids — compare by what they render.
+    for (const defId of ['eyebrow', 'h', 'img']) {
+      const grafted = composed[`cmp__a__${defId}`] as any
+      const copy = Object.values<any>(detached).find(
+        (node) =>
+          node?.componentId === (hero.nodes as any)[defId].componentId &&
+          node?.$id !== 'a' &&
+          JSON.stringify(node?.props) === JSON.stringify(grafted.props),
+      )
+      expect(copy).toBeDefined()
+    }
+  })
+
+  it('a prop-fed image resolves to the bound media, not a token', () => {
+    const detached = detachInstanceSubtree(
+      page({ image: '/media/press-kit.png' }),
+      'a',
+      hero,
+      ids(),
+    )
+    const img = Object.values<any>(detached).find(
+      (node) => node?.componentId === 'muiImage',
+    )
+    expect(img.props.src).toBe('/media/press-kit.png')
+    // The alt text is prop-fed too — nothing on the node keeps a marker.
+    expect(img.props.alt).toBe('Hero — Headline goes here')
+  })
+
+  it('unset props detach to the declared defaults, never to a marker', () => {
+    const detached = detachInstanceSubtree(page(), 'a', hero, ids())
+    expect(allStrings(detached)).not.toContain('{{prop.')
+    const byContent = Object.values<any>(detached).map(
+      (node) => node?.props?.children,
+    )
+    expect(byContent).toContain('PRESS')
+    expect(byContent).toContain('Headline goes here')
+    expect(
+      Object.values<any>(detached).find(
+        (node) => node?.componentId === 'muiImage',
+      ).props.src,
+    ).toBe('/placeholder.png')
+  })
+
+  it('keeps the root styleOverride the instance was displaying (AGL-1306)', () => {
+    const nodes = page(undefined, {
+      styleOverrides: { [STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#0b4a6f' } },
+    })
+    const composed = composeReusableComponentNodes(nodes, { hero })
+    const detached = detachInstanceSubtree(nodes, 'a', hero, ids())
+
+    // The copy forks the look the page was showing, leaf-wise merged —
+    // and it is the SAME sx the graft was rendering.
+    expect(detached['a'].sx).toEqual({ backgroundColor: '#0b4a6f', py: 8 })
+    expect(detached['a'].sx).toEqual((composed['cmp__a__root'] as any).sx)
+    // The instance's own instance-ness is gone with it.
+    expect(detached['a'].componentId).toBe('muiStack')
+    expect((detached['a'] as any).styleOverrides).toBeUndefined()
+    expect((detached['a'].props as any)?.refId).toBeUndefined()
+  })
+
+  it('mints fresh ids and leaves no cmp__ graft prefix behind', () => {
+    const detached = detachInstanceSubtree(
+      page({ headline: 'Ship faster' }),
+      'a',
+      hero,
+      ids(),
+    )
+    // Nothing may carry the graft namespace: those ids collide the next
+    // time an instance of this definition expands on the same screen.
+    expect(Object.keys(detached).some((id) => id.startsWith('cmp__'))).toBe(false)
+    expect(allStrings(detached)).not.toContain('cmp__')
+    // The root keeps the instance id, so the parent still points at it.
+    expect(detached['sec'].nodes).toEqual(['a'])
+    expect(detached['a'].parentId).toBe('sec')
+    expect(detached['a'].nodes).toEqual(['new1', 'new2', 'new3'])
+    expect(detached['new1'].parentId).toBe('a')
+    // Ids the definition used are NOT reused as-is.
+    expect(detached['h']).toBeUndefined()
+    expect(detached['img']).toBeUndefined()
+  })
+
+  it('drops whatever hung under the instance, including a previous graft', () => {
+    // Layout chrome arrives pre-grafted (AGL-1218): the instance already
+    // has children in the map. They must not survive as orphans.
+    const nodes = page({ headline: 'Ship faster' })
+    nodes['a'].nodes = ['cmp__a__root']
+    nodes['cmp__a__root'] = {
+      $id: 'cmp__a__root',
+      componentId: 'muiStack',
+      parentId: 'a',
+      nodes: ['cmp__a__h'],
+    }
+    nodes['cmp__a__h'] = {
+      $id: 'cmp__a__h',
+      componentId: 'muiTypography',
+      parentId: 'cmp__a__root',
+      props: { children: 'Ship faster' },
+    }
+    const detached = detachInstanceSubtree(nodes, 'a', hero, ids())
+    expect(detached['cmp__a__root']).toBeUndefined()
+    expect(detached['cmp__a__h']).toBeUndefined()
+    expect(detached['a'].nodes).toEqual(['new1', 'new2', 'new3'])
+  })
+
+  it('detaching twice is safe: the second is a no-op on a plain subtree', () => {
+    const nodes = page({ headline: 'Ship faster' })
+    const once = detachInstanceSubtree(nodes, 'a', hero, ids())
+    // No instance left to detach — the same map comes back untouched
+    // rather than a second copy overwriting the author's edits.
+    expect(detachInstanceSubtree(once, 'a', hero, ids())).toBe(once)
+  })
+
+  it('two instances of one definition detach into disjoint ids', () => {
+    const nodes = page({ headline: 'One' })
+    nodes['sec'].nodes = ['a', 'b']
+    nodes['b'] = {
+      $id: 'b',
+      componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+      parentId: 'sec',
+      props: { refId: 'hero', propValues: { headline: 'Two' } },
+      nodes: [],
+    }
+    const first = detachInstanceSubtree(nodes, 'a', hero, ids())
+    // A fresh id source that would happily hand out the same ids again;
+    // the second detach must still not overwrite the first copy.
+    const second = detachInstanceSubtree(first, 'b', hero, ids())
+
+    expect(second['a'].nodes).not.toEqual(second['b'].nodes)
+    const texts = Object.values<any>(second).map((node) => node?.props?.children)
+    expect(texts).toContain('One')
+    expect(texts).toContain('Two')
+    // Every node still has exactly one home.
+    for (const [id, node] of Object.entries<any>(second)) {
+      if (!node.parentId) continue
+      expect(second[node.parentId].nodes).toContain(id)
+    }
+  })
+
+  it('an undeclared prop token is left alone, exactly as the graft renders it', () => {
+    const withGhost = {
+      rootId: 'root',
+      nodes: {
+        root: {
+          $id: 'root',
+          componentId: 'muiTypography',
+          props: { children: '{{prop.ghost}} {{var:abc}}' },
+        },
+      },
+      props: [{ name: 'headline', defaultValue: 'Hi' }],
+    } as any
+    const nodes = page()
+    const detached = detachInstanceSubtree(nodes, 'a', withGhost, ids())
+    const composed = composeReusableComponentNodes(nodes, { hero: withGhost })
+    // Detach bakes what the page SHOWS; an undeclared token substitutes
+    // nowhere, and `{{var:*}}` belongs to the resolver downstream.
+    expect(detached['a'].props.children).toBe(
+      (composed['cmp__a__root'] as any).props.children,
+    )
+    expect(detached['a'].props.children).toBe('{{prop.ghost}} {{var:abc}}')
+  })
+
+  it('no-ops on a non-instance, an unknown id or a rootless definition', () => {
+    const nodes = page({ headline: 'Ship faster' })
+    expect(detachInstanceSubtree(nodes, 'sec', hero, ids())).toBe(nodes)
+    expect(detachInstanceSubtree(nodes, 'nope', hero, ids())).toBe(nodes)
+    expect(detachInstanceSubtree(nodes, 'a', undefined, ids())).toBe(nodes)
+    expect(
+      detachInstanceSubtree(nodes, 'a', { rootId: 'gone', nodes: {} } as any, ids()),
+    ).toBe(nodes)
+  })
+
+  it('never mutates the page or the definition', () => {
+    const nodes = page({ headline: 'Ship faster' })
+    const before = JSON.stringify(nodes)
+    const definitionBefore = JSON.stringify(hero)
+    detachInstanceSubtree(nodes, 'a', hero, ids())
+    expect(JSON.stringify(nodes)).toBe(before)
+    expect(JSON.stringify(hero)).toBe(definitionBefore)
   })
 })

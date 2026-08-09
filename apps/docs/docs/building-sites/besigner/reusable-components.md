@@ -161,6 +161,11 @@ copy of the section.
 ids — the confirmation reads *"Detached — this copy no longer follows the component."*
 Use it when one page needs a variation the shared source shouldn't carry.
 
+What you get is what the page was showing. The property values set on that instance — and
+the per-instance styling applied to its root — are baked into the copy as ordinary text,
+images and styles, so the section looks identical before and after; it is simply editable
+now. Nothing in the copy still points at a property.
+
 Detach copies the component's **published** tree — unsaved or unpublished edits sitting
 in the component's working version are not what you get.
 
