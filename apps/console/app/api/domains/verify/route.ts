@@ -22,6 +22,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { promises as dns, Resolver as CallbackResolver } from 'dns'
+import { CNAME_TARGET, HOST_APEX_ADDRESSES } from '../../../../utils/tenant-dns'
 
 const DOMAIN_PATTERN = /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/i
 
@@ -128,15 +129,12 @@ async function resolveARecords(domain: string): Promise<string[]> {
  * and the platform performs that itself. This only answers "has DNS been
  * pointed yet", which is what the customer is actually stuck on. Configurable
  * so the next range expansion is an env edit rather than a patch.
+ *
+ * The list itself lives in `utils/tenant-dns.ts` beside `CNAME_TARGET`, so the
+ * wizard prints an address this route will actually accept rather than keeping
+ * its own copy under a different env var (AGL-1275) — that env edit is exactly
+ * the move which used to leave the two disagreeing.
  */
-const HOST_APEX_ADDRESSES = (
-  process.env['AGLYN_TENANT_APEX_ADDRESSES'] ??
-  '216.198.79.1,216.198.79.65,64.29.17.1,64.29.17.65,76.76.21.21'
-)
-  .split(',')
-  .map((address) => address.trim())
-  .filter(Boolean)
-
 async function apexPointsAtTenantEdge(domain: string): Promise<boolean> {
   const [domainAddresses, targetAddresses] = await Promise.all([
     resolveARecords(domain),
@@ -162,12 +160,10 @@ async function apexPointsAtTenantEdge(domain: string): Promise<boolean> {
  * The soft pass is deliberate but belongs to local dev only, where there is no
  * real DNS pointing at the tenant edge. Off Vercel it still accepts any CNAME
  * so the flow stays testable; on Vercel the target must match exactly.
- * `CNAME_TARGET` mirrors the wizard's own fallback so a missing env var fails
- * closed rather than disabling the check.
+ * `CNAME_TARGET` is imported from `utils/tenant-dns.ts`, which is also what the
+ * wizard prints, so a missing env var fails closed rather than disabling the
+ * check AND the two surfaces cannot be configured apart (AGL-733, AGL-1275).
  */
-const CNAME_TARGET = (
-  process.env['NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME'] ?? 'sites.aglyn.app'
-).toLowerCase()
 async function handler(request: Request): Promise<Response> {
   // Require an authenticated console user (AGL-513): this backs the
   // connect-a-domain wizard, not a public DNS lookup service.
