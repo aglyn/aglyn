@@ -41,6 +41,91 @@
 
 export type AuthActionKind = 'resetPassword' | 'verifyEmail'
 
+/**
+ * Canonical console origin. Same expression `app/layout.tsx` and
+ * `render-system-email.ts` use, so the host in a recovery link cannot drift
+ * from the host the rest of the console calls itself.
+ */
+function canonicalOrigin(): string {
+  return stripTrailingSlash(
+    process.env.NEXT_PUBLIC_CONSOLE_URL || 'https://app.aglyn.com',
+  )
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, '')
+}
+
+/**
+ * Extra origins a minted link may legitimately point at, as a comma-separated
+ * list. The operator control for this feature: a preview deploy that needs to
+ * test recovery against itself is one env var, and removing it is the
+ * rollback. Empty in production by default.
+ */
+function configuredOrigins(): string[] {
+  return (process.env.AUTH_ACTION_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((entry) => stripTrailingSlash(entry.trim()))
+    .filter(Boolean)
+}
+
+/**
+ * Decide which origin a password-reset or verification link is built on.
+ *
+ * **The request may not choose.** `generate*Link` mints an `oobCode` that is
+ * redeemed by a client SDK call against the Auth backend from wherever that
+ * call is made — the property AGL-1112 relies on to escape the locked Firebase
+ * action handler. The same property means the host in the emailed link is the
+ * only thing deciding who receives the code when the recipient clicks: a link
+ * built on an attacker's host hands them a live reset code for an account they
+ * do not control, in a mail genuinely sent by us.
+ *
+ * `Origin` and `Host` are request headers, so on the unauthenticated recovery
+ * endpoint they are attacker-supplied. Firebase's authorized-domain list does
+ * constrain the `continueUrl` we pass alongside, but it is not a boundary this
+ * link should rest on: it is remote configuration this repo cannot see, it
+ * currently contains a bare `vercel.app`, and AGL-719 is about to edit it.
+ *
+ * So the origin comes from server configuration, and a request-supplied one is
+ * honoured only when it is explicitly allowlisted. Anything else falls back to
+ * canonical rather than failing — a link on the real console still redeems
+ * perfectly, so the safe answer is also the working one, and account recovery
+ * never breaks to protect itself.
+ */
+export function resolveAuthActionOrigin(
+  requestOrigin: string | null | undefined,
+): string {
+  const canonical = canonicalOrigin()
+  const candidate = stripTrailingSlash(String(requestOrigin ?? '').trim())
+  if (!candidate) return canonical
+
+  let parsed: URL
+  try {
+    parsed = new URL(candidate)
+  } catch {
+    return canonical
+  }
+  // Only ever http/https — a `javascript:` or `data:` origin reaching an
+  // email button is not a link, it is a payload.
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return canonical
+  }
+
+  const allowed = new Set([canonical, ...configuredOrigins()])
+  if (allowed.has(stripTrailingSlash(parsed.origin))) {
+    return stripTrailingSlash(parsed.origin)
+  }
+  // Local development, where the canonical origin would send a developer's
+  // reset link to production. Never outside development.
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
+  ) {
+    return stripTrailingSlash(parsed.origin)
+  }
+  return canonical
+}
+
 /** Where each action is redeemed in the console. */
 const ACTION_PATH: Record<AuthActionKind, string> = {
   resetPassword: '/reset-password',

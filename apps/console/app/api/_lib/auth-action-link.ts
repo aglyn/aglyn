@@ -28,11 +28,12 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   authActionUrl,
   oobCodeFromLink,
+  resolveAuthActionOrigin,
   type AuthActionKind,
 } from './auth-action-url'
 
 export type { AuthActionKind }
-export { authActionUrl, oobCodeFromLink }
+export { authActionUrl, oobCodeFromLink, resolveAuthActionOrigin }
 
 /**
  * Mint an action link for `email` that lands on Aglyn.
@@ -41,16 +42,25 @@ export { authActionUrl, oobCodeFromLink }
  * half-formed URL — a "reset your password" mail whose button goes nowhere is
  * worse than a failed send, because the failed send is visible to the caller
  * and the dead link is only visible to the person who trusted it.
+ *
+ * `requestOrigin` is a HINT, not an instruction: it is a request header on an
+ * endpoint a stranger can call, so it is run through
+ * {@link resolveAuthActionOrigin} and ignored unless allowlisted. Resolving
+ * here rather than in each route is deliberate — this is the only function
+ * that mints a redeemable code, so it is the only place the check cannot be
+ * forgotten by a future caller.
  */
 export async function generateAuthActionLink(
   kind: AuthActionKind,
   email: string,
-  origin: string,
+  requestOrigin: string,
 ): Promise<string> {
+  const origin = resolveAuthActionOrigin(requestOrigin)
   const auth = firebaseAdmin.app().auth()
   // `url` is where Firebase sends the browser AFTER its own handler runs.
   // It is irrelevant once we bypass that handler, but it must still be an
-  // authorized domain or the generate call itself is rejected.
+  // authorized domain or the generate call itself is rejected — so it uses the
+  // resolved origin too, never the caller's.
   const settings = { url: `${origin}/signin`, handleCodeInApp: false }
   const link =
     kind === 'resetPassword'

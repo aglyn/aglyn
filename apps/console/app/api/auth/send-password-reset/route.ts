@@ -76,10 +76,19 @@ async function handler(request: Request): Promise<Response> {
   }
 
   try {
-    const origin =
+    // A hint only. `generateAuthActionLink` decides the real origin from
+    // server config — these headers are attacker-supplied on this endpoint,
+    // and the link they end up in carries a live reset code. Absent headers
+    // are fine now: the resolver falls back to the canonical console, so a
+    // request without an Origin still gets a working email instead of the
+    // silent no-send this used to be.
+    const requestOrigin =
       headers.origin ?? (headers.host ? `https://${headers.host}` : '')
-    if (!origin) return ok()
-    const resetUrl = await generateAuthActionLink('resetPassword', email, origin)
+    const resetUrl = await generateAuthActionLink(
+      'resetPassword',
+      email,
+      requestOrigin,
+    )
 
     const fallbackText =
       'Someone asked to reset the password for your Aglyn account. ' +

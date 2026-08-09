@@ -20,6 +20,7 @@ import { join } from 'node:path'
 import {
   authActionUrl,
   oobCodeFromLink,
+  resolveAuthActionOrigin,
 } from '../app/api/_lib/auth-action-url'
 
 /** A real Firebase-generated link, with the code replaced. */
@@ -93,6 +94,116 @@ describe('authActionUrl', () => {
     expect(
       authActionUrl('http://localhost:4200', 'resetPassword', 'x'),
     ).toContain('http://localhost:4200/reset-password')
+  })
+})
+
+/**
+ * The origin a recovery link is built on (AGL-751).
+ *
+ * The `oobCode` is redeemable from anywhere, which is what lets AGL-1112 skip
+ * the locked Firebase handler — and is exactly why the host in the emailed
+ * link must not come from a request header. These endpoints take an address
+ * from a stranger and mail a live reset code to it.
+ */
+describe('resolveAuthActionOrigin', () => {
+  const ENV = process.env
+  beforeEach(() => {
+    process.env = { ...ENV }
+    delete process.env.AUTH_ACTION_ALLOWED_ORIGINS
+    process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://app.aglyn.com'
+    // Default to the strict path; the dev-only case sets its own.
+    ;(process.env as Record<string, string>).NODE_ENV = 'production'
+  })
+  afterEach(() => {
+    process.env = ENV
+  })
+
+  it('ignores an attacker-supplied origin and uses the console', () => {
+    // The whole point. A link on evil.example.com would hand whoever runs it
+    // a valid password-reset code for an account they do not own, delivered
+    // in a mail genuinely sent by Aglyn.
+    expect(resolveAuthActionOrigin('https://evil.example.com')).toBe(
+      'https://app.aglyn.com',
+    )
+  })
+
+  it('ignores a host that merely looks like ours', () => {
+    expect(resolveAuthActionOrigin('https://app.aglyn.com.evil.test')).toBe(
+      'https://app.aglyn.com',
+    )
+    expect(resolveAuthActionOrigin('https://notapp.aglyn.com')).toBe(
+      'https://app.aglyn.com',
+    )
+  })
+
+  it('ignores a subdomain of an authorized domain we do not control', () => {
+    // `vercel.app` is in the project's Firebase authorized-domain list, so a
+    // continueUrl there can pass Firebase's own check. Anyone can deploy to
+    // that domain, which is why this cannot be the boundary.
+    expect(resolveAuthActionOrigin('https://attacker-site.vercel.app')).toBe(
+      'https://app.aglyn.com',
+    )
+  })
+
+  it('refuses a non-http scheme', () => {
+    expect(resolveAuthActionOrigin('javascript:alert(1)')).toBe(
+      'https://app.aglyn.com',
+    )
+    expect(resolveAuthActionOrigin('data:text/html,x')).toBe(
+      'https://app.aglyn.com',
+    )
+  })
+
+  it('falls back rather than failing when there is no origin at all', () => {
+    // Fail-safe, not fail-closed: a link on the real console redeems
+    // perfectly, so the safe answer is also the working one. Recovery must
+    // never break in order to protect itself.
+    expect(resolveAuthActionOrigin(undefined)).toBe('https://app.aglyn.com')
+    expect(resolveAuthActionOrigin(null)).toBe('https://app.aglyn.com')
+    expect(resolveAuthActionOrigin('')).toBe('https://app.aglyn.com')
+    expect(resolveAuthActionOrigin('not a url')).toBe('https://app.aglyn.com')
+  })
+
+  it('keeps the canonical origin, trailing slash and all', () => {
+    expect(resolveAuthActionOrigin('https://app.aglyn.com/')).toBe(
+      'https://app.aglyn.com',
+    )
+  })
+
+  it('honours an explicitly allowlisted preview origin', () => {
+    // The operator control: one env var lets a preview deploy test recovery
+    // against itself, and removing it is the rollback.
+    process.env.AUTH_ACTION_ALLOWED_ORIGINS =
+      'https://preview-a.vercel.app, https://staging.aglyn.com'
+    expect(resolveAuthActionOrigin('https://preview-a.vercel.app')).toBe(
+      'https://preview-a.vercel.app',
+    )
+    expect(resolveAuthActionOrigin('https://staging.aglyn.com')).toBe(
+      'https://staging.aglyn.com',
+    )
+    expect(resolveAuthActionOrigin('https://preview-b.vercel.app')).toBe(
+      'https://app.aglyn.com',
+    )
+  })
+
+  it('allows localhost in development but never in production', () => {
+    expect(resolveAuthActionOrigin('http://localhost:4200')).toBe(
+      'https://app.aglyn.com',
+    )
+    ;(process.env as Record<string, string>).NODE_ENV = 'development'
+    expect(resolveAuthActionOrigin('http://localhost:4200')).toBe(
+      'http://localhost:4200',
+    )
+  })
+
+  it('tracks NEXT_PUBLIC_CONSOLE_URL for a self-hosted install', () => {
+    process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://console.example.com'
+    expect(resolveAuthActionOrigin('https://evil.example.com')).toBe(
+      'https://console.example.com',
+    )
+    expect(resolveAuthActionOrigin('https://console.example.com')).toBe(
+      'https://console.example.com',
+    )
   })
 })
 
