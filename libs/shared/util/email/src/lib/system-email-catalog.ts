@@ -467,6 +467,126 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       source: 'apps/console/app/api/_lib/password-admin.ts',
     },
+    // Security alerts (AGL-665). Factual and actionable: what happened, from
+    // where, and one button to the account-security surface. These must be
+    // believed, so the send path only fires them on genuinely new devices —
+    // never on every sign-in.
+    {
+      key: 'security-new-device',
+      name: 'New device sign-in',
+      description:
+        'Security alert sent when an account signs in from a device it has ' +
+        'not used before. Not sent on routine sign-ins from known devices.',
+      deliveredBy: 'resend',
+      defaultSubject: 'New sign-in to your Aglyn account',
+      mergeTokens: [
+        {
+          name: 'device.name',
+          description: 'Browser and operating system that signed in',
+          sample: 'Chrome on macOS',
+        },
+        {
+          name: 'device.location',
+          description: 'Approximate location, from the request IP',
+          sample: 'Denver, CO, US',
+        },
+        {
+          name: 'device.ip',
+          description: 'IP address the sign-in came from',
+          sample: '203.0.113.7',
+        },
+        {
+          name: 'device.time',
+          description: 'When the sign-in happened (UTC)',
+          sample: '2026-08-08 14:03 UTC',
+        },
+        {
+          name: 'accountSecurityUrl',
+          description: 'Manage-account page where the password can be changed',
+          sample: 'https://app.aglyn.com/manage/user',
+        },
+      ],
+      // Mirrors the fallbackText in _lib/security-alerts.ts.
+      defaultBody: [
+        { block: 'text', text: 'New device sign-in', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            'Your Aglyn account was just signed in to from a device it has ' +
+            'not used before.',
+          variant: 'body',
+        },
+        { block: 'text', text: 'Device: {{device.name}}', variant: 'body' },
+        { block: 'text', text: 'Location: {{device.location}}', variant: 'body' },
+        { block: 'text', text: 'IP address: {{device.ip}}', variant: 'body' },
+        { block: 'text', text: 'When: {{device.time}}', variant: 'body' },
+        {
+          block: 'button',
+          label: 'Review account security',
+          href: '{{accountSecurityUrl}}',
+        },
+        {
+          block: 'text',
+          text:
+            'If this was you, no action is needed. If it was not, change ' +
+            'your password from Manage account right away.',
+          variant: 'caption',
+        },
+      ],
+      source: 'apps/console/app/api/_lib/security-alerts.ts',
+    },
+    {
+      key: 'security-passkey-added',
+      name: 'New passkey added',
+      description:
+        'Security alert sent when a passkey is registered on an account. ' +
+        'The trigger ships with passkey support (AGL-662); until then no ' +
+        'call site sends this.',
+      deliveredBy: 'resend',
+      defaultSubject: 'A passkey was added to your Aglyn account',
+      mergeTokens: [
+        {
+          name: 'passkey.label',
+          description: 'Name the passkey was saved under',
+          sample: 'MacBook Touch ID',
+        },
+        {
+          name: 'device.time',
+          description: 'When the passkey was added (UTC)',
+          sample: '2026-08-08 14:03 UTC',
+        },
+        {
+          name: 'accountSecurityUrl',
+          description: 'Manage-account page where credentials are reviewed',
+          sample: 'https://app.aglyn.com/manage/user',
+        },
+      ],
+      // Mirrors the fallbackText in _lib/security-alerts.ts.
+      defaultBody: [
+        { block: 'text', text: 'New passkey added', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            'A passkey ("{{passkey.label}}") was just added to your Aglyn ' +
+            'account. It can be used to sign in without your password.',
+          variant: 'body',
+        },
+        { block: 'text', text: 'When: {{device.time}}', variant: 'body' },
+        {
+          block: 'button',
+          label: 'Review account security',
+          href: '{{accountSecurityUrl}}',
+        },
+        {
+          block: 'text',
+          text:
+            'If you did not add this passkey, change your password from ' +
+            'Manage account right away.',
+          variant: 'caption',
+        },
+      ],
+      source: 'apps/console/app/api/_lib/security-alerts.ts',
+    },
     // Aglyn composes and sends both of these now (AGL-1112). They were
     // Firebase's, from a template nobody could edit — the subject still
     // carried `[aglyn.io]`, a domain the company no longer uses, and the link
