@@ -97,7 +97,8 @@ own properties, never touching values you set elsewhere.
 **Background Fill** in the Colors group builds a gradient by clicking —
 no custom CSS.
 
-1. Set **Fill** to *Linear gradient* (or *Radial gradient*). It starts
+1. Set **Background Fill** to *Linear gradient* (or *Radial
+   gradient*) — the field opens as that one select. It starts
    from your theme's primary and secondary colors so you see a gradient
    immediately; *Solid color* clears it again and hands the element back
    to the Background Color field above.
@@ -108,8 +109,9 @@ no custom CSS.
    other color field, so a stop can be a **theme color** (it then follows
    your palette, in both light and dark) or a literal hex. One gradient
    can mix the two — bind the ends to Primary and Secondary and drop a
-   literal mid-tone between them. **Add stop** inserts one between the
-   last two; a gradient always keeps at least two.
+   literal mid-tone between them. **Add stop** adds one near the end of
+   the ramp, ready to be positioned; a gradient always keeps at least
+   two, so the remove button greys out at two.
 
 Background Fill writes `background-image`, which paints *over* the
 Background Color — so a solid color set there still shows through
@@ -121,10 +123,18 @@ Like the other color fields, Background Fill is
 own, and while the artboard previews dark you can give dark a different
 gradient outright.
 
-A background richer than the stop editor can show — a `conic-gradient`,
-a `to bottom right` direction, several stacked images — opens as an
-editable CSS box instead, and is never rewritten. Edit it back to a plain
-linear or radial gradient and the stop controls come back.
+A background richer than the stop editor can show — a `conic-gradient`, a
+`to bottom right` direction, a `url()` image — opens as an editable CSS
+box instead, and is never rewritten. Edit it back to a plain linear or
+radial gradient and the stop controls come back.
+
+:::caution One layer at a time
+Background Fill holds a **single** gradient or image. Comma-separating
+several layers into it (a tint over a photo, say) is not supported: the
+stop editor reads the list as one gradient, and your next edit in it
+drops the later layers. Build a stack in
+[custom CSS](#custom-css-sx) instead.
+:::
 
 ## Visibility per device band
 

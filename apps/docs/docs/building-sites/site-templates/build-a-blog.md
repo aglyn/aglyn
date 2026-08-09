@@ -21,6 +21,38 @@ fully designed in the besigner via **template screens**.
 
 In **Content**, create a **collection** for your posts. Manage entries from the console.
 
+### Delete a collection
+
+**Delete collection** sits in the **Collections & Entries** toolbar, beside **Categories**
+and **New entry**, and acts on the collection currently picked in the **Collection**
+dropdown. It is a **site admin** action: if your role on this site is editor or viewer the
+button is not there at all, and an org role on its own does not grant it — the check reads
+your role on *this site*. Ask a site admin, or have one raise your role in **Members**.
+
+Aglyn refuses the delete while anything still depends on the collection, and the dialog
+tells you which of these it is before you can type anything:
+
+- **A template screen still points at it.** The message names the screen and which picker
+  holds it — *"Blog" is still the source for "Blog index" (list template)*. Set that
+  collection's **List template screen** or **Entry template screen** back to the built-in
+  option first. Deleting it while a published page renders from it would leave that page
+  with nothing to draw.
+- **It still has entries.** The message gives the count — *"Blog" still has 12 entries*.
+  Delete them from the entries table first, one at a time; deleting a collection never
+  removes published entries for you.
+
+Once nothing depends on it, type the collection's **display name** exactly — the name, not
+the slug, and capitalisation counts — and confirm. Deleting removes the collection, its
+**category list**, and its template pointers. Your **screens are not deleted** (they keep
+their design and simply stop being template screens) and nothing in the media library is
+touched. The `/{collection}` and `/{collection}/{entry}` routes stop resolving on the live
+site within about a minute; there is no publish step.
+
+:::warning No undo
+There is no trash and no restore. A deleted collection comes back only from your own
+export. Export anything you may want before you confirm.
+:::
+
 ## 2. Write entries
 
 Add **rich blog entries** with images, a **live preview**, and **scheduling** so posts
@@ -134,8 +166,8 @@ in the block library:
 - **Category Pills** — the collection's categories as a row of links: **All** plus one
   pill per category. Drop it on the **list template screen**, above the Collection
   Entries block. Attributes: **Collection slug** (blank = the collection from the URL)
-  and **All label** (default "All"; clear it to omit that pill). Renders nothing until
-  the collection has categories.
+  and **All label** — the text of the unfiltered pill, default "All". Renders nothing
+  until the collection has categories.
 
 ### Category filtering
 
@@ -149,13 +181,22 @@ listing is its own cacheable, linkable, indexable page — it can be shared, ope
 new tab, and crawled. **All** is the bare `/{collection}`, so the unfiltered listing
 never gains a second address.
 
-A category with no published entries renders the listing with the pills and an empty
-state, so readers can pick another one. Pagination composes with the filter: page 2 of a
-category lives at `/{collection}/category/{category}/page/2`, and page counts describe
-the filtered set. Category listings join the sitemap automatically.
+A category with nothing published in it still renders — the page, the pills and the rest
+of your template, with **zero entry rows** — so a reader can pick another pill instead of
+hitting a 404. The built-in listing writes *"Nothing published in Guides yet."* in that
+gap; **on your own list template nothing fills it**, so add your own empty-state message
+under the Collection Entries block if you expect thin categories. A category segment that
+matches nothing at all renders the same empty listing and is marked `noindex`.
 
-Pills address a category by its **stable id**, so renaming a category changes the label
-without breaking its links.
+Pagination composes with the filter: page 2 of a category lives at
+`/{collection}/category/{category}/page/2`, and page counts describe the filtered set.
+Category listings join the sitemap automatically.
+
+Pills address a category by its **stable id**, so renaming a category changes every
+pill's label without breaking the links between your own pages. A link someone else wrote
+by hand against the *old name* is the exception — the route also accepts a category's
+current name, so an outside link built that way stops matching after a rename and lands
+on the empty listing above. Prefer linking with the pills.
 
 ### Entry tokens
 
