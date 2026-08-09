@@ -23,6 +23,7 @@ import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
   BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
+  publishFailureMessage,
   useAddElementDrawerCallback,
   useBesignerDocument,
   useRenderedCanvasElements,
@@ -370,10 +371,15 @@ function ComponentBesignerPage(props) {
         { variant: 'success', persist: false },
       )
     } catch (error) {
-      enqueueSnackbar(
-        error instanceof Error ? error.message : 'Publish failed',
-        { variant: 'error', allowDuplicate: true },
-      )
+      // A publish that throws must never read like a success (AGL-1334).
+      // `persist` because this is the one action that moves work onto live
+      // pages: an auto-dismissed toast is how an author walks away believing
+      // the component shipped while every instance renders the old markup.
+      enqueueSnackbar(publishFailureMessage(error), {
+        variant: 'error',
+        allowDuplicate: true,
+        persist: true,
+      })
     } finally {
       setPublishing(false)
     }

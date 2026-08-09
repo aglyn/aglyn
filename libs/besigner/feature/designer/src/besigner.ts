@@ -20,6 +20,8 @@ export * from './lib/drafts/besigner-draft-store'
 export * from './lib/constants/sample-data'
 export * from './lib/constants/shared'
 
+export * from './lib/utils/publish-failure-message'
+
 export * from './lib/hooks/use-add-element-drawer-callback'
 export * from './lib/hooks/use-aglyn-besigner-flag'
 export * from './lib/hooks/use-aglyn-besigner-panel'

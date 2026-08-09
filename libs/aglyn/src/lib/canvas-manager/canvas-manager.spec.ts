@@ -19,6 +19,7 @@ import { NodeId, NodeSchema, NodeSchemaNested, NodeType } from '../types/nodes'
 import { FEATURE_FLAG } from '../foundation'
 import { compress } from '../app-utils/compress'
 import { decompress } from '../app-utils/decompress'
+import { canvasTreeToDefinition } from '../app-utils/definition-canvas-tree'
 import { CanvasManager, NODE_ROOT_ID } from './canvas-manager'
 
 describe('Aglyn: Screen Manager', () => {
@@ -1068,6 +1069,154 @@ describe('Aglyn: Screen Manager', () => {
       const serialized = canvas.toJSON().nodes as Record<string, any>
       expect('styleOverrides' in serialized['plain']).toBe(false)
       expect('styleOverrides' in serialized['empty']).toBe(false)
+    })
+  })
+
+  /**
+   * A cleared optional prop is an ABSENT key, in both write paths (AGL-1334).
+   *
+   * The Button repro: `Start icon = (NONE)`, so the props form writes an own
+   * `startIconPath` key holding `undefined` on the next edit of that element.
+   * A save survived it (msgpack encodes an undefined member as nil, so the
+   * document quietly gained `startIconPath: null`); the very next publish, a
+   * plain-map `updateDoc`, threw `Unsupported field value: undefined`.
+   */
+  describe('undefined props never reach a write path (AGL-1334)', () => {
+    const buttonMap = {
+      [NODE_ROOT_ID]: {
+        $id: NODE_ROOT_ID,
+        type: NodeType.NODE,
+        componentId: 'div',
+        nodes: ['btn'],
+      },
+      btn: {
+        $id: 'btn',
+        type: NodeType.NODE,
+        parentId: NODE_ROOT_ID,
+        componentId: 'button',
+        props: { children: 'Get started' },
+        nodes: [],
+      },
+    } as unknown as Record<NodeId, NodeSchema>
+
+    const editedCanvas = () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(buttonMap as any)
+      // Exactly what the props form submits: every field it renders, with
+      // `undefined` for the ones the author left empty.
+      canvas.updateNodeProps(canvas.getNode('btn')!, {
+        children: 'Get started today',
+        startIconId: undefined,
+        startIconPath: undefined,
+        href: '',
+      })
+      return canvas
+    }
+
+    const findUndefined = (value: unknown, path = ''): string[] => {
+      if (value === undefined) return [path]
+      if (Array.isArray(value)) {
+        return value.flatMap((item, at) => findUndefined(item, `${path}[${at}]`))
+      }
+      if (value && typeof value === 'object') {
+        return Object.entries(value).flatMap(([key, item]) =>
+          findUndefined(item, path ? `${path}.${key}` : key),
+        )
+      }
+      return []
+    }
+
+    it('drops the key instead of serializing undefined', () => {
+      const props = (editedCanvas().toJSON().nodes as Record<string, any>)['btn']
+        .props
+      expect('startIconPath' in props).toBe(false)
+      expect('startIconId' in props).toBe(false)
+      // `''` is a value an author can mean, and it stores fine.
+      expect(props).toEqual({ children: 'Get started today', href: '' })
+    })
+
+    it('leaves nothing undefined anywhere in the published map', () => {
+      const canvas = editedCanvas()
+      canvas.updateNodeProps(canvas.getNode('btn')!, {
+        children: 'Get started today',
+        propValues: { label: undefined, link: 'https://example.com' },
+        sx: undefined,
+      })
+      const published = canvasTreeToDefinition(
+        canvas.toJSON().nodes as Record<string, any>,
+      )
+      expect(findUndefined(published.nodes)).toEqual([])
+      expect(
+        'label' in (published.nodes['btn'] as any).props.propValues,
+      ).toBe(false)
+    })
+
+    it('agrees with the save path on the shape for one in-memory tree', () => {
+      const serialized = editedCanvas().toJSON().nodes as Record<string, any>
+      // The publish write: the plain map, minus the synthetic canvas root.
+      const published = canvasTreeToDefinition(serialized).nodes
+      // The save write: the same serialization through the version-doc
+      // converter's msgpack. It used to be here that `undefined` became
+      // `null`, so the two documents disagreed about a cleared prop.
+      const saved = decompress<Record<string, any>>(compress(serialized))
+      expect(saved['btn'].props).toEqual(published['btn'].props)
+      expect('startIconPath' in saved['btn'].props).toBe(false)
+    })
+
+    it('keeps a cleared prop cleared across a reload', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes({
+        ...buttonMap,
+        btn: {
+          ...(buttonMap['btn'] as any),
+          props: { children: 'Get started', startIconPath: 'M1 2h3' },
+        },
+      } as any)
+      // Clearing the icon: the form resubmits without a path for it, and
+      // `updateNodeProps` REPLACES the bag — so absent is how cleared travels.
+      canvas.updateNodeProps(canvas.getNode('btn')!, {
+        children: 'Get started',
+        startIconPath: undefined,
+      })
+      const serialized = canvas.toJSON().nodes as Record<string, any>
+      expect('startIconPath' in serialized['btn'].props).toBe(false)
+
+      const reloaded = new CanvasManager(undefined as any)
+      reloaded.setNodes(serialized as any)
+      expect(
+        'startIconPath' in
+          (reloaded.toJSON().nodes as Record<string, any>)['btn'].props,
+      ).toBe(false)
+    })
+
+    it('omits props entirely when every key was cleared', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(buttonMap as any)
+      canvas.updateNodeProps(canvas.getNode('btn')!, {
+        children: undefined,
+        startIconPath: undefined,
+      })
+      const node = (canvas.toJSON().nodes as Record<string, any>)['btn']
+      expect('props' in node).toBe(false)
+    })
+
+    it('strips at the serialization boundary, not only in updateNodeProps', () => {
+      // Live co-editing and the inline text editor assign onto `node.props`
+      // directly, so the boundary has to hold on its own.
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(buttonMap as any)
+      const node = canvas.getNode('btn') as any
+      node.props.startIconPath = undefined
+      const props = (canvas.toJSON().nodes as Record<string, any>)['btn'].props
+      expect('startIconPath' in props).toBe(false)
+    })
+
+    it('still reads as saved when the baseline was recorded from toJSON', () => {
+      // The stripping happens on the serialization BOTH sides of the dirty
+      // check use, so it cannot leave the editor permanently dirty.
+      const canvas = editedCanvas()
+      canvas.updateInitialNodes(canvas.toJSON().nodes as any)
+      expect(canvas.isInitialSame).toBe(true)
     })
   })
 })
