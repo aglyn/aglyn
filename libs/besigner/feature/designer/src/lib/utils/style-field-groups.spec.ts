@@ -448,6 +448,7 @@ describe('per-side borders (AGL-1199)', () => {
       undefined,
       { borderBottom: '1px solid' },
       null,
+      null,
     )
     expect(sx).toEqual({ borderBottom: '1px solid' })
     expect(sx['border']).toBeUndefined()

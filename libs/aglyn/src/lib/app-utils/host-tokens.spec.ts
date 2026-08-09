@@ -294,7 +294,8 @@ describe('resolveNodesHostTokens — screens resolve like emails', () => {
       $id: 't',
       componentId: 'text',
       props: { children: 'Welcome to {{host.businessName}}', variant: 'h1' },
-      nodes: [],
+      // Annotated because a bare `[]` has no element type to infer from.
+      nodes: [] as string[],
     },
   })
 
@@ -328,7 +329,9 @@ describe('resolveNodesHostTokens — screens resolve like emails', () => {
   })
 
   it('tolerates nodes with no props', () => {
-    const input = { a: { $id: 'a' }, b: null }
-    expect(() => resolveNodesHostTokens(input as any, site())).not.toThrow()
+    // Annotated rather than inferred: a bare `null` entry widens to `any`
+    // with strictNullChecks off, which `noImplicitAny` then rejects.
+    const input: Record<string, unknown> = { a: { $id: 'a' }, b: null }
+    expect(() => resolveNodesHostTokens(input, site())).not.toThrow()
   })
 })

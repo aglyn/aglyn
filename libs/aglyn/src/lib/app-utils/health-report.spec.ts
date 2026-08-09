@@ -144,7 +144,7 @@ describe('memoizeWithTtl', () => {
     // Re-probing per request hammers the dependency that is already failing,
     // and on a public endpoint that is someone else's lever.
     let calls = 0
-    let clock = 0
+    const clock = 0
     const probe = memoizeWithTtl(
       10_000,
       async () => {
