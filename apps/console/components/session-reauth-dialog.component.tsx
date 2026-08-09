@@ -47,6 +47,7 @@ import {
   markInteractiveSignOut,
 } from '../utils/interactive-signin'
 import isMobileBrowser from '../utils/is-mobile-browser'
+import { signInWithPasskey, usePasskeysSupported } from '../utils/passkeys'
 import {
   clearSessionReauth,
   dismissSessionReauth,
@@ -82,9 +83,10 @@ import {
  * performed only when the user submits — until then nothing is touched, so
  * "Not now" costs nothing.
  *
- * Passkeys (AGL-662) will slot in here as an additional factor when they
- * exist; today the factors offered are the ones the console supports:
- * password, Google, SAML/OIDC SSO.
+ * Passkeys (AGL-662) are the additional factor here: a REAL WebAuthn
+ * ceremony verified server-side and bridged through `signInWithCustomToken`
+ * — a fresh credential sign-in, not a resurrected session, so it honors
+ * the semantics above exactly like the password and provider paths.
  */
 
 /**
@@ -150,6 +152,10 @@ export function SessionReauthDialog() {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Offered whenever the browser can run the ceremony: a discoverable
+  // credential needs no captured identity, and if the user has none the
+  // browser prompt simply comes up empty and cancels — no harm done.
+  const passkeySupported = usePasskeysSupported()
 
   useEffect(() => subscribeSessionReauth(setState), [])
 
@@ -225,6 +231,20 @@ export function SessionReauthDialog() {
         : signInWithPopup(auth, provider),
     )
   }, [auth, signInAgain, state.identity.providerId])
+
+  const handlePasskeyClick = useCallback(() => {
+    void signInAgain(() =>
+      signInWithPasskey(auth).catch((caught) => {
+        // Closing the browser's credential prompt is a cancel; reuse the
+        // existing cancel copy rather than reporting a failure.
+        const name = (caught as { name?: string })?.name
+        if (name === 'NotAllowedError' || name === 'AbortError') {
+          throw { code: 'auth/popup-closed-by-user' }
+        }
+        throw caught
+      }),
+    )
+  }, [auth, signInAgain])
 
   const handleUseSignInPage = useCallback(() => {
     // Escape hatch (an account whose factors we could not capture, or a
@@ -305,7 +325,16 @@ export function SessionReauthDialog() {
               {providerLabel}
             </Button>
           ) : null}
-          {!showPasswordForm && !showProviderButton ? (
+          {passkeySupported ? (
+            <Button
+              variant="outlined"
+              disabled={busy}
+              onClick={handlePasskeyClick}
+            >
+              {'Use a passkey'}
+            </Button>
+          ) : null}
+          {!showPasswordForm && !showProviderButton && !passkeySupported ? (
             <Alert severity="info">
               {'Use the sign-in page to continue — this page will resume ' +
                 'after you sign in.'}

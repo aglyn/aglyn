@@ -29,6 +29,7 @@ import {
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import {
+  mdiFingerprint,
   mdiGoogle,
   mdiShieldKeyOutline,
 } from '@aglyn/shared-data-mdi'
@@ -62,6 +63,7 @@ import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
 import { authSignInHost } from '../../../utils/auth-delegation'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
+import { signInWithPasskey, usePasskeysSupported } from '../../../utils/passkeys'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
 
 const googleOAuthProvider = new GoogleAuthProvider()
@@ -86,6 +88,8 @@ function SignIn() {
   // the sign-in form back at the user (AGL-476).
   const { data: signInCheckResult } = useSigninCheck()
   const signedIn = signInCheckResult?.signedIn === true
+  // Effect-gated so the server render (no WebAuthn) never mismatches.
+  const passkeySupported = usePasskeysSupported()
 
   const handleSignIn = useCallback(
     async (values?: any) => {
@@ -146,6 +150,31 @@ function SignIn() {
   const handleGoogleButtonClick = useCallback(async () => {
     await handleSignIn()
   }, [handleSignIn])
+
+  // Passkey sign-in (AGL-662): the WebAuthn assertion is verified server-side
+  // and bridged into Firebase via signInWithCustomToken; from there the
+  // session machinery is the same as every other interactive sign-in.
+  const handlePasskeyClick = useCallback(async () => {
+    if (loading) return
+    if (error) setError(null)
+    const dequeueLoading = queueLoading()
+    try {
+      await signInWithPasskey(firebaseAuth)
+      logEvent(analytics, 'login', { method: 'passkey' })
+    } catch (caught) {
+      // Closing the browser's credential prompt is a cancel, not an error.
+      const name = (caught as { name?: string })?.name
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        console.error(caught)
+        setError({
+          code: 'auth/passkey-signin-failed',
+          message: 'Passkey sign-in failed.',
+        } as AuthResultError)
+      }
+    } finally {
+      dequeueLoading()
+    }
+  }, [analytics, error, firebaseAuth, loading, queueLoading])
 
   if (delegation === 'redirecting') {
     // Bouncing to the auth host (AGL-465) — no local form or OAuth here.
@@ -247,6 +276,15 @@ function SignIn() {
         >
           {'Single sign-on (SSO)'}
         </Button>
+        {passkeySupported ? (
+          <Button
+            variant="outlined"
+            startIcon={<MdiIcon path={mdiFingerprint.path} />}
+            onClick={handlePasskeyClick}
+          >
+            {'Passkey'}
+          </Button>
+        ) : null}
       </Stack>
       <AuthLegalNotice />
     </AuthFormComponent>

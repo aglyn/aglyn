@@ -726,6 +726,29 @@ service cloud.firestore {
           request.auth.uid == userId;
         allow create: if false;
       }
+
+      // Passkey credentials (AGL-662): SERVER-WRITE ONLY — a client-writable
+      // credential store is a full auth bypass (swap in your own public key,
+      // sign in as anyone). The owner reads their own list for the
+      // management UI; every write goes through the Admin SDK ceremony
+      // endpoints.
+      match /passkeys/{credentialId} {
+        allow read: if isStaff() ||
+          (isSignedIn() && request.auth.uid == userId);
+        allow write: if false;
+      }
+    }
+
+    // WebAuthn machinery (AGL-662): server-only, both of them. Challenges
+    // are single-use secrets; the credential index maps credentialId → uid
+    // and is consulted before minting sign-in tokens. Subcollection-less
+    // top-level docs would already be denied by default — the explicit
+    // matches document that the denial is load-bearing.
+    match /webauthnChallenges/{challengeId} {
+      allow read, write: if false;
+    }
+    match /passkeyCredentialIndex/{credentialId} {
+      allow read, write: if false;
     }
 
     // Marketplace marketplace (AGL-44). Profiles are public publisher pages
