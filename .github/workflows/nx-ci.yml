@@ -71,4 +71,15 @@ jobs:
       # to catch.
       - run: npx jest --config apps/console/jest.config.ts --rootDir apps/console --testPathPatterns revenue-truth
 
+      # App Router graph boundary (AGL-1350). Same shape again: the walk
+      # covers every app's routes and every lib they reach, so its invalidating
+      # input is the whole workspace rather than the console it is filed under
+      # — a tenant route or a plugin lib crossing the line would not mark
+      # console affected. It is also the ONE class here that a green typecheck
+      # and a green test suite both miss by construction: AGL-1349 took main
+      # down with 141/141 clean, because only `nx build` sees a module graph.
+      # Cheap enough (~1s) to run unconditionally, and it fails long before
+      # the build step below would.
+      - run: npm run check:app-router-graph
+
       - run: npx nx affected -t lint test build --parallel=3
