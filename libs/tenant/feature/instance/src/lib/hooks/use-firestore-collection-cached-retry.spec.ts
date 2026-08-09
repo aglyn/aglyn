@@ -56,10 +56,11 @@ jest.mock('firebase/firestore', () => ({
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
 
-/** What IndexedDB still holds for this query. */
+/** What IndexedDB still holds for this query — unconfirmed by definition. */
 const cached = {
   empty: false,
   docs: [{ id: 'stale', data: () => ({ name: 'stale' }) }],
+  metadata: { fromCache: true, hasPendingWrites: false },
 }
 
 const buildQuery = () => ({}) as never
@@ -99,6 +100,38 @@ describe('useFirestoreCollection under persistentLocalCache (AGL-1066)', () => {
     expect(result.current.status).toBe('success')
     expect(result.current.error).toBeUndefined()
     expect(result.current.data).toHaveLength(1)
+    // `fromCache` is the one field that tells the truth here, which is why
+    // write guards key on it rather than on `status` (AGL-1066).
+    expect(result.current.fromCache).toBe(true)
+  })
+
+  /**
+   * The signal has to CLEAR, or it is just a permanent refusal wearing a
+   * freshness costume. A server snapshot after the storm must hand the page
+   * back — no dismissal, no timeout, no re-auth.
+   */
+  it('clears fromCache the moment a server snapshot lands', () => {
+    const { result } = renderHook(() =>
+      useFirestoreCollection(buildQuery, [], { idField: '$id' }),
+    )
+
+    act(() => {
+      const handler = mockHandlers[mockHandlers.length - 1]
+      handler.onNext(cached)
+      handler.onError()
+      jest.advanceTimersByTime(RETRY_DELAY_MS)
+    })
+    expect(result.current.fromCache).toBe(true)
+
+    act(() =>
+      mockHandlers[mockHandlers.length - 1].onNext({
+        empty: false,
+        docs: [{ id: 'live', data: () => ({ name: 'live' }) }],
+        metadata: { fromCache: false, hasPendingWrites: false },
+      }),
+    )
+    expect(result.current.fromCache).toBe(false)
+    expect(result.current.status).toBe('success')
   })
 
   /**

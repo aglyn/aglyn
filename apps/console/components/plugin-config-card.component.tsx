@@ -62,7 +62,11 @@ function SchemaForm({
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { data: stored, status } = useFirestoreDoc<Record<string, unknown>>(
+  const {
+    data: stored,
+    status,
+    fromCache,
+  } = useFirestoreDoc<Record<string, unknown>>(
     () => doc(firestore, 'orgs', orgId, 'pluginSettings', schema.pluginId),
     [firestore, orgId, schema.pluginId],
   )
@@ -98,6 +102,24 @@ function SchemaForm({
     // Distinct from the AGL-1143 guard on Manage Account, which keys on
     // `status === 'error'`. That covers a read that FAILED; a cache-served
     // stale read succeeds, so it sails straight past that check.
+    //
+    // `fromCache` FIRST, because `staleSession` below cannot be reached on
+    // this page (AGL-1066): it needs two distinct LABELLED collections
+    // denied inside 60s, and `/[orgSlug]/plugins/[pluginRef]` issues no
+    // labelled one-shot read at all. The guard under it was inert. This one
+    // is the snapshot's own verdict on the very doc the form was seeded
+    // from — no heuristic, no threshold, and it clears the moment a server
+    // snapshot lands, so a network blip costs at most one refused save with
+    // the reason on screen.
+    if (fromCache) {
+      enqueueSnackbar(
+        'These settings have not been confirmed with the server, so they ' +
+          'may be out of date — saving now could overwrite newer values. ' +
+          'Check your connection and reload.',
+        { variant: 'error' },
+      )
+      return
+    }
     if (getSessionHealth().staleSession) {
       enqueueSnackbar(
         'Your session went stale, so these settings may be out of date — ' +

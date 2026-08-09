@@ -43,6 +43,12 @@ export interface UseFirestoreDocResult<T> {
    * `ObservableStatus.hasPendingWrites` — see that comment (AGL-1262).
    */
   hasPendingWrites: boolean
+  /**
+   * `data` came from the local cache and the server has not confirmed it
+   * (AGL-1066). See `ObservableStatus.fromCache` for why this matters and
+   * why it is the signal to reach for rather than `staleSession`.
+   */
+  fromCache: boolean
 }
 
 /**
@@ -64,6 +70,9 @@ export function useFirestoreDoc<T = DocumentData>(
   const [status, setStatus] = useState<FirestoreDocStatus>('loading')
   const [error, setError] = useState<FirestoreError | undefined>(undefined)
   const [hasPendingWrites, setHasPendingWrites] = useState(false)
+  // Un-confirmed until a snapshot says otherwise: a hook that has not heard
+  // from the server yet must not read as server-confirmed.
+  const [fromCache, setFromCache] = useState(true)
   const buildRefRef = useRef(buildRef)
   buildRefRef.current = buildRef
   const idField = options.idField
@@ -76,6 +85,7 @@ export function useFirestoreDoc<T = DocumentData>(
     // arrives. Mirrors use-firestore-collection.
     setData(undefined)
     setHasPendingWrites(false)
+    setFromCache(true)
 
     const ref = buildRefRef.current()
     if (!ref) {
@@ -96,6 +106,7 @@ export function useFirestoreDoc<T = DocumentData>(
           setStatus('success')
           setError(undefined)
           setHasPendingWrites(snapshot.metadata.hasPendingWrites)
+          setFromCache(snapshot.metadata.fromCache)
           if (!snapshot.exists()) {
             setData(undefined)
             return
@@ -127,7 +138,7 @@ export function useFirestoreDoc<T = DocumentData>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
-  return { data, status, error, hasPendingWrites }
+  return { data, status, error, hasPendingWrites, fromCache }
 }
 
 export default useFirestoreDoc

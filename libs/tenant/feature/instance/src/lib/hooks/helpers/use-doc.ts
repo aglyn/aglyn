@@ -50,6 +50,8 @@ export function useDocData<T>(
   const [error, setError] = useState<Error | undefined>(undefined)
   const [hasEmitted, setHasEmitted] = useState(initialData !== undefined)
   const [hasPendingWrites, setHasPendingWrites] = useState(false)
+  // Un-confirmed until a snapshot says otherwise (AGL-1066).
+  const [fromCache, setFromCache] = useState(true)
   const resolveFirstValueRef = useRef<(() => void) | undefined>(undefined)
   const firstValuePromiseRef = useRef<Promise<void> | undefined>(undefined)
   if (!firstValuePromiseRef.current) {
@@ -81,6 +83,7 @@ export function useDocData<T>(
           // (AGL-1262). Callers that record a "last saved" state need to
           // know the difference.
           setHasPendingWrites(snapshot.metadata.hasPendingWrites)
+          setFromCache(snapshot.metadata.fromCache)
           const value = snapshot.exists()
             ? ({
                 ...(snapshot.data() as object),
@@ -122,6 +125,7 @@ export function useDocData<T>(
     error,
     firstValuePromise: firstValuePromiseRef.current,
     hasPendingWrites,
+    fromCache,
   }
 }
 export type UseDocData<T> = typeof useDocData<T>

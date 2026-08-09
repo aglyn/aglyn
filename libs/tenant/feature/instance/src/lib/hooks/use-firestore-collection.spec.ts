@@ -51,9 +51,12 @@ jest.mock('firebase/firestore', () => ({
   getDocsFromServer: (q: unknown) => mockGetDocsFromServer(q),
 }))
 
-const snap = (ids: string[]) => ({
+const snap = (ids: string[], fromCache = false) => ({
   empty: ids.length === 0,
   docs: ids.map((id) => ({ id, data: () => ({ name: id }) })),
+  // Real snapshots always carry this; the hook reads it to publish
+  // `fromCache` (AGL-1066).
+  metadata: { fromCache, hasPendingWrites: false },
 })
 
 const emit = (ids: string[]) =>

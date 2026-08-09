@@ -55,6 +55,12 @@ export interface UseFirestoreCollectionResult<T> {
   data: T[]
   status: FirestoreCollectionStatus
   error: FirestoreError | undefined
+  /**
+   * `data` came from the local cache and the server has not confirmed it
+   * (AGL-1066). See `ObservableStatus.fromCache` for why this matters and
+   * why it is the signal to reach for rather than `staleSession`.
+   */
+  fromCache: boolean
 }
 
 /**
@@ -79,6 +85,9 @@ export function useFirestoreCollection<T = DocumentData>(
   const [data, setData] = useState<T[]>([])
   const [status, setStatus] = useState<FirestoreCollectionStatus>('loading')
   const [error, setError] = useState<FirestoreError | undefined>(undefined)
+  // Un-confirmed until a snapshot says otherwise: a hook that has not heard
+  // from the server yet must not read as server-confirmed.
+  const [fromCache, setFromCache] = useState(true)
   const buildQueryRef = useRef(buildQuery)
   buildQueryRef.current = buildQuery
   const idField = options.idField
@@ -93,6 +102,7 @@ export function useFirestoreCollection<T = DocumentData>(
     // snapshot arrives — the org-switch "remnants" bug (AGL-591). Same
     // hold-nothing-rather-than-show-the-wrong-org rule as useOrgHosts.
     setData([])
+    setFromCache(true)
 
     const q = buildQueryRef.current()
     if (!q) {
@@ -107,9 +117,13 @@ export function useFirestoreCollection<T = DocumentData>(
     const seen = new Set<string>()
     const confirmedGone = new Set<string>()
 
-    const emit = (docs: QueryDocumentSnapshot<DocumentData>[]) => {
+    const emit = (
+      docs: QueryDocumentSnapshot<DocumentData>[],
+      cached: boolean,
+    ) => {
       setStatus('success')
       setError(undefined)
+      setFromCache(cached)
       setData(
         docs.map((docSnap) => {
           const value = { ...docSnap.data() } as Record<string, unknown>
@@ -145,19 +159,20 @@ export function useFirestoreCollection<T = DocumentData>(
                     if (!freshIds.has(id)) confirmedGone.add(id)
                   })
                   freshIds.forEach((id) => seen.add(id))
-                  emit(fresh.docs)
+                  // `getDocsFromServer` is server-confirmed by definition.
+                  emit(fresh.docs, false)
                 })
                 .catch(() => {
                   // Couldn't confirm: show the live result rather than an
                   // error. A possibly-short list beats an empty one.
-                  if (!cancelled) emit(snapshot.docs)
+                  if (!cancelled) emit(snapshot.docs, snapshot.metadata.fromCache)
                 })
               return
             }
             snapshot.docs.forEach((d) => seen.add(d.id))
           }
 
-          emit(snapshot.docs)
+          emit(snapshot.docs, snapshot.metadata.fromCache)
         },
         (err) => {
           if (cancelled) return
@@ -182,7 +197,7 @@ export function useFirestoreCollection<T = DocumentData>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
-  return { data, status, error }
+  return { data, status, error, fromCache }
 }
 
 export default useFirestoreCollection
