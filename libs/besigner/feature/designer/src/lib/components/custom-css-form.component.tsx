@@ -86,6 +86,12 @@ export interface CustomCssFormProps {
   node?: Aglyn.NodeSchema
   /** Active artboard breakpoint; builder/CSS edits scope to it (AGL-333). */
   breakpoint: SxBreakpoint | null
+  /**
+   * Which `styleOverrides` slice to edit on a component instance
+   * (AGL-1332) — the Styles panel's current style target. Ignored for a
+   * plain node; defaults to the component root.
+   */
+  overrideKey?: string
 }
 
 type BuilderRow = { property: string; value: string }
@@ -98,10 +104,14 @@ type BuilderRow = { property: string; value: string }
  * nested selectors) verbatim.
  */
 export const CustomCssForm = observer((props: CustomCssFormProps) => {
-  const { node, breakpoint } = props
-  // Same target the rest of the Styles panel writes (AGL-1306): a plain
-  // node's own sx, or an instance's root override slice.
-  const target = useMemo(() => getNodeStyleTarget(node), [node])
+  const { node, breakpoint, overrideKey } = props
+  // Same target the rest of the Styles panel writes (AGL-1306/1332): a
+  // plain node's own sx, or the instance override slice the panel's style
+  // target names — root, or one leaf inside the component.
+  const target = useMemo(
+    () => getNodeStyleTarget(node, overrideKey),
+    [node, overrideKey],
+  )
   const nodeSx = (target.sx ?? {}) as Record<string, any>
   const [mode, setMode] = useState<'builder' | 'css' | 'json'>('builder')
   const [cssDraft, setCssDraft] = useState('')
@@ -131,8 +141,11 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
     setCssDraft(serializeCssDeclarations(nodeSx, breakpoint))
     setJsonDraft(JSON.stringify(nodeSx, null, 2))
     setError(null)
+    // Re-seeded on the override target too (AGL-1332): switching from the
+    // component root to a leaf must reload the drafts, or a stale CSS
+    // buffer would be written back onto the newly picked target.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, node?.$id])
+  }, [mode, node?.$id, target.overrideKey])
 
   const writeProperty = useCallback(
     (property: string, value: string | undefined) => {

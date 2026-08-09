@@ -90,6 +90,177 @@ describe('getNodeStyleTarget (AGL-1306)', () => {
   })
 })
 
+/**
+ * Per-leaf targets (AGL-1332). The panel picks a leaf inside the instance
+ * and every writer routes through the same target — so what has to hold
+ * here is that the key it writes is the DEFINITION's node id, and that
+ * one target's edits never disturb another's.
+ */
+describe('getNodeStyleTarget with a leaf target (AGL-1332)', () => {
+  const instance = (styleOverrides?: Record<string, any>) =>
+    ({
+      $id: 'a',
+      componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+      props: { refId: 'cta' },
+      sx: {},
+      ...(styleOverrides && { styleOverrides }),
+    }) as any
+
+  it('writes the DEFINITION id key, not the grafted cmp__ id', () => {
+    const node = instance()
+    const target = getNodeStyleTarget(node, 'headline')
+    expect(target.isInstanceOverride).toBe(true)
+    expect(target.isLeafOverride).toBe(true)
+    expect(target.overrideKey).toBe('headline')
+
+    target.setSx({ color: '#0B1220' })
+    expect(node.styleOverrides).toEqual({ headline: { color: '#0B1220' } })
+    // The graft id is derived per placement; storing it would break on a
+    // duplicate. Nothing in the record may look like one.
+    expect(Object.keys(node.styleOverrides)).not.toContain('cmp__a__headline')
+    expect(node.sx).toEqual({})
+  })
+
+  it('an omitted or empty key still targets the component root', () => {
+    const node = instance()
+    expect(getNodeStyleTarget(node).overrideKey).toBe(
+      Aglyn.STYLE_OVERRIDES_ROOT_KEY,
+    )
+    const target = getNodeStyleTarget(node, '')
+    expect(target.isLeafOverride).toBe(false)
+    target.setSx({ backgroundColor: '#fff' })
+    expect(node.styleOverrides).toEqual({
+      [Aglyn.STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#fff' },
+    })
+  })
+
+  it('targets are independent: one leaf write never disturbs another', () => {
+    const node = instance()
+    getNodeStyleTarget(node, Aglyn.STYLE_OVERRIDES_ROOT_KEY).setSx({
+      backgroundColor: '#fff',
+    })
+    getNodeStyleTarget(node, 'headline').setSx({ color: '#0B1220' })
+    getNodeStyleTarget(node, 'lede').setSx({ color: '#5A6675' })
+    expect(node.styleOverrides).toEqual({
+      [Aglyn.STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#fff' },
+      headline: { color: '#0B1220' },
+      lede: { color: '#5A6675' },
+    })
+
+    // Clearing one slice removes THAT slice only…
+    getNodeStyleTarget(node, 'headline').setSx({})
+    expect(node.styleOverrides).toEqual({
+      [Aglyn.STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#fff' },
+      lede: { color: '#5A6675' },
+    })
+    // …and clearing the last one still removes the field entirely, so a
+    // cleared instance reads as clean everywhere.
+    getNodeStyleTarget(node, Aglyn.STYLE_OVERRIDES_ROOT_KEY).setSx(undefined)
+    getNodeStyleTarget(node, 'lede').setSx(undefined)
+    expect(node.styleOverrides).toBeUndefined()
+  })
+
+  it('a plain node ignores the key entirely', () => {
+    const node = { $id: 'p', componentId: 'muiStack', sx: { py: 2 } } as any
+    const target = getNodeStyleTarget(node, 'headline')
+    expect(target.isInstanceOverride).toBe(false)
+    expect(target.overrideKey).toBe('')
+    target.setSx({ py: 4 })
+    expect(node.sx).toEqual({ py: 4 })
+    expect(node.styleOverrides).toBeUndefined()
+  })
+})
+
+/**
+ * The panel's own loop, end to end (AGL-1332): read the definition's
+ * targets, write through the target the picker names, save, reload,
+ * re-graft. Each hop is specced above or beside the graft — this one
+ * chains them on a REAL MobX canvas node, because the defect the feature
+ * exists to prevent (a white band with a white headline) only shows up
+ * when the panel's key and the graft's key are the same string.
+ */
+describe('panel leaf target → save → reload → render (AGL-1332)', () => {
+  const cta = {
+    rootId: 'root',
+    nodes: {
+      root: {
+        $id: 'root',
+        componentId: 'muiStack',
+        sx: { backgroundColor: '#101828', py: 8 },
+        nodes: ['headline', 'lede'],
+      },
+      headline: {
+        $id: 'headline',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        sx: { fontSize: 32, color: 'common.white' },
+      },
+      lede: {
+        $id: 'lede',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        sx: { fontSize: 18, color: 'common.white' },
+      },
+    },
+  } as any
+
+  it('a white-band variant renders black text and survives a reload', () => {
+    const canvas = new Aglyn.CanvasManager(undefined as any)
+    canvas.setNodes({
+      [Aglyn.NODE_ROOT_ID]: {
+        $id: Aglyn.NODE_ROOT_ID,
+        type: Aglyn.NodeType.NODE,
+        componentId: 'div',
+        nodes: ['inst'],
+      },
+      inst: {
+        $id: 'inst',
+        type: Aglyn.NodeType.NODE,
+        parentId: Aglyn.NODE_ROOT_ID,
+        componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'cta' },
+        nodes: [],
+      },
+    } as any)
+
+    // The panel's picker offers exactly these targets…
+    const targets = Aglyn.listInstanceStyleTargets(cta)
+    expect(targets.map((entry) => entry.key)).toEqual([
+      Aglyn.STYLE_OVERRIDES_ROOT_KEY,
+      'headline',
+      'lede',
+    ])
+    // …and each edit writes through the key the picker named.
+    for (const [key, sx] of [
+      [Aglyn.STYLE_OVERRIDES_ROOT_KEY, { backgroundColor: '#fff' }],
+      ['headline', { color: '#0B1220' }],
+      ['lede', { color: '#5A6675' }],
+    ] as const) {
+      getNodeStyleTarget(canvas.getNode('inst'), key).setSx({ ...sx })
+    }
+
+    const reloaded = new Aglyn.CanvasManager(undefined as any)
+    reloaded.setNodes(canvas.toJSON().nodes as any)
+    const composed = Aglyn.composeReusableComponentNodes(
+      reloaded.toJSON().nodes as any,
+      { cta },
+    )
+
+    expect(composed['cmp__inst__root'].sx).toEqual({
+      backgroundColor: '#fff',
+      py: 8,
+    })
+    expect(composed['cmp__inst__headline'].sx).toEqual({
+      fontSize: 32,
+      color: '#0B1220',
+    })
+    expect(composed['cmp__inst__lede'].sx).toEqual({
+      fontSize: 18,
+      color: '#5A6675',
+    })
+  })
+})
+
 describe('panel → save → reload → render round trip (AGL-1306)', () => {
   it('a panel write on a live canvas node survives save and reload, and renders merged', () => {
     // Each hop has its own spec (style-target above, the canvas manager's

@@ -121,14 +121,34 @@ a field restores the component's own copy rather than collapsing the section to 
 
 An empty field counts as unset. `0` and **no** are real values and survive.
 
-### What an instance can — and can't — restyle
+### Restyle one instance
 
-Properties are the **only** per-instance knob for what's inside a component. Selecting
-an instance and using the **Styles** tab styles the box the instance sits in — margin,
-padding, background and the like all apply — but nothing inside the component can be
-restyled per page. If one page needs different internals, either add a property for
-the difference, edit the component itself (every page follows), or
-[detach](#detach) that instance.
+Select an instance, open the **Styles** tab, and everything you change applies to
+**that placement only** — layered over the component's own styles. Other pages keep the
+component look, and component updates still flow through. A chip at the top of the panel
+names the mode, and each overridden property lists beside it with an ✕ that returns it to
+the component's value.
+
+Styles are per **element inside** the component, not just its outer box. The panel's
+**Style target** picker lists the component's own tree — the outer element first, then
+each element inside it, indented — and a `•` marks the ones this instance has already
+overridden. Pick one and the whole panel styles that element, on this instance.
+
+That picker is what a variant needs. A component's headline usually sets **its own**
+colour, so a background change on the outer element never reaches it: switching one CTA
+to a white band without also targeting the headline gives you white text on white. Set
+the background on the outer element, then pick the headline and the sub-copy and set
+their colours too.
+
+Styling is all an override does. The **content** of an element inside a component stays
+the component's — text and images come from the component or from its
+[properties](#properties). If one page needs different words, add a property for the
+difference; if it needs a different structure, edit the component (every page follows)
+or [detach](#detach) that instance.
+
+Overrides are stored against the component element they target, so an element deleted
+from the component later simply drops its override — that instance falls back to the
+component's own styling rather than breaking.
 
 :::warning
 Instance values are stored **against the property name**, so renaming a property orphans
@@ -162,9 +182,10 @@ ids — the confirmation reads *"Detached — this copy no longer follows the co
 Use it when one page needs a variation the shared source shouldn't carry.
 
 What you get is what the page was showing. The property values set on that instance — and
-the per-instance styling applied to its root — are baked into the copy as ordinary text,
-images and styles, so the section looks identical before and after; it is simply editable
-now. Nothing in the copy still points at a property.
+every [per-instance style](#restyle-one-instance) applied to it, on its outer element and
+on each element inside it — are baked into the copy as ordinary text, images and styles,
+so the section looks identical before and after; it is simply editable now. Nothing in the
+copy still points at a property.
 
 Detach copies the component's **published** tree — unsaved or unpublished edits sitting
 in the component's working version are not what you get.

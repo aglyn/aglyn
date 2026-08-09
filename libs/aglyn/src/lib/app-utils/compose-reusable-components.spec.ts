@@ -20,6 +20,8 @@ import {
   detachInstanceSubtree,
   getInstanceEffectivePropText,
   getInstanceRootStyleOverride,
+  getInstanceStyleOverrides,
+  listInstanceStyleTargets,
   matchComponentPropToken,
   nodesReferenceComponent,
   replaceSubtreeWithInstance,
@@ -28,6 +30,7 @@ import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   STYLE_OVERRIDES_ROOT_KEY,
 } from './compose-reusable-components'
+import { mergeNodeSx } from './merge-node-sx'
 
 const instance = (id: string, refId: string) => ({
   $id: id,
@@ -594,6 +597,370 @@ describe('root style overrides (AGL-1306)', () => {
   })
 })
 
+/**
+ * Per-leaf overrides (AGL-1332). Root-only overrides could change an
+ * instance's background but never a leaf that sets its OWN colour — which
+ * is every text leaf in the real Marketing CTA. Setting one instance to a
+ * white band therefore rendered a white headline on white (AGL-1318), one
+ * page at a time. So the shape under test is that component: a dark root
+ * with two Typography leaves hard-set to `common.white`.
+ */
+describe('per-leaf style overrides (AGL-1332)', () => {
+  const cta = {
+    rootId: 'root',
+    nodes: {
+      root: {
+        $id: 'root',
+        componentId: 'muiStack',
+        sx: { backgroundColor: '#101828', py: 8 },
+        nodes: ['headline', 'lede'],
+      },
+      headline: {
+        $id: 'headline',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        sx: { fontSize: 32, fontWeight: 900, color: 'common.white' },
+      },
+      lede: {
+        $id: 'lede',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        sx: { fontSize: 18, opacity: 0.94, color: 'common.white' },
+      },
+    },
+  } as any
+
+  const instanceWith = (id: string, styleOverrides: Record<string, any>) => ({
+    $id: id,
+    componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+    props: { refId: 'cta' },
+    styleOverrides,
+    nodes: [] as string[],
+  })
+
+  it('THE BUG: a white band can bring black text with it', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWith('a', {
+          [STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#fff' },
+          headline: { color: '#0B1220' },
+          lede: { color: '#5A6675' },
+        }),
+      } as any,
+      { cta },
+    )
+    expect(composed['cmp__a__root'].sx).toEqual({
+      backgroundColor: '#fff',
+      py: 8,
+    })
+    // The half root overrides could never reach: the leaf's own colour is
+    // replaced, and everything else it declares survives.
+    expect(composed['cmp__a__headline'].sx).toEqual({
+      fontSize: 32,
+      fontWeight: 900,
+      color: '#0B1220',
+    })
+    expect(composed['cmp__a__lede'].sx).toEqual({
+      fontSize: 18,
+      opacity: 0.94,
+      color: '#5A6675',
+    })
+    // The definition is never mutated — the next instance grafts the
+    // component's own colours.
+    expect(cta.nodes.headline.sx.color).toBe('common.white')
+  })
+
+  it('is keyed on the DEFINITION id, not the derived graft id', () => {
+    // `cmp__a__headline` is what the graft PRODUCES; keying storage on it
+    // would break the moment the instance were duplicated or re-keyed.
+    const composed = composeReusableComponentNodes(
+      { a: instanceWith('a', { cmp__a__headline: { color: '#f00' } }) } as any,
+      { cta },
+    )
+    expect(composed['cmp__a__headline'].sx).toEqual(cta.nodes.headline.sx)
+  })
+
+  it('two instances of one component keep disjoint overrides', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWith('a', { headline: { color: '#0B1220' } }),
+        b: instanceWith('b', { headline: { color: '#B7BEC8' } }),
+        c: {
+          $id: 'c',
+          componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+          props: { refId: 'cta' },
+          nodes: [] as string[],
+        },
+      } as any,
+      { cta },
+    )
+    expect(composed['cmp__a__headline'].sx).toHaveProperty('color', '#0B1220')
+    expect(composed['cmp__b__headline'].sx).toHaveProperty('color', '#B7BEC8')
+    // The un-overridden instance keeps the component look, and neither
+    // sibling's lede was touched by the other's headline override.
+    expect(composed['cmp__c__headline'].sx).toHaveProperty(
+      'color',
+      'common.white',
+    )
+    expect(composed['cmp__a__lede'].sx).toHaveProperty('color', 'common.white')
+    expect(composed['cmp__b__lede'].sx).toHaveProperty('color', 'common.white')
+  })
+
+  it('a leaf slice cascade-merges @scheme dark and responsive slices, like root', () => {
+    const themed = {
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'muiStack', nodes: ['headline'] },
+        headline: {
+          $id: 'headline',
+          componentId: 'muiTypography',
+          parentId: 'root',
+          sx: {
+            color: 'common.white',
+            fontSize: { xs: 24, md: 32, lg: 40 },
+            '@scheme dark': { color: '#E6EAF2', letterSpacing: '-0.5px' },
+          },
+        },
+      },
+    } as any
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWith('a', {
+          headline: {
+            color: '#0B1220',
+            // Partial breakpoint slice: xs below it survives, md and every
+            // width ABOVE it take the override — MUI's mobile-first
+            // cascade, which is why `lg` goes rather than shadowing it.
+            fontSize: { md: 28 },
+            // Partial scheme slice: letterSpacing must survive.
+            '@scheme dark': { color: '#94A3B8' },
+          },
+        }),
+      } as any,
+      { cta: themed },
+    )
+    expect(composed['cmp__a__headline'].sx).toEqual({
+      color: '#0B1220',
+      fontSize: { xs: 24, md: 28 },
+      '@scheme dark': { color: '#94A3B8', letterSpacing: '-0.5px' },
+    })
+    // Exactly what the ROOT slice does with the same input — one merge
+    // primitive, so a leaf can never grow its own cascade rules.
+    expect(composed['cmp__a__headline'].sx).toEqual(
+      mergeNodeSx(themed.nodes.headline.sx, {
+        color: '#0B1220',
+        fontSize: { md: 28 },
+        '@scheme dark': { color: '#94A3B8' },
+      }),
+    )
+  })
+
+  it('a stale leaf key is ignored, never thrown on', () => {
+    // The component was edited after the override was written: `subhead`
+    // no longer exists. The page must render, minus that override.
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWith('a', {
+          subhead: { color: '#f00' },
+          headline: { color: '#0B1220' },
+        }),
+      } as any,
+      { cta },
+    )
+    expect(Object.keys(composed).sort()).toEqual(
+      ['a', 'cmp__a__headline', 'cmp__a__lede', 'cmp__a__root'].sort(),
+    )
+    expect(composed['cmp__a__headline'].sx).toHaveProperty('color', '#0B1220')
+    // Kept on the instance, not silently dropped: re-adding the leaf to the
+    // component restores the author's intent.
+    expect((composed['a'] as any).styleOverrides.subhead).toEqual({
+      color: '#f00',
+    })
+  })
+
+  it('a leaf id that merely reads `root` is not styled by the root slice', () => {
+    // The root is addressed by the CONSTANT, so a definition whose root is
+    // called something else cannot have an unrelated leaf hijack it.
+    const oddly = {
+      rootId: 'shell',
+      nodes: {
+        shell: { $id: 'shell', componentId: 'muiStack', nodes: ['root'] },
+        root: {
+          $id: 'root',
+          componentId: 'muiTypography',
+          parentId: 'shell',
+          sx: { color: 'common.white' },
+        },
+      },
+    } as any
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWith('a', {
+          [STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#fff' },
+        }),
+      } as any,
+      { cta: oddly },
+    )
+    expect(composed['cmp__a__shell'].sx).toEqual({ backgroundColor: '#fff' })
+    expect(composed['cmp__a__root'].sx).toEqual({ color: 'common.white' })
+  })
+
+  it('leaves every un-overridden node untouched, sx key and all', () => {
+    const composed = composeReusableComponentNodes(
+      { a: instanceWith('a', { headline: { color: '#0B1220' } }) } as any,
+      { cta },
+    )
+    // Not `sx: undefined` on nodes that never had one — a materialized key
+    // would ride into every save of a composed map.
+    const bare = composeReusableComponentNodes(
+      {
+        b: {
+          $id: 'b',
+          componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+          props: { refId: 'plain' },
+          styleOverrides: { nope: { color: '#f00' } },
+          nodes: [] as string[],
+        },
+      } as any,
+      {
+        plain: {
+          rootId: 'root',
+          nodes: { root: { $id: 'root', componentId: 'muiStack', nodes: [] } },
+        } as any,
+      },
+    )
+    expect('sx' in (bare['cmp__b__root'] as any)).toBe(false)
+    expect(composed['cmp__a__lede'].sx).toBe(cta.nodes.lede.sx)
+  })
+
+  it('getInstanceStyleOverrides answers only for instances, dropping junk slices', () => {
+    expect(
+      getInstanceStyleOverrides(
+        instanceWith('a', {
+          [STYLE_OVERRIDES_ROOT_KEY]: { py: 2 },
+          headline: { color: '#000' },
+          cleared: {},
+          bogus: 'nope',
+          nulled: null,
+          listy: [1, 2],
+        }) as any,
+      ),
+    ).toEqual({
+      [STYLE_OVERRIDES_ROOT_KEY]: { py: 2 },
+      headline: { color: '#000' },
+    })
+    expect(
+      getInstanceStyleOverrides({
+        componentId: 'muiStack',
+        styleOverrides: { headline: { color: '#000' } },
+      } as any),
+    ).toEqual({})
+    expect(getInstanceStyleOverrides(undefined)).toEqual({})
+    expect(
+      getInstanceStyleOverrides({
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+      } as any),
+    ).toEqual({})
+  })
+
+  it('listInstanceStyleTargets walks the definition in tree order, root first', () => {
+    expect(listInstanceStyleTargets(cta)).toEqual([
+      {
+        key: STYLE_OVERRIDES_ROOT_KEY,
+        componentInternalId: 'root',
+        depth: 0,
+        componentId: 'muiStack',
+        name: undefined,
+        isRoot: true,
+      },
+      {
+        key: 'headline',
+        componentInternalId: 'headline',
+        depth: 1,
+        componentId: 'muiTypography',
+        name: undefined,
+        isRoot: false,
+      },
+      {
+        key: 'lede',
+        componentInternalId: 'lede',
+        depth: 1,
+        componentId: 'muiTypography',
+        name: undefined,
+        isRoot: false,
+      },
+    ])
+    // Every key it offers is a key the graft consults — the panel and the
+    // renderer cannot drift about what a target means.
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWith(
+          'a',
+          Object.fromEntries(
+            listInstanceStyleTargets(cta).map((entry) => [
+              entry.key,
+              { outlineColor: entry.key },
+            ]),
+          ),
+        ),
+      } as any,
+      { cta },
+    )
+    for (const entry of listInstanceStyleTargets(cta)) {
+      expect(composed[`cmp__a__${entry.componentInternalId}`].sx).toHaveProperty(
+        'outlineColor',
+        entry.key,
+      )
+    }
+  })
+
+  it('listInstanceStyleTargets is safe on cycles, orphans and missing input', () => {
+    const looped = {
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'muiStack', nodes: ['a'] },
+        a: { $id: 'a', componentId: 'muiBox', parentId: 'root', nodes: ['root'] },
+        orphan: { $id: 'orphan', componentId: 'muiBox' },
+      },
+    } as any
+    expect(
+      listInstanceStyleTargets(looped).map((entry) => entry.key),
+    ).toEqual([STYLE_OVERRIDES_ROOT_KEY, 'a'])
+    expect(listInstanceStyleTargets(undefined)).toEqual([])
+    expect(listInstanceStyleTargets({ rootId: 'gone', nodes: {} } as any)).toEqual(
+      [],
+    )
+  })
+
+  it('survives save → reload → re-graft, and stays per instance', () => {
+    // The storage hop the field has to clear: a composed map is what a
+    // canvas saves, and the overrides ride the INSTANCE node, not the
+    // graft — so re-composing the reloaded map must rebuild the same look.
+    const nodes = {
+      a: instanceWith('a', {
+        [STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#fff' },
+        headline: { color: '#0B1220' },
+      }),
+      b: instanceWith('b', { headline: { color: '#B7BEC8' } }),
+    } as any
+    const first = composeReusableComponentNodes(nodes, { cta })
+    const saved = JSON.parse(JSON.stringify(first))
+    // A save keeps only the document's own nodes; the graft is regenerated.
+    for (const id of Object.keys(saved)) {
+      if (id.startsWith('cmp__')) delete saved[id]
+    }
+    for (const id of ['a', 'b']) saved[id].nodes = []
+
+    const again = composeReusableComponentNodes(saved, { cta })
+    expect(again['cmp__a__headline'].sx).toEqual(
+      first['cmp__a__headline'].sx,
+    )
+    expect(again['cmp__a__root'].sx).toEqual(first['cmp__a__root'].sx)
+    expect(again['cmp__b__headline'].sx).toHaveProperty('color', '#B7BEC8')
+    expect(again['cmp__b__root'].sx).toEqual(cta.nodes.root.sx)
+  })
+})
+
 describe('instance leaf hit-test (AGL-1304)', () => {
   /** Prop-fed headline + image, a mixed-content caption, a static label. */
   const hero = {
@@ -926,6 +1293,63 @@ describe('detachInstanceSubtree (AGL-1314)', () => {
     expect(detached['a'].componentId).toBe('muiStack')
     expect((detached['a'] as any).styleOverrides).toBeUndefined()
     expect((detached['a'].props as any)?.refId).toBeUndefined()
+  })
+
+  it('bakes PER-LEAF overrides too: the copy is what the graft rendered (AGL-1332)', () => {
+    // The guard rail on the whole feature: detach forks what the page was
+    // showing. A copy that baked only the root would repaint every
+    // overridden headline the moment an author detached — the AGL-1318
+    // white-on-white symptom, arriving through the escape hatch instead.
+    const styled = {
+      ...hero,
+      nodes: {
+        ...hero.nodes,
+        h: { ...hero.nodes.h, sx: { color: 'common.white', fontSize: 32 } },
+        eyebrow: { ...hero.nodes.eyebrow, sx: { color: 'common.white' } },
+      },
+    }
+    const nodes = page(
+      { headline: 'Ship faster' },
+      {
+        styleOverrides: {
+          [STYLE_OVERRIDES_ROOT_KEY]: { backgroundColor: '#fff' },
+          h: { color: '#0B1220' },
+          eyebrow: { color: '#5A6675', letterSpacing: '1px' },
+        },
+      },
+    )
+    const composed = composeReusableComponentNodes(nodes, { hero: styled })
+    const detached = detachInstanceSubtree(nodes, 'a', styled, ids())
+
+    // Leaf for leaf, the detached copy renders the grafted instance's sx.
+    const byGraftId: Record<string, string> = {
+      root: 'a',
+      eyebrow: 'new1',
+      h: 'new2',
+      img: 'new3',
+    }
+    for (const [defId, copyId] of Object.entries(byGraftId)) {
+      expect(detached[copyId].sx).toEqual(
+        (composed[`cmp__a__${defId}`] as any).sx,
+      )
+    }
+    expect(detached['new2'].sx).toEqual({ color: '#0B1220', fontSize: 32 })
+    expect(detached['new1'].sx).toEqual({
+      color: '#5A6675',
+      letterSpacing: '1px',
+    })
+    // And nothing carries the override layer forward — a plain subtree now.
+    expect((detached['a'] as any).styleOverrides).toBeUndefined()
+  })
+
+  it('a stale leaf key detaches without throwing, exactly as it renders', () => {
+    const nodes = page(undefined, {
+      styleOverrides: { gone: { color: '#f00' }, h: { color: '#0B1220' } },
+    })
+    const composed = composeReusableComponentNodes(nodes, { hero })
+    const detached = detachInstanceSubtree(nodes, 'a', hero, ids())
+    expect(detached['new2'].sx).toEqual((composed['cmp__a__h'] as any).sx)
+    expect(detached['new2'].sx).toEqual({ color: '#0B1220' })
   })
 
   it('mints fresh ids and leaves no cmp__ graft prefix behind', () => {
