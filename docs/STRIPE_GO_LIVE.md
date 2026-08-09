@@ -88,7 +88,29 @@ subscription product, Stripe records them and charges no one.
    tenant one summary per month and stamps `emailedAt` on the rollup.
 5. **Validate the rate table** (`METERED_UNIT_RATES_USD` in
    `apps/console/utils/usage-metering.ts`) against a real Firebase + Vercel
-   invoice month before attaching the metered price in live mode.
+   invoice month.
+
+   **Done once, against LIST rates, 2026-08-09 (AGL-1280) — and it still
+   needs redoing against a real invoice.** There was no paid month to
+   measure: GCP's July 2026 invoice totalled **$0.03**, with every storage
+   and egress SKU inside the free tier, and the Vercel team is on **Hobby**,
+   which produces no invoice at all. Two rates were wrong and both were
+   corrected, because the markup is applied to the figures in that table —
+   so a wrong rate does not make us expensive, it makes the published
+   "cost + 30%" claim false:
+
+   | rate | was | now | basis |
+   | -- | -- | -- | -- |
+   | `storagePerGbMonth` | $0.03 | **$0.026** | GCS Standard US multi-region list — the SKU actually on our invoice |
+   | `perPageView` | $0.0001 | **$0.0001** (kept) | validated +2% against a real 627 KB cold tenant page load |
+   | `perFormSubmission` | $0.0005 | **$0.00005** | ~12 Firestore reads + ~9 writes + 1 invocation; no email, no reCAPTCHA |
+
+   `ORG_COGS_UNIT_RATES_USD` in `plan-entitlements.ts` carries the same three
+   figures and was changed with it — they must never drift.
+
+   **Re-validate this table once a real paid month exists**, i.e. once the
+   Vercel team is off Hobby and GCP usage clears the free tier. Until then
+   the rates are list-derived estimates, not measurements.
 6. **Annual subscriptions carry no metered item.** `aglyn_metered_usage` is
    a monthly price and Stripe forbids mixed `recurring.interval` on one
    subscription, so AGL-1340 attaches it to monthly checkouts only. Until a

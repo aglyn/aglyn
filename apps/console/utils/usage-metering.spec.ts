@@ -71,11 +71,11 @@ describe('estimateMonthlyUsageCost', () => {
     const estimate = estimateMonthlyUsageCost(
       [
         {
-          // 10 GB past the 2 GB band → $0.30
+          // 10 GB past the 2 GB band → 10 × $0.026 = $0.26
           storageBytes: (included.storageGb + 10) * GB,
           // exactly the band → free, and it must not drag storage down
           pageViews: included.pageViews,
-          // 200 past the 200 band → $0.10
+          // 200 past the 200 band → 200 × $0.00005 = $0.01
           formSubmissions: included.formSubmissions + 200,
         },
       ],
@@ -84,8 +84,13 @@ describe('estimateMonthlyUsageCost', () => {
     expect(estimate.billableStorageGb).toBeCloseTo(10)
     expect(estimate.billablePageViews).toBe(0)
     expect(estimate.billableFormSubmissions).toBe(200)
-    expect(estimate.billableCostUsd).toBeCloseTo(0.4)
-    expect(estimate.billedCents).toBe(52) // 0.4 × 1.3
+    // Pinned as LITERALS, deliberately: recomputing from
+    // `METERED_UNIT_RATES_USD` would assert only that multiplication works,
+    // and these rates are the numbers a customer is billed against. Corrected
+    // 2026-08-09 (AGL-1280) from $0.03/GB and $0.0005/submission, which made
+    // the published "cost + 30%" false. A diff here means a rate moved.
+    expect(estimate.billableCostUsd).toBeCloseTo(0.27)
+    expect(estimate.billedCents).toBe(35) // 0.27 × 1.3 = 0.351
     // Gross cost is untouched — it is our COGS, which no band reduces.
     expect(estimate.costUsd).toBeGreaterThan(estimate.billableCostUsd)
   })

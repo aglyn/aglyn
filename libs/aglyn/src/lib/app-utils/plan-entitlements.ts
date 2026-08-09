@@ -1133,11 +1133,19 @@ export const INFRA_COGS_PER_SITE_USD = 2
  * the reads behind them. Treat all six as provisional until validated against
  * a real Firebase + Vercel invoice month; AGL-1134 says so out loud rather
  * than implying the numbers are derived.
+ *
+ * The first three were corrected 2026-08-09 (AGL-1280) — storage $0.03 →
+ * $0.026 and form submissions $0.0005 → $0.00005 — and MUST be changed here
+ * and in `METERED_UNIT_RATES_USD` together. See that table for each figure's
+ * basis; it is the one a customer is billed against, so it is the one that
+ * carries the working. Lowering the two here lowers measured COGS, which
+ * changes no guardrail verdict: `INFRA_COGS_PER_SITE_USD × sites` is the
+ * floor, and it already outran measured cost by five orders of magnitude.
  */
 export const ORG_COGS_UNIT_RATES_USD = {
-  storagePerGbMonth: 0.03,
+  storagePerGbMonth: 0.026,
   perPageView: 0.0001,
-  perFormSubmission: 0.0005,
+  perFormSubmission: 0.00005,
   /** Firestore-backed dataset bytes — an order pricier than object storage. */
   dataStoragePerGbMonth: 0.18,
   perApiRequest: 0.000002,
@@ -1947,7 +1955,7 @@ export interface FormSubmissionQuotaResult {
  * Monthly form-submission meter (AGL-76, made coherent in AGL-1280).
  *
  * Submissions were BOTH hard-capped at `formSubmissionsPerMonth` (429) and
- * metered at $0.65/1k — which made the published promise that usage past the
+ * metered — which made the published promise that usage past the
  * included band is billed rather than cut off false for the one meter where
  * being cut off costs the customer a lead. Now it mirrors the other three
  * overage meters exactly: a plan with the metered pass-through always accepts
