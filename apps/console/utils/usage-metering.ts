@@ -15,11 +15,16 @@
  * limitations under the License.
  */
 
+// This module is imported from BOTH graphs — the Billing card (client) and
+// three App Routes (`report-usage`, `usage-alerts`, `host-usage`) — so it may
+// import neither entry barrel: `@aglyn/aglyn` carries the client-only React
+// contexts, and `@aglyn/aglyn/server` carries the `node:stream` API adapter
+// (AGL-405). The specific modules underneath are safe in both.
+import type { AglynOrgBilling } from '@aglyn/aglyn/foundation'
 import {
-  type AglynOrgBilling,
   planMetersInfraOverage,
   resolveOrgEntitlements,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 /**
  * Usage metering (AGL-41): converts per-host counters into an estimated
