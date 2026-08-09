@@ -44,6 +44,17 @@ export interface ComposeCollectionContext {
    * `categoryId`s resolve to display names against it during expansion.
    */
   categories?: Aglyn.CollectionCategory[]
+  /**
+   * The list page the URL asked for (AGL-1321). Fills in an entries block
+   * that declares `perPage` but no `page` — design time cannot know which
+   * page a visitor is on.
+   */
+  page?: number
+  /**
+   * The category segment the URL filtered on (AGL-1321); marks the current
+   * pill in a Category Pills block. `entries` arrives already filtered.
+   */
+  categorySlug?: string
 }
 
 /**
@@ -59,11 +70,22 @@ async function expandCollectionEntryBlocks(
 ): Promise<Record<string, any>> {
   const slugs = new Set<string>()
   let hasRelated = false
+  let hasCategories = false
   for (const node of Object.values(nodes)) {
     if (node?.componentId === Aglyn.COLLECTION_ENTRIES_COMPONENT_ID) {
       const slug =
         String(node?.props?.collectionSlug ?? '').trim() || collection?.slug
       if (slug) slugs.add(slug)
+    }
+    // Category pills (AGL-1321) need only the taxonomy, but it rides on the
+    // same source, so they count as a reason to resolve one.
+    if (node?.componentId === Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID) {
+      const slug =
+        String(node?.props?.collectionSlug ?? '').trim() || collection?.slug
+      if (slug) {
+        hasCategories = true
+        slugs.add(slug)
+      }
     }
     // Related posts (AGL-582) always resolve against the ROUTED collection
     // — they only mean something with a current entry in context.
@@ -87,6 +109,9 @@ async function expandCollectionEntryBlocks(
           slug,
           entries: collection.entries,
           categories: collection.categories,
+          // Only the ROUTED collection carries the URL's page (AGL-1321) — a
+          // block bound to another collection must not inherit it.
+          ...(collection.page ? { page: collection.page } : {}),
         }
         return
       }
@@ -109,9 +134,17 @@ async function expandCollectionEntryBlocks(
     sources,
     collection?.slug,
   )
-  if (!hasRelated || !collection?.entry) return expanded
+  const withCategories = hasCategories
+    ? Aglyn.expandCollectionCategories(
+        expanded,
+        sources,
+        collection?.slug,
+        collection?.categorySlug,
+      )
+    : expanded
+  if (!hasRelated || !collection?.entry) return withCategories
   return Aglyn.expandCollectionRelated(
-    expanded,
+    withCategories,
     sources[collection.slug],
     collection.entry,
   )

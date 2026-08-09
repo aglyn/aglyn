@@ -17,8 +17,11 @@
 
 import {
   type CollectionCategory,
+  collectionCategorySlug,
   collectionTotalPages,
+  entryMatchesCategoryRoute,
   hostCollectionKind,
+  resolveCollectionCategoryBySlug,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
@@ -180,7 +183,28 @@ export interface CollectionContent {
   entry: CollectionEntrySummary | null
   /** List pagination (AGL-620); null for entry pages or unpaginated lists. */
   pagination?: CollectionPagination | null
+  /**
+   * The category this listing is filtered to (AGL-1321); null on the
+   * canonical unfiltered list and on entry pages.
+   */
+  category?: CollectionRouteCategory | null
   error: unknown
+}
+
+/** The category a `/{collection}/category/{slug}` route addresses (AGL-1321). */
+export interface CollectionRouteCategory {
+  /** The URL segment, normalized — what the canonical link must say. */
+  slug: string
+  /** Taxonomy id; absent when the segment matched no known category. */
+  id?: string
+  /** Display label; falls back to the raw segment for an unknown category. */
+  name: string
+  /**
+   * Whether the segment resolved against the collection's taxonomy. An
+   * unknown category still renders — an empty listing, not a crash — but the
+   * page must not invite indexing of a URL that names nothing.
+   */
+  known: boolean
 }
 
 export interface CollectionPagination {
@@ -301,6 +325,12 @@ export async function getCollectionContent(options: {
   page?: number
   /** Entries per page (AGL-620); when set the list is paginated. */
   perPage?: number
+  /**
+   * Category segment of `/{collection}/category/{slug}` (AGL-1321). Filters
+   * the listing before pagination is computed, so page counts and the page
+   * windows describe the FILTERED set rather than the whole collection.
+   */
+  categorySlug?: string
 }): Promise<CollectionContent> {
   const { hostId, collectionSlug, entrySlug, page = 1, perPage } = options
   const data: CollectionContent = {
@@ -308,6 +338,7 @@ export async function getCollectionContent(options: {
     entries: [],
     entry: null,
     pagination: null,
+    category: null,
     error: null,
   }
   try {
@@ -352,6 +383,32 @@ export async function getCollectionContent(options: {
     }
 
     data.entries = await listLiveEntries(entriesRef)
+
+    // Category filter (AGL-1321). Applied HERE, before pagination, because
+    // the two have to describe the same set: counting pages over the whole
+    // collection and then filtering would advertise pages that render empty
+    // and hide entries that exist.
+    const routedCategory = (options.categorySlug ?? '').trim()
+    if (routedCategory) {
+      const match = resolveCollectionCategoryBySlug(
+        data.collection.categories,
+        routedCategory,
+      )
+      data.category = {
+        slug: collectionCategorySlug(routedCategory),
+        ...(match ? { id: match.id } : {}),
+        name: match?.name ?? routedCategory,
+        known: Boolean(match),
+      }
+      data.entries = data.entries.filter((entry) =>
+        entryMatchesCategoryRoute(
+          entry,
+          { slug: routedCategory, ...(match ? { category: match } : {}) },
+          data.collection?.categories,
+        ),
+      )
+    }
+
     if (perPage && perPage > 0) {
       const totalEntries = data.entries.length
       data.pagination = {

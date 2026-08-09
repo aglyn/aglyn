@@ -23,6 +23,7 @@ import {
   mdiNewspaperVariantOutline,
   mdiPostOutline,
   mdiShareVariant,
+  mdiTagMultipleOutline,
   mdiTagOutline,
   mdiTextLong,
   mdiTwitter,
@@ -50,6 +51,8 @@ export const RELATED_ID: Aglyn.ComponentId =
 export const SHARE_ID: Aglyn.ComponentId = Aglyn.COLLECTION_SHARE_COMPONENT_ID
 export const ENTRY_META_ID: Aglyn.ComponentId =
   Aglyn.COLLECTION_ENTRY_META_COMPONENT_ID
+export const CATEGORIES_ID: Aglyn.ComponentId =
+  Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID
 
 /* ── Collection entries (repeater) ──────────────────────────────────────── */
 
@@ -802,6 +805,141 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
     ],
   }
 
+/* ── Category pills (AGL-1321) ──────────────────────────────────────────── */
+
+export interface CollectionCategoriesProps extends StackProps {
+  /**
+   * Collection whose taxonomy renders (compose-time). Blank = the collection
+   * routed by the current URL on list-template screens.
+   */
+  collectionSlug?: string
+  /** Label for the unfiltered pill; empty string omits it (default "All"). */
+  allLabel?: string
+  /**
+   * Server-stamped pill links (`expandCollectionCategories`); never set by
+   * hand — the tenant builds them from the collection's categories and the
+   * routed category.
+   */
+  items?: Aglyn.CollectionCategoryLink[]
+}
+
+/** Pill look, in palette tokens so it follows the site theme in both modes. */
+const pillSx = (active: boolean) => ({
+  px: 1.75,
+  py: 0.75,
+  borderRadius: 999,
+  border: '1px solid',
+  borderColor: active ? 'primary.main' : 'divider',
+  bgcolor: active ? 'primary.main' : 'transparent',
+  color: active ? 'primary.contrastText' : 'text.secondary',
+  fontSize: 14,
+  lineHeight: 1.2,
+  whiteSpace: 'nowrap',
+  '&:hover': {
+    borderColor: active ? 'primary.main' : 'text.primary',
+    color: active ? 'primary.contrastText' : 'text.primary',
+  },
+})
+
+/**
+ * The category filter row for a collection listing (AGL-1321): "All" plus one
+ * pill per category, each a REAL anchor to `/{collection}/category/{slug}`.
+ *
+ * Anchors, not click handlers, and that is the whole design. A JS-only toggle
+ * would be invisible to crawlers, unopenable in a new tab, unlinkable, and
+ * unreachable without hydration — and it could not exist anyway, since the
+ * filter is resolved server-side before the page is composed. The pill the
+ * current URL selected carries `aria-current="page"`, stamped on the server so
+ * it is in the HTML rather than derived after hydration.
+ */
+const CollectionCategories = forwardRef<
+  HTMLDivElement,
+  CollectionCategoriesProps
+>((props, ref) => {
+  // `collectionSlug`/`allLabel` are compose-time: the tenant resolves them
+  // while stamping `items`; strip so they never hit the DOM.
+  const { collectionSlug, allLabel, items, ...rest } = props
+  const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+  if (!items?.length) {
+    if (!suppressNavigation) return <Box ref={ref} {...rest} />
+    return (
+      <Box
+        ref={ref}
+        {...rest}
+        sx={{
+          p: 2,
+          border: '1px dashed',
+          borderColor: 'divider',
+          color: 'text.secondary',
+          fontSize: 12,
+          fontFamily: 'system-ui, sans-serif',
+        }}
+      >
+        {'Category pills — All + one pill per collection category render here'}
+      </Box>
+    )
+  }
+  return (
+    <MuiStack
+      ref={ref}
+      direction="row"
+      spacing={1}
+      {...rest}
+      sx={{ flexWrap: 'wrap', rowGap: 1, ...(rest.sx as object) }}
+    >
+      {items.map((item) =>
+        // Editing surfaces render the pill look without an href, so a click
+        // in the besigner never navigates the canvas away.
+        suppressNavigation ? (
+          <Box key={item.href} sx={pillSx(item.active)}>
+            {item.label}
+          </Box>
+        ) : (
+          <AppLink
+            key={item.href}
+            href={item.href}
+            underline="none"
+            aria-current={item.active ? 'page' : undefined}
+            sx={pillSx(item.active)}
+          >
+            {item.label}
+          </AppLink>
+        ),
+      )}
+    </MuiStack>
+  )
+})
+CollectionCategories.displayName = 'AglynCollectionCategories'
+
+export const collectionCategoriesSchema: Aglyn.ComponentSchema<CollectionCategoriesProps> =
+  {
+    $id: CATEGORIES_ID,
+    pluginId: BUNDLE_ID,
+    displayName: 'Category Pills',
+    category: Aglyn.ComponentCategory.NAVIGATION,
+    icon: { path: mdiTagMultipleOutline.path, sx: { color: '#00796b' } },
+    flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
+    attributes: [
+      {
+        name: 'collectionSlug',
+        label: 'Collection slug',
+        description:
+          'Content collection whose categories render as pills (e.g. ' +
+          '"blog"). Leave blank on a list-template screen to use the ' +
+          'collection from the URL.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'allLabel',
+        label: 'All label',
+        description:
+          'Label for the unfiltered pill, which links to the collection ' +
+          'root (default "All"). Clear it to omit that pill.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+    ],
+  }
+
 /* ── Presets ────────────────────────────────────────────────────────────── */
 
 const entryText = (variant: string, children: string, extra?: object) => ({
@@ -902,6 +1040,22 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     },
   },
   {
+    $id: generatePresetId(CATEGORIES_ID),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Category Pills',
+    pluginId: BUNDLE_ID,
+    description:
+      "Links to each of the collection's categories, filtering the listing",
+    category: Aglyn.ComponentCategory.NAVIGATION,
+    icon: { path: mdiTagMultipleOutline.path, sx: { color: '#00796b' } },
+    data: {
+      $id: null,
+      componentId: CATEGORIES_ID,
+      pluginId: BUNDLE_ID,
+      props: { allLabel: 'All' },
+    },
+  },
+  {
     $id: generatePresetId(ENTRY_META_ID),
     type: Aglyn.NodeType.PRESET,
     displayName: 'Entry Meta',
@@ -923,6 +1077,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
 ]
 
 export {
+  CollectionCategories,
   CollectionEntries,
   CollectionEntryBody,
   CollectionEntryMeta,

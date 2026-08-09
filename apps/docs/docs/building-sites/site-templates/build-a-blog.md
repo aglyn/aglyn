@@ -131,6 +131,31 @@ in the block library:
   category/tags or nothing matches.
 - **Share Bar** — X, LinkedIn, Facebook, and copy-link buttons for the current page
   URL. Attribute: **Heading** (default "Share").
+- **Category Pills** — the collection's categories as a row of links: **All** plus one
+  pill per category. Drop it on the **list template screen**, above the Collection
+  Entries block. Attributes: **Collection slug** (blank = the collection from the URL)
+  and **All label** (default "All"; clear it to omit that pill). Renders nothing until
+  the collection has categories.
+
+### Category filtering
+
+Each pill is a real link to `/{collection}/category/{category}`, which renders the
+**same list template** with only that category's entries. Nothing to wire: the pills are
+built from the collection's categories and the current one is highlighted
+automatically.
+
+Because the category is part of the **path** rather than a `?query=`, each filtered
+listing is its own cacheable, linkable, indexable page — it can be shared, opened in a
+new tab, and crawled. **All** is the bare `/{collection}`, so the unfiltered listing
+never gains a second address.
+
+A category with no published entries renders the listing with the pills and an empty
+state, so readers can pick another one. Pagination composes with the filter: page 2 of a
+category lives at `/{collection}/category/{category}/page/2`, and page counts describe
+the filtered set. Category listings join the sitemap automatically.
+
+Pills address a category by its **stable id**, so renaming a category changes the label
+without breaking its links.
 
 ### Entry tokens
 
@@ -148,6 +173,8 @@ in the block library:
 | `{{entry.seoTitle}}` | SEO title (falls back to the title) |
 | `{{entry.seoDescription}}` | SEO description (falls back to the excerpt) |
 | `{{collection.name}}` / `{{collection.slug}}` | The routed collection |
+| `{{collection.category}}` | Name of the category the URL filtered on (empty when unfiltered) |
+| `{{collection.categorySlug}}` | That category's URL segment (empty when unfiltered) |
 
 :::tip Recent posts anywhere
 The Collection Entries block also works on **any** screen — set its **Collection slug**
@@ -176,7 +203,8 @@ end returns 404.
 On your own **list template screen**, turn on pagination by setting the **Collection
 Entries** block's **Entries per page** attribute; it then renders the page from the URL
 (the **Page** attribute overrides it for a fixed page). Without **Entries per page**, the
-block shows the top **Entries limit** entries as before.
+block shows the top **Entries limit** entries as before. The same applies inside a
+category: `/{collection}/category/{category}/page/2`.
 
 ## 4. Publish & syndicate
 
