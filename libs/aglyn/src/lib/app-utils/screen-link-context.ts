@@ -75,6 +75,25 @@ export interface ResolvedScreenLink {
 }
 
 /**
+ * Turns a screen id into its current href against a routing map, or
+ * `undefined` when there is no id or the id has no entry (unpublished or
+ * deleted). Pure and hook-free on purpose: an element that resolves ONE
+ * target uses {@link useScreenLink}, but a row of them — the Tabs strip's
+ * per-tab links (AGL-1312) — cannot call a hook per item, and the
+ * map-to-path contract (root is `'/'`, everything else gains a leading
+ * slash) must have exactly one implementation.
+ */
+export function resolveScreenHref(
+  screens: ScreenRouteMap | undefined,
+  screenId: string | null | undefined,
+): string | undefined {
+  if (!screenId) return undefined
+  const path = screens?.[screenId]
+  if (path === undefined) return undefined
+  return path === '/' ? '/' : `/${path}`
+}
+
+/**
  * Resolves a screen id to its current href. Memoized on the routing-map
  * identity: a slug rename, parent-slug change, or re-parent produces a new
  * map value, so cached hrefs reset exactly when the map changes. Returns no
@@ -87,8 +106,8 @@ export function useScreenLink(
   const { screens, suppressNavigation, editorInert } = useContext(ScreenLinkContext)
   const href = useMemo(() => {
     if (!screenId) return undefined
-    const path = screens?.[screenId]
-    if (path === undefined) {
+    const resolved = resolveScreenHref(screens, screenId)
+    if (resolved === undefined) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn(
           `[ScreenLink] screen "${screenId}" has no routing-map entry — ` +
@@ -97,7 +116,7 @@ export function useScreenLink(
       }
       return undefined
     }
-    return path === '/' ? '/' : `/${path}`
+    return resolved
   }, [screenId, screens])
   return {
     href,

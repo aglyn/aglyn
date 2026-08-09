@@ -71,6 +71,26 @@ function parseLabels(value: unknown): string[] {
     .filter(Boolean)
 }
 
+/**
+ * The label the strip opens on, which is NOT always the first one: a tab
+ * carrying a screen link navigates instead of revealing a panel, so a
+ * navigation row lands on the first tab WITHOUT a link (AGL-1312 — the row
+ * is placed on each screen it names, and there the tab for that screen is
+ * the unlinked one). Every tab linked means no panel is really open, and
+ * the client falls back to the first label; this must too, or it withholds
+ * the one panel the reader is looking at.
+ *
+ * Duplicated from the mui plugin's prop names for the same reason
+ * `parseLabels` is: tenant-runtime must not depend on a plugin bundle.
+ */
+function landingLabel(props: Record<string, any>): string | undefined {
+  const labels = parseLabels(props?.labels)
+  const index = labels.findIndex(
+    (_label, position) => !props?.[`tabLink${position + 1}`],
+  )
+  return labels[index < 0 ? 0 : index]
+}
+
 const labelsMatch = (a: unknown, b: unknown): boolean =>
   String(a ?? '')
     .trim()
@@ -112,13 +132,13 @@ export function deferLazyPanelNodes(
     )
     if (!labels.length || panelIds.length < 2) continue
 
-    // The landing panel is the one matching the FIRST label, not the first
+    // The landing panel is the one matching the landing LABEL, not the first
     // child: panels can be reordered in the hierarchy independently of the
     // label list, and pruning the panel that is actually open would leave the
     // reader looking at an empty tab. If no panel matches, defer NOTHING —
     // a mislabelled set is exactly when guessing is most expensive.
     const landing = panelIds.find((panelId) =>
-      labelsMatch(nodes[panelId]?.props?.label, labels[0]),
+      labelsMatch(nodes[panelId]?.props?.label, landingLabel(node.props)),
     )
     if (!landing) continue
 

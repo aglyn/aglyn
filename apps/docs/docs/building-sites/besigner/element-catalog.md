@@ -97,6 +97,22 @@ On the **canvas** every panel is shown stacked, each captioned with the tab it b
 — a hidden panel can't be edited, and a caption with a name you don't recognise is a
 label typo you can see. Preview and the published site show one at a time.
 
+#### Tabs that go to another screen
+
+A row like **Blog · Changelog · Newsroom** isn't really a tab strip — it's navigation
+between three separate screens. Give a tab a screen and it becomes one: pick the target in
+**Tab 1 link**, **Tab 2 link** and so on, one picker per tab you've named. Those tabs
+render as real links, so they open in a new tab, they're followed by search engines, and
+they no longer switch panels.
+
+Leave the link **unset** for the tab of the page the row is already on — a page that links
+to itself helps nobody — and that tab is marked as the current one. Mixing the two is
+fine: unlinked tabs keep revealing their own Tab Panel.
+
+As soon as one tab has a link the whole row is marked up as **navigation** rather than as a
+tab list, which is what it now is. Give it a name in **Accessible label** so it doesn't
+land in a screen reader's landmark list as another "Tabs".
+
 ### Pagination
 
 Pagination renders the control and highlights the page a visitor picks. It does **not** by

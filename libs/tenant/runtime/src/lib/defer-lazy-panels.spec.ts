@@ -27,6 +27,8 @@ const doc = (opts: {
   lazyPanels?: boolean
   panelLabels?: string[]
   panelOrder?: string[]
+  /** Extra props on the Tabs node, e.g. the per-tab links of AGL-1312. */
+  tabProps?: Record<string, any>
 }): Record<string, any> => {
   const {
     labels = 'One\nTwo\nThree',
@@ -45,6 +47,7 @@ const doc = (opts: {
         labels,
         ...(ssrPanels ? { ssrPanels: true } : {}),
         ...(lazyPanels ? { lazyPanels: true } : {}),
+        ...(opts.tabProps ?? {}),
       },
       nodes: order.map((l) => `panel-${l}`),
     },
@@ -127,6 +130,42 @@ describe('deferLazyPanelNodes (AGL-1285)', () => {
   it('follows the label list, not the child order', () => {
     const result = deferLazyPanelNodes(
       doc({ panelOrder: ['Three', 'Two', 'One'] }),
+    )
+    expect(result.nodes['text-One']).toBeDefined()
+    expect(result.deferredPanelIds.sort()).toEqual([
+      'panel-Three',
+      'panel-Two',
+    ])
+  })
+
+  /**
+   * A tab carrying a screen link navigates instead of opening a panel
+   * (AGL-1312), so the strip lands on the first tab WITHOUT one. Withholding
+   * by the first LABEL would prune the panel the reader is actually looking
+   * at — the client would then land on the "Loading…" placeholder.
+   */
+  it('lands where the client lands when the first tabs are links', () => {
+    const result = deferLazyPanelNodes(
+      doc({ tabProps: { tabLink1: 'screen-a' } }),
+    )
+    expect(result.nodes['text-Two']).toBeDefined()
+    expect(result.deferredPanelIds.sort()).toEqual([
+      'panel-One',
+      'panel-Three',
+    ])
+  })
+
+  it('falls back to the first label when every tab is a link', () => {
+    // Nothing is really open; the client shows the first panel, so this
+    // must keep the first panel too.
+    const result = deferLazyPanelNodes(
+      doc({
+        tabProps: {
+          tabLink1: 'screen-a',
+          tabLink2: 'screen-b',
+          tabLink3: 'screen-c',
+        },
+      }),
     )
     expect(result.nodes['text-One']).toBeDefined()
     expect(result.deferredPanelIds.sort()).toEqual([
