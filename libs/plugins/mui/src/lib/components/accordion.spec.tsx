@@ -191,6 +191,29 @@ describe('Accordion summary with a linked header (AGL-1232)', () => {
     expect(detailsExpanded()).toBe(true)
   })
 
+  it('keeps the same element whether or not the screen resolves (AGL-1268)', () => {
+    // `href` comes from the screens map, so it can differ between the render
+    // that produced a cached page and the render that hydrates it. If the
+    // label were an `<a>` in one and a `<span>` in the other, that is an
+    // element-type change at hydration, not a class mismatch — React remounts
+    // the subtree. Link Container shipped this exact bug (AGL-1268).
+    const resolved = renderSite(linkedPanel()).container
+    const unresolved = renderSite(linkedPanel('scr_deleted')).container
+    const suppressed = renderEditor(linkedPanel()).container
+
+    const labelTag = (root: HTMLElement) =>
+      root.querySelector('.MuiLink-root')?.tagName
+
+    expect(labelTag(resolved)).toBe('A')
+    expect(labelTag(unresolved)).toBe('A')
+    expect(labelTag(suppressed)).toBe('A')
+    // Still not a link: an anchor with no href has no link role and is not
+    // in the tab order, so neither surface offers a dead destination.
+    expect(
+      unresolved.querySelector('.MuiLink-root')?.getAttribute('href'),
+    ).toBeNull()
+  })
+
   it('composes the author sx after its own layout, never before', () => {
     const { container } = renderSite(
       <AccordionElement>
