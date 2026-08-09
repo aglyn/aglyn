@@ -5,7 +5,7 @@
   "frameName": "Pricing — Mobile",
   "frameSize": {
     "width": 375,
-    "height": 9700
+    "height": 9678
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -392,7 +392,7 @@
       "name": "Compare features",
       "order": 2,
       "widthPx": 375,
-      "heightPx": 2611,
+      "heightPx": 2571,
       "groups": [
         {
           "figmaNodeId": "268:1992",
@@ -559,14 +559,6 @@
               "cells": [
                 "Multilingual sites",
                 "—"
-              ]
-            },
-            {
-              "figmaNodeId": "268:2051",
-              "name": "row",
-              "cells": [
-                "Site backup & restore",
-                "✓ Included"
               ]
             },
             {
@@ -779,7 +771,7 @@
               "name": "row",
               "cells": [
                 "Product reviews",
-                "—"
+                "✓ Included"
               ]
             },
             {
@@ -787,7 +779,7 @@
               "name": "row",
               "cells": [
                 "Abandoned cart recovery",
-                "—"
+                "✓ Included"
               ]
             },
             {
@@ -803,7 +795,7 @@
               "name": "row",
               "cells": [
                 "Commerce analytics",
-                "—"
+                "✓ Included"
               ]
             },
             {
@@ -903,7 +895,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 375,
-      "heightPx": 1145,
+      "heightPx": 1163,
       "groups": [
         {
           "figmaNodeId": "268:2170",
@@ -1099,7 +1091,7 @@
               "name": "fa",
               "cells": [
                 "Event Calendar (add-on)",
-                "$9 / mo"
+                "$9 / mo · per organization"
               ]
             },
             {

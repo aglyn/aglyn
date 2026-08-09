@@ -5,7 +5,7 @@
   "frameName": "Pricing — Tablet",
   "frameSize": {
     "width": 768,
-    "height": 8076
+    "height": 8014
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -371,7 +371,7 @@
       "name": "Compare features",
       "order": 2,
       "widthPx": 768,
-      "heightPx": 2824,
+      "heightPx": 2780,
       "groups": [
         {
           "figmaNodeId": "572:3095",
@@ -618,21 +618,6 @@
                 "—",
                 "—",
                 "—",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3370",
-              "name": "row",
-              "cells": [
-                "Site backup & restore",
-                "—",
-                "—",
-                "✓",
                 "✓",
                 "✓",
                 "✓",
@@ -1028,7 +1013,7 @@
                 "Product reviews",
                 "—",
                 "—",
-                "—",
+                "✓",
                 "✓",
                 "✓",
                 "✓",
@@ -1043,7 +1028,7 @@
                 "Abandoned cart recovery",
                 "—",
                 "—",
-                "—",
+                "✓",
                 "✓",
                 "✓",
                 "✓",
@@ -1073,7 +1058,7 @@
                 "Commerce analytics",
                 "—",
                 "—",
-                "—",
+                "✓",
                 "✓",
                 "✓",
                 "✓",
@@ -1241,7 +1226,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 768,
-      "heightPx": 1184,
+      "heightPx": 1166,
       "groups": [
         {
           "figmaNodeId": "572:4087",
@@ -1409,7 +1394,7 @@
               "figmaNodeId": "572:4238",
               "name": null,
               "cells": [
-                "First-party event calendar with RSVPs, per site."
+                "First-party event calendar with RSVPs, per organization."
               ]
             },
             {
@@ -1439,7 +1424,7 @@
               "name": "h",
               "cells": [
                 "Metered infrastructure — passed through at cost + 30%",
-                "Usage beyond your plan’s included storage, bandwidth, and form submissions is metered monthly at our actual provider cost (Firebase + Vercel) plus a flat 30% — no hidden markup, itemized on every invoice."
+                "Usage of storage, bandwidth, and form submissions is metered monthly at our actual provider cost (Firebase + Vercel) plus a flat 30% — no hidden markup, itemized on every invoice."
               ]
             },
             {

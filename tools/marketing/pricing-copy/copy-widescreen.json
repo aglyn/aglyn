@@ -5,7 +5,7 @@
   "frameName": "Pricing — Widescreen",
   "frameSize": {
     "width": 1920,
-    "height": 6791
+    "height": 6705
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -88,7 +88,7 @@
         {
           "figmaNodeId": "572:1230",
           "name": "row",
-          "widthPx": 1280,
+          "widthPx": 1488,
           "records": [
             {
               "figmaNodeId": "572:1232",
@@ -259,7 +259,7 @@
         {
           "figmaNodeId": "572:1383",
           "name": "scale-strip",
-          "widthPx": 1280,
+          "widthPx": 1488,
           "records": [
             {
               "figmaNodeId": "572:1384",
@@ -371,12 +371,12 @@
       "name": "Compare features",
       "order": 2,
       "widthPx": 1920,
-      "heightPx": 2777,
+      "heightPx": 2733,
       "groups": [
         {
           "figmaNodeId": "572:1423",
           "name": "hh",
-          "widthPx": 1280,
+          "widthPx": 1488,
           "records": [
             {
               "figmaNodeId": "572:1423",
@@ -392,7 +392,7 @@
         {
           "figmaNodeId": "572:1428",
           "name": "Feature table",
-          "widthPx": 1280,
+          "widthPx": 1488,
           "records": [
             {
               "figmaNodeId": "572:1429",
@@ -604,21 +604,6 @@
                 "—",
                 "—",
                 "—",
-                "✓",
-                "✓",
-                "✓",
-                "✓",
-                "✓"
-              ]
-            },
-            {
-              "figmaNodeId": "572:1698",
-              "name": "row",
-              "cells": [
-                "Site backup & restore",
-                "—",
-                "—",
-                "✓",
                 "✓",
                 "✓",
                 "✓",
@@ -1014,7 +999,7 @@
                 "Product reviews",
                 "—",
                 "—",
-                "—",
+                "✓",
                 "✓",
                 "✓",
                 "✓",
@@ -1029,7 +1014,7 @@
                 "Abandoned cart recovery",
                 "—",
                 "—",
-                "—",
+                "✓",
                 "✓",
                 "✓",
                 "✓",
@@ -1059,7 +1044,7 @@
                 "Commerce analytics",
                 "—",
                 "—",
-                "—",
+                "✓",
                 "✓",
                 "✓",
                 "✓",
@@ -1227,12 +1212,12 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 1920,
-      "heightPx": 1092,
+      "heightPx": 1074,
       "groups": [
         {
           "figmaNodeId": "572:2415",
           "name": "hh",
-          "widthPx": 1280,
+          "widthPx": 1488,
           "records": [
             {
               "figmaNodeId": "572:2415",
@@ -1248,7 +1233,7 @@
         {
           "figmaNodeId": "572:2420",
           "name": "Metered table",
-          "widthPx": 1280,
+          "widthPx": 1488,
           "records": [
             {
               "figmaNodeId": "572:2421",
@@ -1367,7 +1352,7 @@
         {
           "figmaNodeId": "572:2561",
           "name": "cards",
-          "widthPx": 1280,
+          "widthPx": 1488,
           "records": [
             {
               "figmaNodeId": "572:2563",
@@ -1381,7 +1366,7 @@
               "figmaNodeId": "572:2566",
               "name": null,
               "cells": [
-                "First-party event calendar with RSVPs, per site."
+                "First-party event calendar with RSVPs, per organization."
               ]
             },
             {
@@ -1404,14 +1389,14 @@
         {
           "figmaNodeId": "572:2572",
           "name": "pass-through",
-          "widthPx": 1280,
+          "widthPx": 1488,
           "records": [
             {
               "figmaNodeId": "572:2573",
               "name": "h",
               "cells": [
                 "Metered infrastructure — passed through at cost + 30%",
-                "Usage beyond your plan’s included storage, bandwidth, and form submissions is metered monthly at our actual provider cost (Firebase + Vercel) plus a flat 30% — no hidden markup, itemized on every invoice."
+                "Usage of storage, bandwidth, and form submissions is metered monthly at our actual provider cost (Firebase + Vercel) plus a flat 30% — no hidden markup, itemized on every invoice."
               ]
             },
             {
@@ -1468,7 +1453,7 @@
       "name": "FAQ",
       "order": 4,
       "widthPx": 1920,
-      "heightPx": 689,
+      "heightPx": 665,
       "groups": [
         {
           "figmaNodeId": "572:2607",
@@ -1487,7 +1472,7 @@
         {
           "figmaNodeId": "572:2608",
           "name": "grid",
-          "widthPx": 1280,
+          "widthPx": 1488,
           "records": [
             {
               "figmaNodeId": "572:2609",
