@@ -37,7 +37,7 @@ export interface EventListProps {
   maxItems?: number
 }
 
-interface EventItem {
+export interface EventItem {
   $id: string
   title: string
   startsAtMs: number
@@ -46,6 +46,58 @@ interface EventItem {
   organizer?: string | null
   description?: string | null
   coverImage?: string | null
+}
+
+/**
+ * One event as its `schema.org/Event` JSON-LD string (AGL-143/145).
+ *
+ * Lifted out of the JSX so the structured data can be asserted on its own,
+ * which is what the surface is FOR — it is markup no human ever sees, so a
+ * render test that only checks the visible list proves nothing about it.
+ */
+export function eventJsonLd(event: EventItem): string {
+  // The cover, and only if a crawler could actually fetch it (AGL-1351).
+  //
+  // Calling the shared resolver with NO host is how this surface says "accept
+  // what is already absolute, and nothing else": with no origin to resolve
+  // against it returns undefined for a site-relative path and for a `media:`
+  // reference alike, so neither can reach the markup. The origin lives on the
+  // host record, which only the server holds — `/api/events/list` resolves
+  // each cover there, so in practice an already-absolute URL passes straight
+  // through and this stands as the guarantee that the node is never emitted
+  // with an address a crawler cannot follow, whatever the payload contains.
+  //
+  // Deliberately NOT `window.location.origin`: on the console's Preview
+  // surface that is the console, and the markup would then name this site's
+  // image on a URL belonging to a different one.
+  const image = Aglyn.resolveSocialImage({
+    sources: [{ image: event.coverImage }],
+    host: undefined,
+  })
+  return Aglyn.safeJsonLd({
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: event.title,
+    startDate: new Date(event.startsAtMs).toISOString(),
+    ...(event.endsAtMs && {
+      endDate: new Date(event.endsAtMs).toISOString(),
+    }),
+    ...(event.location && {
+      location: { '@type': 'Place', name: event.location },
+    }),
+    ...(event.organizer && {
+      organizer: {
+        '@type': 'Organization',
+        name: event.organizer,
+      },
+    }),
+    ...(event.description && {
+      description: event.description,
+    }),
+    // Absent rather than `"image": [null]` — `strictNullChecks` is off
+    // repo-wide, so this guard is what keeps an unresolvable cover out.
+    ...(image && { image: [image.url] }),
+  })
 }
 
 /**
@@ -150,33 +202,10 @@ const EventList = forwardRef<HTMLDivElement, EventListProps>((props, ref) => {
               <Typography variant="body2">{event.description}</Typography>
             ) : null}
           </Stack>
-          {/* schema.org Event (AGL-143/145). */}
+          {/* schema.org Event (AGL-143/145), built above. */}
           <script
             type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: Aglyn.safeJsonLd({
-                '@context': 'https://schema.org',
-                '@type': 'Event',
-                name: event.title,
-                startDate: new Date(event.startsAtMs).toISOString(),
-                ...(event.endsAtMs && {
-                  endDate: new Date(event.endsAtMs).toISOString(),
-                }),
-                ...(event.location && {
-                  location: { '@type': 'Place', name: event.location },
-                }),
-                ...(event.organizer && {
-                  organizer: {
-                    '@type': 'Organization',
-                    name: event.organizer,
-                  },
-                }),
-                ...(event.description && {
-                  description: event.description,
-                }),
-                ...(event.coverImage && { image: [event.coverImage] }),
-              }),
-            }}
+            dangerouslySetInnerHTML={{ __html: eventJsonLd(event) }}
           />
         </Stack>
       ))}
