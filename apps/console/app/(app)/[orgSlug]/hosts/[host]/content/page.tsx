@@ -28,6 +28,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Alert,
   Button,
   Chip,
   Dialog,
@@ -680,6 +681,100 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     [selected, confirm, firestore, hostId, enqueueSnackbar, logActivity],
   )
 
+  /**
+   * Delete collection (AGL-1324). "New collection" existed and no delete
+   * affordance did anywhere, so a mis-created collection was permanent.
+   *
+   * Admin-only like the site delete (`DeleteSiteCard`) — removing a
+   * collection removes the /{slug} routes the site publishes, which is not
+   * a content edit. The route re-checks the role; this only hides a control
+   * that would 403.
+   */
+  const isSiteAdmin =
+    hostDoc?.memberRoles?.[(user as any)?.uid] === 'admin'
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const screensById = useMemo(() => {
+    const map: Record<string, Aglyn.CollectionTemplateScreen> = {}
+    for (const screen of screenDocs ?? []) {
+      map[(screen as any).$id] = {
+        displayName: (screen as any).displayName,
+        deletedAt: (screen as any).deletedAt,
+      }
+    }
+    return map
+  }, [screenDocs])
+  /**
+   * The same rule the route enforces, run here for fast feedback — so the
+   * dialog can NAME what still depends on the collection instead of arming
+   * a button that 409s. The server owns the truth: `entries` is capped at
+   * 200 by the listener above, while the route counts them for real.
+   */
+  const deleteDenial = useMemo(
+    () =>
+      selected
+        ? Aglyn.collectionDeleteDenial({
+            displayName: selected.displayName ?? '',
+            entryCount: entries.length,
+            bindings: Aglyn.collectionTemplateBindings(selected, screensById),
+          })
+        : null,
+    [selected, entries.length, screensById],
+  )
+  const handleDeleteCollection = useCallback(async () => {
+    if (!selected || deleteBusy) return
+    const name = selected.displayName ?? ''
+    const deletedId = selected.$id
+    setDeleteBusy(true)
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      // recursiveDelete is Admin-SDK-only and the rules deny a client delete
+      // of a collection doc (AGL-947), so this goes through the shared erase
+      // route — never a hand-rolled loop over `entries`.
+      const response = await fetch('/api/resources/erase', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          scope: 'hosts',
+          scopeId: hostId,
+          kind: 'collections',
+          id: deletedId,
+          // Re-checked server-side (AGL-954): this surface must never be
+          // able to erase a catalog collection, however stale its list is.
+          collectionKind: 'content',
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result?.error ?? 'Collection delete failed')
+      }
+    } catch (error: any) {
+      setDeleteBusy(false)
+      return void enqueueSnackbar(
+        error?.message ?? 'Collection delete failed',
+        { variant: 'error', allowDuplicate: true },
+      )
+    }
+    setDeleteBusy(false)
+    setDeleteOpen(false)
+    setDeleteConfirm('')
+    // Fall back to whatever the listener leaves behind, or the empty state.
+    setSelectedId(null)
+    enqueueSnackbar(`Collection "${name}" deleted`, {
+      variant: 'success',
+      persist: false,
+    })
+    logActivity('Deleted collection', {
+      type: 'content',
+      id: deletedId,
+      name,
+    })
+  }, [selected, deleteBusy, user, hostId, enqueueSnackbar, logActivity])
+
   return (
     <>
       <DashboardLayout
@@ -805,6 +900,21 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                 >
                   {'New entry'}
                 </Button>
+                {/* AGL-1324: the collection shell was the one thing on this
+                    page that could be created and never removed. */}
+                {isSiteAdmin && selected ? (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    onClick={() => {
+                      setDeleteConfirm('')
+                      setDeleteOpen(true)
+                    }}
+                  >
+                    {'Delete collection'}
+                  </Button>
+                ) : null}
               </Stack>
               {entries.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
@@ -990,6 +1100,58 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             onClick={handleCreateCollection}
           >
             {'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/* Delete collection (AGL-1324). Type-the-name confirmation, matching
+          the site delete. Refuses while a template screen still renders it
+          or entries still live under it — naming which — because deleting a
+          collection must never be the act that removes a published page. */}
+      <Dialog
+        open={deleteOpen}
+        onClose={() => (deleteBusy ? undefined : setDeleteOpen(false))}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{`Delete "${selected?.displayName ?? ''}"?`}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {deleteDenial ? (
+              <Alert severity="warning">{deleteDenial.error}</Alert>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                {`The collection and its /${selected?.slug ?? ''} route are ` +
+                  'permanently deleted. This cannot be undone.'}
+              </Typography>
+            )}
+            <TextField
+              label={`Type "${selected?.displayName ?? ''}" to confirm`}
+              value={deleteConfirm}
+              disabled={deleteBusy || deleteDenial !== null}
+              onChange={(event) => setDeleteConfirm(event.target.value)}
+              size="small"
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            disabled={deleteBusy}
+            onClick={() => setDeleteOpen(false)}
+          >
+            {'Cancel'}
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={
+              deleteBusy ||
+              deleteDenial !== null ||
+              deleteConfirm.trim() !== (selected?.displayName ?? '')
+            }
+            onClick={() => void handleDeleteCollection()}
+          >
+            {'Delete collection'}
           </Button>
         </DialogActions>
       </Dialog>

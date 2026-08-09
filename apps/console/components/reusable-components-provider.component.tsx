@@ -224,43 +224,25 @@ export function ReusableComponentsProvider(
         if (!definition?.nodes || !definition?.rootId) {
           throw new Error('Definition missing')
         }
-        // Fresh ids so the copy is independent of the definition; the copied
-        // root keeps the instance node's id, so the parent's child list and
-        // the current selection stay valid.
-        const idMap: Record<string, string> = {
-          [definition.rootId]: node.$id,
-        }
-        for (const defId of Object.keys(definition.nodes)) {
-          if (!(defId in idMap)) idMap[defId] = Aglyn.createResourceUid()
-        }
+        // Materialize what the instance was RENDERING (AGL-1314), not the
+        // definition as stored: `detachInstanceSubtree` runs the graft's own
+        // `{{prop.*}}` substitution and root-override merge, so the copy
+        // keeps the author's text, its bound media and the styling the page
+        // was showing. Copying `definition.nodes` verbatim here is what left
+        // detached heroes rendering literal `{{prop.headline}}` markers.
+        // Fresh ids, except the root, which keeps the instance node's id so
+        // the parent's child list and the current selection stay valid.
         const all = Aglyn.canvas.toJSON().nodes as Record<string, any>
-        // Root style overrides (AGL-1306) bake into the detached copy's
-        // root sx: detaching forks the look this instance actually renders,
-        // not the component's base look — without this the page changes
-        // appearance the moment the author detaches.
-        const rootOverride = Aglyn.getInstanceRootStyleOverride(
-          all[node.$id] ?? (node as any),
+        const next = Aglyn.detachInstanceSubtree(
+          all,
+          node.$id,
+          definition,
+          () => Aglyn.createResourceUid(),
         )
-        const next: Record<string, any> = { ...all }
-        for (const [defId, defNode] of Object.entries<any>(definition.nodes)) {
-          const newId = idMap[defId]
-          next[newId] = {
-            ...defNode,
-            $id: newId,
-            parentId:
-              defId === definition.rootId
-                ? (node.parentId ?? null)
-                : (idMap[defNode.parentId] ?? null),
-            ...(Array.isArray(defNode.nodes) && {
-              nodes: defNode.nodes.map(
-                (childId: string) => idMap[childId] ?? childId,
-              ),
-            }),
-            ...(defId === definition.rootId && rootOverride
-              ? { sx: Aglyn.mergeNodeSx(defNode.sx, rootOverride) }
-              : {}),
-          }
-        }
+        // A no-op means the selected node is not an instance the canvas
+        // knows about — say so rather than claiming a detach that never
+        // happened.
+        if (next === all) throw new Error('Instance not found on this screen')
         Aglyn.canvas.applyNodes(next as any)
         enqueueSnackbar('Detached — this copy no longer follows the component', {
           variant: 'success',

@@ -106,7 +106,13 @@ export function resolveScreenLiveUrl(
     return { url: buildScreenLiveUrl(host, screenId, consoleHostname) }
   }
   const routes = template.routes ?? []
-  const listRoute = routes.find((route) => route.role === 'list')
+  // Sorted, not `find`: one screen can be the list template of two
+  // collections, and `collectCollectionTemplateRoutes` emits them in the
+  // order the collections listener happened to deliver. Picking the first
+  // match would send "View live" to a different collection between renders.
+  const listRoute = routes
+    .filter((route) => route.role === 'list' && route.collectionSlug)
+    .sort((a, b) => a.collectionSlug.localeCompare(b.collectionSlug))[0]
   if (listRoute) {
     // The list page renders this screen whether or not the template was
     // ever published at its own slug — the collection branch resolves the

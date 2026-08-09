@@ -52,6 +52,25 @@
  *     npx jest -c libs/tenant/runtime/jest.config.ts --testPathPatterns plugin-takedown
  */
 
+// STATIC on purpose, and it has to stay that way (AGL-1329).
+//
+// This used to be `await import('@aglyn/tenant-data-admin')` inside
+// `beforeAll`, mirroring the sibling emulator specs — but those defer
+// RELATIVE imports, which never leave this project. A dynamic import that
+// crosses a project boundary registers a `dynamic` edge on the whole
+// tenant-runtime → tenant-data-admin pair, and `enforce-module-boundaries`
+// checks the edge at PROJECT level: one deferred line here put "Static
+// imports of lazy-loaded libraries are forbidden" on 14 files that never
+// touch this spec, and the co-existing `static` edge does not excuse them.
+//
+// The deferral bought nothing. Verified against the Firestore emulator with
+// the module evaluated ahead of both `initializeApp` and `seed()`: 8/8 either
+// way, jest still exits clean, and the skipped (no-emulator) run is
+// unaffected. Also verified with a service-account credential present, the
+// one case where `@aglyn/shared-util-fbserver` initializes the default app
+// first and this file's `initializeApp` is skipped — `FIRESTORE_EMULATOR_HOST`
+// pins the endpoint regardless of which app wins that race.
+import { getRealmPluginInstalls } from '@aglyn/tenant-data-admin'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
 
@@ -179,14 +198,11 @@ async function restore(db: Firestore, listingId: string): Promise<void> {
 
 describeEmulated('a taken-down plugin stops executing (AGL-958)', () => {
   let db: Firestore
-  let getRealmPluginInstalls: typeof import('@aglyn/tenant-data-admin').getRealmPluginInstalls
   let getPluginInstalls: typeof import('./get-plugin-installs').getPluginInstalls
 
   beforeAll(async () => {
     db = getFirestore()
     await seed(db)
-    getRealmPluginInstalls = (await import('@aglyn/tenant-data-admin'))
-      .getRealmPluginInstalls
     getPluginInstalls = (await import('./get-plugin-installs')).getPluginInstalls
   }, 60_000)
 

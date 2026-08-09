@@ -33,17 +33,17 @@ import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
-
-const CNAME_TARGET =
-  process.env['NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME'] ?? 'sites.aglyn.app'
-/**
- * The address an apex A record should point at — the platform host's primary
- * anycast address. The verify route accepts the WHOLE pool (AGL-1264's
- * `AGLYN_TENANT_APEX_ADDRESSES`); this is only the one we print, so it must
- * stay a member of that pool.
- */
-const APEX_A_TARGET =
-  process.env['NEXT_PUBLIC_AGLYN_TENANT_APEX_A'] ?? '216.198.79.1'
+// The target and the apex address come from the SAME module the verify route
+// reads (AGL-1275). They used to be private constants here, and the apex one
+// had its own `NEXT_PUBLIC_AGLYN_TENANT_APEX_A` that nothing else looked at —
+// so "must stay a member of the route's pool" was an invariant held by a
+// comment, and widening the pool by env var would have printed an address the
+// route rejects.
+import {
+  CNAME_TARGET,
+  isApexDomain,
+  RECOMMENDED_APEX_ADDRESS,
+} from '../utils/tenant-dns'
 
 export interface CustomDomainCardProps {
   hostId: string
@@ -76,9 +76,13 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
   // line; deeper subdomains keep the typed value on the CNAME line and the
   // A line keeps its placeholder, since an apex example derived from
   // shop.example.co.uk would just be a guess.
+  //
+  // Apex detection is `isApexDomain`, not a label count: counting labels calls
+  // `example.co.uk` a subdomain, so a UK customer typing their bare domain got
+  // the CNAME line pointed at it — the one record a zone root cannot carry —
+  // while the A line still showed a placeholder (AGL-1275).
   const typed = domain.trim().toLowerCase()
-  const labels = typed ? typed.split('.').filter(Boolean) : []
-  const isBareApex = labels.length === 2
+  const isBareApex = isApexDomain(typed)
   const startsWithWww = /^www\./.test(typed)
   const cnameExample = !typed
     ? 'www.your-domain.com'
@@ -333,7 +337,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
                 fontFamily: 'monospace',
               }}
             >
-              {`A      ${apexExample}  →  ${APEX_A_TARGET}`}
+              {`A      ${apexExample}  →  ${RECOMMENDED_APEX_ADDRESS}`}
             </Typography>
             <Stack direction="row" spacing={1}>
               <TextField

@@ -119,6 +119,31 @@ describe('resolveScreenLiveUrl (AGL-1271)', () => {
       ).toEqual({ url: 'https://aglyn-marketing.aglyn.app/blog' })
     })
 
+    it('picks the same collection every render when two designate it', () => {
+      // `collectCollectionTemplateRoutes` emits routes in collections-listener
+      // order, so taking the first `list` match sent "View live" to a
+      // different collection from one render to the next.
+      const templateHost = {
+        subdomain: 'aglyn-marketing',
+        screens: { 'scr-list': '/shared-list-template' },
+      } as any
+      const routes = [
+        { role: 'list', collectionSlug: 'news' },
+        { role: 'list', collectionSlug: 'blog' },
+      ] as any[]
+      const forOrder = (ordered: any[]) =>
+        resolveScreenLiveUrl(
+          templateHost,
+          'scr-list' as any,
+          { isTemplate: true, routes: ordered },
+          hostname,
+        )
+      expect(forOrder(routes)).toEqual(forOrder([...routes].reverse()))
+      expect(forOrder(routes)).toEqual({
+        url: 'https://aglyn-marketing.aglyn.app/blog',
+      })
+    })
+
     it('an ENTRY template gets a reason instead of a dead link', () => {
       const resolved = resolveScreenLiveUrl(
         host,

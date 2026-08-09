@@ -27,6 +27,20 @@ const renderEditor = (ui: React.ReactElement) =>
     </Aglyn.ScreenLinkContext.Provider>,
   )
 
+/** A published site whose routing map knows about `about`, and nothing else. */
+const renderSite = (ui: React.ReactElement) =>
+  render(
+    <Aglyn.ScreenLinkContext.Provider
+      value={{ screens: { about: 'company/about' } }}
+    >
+      {ui}
+    </Aglyn.ScreenLinkContext.Provider>,
+  )
+
+/** The single rendered element, whatever tag it turned out to be. */
+const root = (container: HTMLElement) =>
+  container.firstElementChild as HTMLElement
+
 const tile = (
   <>
     <span data-testid="icon" />
@@ -56,26 +70,83 @@ describe('LinkBox (AGL-1231)', () => {
     expect(schema.flags?.textEditable).toBeUndefined()
   })
 
-  it('keeps the box but drops the anchor when navigation is suppressed', () => {
-    renderEditor(<LinkBox href="/product/besigner">{tile}</LinkBox>)
+  it('keeps the element but drops navigation when navigation is suppressed', () => {
+    const { container } = renderEditor(
+      <LinkBox href="/product/besigner">{tile}</LinkBox>,
+    )
+    // Same tag the live page ships (AGL-1268) — the canvas must not lie
+    // about the box the page will ship...
+    expect(root(container).tagName).toBe('A')
+    // ...but the besigner must not navigate when you click a tile, and an
+    // anchor with no `href` is inert by spec: not focusable, not a link.
+    expect(root(container).hasAttribute('href')).toBe(false)
     expect(screen.queryByRole('link')).toBeNull()
-    // The canvas must not lie about what ships — the content is still there.
+    // The content is still there.
     expect(screen.getByText('Besigner')).toBeTruthy()
   })
 
-  it('renders no anchor when the screen id does not resolve', () => {
-    render(<LinkBox screenId="deleted-screen">{tile}</LinkBox>)
-    expect(screen.queryByRole('link')).toBeNull()
-    expect(screen.getByText('Besigner')).toBeTruthy()
+  describe('element type does not depend on the screens map (AGL-1268)', () => {
+    it('navigates when the screen resolves', () => {
+      const { container } = renderSite(<LinkBox screenId="about">{tile}</LinkBox>)
+      expect(root(container).tagName).toBe('A')
+      expect(root(container).getAttribute('href')).toBe('/company/about')
+      expect(screen.getByRole('link')).toBe(root(container))
+    })
+
+    it('renders the SAME element, dead, when the screen does not resolve', () => {
+      // A screen unpublished or deleted after the ISR page was cached: the
+      // routing map has no entry, so `useScreenLink` returns no href. If
+      // that flipped the tag to `<div class="MuiBox-root">`, the cached HTML
+      // and the hydrating render would disagree on the element type and
+      // React would throw the whole subtree away.
+      const { container } = renderSite(
+        <LinkBox screenId="unpublished">{tile}</LinkBox>,
+      )
+      expect(root(container).tagName).toBe('A')
+      // Dead, not navigating: no href means the browser does nothing on
+      // click and assistive tech does not announce a link.
+      expect(root(container).hasAttribute('href')).toBe(false)
+      expect(screen.queryByRole('link')).toBeNull()
+      expect(screen.getByText('Besigner')).toBeTruthy()
+    })
+
+    it('is the same tag on every surface', () => {
+      // Stated as one assertion so the three branches cannot drift apart
+      // again: resolved, unresolved, and suppressed must agree.
+      const tags = [
+        renderSite(<LinkBox screenId="about">{tile}</LinkBox>),
+        renderSite(<LinkBox screenId="unpublished">{tile}</LinkBox>),
+        renderEditor(<LinkBox screenId="about">{tile}</LinkBox>),
+      ].map(({ container }) => root(container).tagName)
+      expect(tags).toEqual(['A', 'A', 'A'])
+    })
+
+    it('keeps the anchor chrome off the dead box too', () => {
+      // The dead branch is a bare `<a>`, which a browser styles as underlined
+      // and blue. It carries the same style floor as the live branch, and
+      // node styles still win over it — otherwise a tile whose screen went
+      // missing would suddenly render as a default anchor.
+      const { container } = renderSite(
+        <LinkBox screenId="unpublished" sx={{ display: 'flex' }}>
+          {tile}
+        </LinkBox>,
+      )
+      const style = getComputedStyle(root(container))
+      expect(style.textDecoration).toContain('none')
+      expect(style.display).toBe('flex')
+    })
   })
 
   it('refuses a javascript: href', () => {
-    render(
+    const { container } = render(
       <LinkBox href={'javascript:alert(1)' as string}>{tile}</LinkBox>,
     )
     // A stored href is rendered verbatim into every visitor's page, so an
-    // unsafe protocol must produce no anchor at all rather than a live one.
+    // unsafe protocol must never reach the DOM. The element stays the same
+    // anchor (AGL-1268); what it must not have is the href.
     expect(screen.queryByRole('link')).toBeNull()
+    expect(root(container).hasAttribute('href')).toBe(false)
+    expect(container.innerHTML).not.toContain('javascript:')
   })
 
   it('opens a new tab only for external destinations', () => {

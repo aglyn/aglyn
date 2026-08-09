@@ -24,6 +24,7 @@
  */
 export * from './binding-token-catalog'
 export * from './binding-tokens'
+export * from './collection-delete'
 export * from './collection-entries'
 export * from './collection-kind'
 export * from './collection-slug'

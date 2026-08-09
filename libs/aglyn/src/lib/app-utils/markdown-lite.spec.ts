@@ -290,17 +290,110 @@ describe('markdown-lite', () => {
     ])
   })
 
-  it('a chunk merely containing a numbered line stays a paragraph (AGL-1320)', () => {
-    // Same all-lines rule the bullet and quote blocks use, which is what
-    // keeps prose opening `1997. A good year` out of the list.
-    expect(
-      parseMarkdownLite('prose line\n1. not a list here').map(
-        (block) => block.type,
-      ),
-    ).toEqual(['paragraph'])
+  it('prose reading `1997. A good year` stays prose (AGL-1320)', () => {
+    // CommonMark's guard, and the reason an ordered list may only interrupt a
+    // paragraph when it starts at 1: a year, a price or a footnote number
+    // mid-sentence must not silently become a list.
+    const blocks = parseMarkdownLite(
+      'The web grew up in\n1997. A good year for the web.',
+    )
+    expect(blocks.map((block) => block.type)).toEqual(['paragraph'])
+    expect(blocks[0]).toEqual({
+      type: 'paragraph',
+      inlines: [
+        {
+          type: 'text',
+          text: 'The web grew up in 1997. A good year for the web.',
+        },
+      ],
+    })
     // A marker needs its separating space, exactly like `#NoSpace`.
     expect(parseMarkdownLite('1.no space').map((block) => block.type)).toEqual([
       'paragraph',
+    ])
+  })
+
+  it('an ordered list interrupts a paragraph when it starts at 1 (AGL-1320)', () => {
+    // The DMCA shape: an introducing line with the statutory elements
+    // directly beneath it, no blank line between. It used to join into one
+    // run-on paragraph on a LIVE legal page.
+    const blocks = parseMarkdownLite(
+      'A notice must include:\n1. a signature;\n2. the work.',
+    )
+    expect(blocks).toEqual([
+      {
+        type: 'paragraph',
+        inlines: [{ type: 'text', text: 'A notice must include:' }],
+      },
+      {
+        type: 'orderedList',
+        start: 1,
+        items: [
+          [{ type: 'text', text: 'a signature;' }],
+          [{ type: 'text', text: 'the work.' }],
+        ],
+      },
+    ])
+  })
+
+  it('bullets interrupt a paragraph freely (AGL-1320)', () => {
+    const blocks = parseMarkdownLite('You may not:\n- do this\n- or that')
+    expect(blocks).toEqual([
+      { type: 'paragraph', inlines: [{ type: 'text', text: 'You may not:' }] },
+      {
+        type: 'list',
+        items: [
+          [{ type: 'text', text: 'do this' }],
+          [{ type: 'text', text: 'or that' }],
+        ],
+      },
+    ])
+  })
+
+  it('an ordered run starting at 7 mid-paragraph stays prose (AGL-1320)', () => {
+    const blocks = parseMarkdownLite('Intro line:\n7. seven\n8. eight')
+    expect(blocks).toEqual([
+      {
+        type: 'paragraph',
+        inlines: [{ type: 'text', text: 'Intro line: 7. seven 8. eight' }],
+      },
+    ])
+    // But a chunk that OPENS with it is interrupting nothing, so the author's
+    // start number still survives — the counter-notice resuming at seven.
+    const standalone = parseMarkdownLite('7. seven\n8. eight')
+    expect(standalone.map((block) => block.type)).toEqual(['orderedList'])
+    expect((standalone[0] as any).start).toBe(7)
+  })
+
+  it('a list ends at the first non-item line, which starts a paragraph (AGL-1320)', () => {
+    const blocks = parseMarkdownLite(
+      'Steps:\n1. first\n2. second\nThat is all.\n- and a bullet',
+    )
+    expect(blocks.map((block) => block.type)).toEqual([
+      'paragraph',
+      'orderedList',
+      'paragraph',
+      'list',
+    ])
+    expect((blocks[2] as any).inlines).toEqual([
+      { type: 'text', text: 'That is all.' },
+    ])
+  })
+
+  it('a fence holding `1. ` is untouched by the interrupt rule (AGL-1320)', () => {
+    // Fences are cut out before chunking, so nothing inside one is ever
+    // scanned for markers — intro line or not.
+    const blocks = parseMarkdownLite(
+      'Run it:\n\n```bash\nnpm i thing\n1. not a list\n- nor this\n```\n\nDone.',
+    )
+    expect(blocks).toEqual([
+      { type: 'paragraph', inlines: [{ type: 'text', text: 'Run it:' }] },
+      {
+        type: 'code',
+        lang: 'bash',
+        text: 'npm i thing\n1. not a list\n- nor this',
+      },
+      { type: 'paragraph', inlines: [{ type: 'text', text: 'Done.' }] },
     ])
   })
 
@@ -410,6 +503,21 @@ describe('serializeMarkdownLite (AGL-582)', () => {
       '## Notice\n\nA notice must include:\n\n1. A **signature**.\n' +
       '2. The work.\n3. The material.\n4. Your contact [details](/legal).\n' +
       '5. A good-faith statement.\n6. A statement under penalty of perjury.',
+    // The same document authored the NATURAL way — no blank line between the
+    // introducing line and its items (AGL-1320). The split chunk has to come
+    // back through the serializer as the same paragraph + list pair.
+    'DMCA shape authored with no blank line before the elements':
+      '## Notice\n\nA notice must include:\n1. A **signature**.\n' +
+      '2. The work.\n3. Your contact [details](/legal).',
+    'bullets interrupting a paragraph': 'You may not:\n- do this\n- or that',
+    'ordered run at 7 mid-paragraph stays prose':
+      'Intro line:\n7. seven\n8. eight',
+    'prose reading `1997. A good year` stays prose':
+      'The web grew up in\n1997. A good year for the web.',
+    'list then a trailing paragraph, all one chunk':
+      'Steps:\n1. first\n2. second\nThat is all.',
+    'two interrupted lists in one chunk':
+      'Do:\n- a\n- b\nThen:\n1. one\n2. two',
     'README shape: heading, table, fence':
       '## Config\n\n| Prop | Default |\n| --- | --- |\n| size | 8 |\n\n' +
       '```ts\nregister({ size: 8 })\n```\n\nThat is all.',
@@ -461,6 +569,20 @@ describe('serializeMarkdownLite (AGL-582)', () => {
       '### Hi\n\na **b***c*[d](/d)\n\n- one\n- two\n\n' +
         '![pic](https://x.example/p.png)',
     )
+  })
+
+  it('separates a paragraph from a following list with a blank line (AGL-1320)', () => {
+    // The blank line is what makes the interrupt split round-trip: written
+    // back this way, the pair re-parses to the pair rather than to one chunk
+    // that has to be re-split.
+    const model = parseMarkdownLite('A notice must include:\n1. a signature;')
+    expect(serializeMarkdownLite(model)).toBe(
+      'A notice must include:\n\n1. a signature;',
+    )
+    expect(parseMarkdownLite(serializeMarkdownLite(model))).toEqual(model)
+    expect(
+      serializeMarkdownLite(parseMarkdownLite('You may not:\n- do this')),
+    ).toBe('You may not:\n\n- do this')
   })
 
   it('normalizes editor models the dialect cannot represent', () => {

@@ -51,7 +51,7 @@ export type MarkdownBlock =
    * `start` is the FIRST marker's number, so a notice continuing at `7.`
    * keeps counting from seven; the rest renumber from it, which is how the
    * serializer round-trips a `1. 1. 1.` source. A separate block rather than
-   * a flag on `list`, so the five renderers have to name it and no ordered
+   * a flag on `list`, so the six renderers have to name it and no ordered
    * list can silently render as bullets. NO nesting, like the rest of the
    * dialect: indentation is trimmed, so a `  1. ` sub-item is a sibling.
    */
@@ -147,7 +147,7 @@ const HEADING_PATTERN = /^(#{1,6})\s+(.*)$/
  * same lossy-but-visible degradation the dialect already applies to a `*`
  * inside a bold run. Deliberately NOT widening `level` to `1 | 2 | 3`: every
  * renderer reads it as `level === 2 ? h2 : h3`, so a third value would type-
- * check clean and silently render an h1 as an h3 in five places. This also
+ * check clean and silently render an h1 as an h3 in six places. This also
  * makes the markdown path agree with the HTML-paste path, which has always
  * mapped `<h1>` to a level-2 heading.
  */
@@ -157,9 +157,14 @@ function clampHeadingLevel(hashes: number): 2 | 3 {
 
 /** ```` ``` ```` or longer, optionally naming a language. */
 const FENCE_PATTERN = /^`{3,}\s*([^\s`]*)\s*$/
+/** A bullet-list marker: `- ` or `* `. */
+const BULLET_ITEM_PATTERN = /^[-*]\s+/
 /**
  * An ordered-list marker (AGL-1320): `1. ` or `1) `, capped at nine digits
- * like CommonMark so a stray year cannot become an absurd `start`.
+ * like CommonMark so a stray year cannot become an absurd `start`. The
+ * trailing `\s+` is load-bearing twice over: it keeps `1.no space` prose, and
+ * it makes an EMPTY item impossible, which is the other half of CommonMark's
+ * interrupt rule (a bare `1.` may not interrupt a paragraph either).
  */
 const ORDERED_ITEM_PATTERN = /^(\d{1,9})[.)]\s+/
 /** A delimiter cell of a GFM table's second row: `---`, `:--`, `:-:`, `--:`. */
@@ -208,61 +213,117 @@ function parseTable(lines: string[]): MarkdownBlock | null {
   }
 }
 
-/** One blank-line-delimited chunk of non-fenced source, as a block. */
-function parseChunk(chunk: string): MarkdownBlock | null {
+/**
+ * Where a list begins, and which one (AGL-1320).
+ *
+ * `interrupting` is true when prose of the SAME chunk is already pending —
+ * i.e. this line would break a paragraph in two. CommonMark's rule, adopted
+ * verbatim: bullets may interrupt a paragraph freely, an ordered list only
+ * when it starts at 1. That is what keeps prose reading `1997. A good year
+ * for the web.` prose, while `…that includes:` followed by `1.`/`2.` becomes
+ * the enumerated list a statute describes. At the head of a chunk nothing is
+ * being interrupted, so any start number opens a list and a counter-notice
+ * resuming at `7.` still counts from seven.
+ */
+function listStartOf(
+  line: string,
+  interrupting: boolean,
+): { kind: 'list' | 'orderedList'; start: number } | null {
+  if (BULLET_ITEM_PATTERN.test(line)) return { kind: 'list', start: 0 }
+  const ordered = ORDERED_ITEM_PATTERN.exec(line)
+  if (!ordered) return null
+  const start = Number(ordered[1])
+  if (interrupting && start !== 1) return null
+  return { kind: 'orderedList', start }
+}
+
+/**
+ * One blank-line-delimited chunk of non-fenced source, as blocks.
+ *
+ * Usually one block — but a chunk splits at a list (AGL-1320), because the
+ * shape legal and instructional prose reaches for most is an introducing line
+ * with its items directly beneath, no blank line between. A list runs to the
+ * first line that is not an item; whatever follows starts a fresh paragraph,
+ * which a later list may interrupt in turn. The serializer writes the pieces
+ * back as separate blank-line-delimited chunks, so the split round-trips.
+ */
+function parseChunk(chunk: string): MarkdownBlock[] {
   const trimmed = chunk.trim()
-  if (!trimmed) return null
+  if (!trimmed) return []
   const image = /^!\[([^\]]*)\]\(([^)\s]+)\)$/.exec(trimmed)
   if (image) {
     const src = safeUrl(image[2])
-    return src ? { type: 'image', src, alt: image[1] } : null
+    return src ? [{ type: 'image', src, alt: image[1] }] : []
   }
   const heading = HEADING_PATTERN.exec(trimmed)
   if (heading) {
-    return {
-      type: 'heading',
-      level: clampHeadingLevel(heading[1].length),
-      inlines: parseMarkdownInlines(heading[2]),
-    }
+    return [
+      {
+        type: 'heading',
+        level: clampHeadingLevel(heading[1].length),
+        inlines: parseMarkdownInlines(heading[2]),
+      },
+    ]
   }
   const lines = trimmed.split('\n')
   const table = parseTable(lines)
-  if (table) return table
-  // A quote when EVERY line of the chunk is `>`-prefixed, same shape as the
-  // list rule below — a paragraph merely mentioning `>` stays a paragraph.
-  // Fenced code never reaches here (fences are cut out before chunking), so
-  // a `> ` inside a snippet is snippet text, not a quote (AGL-1315).
+  if (table) return [table]
+  // A quote when EVERY line of the chunk is `>`-prefixed — a paragraph merely
+  // mentioning `>` stays a paragraph, and a quote does NOT interrupt prose the
+  // way a list does (`> ` is far rarer mid-paragraph than a numbered step, and
+  // the all-lines rule is the cheaper guarantee). Fenced code never reaches
+  // here (fences are cut out before chunking), so a `> ` inside a snippet is
+  // snippet text, not a quote (AGL-1315).
   if (lines.every((line) => /^>(\s|$)/.test(line.trim()))) {
     const text = lines
       .map((line) => line.trim().replace(/^>\s?/, ''))
       .filter(Boolean)
       .join(' ')
-    return { type: 'quote', inlines: parseMarkdownInlines(text) }
+    return [{ type: 'quote', inlines: parseMarkdownInlines(text) }]
   }
-  if (lines.every((line) => /^[-*]\s+/.test(line.trim()))) {
-    return {
-      type: 'list',
-      items: lines.map((line) =>
-        parseMarkdownInlines(line.trim().replace(/^[-*]\s+/, '')),
-      ),
+  const blocks: MarkdownBlock[] = []
+  // Prose lines are buffered RAW and joined with spaces, the way a multi-line
+  // paragraph has always read.
+  let prose: string[] = []
+  const flushProse = (): void => {
+    if (prose.length) {
+      blocks.push({
+        type: 'paragraph',
+        inlines: parseMarkdownInlines(prose.join(' ')),
+      })
     }
+    prose = []
   }
-  // A numbered list under the same all-lines rule (AGL-1320), so prose that
-  // merely opens with `1997. A good year` mid-chunk stays prose. The FIRST
-  // marker sets `start`; the others only mark items, which is why a source
-  // numbered `1. 1. 1.` renumbers on the way out. Fences are cut out before
-  // chunking, so a `1. ` inside a snippet never reaches here.
-  if (lines.every((line) => ORDERED_ITEM_PATTERN.test(line.trim()))) {
-    const first = ORDERED_ITEM_PATTERN.exec(lines[0]?.trim() ?? '')
-    return {
-      type: 'orderedList',
-      start: Number(first?.[1] ?? 1),
-      items: lines.map((line) =>
-        parseMarkdownInlines(line.trim().replace(ORDERED_ITEM_PATTERN, '')),
-      ),
+  for (let index = 0; index < lines.length; index++) {
+    const line = (lines[index] ?? '').trim()
+    const list = listStartOf(line, prose.length > 0)
+    if (!list) {
+      prose.push(lines[index] ?? '')
+      continue
     }
+    flushProse()
+    const pattern =
+      list.kind === 'list' ? BULLET_ITEM_PATTERN : ORDERED_ITEM_PATTERN
+    const items: MarkdownInline[][] = []
+    // The run ends at the first line that is not an item of THIS kind, so a
+    // bullet closes a numbered run and vice versa. Only the FIRST ordered
+    // marker is read, which is why a source numbered `1. 1. 1.` renumbers on
+    // the way out.
+    while (index < lines.length) {
+      const item = (lines[index] ?? '').trim()
+      if (!pattern.test(item)) break
+      items.push(parseMarkdownInlines(item.replace(pattern, '')))
+      index++
+    }
+    index--
+    blocks.push(
+      list.kind === 'list'
+        ? { type: 'list', items }
+        : { type: 'orderedList', start: list.start, items },
+    )
   }
-  return { type: 'paragraph', inlines: parseMarkdownInlines(lines.join(' ')) }
+  flushProse()
+  return blocks
 }
 
 /**
@@ -276,8 +337,9 @@ export function parseMarkdownLite(body: string): MarkdownBlock[] {
   const lines = body.split('\n')
   let pending: string[] = []
   const flush = (): void => {
-    const block = pending.length ? parseChunk(pending.join('\n')) : null
-    if (block) blocks.push(block)
+    // A chunk yields MORE than one block when a list interrupts its prose
+    // (AGL-1320) — and none at all when it holds nothing renderable.
+    if (pending.length) blocks.push(...parseChunk(pending.join('\n')))
     pending = []
   }
   for (let index = 0; index < lines.length; index++) {
@@ -364,7 +426,7 @@ export function slugifyHeading(text: string): string {
  * elements, which is exactly what a plain counter would do.
  *
  * Deliberately NOT a widening of the `MarkdownBlock` union. The union is
- * rendered exhaustively in five places, so a slug carried on the heading
+ * rendered exhaustively in six places, so a slug carried on the heading
  * block would have to be produced by every writer of that union — including
  * the visual editor's serializer, which round-trips through markdown source
  * that has nowhere to put one. Derived here instead, from the same parse the
@@ -428,6 +490,13 @@ export function serializeMarkdownInlines(inlines: MarkdownInline[]): string {
  * and list items that would parse to nothing (empty text) are omitted, and
  * block lines are edge-trimmed. Entry bodies stay markdown-lite strings in
  * Firestore — this is the only writer the visual editor goes through.
+ *
+ * Every block is written as its own chunk, separated by a BLANK line, which
+ * is what holds the invariant now that a list may interrupt a paragraph
+ * (AGL-1320): `intro:` + `1. a` re-parses to the same paragraph + list pair
+ * whether or not the author left a blank line between them. The blank line is
+ * therefore load-bearing, not cosmetic: writing the two chunks adjacent would
+ * re-parse correctly today only by luck of the interrupt rule.
  */
 export function serializeMarkdownLite(blocks: MarkdownBlock[]): string {
   const chunks: string[] = []

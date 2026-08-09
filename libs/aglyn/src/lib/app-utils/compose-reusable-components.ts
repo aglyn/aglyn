@@ -370,6 +370,144 @@ export function composeReusableComponentNodes<
 }
 
 /**
+ * Ids of every descendant of `rootId` reachable through `nodes` arrays —
+ * the root itself excluded, unknown and repeated ids skipped, so a cycle
+ * cannot hang the walk.
+ */
+function collectDescendantIds<N extends AglynNodeSchema>(
+  nodes: NormalizedNodes<N>,
+  rootId: NodeId,
+): Set<NodeId> {
+  const found = new Set<NodeId>()
+  const root = nodes?.[rootId]
+  const queue: NodeId[] = Array.isArray(root?.nodes)
+    ? [...(root.nodes as NodeId[])]
+    : []
+  while (queue.length) {
+    const id = queue.shift() as NodeId
+    if (found.has(id) || id === rootId || !nodes[id]) continue
+    found.add(id)
+    const children = nodes[id]?.nodes
+    if (Array.isArray(children)) queue.push(...(children as NodeId[]))
+  }
+  return found
+}
+
+/**
+ * Materializes the instance at `instanceId` into a plain, freely editable
+ * copy of what it was RENDERING (AGL-1314) — what "Detach from component"
+ * does, and the inverse of {@link replaceSubtreeWithInstance}.
+ *
+ * Deliberately here, beside the graft, because "what the instance rendered"
+ * is a question only {@link composeReusableComponentNodes} can answer. The
+ * console used to copy `definition.nodes` verbatim, which is the whole bug:
+ * the definition's leaves hold `{{prop.headline}}` TOKENS, not text, so a
+ * detached hero rendered its own markers and the author's copy was gone.
+ * A second, simpler materializer will always drift from the renderer —
+ * so this one runs the renderer's own steps:
+ *
+ * - Declared props (AGL-1247) resolve through {@link buildPropTokens} +
+ *   `resolveNamedTokens`, exactly as the graft does: the instance's
+ *   override, else the definition's default. Every string prop is walked,
+ *   so an image's `src` bakes to the bound media for free — the token is
+ *   substituted by name, not by which prop happens to hold it.
+ * - The root style override (AGL-1306) merges over the definition root's
+ *   own sx, so the copy keeps the look the page was showing rather than
+ *   snapping back to the component's base styling.
+ * - Ids are FRESH (`createId`), never the `cmp__…` graft namespace: a
+ *   detached copy is an ordinary subtree, and leaving graft ids behind
+ *   would collide the next time an instance of the same definition
+ *   expanded here. Only the root keeps the instance's id, so the parent's
+ *   child list, the undo stack and the selection all stay valid.
+ * - Anything hanging under the instance (a pre-grafted layout-chrome
+ *   subtree, AGL-1218) is dropped with it; the copy replaces the whole
+ *   thing.
+ *
+ * A missing instance, a node that is not an instance, or a definition
+ * without a resolvable root returns `nodes` UNCHANGED — detach must never
+ * be the thing that empties a screen. Inputs are never mutated.
+ */
+export function detachInstanceSubtree<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(
+  nodes: NormalizedNodes<N>,
+  instanceId: NodeId,
+  definition:
+    | Pick<ReusableComponentTree<N>, 'rootId' | 'nodes' | 'props'>
+    | null
+    | undefined,
+  createId: () => NodeId,
+): NormalizedNodes<N> {
+  const instanceNode = nodes?.[instanceId]
+  if (instanceNode?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) {
+    return nodes
+  }
+  const rootId = definition?.rootId
+  if (!rootId || !definition?.nodes?.[rootId]) return nodes
+
+  // Fresh ids for everything but the root, which inherits the instance's.
+  // `createId` is injected so this stays pure (and specs stay readable);
+  // the loop re-rolls rather than trusting uniqueness, because a collision
+  // here would silently overwrite an unrelated node on the page.
+  const taken = new Set<NodeId>(Object.keys(nodes))
+  const idMap: Record<NodeId, NodeId> = { [rootId]: instanceId }
+  for (const defId of Object.keys(definition.nodes)) {
+    if (idMap[defId] != null) continue
+    let fresh = createId()
+    for (
+      let attempt = 0;
+      (!fresh || taken.has(fresh)) && attempt < 10;
+      attempt++
+    ) {
+      fresh = createId()
+    }
+    taken.add(fresh)
+    idMap[defId] = fresh
+  }
+
+  const rootStyleOverride = getInstanceRootStyleOverride(
+    instanceNode as { componentId?: string; styleOverrides?: unknown },
+  )
+  const copied: NormalizedNodes<N> = {}
+  for (const [defId, defNode] of Object.entries(definition.nodes)) {
+    if (!defNode) continue
+    const newId = idMap[defId]
+    copied[newId] = {
+      ...defNode,
+      $id: newId,
+      parentId:
+        defId === rootId
+          ? (instanceNode.parentId ?? null)
+          : defNode.parentId != null
+            ? (idMap[defNode.parentId] ?? null)
+            : (defNode.parentId ?? null),
+      ...(Array.isArray(defNode.nodes) && {
+        nodes: (defNode.nodes as NodeId[]).map((childId) =>
+          typeof childId === 'string' ? (idMap[childId] ?? childId) : childId,
+        ),
+      }),
+      ...(defId === rootId && rootStyleOverride
+        ? { sx: mergeNodeSx(defNode.sx, rootStyleOverride) as any }
+        : {}),
+    }
+  }
+
+  const doomed = collectDescendantIds(nodes, instanceId)
+  const next: NormalizedNodes<N> = {}
+  for (const [id, node] of Object.entries(nodes)) {
+    if (id === instanceId || doomed.has(id)) continue
+    next[id] = node as N
+  }
+  return Object.assign(
+    next,
+    resolveNamedTokens(
+      copied,
+      buildPropTokens(definition.props, instanceNode.props),
+    ),
+  )
+}
+
+/**
  * Replaces the subtree rooted at `rootId` with an instance of `definitionId`
  * (AGL-1193) — what "Save as reusable component" does to the tree it was
  * promoted from.
@@ -399,17 +537,7 @@ export function replaceSubtreeWithInstance<
   if (!root || !definitionId) return nodes
 
   // Descendants only — the root is replaced, not removed.
-  const doomed = new Set<NodeId>()
-  const queue: NodeId[] = Array.isArray(root.nodes)
-    ? [...(root.nodes as NodeId[])]
-    : []
-  while (queue.length) {
-    const id = queue.shift() as NodeId
-    if (doomed.has(id) || id === rootId || !nodes[id]) continue
-    doomed.add(id)
-    const children = nodes[id]?.nodes
-    if (Array.isArray(children)) queue.push(...(children as NodeId[]))
-  }
+  const doomed = collectDescendantIds(nodes, rootId)
 
   const next: NormalizedNodes<N> = {}
   for (const [id, node] of Object.entries(nodes)) {
