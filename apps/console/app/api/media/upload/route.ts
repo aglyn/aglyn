@@ -39,12 +39,16 @@ import {
   mediaCdnPathUpdate,
 } from '../../../../utils/server/media-scope'
 
-// Base64 JSON payloads: ~25MB of media encodes to ~34MB of body.
-// Per-type caps (AGL-162). Large-video signed-URL uploads come later.
-const MAX_IMAGE_BYTES = 15 * 1024 * 1024
-const MAX_VIDEO_BYTES = 25 * 1024 * 1024
-const MAX_PDF_BYTES = 10 * 1024 * 1024
-const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime'])
+import {
+  DIRECT_UPLOAD_MAX_BYTES,
+  normalizeUploadContentType,
+  VIDEO_TYPES,
+} from '../../../../utils/media-upload-limits'
+
+// Base64 JSON payloads (AGL-162 caps). NOTE (AGL-1317): on Vercel the
+// platform rejects request bodies over 4.5MB with a 413 before this
+// handler runs, so the direct path's real ceiling is ~3.3MB of raw file —
+// the client sends anything larger through /api/media/upload-url.
 
 /**
  * Authenticated media upload/delete (AGL-85): Storage rules deny client
@@ -122,7 +126,10 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const fileName = String(body?.fileName ?? 'upload').slice(0, 200)
-    const contentType = String(body?.contentType ?? '')
+    const contentType = normalizeUploadContentType(
+      String(body?.contentType ?? ''),
+      String(body?.fileName ?? ''),
+    )
     const data = String(body?.data ?? '')
     // Destination folder (AGL-172): uploads land in the library's open
     // folder. Id only — existence is the client's concern; a stale id
@@ -131,20 +138,25 @@ async function handler(request: Request): Promise<Response> {
       typeof body?.folderId === 'string' && body.folderId
         ? String(body.folderId).slice(0, 64)
         : null
-    // Media-type allowlist (AGL-162): images for everyone; video and PDF
-    // by tier (videoMedia flag; dark-launch workspaces uncapped as usual).
+    // Media-type allowlist (AGL-162): images for everyone; video, PDF and
+    // ZIP by tier (videoMedia flag; dark-launch workspaces uncapped as
+    // usual). Zips (AGL-1317, brand kits) are stored as plain objects —
+    // never extracted or served inline.
     const isImage = contentType.startsWith('image/')
     const isVideo = VIDEO_TYPES.has(contentType)
     const isPdf = contentType === 'application/pdf'
-    if (!isImage && !isVideo && !isPdf) {
-      return Response.json({ error: 'Supported uploads: images, mp4/webm video, PDF' }, { status: 415 })
+    const isZip = contentType === 'application/zip'
+    if (!isImage && !isVideo && !isPdf && !isZip) {
+      return Response.json({ error: 'Supported uploads: images, mp4/webm video, PDF, ZIP' }, { status: 415 })
     }
     const buffer = Buffer.from(data, 'base64')
     const maxBytes = isVideo
-      ? MAX_VIDEO_BYTES
+      ? DIRECT_UPLOAD_MAX_BYTES.video
       : isPdf
-        ? MAX_PDF_BYTES
-        : MAX_IMAGE_BYTES
+        ? DIRECT_UPLOAD_MAX_BYTES.pdf
+        : isZip
+          ? DIRECT_UPLOAD_MAX_BYTES.zip
+          : DIRECT_UPLOAD_MAX_BYTES.image
     if (!buffer.length || buffer.length > maxBytes) {
       return Response.json({
         error: `File is empty or too large (${Math.round(maxBytes / 1024 / 1024)}MB max)`,
@@ -160,7 +172,7 @@ async function handler(request: Request): Promise<Response> {
     const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
     // Quota/entitlements ride the owning org's doc (AGL-238).
     const org = scope.billing
-    if ((isVideo || isPdf) && !checkEntitlement(org, 'videoMedia')) {
+    if ((isVideo || isPdf || isZip) && !checkEntitlement(org, 'videoMedia')) {
       return Response.json({
         error: 'Video and file uploads require a Pro plan',
       }, { status: 403 })

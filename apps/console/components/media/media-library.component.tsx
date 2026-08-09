@@ -94,6 +94,11 @@ import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
+import {
+  normalizeUploadContentType,
+  SIGNED_UPLOAD_MAX_BYTES,
+  SIGNED_UPLOAD_THRESHOLD_BYTES,
+} from '../../utils/media-upload-limits'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { ImageEditorDialog } from './image-editor-dialog.component'
@@ -1798,13 +1803,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // estimate — the counter doc only refreshes after the whole batch.
   const uploadOne = useCallback(
     async (file: File, addedBytes: number): Promise<number> => {
+      // Canonical type (AGL-1317): folds zip aliases and infers pdf/zip
+      // from the name when the browser reports an empty type.
+      const contentType = normalizeUploadContentType(file.type, file.name)
       const allowed =
-        file.type.startsWith('image/') ||
-        ['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type) ||
-        file.type === 'application/pdf'
+        contentType.startsWith('image/') ||
+        ['video/mp4', 'video/webm', 'video/quicktime'].includes(contentType) ||
+        contentType === 'application/pdf' ||
+        contentType === 'application/zip'
       if (!allowed) {
         enqueueSnackbar(
-          `"${file.name}" skipped — supported uploads: images, mp4/webm video, PDF`,
+          `"${file.name}" skipped — supported uploads: images, mp4/webm video, PDF, ZIP`,
           { variant: 'warning', persist: false, allowDuplicate: true },
         )
         return 0
@@ -1825,9 +1834,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           : null
       try {
         const idToken = await (user as any)?.getIdToken?.()
-        // Large video goes direct-to-storage via signed URLs (AGL-167) —
-        // base64 JSON bodies cap out around 25MB.
-        if (file.type.startsWith('video/') && file.size > 20 * 1024 * 1024) {
+        // Large files go direct-to-storage via signed URLs (AGL-167/1317):
+        // Vercel 413s any request body over 4.5MB at the platform layer, so
+        // the base64-JSON route can only carry ~3.3MB of raw file. Video,
+        // PDF and ZIP above the threshold PUT straight to GCS instead.
+        if (
+          SIGNED_UPLOAD_MAX_BYTES[contentType] &&
+          file.size > SIGNED_UPLOAD_THRESHOLD_BYTES
+        ) {
           const mint = await fetch('/api/media/upload-url', {
             method: 'POST',
             headers: {
@@ -1836,7 +1850,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             },
             body: JSON.stringify({
               ...scopeBody,
-              contentType: file.type,
+              contentType,
+              fileName: file.name,
               sizeBytes: file.size,
               // The signed URL is bound to the folder's Storage path.
               folderId: uploadFolderId,
@@ -1852,7 +1867,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           }
           const put = await fetch(minted.uploadUrl, {
             method: 'PUT',
-            headers: { 'Content-Type': file.type },
+            // Must match the type the signed URL was minted for exactly.
+            headers: { 'Content-Type': minted.contentType ?? contentType },
             body: file,
           })
           if (!put.ok) {
@@ -1899,7 +1915,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           body: JSON.stringify({
             ...scopeBody,
             fileName: file.name,
-            contentType: file.type,
+            contentType,
             folderId: uploadFolderId,
             data: await fileToBase64(file),
           }),
@@ -2145,7 +2161,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           ref={inputRef}
           type="file"
           multiple
-          accept="image/*,video/mp4,video/webm,video/quicktime,application/pdf"
+          accept="image/*,video/mp4,video/webm,video/quicktime,application/pdf,application/zip,application/x-zip-compressed,.zip"
           onChange={handleUpload}
           sx={{ display: 'none' }}
         />

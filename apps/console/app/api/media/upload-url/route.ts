@@ -27,23 +27,30 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   folderStoragePath,
+  mediaCdnPathUpdate,
   resolveMediaScope,
 } from '../../../../utils/server/media-scope'
 import { randomUUID } from 'crypto'
 
-/** Signed-URL cap (AGL-167): raises video past the base64 body limit. */
-const MAX_SIGNED_VIDEO_BYTES = 200 * 1024 * 1024
-const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime'])
+import {
+  normalizeUploadContentType,
+  SIGNED_UPLOAD_MAX_BYTES,
+  SIGNED_UPLOAD_TYPES_MESSAGE,
+} from '../../../../utils/media-upload-limits'
+
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000
 
 /**
- * Large-video uploads via signed URLs (AGL-167): base64-JSON bodies cap
- * practical uploads around 25MB, so large video goes direct-to-storage.
- * POST mints a v4 signed PUT URL after the same auth/entitlement/quota
- * checks as /api/media/upload (declared size is provisional); PATCH
- * finalizes — verifies the object's REAL size against the quota (deleting
- * it on violation, so a lying client gains nothing), attaches the
- * download token, and writes the Firestore doc + byte counter.
+ * Large uploads via signed URLs (AGL-167, extended by AGL-1317): the
+ * base64-JSON direct route hits Vercel's 4.5MB request-body platform cap
+ * at ~3.3MB of raw file, so large video — and now PDFs and brand-kit
+ * zips — go direct-to-storage. POST mints a v4 signed PUT URL after the
+ * same auth/entitlement/quota checks as /api/media/upload (declared size
+ * is provisional); PATCH finalizes — verifies the object's REAL size and
+ * type against the per-type cap (deleting it on violation, so a lying
+ * client gains nothing), attaches the download token, and writes the
+ * Firestore doc + byte counter. Zips are stored as plain objects, never
+ * extracted.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -80,26 +87,32 @@ async function handler(request: Request): Promise<Response> {
     const counterRef = scope.scopeRef.collection('counters').doc('media')
 
     if (method === 'POST') {
-      const contentType = String(body?.contentType ?? '')
+      const contentType = normalizeUploadContentType(
+        String(body?.contentType ?? ''),
+        String(body?.fileName ?? ''),
+      )
       const sizeBytes = Number(body?.sizeBytes ?? 0)
-      if (!VIDEO_TYPES.has(contentType)) {
+      const maxBytes = SIGNED_UPLOAD_MAX_BYTES[contentType]
+      if (!maxBytes) {
         return Response.json({
-          error: 'Signed uploads are for mp4/webm/quicktime video',
+          error: SIGNED_UPLOAD_TYPES_MESSAGE,
         }, { status: 415 })
       }
       if (
         !Number.isFinite(sizeBytes) ||
         sizeBytes <= 0 ||
-        sizeBytes > MAX_SIGNED_VIDEO_BYTES
+        sizeBytes > maxBytes
       ) {
         return Response.json({
-          error: `Video uploads are capped at ${
-            MAX_SIGNED_VIDEO_BYTES / 1024 / 1024
-          }MB`,
+          error: `File is empty or too large (${Math.round(
+            maxBytes / 1024 / 1024,
+          )}MB max)`,
         }, { status: 413 })
       }
+      // Video, PDF and ZIP all ride the videoMedia entitlement (AGL-162's
+      // "video & file uploads" tier gate).
       if (!checkEntitlement(org as any, 'videoMedia')) {
-        return Response.json({ error: 'Video uploads require a Pro plan' }, { status: 403 })
+        return Response.json({ error: 'Video and file uploads require a Pro plan' }, { status: 403 })
       }
       {
         // Storage quota applies to every org; a plan-less org resolves as
@@ -143,7 +156,7 @@ async function handler(request: Request): Promise<Response> {
 
     // PATCH — finalize after the client's direct PUT.
     const mediaId = String(body?.mediaId ?? '')
-    const fileName = String(body?.fileName ?? 'video').slice(0, 200)
+    const fileName = String(body?.fileName ?? 'upload').slice(0, 200)
     const folderId =
       typeof body?.folderId === 'string' && body.folderId
         ? String(body.folderId).slice(0, 64)
@@ -160,7 +173,8 @@ async function handler(request: Request): Promise<Response> {
     const [metadata] = await file.getMetadata()
     const actualBytes = Number(metadata.size ?? 0)
     const contentType = String(metadata.contentType ?? '')
-    if (!VIDEO_TYPES.has(contentType) || actualBytes > MAX_SIGNED_VIDEO_BYTES) {
+    const maxBytes = SIGNED_UPLOAD_MAX_BYTES[contentType]
+    if (!maxBytes || actualBytes > maxBytes) {
       await file.delete().catch(() => undefined)
       return Response.json({ error: 'Uploaded object rejected' }, { status: 415 })
     }
@@ -210,6 +224,14 @@ async function handler(request: Request): Promise<Response> {
             }),
           }
         : {}),
+      // Stable mediaId-keyed CDN URL (AGL-829), same rule as the direct
+      // route — parity matters now that PDFs/zips can land here (AGL-1317).
+      cdnPath: mediaCdnPathUpdate({
+        billing: org,
+        cdnScope: scope.cdnScope,
+        mediaId,
+        isPrivate: false,
+      }),
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
     await counterRef.set(
