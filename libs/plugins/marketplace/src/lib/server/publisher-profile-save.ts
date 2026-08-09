@@ -18,7 +18,10 @@
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { PUBLISHER_AGREEMENT_VERSION } from '@aglyn/aglyn/app-utils/publisher-agreement'
-import { isValidPublisherHandle } from '../model/marketplace'
+import {
+  isValidPublisherHandle,
+  validatePublisherProfileContent,
+} from '../model/marketplace'
 import {
   canActAsPublisher,
   claimPublisherHandle,
@@ -159,15 +162,27 @@ export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) =>
     }
 
     const bio = String(req.body?.bio ?? '').trim().slice(0, 500)
-    const website = String(req.body?.website ?? '').trim().slice(0, 200)
-    const avatarUrl = String(req.body?.avatarUrl ?? '').trim().slice(0, 500)
+    // Logo, support contact and social links (AGL-1009): validated here on
+    // the save route — the same server-owned discipline as the handle — and
+    // through `validatePublisherProfileContent`, which shares the listing
+    // validator's https-only rule rather than growing a second URL parser.
+    const extras = validatePublisherProfileContent(req.body ?? {})
+    if (!extras.ok) {
+      return res.status(400).json({ error: extras.error })
+    }
+    const extraWrites: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(extras.content ?? {})) {
+      // An explicit empty string clears the stored field — otherwise a
+      // publisher could add a link but never take one down.
+      extraWrites[key] =
+        value === '' ? firebaseAdmin.firestore.FieldValue.delete() : value
+    }
     await ref.set(
       {
         handle,
         displayName,
         ...(bio ? { bio } : {}),
-        ...(website ? { website } : {}),
-        ...(avatarUrl ? { avatarUrl } : {}),
+        ...extraWrites,
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true },

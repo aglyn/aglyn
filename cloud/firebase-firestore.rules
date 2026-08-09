@@ -818,10 +818,16 @@ service cloud.firestore {
       // `accept-agreement` action, which checks the submitted version
       // against the one in force.
       allow create: if false;
+      // The AGL-1009 contact/link fields are server-owned too: the save
+      // route is what enforces https-only and the fixed social hosts, and a
+      // client that could write `avatarUrl` directly could store a
+      // `javascript:` URL the storefront would then have to distrust.
       allow update: if publisherManager() && publisherFieldsValid() &&
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['handle', 'stripeAccountId', 'stripeChargesEnabled',
-                   'publisherAgreement']);
+                   'publisherAgreement', 'avatarUrl', 'website',
+                   'supportEmail', 'supportUrl', 'githubUrl', 'xUrl',
+                   'linkedinUrl']);
       allow delete: if isStaff();
     }
 
