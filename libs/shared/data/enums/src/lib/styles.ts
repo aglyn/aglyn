@@ -260,6 +260,27 @@ function splitTopLevelArgs(text: string): string[] {
   return args
 }
 
+/**
+ * Whether every `(` is closed and none closes early — the precondition
+ * {@link splitTopLevelArgs} needs to be trusted (AGL-1336).
+ *
+ * Its depth counter goes NEGATIVE on a stray `)`, and a negative depth is
+ * never `0`, so every top-level comma after that stray paren stops being a
+ * split point. That is not a defect in the splitter — it is what makes
+ * checking balance first load-bearing rather than defensive.
+ */
+function hasBalancedParens(text: string): boolean {
+  let depth = 0
+  for (const char of text) {
+    if (char === '(') depth += 1
+    else if (char === ')') {
+      depth -= 1
+      if (depth < 0) return false
+    }
+  }
+  return depth === 0
+}
+
 const GRADIENT_FUNCTION_PATTERN =
   /^([a-z-]*gradient)\s*\(([\s\S]*)\)$/i
 const GRADIENT_ANGLE_PATTERN = /^(-?\d+(?:\.\d+)?)deg$/i
@@ -278,6 +299,17 @@ export function isCssGradientValue(value: unknown): boolean {
  * undefined when the value is empty or is not a gradient at all (a `url(…)`
  * image, say), and a `raw`-carrying gradient when it is one this model
  * cannot express — never a lossy approximation.
+ *
+ * `background-image` is a comma-separated LAYER LIST and this model holds
+ * ONE layer, so the layer split happens before anything else (AGL-1336).
+ * Without it `linear-gradient(#000 0%, #fff 100%), url(/hero.jpg)` parsed
+ * as a single two-stop gradient whose second stop was the whole string
+ * `#fff 100%), url(/hero.jpg` — the function pattern is greedy to the last
+ * `)`, and the stray `)` it swallowed then suppressed the top-level comma
+ * split. That round-tripped BYTE-IDENTICAL, so nothing looked wrong until
+ * the author's first stop edit re-serialized the model and the `url()`
+ * layer was gone for good. A stacked value now takes the `raw` path, where
+ * the field shows the CSS verbatim and hands it back untouched.
  */
 export function parseCssGradient(
   value: string | undefined | null,
@@ -286,14 +318,25 @@ export function parseCssGradient(
   const text = `${value}`.trim()
   if (!text || !isCssGradientValue(text)) return undefined
 
+  /** Held verbatim: gradient-shaped, but not one this model can express. */
+  const unmodellable: CssGradient = { type: 'linear', stops: [], raw: text }
+  // Unbalanced parens make every split below meaningless, so refuse first.
+  if (!hasBalancedParens(text)) return unmodellable
+  if (splitTopLevelArgs(text).filter((layer) => layer !== '').length !== 1) {
+    return unmodellable
+  }
+
   const match = GRADIENT_FUNCTION_PATTERN.exec(text)
   const fn = match?.[1]?.toLowerCase()
-  // Only the two the control can round-trip. `conic-gradient`,
-  // `repeating-linear-gradient` and a comma-stacked image list all land in
-  // `raw`, where the field shows the CSS verbatim rather than mangling it.
+  // Only the two the control can round-trip. `conic-gradient` and
+  // `repeating-linear-gradient` land in `raw` alongside the stacked lists.
   if (!match || (fn !== 'linear-gradient' && fn !== 'radial-gradient')) {
-    return { type: 'linear', stops: [], raw: text }
+    return unmodellable
   }
+  // One layer, balanced overall, and still unbalanced INSIDE the captured
+  // body means the trailing `)` closes something else — `linear-gradient(a,
+  // b) url(x)` is one layer whose gradient is only part of it.
+  if (!hasBalancedParens(match[2] ?? '')) return unmodellable
   const type: CssGradientType = fn === 'radial-gradient' ? 'radial' : 'linear'
   const args = splitTopLevelArgs(match[2] ?? '').filter((arg) => arg !== '')
   const unparsed: CssGradient = { type, stops: [], raw: text }

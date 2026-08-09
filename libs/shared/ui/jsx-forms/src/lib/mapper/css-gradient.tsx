@@ -84,7 +84,10 @@ import { type ExtendedFieldMeta, validationError } from './validation-error'
  * Anything the editor cannot model — `conic-gradient`, `to bottom right`,
  * a comma-stacked image list — falls back to a free-text box holding the
  * raw string, so no existing value is destroyed by an editor that cannot
- * show it.
+ * show it. The stacked case reaches that box only because `parseCssGradient`
+ * splits top-level layers first (AGL-1336); until it did, a tint over a
+ * photo opened in the STOP editor and the author's first edit deleted the
+ * photo.
  */
 
 /** What the fill-type switch offers; `solid` means "no background image". */
@@ -491,8 +494,9 @@ export const CssGradientField = (props: CssGradientProps) => {
           />
           <FormHelperText>
             {'This background is richer than the stop editor can show — ' +
-              'editing it back to a plain linear or radial gradient brings ' +
-              'the controls back.'}
+              'stacked layers, a conic gradient, a direction keyword. It is ' +
+              'kept exactly as written; editing it back to a plain linear ' +
+              'or radial gradient brings the controls back.'}
           </FormHelperText>
         </>
       ) : draft.fill === 'solid' ? null : (

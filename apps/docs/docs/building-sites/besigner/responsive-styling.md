@@ -124,17 +124,16 @@ own, and while the artboard previews dark you can give dark a different
 gradient outright.
 
 A background richer than the stop editor can show — a `conic-gradient`, a
-`to bottom right` direction, a `url()` image — opens as an editable CSS
-box instead, and is never rewritten. Edit it back to a plain linear or
-radial gradient and the stop controls come back.
+`to bottom right` direction, a `url()` image, or **several comma-separated
+layers** — opens as an editable CSS box instead, and is never rewritten.
+Edit it back to a plain linear or radial gradient and the stop controls
+come back.
 
-:::caution One layer at a time
-Background Fill holds a **single** gradient or image. Comma-separating
-several layers into it (a tint over a photo, say) is not supported: the
-stop editor reads the list as one gradient, and your next edit in it
-drops the later layers. Build a stack in
-[custom CSS](#custom-css-sx) instead.
-:::
+That includes a stack: `linear-gradient(…), url(/hero.jpg)` is a tint over
+a photo, and Background Fill keeps it exactly as written rather than
+offering stop controls that could only describe the first layer. You can
+edit the stack in that box, or build one in
+[custom CSS](#custom-css-sx).
 
 ## Visibility per device band
 

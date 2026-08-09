@@ -120,6 +120,81 @@ describe('parseCssGradient / buildCssGradient (AGL-1331)', () => {
   })
 })
 
+/**
+ * Stacked layers (AGL-1336). `background-image` is a comma-separated LAYER
+ * LIST; this model holds one layer. Before the layer split, a tint over a
+ * photo parsed as a SINGLE two-stop gradient whose second stop carried the
+ * rest of the string — and because `buildCssGradient` re-joined the same
+ * pieces it round-tripped byte-identical, so the value looked fine right up
+ * until the author's first stop edit silently deleted the `url()` layer.
+ */
+describe('stacked background layers (AGL-1336)', () => {
+  /** A tint over a photo — the shape the docs pass caught. */
+  const STACKED = `${SLIM}, url(/hero.jpg)`
+
+  it.each([
+    STACKED,
+    'url(/hero.jpg), linear-gradient(#000 0%, #fff 100%)',
+    `${CTA}, ${SLIM}`,
+    'linear-gradient(#000, #fff), linear-gradient(#fff, #000), url(/a.png)',
+  ])('refuses the stop editor for %s and holds it raw', (value) => {
+    const parsed = parseCssGradient(value)
+    expect(parsed?.raw).toBe(value)
+    // No modelled stops at all: a partial model is what let the later
+    // layers be dropped by a re-serialize.
+    expect(parsed?.stops).toEqual([])
+    expect(buildCssGradient(parsed)).toBe(value)
+  })
+
+  it('refuses a single layer whose gradient is only part of it', () => {
+    // One layer (no top-level comma) but the trailing `)` closes `url(`,
+    // not the gradient — the greedy pattern captured `#000, #fff) url(/x`.
+    const value = 'linear-gradient(#000, #fff) url(/x.png)'
+    const parsed = parseCssGradient(value)
+    expect(parsed?.raw).toBe(value)
+    expect(parsed?.stops).toEqual([])
+  })
+
+  it('refuses an unbalanced value rather than guessing at it', () => {
+    const value = 'linear-gradient(#000, #fff))'
+    expect(parseCssGradient(value)?.raw).toBe(value)
+  })
+
+  it('still parses a lone gradient normally', () => {
+    // The layer split must not cost the ordinary case: the CTA's stops each
+    // hold commas of their own inside `var()`/`rgba()`.
+    expect(parseCssGradient(CTA)?.raw).toBeUndefined()
+    expect(parseCssGradient(CTA)?.stops).toHaveLength(3)
+    expect(
+      parseCssGradient('radial-gradient(rgba(0, 0, 0, .5) 0%, #fff 100%)')
+        ?.stops,
+    ).toHaveLength(2)
+  })
+
+  it('seeds the raw box, so no stop control exists to drop a layer', () => {
+    expect(seedGradientDraft(STACKED)).toEqual({
+      fill: 'linear',
+      angle: '',
+      stops: [],
+      raw: STACKED,
+    })
+    expect(serializeGradientDraft(seedGradientDraft(STACKED))).toBe(STACKED)
+  })
+
+  it('survives load and save byte-identical, with the layers named', () => {
+    const onSubmit = renderField(STACKED)
+    expect(
+      (screen.getByLabelText('Background image CSS') as HTMLInputElement).value,
+    ).toBe(STACKED)
+    // The structured controls the old parse offered — and drops layers
+    // through — are simply not on screen.
+    expect(screen.queryByLabelText('Angle')).toBeNull()
+    expect(screen.queryByLabelText('Stop 1 color')).toBeNull()
+    expect(screen.getByText(/stacked layers/i)).toBeTruthy()
+    expect(persisted(onSubmit).backgroundImage).toBe(STACKED)
+  })
+})
+
 describe('palette token references (AGL-1331)', () => {
   it('maps a token path to MUI’s own custom-property name', () => {
     expect(paletteTokenToCssVar('primary.main', '#00B0FF')).toBe(
