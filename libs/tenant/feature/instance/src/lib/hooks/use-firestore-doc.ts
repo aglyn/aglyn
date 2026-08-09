@@ -23,6 +23,12 @@ import {
   type FirestoreError,
 } from 'firebase/firestore'
 import { useEffect, useRef, useState, type DependencyList } from 'react'
+import {
+  DENIAL_STREAK_TO_REPORT,
+  denialLabelForQuery,
+  reportFirestoreDenial,
+  reportFirestoreServerRead,
+} from './firestore-denial-reporter'
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
@@ -43,6 +49,12 @@ export interface UseFirestoreDocResult<T> {
    * `ObservableStatus.hasPendingWrites` — see that comment (AGL-1262).
    */
   hasPendingWrites: boolean
+  /**
+   * `data` came from the local cache and the server has not confirmed it
+   * (AGL-1066). See `ObservableStatus.fromCache` for why this matters and
+   * why it is the signal to reach for rather than `staleSession`.
+   */
+  fromCache: boolean
 }
 
 /**
@@ -64,6 +76,9 @@ export function useFirestoreDoc<T = DocumentData>(
   const [status, setStatus] = useState<FirestoreDocStatus>('loading')
   const [error, setError] = useState<FirestoreError | undefined>(undefined)
   const [hasPendingWrites, setHasPendingWrites] = useState(false)
+  // Un-confirmed until a snapshot says otherwise: a hook that has not heard
+  // from the server yet must not read as server-confirmed.
+  const [fromCache, setFromCache] = useState(true)
   const buildRefRef = useRef(buildRef)
   buildRefRef.current = buildRef
   const idField = options.idField
@@ -76,6 +91,7 @@ export function useFirestoreDoc<T = DocumentData>(
     // arrives. Mirrors use-firestore-collection.
     setData(undefined)
     setHasPendingWrites(false)
+    setFromCache(true)
 
     const ref = buildRefRef.current()
     if (!ref) {
@@ -86,6 +102,11 @@ export function useFirestoreDoc<T = DocumentData>(
     let unsubscribe: (() => void) | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     let attempt = 0
+    // Refusals since the last SERVER snapshot (AGL-1066) — see the note on
+    // `DENIAL_STREAK_TO_REPORT` for why this is not `attempt`.
+    let deniedStreak = 0
+    let denialReported = false
+    const denialLabel = denialLabelForQuery(ref)
 
     const subscribe = () => {
       unsubscribe = onSnapshot(
@@ -96,6 +117,16 @@ export function useFirestoreDoc<T = DocumentData>(
           setStatus('success')
           setError(undefined)
           setHasPendingWrites(snapshot.metadata.hasPendingWrites)
+          setFromCache(snapshot.metadata.fromCache)
+          // Only the SERVER answering is evidence the session can read.
+          if (!snapshot.metadata.fromCache) {
+            deniedStreak = 0
+            denialReported = false
+            // Proof the session can read — stronger than any accumulated
+            // denial, and what stops a scoped collaborator's by-design
+            // denials from ever adding up to a re-auth prompt.
+            reportFirestoreServerRead()
+          }
           if (!snapshot.exists()) {
             setData(undefined)
             return
@@ -107,6 +138,15 @@ export function useFirestoreDoc<T = DocumentData>(
         (err) => {
           if (cancelled) return
           unsubscribe?.()
+          // Say so once per outage, and only for a refusal — a lost network
+          // produces no error callback at all, so this cannot fire offline.
+          if (err?.code === 'permission-denied') {
+            deniedStreak += 1
+            if (deniedStreak >= DENIAL_STREAK_TO_REPORT && !denialReported) {
+              denialReported = true
+              reportFirestoreDenial(denialLabel)
+            }
+          }
           if (attempt < MAX_RETRIES) {
             attempt += 1
             timer = setTimeout(subscribe, RETRY_DELAY_MS)
@@ -127,7 +167,7 @@ export function useFirestoreDoc<T = DocumentData>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
-  return { data, status, error, hasPendingWrites }
+  return { data, status, error, hasPendingWrites, fromCache }
 }
 
 export default useFirestoreDoc

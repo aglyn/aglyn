@@ -92,6 +92,25 @@ export interface ObservableStatus<T> {
    * up unable to save real changes (AGL-1262).
    */
   hasPendingWrites: boolean
+  /**
+   * The emitted `data` came from the local cache and the server has NOT
+   * confirmed it (`snapshot.metadata.fromCache`).
+   *
+   * Carried because it is the only per-listener ground truth about
+   * freshness the SDK offers, and the console needs it (AGL-1066). Under
+   * `persistentLocalCache` a listener whose server listen is being REFUSED
+   * still emits cached snapshots and still reports `status: 'success'` —
+   * the retry budget is reset by each cached emission and never spends, so
+   * `status` can never reveal the fault (see
+   * `use-firestore-collection-cached-retry.spec.ts`).
+   *
+   * Prefer this over `session-health`'s `staleSession` for anything that
+   * asks "is what I am looking at live?". `staleSession` is a heuristic
+   * needing two denied collections inside a window, and it is unreachable
+   * on listener-only pages; this is a fact about THIS listener, costs
+   * nothing, and clears itself the instant a server snapshot lands.
+   */
+  fromCache: boolean
 }
 
 /** Replaces reactfire's `ReactFireOptions<T>` — drops the `suspense` field, which was never read. */
@@ -145,6 +164,20 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
         // arrives, which looks like "empty pages with zero errors"
         // (the AGL-217 mystery). Production keeps the default transport
         // and persistent cache.
+        //
+        // ⚠️ CONSEQUENCE, and it will cost you hours if you do not know it
+        // (AGL-1066): every stale-session/stale-cache fault is UNREPRODUCIBLE
+        // locally through the app, because the cache that causes them is off
+        // in exactly the configuration you would reach for to reproduce one.
+        // A listener that keeps serving arbitrarily-old data while the server
+        // refuses it, a `noDocument` tombstone that 404s a live host, the
+        // retry budget that never spends because a cached emission resets it
+        // — none of them can happen here. Test that behaviour with the unit
+        // seams instead (`use-firestore-collection-cached-retry.spec.ts`
+        // drives cached emissions and denials directly), or against a
+        // deployed environment. Do NOT "fix" it by turning the cache on for
+        // the emulator: the AGL-217 empty-pages-with-zero-errors mystery is
+        // what that produces.
         initializeFirestore(
           app,
           FIREBASE_FIRESTORE_EMULATOR_ENABLED

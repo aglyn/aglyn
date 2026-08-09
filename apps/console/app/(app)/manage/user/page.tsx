@@ -17,7 +17,7 @@
 
 'use client'
 
-import { getSessionHealth } from '../../../../utils/session-health'
+import { writeGuardedBySeed } from '../../../../utils/guarded-seed-write'
 import {
   canLinkSocialProvider,
   normalizeAddress,
@@ -195,6 +195,14 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     data,
     status: profileStatus,
     error: profileError,
+    /**
+     * The seeding snapshot is unconfirmed by the server (AGL-1356). The
+     * guard below cannot rely on `profileStatus` alone: under
+     * `persistentLocalCache` a refused listen still emits cached snapshots,
+     * and each one resets the hook's retry budget, so `status` never reaches
+     * `'error'` and the AGL-1143 guard never fires on this page.
+     */
+    fromCache: profileFromCache,
   } = useFirestoreDoc(() => userRef, [firestore, user.uid])
   /** The read failed — as opposed to succeeding and finding nothing. */
   const profileUnreadable = profileStatus === 'error'
@@ -238,74 +246,84 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
 
   const handleBasicSave = useCallback(
     async (fields: any) => {
-      // Never write over a document we could not read (AGL-1143). The form is
-      // already hidden in this state, so reaching here means something rendered
-      // it anyway — and this is a destructive write with `merge: true`, so a
-      // blank field is a deletion, not a no-op. Refuse rather than trust the UI.
-      if (profileUnreadable) {
-        enqueueSnackbar(
-          'Your profile could not be loaded, so it cannot be saved — that ' +
-            'would overwrite it with blanks. Reload and try again.',
-          { variant: 'error' },
-        )
-        return
-      }
-      // And never write over one we could read but cannot TRUST (AGL-1066).
-      // The AGL-1143 guard above keys on a read that FAILED; a cache-served
-      // stale read succeeds and renders a populated, plausible form. This
-      // write is `{...fields}` — every field, seeded from that read — so
-      // `merge: true` protects nothing and saving one change reverts the rest
-      // to whatever IndexedDB last saw.
-      if (getSessionHealth().staleSession) {
-        enqueueSnackbar(
-          'Your session went stale, so this profile may be out of date — ' +
-            'saving now could overwrite newer values. Sign in again and reload.',
-          { variant: 'error' },
-        )
-        return
-      }
+      /**
+       * Never write over a document we could not read (AGL-1143), and never
+       * over one we could read but cannot TRUST (AGL-1356).
+       *
+       * This write is `{...fields}` — every field of the form, seeded from
+       * the profile listener — so `merge: true` protects nothing, and the
+       * address block is REPLACED outright (see AGL-1133 below). Saving one
+       * change therefore rewrites everything else to whatever the seed held.
+       *
+       * The guard WRAPS the write rather than preceding it: an early return
+       * is a shape you can keep while losing the protection, and the two
+       * guards that used to sit here were both unreachable on this page —
+       * `status === 'error'` because a cached emission resets the retry
+       * budget so it never errors, and `staleSession` because this page
+       * issues no labelled one-shot read and so can never reach the
+       * two-collection threshold. `fromCache` is what actually catches it.
+       */
       const dequeueLoading = queueLoading()
       try {
-        // Normalize before storing, not after reading (AGL-1133). Production
-        // held `phoneNumber: "7376006900"` — ten digits, no country code —
-        // which is unusable for SMS or for a Stripe customer, and every later
-        // reader would have had to guess a country to fix it.
-        //
-        // The whole address is REPLACED rather than merged: Firestore merges
-        // nested maps key by key, so clearing one line would silently leave
-        // the old value behind. `normalizeAddress` returns null for an empty
-        // address, and null here means "no address", not "an object of empty
-        // strings" — which every `if (address)` in the codebase would read as
-        // having one.
-        const normalizedPhone = normalizePhone(fields?.phoneNumber)
-        const address = normalizeAddress(fields?.address)
-        await setDoc(
-          userRef,
+        const verdict = await writeGuardedBySeed(
           {
-            ...fields,
-            // Keep exactly what was typed if it cannot be normalized
-            // confidently, rather than dropping the user's data on the floor.
-            // The field's own validator is what stops nonsense arriving here.
-            phoneNumber: normalizedPhone ?? fields?.phoneNumber ?? null,
-            address,
+            subject: 'profile',
+            unreadable: profileUnreadable,
+            fromCache: profileFromCache,
           },
-          { merge: true },
+          async () => {
+            // Normalize before storing, not after reading (AGL-1133).
+            // Production held `phoneNumber: "7376006900"` — ten digits, no
+            // country code — which is unusable for SMS or for a Stripe
+            // customer, and every later reader would have had to guess a
+            // country to fix it.
+            //
+            // The whole address is REPLACED rather than merged: Firestore
+            // merges nested maps key by key, so clearing one line would
+            // silently leave the old value behind. `normalizeAddress` returns
+            // null for an empty address, and null here means "no address",
+            // not "an object of empty strings" — which every `if (address)`
+            // in the codebase would read as having one.
+            const normalizedPhone = normalizePhone(fields?.phoneNumber)
+            const address = normalizeAddress(fields?.address)
+            await setDoc(
+              userRef,
+              {
+                ...fields,
+                // Keep exactly what was typed if it cannot be normalized
+                // confidently, rather than dropping the user's data on the
+                // floor. The field's own validator is what stops nonsense
+                // arriving here.
+                phoneNumber: normalizedPhone ?? fields?.phoneNumber ?? null,
+                address,
+              },
+              { merge: true },
+            )
+            // Keep Firebase Auth's displayName in step (AGL-852): rosters and
+            // comments read it, so without this a name edit here was
+            // invisible to teammates. Best-effort — a failed sync must not
+            // fail the save.
+            const displayName = [
+              String(fields?.[FIELD_SCHEMA_FIRST_NAME.name] ?? '').trim(),
+              String(fields?.[FIELD_SCHEMA_LAST_NAME.name] ?? '').trim(),
+            ]
+              .filter(Boolean)
+              .join(' ')
+            if (displayName && displayName !== user?.displayName) {
+              try {
+                await updateProfile(user, { displayName })
+              } catch (error) {
+                console.error('displayName sync failed', error)
+              }
+            }
+          },
         )
-        // Keep Firebase Auth's displayName in step (AGL-852): rosters and
-        // comments read it, so without this a name edit here was invisible to
-        // teammates. Best-effort — a failed sync must not fail the save.
-        const displayName = [
-          String(fields?.[FIELD_SCHEMA_FIRST_NAME.name] ?? '').trim(),
-          String(fields?.[FIELD_SCHEMA_LAST_NAME.name] ?? '').trim(),
-        ]
-          .filter(Boolean)
-          .join(' ')
-        if (displayName && displayName !== user?.displayName) {
-          try {
-            await updateProfile(user, { displayName })
-          } catch (error) {
-            console.error('displayName sync failed', error)
-          }
+        if (!verdict.ok) {
+          // Say why, and what to do about it. A refused save that reports
+          // nothing sends the user back to retype a form that will be
+          // refused again just as quietly.
+          enqueueSnackbar(verdict.message, { variant: 'error' })
+          return
         }
         enqueueSnackbar('Saved!', { variant: 'success' })
       } catch (e) {
@@ -314,7 +332,14 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         dequeueLoading()
       }
     },
-    [enqueueSnackbar, profileUnreadable, queueLoading, userRef, user],
+    [
+      enqueueSnackbar,
+      profileUnreadable,
+      profileFromCache,
+      queueLoading,
+      userRef,
+      user,
+    ],
   )
   // Profile image (AGL-365): mirrors to the auth photoURL (app bar,
   // comments) and the users doc (team lists, activity).

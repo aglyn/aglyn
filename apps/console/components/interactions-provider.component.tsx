@@ -65,14 +65,15 @@ export function InteractionsProvider(props: InteractionsProviderProps) {
   const { enqueueSnackbar } = useSnackbar()
   const [builder, setBuilder] = useState<InteractionBuilderState | null>(null)
 
-  const { data: actionDocs } = useFirestoreCollection<any>(
-    () =>
-      disabled
-        ? null
-        : query(collection(firestore, 'hosts', hostId, 'actions'), limit(100)),
-    [firestore, hostId, disabled],
-    { idField: '$id' },
-  )
+  const { data: actionDocs, fromCache: actionsFromCache } =
+    useFirestoreCollection<any>(
+      () =>
+        disabled
+          ? null
+          : query(collection(firestore, 'hosts', hostId, 'actions'), limit(100)),
+      [firestore, hostId, disabled],
+      { idField: '$id' },
+    )
   const { data: experimentDocs } = useFirestoreCollection<any>(
     () =>
       disabled
@@ -267,6 +268,10 @@ export function InteractionsProvider(props: InteractionsProviderProps) {
           hostId={hostId}
           state={builder}
           existing={editingDoc}
+          // The freshness of the listener `existing` was seeded from
+          // (AGL-1066) — the dialog cannot ask, so the owner of the listen
+          // has to tell it.
+          existingFromCache={actionsFromCache}
           onClose={() => setBuilder(null)}
         />
       ) : null}

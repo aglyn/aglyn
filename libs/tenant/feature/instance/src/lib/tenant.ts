@@ -24,6 +24,7 @@ export * from './hooks/helpers/use-doc'
 export * from './hooks/helpers/use-modify-doc-callback'
 export * from './hooks/helpers/guarded-nodes-save'
 
+export * from './hooks/firestore-denial-reporter'
 export * from './hooks/use-firestore-collection'
 export * from './hooks/use-firestore-doc'
 export * from './hooks/use-switcher-collection'

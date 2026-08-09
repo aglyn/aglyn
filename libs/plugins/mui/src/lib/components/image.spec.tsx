@@ -163,7 +163,7 @@ describe('Image metadata (AGL-1305)', () => {
   })
 })
 
-describe('Image node styles (AGL-1238)', () => {
+describe('Image node styles (AGL-1240)', () => {
   it('merges the node sx over the component defaults instead of dropping it', () => {
     // The literals are composed AFTER `{...rest}`, so leaving `sx` in the
     // spread REPLACED everything the author set from the Styles panel. Every

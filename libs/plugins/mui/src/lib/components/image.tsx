@@ -61,7 +61,7 @@ export interface ImageProps {
   /**
    * Authored node styles, handed over by the renderer rather than typed into
    * an attribute — recomposed below so the author's Styles-panel values are
-   * merged rather than replaced (AGL-1238).
+   * merged rather than replaced (AGL-1240).
    */
   sx?: SxProps
   /**
@@ -97,7 +97,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     // Pull `sx` out of the spread: the literals below are composed AFTER
     // `{...rest}`, so leaving it there REPLACED every style the author set
     // from the Styles panel. The hero mockups' 16px radius and drop shadow
-    // were being discarded on every published page (AGL-1238).
+    // were being discarded on every published page (AGL-1240).
     sx: nodeSxProp,
     ...rest
   } = props

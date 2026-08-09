@@ -40,7 +40,13 @@ export {
 // AglynScreenVersion/AglynLayoutVersion are exported (specialized with the
 // SDK's NodeSchema) from ../types/screen instead of this generic form.
 // Org billing vocabulary (see definitions/org-billing.types.ts and the
-// glossary).
+// glossary). The two ownership maps are VALUES, not types: they are the
+// declared client-writable/unpersisted partition of `orgs/{orgId}` that the
+// AGL-1355 coverage guard checks the Firestore rules against.
+export {
+  ORG_CLIENT_WRITABLE_FIELDS,
+  ORG_UNPERSISTED_FIELDS,
+} from './definitions/org-billing.types'
 export type {
   AglynOrgBilling,
   OrgBrandingProfile,

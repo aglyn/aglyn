@@ -183,12 +183,15 @@ export const AccordionSummaryElement = forwardRef<
         // Unresolved target, or a surface that must not navigate (canvas,
         // preview): same two-part shape, so the editor never shows a row
         // that behaves differently from the one that ships.
-        <Link
-          component="span"
-          underline="none"
-          color="inherit"
-          sx={SUMMARY_LABEL_SX}
-        >
+        //
+        // Same ELEMENT too, not just the same box (AGL-1268). `href` comes
+        // from the screens map, which differs between the render that
+        // produced an ISR page and the render that hydrates it — a screen
+        // published or unpublished in between. Switching `<a>` to `<span>`
+        // on that would remount the subtree at hydration; an `<a>` with no
+        // href is HTML's placeholder link, so the element is stable and the
+        // row is still inert. Link Container settled on this shape first.
+        <Link underline="none" color="inherit" sx={SUMMARY_LABEL_SX}>
           {children}
         </Link>
       )}

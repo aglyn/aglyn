@@ -125,12 +125,26 @@ export function reportDeniedRead(collection = 'unknown'): void {
 }
 
 /**
- * A one-shot read reached the SERVER and succeeded.
+ * A read reached the SERVER and succeeded.
  *
  * That is proof the session is alive — stronger than any accumulated
- * denial, since one-shot reads bypass the persistent cache — so it clears
- * the evidence outright. Without this, two genuine denials early in a
- * session would leave the prompt armed for the rest of it.
+ * denial — so it clears the evidence outright. Without this, two genuine
+ * denials early in a session would leave the prompt armed for the rest of
+ * it.
+ *
+ * Also called by the listener hooks for any snapshot with
+ * `metadata.fromCache === false` (AGL-1066), which is what makes listener
+ * denials safe to count: a scoped collaborator's other listens keep being
+ * answered and clear the evidence, while a dead session has no answer to
+ * offer.
+ *
+ * NOTE: one-shot reads do NOT unconditionally bypass the cache, as this
+ * comment used to claim. `getDocs` with the default source falls back to
+ * the cache when the client is OFFLINE, and succeeds — so this can be
+ * reached without the server having answered. Harmless in practice, because
+ * an offline client accumulates no `permission-denied` evidence for it to
+ * clear, but do not build anything on the stronger reading. A refusal is
+ * still always the server's, which is the part that matters.
  */
 export function reportSuccessfulRead(): void {
   if (!denials.size) return

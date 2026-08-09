@@ -61,6 +61,11 @@ export interface InteractionBuilderDialogProps {
   state: InteractionBuilderState
   /** Existing action doc when editing. */
   existing?: any
+  /**
+   * `existing` came from a cached snapshot the server has not confirmed
+   * (AGL-1066). Passed in because the listener lives in the provider.
+   */
+  existingFromCache?: boolean
   onClose: () => void
 }
 
@@ -189,7 +194,7 @@ function TargetPicker(props: {
  * class steps against the live canvas DOM.
  */
 export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
-  const { hostId, state, existing, onClose } = props
+  const { hostId, state, existing, existingFromCache, onClose } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
 
@@ -418,6 +423,22 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     // because the untouched fields are all present in the payload. Editing one
     // step would revert the rest to whatever the cache last saw, over a
     // colleague's newer version.
+    //
+    // `existingFromCache` FIRST — it is the actions listener's own verdict
+    // on the doc this dialog was seeded from, whereas `staleSession` below
+    // needs two distinct LABELLED collections denied inside 60s and is
+    // unreachable on most of the routes this dialog opens over (AGL-1066).
+    // Only meaningful when EDITING: a brand-new action is seeded from the
+    // canvas, not from a read, so nothing can be stale about it.
+    if (existing && existingFromCache) {
+      enqueueSnackbar(
+        'This interaction has not been confirmed with the server, so it may ' +
+          'be out of date — saving now could overwrite newer changes. Check ' +
+          'your connection and reload.',
+        { variant: 'error' },
+      )
+      return
+    }
     if (getSessionHealth().staleSession) {
       enqueueSnackbar(
         'Your session went stale, so this interaction may be out of date — ' +
@@ -450,7 +471,17 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
       persist: false,
     })
     onClose()
-  }, [problem, state.id, candidate, firestore, hostId, enqueueSnackbar, onClose])
+  }, [
+    problem,
+    state.id,
+    candidate,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+    onClose,
+    existing,
+    existingFromCache,
+  ])
 
   return (
     <Dialog open={!minimized} onClose={onClose} maxWidth="sm" fullWidth>
