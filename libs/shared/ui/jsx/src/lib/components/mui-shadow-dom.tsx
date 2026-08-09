@@ -16,7 +16,6 @@
  */
 
 import { createEmotionCache } from '@aglyn/shared-ui-theme'
-import { renderStylesToString } from '@emotion/server'
 import { Portal } from '@mui/material'
 import { kebabCase } from 'change-case'
 import {
@@ -29,6 +28,9 @@ import {
 } from 'react'
 import { renderToString } from 'react-dom/server'
 import { useMergeRefs } from '../hooks/use-merge-refs'
+// AGL-1238: vendored, stream-free port — the real @emotion/server entry drags
+// stream polyfills (and an eval-based feature probe) into every client bundle.
+import { renderStylesToString } from '../vendor/emotion-render-styles-to-string'
 import EmotionCacheProvider from './emotion-cache-provider'
 
 export type MuiShadowRendererProps = {
