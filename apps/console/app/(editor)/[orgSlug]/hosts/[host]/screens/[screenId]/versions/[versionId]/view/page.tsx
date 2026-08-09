@@ -637,23 +637,33 @@ function ScreenDetails() {
   const [seoDraft, setSeoDraft] = useState<{
     title: string
     description: string
-    image: string
   } | null>(null)
   const seoValue = {
     title: seoDraft?.title ?? screen?.seo?.title ?? '',
     description: seoDraft?.description ?? screen?.seo?.description ?? '',
-    image: seoDraft?.image ?? screen?.seo?.image ?? '',
   }
-  const setSeoField = (field: 'title' | 'description' | 'image') =>
+  const setSeoField = (field: 'title' | 'description') =>
     (event: { target: { value: string } }) =>
       setSeoDraft({ ...seoValue, [field]: event.target.value })
   const handleSeoSave = useCallback(async () => {
     if (!seoDraft) return
-    const seo: Record<string, string> = {}
+    /**
+     * Carry forward everything this panel does not edit (AGL-1337).
+     *
+     * This used to build a fresh `seo` map from its own three fields and
+     * write it whole — so saving a title here silently deleted `breadcrumb`,
+     * and would now also delete the `imageWidth`/`imageHeight` the social
+     * image picker stores beside the reference, leaving a card that names an
+     * image but cannot say how big it is. A panel that edits two fields must
+     * write two fields.
+     */
+    const existing = (screen?.seo ?? {}) as Record<string, unknown>
+    const seo: Record<string, unknown> = { ...existing }
     if (seoDraft.title.trim()) seo.title = seoDraft.title.trim()
+    else delete seo.title
     if (seoDraft.description.trim())
       seo.description = seoDraft.description.trim()
-    if (seoDraft.image.trim()) seo.image = seoDraft.image.trim()
+    else delete seo.description
     await updateDoc(
       screenRef,
       Object.keys(seo).length
@@ -672,7 +682,15 @@ function ScreenDetails() {
       .catch(() =>
         enqueueSnackbar('An error has occurred', { variant: 'error' }),
       )
-  }, [seoDraft, screenRef, enqueueSnackbar, displayName, logActivity, screenId])
+  }, [
+    seoDraft,
+    screen,
+    screenRef,
+    enqueueSnackbar,
+    displayName,
+    logActivity,
+    screenId,
+  ])
 
   const details = [
     {
@@ -1091,13 +1109,18 @@ function ScreenDetails() {
                         helperText={`${seoValue.description.length}/155`}
                         error={seoValue.description.length > 155}
                       />
-                      <TextField
-                        size="small"
-                        label="Social image URL"
-                        value={seoValue.image}
-                        onChange={setSeoField('image')}
-                        helperText="Shown as the og:image preview when the page is shared."
-                      />
+                      {/* The social image is a media PICK, not a URL you type
+                          (AGL-1337): the reference is stored by identity so it
+                          survives a folder move, and the picker records the
+                          asset's dimensions alongside it so the head can emit
+                          `og:image:width`/`height`. A free-text URL here could
+                          express neither, and would leave the dimensions
+                          describing an image that is no longer there. */}
+                      <Typography variant="caption" color="text.secondary">
+                        {'Social image — choose it in the designer’s Screen ' +
+                          'properties ▸ SEO panel, or set a site-wide default ' +
+                          'in Site setup ▸ SEO.'}
+                      </Typography>
                       <Button
                         size="small"
                         variant="outlined"

@@ -17,6 +17,9 @@
 
 import {
   CNAME_TARGET,
+  DNS_INSTRUCTIONS_INTRO,
+  dnsInstructionsFor,
+  formatDnsInstruction,
   HOST_APEX_ADDRESSES,
   isApexDomain,
   RECOMMENDED_APEX_ADDRESS,
@@ -67,6 +70,18 @@ describe('the wizard and the verify route share one source of truth', () => {
     expect(RECOMMENDED_APEX_ADDRESS).not.toBe('76.76.21.21')
   })
 
+  it('recommends the ALIAS hostname the route resolves, not a pinned address', () => {
+    // The ALIAS names `CNAME_TARGET`, so the registrar flattens it to whatever
+    // that hostname resolves to — which is precisely the intersection
+    // `apexPointsAtTenantEdge` compares against. An apex on an ALIAS therefore
+    // survives a pool change with no customer action; that is the whole point
+    // of leading with it (AGL-1327).
+    const alias = dnsInstructionsFor('example.com').find(
+      (record) => record.type === 'ALIAS',
+    )
+    expect(alias?.value).toBe(CNAME_TARGET)
+  })
+
   it('defaults to the shipped platform values', () => {
     expect(CNAME_TARGET).toBe('sites.aglyn.app')
     expect(RECOMMENDED_APEX_ADDRESS).toBe('216.198.79.1')
@@ -79,5 +94,78 @@ describe('the wizard and the verify route share one source of truth', () => {
       '64.29.17.65',
       '76.76.21.21',
     ])
+  })
+})
+
+describe('dnsInstructionsFor (AGL-1327)', () => {
+  const types = (domain: string) =>
+    dnsInstructionsFor(domain).map((record) => record.type)
+
+  it('leads with ALIAS for a bare apex', () => {
+    expect(types('example.com')[0]).toBe('ALIAS')
+    // The multi-label suffix case has to reach the apex branch too, or a UK
+    // customer is back to being offered a CNAME on their zone root (AGL-1275).
+    expect(types('example.co.uk')[0]).toBe('ALIAS')
+  })
+
+  it('keeps the A record as a fallback for registrars without ALIAS', () => {
+    const apex = dnsInstructionsFor('example.com')
+    const fallback = apex.find((record) => record.type === 'A')
+    expect(fallback).toBeDefined()
+    expect(fallback?.name).toBe('example.com')
+    expect(fallback?.value).toBe(RECOMMENDED_APEX_ADDRESS)
+    // ALIAS first, then the address it falls back to.
+    expect(apex.indexOf(fallback!)).toBeGreaterThan(0)
+    expect(fallback?.note).toContain('only if your registrar offers no ALIAS')
+  })
+
+  it('is unchanged for a subdomain — CNAME first, pointed at the typed name', () => {
+    expect(types('www.example.com')[0]).toBe('CNAME')
+    expect(types('shop.example.co.uk')[0]).toBe('CNAME')
+    const [cname] = dnsInstructionsFor('www.example.com')
+    expect(formatDnsInstruction(cname)).toBe(
+      'CNAME  www.example.com  →  sites.aglyn.app',
+    )
+  })
+
+  it('derives each line from the SHAPE of name it applies to', () => {
+    // A bare apex gains www. on the CNAME line…
+    const apex = dnsInstructionsFor('example.com')
+    expect(apex.find((r) => r.type === 'CNAME')?.name).toBe('www.example.com')
+    expect(apex.find((r) => r.type === 'ALIAS')?.name).toBe('example.com')
+    // …a www name sheds it on the apex lines…
+    const www = dnsInstructionsFor('www.example.co.uk')
+    expect(www.find((r) => r.type === 'ALIAS')?.name).toBe('example.co.uk')
+    // …and a deeper subdomain keeps its placeholder rather than guessing.
+    const deep = dnsInstructionsFor('shop.eu.example.com')
+    expect(deep.find((r) => r.type === 'CNAME')?.name).toBe(
+      'shop.eu.example.com',
+    )
+    expect(deep.find((r) => r.type === 'A')?.name).toBe('your-domain.com')
+  })
+
+  it('shows all three shapes with placeholders before anything is typed', () => {
+    expect(types('')).toEqual(['CNAME', 'ALIAS', 'A'])
+    expect(dnsInstructionsFor('  ').map((record) => record.name)).toEqual([
+      'www.your-domain.com',
+      'your-domain.com',
+      'your-domain.com',
+    ])
+  })
+
+  it('formats a line the docs can quote verbatim', () => {
+    const [alias, fallback] = dnsInstructionsFor('example.com')
+    expect(formatDnsInstruction(alias)).toBe(
+      'ALIAS  example.com  →  sites.aglyn.app',
+    )
+    expect(formatDnsInstruction(fallback)).toBe(
+      'A      example.com  →  216.198.79.1',
+    )
+  })
+
+  it('says ALIAS before it says A in the intro the docs quote', () => {
+    expect(DNS_INSTRUCTIONS_INTRO.indexOf('ALIAS')).toBeLessThan(
+      DNS_INSTRUCTIONS_INTRO.indexOf('A record'),
+    )
   })
 })

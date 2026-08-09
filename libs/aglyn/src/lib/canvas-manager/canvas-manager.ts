@@ -33,6 +33,7 @@ import {
 import { computedFn } from 'mobx-utils'
 import type { Aglyn } from '../aglyn'
 import { REUSABLE_INSTANCE_COMPONENT_ID } from '../app-utils/compose-reusable-components'
+import { stripUndefinedDeep } from '../app-utils/strip-undefined'
 import { createIdUrlSafe, FEATURE_FLAG } from '../foundation'
 import type { PluginId } from '../plugin-manager'
 import {
@@ -166,15 +167,22 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     // Omit collection fields when empty to save Firestore storage
     const nodes = this.nodes ? [...this.nodes] : []
     if (nodes.length > 0) json['nodes'] = nodes
-    const props = toJS(this.props)
+    // The scalar omissions above stopped at the top level, so an OWN key
+    // holding `undefined` inside these bags still reached storage (AGL-1334).
+    // An editor form writes the whole field set back, so a never-set or
+    // cleared optional attribute is such a key — and the two write paths then
+    // disagreed: a save msgpacked it to `null`, a publish handed `undefined`
+    // straight to `updateDoc()`, which rejects it. Stripping HERE is what
+    // makes save and publish agree: both serialize from this one method.
+    const props = stripUndefinedDeep(toJS(this.props))
     if (props && Object.keys(props).length > 0) json['props'] = props
-    const sx = toJS(this.sx)
+    const sx = stripUndefinedDeep(toJS(this.sx))
     const sxEmpty = Array.isArray(sx) ? sx.length === 0 : !sx || Object.keys(sx).length === 0
     if (!sxEmpty) json['sx'] = sx
     // Instance style overrides (AGL-1306): emitted like sx — absent when
     // empty — so the SAVED node map carries them into both storage forms
     // (the plain map and the msgpack bytes both serialize this output).
-    const styleOverrides = toJS(this.styleOverrides)
+    const styleOverrides = stripUndefinedDeep(toJS(this.styleOverrides))
     if (styleOverrides && Object.keys(styleOverrides).length > 0) {
       json['styleOverrides'] = styleOverrides
     }
@@ -822,13 +830,23 @@ export class CanvasManager {
     if (!preset) throw new Error('Invalid preset')
     return this.addNodeFromNested(toJS(preset).data, parent, index)
   }
+  /**
+   * REPLACES a node's props — callers spread the current ones to merge.
+   *
+   * An editor form submits every field it renders, so keys the author left
+   * empty arrive as `undefined`. Those are dropped here rather than stored as
+   * own keys (AGL-1334): for a props bag that is REPLACED wholesale, absent IS
+   * cleared, and an `undefined` member is a value no storage layer accepts.
+   * `AglynNode.toJSON` strips again at the write boundary — this one keeps the
+   * live tree honest for everything that reads it before a save.
+   */
   public updateNodeProps(
     node: NodeSchema<any>,
     props: NodeSchema<any>['props'],
   ): void {
     if (!node) throw new Error('Invalid node')
     this.saveHistory()
-    node.props = { ...props }
+    node.props = stripUndefinedDeep({ ...props })
   }
 
   public static nestDenormalizedNodes(

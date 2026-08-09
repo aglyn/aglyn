@@ -19,13 +19,19 @@ Aglyn emits the right tags, sitemap, and structured data automatically.
 
 Every screen's detail page has an **SEO** card with three fields:
 
-- **Title** — up to 60 characters; overrides the site title on this page.
-- **Description** — up to 155 characters, the meta description.
-- **Social image URL** — shown as the `og:image` preview when the page is shared.
+- **Search title** — up to 60 characters; overrides the site title on this page.
+- **Search description** — up to 155 characters, the meta description.
+- **Social image** — the picture shown when the page is shared. Press **Choose
+  image** to pick one from your [media library](../../content-and-data/media/overview.md)
+  (or the organization's shared library); **Clear** puts the site default back.
 
 Fill them in and press **Save SEO** — it saves independently of the canvas, so you can
 update metadata without touching the design. The published site emits these into the
 page head, deduping descriptions so you never get conflicting tags.
+
+The social image is a media **pick**, not a URL you type. That is deliberate: a
+picked asset is stored by identity, so moving it into a folder or replacing it
+with a new version keeps every card that references it working.
 
 <!-- screenshot: seo/screen-seo-card.png per SCREENSHOT_PLAN.md -->
 
@@ -37,8 +43,13 @@ screen's own description and then the site's, and the social image to the site-w
 
 **Setup → SEO** holds the site-level fields every screen inherits: the site **Title**
 and **Description**, the **Separator** used to join page and site titles (default
-`–`), the **Favicon**, and an **Entity** block (Organization or Person, with a name
-and logo) that feeds the site's structured data.
+`–`), the **Favicon**, a **Social image**, and an **Entity** block (Organization or
+Person, with a name and logo) that feeds the site's structured data.
+
+The **Social image** card is the default card for the whole site — every page that
+sets none of its own uses it, including collection lists and blog entries with no
+cover image. Set one and no page of your site ever shares as a bare, image-less
+link again.
 
 ## Search engine visibility
 
@@ -114,8 +125,29 @@ so a freshly published page never waits on the cache.
 
 ## Social cards
 
-Set **Open Graph** and **Twitter** metadata, including images from your
-[media library](../../content-and-data/media/overview.md). Aglyn checks media completeness so cards render.
+Every published page emits **Open Graph** and **Twitter** metadata: title,
+description, canonical URL, site name, and — once an image is set — `og:image`
+with its `og:image:width` and `og:image:height`.
+
+Which image a page uses is decided in this order:
+
+1. the **entry's cover image**, for a blog or collection entry;
+2. the **screen's own social image**, from its SEO panel;
+3. the **site default**, from Setup → SEO;
+4. nothing.
+
+The first three make the page share as a **large** card
+(`twitter:card: summary_large_image`). Only the fourth falls back to the small
+image-less `summary` card, which is why setting a site default is worth doing once.
+
+**Size.** 1200×630 is the size every network crops well. Aglyn reads the real
+dimensions off the media record and publishes them, so previews reserve the right
+shape before the image finishes loading — it does not assume a size, so a different
+ratio is described honestly rather than stretched.
+
+**Addresses.** Card images are always published as absolute URLs on your site's own
+domain (your custom domain when you have one). A crawler fetches the image without a
+page to resolve a relative path against, so a relative address is a blank card.
 
 ## Structured data
 

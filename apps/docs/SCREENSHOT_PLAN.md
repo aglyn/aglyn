@@ -22,11 +22,12 @@ full pages throughout.
   (`/{org}/hosts/{host}/setup?tab=domain`), on a **paid-plan** site with no domain
   connected. Type `www.example.com` into the **Domain** field first so the record
   lines show a real value.
-- **Frame:** the Custom domain card only — helper text, the two monospace record
-  lines (CNAME → `sites.aglyn.app`, A → `216.198.79.1`), the Domain field, and the
-  **Verify & connect** button. Crop out the rest of the Setup page.
-- **Alt text:** The Custom domain card with the CNAME and A records to add, the
-  Domain field filled in, and the Verify & connect button.
+- **Frame:** the Custom domain card only — helper text, the monospace record lines
+  with the caption under each (CNAME → `sites.aglyn.app`, ALIAS → `sites.aglyn.app`,
+  A → `216.198.79.1`), the Domain field, and the **Verify & connect** button. Crop out
+  the rest of the Setup page.
+- **Alt text:** The Custom domain card with the CNAME, ALIAS, and A records to add,
+  the Domain field filled in, and the Verify & connect button.
 
 ### 2. `static/img/custom-domains/connected-chip-and-actions.png`
 

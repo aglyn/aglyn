@@ -69,9 +69,17 @@ import { type ExtendedFieldMeta, validationError } from './validation-error'
  *
  * The PERSISTED value is ONE CSS string under `backgroundImage` — the same
  * contract as `CssDimensionField`, so nothing downstream has to know
- * this editor exists. A **Solid** fill writes `''`, which clears
- * `backgroundImage` and leaves the neighbouring Background Color field to
- * do the job; the two never fight over one property.
+ * this editor exists. A **Solid** fill writes the explicit keyword
+ * `none`, which paints no image and leaves the neighbouring Background
+ * Color field to do the job; the two never fight over one property.
+ * **Default** writes `''`, which clears the property entirely.
+ *
+ * Solid and Default are two states, not one (AGL-1338). Solid shipped as
+ * "write nothing" — and on a reusable-component INSTANCE, where the panel
+ * edits an override slice, writing nothing IS "no override": the field
+ * could not be used to take a gradient off one placement, because the
+ * absence it produced was indistinguishable from never having touched it.
+ * `none` is a value, so it merges over the component's gradient and wins.
  *
  * Stops bind to palette TOKENS or to literals, and a single gradient can
  * mix them: the marketing CTA's endpoints are `primary.main` /
@@ -90,8 +98,27 @@ import { type ExtendedFieldMeta, validationError } from './validation-error'
  * photo.
  */
 
-/** What the fill-type switch offers; `solid` means "no background image". */
-type GradientFillType = 'solid' | CssGradientType
+/**
+ * The CSS an explicit **Solid** fill persists — `background-image`'s own
+ * initial value, so it renders identically to no declaration at all while
+ * remaining a VALUE that can override an inherited one (AGL-1338).
+ */
+export const SOLID_FILL_VALUE = 'none'
+
+/**
+ * What the fill-type switch offers. Three states, because "no gradient"
+ * and "no opinion" are different answers on a component instance:
+ *
+ * - `''` — unset: the property is not written at all. On a plain node
+ *   that is the browser default; in an instance's override slice it is
+ *   how "this instance does not override the fill" is stored, so the
+ *   component's own fill keeps painting.
+ * - `solid` — an explicit {@link SOLID_FILL_VALUE}: paint no image and
+ *   let Background Color show. A real value, so it beats a gradient the
+ *   component set.
+ * - `linear` / `radial` — the gradient the stop editor builds.
+ */
+type GradientFillType = '' | 'solid' | CssGradientType
 
 interface GradientDraft {
   fill: GradientFillType
@@ -103,11 +130,19 @@ interface GradientDraft {
 
 const DEFAULT_ANGLE = 180
 
-const emptyDraft: GradientDraft = { fill: 'solid', angle: '', stops: [] }
+/** No value at all — the property stays off the node. */
+const emptyDraft: GradientDraft = { fill: '', angle: '', stops: [] }
+
+/** An explicit `background-image: none`. */
+const solidDraft: GradientDraft = { fill: 'solid', angle: '', stops: [] }
 
 export const seedGradientDraft = (value: unknown): GradientDraft => {
   const text = typeof value === 'string' ? value.trim() : ''
   if (!text) return emptyDraft
+  // `none` is this control's own Solid value, not a background it cannot
+  // model: reading it as raw CSS would strand the author in the text box
+  // on a value the control itself wrote.
+  if (text.toLowerCase() === SOLID_FILL_VALUE) return solidDraft
   const parsed = parseCssGradient(text)
   // A non-gradient background image (`url(…)`) is still someone's value.
   if (!parsed) return { ...emptyDraft, fill: 'linear', raw: text }
@@ -123,7 +158,8 @@ export const seedGradientDraft = (value: unknown): GradientDraft => {
 
 export const serializeGradientDraft = (draft: GradientDraft): string => {
   if (draft.raw !== undefined) return draft.raw
-  if (draft.fill === 'solid') return ''
+  if (draft.fill === '') return ''
+  if (draft.fill === 'solid') return SOLID_FILL_VALUE
   const angle = draft.angle.trim()
   const gradient: CssGradient = {
     type: draft.fill,
@@ -302,6 +338,13 @@ GradientStopColor.displayName = 'AglynGradientStopColor'
 export interface CssGradientProps extends BaseFieldProps {
   /** Swatches offered on the custom stage, same as the colour field. */
   presetColors?: string[]
+  /**
+   * What the unset choice is called (AGL-1338). Defaults to the panel's
+   * usual `Default`; a caller editing a component instance's override
+   * slice says so, because there "unset" means the component's own fill
+   * keeps painting rather than nothing painting.
+   */
+  unsetLabel?: string
   ColorPickerProps?: Partial<AglynColorPickerProps>
   FormFieldGridProps?: FormFieldGridProps
 }
@@ -318,6 +361,7 @@ export const CssGradientField = (props: CssGradientProps) => {
     meta,
     help,
     presetColors,
+    unsetLabel = 'Default',
     ColorPickerProps,
     FormFieldGridProps = {},
     // Free-text leftovers from an attribute schema that must never reach
@@ -358,9 +402,11 @@ export const CssGradientField = (props: CssGradientProps) => {
 
   const handleFillChange = useCallback(
     (event: { target: { value: unknown } }) => {
-      const fill = (event.target.value || 'solid') as GradientFillType
-      if (fill === 'solid') {
-        commit({ ...emptyDraft })
+      const fill = (event.target.value ?? '') as GradientFillType
+      // Neither non-gradient choice keeps stops, but they persist
+      // differently: Solid writes `none`, Default writes nothing.
+      if (fill === '' || fill === 'solid') {
+        commit({ ...emptyDraft, fill })
         return
       }
       // Switching INTO a gradient with nothing to show yet starts from the
@@ -469,8 +515,14 @@ export const CssGradientField = (props: CssGradientProps) => {
           helperText ||
           description
         }
-        slotProps={{ htmlInput: { 'aria-label': 'Fill type' } }}
+        slotProps={{
+          htmlInput: { 'aria-label': 'Fill type' },
+          // Without displayEmpty a MUI Select renders NOTHING for `''`,
+          // which would show the unset state as a broken control.
+          select: { displayEmpty: true },
+        }}
       >
+        <MenuItem value="">{unsetLabel}</MenuItem>
         <MenuItem value="solid">Solid color</MenuItem>
         <MenuItem value="linear">Linear gradient</MenuItem>
         <MenuItem value="radial">Radial gradient</MenuItem>
@@ -499,7 +551,7 @@ export const CssGradientField = (props: CssGradientProps) => {
               'or radial gradient brings the controls back.'}
           </FormHelperText>
         </>
-      ) : draft.fill === 'solid' ? null : (
+      ) : draft.fill !== 'linear' && draft.fill !== 'radial' ? null : (
         <>
           <Box
             aria-label="Gradient preview"

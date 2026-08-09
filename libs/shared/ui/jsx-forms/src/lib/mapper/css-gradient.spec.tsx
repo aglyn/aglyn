@@ -264,16 +264,38 @@ describe('describeCssColorProblem (AGL-1331)', () => {
 })
 
 describe('gradient draft round trip (AGL-1331)', () => {
-  it.each([CTA, SLIM, '', 'conic-gradient(#000, #fff)', 'url(/hero.png)'])(
-    'serializes %s back to itself',
-    (value) => {
-      expect(serializeGradientDraft(seedGradientDraft(value))).toBe(value)
-    },
-  )
+  it.each([
+    CTA,
+    SLIM,
+    '',
+    'none',
+    'conic-gradient(#000, #fff)',
+    'url(/hero.png)',
+  ])('serializes %s back to itself', (value) => {
+    expect(serializeGradientDraft(seedGradientDraft(value))).toBe(value)
+  })
 
-  it('opens an empty value on Solid — no background image', () => {
-    expect(seedGradientDraft('')).toEqual({ fill: 'solid', angle: '', stops: [] })
+  it('opens an empty value UNSET, not on Solid (AGL-1338)', () => {
+    // Two different answers: unset writes nothing, Solid writes `none`.
+    // Seeding an empty value on Solid is what made the control read as
+    // already-solid on an instance, so choosing Solid was a no-op.
+    expect(seedGradientDraft('')).toEqual({ fill: '', angle: '', stops: [] })
     expect(seedGradientDraft(undefined)).toEqual({
+      fill: '',
+      angle: '',
+      stops: [],
+    })
+  })
+
+  it('opens an explicit none on Solid, not in the raw box (AGL-1338)', () => {
+    // `none` is this control's own output; parsing it as an unmodellable
+    // background would strand the author in the Custom CSS text box.
+    expect(seedGradientDraft('none')).toEqual({
+      fill: 'solid',
+      angle: '',
+      stops: [],
+    })
+    expect(seedGradientDraft('NONE')).toEqual({
       fill: 'solid',
       angle: '',
       stops: [],
@@ -400,14 +422,70 @@ describe('CssGradientField (AGL-1331)', () => {
     )
   })
 
-  it('clears the background image when the fill goes back to Solid', () => {
+  it('writes an explicit none when the fill goes back to Solid', () => {
     // Solid means "let Background Color do it" — the two fields are
-    // different CSS properties and must never fight over one. The control
-    // emits '', which final-form's default parse turns into undefined;
-    // both clear the sx key (see style-field-groups.spec).
+    // different CSS properties and must never fight over one. It persists
+    // as the keyword `none` rather than as an absent key (AGL-1338), so
+    // the choice survives into an instance override slice, where absence
+    // is reserved for "not overridden".
     const onSubmit = renderField(CTA)
     pickFill('Solid color')
+    expect(persisted(onSubmit).backgroundImage).toBe('none')
+  })
+
+  it('clears the property outright on the unset choice (AGL-1338)', () => {
+    // The way back: no fill value at all. The control emits '', which
+    // final-form's default parse turns into undefined, and the styles
+    // panel deletes the sx key — on an instance that returns the
+    // placement to whatever the component paints.
+    const onSubmit = renderField(CTA)
+    pickFill('Default')
     expect(persisted(onSubmit).backgroundImage).toBeUndefined()
+  })
+
+  it.each(['', 'none'])(
+    'offers no stop editor for %s — neither state has a ramp',
+    (value) => {
+      renderField(value)
+      expect(screen.queryByLabelText('Gradient preview')).toBeNull()
+      expect(screen.queryByText('Add stop')).toBeNull()
+      expect(screen.queryByLabelText('Stop 1 color')).toBeNull()
+    },
+  )
+
+  it('re-opens a stored none on Solid, so the state survives a reload', () => {
+    // The instance case: `backgroundImage: 'none'` is read back as Solid
+    // with no stop editor, not as a custom-CSS value.
+    renderField('none')
+    expect(screen.queryByLabelText('Angle')).toBeNull()
+    expect(screen.queryByLabelText('Background image CSS')).toBeNull()
+    expect(
+      (document.querySelector('.MuiSelect-select') as HTMLElement).textContent,
+    ).toBe('Solid color')
+  })
+
+  it('names the unset choice for what it means where it is used', () => {
+    // Nothing but the label changes: on an instance "Default" would be a
+    // lie, because leaving it unset paints the component's gradient.
+    render(
+      <FormRenderer
+        FormTemplate={FormTemplate}
+        componentMapper={{ 'css-gradient': CssGradientField }}
+        onSubmit={jest.fn()}
+        initialValues={{}}
+        schema={{
+          fields: [
+            {
+              component: 'css-gradient',
+              name: 'backgroundImage',
+              label: 'Background Fill',
+              unsetLabel: 'Inherited',
+            },
+          ],
+        }}
+      />,
+    )
+    expect(screen.getAllByText('Inherited').length).toBeGreaterThan(0)
   })
 
   it('shows a value it cannot model as text rather than destroying it', () => {

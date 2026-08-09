@@ -164,7 +164,20 @@ export interface AglynHost extends AglynDocument {
     description?: string
     separator?: string
     favicon?: string
-    image?: HostMediaUid
+    /**
+     * Site-wide default social card image (AGL-1337) — used by every page
+     * that sets none of its own. A `media:` reference (what the picker
+     * writes) or a raw URL; resolved and made absolute by
+     * `resolveSocialImage`, never emitted as stored.
+     *
+     * `''` is a CLEARED field, written directly to Firestore by the picker
+     * card rather than through the attributes form stack, which maps `''` to
+     * `undefined` and would leave a default nobody could remove (AGL-1191).
+     */
+    image?: string
+    /** Copied from the media record at pick time; see `resolveSocialImage`. */
+    imageWidth?: number
+    imageHeight?: number
     /**
      * Site-wide "discourage search engines" (AGL-1263): `robots.txt` refuses
      * everything, the sitemap goes empty, and every page carries `noindex`.
@@ -399,7 +412,16 @@ export interface AglynScreen extends AglynDocument {
     title?: string
     description?: string
     breadcrumb?: string
-    image?: HostMediaUid
+    /**
+     * This screen's social card image (AGL-1337), overriding the host
+     * default. Same storage contract as {@link AglynHost.seo.image}: a
+     * `media:` reference or URL, `''` meaning cleared — which is how a screen
+     * goes back to inheriting the site default.
+     */
+    image?: string
+    /** Copied from the media record at pick time; see `resolveSocialImage`. */
+    imageWidth?: number
+    imageHeight?: number
   }
 
   // CONCEPT: Scheduling
@@ -687,7 +709,9 @@ export interface AglynTemplate<N = AglynNodeSchema> extends AglynDocument {
     title?: string
     description?: string
     breadcrumb?: string
-    image?: HostMediaUid
+    image?: string
+    imageWidth?: number
+    imageHeight?: number
   }
   placeholders?: Array<TemplatePlaceholder>
   /**

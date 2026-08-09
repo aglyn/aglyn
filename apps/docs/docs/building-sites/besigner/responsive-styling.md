@@ -100,7 +100,7 @@ no custom CSS.
 1. Set **Background Fill** to *Linear gradient* (or *Radial
    gradient*) — the field opens as that one select. It starts
    from your theme's primary and secondary colors so you see a gradient
-   immediately; *Solid color* clears it again and hands the element back
+   immediately; *Solid color* paints no image and hands the element back
    to the Background Color field above.
 2. Set the **Angle** in degrees for a linear fill — `180` runs top to
    bottom, `90` left to right.
@@ -117,6 +117,14 @@ Background Fill writes `background-image`, which paints *over* the
 Background Color — so a solid color set there still shows through
 anywhere the gradient is transparent, and stays as the fallback if you
 switch the fill back to solid.
+
+The first choice in the menu — *Default*, or *Inherited* on a component
+instance — is not the same as *Solid color*. **Default** leaves the fill
+unset; **Solid color** is a positive "paint no image" (`background-image:
+none`). On an ordinary element they look identical, and on a
+[component instance](reusable-components.md#restyle-one-instance) they are
+the difference between keeping the component's gradient and replacing it
+with your own background color.
 
 Like the other color fields, Background Fill is
 [scheme-scoped](#scheme-scoped-colors): theme-color stops adapt on their

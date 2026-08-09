@@ -33,16 +33,17 @@ import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
-// The target and the apex address come from the SAME module the verify route
-// reads (AGL-1275). They used to be private constants here, and the apex one
-// had its own `NEXT_PUBLIC_AGLYN_TENANT_APEX_A` that nothing else looked at —
-// so "must stay a member of the route's pool" was an invariant held by a
-// comment, and widening the pool by env var would have printed an address the
-// route rejects.
+// The target, the apex address, and the instruction copy come from the SAME
+// module the verify route reads (AGL-1275). They used to be private constants
+// here, and the apex one had its own `NEXT_PUBLIC_AGLYN_TENANT_APEX_A` that
+// nothing else looked at — so "must stay a member of the route's pool" was an
+// invariant held by a comment, and widening the pool by env var would have
+// printed an address the route rejects.
 import {
   CNAME_TARGET,
-  isApexDomain,
-  RECOMMENDED_APEX_ADDRESS,
+  DNS_INSTRUCTIONS_INTRO,
+  dnsInstructionsFor,
+  formatDnsInstruction,
 } from '../utils/tenant-dns'
 
 export interface CustomDomainCardProps {
@@ -69,33 +70,11 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
   )
   const connected = host?.cname as string | undefined
   const [domain, setDomain] = useState('')
-  // Each record line shows the SHAPE of name it applies to, derived from the
-  // typed value rather than echoing it into both (the echo claimed a CNAME
-  // for a bare apex and an A record for a www — both wrong). A bare apex
-  // gains www. on the CNAME line; a www-prefixed name sheds it on the A
-  // line; deeper subdomains keep the typed value on the CNAME line and the
-  // A line keeps its placeholder, since an apex example derived from
-  // shop.example.co.uk would just be a guess.
-  //
-  // Apex detection is `isApexDomain`, not a label count: counting labels calls
-  // `example.co.uk` a subdomain, so a UK customer typing their bare domain got
-  // the CNAME line pointed at it — the one record a zone root cannot carry —
-  // while the A line still showed a placeholder (AGL-1275).
-  const typed = domain.trim().toLowerCase()
-  const isBareApex = isApexDomain(typed)
-  const startsWithWww = /^www\./.test(typed)
-  const cnameExample = !typed
-    ? 'www.your-domain.com'
-    : isBareApex
-      ? `www.${typed}`
-      : typed
-  const apexExample = !typed
-    ? 'your-domain.com'
-    : isBareApex
-      ? typed
-      : startsWithWww
-        ? typed.replace(/^www\./, '')
-        : 'your-domain.com'
+  // Which records to offer for the name typed so far, and in which order —
+  // ALIAS leads for a bare apex, CNAME for everything else (AGL-1327). The
+  // derivation lives in `utils/tenant-dns.ts` beside the values the verify
+  // route reads, so the card cannot drift from what the route accepts.
+  const records = dnsInstructionsFor(domain)
   const [checking, setChecking] = useState(false)
   const entitled = hasEntitlement('custom-domain', org)
 
@@ -125,17 +104,22 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
             ? `Domain points at ${verify.records.join(', ')} — expected ${
                 verify.expected ?? CNAME_TARGET
               }. DNS changes can take a while to propagate.`
-            : 'No CNAME found, and the domain does not point at Aglyn by ' +
-                'A record yet — add one of the records above. DNS changes ' +
-                'can take a while to propagate.',
+            : 'No CNAME found, and the domain does not resolve to Aglyn ' +
+                'yet — add one of the records above. DNS changes can take a ' +
+                'while to propagate.',
           { variant: 'warning', persist: false },
         )
       }
       // The verify route says WHICH rule passed (AGL-1264 added
       // `matchedBy: 'apex-address'` precisely so this wizard could explain
       // itself); until now nothing read it and apex customers got a bare tick.
+      //
+      // The message names the ADDRESSES, not the record type: the same rule
+      // passes for an ALIAS — which a registrar flattens to those addresses —
+      // and calling that "your A record" would name a record the customer
+      // never created (AGL-1327).
       if (verify.matchedBy === 'apex-address') {
-        enqueueSnackbar('Apex verified by its A record.', {
+        enqueueSnackbar('Apex verified by the addresses it resolves to.', {
           variant: 'info',
           persist: false,
         })
@@ -311,34 +295,29 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
         ) : (
           <>
             <Typography variant="body2" color="text.secondary">
-              {'Point your domain at Aglyn, then verify. A subdomain like ' +
-                'www uses a CNAME; a bare apex uses an A record — either ' +
-                'verifies:'}
+              {DNS_INSTRUCTIONS_INTRO}
             </Typography>
-            <Typography
-              variant="body2"
-              component="code"
-              sx={{
-                p: 1,
-                bgcolor: 'action.hover',
-                borderRadius: 1,
-                fontFamily: 'monospace',
-              }}
-            >
-              {`CNAME  ${cnameExample}  →  ${CNAME_TARGET}`}
-            </Typography>
-            <Typography
-              variant="body2"
-              component="code"
-              sx={{
-                p: 1,
-                bgcolor: 'action.hover',
-                borderRadius: 1,
-                fontFamily: 'monospace',
-              }}
-            >
-              {`A      ${apexExample}  →  ${RECOMMENDED_APEX_ADDRESS}`}
-            </Typography>
+            {records.map((record) => (
+              <Stack key={record.type} spacing={0.5}>
+                <Typography
+                  variant="body2"
+                  component="code"
+                  sx={{
+                    p: 1,
+                    bgcolor: 'action.hover',
+                    borderRadius: 1,
+                    fontFamily: 'monospace',
+                    whiteSpace: 'pre',
+                    overflowX: 'auto',
+                  }}
+                >
+                  {formatDnsInstruction(record)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {record.note}
+                </Typography>
+              </Stack>
+            ))}
             <Stack direction="row" spacing={1}>
               <TextField
                 size="small"

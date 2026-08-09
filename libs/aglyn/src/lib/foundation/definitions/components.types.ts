@@ -206,11 +206,14 @@ export enum FieldComponentType {
    */
   CSS_DIMENSION = 'css-dimension',
   /**
-   * Background fill editor (AGL-1331): a fill-type switch (solid / linear /
-   * radial) over an angle box and a colour-stop list, each stop bindable to
-   * a palette token or a literal. The persisted prop is ONE CSS string
-   * under `backgroundImage` — a solid fill clears it and leaves
-   * `backgroundColor` to do the job — so renderers stay untouched. Values
+   * Background fill editor (AGL-1331): a fill-type switch (default / solid
+   * / linear / radial) over an angle box and a colour-stop list, each stop
+   * bindable to a palette token or a literal. The persisted prop is ONE CSS
+   * string under `backgroundImage` — a solid fill writes the explicit
+   * keyword `none` and leaves `backgroundColor` to do the job, while the
+   * default choice writes nothing at all (AGL-1338: the two differ on a
+   * component instance, where absence means "keep the component's fill") —
+   * so renderers stay untouched. Values
    * the editor cannot model (`conic-gradient`, `to bottom right`, a stacked
    * image list) fall back to free text rather than being clobbered.
    */
