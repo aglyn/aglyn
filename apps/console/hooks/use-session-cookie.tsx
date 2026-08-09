@@ -27,6 +27,10 @@ import {
   consumeInteractiveSignOut,
 } from '../utils/interactive-signin'
 import clearServiceWorkerCaches from '../utils/clear-service-worker-caches'
+import {
+  captureReauthIdentity,
+  requestSessionReauth,
+} from '../utils/session-reauth'
 
 /**
  * Mints the shared `__session` cookie, and reports whether it worked
@@ -167,7 +171,17 @@ export function useSessionCookie(): void {
             // re-login mint failed/raced) and would otherwise log the user
             // out on a plain refresh (AGL-624); heal it by re-minting.
             if (reason === 'revoked') {
-              if (active) await signOut(auth)
+              if (active) {
+                // The sign-out stands — a revoked session is deliberately
+                // dead and only a real credential sign-in may follow. The
+                // request is what turns the hard bounce to /signin into an
+                // in-place prompt over the current route (AGL-664); it is
+                // raised BEFORE signOut so the layout never sees a signed-
+                // out beat without it and redirects anyway. Identity is
+                // captured now, while there is still a user to ask.
+                requestSessionReauth('revoked', captureReauthIdentity(user))
+                await signOut(auth)
+              }
               return
             }
             if (reason === 'signed-out') {
@@ -175,7 +189,14 @@ export function useSessionCookie(): void {
               const lastSignInMs =
                 Date.parse(user.metadata?.lastSignInTime ?? '') || 0
               if (tombstoneEndsSession(signedOutAt, lastSignInMs)) {
-                if (active) await signOut(auth)
+                if (active) {
+                  // Same shape as `revoked` above (AGL-664).
+                  requestSessionReauth(
+                    'signed-out',
+                    captureReauthIdentity(user),
+                  )
+                  await signOut(auth)
+                }
                 return
               }
             }

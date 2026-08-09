@@ -23,8 +23,14 @@ import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useState } from 'react'
 import { useSigninCheck } from '@aglyn/tenant-feature-instance'
 import useIdleLogout from '../../hooks/use-idle-logout'
+import {
+  getSessionReauth,
+  subscribeSessionReauth,
+  type SessionReauthState,
+} from '../../utils/session-reauth'
 import ImpersonationBanner from '../impersonation-banner.component'
 import SessionHealthBanner from '../session-health-banner.component'
+import SessionReauthDialog from '../session-reauth-dialog.component'
 
 export interface AuthenticatedLayoutProps {
   children?: JSX.Children
@@ -73,14 +79,35 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
     return () => void (active = false)
   }, [gateOnVerify, user])
 
-  const verifyBlocked = gateOnVerify && impersonating !== true
-  const invalidAuth = authLoading || !signedIn || verifyBlocked
+  // In-place re-auth (AGL-664): while a session-loss prompt is pending —
+  // shown or dismissed into the degraded state — the layout must neither
+  // redirect to /signin nor unmount the page, or the "resume exactly where
+  // you were" promise is broken before the dialog can keep it. The store is
+  // module state that resets on a page load, so a genuinely fresh
+  // unauthenticated load (deep link, cleared storage) still redirects
+  // exactly as before; only a session lost MID-USE holds here. Triggered
+  // solely by the console's own auth-state signals — never by anything
+  // read out of fetched content.
+  const [reauth, setReauth] = useState<SessionReauthState>(getSessionReauth)
+  useEffect(() => subscribeSessionReauth(setReauth), [])
+  const reauthActive = reauth.reason !== null
+
+  // Only meaningful while signed in: when a re-auth prompt is holding a
+  // signed-out layout open, `emailVerified` is merely absent — that absence
+  // must not answer the verification question and blank the page.
+  const verifyBlocked = signedIn && gateOnVerify && impersonating !== true
+  const invalidAuth =
+    authLoading || (!signedIn && !reauthActive) || verifyBlocked
   // Idle session expiry (AGL-464) — armed only while signed in.
   useIdleLogout(signedIn)
 
   useEffect(() => {
     if (authLoading) return void 0
-    if (!signedIn) return void pushToRequestAuth(`/signin`)
+    if (!signedIn) {
+      // Session lost mid-use with the re-auth dialog up (AGL-664): stay.
+      if (reauthActive) return void 0
+      return void pushToRequestAuth(`/signin`)
+    }
     // Redirect only once the impersonation claim has resolved to false — while
     // it's unresolved (`null`) the splash holds and we must not bounce.
     if (gateOnVerify && impersonating === false)
@@ -97,6 +124,7 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
     gateOnVerify,
     impersonating,
     queueLoading,
+    reauthActive,
     router,
     signedIn,
   ])
@@ -110,6 +138,9 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
           {/* "Your session needs refreshing" (AGL-1063). Renders nothing
               until server reads fail across two distinct collections. */}
           <SessionHealthBanner />
+          {/* "Sign in again to verify your device" (AGL-664). Renders
+              nothing until the console's own auth machinery requests it. */}
+          <SessionReauthDialog />
           {children}
         </Fragment>
       ) : (
