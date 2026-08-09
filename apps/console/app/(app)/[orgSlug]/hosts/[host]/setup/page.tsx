@@ -54,6 +54,7 @@ import CustomDomainCard from '../../../../../../components/custom-domain-card.co
 import SiteEmailsCard from '../../../../../../components/site-emails-card.component'
 import FaviconCard from '../../../../../../components/favicon-card.component'
 import SearchIndexingCard from '../../../../../../components/search-indexing-card.component'
+import SocialImageCard from '../../../../../../components/social-image-card.component'
 import BusinessDetailsCard from '../../../../../../components/business-details-card.component'
 import LogoCard from '../../../../../../components/logo-card.component'
 import ErrorScreensCard from '../../../../../../components/error-screens-card.component'
@@ -696,6 +697,14 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                           <>
                             <div style={{ marginTop: 24 }}>
                               <FaviconCard hostId={hostId} />
+                            </div>
+                            {/* Site-wide default social card (AGL-1337). A
+                                card for the same reason the favicon is one:
+                                it is a media pick, and a cleared value has to
+                                reach Firestore as `''` rather than being
+                                dropped by the form stack (AGL-1191). */}
+                            <div style={{ marginTop: 24 }}>
+                              <SocialImageCard hostId={hostId} />
                             </div>
                             {/* Site-wide search indexing (AGL-1263). Its own
                                 card rather than a field in the SEO form

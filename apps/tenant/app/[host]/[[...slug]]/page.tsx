@@ -117,7 +117,19 @@ function buildMetadata(props: Props): Metadata {
     const description: string | undefined = entry
       ? entry.seoDescription || entry.excerpt || undefined
       : undefined
-    const socialImage: string | undefined = entry?.coverImage || undefined
+    // The card image (AGL-1337). The entry's own cover wins, then the
+    // template screen's, then the site default — the same precedence list the
+    // screen branch uses, through the same resolver, so a collection list (an
+    // entry-less page that could never have had a cover) now gets the site
+    // default instead of sharing as a bare `summary` card.
+    //
+    // The resolver is what makes the URL ABSOLUTE and attaches the
+    // dimensions; before it, a cover stored as a `media:` reference reached
+    // `og:image` as the literal string `media:…`.
+    const socialImage = Aglyn.resolveSocialImage({
+      sources: [{ image: entry?.coverImage }, screen?.seo, host?.seo],
+      host,
+    })
     const fullTitle = withSite(title)
     // Collection pages had NO canonical at all (AGL-1272). This branch returns
     // before the screen path builds one, so every `/blog` and `/blog/{entry}`
@@ -186,8 +198,13 @@ function buildMetadata(props: Props): Metadata {
   const fullTitle = withSite(pageTitle)
   const description: string | undefined =
     screen?.seo?.description || screen?.description || host?.seo?.description
-  const socialImage: string | undefined =
-    screen?.seo?.image || host?.seo?.image || undefined
+  // Screen image, then the site default (AGL-1337). Clearing a screen's
+  // image stores `''`, which is falsy here — so "cleared" means "inherit the
+  // site default" rather than "no card", and neither set stays absent.
+  const socialImage = Aglyn.resolveSocialImage({
+    sources: [screen?.seo, host?.seo],
+    host,
+  })
   // One policy, four surfaces (AGL-1263): this, the client twin in
   // `catch-all-client.tsx`, `robots.txt` and `sitemap.xml` all ask
   // `isPageIndexable` rather than each keeping their own copy of the rule.
@@ -238,10 +255,16 @@ function buildMetadata(props: Props): Metadata {
       ...(description ? { description } : {}),
       type: 'website',
       ...(canonical ? { url: canonical } : {}),
+      // A DESCRIPTOR, not a bare string: Next emits `og:image:width` and
+      // `og:image:height` only for the object form, and the bare string is
+      // what left every card without them (AGL-1337).
       ...(socialImage ? { images: [socialImage] } : {}),
       ...(siteTitle ? { siteName: siteTitle } : {}),
     },
     twitter: {
+      // The upgrade the whole issue is about: a page with an image shares as
+      // the large card, and a page without one keeps the small `summary`
+      // rather than promising an image it has not got.
       card: socialImage ? 'summary_large_image' : 'summary',
       ...(socialImage ? { images: [socialImage] } : {}),
     },
