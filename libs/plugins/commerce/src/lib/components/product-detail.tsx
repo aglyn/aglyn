@@ -100,6 +100,8 @@ function slugFromLocation(): string {
 const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
   (props, ref) => {
     const { slug: slugProp, buyLabel, hideDescription, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const { hostId } = site
@@ -246,7 +248,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
 
     if (hostId && detail === null) {
       return (
-        <Box ref={ref} {...rest} sx={{ display: 'flex', gap: 3 }}>
+        <Box ref={ref} {...rest} sx={[{ display: 'flex', gap: 3 }, ...nodeSx]}>
           <Skeleton variant="rectangular" width={320} height={320} />
           <Box sx={{ flex: 1 }}>
             <Skeleton width="60%" height={36} />
@@ -258,7 +260,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     }
     if (!resolved) {
       return (
-        <Box ref={ref} {...rest} sx={{ p: 3 }}>
+        <Box ref={ref} {...rest} sx={[{ p: 3 }, ...nodeSx]}>
           <Typography variant="body2" color="text.secondary">
             {'Product not found.'}
           </Typography>
@@ -311,11 +313,14 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       <Box
         ref={ref}
         {...rest}
-        sx={{
-          display: 'flex',
-          gap: 3,
-          flexDirection: { xs: 'column', md: 'row' },
-        }}
+        sx={[
+          {
+            display: 'flex',
+            gap: 3,
+            flexDirection: { xs: 'column', md: 'row' },
+          },
+          ...nodeSx,
+        ]}
       >
         <Box sx={{ flex: 1, minWidth: 0 }}>
           {galleryImage ? (

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn/server'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import searchContent from '../../../utils/search-content'
@@ -33,10 +34,18 @@ export async function generateMetadata({
 }: SearchPageProps): Promise<Metadata> {
   const { host } = await params
   const hostRes = await getHostCached(host)
-  const siteTitle =
-    hostRes.host?.seo?.title ?? hostRes.host?.displayName ?? 'Search'
+  // The built-in search page through the same rule as every other head
+  // (AGL-1341). "Search" is a name we generate rather than an authored title,
+  // so it keeps the site title after it — but through the HOST's separator,
+  // not the hard-coded en dash this used to carry, and without the old
+  // `?? 'Search'` site-title fallback that could render "Search – Search".
   return {
-    title: `Search – ${siteTitle}`,
+    title: Aglyn.resolveSeoTitle({
+      name: 'Search',
+      siteTitle: hostRes.host?.seo?.title ?? hostRes.host?.displayName,
+      separator: hostRes.host?.seo?.separator,
+      fallback: 'Search',
+    }),
     robots: { index: false, follow: true },
   }
 }

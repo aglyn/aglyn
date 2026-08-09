@@ -123,6 +123,8 @@ const MarketplacePlugin = forwardRef<HTMLElement, MarketplacePluginProps>(
       pluginPropsJson,
       ...rest
     } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     // Merge authored settings (AGL-192) under any compose-injected props;
     // PluginFrame filters the result to the manifest allowlist.
     const resolvedPluginProps = {
@@ -142,20 +144,23 @@ const MarketplacePlugin = forwardRef<HTMLElement, MarketplacePluginProps>(
         <Box
           ref={ref as any}
           {...rest}
-          sx={{
-            minHeight: 120,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            color: 'text.secondary',
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-            p: 2,
-            textAlign: 'center',
-          }}
+          sx={[
+            {
+              minHeight: 120,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              color: 'text.secondary',
+              fontSize: 13,
+              fontFamily: 'system-ui, sans-serif',
+              p: 2,
+              textAlign: 'center',
+            },
+            ...nodeSx,
+          ]}
         >
           {placeholderText(listingId)}
         </Box>

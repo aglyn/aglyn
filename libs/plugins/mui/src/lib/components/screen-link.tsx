@@ -63,10 +63,6 @@ export interface ScreenLinkProps extends ButtonProps {
  * — `variant` means the typography variant on a `Link`, so forwarding
  * `"contained"` would silently produce an unstyled element.
  */
-// Only navigable protocols: javascript:/data: URLs in a stored href would
-// execute in visitors' browsers (content-hardening review, 2026-07-07).
-const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
-
 const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
   const {
     screenId,
@@ -77,12 +73,13 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
     fullWidth,
     ...rest
   } = props
-  const { href: resolvedHref, suppressNavigation } = Aglyn.useScreenLink(screenId)
-  const safeExternalHref =
-    externalHref && SAFE_HREF.test(externalHref.trim())
-      ? externalHref.trim()
-      : undefined
-  const href = screenId ? resolvedHref : safeExternalHref
+  // Id-vs-URL precedence and the `javascript:`/`data:` guard live in
+  // `useLinkTarget` (AGL-1335) — one copy for every linking element, and
+  // the only place that knows a `screen:`-prefixed value is a reference.
+  const { href, suppressNavigation } = Aglyn.useLinkTarget(
+    screenId,
+    externalHref,
+  )
   const asLink = renderAs === 'link'
 
   if (!href || suppressNavigation) {
@@ -148,8 +145,7 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
     },
     {
       name: 'href',
-      description:
-        'External URL used only when no screen is selected above.',
+      description: 'External URL used only when no screen is selected above.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
     },

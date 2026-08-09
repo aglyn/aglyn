@@ -72,9 +72,6 @@ export interface ImageProps {
   children?: ReactNode
 }
 
-// Only navigable protocols — mirrors ScreenLink's hardening.
-const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
-
 /**
  * Image element (AGL-74): renders a plain img with fit/size/radius
  * controls; an empty src shows a labeled placeholder so the element stays
@@ -105,16 +102,19 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     ...rest
   } = props
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
-  const nodeSx = Array.isArray(nodeSxProp) ? nodeSxProp : nodeSxProp ? [nodeSxProp] : []
+  const nodeSx = Array.isArray(nodeSxProp)
+    ? nodeSxProp
+    : nodeSxProp
+      ? [nodeSxProp]
+      : []
   // Optional link mode (AGL-339): screen id first (rename-safe), external
   // URL as fallback; suppressed in the besigner canvas like Screen Link.
-  const { href: resolvedHref, suppressNavigation } =
-    Aglyn.useScreenLink(screenId)
-  const safeExternalHref =
-    externalHref && SAFE_HREF.test(externalHref.trim())
-      ? externalHref.trim()
-      : undefined
-  const linkHref = screenId ? resolvedHref : safeExternalHref
+  // Shared with every other linking element since AGL-1335, so a `Link`
+  // component prop bound here behaves as it does on a Button.
+  const { href: linkHref, suppressNavigation } = Aglyn.useLinkTarget(
+    screenId,
+    externalHref,
+  )
   /**
    * Resolve the stored value to a URL (AGL-1215). A media reference becomes
    * a CDN URL here rather than in the document, so the route shape stays an
@@ -145,19 +145,22 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       <Box
         ref={ref}
         {...rest}
-        sx={[{
-          width: width || '100%',
-          height: height || 120,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '1px dashed',
-          borderColor: 'divider',
-          borderRadius: radius != null ? `${radius}px` : undefined,
-          color: 'text.secondary',
-          fontSize: 12,
-          fontFamily: 'system-ui, sans-serif',
-        }, ...nodeSx]}
+        sx={[
+          {
+            width: width || '100%',
+            height: height || 120,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px dashed',
+            borderColor: 'divider',
+            borderRadius: radius != null ? `${radius}px` : undefined,
+            color: 'text.secondary',
+            fontSize: 12,
+            fontFamily: 'system-ui, sans-serif',
+          },
+          ...nodeSx,
+        ]}
       >
         {'Image — choose a source'}
       </Box>
@@ -186,7 +189,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       // existing documents must not change output (AGL-1305). Decorative
       // ON forces `alt=""` over any alt text and suppresses the tooltip,
       // so the a11y intent is explicit rather than an accident of blank.
-      alt={decorative ? '' : alt ?? ''}
+      alt={decorative ? '' : (alt ?? '')}
       title={decorative ? undefined : title || undefined}
       loading={loading === 'eager' ? 'eager' : 'lazy'}
       {...rest}
@@ -236,8 +239,7 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
     },
     {
       name: 'alt',
-      description:
-        'Describes the image for screen readers and search engines.',
+      description: 'Describes the image for screen readers and search engines.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Alt text',
       // Hidden while Decorative is on — the renderer forces alt="" then,
@@ -275,7 +277,8 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
     },
     {
       name: 'width',
-      description: 'Width of the image — a number plus a unit, e.g. 100% or 320px.',
+      description:
+        'Width of the image — a number plus a unit, e.g. 100% or 320px.',
       component: Aglyn.FieldComponentType.CSS_DIMENSION,
       label: 'Width',
     },

@@ -8,12 +8,14 @@ import reactPlugin from 'eslint-plugin-react'
 import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import eslintPluginTsdoc from 'eslint-plugin-tsdoc'
 import noPlanGatedEntitlement from './tools/eslint-rules/no-plan-gated-entitlement.mjs'
+import noSxAfterSpread from './tools/eslint-rules/no-sx-after-spread.mjs'
 import noUnguardedLoadingHook from './tools/eslint-rules/no-unguarded-loading-hook.mjs'
 
 // Local rules that guard Aglyn-specific invariants (not published as a plugin).
 const aglynPlugin = {
   rules: {
     'no-plan-gated-entitlement': noPlanGatedEntitlement,
+    'no-sx-after-spread': noSxAfterSpread,
     'no-unguarded-loading-hook': noUnguardedLoadingHook,
   },
 }
@@ -233,6 +235,16 @@ export default [
       ...reactHooksPlugin.configs.recommended.rules,
       ...jsRuleOverrides,
     },
+  },
+  {
+    // Plugin components render canvas nodes, so their props bag carries the
+    // author's `sx`. Writing an `sx` literal after spreading it discards
+    // styles that were authored, saved and are sitting in the document —
+    // five shipped instances before anything in the toolchain noticed
+    // (AGL-1240/1284). Scoped here because this is where node props are
+    // spread; widen it the first time the shape appears outside.
+    files: ['libs/plugins/**/*.tsx'],
+    rules: { 'aglyn/no-sx-after-spread': 'error' },
   },
   {
     // Base UI (AGL-1222) is a pre-1.x-shaped dependency whose parts compose

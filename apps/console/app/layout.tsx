@@ -16,6 +16,9 @@
  */
 
 import { APP_CONSOLE } from '@aglyn/shared-data-enums'
+// Deep import (not the barrel) so this Server Component doesn't pull the theme
+// lib's createContext HOCs into the RSC graph (AGL-405).
+import { APP_EMOTION_CACHE_OPTIONS } from '@aglyn/shared-ui-theme/util/emotion-cache'
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
 import type { Metadata, Viewport } from 'next'
 import type { ReactNode } from 'react'
@@ -28,6 +31,11 @@ import '../public/_static/styles/styles.css'
  * `AppRouterCacheProvider` (replacing the Pages Router
  * `_EmotionDocumentComponent`); the global client provider stack lives in
  * `./providers`.
+ *
+ * The cache options are named rather than defaulted, and shared with the
+ * tenant's root layout (AGL-1266) — the canvas renders tenant node trees
+ * inside this app, so the two surfaces have to agree on the emotion key or a
+ * component styled here and shipped there changes class prefix between them.
  */
 const SOCIAL_CARD = '/_static/images/social/aglyn-console-social-card.png'
 
@@ -119,7 +127,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <AppRouterCacheProvider options={{ enableCssLayer: true }}>
+        <AppRouterCacheProvider options={APP_EMOTION_CACHE_OPTIONS}>
           <Providers>
             {children}
             {/* Registers /sw.js in production only, and offers its updates

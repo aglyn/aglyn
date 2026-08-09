@@ -1096,7 +1096,7 @@ function ScreenDetails() {
                         label="Title"
                         value={seoValue.title}
                         onChange={setSeoField('title')}
-                        helperText={`${seoValue.title.length}/60 — overrides the host title on this page`}
+                        helperText={`${seoValue.title.length}/60 — published verbatim; the site title is not appended`}
                         error={seoValue.title.length > 60}
                       />
                       <TextField

@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { getMdiIconPath, mdiShapePlus } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
+import type { SxProps } from '@mui/material/styles'
 import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -38,6 +39,12 @@ export interface IconProps {
   size?: number
   /** CSS color; defaults to the inherited text color. */
   color?: string
+  /**
+   * Authored node styles, handed over by the renderer rather than typed
+   * into an attribute — recomposed below so the Styles panel's values are
+   * merged rather than replaced (AGL-1284).
+   */
+  sx?: SxProps
 }
 
 /**
@@ -54,6 +61,8 @@ export interface IconProps {
  */
 const Icon = forwardRef<HTMLElement, IconProps>((props, ref) => {
   const { iconId, iconPath, size, color, ...rest } = props
+  // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const path = iconPath || getMdiIconPath(iconId)
   const icon = path ? { path } : undefined
   if (!icon?.path) {
@@ -61,19 +70,22 @@ const Icon = forwardRef<HTMLElement, IconProps>((props, ref) => {
       <Box
         ref={ref}
         {...rest}
-        sx={{
-          width: 48,
-          height: 48,
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '1px dashed',
-          borderColor: 'divider',
-          borderRadius: 1,
-          color: 'text.secondary',
-          fontSize: 10,
-          fontFamily: 'system-ui, sans-serif',
-        }}
+        sx={[
+          {
+            width: 48,
+            height: 48,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px dashed',
+            borderColor: 'divider',
+            borderRadius: 1,
+            color: 'text.secondary',
+            fontSize: 10,
+            fontFamily: 'system-ui, sans-serif',
+          },
+          ...nodeSx,
+        ]}
       >
         {'Icon'}
       </Box>

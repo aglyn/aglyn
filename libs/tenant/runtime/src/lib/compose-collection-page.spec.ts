@@ -210,7 +210,36 @@ describe('composeCollectionTemplatePage (AGL-551)', () => {
       'collection.category': '',
       'collection.categorySlug': '',
     })
-    expect(result?.screen['seo'].title).toBe('Blog')
+    // The template's SEO passes through as the screen wrote it (AGL-1345):
+    // this once defaulted to the collection's display name, which left the
+    // head unable to tell an authored title from a generated one.
+    expect(result?.screen['seo']).toEqual({})
+  })
+
+  it('passes a list template’s authored SEO through untouched (AGL-1345)', async () => {
+    getScreenMock.mockResolvedValue({
+      screen: {
+        $id: 'scr-1',
+        displayName: 'Template',
+        layoutId: 'lay-1',
+        seo: {
+          title: 'Changelog — What we’ve shipped | Acme',
+          description: 'New features and improvements, updated as we ship.',
+        },
+      },
+    })
+    const data = content()
+    data.collection!.listScreenId = 'list-screen'
+
+    const result = await composeCollectionTemplatePage({
+      hostId: 'host-1',
+      content: data,
+    })
+
+    expect(result?.screen['seo']).toEqual({
+      title: 'Changelog — What we’ve shipped | Acme',
+      description: 'New features and improvements, updated as we ship.',
+    })
   })
 
   it('hands the routed category and page to the list template (AGL-1321)', async () => {

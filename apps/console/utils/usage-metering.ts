@@ -15,12 +15,30 @@
  * limitations under the License.
  */
 
+// This module is imported from BOTH graphs — the Billing card (client) and
+// three App Routes (`report-usage`, `usage-alerts`, `host-usage`) — so it may
+// import neither entry barrel: `@aglyn/aglyn` carries the client-only React
+// contexts, and `@aglyn/aglyn/server` carries the `node:stream` API adapter
+// (AGL-405). The specific modules underneath are safe in both.
+import type { AglynOrgBilling } from '@aglyn/aglyn/foundation'
+import {
+  planMetersInfraOverage,
+  resolveOrgEntitlements,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+
 /**
  * Usage metering (AGL-41): converts per-host counters into an estimated
  * monthly infra cost, billed to the org at cost × 1.30. Rates are OUR
  * unit costs (operator-tuned; validate against a real Firebase + Vercel
  * invoice month before enabling live metered billing). Pure data module —
  * shared by the Billing page estimate and the report-usage rollup route.
+ *
+ * AGL-1280 gave it the included bands. It used to price every GB, page view
+ * and form submission from unit zero, while the published terms promised
+ * only "usage beyond your plan's included storage, bandwidth, and form
+ * submissions" was metered — so the code overcharged relative to the promise.
+ * The bands come from `plan-entitlements`, the same source the three
+ * already-published overage meters read, so the two can't drift.
  */
 
 /** Platform markup on passed-through infra costs. */
@@ -50,19 +68,94 @@ export interface HostUsageSnapshot {
   formSubmissions: number
 }
 
+/** What a plan includes before any of the three meters starts charging. */
+export interface MeteredIncludedAllowance {
+  /** Org-wide media/file storage, GB. */
+  storageGb: number
+  /** Page views the plan's bandwidth band covers. */
+  pageViews: number
+  /** Org-wide form submissions per month. */
+  formSubmissions: number
+  /** False when the plan hard-caps instead of metering (free, enterprise). */
+  metered: boolean
+}
+
+/**
+ * The plan's included bands, in the units the counters are kept in.
+ *
+ * Two conversions, both matching what the rest of the platform already does:
+ *
+ * - Storage and form submissions are per-SITE entitlements and the counters
+ *   are summed across sites, so the org-wide band is `hostLimit ×` the
+ *   per-site figure — the same expansion the usage-alerts cron uses for the
+ *   media allowance. `hostLimit` (not the live site count) on purpose: the
+ *   band is then a property of the plan alone, so the console estimate and
+ *   the rollup compute an identical number without having to agree on how
+ *   many sites existed at the moment each one ran.
+ * - Bandwidth is published in GB but metered per page view, so the band is
+ *   converted through `ESTIMATED_PAGE_TRANSFER_BYTES` — the same assumption
+ *   `perPageView` is priced on, used in the other direction by usage-alerts.
+ *
+ * `UNLIMITED` bands are `Infinity`, which subtracts to zero billable usage
+ * without a special case.
+ */
+export function meteredIncludedAllowance(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): MeteredIncludedAllowance {
+  const entitlements = resolveOrgEntitlements(org)
+  const hostLimit = Math.max(1, entitlements.hostLimit)
+  return {
+    storageGb: (hostLimit * entitlements.storagePerHostMb) / 1024,
+    pageViews:
+      (entitlements.bandwidthGb * 1024 * 1024 * 1024) /
+      ESTIMATED_PAGE_TRANSFER_BYTES,
+    formSubmissions: hostLimit * entitlements.formSubmissionsPerMonth,
+    metered: planMetersInfraOverage(org),
+  }
+}
+
 export interface UsageCostEstimate {
   storageGb: number
   pageViews: number
   formSubmissions: number
-  /** Raw infra cost estimate in USD. */
+  /** The bands subtracted before anything is priced. */
+  included: MeteredIncludedAllowance
+  /** Storage past the included band — the only part billed. */
+  billableStorageGb: number
+  /** Page views past the included band. */
+  billablePageViews: number
+  /** Form submissions past the included band. */
+  billableFormSubmissions: number
+  /**
+   * Raw infra cost of ALL usage in USD — our COGS, which no included band
+   * reduces. Unchanged by AGL-1280 because the cost model, the staff usage
+   * views and the spike detector all mean "what did this org cost us".
+   */
   costUsd: number
-  /** What the org is billed: cost × METERED_MARKUP, in whole cents. */
+  /** Raw infra cost of the billable excess only. */
+  billableCostUsd: number
+  /**
+   * What the org is billed: billable excess × METERED_MARKUP, whole cents.
+   * Zero on a plan that hard-caps rather than metering.
+   */
   billedCents: number
 }
 
-/** Sums host snapshots and prices the month at cost × markup. */
+/**
+ * Sums host snapshots and prices the month's OVERAGE at cost × markup.
+ *
+ * Each meter is independent: exceeding the storage band does not make page
+ * views billable, and usage exactly at a band is free (the boundary belongs
+ * to the customer).
+ *
+ * `org` is optional only so a caller can price a snapshot with no org in
+ * hand; omitting it resolves as free, which meters nothing. That is the safe
+ * default — an unknown org billing $0 is recoverable, billing it from unit
+ * zero is not.
+ */
 export function estimateMonthlyUsageCost(
   hosts: HostUsageSnapshot[],
+  org?: Partial<AglynOrgBilling> | null,
 ): UsageCostEstimate {
   const storageBytes = hosts.reduce(
     (sum, host) => sum + Math.max(0, host.storageBytes || 0),
@@ -77,15 +170,34 @@ export function estimateMonthlyUsageCost(
     0,
   )
   const storageGb = storageBytes / (1024 * 1024 * 1024)
-  const costUsd =
-    storageGb * METERED_UNIT_RATES_USD.storagePerGbMonth +
-    pageViews * METERED_UNIT_RATES_USD.perPageView +
-    formSubmissions * METERED_UNIT_RATES_USD.perFormSubmission
+  const included = meteredIncludedAllowance(org)
+  const billableStorageGb = Math.max(0, storageGb - included.storageGb)
+  const billablePageViews = Math.max(0, pageViews - included.pageViews)
+  const billableFormSubmissions = Math.max(
+    0,
+    formSubmissions - included.formSubmissions,
+  )
+  const priced = (
+    storage: number,
+    views: number,
+    submissions: number,
+  ): number =>
+    storage * METERED_UNIT_RATES_USD.storagePerGbMonth +
+    views * METERED_UNIT_RATES_USD.perPageView +
+    submissions * METERED_UNIT_RATES_USD.perFormSubmission
+  const billableCostUsd = included.metered
+    ? priced(billableStorageGb, billablePageViews, billableFormSubmissions)
+    : 0
   return {
     storageGb,
     pageViews,
     formSubmissions,
-    costUsd,
-    billedCents: Math.round(costUsd * METERED_MARKUP * 100),
+    included,
+    billableStorageGb,
+    billablePageViews,
+    billableFormSubmissions,
+    costUsd: priced(storageGb, pageViews, formSubmissions),
+    billableCostUsd,
+    billedCents: Math.round(billableCostUsd * METERED_MARKUP * 100),
   }
 }

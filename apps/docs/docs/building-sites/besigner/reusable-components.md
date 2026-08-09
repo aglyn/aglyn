@@ -76,9 +76,19 @@ This is what stops a hero from being rebuilt on every page. Only the words diffe
 | Text | Single-line text |
 | Long text | Multi-line text |
 | Image | Image picker |
-| Link | Link / URL |
+| Link | Screen picker, or an external URL |
 | Number | Number |
 | Yes / no | Toggle |
+
+A **Link** property is a screen picker at both ends — in the dialog's **Default** column and
+in each instance's Attributes panel — exactly like a Button's own **Link to screen** field.
+It stores the screen's id, not its address, so the link keeps working when that screen's slug
+or parent changes. Choose **External URL or path…** for anything that is not one of your
+screens; a typed address is used verbatim and does not follow a rename.
+
+Link properties written before the picker existed hold a typed address. They keep working
+unchanged — but they are still typed addresses, so pick the screen again if you want them to
+survive a rename.
 
 Property names must start with a letter or underscore and contain only letters, numbers and
 underscores. A dot is rejected: the Attributes panel names its field for the storage path
@@ -94,7 +104,12 @@ Inside the component, put the property's token wherever the value belongs:
 ```
 
 It works in any text element and in any string attribute — the same token syntax as
-`{{entry.*}}` and `{{host.*}}`.
+`{{entry.*}}` and `{{host.*}}`. The `{}` **insert binding** button beside a bindable field
+lists the component's own properties under **Properties**, so you can pick one instead of
+typing the token.
+
+A Link property can be bound into either of a linking element's two fields — **Link to
+screen** or **External URL** — and resolves the same way in both.
 
 ### Save, then publish
 

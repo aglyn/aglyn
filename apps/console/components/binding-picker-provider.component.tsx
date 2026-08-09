@@ -19,10 +19,12 @@
 import {
   formatFunctionIdToken,
   formatVariableIdToken,
+  type ReusableComponentProp,
 } from '@aglyn/aglyn'
 import { describeHostTokens } from '@aglyn/aglyn/app-utils/host-tokens'
 import { BindingPickerContext, type BindingOption } from '@aglyn/besigner-ui'
 import { collection, doc, limit, query } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -58,6 +60,43 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  /**
+   * The reusable component being edited, for its declared props (AGL-1335).
+   *
+   * Read from the ROUTE rather than passed in, because that is the only
+   * thing that actually distinguishes the surfaces: this provider wraps five
+   * editors and only the component one has a `componentId`, so the null ref
+   * below is what keeps the other four from subscribing to anything. The
+   * page already listens to this exact document, and the Firestore SDK
+   * shares one listener per ref — so this is a second reader, not a second
+   * read.
+   *
+   * Deliberately WITHOUT the version converter: only `props` is wanted here,
+   * and the converter exists to decompress `nodes`, which would be pure cost
+   * for a picker list.
+   */
+  const params = useParams<{ componentId?: string; versionId?: string }>()
+  const componentId =
+    typeof params?.componentId === 'string' ? params.componentId : ''
+  const versionId = typeof params?.versionId === 'string' ? params.versionId : ''
+  const { data: componentVersionDoc } = useFirestoreDoc<any>(
+    () =>
+      hostId && componentId && versionId
+        ? doc(
+            firestore,
+            'hosts',
+            hostId,
+            'components',
+            componentId,
+            'versions',
+            versionId,
+          )
+        : null,
+    [firestore, hostId, componentId, versionId],
+  )
+  const componentProps = Array.isArray(componentVersionDoc?.props)
+    ? (componentVersionDoc.props as ReusableComponentProp[])
+    : undefined
 
   const value = useMemo(() => {
     // Inserted tokens carry doc ids (AGL-186) so they survive renames;
@@ -138,8 +177,8 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
       if (definition.deletedAt || !definition.name) continue
       functions[definition.$id] = definition
     }
-    return { options, variables, functions }
-  }, [variableDocs, functionDocs, hostDoc])
+    return { options, variables, functions, componentProps }
+  }, [variableDocs, functionDocs, hostDoc, componentProps])
 
   return (
     <BindingPickerContext.Provider value={value}>

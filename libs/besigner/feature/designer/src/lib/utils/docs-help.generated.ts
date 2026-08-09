@@ -43,7 +43,7 @@ export const BESIGNER_DOCS_ANCHORS = {
   responsiveStyling: ['#style-per-breakpoint', '#box-stylers', '#style-groups', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
   reusableComponents: ['#promote', '#insert-instances', '#properties', '#declare-them', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#restyle-one-instance', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#copy--paste-vs-reusable-components', '#tips', '#related'],
   screens: ['#screens--routing', '#layouts', '#nested-layouts', '#used-by', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],
-  seo: ['#per-screen-seo', '#site-wide-defaults', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
+  seo: ['#per-screen-seo', '#how-a-page-title-is-built', '#site-wide-defaults', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
   textEditing: ['#edit-inline', '#rich-text', '#the-text-attribute', '#bindings-in-text', '#related'],
 } as const satisfies Partial<Record<BesignerDocsKey, readonly `#${string}`[]>>
 

@@ -44,6 +44,8 @@ export interface LanguageSwitcherProps {
 const LanguageSwitcher = forwardRef<HTMLElement, LanguageSwitcherProps>(
   (props, ref) => {
     const { variant, uppercase, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { screens, localeVariants, currentLocale, suppressNavigation } =
       useContext(Aglyn.ScreenLinkContext)
     const entries = Object.entries(localeVariants ?? {}).filter(
@@ -61,17 +63,20 @@ const LanguageSwitcher = forwardRef<HTMLElement, LanguageSwitcherProps>(
           direction="row"
           spacing={1}
           {...rest}
-          sx={{
-            alignItems: 'center',
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            px: 1.5,
-            py: 0.5,
-            color: 'text.secondary',
-            fontSize: 12,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              alignItems: 'center',
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              px: 1.5,
+              py: 0.5,
+              color: 'text.secondary',
+              fontSize: 12,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'Language switcher — set screen translations'}
         </Stack>
@@ -84,7 +89,7 @@ const LanguageSwitcher = forwardRef<HTMLElement, LanguageSwitcherProps>(
         direction="row"
         spacing={0.5}
         {...rest}
-        sx={{ alignItems: 'center' }}
+        sx={[{ alignItems: 'center' }, ...nodeSx]}
       >
         {currentLocale ? (
           <Button size="small" variant="text" disabled>

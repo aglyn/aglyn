@@ -49,6 +49,8 @@ const MemberSignin = forwardRef<HTMLDivElement, MemberSigninProps>(
   (props, ref) => {
     const { heading, signupPath, recoveryPath, continueFallback, ...rest } =
       props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const [email, setEmail] = useState('')
@@ -84,15 +86,18 @@ const MemberSignin = forwardRef<HTMLDivElement, MemberSigninProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            p: 3,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            color: 'text.secondary',
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              p: 3,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              color: 'text.secondary',
+              fontSize: 13,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'Member sign-in — the email/password form renders here'}
         </Box>
@@ -100,7 +105,7 @@ const MemberSignin = forwardRef<HTMLDivElement, MemberSigninProps>(
     }
 
     return (
-      <Box ref={ref} {...rest} sx={{ maxWidth: 420 }}>
+      <Box ref={ref} {...rest} sx={[{ maxWidth: 420 }, ...nodeSx]}>
         {heading ? (
           <Typography variant="h5" gutterBottom>
             {heading}

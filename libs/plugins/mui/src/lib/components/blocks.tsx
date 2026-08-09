@@ -98,24 +98,29 @@ export function parseVideoEmbedSrc(url: string): string | null {
 const VideoEmbed = forwardRef<HTMLDivElement, VideoEmbedProps>(
   (props, ref) => {
     const { url, height, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const src = url ? parseVideoEmbedSrc(url) : null
     if (!src) {
       return (
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            width: '100%',
-            height: height || 315,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '1px dashed',
-            borderColor: 'divider',
-            color: 'text.secondary',
-            fontSize: 12,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              width: '100%',
+              height: height || 315,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px dashed',
+              borderColor: 'divider',
+              color: 'text.secondary',
+              fontSize: 12,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'Video — paste a YouTube or Vimeo URL'}
         </Box>
@@ -132,12 +137,15 @@ const VideoEmbed = forwardRef<HTMLDivElement, VideoEmbedProps>(
         allowFullScreen
         sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
         {...rest}
-        sx={{
-          display: 'block',
-          width: '100%',
-          height: height || 315,
-          border: 0,
-        }}
+        sx={[
+          {
+            display: 'block',
+            width: '100%',
+            height: height || 315,
+            border: 0,
+          },
+          ...nodeSx,
+        ]}
       />
     )
   },

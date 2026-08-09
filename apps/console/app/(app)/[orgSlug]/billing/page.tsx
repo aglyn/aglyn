@@ -675,7 +675,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   contentGutterX
                   contentGutterY
                 >
-                  <BillingMeteredEstimateComponent hosts={hosts ?? []} />
+                  <BillingMeteredEstimateComponent
+                    org={org}
+                    hosts={hosts ?? []}
+                  />
                 </CardDisplay>
               ),
             },

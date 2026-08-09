@@ -80,6 +80,8 @@ const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
 const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
   (props, ref) => {
     const { signedOutHeading, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const [account, setAccount] = useState<AccountData | null | 'anonymous'>(
@@ -179,15 +181,18 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            p: 3,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            color: 'text.secondary',
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              p: 3,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              color: 'text.secondary',
+              fontSize: 13,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'Customer account — sign-in and order history render here'}
         </Box>
@@ -197,7 +202,7 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
 
     if (account === 'anonymous') {
       return (
-        <Box ref={ref} {...rest} sx={{ maxWidth: 420 }}>
+        <Box ref={ref} {...rest} sx={[{ maxWidth: 420 }, ...nodeSx]}>
           {signedOutHeading ? (
             <Typography variant="h5" gutterBottom>
               {signedOutHeading}
@@ -257,7 +262,7 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
     }
 
     return (
-      <Box ref={ref} {...rest} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box ref={ref} {...rest} sx={[{ display: 'flex', flexDirection: 'column', gap: 2 }, ...nodeSx]}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="h5" sx={{ flex: 1 }}>
             {account.member.displayName || account.member.email}

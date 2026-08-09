@@ -53,6 +53,8 @@ const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
 const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
   (props, ref) => {
     const { resourceId, reserveLabel, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const [availability, setAvailability] = useState<Availability | null>(null)
@@ -140,15 +142,18 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            p: 3,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            color: 'text.secondary',
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              p: 3,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              color: 'text.secondary',
+              fontSize: 13,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'Reservation widget — dates, quote, and reserve render here'}
         </Box>
@@ -156,7 +161,7 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
     }
     if (!resourceId) {
       return (
-        <Box ref={ref} {...rest} sx={{ p: 2 }}>
+        <Box ref={ref} {...rest} sx={[{ p: 2 }, ...nodeSx]}>
           <Typography variant="body2" color="text.secondary">
             {'Set a resource id on this block (console → Resources).'}
           </Typography>
@@ -168,16 +173,19 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
       <Box
         ref={ref}
         {...rest}
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1.5,
-          maxWidth: 420,
-          p: 2,
-          border: 1,
-          borderColor: 'divider',
-          borderRadius: 1,
-        }}
+        sx={[
+          {
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1.5,
+            maxWidth: 420,
+            p: 2,
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: 1,
+          },
+          ...nodeSx,
+        ]}
       >
         {availability ? (
           <>

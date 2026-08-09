@@ -53,6 +53,8 @@ interface CatalogItem {
 const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
   (props, ref) => {
     const { productId: productIdProp, heading, maxItems, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
     const [items, setItems] = useState<CatalogItem[] | null>(null)
 
@@ -96,15 +98,18 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
         <Box
           ref={ref}
           {...rest}
-          sx={{
-            p: 3,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-            color: 'text.secondary',
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          sx={[
+            {
+              p: 3,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              color: 'text.secondary',
+              fontSize: 13,
+              fontFamily: 'system-ui, sans-serif',
+            },
+            ...nodeSx,
+          ]}
         >
           {'Related products render here'}
         </Box>

@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiVideo } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
+import type { SxProps } from '@mui/material/styles'
 import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -40,6 +41,12 @@ export interface VideoProps {
   height?: string
   /** Border radius in px. */
   radius?: number
+  /**
+   * Authored node styles, handed over by the renderer rather than typed
+   * into an attribute — recomposed below so the Styles panel's values are
+   * merged rather than replaced (AGL-1284).
+   */
+  sx?: SxProps
 }
 
 /**
@@ -60,6 +67,8 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
     radius,
     ...rest
   } = props
+  // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   // Both fields are media-picker targets, so both can hold a media
   // reference (AGL-1215) as well as any of the URL forms that predate it.
   // Resolving here is not optional: the picker hands back one string for
@@ -73,19 +82,22 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
       <Box
         ref={ref}
         {...rest}
-        sx={{
-          width: width || '100%',
-          height: height || 180,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '1px dashed',
-          borderColor: 'divider',
-          borderRadius: radius != null ? `${radius}px` : undefined,
-          color: 'text.secondary',
-          fontSize: 12,
-          fontFamily: 'system-ui, sans-serif',
-        }}
+        sx={[
+          {
+            width: width || '100%',
+            height: height || 180,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px dashed',
+            borderColor: 'divider',
+            borderRadius: radius != null ? `${radius}px` : undefined,
+            color: 'text.secondary',
+            fontSize: 12,
+            fontFamily: 'system-ui, sans-serif',
+          },
+          ...nodeSx,
+        ]}
       >
         {'Video — set a source URL'}
       </Box>
@@ -105,12 +117,15 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
       playsInline
       preload="metadata"
       {...rest}
-      sx={{
-        display: 'block',
-        width: width || '100%',
-        height: height || 'auto',
-        borderRadius: radius != null ? `${radius}px` : undefined,
-      }}
+      sx={[
+        {
+          display: 'block',
+          width: width || '100%',
+          height: height || 'auto',
+          borderRadius: radius != null ? `${radius}px` : undefined,
+        },
+        ...nodeSx,
+      ]}
     />
   )
 })

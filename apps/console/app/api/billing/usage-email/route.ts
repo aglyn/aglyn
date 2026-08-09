@@ -121,9 +121,14 @@ async function handler(request: Request): Promise<Response> {
       const storageGb = Number(rollup.get('storageGb') ?? 0)
       const pageViews = Number(rollup.get('pageViews') ?? 0)
       const formSubmissions = Number(rollup.get('formSubmissions') ?? 0)
-      const costUsd = Number(rollup.get('costUsd') ?? 0)
       const dataStorageMb = Number(rollup.get('dataStorageMb') ?? 0)
       const dataOverageUsd = Number(rollup.get('dataOverageUsd') ?? 0)
+      // `billedCents` is the whole metered bill — infra overage at cost × 1.3
+      // PLUS the dataset/API/contact overages. It replaced `costUsd +
+      // dataOverageUsd`, which was wrong twice over (AGL-1280): `costUsd` is
+      // our raw cost with no markup and, until now, no included band
+      // subtracted, so this line quoted a number matching nothing.
+      const billedUsd = Number(rollup.get('billedCents') ?? 0) / 100
       // The metric block, reused as the built-in body and as the
       // {{usage.summary}} token a staff-designed template drops in.
       const usageSummary = [
@@ -135,7 +140,7 @@ async function handler(request: Request): Promise<Response> {
           (dataOverageUsd > 0
             ? ` (overage ${formatUsd(dataOverageUsd)})`
             : ''),
-        `Metered usage estimate: ${formatUsd(costUsd + dataOverageUsd)}`,
+        `Metered usage estimate: ${formatUsd(billedUsd)}`,
         '',
         'Full meters and plan limits: your console → Manage → Billing.',
       ].join('\n')

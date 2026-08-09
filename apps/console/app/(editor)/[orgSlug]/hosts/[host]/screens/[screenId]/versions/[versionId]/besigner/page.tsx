@@ -1227,7 +1227,7 @@ function BesignerPage(props) {
             label="Search title"
             value={seoTitle ?? (screenResult?.data as any)?.seo?.title ?? ''}
             onChange={(e) => setSeoTitle(e.target.value)}
-            helperText="Shown as the tab/search result title (≤60 chars works best)"
+            helperText="The whole tab/search title, published verbatim (≤60 chars works best)"
           />
           <TextField
             size="small"

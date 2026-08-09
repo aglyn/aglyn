@@ -56,6 +56,8 @@ interface EventItem {
  */
 const EventList = forwardRef<HTMLDivElement, EventListProps>((props, ref) => {
   const { mode, heading, maxItems, ...rest } = props
+  // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+  const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { hostId } = Aglyn.useSite()
   const [events, setEvents] = useState<EventItem[] | null>(null)
 
@@ -83,15 +85,18 @@ const EventList = forwardRef<HTMLDivElement, EventListProps>((props, ref) => {
       <Box
         ref={ref}
         {...rest}
-        sx={{
-          p: 3,
-          border: '1px dashed',
-          borderColor: 'divider',
-          borderRadius: 1,
-          color: 'text.secondary',
-          fontSize: 13,
-          fontFamily: 'system-ui, sans-serif',
-        }}
+        sx={[
+          {
+            p: 3,
+            border: '1px dashed',
+            borderColor: 'divider',
+            borderRadius: 1,
+            color: 'text.secondary',
+            fontSize: 13,
+            fontFamily: 'system-ui, sans-serif',
+          },
+          ...nodeSx,
+        ]}
       >
         {'Event list — published events render here (Event Calendar add-on)'}
       </Box>
@@ -99,7 +104,7 @@ const EventList = forwardRef<HTMLDivElement, EventListProps>((props, ref) => {
   }
   if (events === null) {
     return (
-      <Box ref={ref} {...rest} sx={{ p: 2 }}>
+      <Box ref={ref} {...rest} sx={[{ p: 2 }, ...nodeSx]}>
         <CircularProgress size={24} />
       </Box>
     )
