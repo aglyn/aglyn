@@ -438,13 +438,37 @@ function buildJsonLd(props: Props): string[] {
       content.collection?.categories,
     )
     const articleUrl = entryUrl(entry.slug)
+    // The cover through the SAME resolver as `og:image` (AGL-1343).
+    //
+    // This emitted `entry.coverImage` verbatim, so a cover picked from the DAM
+    // reached the structured data as the literal string `media:{scope}/{id}`
+    // and a stored path reached it site-relative — unfetchable for a crawler
+    // that has no page to resolve it against, which is precisely the defect
+    // AGL-1337 fixed one surface over in the meta tags. Nothing about "absolute
+    // and crawlable" differs between the two, so neither should the code:
+    // whoever changes how a cover resolves must not have to find both.
+    //
+    // The precedence list is deliberately the ENTRY'S COVER ALONE, where the
+    // head passes `[entry, screen, host]`. A missing `og:image` costs a large
+    // share card and the site default is a fair stand-in; `Article.image` is a
+    // claim about THIS article, and answering it with the site-wide card would
+    // tell Google that every coverless post is illustrated by the same asset.
+    // Omitted is the honest answer, and it is what this already did.
+    const articleImage = Aglyn.resolveSocialImage({
+      sources: [{ image: entry.coverImage }],
+      host,
+    })
     return [
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
         '@type': 'Article',
         headline: entry.title,
         ...(entry.excerpt && { description: entry.excerpt }),
-        ...(entry.coverImage && { image: [entry.coverImage] }),
+        // Absent, never `"image": [null]` — the resolver returns undefined for
+        // an empty cover, an unresolvable reference, and a host that names no
+        // origin alike, and `strictNullChecks` is off repo-wide so this guard
+        // is load-bearing rather than decorative.
+        ...(articleImage && { image: [articleImage.url] }),
         // Entry model v2 (AGL-582): taxonomy enriches rich results.
         ...(categoryName && { articleSection: categoryName }),
         ...(Array.isArray(entry.tags) &&
