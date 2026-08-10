@@ -83,7 +83,19 @@ export function DiscountsCard(props: DiscountsCardProps) {
 
   const handleSave = useCallback(async () => {
     if (!draft) return
-    const { id, ...data } = draft
+    /**
+     * `$id` comes off with `id` (AGL-1374).
+     *
+     * The editor is seeded `{ id: discount.$id, ...discount }`, and that
+     * spread carries the listener's SYNTHETIC `$id` — `idField: '$id'`
+     * stamps the document id onto the in-memory row, where nothing persists
+     * it. Destructuring only `id` left `$id` in `data`, so every save wrote
+     * it into the stored document as a real field. Nothing reads it; it is
+     * the listener's bookkeeping leaking into storage, and once there no
+     * reader can tell it from a field the card meant to write.
+     */
+    const seeded = draft as typeof draft & { $id?: string }
+    const { id, $id: _syntheticId, ...data } = seeded
     const code = data.code?.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '')
     /**
      * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
