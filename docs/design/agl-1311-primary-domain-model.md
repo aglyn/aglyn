@@ -402,13 +402,22 @@ apex?` block in `connect-a-domain.md`, which would be replaced rather than delet
    Linear.
 2. **Confirm AGL-1327** and move it to Done. It is committed as `1c7ec09c1` and
    this memo depends on it. It is not competing with anything here.
-3. **Run the AGL-1273 backfill.** Measured gap: `aglyn-marketing.aglyn.app` is
-   **not** a Vercel project domain, so the edge redirect AGL-1273 built has never
-   applied to the one host that exists. Production still serves the app-level
-   `307` that **drops the query string** — verified:
-   `aglyn-marketing.aglyn.app/pricing?q=1` → `Location: https://aglyn.com/pricing`.
-   One `upsertSubdomainRedirect` call fixes it. Do this while `Disallow: /` still
-   stands and there is no campaign traffic to lose.
+3. ~~**Run the AGL-1273 backfill.**~~ **Done — AGL-1365, `9fba8a8f2`.** The
+   measured gap was real (`aglyn-marketing.aglyn.app/pricing?q=1` →
+   `Location: https://aglyn.com/pricing`, query dropped), but this memo's
+   diagnosis of it was wrong in a way worth recording: **the backfill going
+   unrun was not the cause.** Running it failed, which is how the real fault
+   surfaced — every edge write AGL-1273 shipped was malformed. Vercel's
+   per-domain `redirect` takes a **bare hostname** (`aglyn.com`); the code sent
+   `https://aglyn.com` and got `bad_request: Unable to redirect to
+   "https://aglyn.com", because that domain is not added to the project` — a
+   message that blames the target for being absent when the target was present
+   and the *format* was wrong.
+
+   So "one `upsertSubdomainRedirect` call fixes it" was false: that call was
+   itself the bug, and hand-attaching the domain would have masked a live defect
+   in the attach route that the first real customer would have hit. Now measured:
+   `307 → https://aglyn.com/pricing?q=1`, path and query intact.
 4. **Decide the twin** (§7 decision 3). Building it is optional; deciding it is
    not, because the wizard copy is what customers act on and copy is expensive to
    retract once people have followed it.
@@ -452,7 +461,7 @@ show up in any test that exercises one org.
 | 1 | **Apex (`aglyn.com`) is primary; `www` 308-redirects to it.** | **One-line confirmation.** Already the running configuration. Ratifying costs nothing; the memo exists so it stops being undecided. |
 | 2 | **AGL-1327 (ALIAS-first apex) stands, and this memo depends on it.** | **One-line confirmation.** Code already on main as `1c7ec09c1`. |
 | 3 | **Do customers get an automatic `www`↔apex twin, and when?** | **Genuine judgement.** Product-shaped: it changes the wizard, adds a second DNS record to the customer's task, and doubles project-domain count. Options: (a) build the derived twin now while there are zero customers to migrate; (b) keep the registrar-forwarding story and revisit at GA, as AGL-1311 originally proposed; (c) build it but keep it opt-in behind a checkbox. |
-| 4 | **Run the AGL-1273 backfill for `aglyn-marketing.aglyn.app` now?** | **One-line confirmation**, though it is really a bug report: the shipped feature has never applied to the only host that exists. |
+| 4 | ~~**Run the AGL-1273 backfill for `aglyn-marketing.aglyn.app` now?**~~ | **Closed by AGL-1365.** It was indeed a bug report — but a deeper one than "unrun migration": the shipped write was malformed and had never succeeded anywhere. Fixed and applied. |
 
 Decision 3 is the only one that is genuinely open. Decisions 1, 2 and 4 are
 confirmations of things already true or already built.
@@ -468,9 +477,15 @@ confirmations of things already true or already built.
    production, in five project-domain configurations, since before the issue was
    filed.
 3. **"AGL-1273's edge-redirect work means the platform subdomain now redirects
-   query-preserving."** **False in production.** The code is committed
-   (`e304384d8`) but the backfill never ran: `aglyn-marketing.aglyn.app` is not a
-   Vercel project domain, and the app-level `307` still drops the query.
+   query-preserving."** **Was false in production; true as of AGL-1365
+   (`9fba8a8f2`).** The code was committed (`e304384d8`) and the backfill had
+   never run — but the backfill was not the blocker. Its writes, and the attach
+   route's, sent a scheme-prefixed `redirect` where Vercel wants a bare
+   hostname, so the feature had never worked anywhere and would have failed for
+   the first customer too. Format fixed, backfill applied, measured
+   `307 → https://aglyn.com/pricing?q=1`. **The general lesson: an unrun
+   migration is a satisfying diagnosis, and it can be a decoy — running it is
+   also how you test it.**
 4. **"There are five `cname || subdomain` site-origin reimplementations, two
    drift-tested."** There are **eleven**, three drift-tested (§1.4). The estimate
    for the data-model route was roughly half the real size — which strengthens the
@@ -486,7 +501,9 @@ confirmations of things already true or already built.
 
 - AGL-1272 (Done) — canonical redirect from `{sub}.aglyn.app`; the `307` reasoning
   in `load-page-data.ts` is the reference for §4.1's status-code table.
-- AGL-1273 (In Review) — edge redirect; backfill outstanding (§6).
+- AGL-1273 (In Review) — edge redirect; backfill applied and verified by AGL-1365 (§6).
+- AGL-1365 (In Review) — the malformed `redirect` field that made AGL-1273 a
+  no-op; the correction this memo's §6.3 and §8.3 now reflect.
 - AGL-1275 (In Review) — apex docs and wizard; single DNS source of truth.
 - AGL-1327 (In Review) — ALIAS-first apex instructions; precondition of §3.
 - AGL-743 / AGL-642 — the uniqueness transaction and the Admin-SDK-only `cname`
