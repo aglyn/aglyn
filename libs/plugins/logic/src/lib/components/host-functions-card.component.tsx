@@ -50,6 +50,7 @@ import {
   useFirestoreCollection,
   useHostResourceApi,
   useUser,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import WhereUsedDialog from './where-used-dialog.component'
 import {
@@ -118,7 +119,21 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { org } = props
-  const { data: functionDocs } = useFirestoreCollection<any>(
+  const {
+    data: functionDocs,
+    status: functionsStatus,
+    /**
+     * The rows this editor is seeded from are unconfirmed by the server
+     * (AGL-1358). Editing destructures a whole stored function into `draft`
+     * and writes `{...definition}` back, so `merge: true` protects nothing —
+     * the payload is literally every field of the definition. `parameters`
+     * and `operations` are arrays, which a merge replaces wholesale rather
+     * than diffing, so a cached seed does not lose one edit: it restores that
+     * snapshot's entire logic body and parameter list, and every caller's
+     * arguments are positional against the list it just reverted.
+     */
+    fromCache: functionsFromCache,
+  } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
     [firestore, hostId],
     { idField: '$id' },
@@ -179,12 +194,38 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
     const fields = { ...definition, name: draft.name.trim().slice(0, 60) }
     try {
       if (draftId) {
-        // Edit stays client-direct (no quota consumed).
-        await setDoc(
-          doc(firestore, 'hosts', hostId, 'functions', draftId),
-          { ...fields, updatedAt: Timestamp.now() },
-          { merge: true },
+        /**
+         * Edit stays client-direct (no quota consumed) — and is refused when
+         * its seed was never confirmed by the server (AGL-1358). `fields` is
+         * the whole definition spread out of the listener row, so `merge:
+         * true` has nothing left to protect.
+         *
+         * The guard WRAPS the write. An early return is a shape you can keep
+         * while losing the protection; here the write is only reachable
+         * through the verdict.
+         */
+        const verdict = await writeGuardedBySeed(
+          {
+            subject: 'function',
+            unreadable: functionsStatus === 'error',
+            fromCache: functionsFromCache,
+          },
+          async () => {
+            await setDoc(
+              doc(firestore, 'hosts', hostId, 'functions', draftId),
+              { ...fields, updatedAt: Timestamp.now() },
+              { merge: true },
+            )
+          },
         )
+        // Before `setDraft(null)`, so a refusal keeps the dialog open with
+        // the whole edited body and its test run still on screen.
+        if (!verdict.ok) {
+          return void enqueueSnackbar(verdict.message, {
+            variant: 'warning',
+            persist: false,
+          })
+        }
       } else {
         // New function rides the quota-enforcing resources API (AGL-473).
         await createHostResource({ hostId, resource: 'function', data: fields })
@@ -199,7 +240,16 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
         allowDuplicate: true,
       })
     }
-  }, [draft, nameTaken, firestore, hostId, createHostResource, enqueueSnackbar])
+  }, [
+    draft,
+    nameTaken,
+    firestore,
+    hostId,
+    createHostResource,
+    enqueueSnackbar,
+    functionsStatus,
+    functionsFromCache,
+  ])
 
   const handleShowUsage = useCallback(
     (definition: any) => async () => {

@@ -49,6 +49,7 @@ import {
   useFirestoreCollection,
   useHostResourceApi,
   useUser,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import HostActivityCard from './host-activity-card.component'
 import { WhereUsedDialog } from '@aglyn/plugins-logic'
@@ -84,7 +85,21 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   const { confirm } = useConfirmationContext()
   const { org } = props
 
-  const { data: workflowDocs } = useFirestoreCollection<any>(
+  const {
+    data: workflowDocs,
+    status: workflowsStatus,
+    /**
+     * The rows this editor is seeded from are unconfirmed by the server
+     * (AGL-1358). Editing destructures a whole stored workflow into `draft`
+     * and writes `{...definition}` back, so `merge: true` protects nothing.
+     * `trigger` is the field that makes this more than a lost edit: it is
+     * `{event, filter}` or `null` for manual-only, and nothing else on this
+     * card writes it, so a cached seed can re-arm an automation the author
+     * disarmed — or disarm one running on a live site — and revert every
+     * step of the pipeline with it.
+     */
+    fromCache: workflowsFromCache,
+  } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
     [firestore, hostId],
@@ -213,12 +228,38 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
     const fields = { ...definition, name: draft.name.trim().slice(0, 60) }
     try {
       if (draftId) {
-        // Edit stays client-direct (no quota consumed).
-        await setDoc(
-          doc(firestore, 'hosts', hostId, 'workflows', draftId),
-          { ...fields, updatedAt: Timestamp.now() },
-          { merge: true },
+        /**
+         * Edit stays client-direct (no quota consumed) — and is refused when
+         * its seed was never confirmed by the server (AGL-1358). `fields` is
+         * the whole definition spread out of the listener row, `trigger` and
+         * `steps` included, so `merge: true` has nothing left to protect.
+         *
+         * The guard WRAPS the write. An early return is a shape you can keep
+         * while losing the protection; here the write is only reachable
+         * through the verdict.
+         */
+        const verdict = await writeGuardedBySeed(
+          {
+            subject: 'workflow',
+            unreadable: workflowsStatus === 'error',
+            fromCache: workflowsFromCache,
+          },
+          async () => {
+            await setDoc(
+              doc(firestore, 'hosts', hostId, 'workflows', draftId),
+              { ...fields, updatedAt: Timestamp.now() },
+              { merge: true },
+            )
+          },
         )
+        // Before `setDraft(null)`, so a refusal keeps the dialog open with
+        // every step that was built and its test run still on screen.
+        if (!verdict.ok) {
+          return void enqueueSnackbar(verdict.message, {
+            variant: 'warning',
+            persist: false,
+          })
+        }
       } else {
         // New workflow rides the quota-enforcing resources API (AGL-473) —
         // it also re-checks the `workflows` entitlement server-side.
@@ -233,7 +274,16 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         allowDuplicate: true,
       })
     }
-  }, [draft, nameTaken, firestore, hostId, createHostResource, enqueueSnackbar])
+  }, [
+    draft,
+    nameTaken,
+    firestore,
+    hostId,
+    createHostResource,
+    enqueueSnackbar,
+    workflowsStatus,
+    workflowsFromCache,
+  ])
 
   const handleShowUsage = useCallback(
     (workflow: any) => async () => {
