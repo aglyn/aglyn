@@ -47,6 +47,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { type PickedMedia, useMediaPicker } from '@aglyn/aglyn'
 
@@ -54,6 +55,16 @@ export interface ProductEditorDialogProps {
   hostId: string
   /** Product doc (with `$id`) to edit, `null` for a new product. */
   product: (CommerceModel.HostProduct & { $id: string }) | null
+  /**
+   * The listener that produced `product` has NOT been confirmed by the
+   * server (AGL-1358). Required rather than optional on purpose: the
+   * products listener lives in the parent hub card, so this dialog cannot
+   * compute the verdict, and an optional prop a caller forgets is a guard
+   * that is off while looking present.
+   */
+  seedFromCache: boolean
+  /** That listener FAILED (`status === 'error'`). */
+  seedUnreadable?: boolean
   open: boolean
   onClose: () => void
 }
@@ -79,7 +90,8 @@ function comboLabel(options: Record<string, string> | undefined): string {
  * charging correctly without reading the variants array.
  */
 export function ProductEditorDialog(props: ProductEditorDialogProps) {
-  const { hostId, product, open, onClose } = props
+  const { hostId, product, seedFromCache, seedUnreadable, open, onClose } =
+    props
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
@@ -211,20 +223,56 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
       updatedAtMs: Date.now(),
     }
     try {
-      if (product) {
-        // Edit stays client-direct (no quota consumed); full replace.
-        await setDoc(
-          doc(firestore, 'hosts', hostId, 'products', product.$id),
-          { ...base, updatedAt: Timestamp.now() },
-          { merge: false },
-        )
-      } else {
-        // New product rides the quota-enforcing resources API (AGL-473) —
-        // it re-checks the `commerce` entitlement and productsPerHost.
-        await createHostResource({
-          hostId,
-          resource: 'product',
-          data: { ...base, createdAtMs: Date.now() },
+      /**
+       * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
+       *
+       * `merge: false` — a genuine full-document replace, and the payload is
+       * `{...current}`, which is `draft ?? lifted(product)`: every field the
+       * dialog was seeded with, whether or not it was touched. So a cached
+       * seed does not lose the one edit, it replaces the stored product with
+       * the cache's whole picture of it — price, variants, stock, media,
+       * status, SEO. Anything written since that snapshot, by a colleague or
+       * by the checkout engine, is gone.
+       *
+       * Only the edit path is guarded. A NEW product goes through the
+       * quota-enforcing resources API at a fresh uid and can overwrite
+       * nothing; the first snapshot of any listener is `fromCache: true`, so
+       * guarding a create would refuse a save that was never unsafe.
+       *
+       * The guard WRAPS the write: an early return is a shape you can keep
+       * while losing the protection.
+       */
+      const verdict = await writeGuardedBySeed(
+        {
+          subject: 'product',
+          unreadable: Boolean(product) && seedUnreadable,
+          fromCache: Boolean(product) && seedFromCache,
+        },
+        async () => {
+          if (product) {
+            // Edit stays client-direct (no quota consumed); full replace.
+            await setDoc(
+              doc(firestore, 'hosts', hostId, 'products', product.$id),
+              { ...base, updatedAt: Timestamp.now() },
+              { merge: false },
+            )
+          } else {
+            // New product rides the quota-enforcing resources API (AGL-473) —
+            // it re-checks the `commerce` entitlement and productsPerHost.
+            await createHostResource({
+              hostId,
+              resource: 'product',
+              data: { ...base, createdAtMs: Date.now() },
+            })
+          }
+        },
+      )
+      // A refusal leaves the editor open with every field as edited. Closing
+      // it would discard the work AND look like a save that succeeded.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
         })
       }
       onClose()
@@ -236,7 +284,18 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         allowDuplicate: true,
       })
     }
-  }, [current, error, product, firestore, hostId, createHostResource, onClose, enqueueSnackbar])
+  }, [
+    current,
+    error,
+    product,
+    seedFromCache,
+    seedUnreadable,
+    firestore,
+    hostId,
+    createHostResource,
+    onClose,
+    enqueueSnackbar,
+  ])
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>

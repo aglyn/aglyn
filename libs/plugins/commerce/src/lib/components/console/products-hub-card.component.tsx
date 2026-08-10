@@ -854,6 +854,11 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         key={editing?.$id ?? (creating ? 'new' : 'closed')}
         hostId={hostId}
         product={editing}
+        // The editor is seeded from a row of THIS listener and replaces the
+        // whole document, so the freshness verdict belongs here (AGL-1358) —
+        // the dialog has no listener of its own to ask.
+        seedFromCache={productsFromCache}
+        seedUnreadable={productsStatus === 'error'}
         open={creating || editing !== null}
         onClose={() => {
           setEditing(null)
