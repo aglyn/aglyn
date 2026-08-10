@@ -39,11 +39,28 @@ const escapeXml = (value: string) =>
 
 /**
  * RSS feed for a content collection (AGL-81):
- * `/api/collections-rss?host={subdomain|cname}&collection={slug}`.
+ * `/api/collections-rss?host={subdomain|custom domain}&collection={slug}`.
+ *
+ * Every published site also serves it at `/{collection}/rss.xml`, which the
+ * middleware rewrites here with the resolved tenant host (AGL-1385) — that is
+ * the form to link, because it needs no `host` at all and stays right when a
+ * site changes domain.
+ *
+ * `host` accepts the spellings a person actually has: the platform origin
+ * (`acme.aglyn.app`), a custom domain (`acme.com`), or the bare subdomain
+ * (`acme`). `normalizeHostAlias` maps all three onto what Firestore can be
+ * queried by; before AGL-1385 only the middleware's internal `cname--`
+ * sentinel resolved, so every documented form 404'd.
  */
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url)
-  const host = url.searchParams.get('host') ?? ''
+  // The header wins, exactly as on `../sitemap/route.ts`: a dev rewrite can
+  // drop the query, so the resolved tenant host travels both ways.
+  const host = String(
+    request.headers.get('x-aglyn-tenant-host') ??
+      url.searchParams.get('host') ??
+      '',
+  )
   const collectionSlug = url.searchParams.get('collection') ?? ''
   if (!host || !collectionSlug) {
     return new Response('Missing host or collection', { status: 400 })

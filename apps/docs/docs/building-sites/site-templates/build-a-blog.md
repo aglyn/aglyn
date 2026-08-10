@@ -275,14 +275,25 @@ cover image as the social card.
 Aglyn also generates an **RSS feed** per collection, at:
 
 ```
+https://your-domain.com/<collection-slug>/rss.xml
+```
+
+e.g. `https://acme.com/blog/rss.xml`. **This is the URL to link** — it names no site, so
+it keeps working if you connect a custom domain later, and it is the one to put behind a
+"Subscribe" link.
+
+The same feed answers on the explicit form, if you need to point at another site's:
+
+```
 https://your-domain.com/api/collections-rss?host=<your-site>&collection=<collection-slug>
 ```
 
-`host` is your site's subdomain (or custom domain) and `collection` is the collection's
-slug — e.g. `?host=acme&collection=blog`. Items carry the entry's title, link, publish
-date, excerpt, and its category and tags as feed categories, newest first. Link it from
-your own footer or share it with aggregators — feed readers don't discover it
-automatically yet.
+`host` accepts your site's platform origin (`acme.aglyn.app`), your custom domain
+(`acme.com`), or the bare subdomain (`acme`), and `collection` is the collection's slug.
+
+Items carry the entry's title, link, publish date, excerpt, and its category and tags as
+feed categories, newest first. Link it from your own footer or share it with
+aggregators — feed readers don't discover it automatically yet.
 
 ## Tips
 

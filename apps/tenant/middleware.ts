@@ -66,6 +66,10 @@ export const config = {
     '/sitemap.xml',
     '/robots.txt',
     '/manifest.webmanifest',
+    // Per-collection RSS (AGL-1385), same reason as the three above: the
+    // matcher excludes anything shaped `name.ext`, so a feed path would never
+    // reach a route at all.
+    '/:collection/rss.xml',
   ],
 }
 
@@ -220,10 +224,22 @@ export const middleware: NextMiddleware = (req, event) => {
     '/robots.txt': '/api/robots',
     '/manifest.webmanifest': '/api/manifest',
   }
-  if (SEO_REWRITES[req.nextUrl.pathname]) {
+  // A collection's feed at `/{collection}/rss.xml` (AGL-1385). The feed route
+  // has existed since AGL-81 and was reachable only as
+  // `/api/collections-rss?host=cname--acme.com&collection=blog` — a URL whose
+  // host parameter is an internal sentinel, so nothing could link to it and
+  // nothing did. This is the linkable form: no host to get right, and it
+  // survives a domain change because the middleware resolves the host per
+  // request.
+  const rssMatch = /^\/([\w-]+)\/rss\.xml$/.exec(req.nextUrl.pathname)
+  const seoPathname = rssMatch
+    ? '/api/collections-rss'
+    : SEO_REWRITES[req.nextUrl.pathname]
+  if (seoPathname) {
     const seoUrl = req.nextUrl.clone()
-    seoUrl.pathname = SEO_REWRITES[req.nextUrl.pathname]
+    seoUrl.pathname = seoPathname
     seoUrl.searchParams.set('host', tenantHost)
+    if (rssMatch) seoUrl.searchParams.set('collection', rssMatch[1])
     // The query can be dropped across dev rewrites, so the resolved tenant
     // host also travels as a request header the api routes prefer.
     const seoHeaders = new Headers(req.headers)
