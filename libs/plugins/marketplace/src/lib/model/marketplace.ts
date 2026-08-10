@@ -964,6 +964,34 @@ function sanitizePublishedNodeProps(
   return safe
 }
 
+/**
+ * `nodes` that is still in one of its STORAGE forms rather than a node map
+ * (AGL-1395).
+ *
+ * The two forms `decodeStoredNodes` knows about, tested structurally so this
+ * stays a model function with no server import: a byte view — what
+ * firebase-admin hands back for a `Bytes` field — and the `{type, data}`
+ * envelope `JSON.stringify` makes of a Node `Buffer`, which is what a
+ * site-export bundle carries. Neither is a map, and neither is anything the
+ * publisher did.
+ *
+ * The envelope test is deliberately exact, for the reason `decodeStoredNodes`
+ * spells out: the alternative reading is a node map with nodes called `type`
+ * and `data`, which cannot exist because node-map values are objects.
+ */
+function isUndecodedNodes(nodes: unknown): boolean {
+  if (ArrayBuffer.isView(nodes)) return true
+  if (typeof nodes !== 'object' || nodes === null || Array.isArray(nodes)) {
+    return false
+  }
+  const value = nodes as { type?: unknown; data?: unknown }
+  return (
+    value.type === 'Buffer' &&
+    Array.isArray(value.data) &&
+    Object.keys(value).length === 2
+  )
+}
+
 export type MarketplaceDefinitionNodes = Record<
   string,
   {
@@ -1022,6 +1050,23 @@ export function sanitizeMarketplaceDefinition(
   const allowed = options?.extraComponentIds?.length
     ? [...base, ...options.extraComponentIds]
     : base
+  // An UNDECODED `nodes` is never the author's fault, so it must not share a
+  // message with a genuinely rootless definition (AGL-1395). Both undecoded
+  // forms — a Node `Buffer` from the Admin SDK, and the `{type:'Buffer'}`
+  // envelope `JSON.stringify` makes of one — reach the root check below as
+  // something with no `_@_` in it, and the answer was "Definition has no root
+  // node": a sentence that sends the publisher to redesign a page that is
+  // fine. Callers must run `decodeStoredNodes` first; this says so out loud
+  // rather than letting the next raw read look like a content problem.
+  if (isUndecodedNodes(nodes)) {
+    return {
+      ok: false,
+      error:
+        'This content could not be read — it is stored compressed and was ' +
+        'not decoded before publishing. That is a bug on our side, not a ' +
+        'problem with your design.',
+    }
+  }
   if (!rootId || !nodes?.[rootId]) {
     return { ok: false, error: 'Definition has no root node' }
   }

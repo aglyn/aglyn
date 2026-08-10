@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { CANVAS_ROOT_ELEMENT_ID, checkEntitlement, createResourceUid } from '@aglyn/aglyn/server'
+import {
+  CANVAS_ROOT_ELEMENT_ID,
+  checkEntitlement,
+  createResourceUid,
+  decodeStoredNodes,
+} from '@aglyn/aglyn/server'
 import { MARKETPLACE_MAX_PRICE_USD, sanitizeMarketplaceDefinition } from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
@@ -134,7 +139,13 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
         .collection('versions')
         .doc(String(screen.versionId))
         .get()
-      const nodes = versionSnapshot.get('nodes')
+      // `nodes` is stored in more than one form and the besigner writes the
+      // COMPRESSED one, which the Admin SDK materialises as a Node `Buffer`
+      // (AGL-1395). Read raw, that Buffer is truthy, so the guard below let it
+      // straight through to the sanitizer — which found no `_@_` on it and
+      // told the author their screen had no root node. Every besigner-edited
+      // screen failed here, blaming content that was fine.
+      const nodes = decodeStoredNodes(versionSnapshot.get('nodes'))
       if (!nodes) continue
       const sanitized = sanitizeMarketplaceDefinition({
         rootId: CANVAS_ROOT_ELEMENT_ID,
