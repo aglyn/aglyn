@@ -24,6 +24,7 @@ import MuiStack, { type StackProps } from '@mui/material/Stack'
 import type { CSSProperties } from 'react'
 import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // justifyContent/alignItems are no longer direct StackProps in MUI v6+; pass them through sx.
@@ -46,7 +47,10 @@ const Stack = forwardRef<HTMLDivElement, StackWithFlexProps>(
     createElement(MuiStack, {
       ref,
       sx: [{ justifyContent, alignItems }, ...(Array.isArray(sx) ? sx : sx ? [sx] : [])],
-      ...props,
+      // A cleared `direction` persists as null, and MUI resolves it as a
+      // responsive value — `null.xs` throws during SSR and 500s the page.
+      // Same class as the AGL-1226 button colour, different sharp edge.
+      ...dropClearedProps(props),
     }),
 )
 

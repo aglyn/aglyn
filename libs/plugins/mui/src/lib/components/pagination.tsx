@@ -21,6 +21,7 @@ import MuiPagination from '@mui/material/Pagination'
 import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_DISABLED, FIELD_SIZE } from '../constants/field-presets'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -79,8 +80,11 @@ const PaginationElement = forwardRef<HTMLElement, PaginationElementProps>(
       siblingCount,
       boundaryCount,
       children: _children,
-      ...rest
+      ...spread
     } = props
+    // A cleared `color`/`size` persists as null; MUI capitalizes both and
+    // throws during SSR, 500ing the page (AGL-1226).
+    const rest = dropClearedProps(spread)
     const total = toCount(count, 10)
     return (
       <MuiPagination

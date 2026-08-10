@@ -31,6 +31,7 @@ import DOMPurify from 'dompurify'
 import { forwardRef, useEffect, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_TEXT_CONTENT } from '../constants/field-presets'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; keep the legacy ids.
@@ -176,7 +177,10 @@ const AglynTypography = forwardRef<
   HTMLElement,
   TypographyProps & { html?: string }
 >(function AglynTypography(props, ref) {
-  const { html, children, ...rest } = props
+  const { html, children, ...spread } = props
+  // A cleared `align` persists as null and MUI capitalizes it — an SSR throw
+  // that 500s the page (AGL-1226, same shape as the button colour).
+  const rest = dropClearedProps(spread)
   const hasHtml = typeof html === 'string' && Boolean(html)
   // DOMPurify needs a DOM, so the server cannot sanitize — and unsanitized
   // markup must never reach `dangerouslySetInnerHTML` (AGL-497). Rendering
