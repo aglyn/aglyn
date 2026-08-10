@@ -21,6 +21,7 @@ import {
   buildScreenRouteEntries,
   composeScreenRoutePath,
   createResourceUid,
+  decodeStoredNodes,
   findScreenIdByRoutePath,
   normalizeScreenSlug,
   screenClaimsToBeAPage,
@@ -503,7 +504,10 @@ function Screens(props) {
             String(versionId),
           ),
         )
-        const nodes = snapshot.get('nodes') as Record<string, unknown> | undefined
+        // Decoded (AGL-1397): a besigner-saved version stores `nodes` as
+        // msgpack `Bytes`, and a template built from the wrapper carries no
+        // node tree at all.
+        const nodes = decodeStoredNodes(snapshot.get('nodes'))
         if (!nodes) return null
         return {
           nodes,

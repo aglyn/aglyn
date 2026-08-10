@@ -74,6 +74,7 @@ import {
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../utils/revalidate-live-pages'
+import rewriteStoredBindingTokens from '../utils/rewrite-stored-binding-tokens'
 import { hasEntitlement } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostSubdomain } from '../components/host-id-provider'
@@ -291,14 +292,19 @@ export const BesignerVersionsComponent = observer(
               targetVersionId,
             )
             const versionSnapshot = await getDoc(versionRef)
-            const nodes = versionSnapshot.get('nodes')
-            if (nodes) {
-              const { value, changed } = Aglyn.rewriteBindingTokensDeep(
-                nodes,
-                toLookup(variableDocs),
-                toLookup(functionDocs),
-              )
-              if (changed) await updateDoc(versionRef, { nodes: value })
+            // Through the storage-form-aware rewrite (AGL-1397). A
+            // besigner-saved version's `nodes` is a `Bytes`, and handing the
+            // wrapper straight to `rewriteBindingTokensDeep` did not skip the
+            // rewrite — it walked INTO the wrapper, found the page's text
+            // sitting in the msgpack payload as a latin-1 string, rewrote a
+            // token there, and wrote the mangled wrapper back as the nodes.
+            const rewrite = rewriteStoredBindingTokens(
+              versionSnapshot.get('nodes'),
+              toLookup(variableDocs),
+              toLookup(functionDocs),
+            )
+            if (rewrite?.changed) {
+              await updateDoc(versionRef, { nodes: rewrite.value })
             }
           } catch (error) {
             console.warn('Publish-time token normalization skipped', error)

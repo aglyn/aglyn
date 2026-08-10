@@ -19,6 +19,7 @@
 import {
   CANVAS_ROOT_ELEMENT_ID,
   createResourceUid,
+  decodeStoredNodes,
   LAYOUT_SLOT_COMPONENT_ID,
 } from '@aglyn/aglyn'
 import { MUI_BUNDLE_ID } from '@aglyn/aglyn'
@@ -138,9 +139,10 @@ function Layouts(props) {
             versionId,
           ),
         )
-        const nodes = snapshot.get('nodes') as
-          | Record<string, unknown>
-          | undefined
+        // Decoded (AGL-1397): the besigner stores `nodes` as msgpack `Bytes`,
+        // and the LayoutSlot check below is exactly the sort that cannot work
+        // on the wrapper — it walks the map and finds nothing, silently.
+        const nodes = decodeStoredNodes(snapshot.get('nodes'))
         // The LayoutSlot node rides along inside `nodes` — it marks where a
         // bound screen grafts in, so a layout template without it would be
         // chrome with nowhere to put the page.

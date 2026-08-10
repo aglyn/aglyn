@@ -68,6 +68,34 @@ describe('decodeStoredNodes', () => {
     expect(decodeStoredNodes(packed)).toEqual(NODES)
   })
 
+  /**
+   * The CLIENT SDK's form (AGL-1397). Every fix before it — AGL-1223,
+   * AGL-1391 — was on a server read, where firebase-admin materialises a
+   * bytes field as a Node `Buffer`, an `ArrayBuffer` view. `firebase/firestore`
+   * hands back a `Bytes` instead: not a view, and not a plain map either, so
+   * without this branch it falls through to `return raw as T` and four
+   * console reads keep their blindness while looking fixed.
+   *
+   * Asserted structurally rather than against the class, to keep
+   * `firebase/firestore` out of this library — `decompress` already types the
+   * contract as `ByteSource`, and `apps/console/specs/publish-token-normalization.spec.ts`
+   * pins the real `Bytes` against it.
+   */
+  it('decodes the client SDK form, a ByteSource with toUint8Array', () => {
+    const bytes = compress(NODES)
+    const source = { toUint8Array: () => bytes }
+
+    expect(ArrayBuffer.isView(source)).toBe(false)
+    expect(decodeStoredNodes(source)).toEqual(NODES)
+  })
+
+  it('does not mistake a node map for a ByteSource', () => {
+    // It cannot collide — a node map's values are node OBJECTS, never
+    // functions — but the guard is what makes that reasoning hold.
+    const map = { toUint8Array: { componentId: 'text' } }
+    expect(decodeStoredNodes(map)).toBe(map)
+  })
+
   it('decodes a bare Uint8Array view at a non-zero offset', () => {
     const bytes = compress(NODES)
     const padded = new Uint8Array(bytes.byteLength + 8)

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { decompress } from './decompress'
+import { decompress, type ByteSource } from './decompress'
 
 /**
  * A version document's `nodes` field, decoded to the map every reader wants
@@ -47,6 +47,17 @@ import { decompress } from './decompress'
  * template versions are written by a bare `setDoc` with no converter. Passing
  * those through here is still correct: a plain map returns unchanged.
  *
+ * The bytes arrive as a Node `Buffer` on the server and as a Firestore
+ * `Bytes` on the CLIENT (AGL-1397), and only the first is an `ArrayBuffer`
+ * view. `Bytes` is a wrapper — `decompress` has always accepted it via
+ * `ByteSource`, but this helper used to route only views into `decompress`, so
+ * a `Bytes` fell through to the plain-map branch and came back UNCHANGED.
+ * That is the worst possible outcome for a client caller, because the wrapper
+ * is walkable: its `_byteString.binaryString` is the msgpack payload held as a
+ * latin-1 string, so `rewriteBindingTokensDeep` reads the page's text right
+ * out of the encoded bytes, "normalizes" a token inside them, and hands back
+ * `{_byteString: {binaryString: …}}` for something to write.
+ *
  * A THIRD form arrives from outside Firestore: `{type: 'Buffer', data: […]}`,
  * which is what `JSON.stringify` makes of a Node `Buffer` (AGL-1391). Site
  * export bundles downloaded before that fix carry it, and it is the nastiest
@@ -60,7 +71,7 @@ export function decodeStoredNodes<T = Record<string, any>>(
   if (raw === null || raw === undefined) return null
   const bytes = ArrayBuffer.isView(raw)
     ? raw
-    : bufferEnvelopeBytes(raw)
+    : byteSource(raw) ?? bufferEnvelopeBytes(raw)
   if (bytes) {
     try {
       return decompress<T>(bytes)
@@ -71,6 +82,21 @@ export function decodeStoredNodes<T = Record<string, any>>(
     }
   }
   return raw as T
+}
+
+/**
+ * The client SDK's `Bytes`, structurally, or `null` for anything else.
+ *
+ * Matched on the method rather than the class so `firebase/firestore` stays
+ * out of this library — the same reason `decompress` types its input as
+ * `ByteSource`. A node map cannot collide: its values are node OBJECTS, never
+ * functions.
+ */
+function byteSource(raw: unknown): ByteSource | null {
+  if (typeof raw !== 'object') return null
+  return typeof (raw as ByteSource).toUint8Array === 'function'
+    ? (raw as ByteSource)
+    : null
 }
 
 /**
