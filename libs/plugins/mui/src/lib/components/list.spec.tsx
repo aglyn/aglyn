@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import { render, screen } from '@testing-library/react'
 import List, { ID as LIST_ID, presets as listPresets, schema as listSchema } from './list'
 import ListItem, {
@@ -154,5 +155,27 @@ describe('List Item Text', () => {
       (container.querySelector('.MuiListItemText-root') as HTMLElement)
         .className,
     ).toMatch(/MuiListItemText-inset/)
+  })
+
+  /**
+   * The second element that accepted children in the hierarchy and discarded
+   * them at render (AGL-1388), found sweeping for the Markdown block's shape.
+   * MUI reads `children` only as a fallback for a missing `primary`, so with
+   * a primary set — every preset, every authored row — a dropped node is
+   * gone with no warning.
+   */
+  it('takes no children: a dropped node vanishes behind `primary`', () => {
+    expect(listItemTextSchema.flags?.dropping).toBe(
+      Aglyn.FEATURE_FLAG.DISABLED,
+    )
+    // The render behaviour the flag is describing, so the flag cannot drift
+    // away from the component it speaks for.
+    render(
+      <ListItemText primary="One">
+        <span data-testid="dropped">{'two'}</span>
+      </ListItemText>,
+    )
+    expect(screen.queryByTestId('dropped')).toBeNull()
+    expect(screen.getByText('One')).toBeTruthy()
   })
 })

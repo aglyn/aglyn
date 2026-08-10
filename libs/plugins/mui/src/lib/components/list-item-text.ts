@@ -36,6 +36,15 @@ export const schema: Aglyn.ComponentSchema<ListItemTextProps> = {
   icon: { path: mdiFormatListChecks.path },
   // Text lives in `primary`/`secondary` (not `children`), so this component
   // exposes its own text fields instead of FIELD_TEXT_CONTENT.
+  flags: {
+    // …and MUI reads `children` ONLY as a fallback for a missing `primary`
+    // (`primary = primaryProp != null ? primaryProp : children`), so with a
+    // primary set — which every preset and every authored row has — a node
+    // dropped in here is discarded at render with no warning. Same shape as
+    // the Markdown block that swallowed three /press screenshots
+    // (AGL-1388): the row's text is its attributes, not its child list.
+    dropping: Aglyn.FEATURE_FLAG.DISABLED,
+  },
   attributes: [
     {
       name: 'primary',

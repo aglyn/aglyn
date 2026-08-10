@@ -130,9 +130,18 @@ export interface MarkdownProps extends BoxProps {
  * blocks and never an HTML string — so there is no `dangerouslySetInnerHTML`
  * anywhere on this path and nothing to sanitize. Parsing is pure, so the full
  * document server-renders and the text is in the crawled HTML.
+ *
+ * Child NODES are never rendered, in either branch (AGL-1388). The document
+ * is the `content` prop; there is no position in a parsed block list that a
+ * dropped element could occupy, so the schema turns dropping off and
+ * `nodeAcceptsChildren` now honors that — a drop lands as a sibling instead.
+ * `children` is destructured away rather than left in `rest` because the
+ * empty-content branch spreads `rest` onto a childless Box: without this, a
+ * Markdown element rendered exactly the child nodes it had swallowed a
+ * moment earlier as soon as its content was cleared.
  */
 const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
-  const { content, sx, ...rest } = props
+  const { content, sx, children: _children, ...rest } = props
   const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
   const source = (content ?? '').trim()
   const blocks = useMemo(

@@ -30,6 +30,13 @@ Text is set for reading rather than for a layout: 17px on a generous line height
 theme's primary text colour, with headings that step up in size on wider screens. You don't
 need to style anything for it to look right.
 
+The element draws its **Content** attribute and nothing else, so it takes no child elements —
+there's no position in a parsed document an element could occupy. Dropping onto it places your
+element **next to** the Markdown block rather than inside it, the same way every other
+[leaf element](drag-drop-hierarchy.md#leaf-elements-dont--dropping-on-one-makes-a-sibling)
+behaves. To put a picture *in* the document, write it as markdown — `![alt](https://…)` — and to
+put one beside the document, drop an **Image** as a sibling.
+
 ### What the markdown supports
 
 | You write | You get |

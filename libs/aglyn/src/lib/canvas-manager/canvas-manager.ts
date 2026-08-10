@@ -63,6 +63,16 @@ function isLeafFlagEnabled(flag?: FEATURE_FLAG): boolean {
   return typeof flag === 'number' && (flag & FEATURE_FLAG.ENABLED) !== 0
 }
 
+/**
+ * True only when a feature flag is explicitly present and carries the
+ * DISABLED bit — the mirror of {@link isLeafFlagEnabled}, for the flags whose
+ * interesting value is the switched-OFF one. An absent flag reads as false,
+ * so a component that declares no flags keeps the permissive default.
+ */
+function isFlagDisabled(flag?: FEATURE_FLAG): boolean {
+  return typeof flag === 'number' && (flag & FEATURE_FLAG.DISABLED) !== 0
+}
+
 export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   // public store: CanvasManager
   public $id: NodeId
@@ -438,11 +448,30 @@ export class CanvasManager {
    * its `children` as inline text (a screen link, button, icon, image) has
    * no slot to receive them and can't. Components with no registered schema
    * default to accepting children.
+   *
+   * `flags.dropping: DISABLED` is the third way to say "no canvas child
+   * slot" (AGL-1388), for components that are neither self-closing nor text
+   * leaves but still have nowhere to put a dropped node:
+   *
+   * - Markdown renders the parsed `content` prop and nothing else, so a
+   *   dropped element lands somewhere the markdown source cannot say.
+   * - A Reusable Component instance is opaque: compose REPLACES its child
+   *   list with the grafted definition subtree, so a canvas-dropped child is
+   *   destroyed before the page is rendered.
+   * - A Layout Slot's children come from screen composition.
+   *
+   * The flag was declared on all three, and until now nothing read it —
+   * which is exactly how three /press screenshots came to be parented under
+   * a Markdown node, shipped in the page payload, and never drawn. A
+   * container that accepts children in the hierarchy and discards them at
+   * render is silent data loss: the author sees the nodes in the tree and
+   * the published page does not have them.
    */
   public nodeAcceptsChildren = computedFn((node: NodeSchema<any>): boolean => {
     if (!node) return false
     if (this.isRootNode(node)) return true
     const flags = this.aglyn?.components?.getSchema(node.componentId)?.flags
+    if (isFlagDisabled(flags?.dropping)) return false
     const isLeaf =
       isLeafFlagEnabled(flags?.selfClosing) ||
       isLeafFlagEnabled(flags?.textEditable)

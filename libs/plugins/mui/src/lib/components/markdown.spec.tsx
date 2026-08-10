@@ -274,6 +274,108 @@ describe('Table of contents element (AGL-1162)', () => {
   })
 })
 
+/**
+ * A Markdown block swallowing dropped elements (AGL-1388).
+ *
+ * Three product-screenshot nodes were parented under the `markdown` node on
+ * `/press`. They shipped in the page payload and never became an `<img>`,
+ * because `Markdown` renders parsed `content` blocks and nothing else — while
+ * the hierarchy happily accepted the drop. The author saw them in the tree;
+ * the published page did not have them; nothing warned. That reads as "never
+ * done" rather than "broken", which is worse.
+ *
+ * The side that gives is the EDITOR: a markdown block's content IS its
+ * `content` prop, so there is no position in a parsed block list a dropped
+ * element could occupy. The schema already said so with
+ * `flags.dropping: DISABLED` — nothing read the flag, which is the whole bug.
+ */
+describe('a Markdown node refuses children on BOTH sides (AGL-1388)', () => {
+  const PRESS_DOC = '## Press kit\n\nLogos and screenshots below.'
+
+  /** The /press shape: a markdown node carrying image nodes as children. */
+  const fillPressCanvas = () => {
+    Aglyn.canvas.setNodes({
+      [Aglyn.NODE_ROOT_ID]: {
+        $id: Aglyn.NODE_ROOT_ID,
+        type: Aglyn.NodeType.NODE,
+        componentId: 'div',
+        nodes: ['WAUHna5nnG'],
+      },
+      WAUHna5nnG: {
+        $id: 'WAUHna5nnG',
+        type: Aglyn.NodeType.NODE,
+        parentId: Aglyn.NODE_ROOT_ID,
+        componentId: MARKDOWN_ID,
+        props: { content: PRESS_DOC },
+        nodes: ['D-Ghfaw6z3'],
+      },
+      'D-Ghfaw6z3': {
+        $id: 'D-Ghfaw6z3',
+        type: Aglyn.NodeType.NODE,
+        parentId: 'WAUHna5nnG',
+        componentId: 'muiImage',
+        props: { src: '/screenshot.png' },
+      },
+    } as any)
+  }
+
+  beforeEach(() => {
+    // The schema has to be REGISTERED for the gate to see its flags — the
+    // besigner reads `nodeAcceptsChildren` off the live component registry.
+    Aglyn.components.registerComponent(Markdown as any, markdownSchema)
+  })
+  afterEach(() => Aglyn.components.unregisterComponent(MARKDOWN_ID))
+
+  it('the schema turns dropping off', () => {
+    expect(markdownSchema.flags?.dropping).toBe(Aglyn.FEATURE_FLAG.DISABLED)
+  })
+
+  it('the hierarchy refuses it as a drop target', () => {
+    fillPressCanvas()
+    const markdownNode = Aglyn.canvas.getNode('WAUHna5nnG')!
+    // Fails before the fix: `nodeAcceptsChildren` read only `selfClosing`
+    // and `textEditable`, so a Markdown node advertised a children slot it
+    // does not have and the canvas let the drop land inside.
+    expect(Aglyn.canvas.nodeAcceptsChildren(markdownNode)).toBe(false)
+  })
+
+  it('an insert aimed at it lands as a SIBLING, not a child', () => {
+    fillPressCanvas()
+    // Every editor entry point funnels through one of two gates, and both
+    // consult `nodeAcceptsChildren`: the Insert menu and paste go through
+    // `resolveInsertTarget`, canvas drag-and-drop through the dnd manager's
+    // `computedDrop`. Proving the first proves the shared gate.
+    const { parent } = Aglyn.canvas.resolveInsertTarget(
+      Aglyn.canvas.getNode('WAUHna5nnG'),
+    )
+    expect(parent.$id).toBe(Aglyn.NODE_ROOT_ID)
+  })
+
+  it('renders no child nodes next to a parsed document', () => {
+    const { container } = render(
+      <Markdown content={PRESS_DOC}>
+        <img data-testid="dropped" src="/screenshot.png" alt="" />
+      </Markdown>,
+    )
+    expect(container.querySelector('h2')?.textContent).toBe('Press kit')
+    expect(screen.queryByTestId('dropped')).toBeNull()
+  })
+
+  it('renders no child nodes once the document is cleared either', () => {
+    // The half that was genuinely inconsistent: the empty-content branch
+    // spread `...rest` onto a childless Box, and `children` rode along in
+    // `rest`. So clearing the Content attribute made the swallowed nodes
+    // reappear — the same tree rendering two different pages depending on a
+    // prop that has nothing to do with them.
+    render(
+      <Markdown content="">
+        <img data-testid="dropped" src="/screenshot.png" alt="" />
+      </Markdown>,
+    )
+    expect(screen.queryByTestId('dropped')).toBeNull()
+  })
+})
+
 describe('markdown schemas (AGL-1162)', () => {
   it('keeps the persisted component ids', () => {
     // Ids live in every screen document that ever used these elements.
