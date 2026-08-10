@@ -19,8 +19,9 @@
  * The redirects console must not rewrite a rule from a seed the server never
  * confirmed (AGL-1358).
  *
- * Editing copies a whole stored rule into `draft` and writes every field of
- * it back under `merge: true`, which protects nothing. This is the site in
+ * Editing copies every field the form owns out of the stored rule and writes
+ * all of them back under `merge: true`, which protects only what is written
+ * elsewhere (`lastHitAt`, `deletedAt`). This is the site in
  * the issue where a rollback is hardest to undo: a reverted `destination` on
  * a **301** is cached by every browser that has already followed it, so the
  * stale target outlives the fix in the console. `kind` reverting from exact
