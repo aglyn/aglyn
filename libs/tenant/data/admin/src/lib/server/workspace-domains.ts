@@ -16,8 +16,15 @@
  */
 
 /**
- * Attach and detach `{slug}.aglyn.com` on the console's Vercel project
- * (AGL-1136).
+ * Attach and detach names on the console's Vercel project (AGL-1136).
+ *
+ * Two layers. The bottom one — `attachProjectDomain` / `detachProjectDomain` —
+ * takes a fully-qualified name and is what a custom **console** domain uses
+ * (AGL-1373). The top one is the workspace-subdomain pair below, which is that
+ * primitive with `{slug}.aglyn.com` built for it. One implementation of the
+ * Vercel call, one deadline, one never-throws contract; a second copy pointed
+ * at the same project is how two copies of a constant drift apart, which is the
+ * bug AGL-1135 was, one layer down.
  *
  * AGL-1135 removed the `*.aglyn.com` wildcard, because it meant every
  * hostname under the domain served a real console sign-in page —
@@ -109,19 +116,86 @@ function deadline(): AbortSignal | undefined {
   }
 }
 
+/** Mirrors the app-level canonical redirect: revocable, method-preserving. */
+const REDIRECT_STATUS_CODE = 307
+
+const HOSTNAME_PATTERN =
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/
+
+function normalizeHost(input: string): string {
+  return String(input ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\.$/, '')
+}
+
 /**
- * Attach `{slug}.<workspace domain>` so the workspace subdomain resolves.
+ * Vercel's `redirect` field takes a **BARE HOSTNAME, not a URL**.
  *
- * Idempotent: Vercel answers `domain_already_in_use` when the domain is
- * already on the project, which is success for our purposes — the reconcile
- * script and the create path can both run without coordinating.
+ * `https://aglyn.com` is rejected with the error `bad_request`, whose message
+ * reads "Unable to redirect to https://…, because that domain is not added to
+ * the project" — it blames the target for being absent when the format was
+ * wrong, which is the misreading that hid the bug. That
+ * misreading is why AGL-1273's redirect shipped looking correct and never once
+ * succeeded, and survived for weeks before AGL-1365 caught it.
+ *
+ * So the shape is enforced here rather than trusted at each call site: a
+ * scheme-prefixed or path-bearing value is reduced to its host, and anything
+ * that is not then a plausible hostname returns `null` so the caller can refuse
+ * rather than send a request that cannot work.
  */
-export async function attachWorkspaceDomain(
-  slug: string,
+export function redirectHostname(target: string): string | null {
+  const raw = normalizeHost(target)
+  if (!raw) return null
+  const host = raw
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+    .split(/[/?#]/)[0]
+    .replace(/\.$/, '')
+  return HOSTNAME_PATTERN.test(host) ? host : null
+}
+
+export interface ProjectDomainOptions {
+  /**
+   * Register the name as a per-domain REDIRECT to this host instead of serving
+   * the app on it. Passed through `redirectHostname`, so a URL is accepted from
+   * a caller and never sent to Vercel.
+   */
+  redirectTo?: string
+}
+
+/**
+ * Attach one fully-qualified name to the console project.
+ *
+ * Idempotent: Vercel answers `domain_already_in_use` when the name is already
+ * on the project, which is success for our purposes — the reconcile script and
+ * the create path can both run without coordinating.
+ *
+ * ⚠️ Tolerating `domain_already_in_use` is only safe while **every** name this
+ * function is asked to attach is also claimed in Firestore. Without that, a
+ * second org attaches a name someone else already holds, reads
+ * `already-exists` as success, and gets a console that looks healthy while its
+ * visitors are served — or redirected — somewhere else. That is the AGL-743
+ * shape, and `console-domains.ts` is where the claim is kept in step.
+ */
+export async function attachProjectDomain(
+  name: string,
+  options: ProjectDomainOptions = {},
 ): Promise<WorkspaceDomainResult> {
-  const domain = domainFor(slug)
+  const domain = normalizeHost(name)
   const settings = config()
-  if (!settings || !slug) return { outcome: 'skipped', domain }
+  if (!settings || !domain) return { outcome: 'skipped', domain }
+
+  const redirect = options.redirectTo
+    ? redirectHostname(options.redirectTo)
+    : null
+  if (options.redirectTo && !redirect) {
+    console.error('[workspace-domains] refusing a non-hostname redirect', options.redirectTo)
+    return { outcome: 'failed', domain, detail: 'invalid-redirect' }
+  }
+  const body = redirect
+    ? { name: domain, redirect, redirectStatusCode: REDIRECT_STATUS_CODE }
+    : { name: domain }
+
   try {
     const response = await fetch(
       `https://api.vercel.com/v10/projects/${settings.projectId}/domains${query(settings.teamId)}`,
@@ -131,7 +205,7 @@ export async function attachWorkspaceDomain(
           Authorization: `Bearer ${settings.token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: domain }),
+        body: JSON.stringify(body),
         signal: deadline(),
       },
     )
@@ -139,6 +213,9 @@ export async function attachWorkspaceDomain(
     const payload = await response.json().catch(() => null)
     const code = String(payload?.error?.code ?? '')
     if (code === 'domain_already_in_use' || response.status === 409) {
+      // An entry that already exists still has to CARRY the redirect, or the
+      // twin quietly serves the console instead of forwarding to the primary.
+      if (redirect) return patchRedirect(settings, domain, redirect)
       return { outcome: 'already-exists', domain }
     }
     // Logged, never thrown — see property 1 above.
@@ -154,18 +231,44 @@ export async function attachWorkspaceDomain(
   }
 }
 
-/**
- * Detach the domain, for org erasure.
- *
- * NOT called on rename: the previous slug keeps serving a 308 to the new one,
- * and a redirect needs a hostname that still resolves.
- */
-export async function detachWorkspaceDomain(
-  slug: string,
+/** Point an already-attached name at `redirect`. Same never-throws contract. */
+async function patchRedirect(
+  settings: { token: string; projectId: string; teamId?: string },
+  domain: string,
+  redirect: string,
 ): Promise<WorkspaceDomainResult> {
-  const domain = domainFor(slug)
+  try {
+    const response = await fetch(
+      `https://api.vercel.com/v9/projects/${settings.projectId}/domains/${encodeURIComponent(domain)}${query(settings.teamId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${settings.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          redirect,
+          redirectStatusCode: REDIRECT_STATUS_CODE,
+        }),
+        signal: deadline(),
+      },
+    )
+    if (response.ok) return { outcome: 'already-exists', domain }
+    console.error('[workspace-domains] redirect patch failed', domain, response.status)
+    return { outcome: 'failed', domain, detail: String(response.status) }
+  } catch (error) {
+    console.error('[workspace-domains] redirect patch threw', domain, error)
+    return { outcome: 'failed', domain, detail: 'network' }
+  }
+}
+
+/** Detach one fully-qualified name from the console project. */
+export async function detachProjectDomain(
+  name: string,
+): Promise<WorkspaceDomainResult> {
+  const domain = normalizeHost(name)
   const settings = config()
-  if (!settings || !slug) return { outcome: 'skipped', domain }
+  if (!settings || !domain) return { outcome: 'skipped', domain }
   try {
     const response = await fetch(
       `https://api.vercel.com/v9/projects/${settings.projectId}/domains/${encodeURIComponent(domain)}${query(settings.teamId)}`,
@@ -183,6 +286,33 @@ export async function detachWorkspaceDomain(
     console.error('[workspace-domains] detach threw', domain, error)
     return { outcome: 'failed', domain, detail: 'network' }
   }
+}
+
+/**
+ * Attach `{slug}.<workspace domain>` so the workspace subdomain resolves.
+ *
+ * The `!slug` guard is not redundant with the one inside `attachProjectDomain`:
+ * an empty slug still produces the well-formed `.aglyn.com`, and on the detach
+ * side that is a request to delete the apex.
+ */
+export async function attachWorkspaceDomain(
+  slug: string,
+): Promise<WorkspaceDomainResult> {
+  if (!slug) return { outcome: 'skipped', domain: domainFor(slug) }
+  return attachProjectDomain(domainFor(slug))
+}
+
+/**
+ * Detach the domain, for org erasure.
+ *
+ * NOT called on rename: the previous slug keeps serving a 308 to the new one,
+ * and a redirect needs a hostname that still resolves.
+ */
+export async function detachWorkspaceDomain(
+  slug: string,
+): Promise<WorkspaceDomainResult> {
+  if (!slug) return { outcome: 'skipped', domain: domainFor(slug) }
+  return detachProjectDomain(domainFor(slug))
 }
 
 /**

@@ -454,6 +454,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Custom console domain → org (AGL-1099/AGL-1373). Admin SDK only, on the
+    // same reasoning as `ssoDomains` and deliberately NOT public-read like
+    // `orgSlugs` — nothing client-side consults it, and `orgSlugs` is public
+    // only because it doubles as the health probe.
+    //
+    // A doc here is a RESERVATION as much as a routing record: `status` and
+    // `txtToken` are the whole ownership proof, and every name in `names` is
+    // claimed in one transaction precisely so no second org can hold any part
+    // of the set. A client that could write either field has defeated domain
+    // verification and the uniqueness guard together.
+    match /consoleDomains/{domain} {
+      allow read, write: if false;
+    }
+
     // Host → org resolver mirror, server-written beside host create.
     match /hostIndex/{hostId} {
       allow read: if isSignedIn();

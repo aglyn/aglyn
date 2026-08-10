@@ -137,6 +137,97 @@ describe('attachWorkspaceDomain', () => {
   })
 })
 
+describe('redirectHostname — Vercel takes a BARE HOSTNAME (AGL-1365)', () => {
+  it('reduces a URL to its host rather than sending one', async () => {
+    // `https://aglyn.com` comes back as `bad_request: Unable to redirect to
+    // "https://…", because that domain is not added to the project`. The
+    // message blames the target for being absent when the format was wrong,
+    // which is why AGL-1273's redirect shipped looking correct and never once
+    // succeeded — for weeks, until AGL-1365.
+    const { redirectHostname } = await load()
+    expect(redirectHostname('https://acme.com')).toBe('acme.com')
+    expect(redirectHostname('https://acme.com/path?utm=1')).toBe('acme.com')
+    expect(redirectHostname('  HTTP://Acme.COM.  ')).toBe('acme.com')
+    expect(redirectHostname('acme.com')).toBe('acme.com')
+  })
+
+  it('returns null for anything that is not a hostname', async () => {
+    const { redirectHostname } = await load()
+    for (const bad of ['', '   ', 'acme', 'https://', '-acme.com', 'acme..com']) {
+      expect(redirectHostname(bad)).toBeNull()
+    }
+  })
+})
+
+describe('attachProjectDomain', () => {
+  it('sends a bare-hostname redirect and a 307, never a URL', async () => {
+    fetchMock.mockResolvedValue(respond(200))
+    const { attachProjectDomain } = await load()
+    await attachProjectDomain('www.acme.com', { redirectTo: 'https://acme.com' })
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body).toEqual({
+      name: 'www.acme.com',
+      redirect: 'acme.com',
+      redirectStatusCode: 307,
+    })
+    expect(body.redirect).not.toMatch(/^https?:\/\//)
+  })
+
+  it('refuses a redirect target it cannot reduce, without calling Vercel', async () => {
+    const { attachProjectDomain } = await load()
+    expect(await attachProjectDomain('www.acme.com', { redirectTo: 'nonsense' })).toEqual({
+      outcome: 'failed',
+      domain: 'www.acme.com',
+      detail: 'invalid-redirect',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('PATCHes an existing name so the redirect is actually applied', async () => {
+    // A name already on the project answers `domain_already_in_use`. Treating
+    // that as done would leave the twin SERVING the console instead of
+    // forwarding to the primary.
+    fetchMock
+      .mockResolvedValueOnce(respond(409, { error: { code: 'domain_already_in_use' } }))
+      .mockResolvedValueOnce(respond(200))
+    const { attachProjectDomain } = await load()
+    expect(await attachProjectDomain('www.acme.com', { redirectTo: 'acme.com' })).toEqual({
+      outcome: 'already-exists',
+      domain: 'www.acme.com',
+    })
+    const [url, init] = fetchMock.mock.calls[1]
+    expect(url).toBe(
+      'https://api.vercel.com/v9/projects/prj_test/domains/www.acme.com?teamId=team_test',
+    )
+    expect(init.method).toBe('PATCH')
+    expect(JSON.parse(init.body)).toEqual({
+      redirect: 'acme.com',
+      redirectStatusCode: 307,
+    })
+  })
+
+  it('does not PATCH when there is no redirect to apply', async () => {
+    fetchMock.mockResolvedValue(
+      respond(409, { error: { code: 'domain_already_in_use' } }),
+    )
+    const { attachProjectDomain } = await load()
+    expect(await attachProjectDomain('console.acme.com')).toEqual({
+      outcome: 'already-exists',
+      domain: 'console.acme.com',
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('takes a fully-qualified name, unchanged by the workspace domain', async () => {
+    fetchMock.mockResolvedValue(respond(200))
+    const { attachProjectDomain } = await load()
+    await attachProjectDomain('  Console.Acme-Agency.com.  ')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      name: 'console.acme-agency.com',
+    })
+  })
+})
+
 describe('detachWorkspaceDomain', () => {
   it('DELETEs the domain', async () => {
     fetchMock.mockResolvedValue(respond(200))

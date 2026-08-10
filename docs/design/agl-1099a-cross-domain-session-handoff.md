@@ -938,3 +938,47 @@ hostname doing `signInWithCustomToken` with `inMemoryPersistence` and no
 `popupRedirectResolver`, with the network log showing no `/__/auth/iframe`
 request. If that fails, D6 collapses and items 2 and 3 of AGL-1099's list come
 back — along with the 250-domain ceiling becoming the whole story.
+
+> **Run — and it passed.** `docs/design/agl-1099a-poc-findings.md`. Two
+> orderings changed as a result, and both are binding on everything below.
+
+### The ordering the PoC changed: 1099d **blocks** 1099c
+
+App Check — **not** Firebase's authorized-domain list — is the gate. An
+unattested `signInWithCustomToken` is refused `401 UNAUTHENTICATED` ("Firebase
+App Check token is invalid") *before* token validation, on any origin. So the
+App Check reCAPTCHA key's domain allowlist is a **hard functional
+prerequisite**, not the commercial ceiling this document called it: a domain
+that attaches and routes but cannot attest produces a console that renders and
+can never sign anyone in — precisely the "looks finished" failure AGL-1099
+warns against. **Resolve 1099d before the first domain is attached, and do not
+start 1099c until it is done.**
+
+### 1099b, as built (AGL-1373)
+
+Landed **dark**: mechanism and tests, no domain attached, no user-facing attach
+path, no production configuration touched. `1099a-pre` is folded into it, since
+its four prerequisites are the same code.
+
+- `libs/tenant/data/admin/src/lib/server/console-domains.ts` — the
+  `consoleDomains/{host}` claim, TXT ownership proof (reusing
+  `SSO_TXT_PREFIX` / `resolveChallengeTxt` / `recordsProveOwnership`), the
+  reserved-name blocklist, and the `whiteLabel` gate read server-side.
+- `workspace-domains.ts` grew `attachProjectDomain` / `detachProjectDomain`,
+  which take a fully-qualified name; the workspace-subdomain pair is now that
+  primitive with `{slug}.aglyn.com` built for it. One implementation, one
+  deadline, one never-throws contract.
+- **The twin is claimed in the same transaction as its primary.**
+  `attachProjectDomain` tolerating `domain_already_in_use` is only safe while
+  the Firestore claim indexes every name Vercel holds; a twin claimed in a
+  follow-up write is the AGL-743 hole, and there it meant one org served on
+  another org's domain. `consoleDomainNames` derives the set, the transaction
+  claims all of it or none, and activation attaches exactly what was claimed.
+- `customConsoleDomain` in `/api/orgs/settings` now runs the blocklist and
+  takes the reservation, so the field cannot name `aglyn.com` and two orgs
+  cannot hold the same value. `brandingProfile` is denied to client writes as
+  of AGL-1354, so that route is the only writer and the gate is real.
+
+Still open, and deliberately not built here: everything in D6/D7 that needs the
+handoff, the `setPersistence` guard the PoC's §4 asks for, and the Firestore
+cache decision in its §5.
