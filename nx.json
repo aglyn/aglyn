@@ -98,7 +98,7 @@
       "inputs": [
         "default",
         "^default",
-        "{workspaceRoot}/tools/eslint-rules/**/*",
+        "{workspaceRoot}/tools/lint-rules/**/*",
         "{workspaceRoot}/eslint.config.mjs"
       ],
       "cache": true

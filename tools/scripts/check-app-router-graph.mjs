@@ -33,7 +33,7 @@
 
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { analyzeAppRouterGraph } from '../eslint-rules/lib/app-router-graph.mjs'
+import { analyzeAppRouterGraph } from '../lint-rules/lib/app-router-graph.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const asJson = process.argv.includes('--json')

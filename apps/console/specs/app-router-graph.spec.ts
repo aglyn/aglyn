@@ -34,7 +34,7 @@
  *    tells you where to make the change.
  *
  * The invariant itself is defined once, in
- * `tools/eslint-rules/lib/app-router-graph.mjs`, so the rule and this spec
+ * `tools/lint-rules/lib/app-router-graph.mjs`, so the rule and this spec
  * cannot drift. It runs in a child process because that analyser is ESM and
  * this suite is transpiled to CommonJS.
  */

@@ -7,12 +7,12 @@ import eslintPluginMobx from 'eslint-plugin-mobx'
 import reactPlugin from 'eslint-plugin-react'
 import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import eslintPluginTsdoc from 'eslint-plugin-tsdoc'
-import noCrossGraphImport from './tools/eslint-rules/no-cross-graph-import.mjs'
-import noLinkElementSwitch from './tools/eslint-rules/no-link-element-switch.mjs'
-import noListenerRowSpreadIntoWrite from './tools/eslint-rules/no-listener-row-spread-into-write.mjs'
-import noPlanGatedEntitlement from './tools/eslint-rules/no-plan-gated-entitlement.mjs'
-import noSxAfterSpread from './tools/eslint-rules/no-sx-after-spread.mjs'
-import noUnguardedLoadingHook from './tools/eslint-rules/no-unguarded-loading-hook.mjs'
+import noCrossGraphImport from './tools/lint-rules/no-cross-graph-import.mjs'
+import noLinkElementSwitch from './tools/lint-rules/no-link-element-switch.mjs'
+import noListenerRowSpreadIntoWrite from './tools/lint-rules/no-listener-row-spread-into-write.mjs'
+import noPlanGatedEntitlement from './tools/lint-rules/no-plan-gated-entitlement.mjs'
+import noSxAfterSpread from './tools/lint-rules/no-sx-after-spread.mjs'
+import noUnguardedLoadingHook from './tools/lint-rules/no-unguarded-loading-hook.mjs'
 
 // Local rules that guard Aglyn-specific invariants (not published as a plugin).
 const aglynPlugin = {
