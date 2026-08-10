@@ -284,6 +284,56 @@ export function buildInstancePropFields(
     })
 }
 
+/**
+ * The two visibility fields every node inside a component definition gets
+ * (AGL-1314), so "this part is optional" is something an author declares by
+ * clicking rather than something the component hard-codes.
+ *
+ * Token-capable, because the value that decides is almost always the
+ * definition's own `{{prop.*}}`: `hideIf` takes a `boolean` prop ("Hide the
+ * mockup"), `hideUnless` takes the prop that would have supplied the
+ * content ("no link, no button" — AGL-1348).
+ *
+ * Offered ONLY where `{{prop.*}}` exists — inside a component editor,
+ * signalled by `BindingPickerContext.componentProps` exactly as the insert
+ * picker uses it. On an ordinary screen the directive is inert (the graft
+ * is the only thing that evaluates it), and a field that silently does
+ * nothing is worse than no field.
+ */
+export function buildVisibilityFields(
+  tokenOptions?: unknown,
+  tokenLabelContext?: unknown,
+): Array<Record<string, unknown>> {
+  const field = (name: string, label: string, description: string) => ({
+    name,
+    label,
+    description,
+    // Same tooltip treatment the schema attributes get (AGL-600); this
+    // list never reaches the `withAttributeHelp` map above.
+    help: { title: label, excerpt: description },
+    component: TOKEN_TEXT_FIELD_COMPONENT,
+    tokenOptions,
+    tokenLabelContext,
+  })
+  return [
+    field(
+      Aglyn.NODE_HIDE_IF_PROP,
+      'Hide when',
+      'Remove this element (and everything inside it) from pages where ' +
+        'this value is on. Usually a property of this component, e.g. ' +
+        '{{prop.hideMedia}}.',
+    ),
+    field(
+      Aglyn.NODE_HIDE_UNLESS_PROP,
+      'Hide unless',
+      'The reverse: remove this element from pages that leave this value ' +
+        'empty. Point it at the property that fills the element — a button ' +
+        'bound to {{prop.ctaLink}} then disappears instead of shipping a ' +
+        'link with nowhere to go.',
+    ),
+  ]
+}
+
 const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
   (props, ref) => {
     const { node, ...rest } = props
@@ -580,9 +630,22 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       tokenLabelContext,
     ])
 
+    // Visibility directives (AGL-1314), inside a component editor only —
+    // `componentProps` is the same "am I editing a definition" signal the
+    // insert picker keys `{{prop.*}}` off.
+    const { componentProps: editedComponentProps } =
+      useContext(BindingPickerContext)
+    const visibilityFields = useMemo(
+      () =>
+        editedComponentProps
+          ? buildVisibilityFields(insertOptions, tokenLabelContext)
+          : [],
+      [editedComponentProps, insertOptions, tokenLabelContext],
+    )
+
     const formFieldSchema = useMemo(
-      () => [...attributes, ...instancePropFields],
-      [attributes, instancePropFields],
+      () => [...attributes, ...instancePropFields, ...visibilityFields],
+      [attributes, instancePropFields, visibilityFields],
     )
 
     // Image-typed declared props get the same library browse button the

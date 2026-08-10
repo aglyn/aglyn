@@ -22,7 +22,10 @@ import {
   getInstanceRootStyleOverride,
   getInstanceStyleOverrides,
   listInstanceStyleTargets,
+  isNodeHiddenByDirective,
   matchComponentPropToken,
+  NODE_HIDE_IF_PROP,
+  NODE_HIDE_UNLESS_PROP,
   nodesReferenceComponent,
   replaceSubtreeWithInstance,
   resolveInstanceIconPath,
@@ -1710,5 +1713,305 @@ describe('detachInstanceSubtree (AGL-1314)', () => {
     detachInstanceSubtree(nodes, 'a', hero, ids())
     expect(JSON.stringify(nodes)).toBe(before)
     expect(JSON.stringify(hero)).toBe(definitionBefore)
+  })
+})
+
+describe('optional CTAs and media (AGL-1314)', () => {
+  /**
+   * The shape the Product detail hero needs: prop-fed CTA labels and
+   * links, a media column the page can switch off, and a secondary CTA
+   * that removes itself rather than shipping a link with no destination.
+   */
+  const hero = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'muiStack', nodes: ['copy', 'media'] },
+      copy: {
+        $id: 'copy',
+        componentId: 'muiStack',
+        parentId: 'root',
+        nodes: ['h', 'actions'],
+      },
+      h: {
+        $id: 'h',
+        componentId: 'muiTypography',
+        parentId: 'copy',
+        props: { children: '{{prop.headline}}' },
+      },
+      actions: {
+        $id: 'actions',
+        componentId: 'muiStack',
+        parentId: 'copy',
+        nodes: ['cta1', 'cta2'],
+      },
+      cta1: {
+        $id: 'cta1',
+        componentId: 'muiButton',
+        parentId: 'actions',
+        props: {
+          children: '{{prop.primaryCtaLabel}}',
+          screenId: '{{prop.primaryCtaLink}}',
+          [NODE_HIDE_UNLESS_PROP]: '{{prop.primaryCtaLink}}',
+        },
+      },
+      cta2: {
+        $id: 'cta2',
+        componentId: 'muiButton',
+        parentId: 'actions',
+        props: {
+          children: '{{prop.secondaryCtaLabel}}',
+          screenId: '{{prop.secondaryCtaLink}}',
+          [NODE_HIDE_UNLESS_PROP]: '{{prop.secondaryCtaLink}}',
+        },
+      },
+      media: {
+        $id: 'media',
+        componentId: 'muiStack',
+        parentId: 'root',
+        props: { [NODE_HIDE_IF_PROP]: '{{prop.hideMedia}}' },
+        nodes: ['mockup'],
+      },
+      mockup: {
+        $id: 'mockup',
+        componentId: 'muiImage',
+        parentId: 'media',
+        props: { src: '/mockup.png' },
+      },
+    },
+    props: [
+      { name: 'headline', type: 'text', defaultValue: 'Headline' },
+      { name: 'primaryCtaLabel', type: 'text', defaultValue: 'START FREE' },
+      { name: 'primaryCtaLink', type: 'href', defaultValue: 'screen:signup' },
+      {
+        name: 'secondaryCtaLabel',
+        type: 'text',
+        defaultValue: 'WATCH THE TOUR',
+      },
+      { name: 'secondaryCtaLink', type: 'href', defaultValue: 'screen:tour' },
+      { name: 'hideMedia', type: 'boolean' },
+    ],
+  } as any
+
+  const page = (propValues?: Record<string, unknown>) =>
+    ({
+      a: {
+        $id: 'a',
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'hero', ...(propValues && { propValues }) },
+        nodes: [] as string[],
+      },
+    }) as any
+
+  it('grafts the media by default and strips the directive off it', () => {
+    const composed = composeReusableComponentNodes(page(), { hero })
+
+    expect(composed['cmp__a__media']).toBeTruthy()
+    expect(composed['cmp__a__mockup'].props.src).toBe('/mockup.png')
+    expect(composed['cmp__a__root'].nodes).toEqual([
+      'cmp__a__copy',
+      'cmp__a__media',
+    ])
+    // The directive is a compose-time instruction; `Leaf` spreads whatever
+    // survives onto the element, so it must not reach the DOM.
+    expect(NODE_HIDE_IF_PROP in composed['cmp__a__media'].props).toBe(false)
+    // ...and the definition it was read from is untouched.
+    expect(hero.nodes.media.props[NODE_HIDE_IF_PROP]).toBe(
+      '{{prop.hideMedia}}',
+    )
+  })
+
+  it('drops the media column and its subtree when the page hides it', () => {
+    const shown = composeReusableComponentNodes(page(), { hero })
+    const hidden = composeReusableComponentNodes(page({ hideMedia: true }), {
+      hero,
+    })
+
+    expect(shown['cmp__a__media']).toBeTruthy()
+    expect(hidden['cmp__a__media']).toBeUndefined()
+    // The whole subtree goes, not just the node that carried the flag —
+    // an orphaned image would still fetch its bytes.
+    expect(hidden['cmp__a__mockup']).toBeUndefined()
+    // ...and the parent no longer references it, so no dangling child id.
+    expect(hidden['cmp__a__root'].nodes).toEqual(['cmp__a__copy'])
+    // The copy column is untouched: hiding is scoped to the subtree.
+    expect(hidden['cmp__a__h'].props.children).toBe('Headline')
+  })
+
+  it('reads a checkbox that stored the STRING "false" as "show it"', () => {
+    // Every prop kind substitutes as text, so a `boolean` prop arrives as
+    // 'true'/'false' — and plain JS truthiness reads 'false' as "hide".
+    const off = composeReusableComponentNodes(page({ hideMedia: 'false' }), {
+      hero,
+    })
+    const on = composeReusableComponentNodes(page({ hideMedia: 'true' }), {
+      hero,
+    })
+
+    expect(off['cmp__a__media']).toBeTruthy()
+    expect(on['cmp__a__media']).toBeUndefined()
+  })
+
+  it('removes a CTA with no destination rather than rendering a dead one', () => {
+    // A declared prop with no default resolves to '' when the page leaves
+    // it blank — the AGL-1348 shape, a labelled control you can tab to
+    // that goes nowhere.
+    const linkless = {
+      ...hero,
+      props: hero.props.map((prop: any) =>
+        prop.name === 'secondaryCtaLink'
+          ? { ...prop, defaultValue: undefined }
+          : prop,
+      ),
+    }
+    const composed = composeReusableComponentNodes(page(), {
+      hero: linkless as any,
+    })
+
+    expect(composed['cmp__a__cta2']).toBeUndefined()
+    expect(composed['cmp__a__actions'].nodes).toEqual(['cmp__a__cta1'])
+    // The primary CTA still has one, so it stays — and keeps its link.
+    expect(composed['cmp__a__cta1'].props.screenId).toBe('screen:signup')
+    expect(NODE_HIDE_UNLESS_PROP in composed['cmp__a__cta1'].props).toBe(false)
+  })
+
+  it('keeps a CTA the page gave a destination to', () => {
+    const composed = composeReusableComponentNodes(
+      page({
+        secondaryCtaLabel: 'BRAND GUIDELINES (PDF)',
+        secondaryCtaLink: 'https://cdn.aglyn.com/brand/guidelines.pdf',
+      }),
+      { hero },
+    )
+
+    expect(composed['cmp__a__cta2'].props.children).toBe(
+      'BRAND GUIDELINES (PDF)',
+    )
+    expect(composed['cmp__a__cta2'].props.screenId).toBe(
+      'https://cdn.aglyn.com/brand/guidelines.pdf',
+    )
+  })
+
+  it('never hides on a token nobody declared', () => {
+    // Only DECLARED names substitute, so a typo leaves the token verbatim.
+    // Hiding on that would let one misspelling blank a live section.
+    const typo = {
+      ...hero,
+      nodes: {
+        ...hero.nodes,
+        media: {
+          ...hero.nodes.media,
+          props: { [NODE_HIDE_IF_PROP]: '{{prop.hideMockup}}' },
+        },
+      },
+    }
+    const composed = composeReusableComponentNodes(page(), {
+      hero: typo as any,
+    })
+
+    expect(composed['cmp__a__media']).toBeTruthy()
+    expect(NODE_HIDE_IF_PROP in composed['cmp__a__media'].props).toBe(false)
+  })
+
+  it('never drops the definition root, which the instance points at by id', () => {
+    const selfHiding = {
+      ...hero,
+      nodes: {
+        ...hero.nodes,
+        root: { ...hero.nodes.root, props: { [NODE_HIDE_IF_PROP]: 'true' } },
+      },
+    }
+    const composed = composeReusableComponentNodes(page(), {
+      hero: selfHiding as any,
+    })
+
+    expect(composed['a'].nodes).toEqual(['cmp__a__root'])
+    expect(composed['cmp__a__root']).toBeTruthy()
+  })
+
+  it('bakes the page\'s choices into a detached copy', () => {
+    const nodes = page({ hideMedia: true })
+    let counter = 0
+    const composed = composeReusableComponentNodes(nodes, { hero })
+    const detached = detachInstanceSubtree(
+      nodes,
+      'a',
+      hero,
+      () => `n${++counter}`,
+    )
+
+    const values = Object.values(detached) as any[]
+    // Detach materializes what the instance was RENDERING (the AGL-1314
+    // contract), so a hero detached with its mockup off must not grow one
+    // back — and no directive rides along into the free-standing copy.
+    expect(values.some((node) => node?.props?.src === '/mockup.png')).toBe(
+      false,
+    )
+    expect(
+      values.some(
+        (node) =>
+          node?.props &&
+          (NODE_HIDE_IF_PROP in node.props ||
+            NODE_HIDE_UNLESS_PROP in node.props),
+      ),
+    ).toBe(false)
+    // The graft agreed, on the same inputs.
+    expect(composed['cmp__a__mockup']).toBeUndefined()
+    // The copy the page kept is still there.
+    expect(values.some((node) => node?.props?.children === 'Headline')).toBe(
+      true,
+    )
+  })
+
+  it('is inert on nodes that declare no directive', () => {
+    const plain = {
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'muiStack', nodes: ['h'] },
+        h: {
+          $id: 'h',
+          componentId: 'muiTypography',
+          parentId: 'root',
+          props: { children: 'Static' },
+        },
+      },
+    } as any
+    const composed = composeReusableComponentNodes(page(), { hero: plain })
+
+    expect(composed['cmp__a__h'].props).toEqual({ children: 'Static' })
+  })
+
+  describe('isNodeHiddenByDirective', () => {
+    it('treats the textual spellings of "no" as false', () => {
+      for (const value of ['', '  ', 'false', 'FALSE', '0', 'off', 'no']) {
+        expect(isNodeHiddenByDirective({ [NODE_HIDE_IF_PROP]: value })).toBe(
+          false,
+        )
+        expect(
+          isNodeHiddenByDirective({ [NODE_HIDE_UNLESS_PROP]: value }),
+        ).toBe(true)
+      }
+    })
+
+    it('treats anything else as true', () => {
+      for (const value of ['true', '1', 'on', 'yes', '/press.zip', true, 2]) {
+        expect(isNodeHiddenByDirective({ [NODE_HIDE_IF_PROP]: value })).toBe(
+          true,
+        )
+        expect(
+          isNodeHiddenByDirective({ [NODE_HIDE_UNLESS_PROP]: value }),
+        ).toBe(false)
+      }
+    })
+
+    it('has no opinion when absent or still a token', () => {
+      expect(isNodeHiddenByDirective(undefined)).toBe(false)
+      expect(isNodeHiddenByDirective({ children: 'hi' })).toBe(false)
+      expect(
+        isNodeHiddenByDirective({ [NODE_HIDE_IF_PROP]: '{{prop.ghost}}' }),
+      ).toBe(false)
+      expect(
+        isNodeHiddenByDirective({ [NODE_HIDE_UNLESS_PROP]: '{{prop.ghost}}' }),
+      ).toBe(false)
+    })
   })
 })

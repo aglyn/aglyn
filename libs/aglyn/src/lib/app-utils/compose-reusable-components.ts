@@ -386,6 +386,177 @@ function buildPropTokens(
 }
 
 /**
+ * Node prop a definition sets to drop part of itself when a value is
+ * TRUTHY (AGL-1314) — the "hide the mockup" toggle: the hero's media
+ * column carries `hideIf: '{{prop.hideMedia}}'`, and a page that wants no
+ * illustration ticks one checkbox.
+ *
+ * Persisted in component documents — never rename.
+ */
+export const NODE_HIDE_IF_PROP = 'hideIf'
+
+/**
+ * The other polarity (AGL-1314): drop the node when the value is FALSY.
+ *
+ * This is what keeps an unfinished CTA from shipping as a dead control. A
+ * button whose link is unset renders as a labelled thing you can tab to
+ * that goes nowhere — seven of them nearly shipped in the footer
+ * (AGL-1348). Binding `hideUnless: '{{prop.secondaryCtaLink}}'` on the
+ * button means "no destination, no button": the node is gone before any
+ * renderer sees it, so there is no anchor, no `<button>`, and no keyboard
+ * stop.
+ *
+ * Note what it is bound to: the AUTHORED prop value, never whether a
+ * screen id RESOLVES. Resolution happens later (`useLinkTarget`) against
+ * the screens map, and the map behind an ISR render is not the map behind
+ * the hydration that follows it — pruning on resolution would be the
+ * element-switch hazard AGL-1357 lints for, one level up the pipeline.
+ * Prop values ride in the page document, so server and client prune
+ * identically.
+ *
+ * Persisted in component documents — never rename.
+ */
+export const NODE_HIDE_UNLESS_PROP = 'hideUnless'
+
+/**
+ * Spellings of "no" a visibility directive accepts, beyond a real `false`.
+ *
+ * `'false'` and `'0'` are in here because the substitution these run
+ * against is textual: {@link buildPropTokens} stringifies every value, so a
+ * `boolean` prop set to `false` in the Attributes panel arrives as the
+ * STRING `'false'` — which plain JS truthiness would read as "yes, hide".
+ */
+const FALSY_DIRECTIVE_VALUES = new Set(['', 'false', '0', 'off', 'no'])
+
+/**
+ * A visibility directive's truth, or `undefined` for "no opinion" — absent,
+ * or still holding an unsubstituted token.
+ *
+ * The unresolved-token case is the important one, and it is deliberately
+ * "no opinion" for BOTH directives: a definition binding a prop nobody
+ * declared leaves `{{prop.ghost}}` in place verbatim (only declared names
+ * are substituted), and the literal string is neither obviously true nor
+ * obviously false. Treating it as either would let one typo blank a
+ * section of a live page — the same reason an unset prop falls back to the
+ * component's own copy rather than collapsing to empty.
+ */
+function directiveTruth(value: unknown): boolean | undefined {
+  if (value == null) return undefined
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value !== 0
+  if (typeof value !== 'string') return Boolean(value)
+  const trimmed = value.trim()
+  if (trimmed.includes('{{')) return undefined
+  return !FALSY_DIRECTIVE_VALUES.has(trimmed.toLowerCase())
+}
+
+/**
+ * Whether a node's props ask for it to be dropped (AGL-1314) — see
+ * {@link NODE_HIDE_IF_PROP} and {@link NODE_HIDE_UNLESS_PROP}.
+ *
+ * Evaluated on SUBSTITUTED props, so callers must run this after the
+ * declared-prop tokens have resolved; against a raw definition node every
+ * directive is still a token and reads as "no opinion" by design, which is
+ * what keeps the component editor showing the parts a page will hide.
+ */
+export function isNodeHiddenByDirective(props: unknown): boolean {
+  if (!props || typeof props !== 'object' || Array.isArray(props)) return false
+  const bag = props as Record<string, unknown>
+  if (directiveTruth(bag[NODE_HIDE_IF_PROP]) === true) return true
+  return directiveTruth(bag[NODE_HIDE_UNLESS_PROP]) === false
+}
+
+function hasVisibilityDirective(props: unknown): boolean {
+  if (!props || typeof props !== 'object' || Array.isArray(props)) return false
+  const bag = props as Record<string, unknown>
+  return NODE_HIDE_IF_PROP in bag || NODE_HIDE_UNLESS_PROP in bag
+}
+
+/**
+ * The node minus its visibility directives — they are compose-time
+ * instructions, and `Leaf` spreads whatever survives onto the component,
+ * so leaving them would put `hideif="…"` on the DOM of every node that
+ * declared one and stayed.
+ */
+function withoutVisibilityDirectives<N extends AglynNodeSchema>(node: N): N {
+  if (!hasVisibilityDirective(node?.props)) return node
+  const props = { ...(node.props as Record<string, unknown>) }
+  delete props[NODE_HIDE_IF_PROP]
+  delete props[NODE_HIDE_UNLESS_PROP]
+  return { ...node, props: props as N['props'] }
+}
+
+/**
+ * Drops every node under `rootId` whose props ask to be hidden, along with
+ * its whole subtree and its entry in its parent's child list, and strips
+ * the directives off everything that survives (AGL-1314).
+ *
+ * Structural rather than a `display: none`: an instance can already hide a
+ * leaf with a per-leaf style override (AGL-1332), but that still ships the
+ * markup, still fetches the image, still leaves the grid column, and still
+ * leaves the control in the tab order. "This page has no mockup" is a
+ * statement about the tree, so it is made in the tree.
+ *
+ * `rootId` itself is never dropped. The graft below wires the instance
+ * node's single child to the definition root by id, so a self-hiding root
+ * would leave a dangling reference; a component that should not appear at
+ * all is a decision for the page that placed it, not for the definition.
+ *
+ * Returns the input unchanged when no node carries a directive, so the
+ * overwhelmingly common case costs one scan and allocates nothing.
+ */
+export function pruneHiddenNodes<N extends AglynNodeSchema = AglynNodeSchema>(
+  nodes: NormalizedNodes<N>,
+  rootId: NodeId,
+): NormalizedNodes<N> {
+  if (!nodes) return nodes
+  let sawDirective = false
+  for (const node of Object.values(nodes)) {
+    if (hasVisibilityDirective(node?.props)) {
+      sawDirective = true
+      break
+    }
+  }
+  if (!sawDirective) return nodes
+
+  const hidden = new Set<NodeId>()
+  const seen = new Set<NodeId>()
+  const walk = (id: NodeId) => {
+    const node = nodes[id]
+    // `seen` bounds the walk: a definition that referenced an ancestor
+    // would otherwise recurse until the stack gave out.
+    if (!node || seen.has(id)) return
+    seen.add(id)
+    const children = Array.isArray(node.nodes) ? (node.nodes as NodeId[]) : []
+    for (const childId of children) {
+      if (typeof childId !== 'string' || !nodes[childId]) continue
+      if (isNodeHiddenByDirective(nodes[childId]?.props)) {
+        hidden.add(childId)
+        for (const descendant of collectDescendantIds(nodes, childId)) {
+          hidden.add(descendant)
+        }
+        continue
+      }
+      walk(childId)
+    }
+  }
+  walk(rootId)
+
+  const next: NormalizedNodes<N> = {}
+  for (const [id, node] of Object.entries(nodes)) {
+    if (hidden.has(id)) continue
+    const kept = withoutVisibilityDirectives(node as N)
+    const children = Array.isArray(kept?.nodes) ? (kept.nodes as NodeId[]) : null
+    const survivors =
+      children && children.some((childId) => hidden.has(childId as NodeId))
+        ? children.filter((childId) => !hidden.has(childId as NodeId))
+        : null
+    next[id] = survivors ? ({ ...kept, nodes: survivors } as N) : kept
+  }
+  return next
+}
+
+/**
  * Expands reusable-component instance nodes (componentId
  * {@link REUSABLE_INSTANCE_COMPONENT_ID}, `props.refId` → definition id) by
  * grafting the referenced definition's subtree under each instance:
@@ -402,6 +573,10 @@ function buildPropTokens(
  *   subtree is grafted: `{{prop.name}}` tokens take that instance's
  *   override, falling back to the prop's default. This is what lets one
  *   hero serve eleven pages instead of being copied onto each.
+ * - A grafted node asking to be hidden ({@link NODE_HIDE_IF_PROP} /
+ *   {@link NODE_HIDE_UNLESS_PROP}, AGL-1314) is pruned with its subtree —
+ *   which is how one hero renders with a mockup on `/product` and without
+ *   one on `/press`.
  * - Inputs are never mutated.
  */
 export function composeReusableComponentNodes<
@@ -484,11 +659,19 @@ export function composeReusableComponentNodes<
       // The value lands in a real string prop and compose runs graft →
       // repeatables → `resolveNodesBindings`, so a `{{var:id}}` typed into
       // an override still resolves downstream for free.
+      //
+      // Visibility directives (AGL-1314) are evaluated on the result, never
+      // before: they read `{{prop.*}}` like everything else, so pruning
+      // ahead of substitution would see a token instead of the value and
+      // hide whatever the definition merely MENTIONED.
       Object.assign(
         next,
-        resolveNamedTokens(
-          grafted,
-          buildPropTokens(definition.props, instanceNode.props),
+        pruneHiddenNodes(
+          resolveNamedTokens(
+            grafted,
+            buildPropTokens(definition.props, instanceNode.props),
+          ),
+          prefixId(definition.rootId),
         ),
       )
       next[instanceId] = {
@@ -635,11 +818,18 @@ export function detachInstanceSubtree<
     if (id === instanceId || doomed.has(id)) continue
     next[id] = node as N
   }
+  // Detach must materialize what the instance was RENDERING, so the parts
+  // this page hid (AGL-1314) are absent from the copy too — a detached hero
+  // that grew its mockup back is the same class of bug as one that rendered
+  // `{{prop.headline}}`.
   return Object.assign(
     next,
-    resolveNamedTokens(
-      copied,
-      buildPropTokens(definition.props, instanceNode.props),
+    pruneHiddenNodes(
+      resolveNamedTokens(
+        copied,
+        buildPropTokens(definition.props, instanceNode.props),
+      ),
+      instanceId,
     ),
   )
 }
