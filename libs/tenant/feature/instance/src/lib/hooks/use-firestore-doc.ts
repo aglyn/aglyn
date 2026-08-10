@@ -28,6 +28,7 @@ import {
   denialLabelForQuery,
   reportFirestoreDenial,
   reportFirestoreServerRead,
+  subscribeFirestoreSessionHeal,
 } from './firestore-denial-reporter'
 
 const RETRY_DELAY_MS = 400
@@ -182,8 +183,24 @@ export function useFirestoreDoc<T = DocumentData>(
     }
     subscribe()
 
+    // Reopen when the session heals — see the long note on the same
+    // subscription in `use-firestore-collection` (AGL-1066). Gated on this
+    // listen actually being refused, so a healthy one ignores the broadcast.
+    const unsubscribeHeal = subscribeFirestoreSessionHeal(() => {
+      if (cancelled || deniedStreak === 0) return
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+      unsubscribe?.()
+      attempt = 0
+      denialReported = false
+      subscribe()
+    })
+
     return () => {
       cancelled = true
+      unsubscribeHeal()
       if (timer) clearTimeout(timer)
       unsubscribe?.()
     }

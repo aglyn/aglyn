@@ -30,6 +30,7 @@ import {
   denialLabelForQuery,
   reportFirestoreDenial,
   reportFirestoreServerRead,
+  subscribeFirestoreSessionHeal,
 } from './firestore-denial-reporter'
 
 const RETRY_DELAY_MS = 400
@@ -43,7 +44,10 @@ const MAX_RETRIES = 5
  * fast cadence is what recovers the page. Past it the session is refusing
  * this listen and reopening 2.5 listeners a second buys nothing — but the
  * loop must NOT stop, because the heal (an AGL-664 in-place re-auth) takes as
- * long as a human takes to type a password, and nothing else re-subscribes.
+ * long as a human takes to type a password. A heal broadcast now reopens the
+ * listen the instant that lands (see `subscribeFirestoreSessionHeal`), so
+ * this cadence is the fallback for a recovery nobody announced, not the only
+ * road back.
  *
  * The ceiling on this number is not the churn — it is the 38 AGL-1358 write
  * guards, which refuse a save while `fromCache` is true and can only learn
@@ -200,10 +204,11 @@ export function useFirestoreCollection<T = DocumentData>(
            * one line — but it is NOT safe to make in isolation:
            *
            *  - the budget is 5 x 400ms = two seconds, after which the error
-           *    branch stops retrying for good. An AGL-664 in-place re-auth
-           *    takes far longer than that and nothing re-subscribes, so every
-           *    listener would already have given up by the time the session
-           *    healed;
+           *    branch stops retrying for good, while an AGL-664 in-place
+           *    re-auth takes as long as a human takes to type a password.
+           *    That was the hard blocker and it is now CLEARED: a resolved
+           *    re-auth broadcasts a heal and this listener reopens on it,
+           *    terminal or not (`subscribeFirestoreSessionHeal` below);
            *  - `error` blanks surfaces that today render cached data — the
            *    besigner editors swap the canvas for "Not found", and the host
            *    setup Theme tab renders nothing.
@@ -289,8 +294,43 @@ export function useFirestoreCollection<T = DocumentData>(
     }
     subscribe()
 
+    /**
+     * The session came back — reopen NOW rather than on the next tick of a
+     * cadence tuned for a session that has not (AGL-1066).
+     *
+     * Gated on this listener actually being refused. A healthy listener has
+     * an open subscription and nothing to recover, so it must ignore the
+     * broadcast entirely: without this gate a heal would tear down and
+     * reopen every listen in the console at once, which is a listener storm
+     * dressed up as a fix.
+     *
+     * What is refunded is `attempt` — the retry BUDGET, which was spent on a
+     * fault that is now over. `deniedStreak` is deliberately left alone: it
+     * is evidence about the server, and only the server answering may clear
+     * it. So `serverDenied` stays true across the heal and goes false on the
+     * snapshot that actually proves the read works, and a heal that turns
+     * out to be wishful thinking falls straight back to the slow cadence
+     * instead of resuming a 400ms storm.
+     *
+     * `denialReported` IS reset: the outage ended here. If reads are still
+     * refused afterwards that is a new one, and it has to be able to raise
+     * the AGL-1063 banner again.
+     */
+    const unsubscribeHeal = subscribeFirestoreSessionHeal(() => {
+      if (cancelled || deniedStreak === 0) return
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+      unsubscribe?.()
+      attempt = 0
+      denialReported = false
+      subscribe()
+    })
+
     return () => {
       cancelled = true
+      unsubscribeHeal()
       if (timer) clearTimeout(timer)
       unsubscribe?.()
     }

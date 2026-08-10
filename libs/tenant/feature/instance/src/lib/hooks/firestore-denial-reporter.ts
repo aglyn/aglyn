@@ -40,6 +40,12 @@
  * cache keeps answering — and any one-shot it does make fails `unavailable`.
  * That is what keeps the whole mechanism from mistaking a tunnel for a dead
  * session, and it is why callers must NOT relax the code check.
+ *
+ * The channel runs both ways: see {@link reportFirestoreSessionHeal} at the
+ * bottom of this file for the return leg, which is how a refused listener
+ * learns the session came back. It lives here rather than in a module of its
+ * own because a heal is defined entirely in terms of the denial it reverses —
+ * split them and someone broadcasts one without the other's rules.
  */
 
 export interface FirestoreSessionReporters {
@@ -82,6 +88,68 @@ export function reportFirestoreDenial(collection?: string): void {
 /** Report a listen the SERVER answered. No-op when nothing is registered. */
 export function reportFirestoreServerRead(): void {
   reporters?.onServerRead()
+}
+
+/**
+ * The same seam in the other direction: the app telling refused listeners
+ * that the session came back (AGL-1066).
+ *
+ * ## Why this has to exist
+ *
+ * A refused listen recovers today only because the retry loop never stops —
+ * every reopen is another chance for the token to have attached. That is also
+ * the single reason the AGL-664 in-place re-auth works at all: nothing else
+ * re-subscribes. The hooks' effects depend on the query's identity
+ * (`[ref.firestore, ref.path]` and each caller's `deps`), and a `stale`-reason
+ * re-auth signs the same uid back in, so no dependency changes and no effect
+ * re-runs. `AuthenticatedLayout` deliberately holds the tree MOUNTED while a
+ * re-auth prompt is pending (AGL-664), which is what makes "resume exactly
+ * where you were" true — and it is exactly why a remount cannot be relied on
+ * to reopen anything.
+ *
+ * So any change that lets a refusal streak go terminal — the AGL-1066 item-3
+ * flip — needs this channel first, or a user who re-authenticates
+ * successfully sits in front of an errored console until they reload.
+ *
+ * ## What may broadcast, and what must not
+ *
+ * A heal is a RECOVERY FROM DENIAL, not any token event. Firebase refreshes
+ * the ID token roughly hourly; broadcasting on that would reopen every
+ * listener in the console on a timer for no reason. The console broadcasts
+ * from one place — a session fault that has been resolved — see
+ * `apps/console/utils/session-heal.ts`.
+ *
+ * Subscribers gate themselves as well: a listener the server is NOT refusing
+ * ignores the broadcast entirely, so even a spurious heal costs nothing.
+ * Nothing here clears `serverDenied` or `deniedStreak` — only a snapshot the
+ * server answered is evidence, and that invariant does not bend for a
+ * hopeful signal from the auth layer.
+ */
+const healListeners = new Set<() => void>()
+
+/**
+ * Listen for "the session may have recovered". Returns the unsubscribe.
+ *
+ * The callback runs synchronously inside {@link reportFirestoreSessionHeal},
+ * so it must be cheap and must tolerate being called when there is nothing
+ * to do.
+ */
+export function subscribeFirestoreSessionHeal(
+  listener: () => void,
+): () => void {
+  healListeners.add(listener)
+  return () => void healListeners.delete(listener)
+}
+
+/**
+ * Tell every listener the session may have recovered.
+ *
+ * Iterates a COPY: a subscriber reopening its listen can unsubscribe (an
+ * unmount racing the broadcast) and mutating the set mid-iteration would skip
+ * the next one.
+ */
+export function reportFirestoreSessionHeal(): void {
+  for (const listener of [...healListeners]) listener()
 }
 
 /**

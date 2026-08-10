@@ -18,7 +18,10 @@
 import { onSnapshot, type DocumentReference } from 'firebase/firestore'
 import { useEffect, useRef, useState } from 'react'
 import type { ObservableStatus, FirestoreDocOptions } from '../firebase/firebase-services'
-import { DENIAL_STREAK_TO_REPORT } from '../firestore-denial-reporter'
+import {
+  DENIAL_STREAK_TO_REPORT,
+  subscribeFirestoreSessionHeal,
+} from '../firestore-denial-reporter'
 import useModifyDocCallback, {
   type UseModifyDocCallback,
 } from './use-modify-doc-callback'
@@ -144,8 +147,29 @@ export function useDocData<T>(
     }
     subscribe()
 
+    /**
+     * Reopen when the session heals — see the long note on the same
+     * subscription in `use-firestore-collection` (AGL-1066).
+     *
+     * This hook is where it counts most: its deps are `[ref.firestore,
+     * ref.path]`, neither of which moves when a `stale` re-auth signs the
+     * same uid back in, and it is what every besigner editor reads through.
+     * Nothing else was ever going to bring those pages back without a reload.
+     */
+    const unsubscribeHeal = subscribeFirestoreSessionHeal(() => {
+      if (cancelled || deniedStreak === 0) return
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+      unsubscribe?.()
+      attempt = 0
+      subscribe()
+    })
+
     return () => {
       cancelled = true
+      unsubscribeHeal()
       if (timer) clearTimeout(timer)
       unsubscribe?.()
     }
