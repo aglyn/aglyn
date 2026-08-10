@@ -27,6 +27,40 @@ The script prints the env block to paste into the console app's environment
 - `STRIPE_PRICE_*_EXTRA_HOST` (consumed when the extra-host purchase path lands, AGL-39 follow-on)
 - `STRIPE_WEBHOOK_SECRET`
 
+### `STRIPE_PRICE_*` are deliberately NOT `sensitive` (AGL-1362)
+
+A price id is an identifier, not a credential — it rides in every checkout
+session. Storing one as `type=sensitive` buys nothing and costs the ability to
+answer "is production pointed at the right price?", because Vercel never
+decrypts a sensitive value: it comes back as an **empty string**. That is a bad
+trade when a wrong price id means billing the wrong amount, or not billing at
+all. So all 66 of them are stored `type=encrypted` (Vercel's default, still
+decryptable by anyone with project access). **Re-adding one as `sensitive`
+re-opens the gap.**
+
+The real secrets stay unreadable: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`CRON_SECRET`, `TOKEN_SIGNING_SECRET`. The first two are **team-shared**
+variables, which `vercel env ls` and `GET /v9/projects/{id}/env` do not list at
+all — check `GET /v1/env?teamId=…` (linkage field `projectId`, singular,
+holding an array) before concluding one is missing. Editing a shared variable
+can drop every project link, so leave them alone.
+
+To audit what production is pointed at, with no deploy and no writes:
+
+```bash
+# what the build actually sees — plaintext for everything non-sensitive
+curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+  "https://api.vercel.com/v3/env/pull/$VERCEL_CONSOLE_PROJECT_ID/production?teamId=$VERCEL_TEAM_ID"
+
+# what Stripe says those ids should be, keyed by lookup_key — GET only
+STRIPE_SECRET_KEY=sk_live_… node tools/scripts/setup-stripe.mjs --dry-run
+```
+
+The two must agree key for key. ⚠️ `?decrypt=true` on the **list** endpoint
+decrypts nothing — it returns ciphertext for `encrypted` and `''` for
+`sensitive`. Per-variable `GET /v1/projects/{id}/env/{envId}` is what actually
+returns plaintext.
+
 ## 2. How the flow works once envs are set
 
 1. Billing page → Upgrade → `POST /api/billing/checkout` (Firebase ID token)
