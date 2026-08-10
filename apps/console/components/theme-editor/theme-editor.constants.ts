@@ -120,6 +120,9 @@ export type SurfaceColorPath =
   | ['text', 'primary']
   | ['text', 'secondary']
   | ['text', 'disabled']
+  | ['tint', 'primary']
+  | ['tint', 'secondary']
+  | ['tint', 'tertiary']
 
 export const SURFACE_COLOR_FIELDS: Array<{
   path: SurfaceColorPath
@@ -130,6 +133,24 @@ export const SURFACE_COLOR_FIELDS: Array<{
   { path: ['text', 'primary'], label: 'Text' },
   { path: ['text', 'secondary'], label: 'Secondary text' },
   { path: ['text', 'disabled'], label: 'Disabled text' },
+]
+
+/**
+ * Pale accent washes (AGL-1244).
+ *
+ * Separate from {@link PALETTE_COLOR_FIELDS} because a tint is a STRING LEAF,
+ * not a `{ main }` record — the palette fields all write `main`, and a tint has
+ * none. It rides the same `SurfaceColorPath` machinery as `background`/`text`
+ * for exactly that reason, and is listed apart only so the editor can head it
+ * "Tints" instead of filing it under "Background & text".
+ */
+export const TINT_COLOR_FIELDS: Array<{
+  path: SurfaceColorPath
+  label: string
+}> = [
+  { path: ['tint', 'primary'], label: 'Primary tint' },
+  { path: ['tint', 'secondary'], label: 'Secondary tint' },
+  { path: ['tint', 'tertiary'], label: 'Tertiary tint' },
 ]
 
 /** Curated Google Fonts choices for the font family selector. */

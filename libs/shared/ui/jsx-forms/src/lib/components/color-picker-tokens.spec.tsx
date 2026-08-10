@@ -58,11 +58,11 @@ describe('buildColorTokenOptions (AGL-588)', () => {
     expect(paper?.dark).toBe('#121212')
 
     // The offered tokens are the default paths that the palette actually
-    // resolves, in order. A stock MUI theme has no `tertiary`/`surface`, so
-    // those brand-only slots drop out — see the brand-palette case below.
+    // resolves, in order. A stock MUI theme has no `tertiary`/`surface`/`tint`,
+    // so those brand-only slots drop out — see the brand-palette case below.
     const stockPaths = COLOR_PICKER_TOKEN_PATHS.map((token) => token.path)
     expect(options.map((option) => option.value)).toEqual(
-      stockPaths.filter((path) => !/^(tertiary|surface)\./.test(path)),
+      stockPaths.filter((path) => !/^(tertiary|surface|tint)\./.test(path)),
     )
     // The stored value is the token path, never a resolved color.
     for (const option of options) {
@@ -120,6 +120,28 @@ describe('buildColorTokenOptions (AGL-588)', () => {
     expect(tertiary?.light).toBe('#404C5C')
     expect(tertiary?.dark).toBe('#7C8CA3')
     expect(options.find((o) => o.value === 'grey.600')?.light).toBe('#757575')
+  })
+
+  // AGL-1244: `tint` is a group of STRING leaves, not a `{ main }` record, so
+  // it resolves through a different branch of `resolvePaletteToken` than every
+  // other brand slot. If the picker could not offer it, an author repointing
+  // the mega-menu tiles would have had to type the hex back in.
+  it('offers the tints, which are string leaves rather than {main}', () => {
+    const options = buildColorTokenOptions(
+      { tint: { primary: '#E6F5FF', secondary: '#FBE6FE', tertiary: '#EEF0F2' } },
+      { tint: { primary: '#143043', secondary: '#3D1443', tertiary: '#262B31' } },
+    )
+    const tint = options.find((o) => o.value === 'tint.primary')
+    expect(tint?.label).toBe('Tint primary')
+    // Both resolutions, which is what makes the swatch show the flip the
+    // deleted `@scheme dark` slices used to hand-write.
+    expect(tint?.light).toBe('#E6F5FF')
+    expect(tint?.dark).toBe('#143043')
+    expect(options.map((o) => o.value)).toEqual([
+      'tint.primary',
+      'tint.secondary',
+      'tint.tertiary',
+    ])
   })
 
   it('drops tokens that resolve in neither palette', () => {

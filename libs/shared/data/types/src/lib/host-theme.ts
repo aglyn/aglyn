@@ -33,6 +33,23 @@ export interface HostThemePaletteColor {
   contrastText?: string
 }
 
+/**
+ * Pale washes of the three accents, used as SURFACES (AGL-1244).
+ *
+ * Deliberately NOT a {@link HostThemePaletteColor}: a tint has no ramp and no
+ * `contrastText`, because it is never a component `color`. It is the fill
+ * behind an icon that is already `primary.dark` / `secondary.main` /
+ * `tertiary.main`, so its members are named after the accent they belong to
+ * rather than after a shade. Same shape as `background` and `text` — a group
+ * of string leaves — which is why the theme editor reads and writes it
+ * through the same path-based fields.
+ */
+export interface HostThemeTintColors {
+  primary?: string
+  secondary?: string
+  tertiary?: string
+}
+
 /** Palette color keys supported per scheme, including repo-custom ones. */
 export interface HostThemeSchemeColors {
   primary?: HostThemePaletteColor
@@ -52,6 +69,7 @@ export interface HostThemeSchemeColors {
     secondary?: string
     disabled?: string
   }
+  tint?: HostThemeTintColors
   divider?: string
 }
 

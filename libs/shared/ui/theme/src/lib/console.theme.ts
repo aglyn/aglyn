@@ -58,6 +58,17 @@ const colorScheme = {
       main: `#F8F9FA`,
       contrastText: '#000000',
     },
+    // Pale accent washes used as tile/panel FILLS (AGL-1244). Each member is
+    // named after the accent whose icon sits on it — the mega-menu's blue
+    // tiles pair `tint.primary` with a `primary.dark` glyph — so the pairing
+    // is legible from the token names alone. These were the last raw hexes on
+    // the marketing nav; they are not `primary.light` (`#33BFFF`) and never
+    // were, which is why the slot had to be named rather than borrowed.
+    tint: {
+      primary: '#E6F5FF',
+      secondary: '#FBE6FE',
+      tertiary: '#EEF0F2',
+    },
     background: {
       default: '#F5F5F5',
       paper: '#FFFFFF',
@@ -134,6 +145,15 @@ const colorScheme = {
     surface: {
       main: `#202934`,
       contrastText: '#FFFFFF',
+    },
+    // The hand-curated dark counterparts the 15 tinted tiles carried in their
+    // `@scheme dark` slices before the token existed (AGL-1244). Carrying the
+    // exact values here is what lets those slices be DELETED without dark mode
+    // shifting: a literal needs a slice, a token flips on its own.
+    tint: {
+      primary: '#143043',
+      secondary: '#3D1443',
+      tertiary: '#262B31',
     },
     background: {
       default: '#161c21',

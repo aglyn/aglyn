@@ -310,3 +310,43 @@ describe('console blast radius (AGL-1297)', () => {
     }
   })
 })
+
+describe('tints survive theme creation untouched (AGL-1244)', () => {
+  // The tints are authored values, not derived ones: `addShadeVariants` needs
+  // a `main` to ramp from and `ensureAccessibleShades` walks foregrounds to a
+  // 4.5:1 bar. A 90%-desaturated FILL fails that bar by construction, so the
+  // one thing that must be true is that neither pass touches it — otherwise
+  // the shipped theme would quietly hold a different colour than the one the
+  // tiles were repointed at.
+  it.each([
+    ['light', consoleThemeLight, consoleOptions],
+    ['dark', consoleThemeDark, consoleOptionsDark],
+  ] as const)('%s scheme is byte-identical to the brand input', (
+    _scheme,
+    built,
+    options,
+  ) => {
+    expect(built.palette.tint).toEqual((options.palette as any).tint)
+    // No ramp and no contrast pairing were invented alongside it.
+    expect(Object.keys(built.palette.tint).sort()).toEqual([
+      'primary',
+      'secondary',
+      'tertiary',
+    ])
+  })
+
+  it('reaches the theme through a host override too', () => {
+    const theme = createResponsiveTheme({
+      themeOptions: mergeThemeOptions(
+        consoleOptions,
+        hostThemeToThemeOptions(
+          { colorSchemes: { light: { tint: { primary: '#FFEEDD' } } } } as HostTheme,
+          'light',
+        ),
+      ),
+    })
+    // Palette merges ONE level, so a host that sets one tint owns the group —
+    // the same semantics as overriding `primary`.
+    expect(theme.palette.tint).toEqual({ primary: '#FFEEDD' })
+  })
+})

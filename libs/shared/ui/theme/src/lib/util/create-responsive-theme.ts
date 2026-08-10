@@ -270,6 +270,12 @@ export function createResponsiveTheme(
   let theme = createTheme(themeOptions)
   addShadeVariants(theme.palette.tertiary, theme.palette.tonalOffset)
   addShadeVariants(theme.palette.surface, theme.palette.tonalOffset)
+  // `tint` is deliberately absent from BOTH shade passes (AGL-1244). It is a
+  // group of string leaves rather than a PaletteColor — no `main` to ramp
+  // from, no `contrastText` to pair — so `addShadeVariants` would no-op and
+  // `ensureAccessibleShades` (which keys off `CONTRAST_TEXT_COLOR_KEYS`) never
+  // sees it. Both correct: a 90%-desaturated wash is authored, not derived,
+  // and walking it to a text-contrast bar would repaint the fill.
   // Scheme- and AA-aware repair of DERIVED shades only (AGL-1297); explicit
   // palette values pass through byte-identical.
   ensureAccessibleShades(theme, themeOptions?.palette)

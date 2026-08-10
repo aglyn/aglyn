@@ -68,6 +68,14 @@ export const COLOR_PICKER_TOKEN_PATHS: ReadonlyArray<{
   // names it rather than `background.paper` (which is Paper).
   { path: 'tertiary.main', label: 'Tertiary' },
   { path: 'surface.main', label: 'Surface' },
+  // The pale accent washes used as tile fills (AGL-1244). Offered right after
+  // the accent they belong to, because the pairing IS the token: a tile filled
+  // `tint.primary` carries a `primary.dark` glyph. Without these an author had
+  // no token for "pale blue panel" and reached for a hex, which then needed a
+  // hand-written `@scheme dark` slice to survive dark mode.
+  { path: 'tint.primary', label: 'Tint primary' },
+  { path: 'tint.secondary', label: 'Tint secondary' },
+  { path: 'tint.tertiary', label: 'Tint tertiary' },
   { path: 'error.main', label: 'Error' },
   { path: 'warning.main', label: 'Warning' },
   { path: 'info.main', label: 'Info' },

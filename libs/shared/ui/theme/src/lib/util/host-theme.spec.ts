@@ -71,6 +71,40 @@ describe('hostThemeToThemeOptions', () => {
     expect(mui.palette.primary.contrastText).toBeTruthy()
   })
 
+  // AGL-1244. `pickPaletteColor` gates on `main`, so routing tints through
+  // `colorKeys` would have dropped them silently — the exact failure mode the
+  // memo recorded for `quaternary`, one layer down.
+  it('forwards tints, which carry no `main` to gate on', () => {
+    const options = hostThemeToThemeOptions(
+      {
+        colorSchemes: {
+          light: {
+            tint: { primary: '#E6F5FF', secondary: '#FBE6FE', tertiary: '#EEF0F2' },
+          },
+        },
+      },
+      'light',
+    )
+    expect(options.palette).toEqual({
+      mode: 'light',
+      tint: { primary: '#E6F5FF', secondary: '#FBE6FE', tertiary: '#EEF0F2' },
+    })
+    // Partial authoring emits only what was set, like every other branch.
+    expect(
+      hostThemeToThemeOptions(
+        { colorSchemes: { light: { tint: { tertiary: '#EEF0F2' } } } },
+        'light',
+      ).palette,
+    ).toEqual({ mode: 'light', tint: { tertiary: '#EEF0F2' } })
+    // An empty tint group emits nothing rather than an empty object.
+    expect(
+      hostThemeToThemeOptions(
+        { colorSchemes: { light: { tint: {} } } },
+        'light',
+      ).palette,
+    ).toEqual({ mode: 'light' })
+  })
+
   it('maps typography font family and variant overrides', () => {
     const options = hostThemeToThemeOptions(
       {
@@ -200,6 +234,38 @@ describe('mergeThemeOptions (AGL-1180)', () => {
     const palette = merged.palette as Record<string, { main?: string }>
     expect(palette['primary']?.main).toBe('#00b0ff')
     expect(palette['tertiary']?.main).toBe('#7C8CA3')
+  })
+
+  /**
+   * The assertion the canvas repoint rests on (AGL-1244).
+   *
+   * The marketing host keeps its theme all-`Default`, so a node that says
+   * `backgroundColor: 'tint.primary'` resolves against the BRAND BASE, not
+   * against anything in `hosts/{id}.theme`. If the base did not carry tints,
+   * every repointed tile would render with no background — which is precisely
+   * how `quaternary.main` fails today.
+   *
+   * The dark half is what lets the 15 `@scheme dark` slices be deleted: these
+   * ARE the values those slices hand-wrote, so the token flips to the same
+   * colour the slice used to force.
+   */
+  it('resolves the tints from the BRAND BASE in both schemes', () => {
+    const tintFor = (base: typeof consoleOptions, scheme: 'light' | 'dark') =>
+      (
+        mergeThemeOptions(base, hostThemeToThemeOptions({}, scheme))
+          .palette as Record<string, Record<string, string>>
+      )['tint']
+
+    expect(tintFor(consoleOptions, 'light')).toEqual({
+      primary: '#E6F5FF',
+      secondary: '#FBE6FE',
+      tertiary: '#EEF0F2',
+    })
+    expect(tintFor(consoleOptionsDark, 'dark')).toEqual({
+      primary: '#143043',
+      secondary: '#3D1443',
+      tertiary: '#262B31',
+    })
   })
 
   it('applies the override without dropping its siblings', () => {

@@ -117,6 +117,17 @@ function schemeColorsToPaletteOptions(
       ...(colors.text.disabled && { disabled: colors.text.disabled }),
     }
   }
+  // Tints are string leaves, not a PaletteColor, so they pass through the
+  // same "copy what was set" path as `background`/`text` rather than
+  // `pickPaletteColor` — which requires a `main` a tint does not have
+  // (AGL-1244).
+  if (colors.tint?.primary || colors.tint?.secondary || colors.tint?.tertiary) {
+    palette.tint = {
+      ...(colors.tint.primary && { primary: colors.tint.primary }),
+      ...(colors.tint.secondary && { secondary: colors.tint.secondary }),
+      ...(colors.tint.tertiary && { tertiary: colors.tint.tertiary }),
+    }
+  }
   if (colors.divider) palette.divider = colors.divider
 
   return palette
