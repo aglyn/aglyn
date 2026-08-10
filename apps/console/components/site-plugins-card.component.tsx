@@ -33,7 +33,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
-import { useHost } from '@aglyn/tenant-feature-instance'
+import { useHost, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import useCurrentOrg from '../hooks/use-current-org'
 
@@ -52,7 +52,23 @@ export default function SitePluginsCard(props: { hostId: string }) {
   const { org } = useCurrentOrg()
   const { enqueueSnackbar } = useSnackbar()
   const {
-    doc: { data: host },
+    doc: {
+      data: host,
+      status: hostStatus,
+      /**
+       * The host doc the switch list is seeded from is unconfirmed by the
+       * server (AGL-1358). This save writes the WHOLE `disabledPlugins`
+       * array — `mergeFields` replaces it atomically, deliberately, because
+       * a deep merge could never remove an id — so a cached seed re-enables
+       * every plugin disabled since that snapshot.
+       *
+       * That is not a preference being lost. `resolveHostEnabledPlugins` is
+       * the single enforcement point for navigation, the editor, published
+       * pages and API dispatch, so a plugin switched back on here is running
+       * again on a live site, with nobody having asked for it.
+       */
+      fromCache: hostFromCache,
+    },
     setDoc,
   } = useHost({ hostId })
   const [disabled, setDisabled] = useState<string[]>([])
@@ -94,12 +110,31 @@ export default function SitePluginsCard(props: { hostId: string }) {
   const save = async () => {
     setBusy(true)
     try {
-      // mergeFields replaces the array atomically — a deep merge could
-      // never REMOVE an id, so re-enabling would silently not persist.
-      await setDoc(
-        { disabledPlugins: disabled },
-        { mergeFields: ['disabledPlugins'] },
+      // The guard WRAPS the write (AGL-1356): an early return is a shape you
+      // can keep while losing the protection.
+      const verdict = await writeGuardedBySeed(
+        {
+          subject: 'site plugin list',
+          unreadable: hostStatus === 'error',
+          fromCache: hostFromCache,
+        },
+        async () => {
+          // mergeFields replaces the array atomically — a deep merge could
+          // never REMOVE an id, so re-enabling would silently not persist.
+          // Which is also why a stale seed is dangerous rather than merely
+          // wasteful: the array it replaces is the whole deny-list.
+          await setDoc(
+            { disabledPlugins: disabled },
+            { mergeFields: ['disabledPlugins'] },
+          )
+        },
       )
+      if (!verdict.ok) {
+        // `dirty` stays true and the switches keep their positions, so the
+        // user can retry once the page reloads rather than discovering later
+        // that nothing was saved.
+        return void enqueueSnackbar(verdict.message, { variant: 'warning' })
+      }
       enqueueSnackbar('Site plugins saved', { variant: 'success' })
       setDirty(false)
     } catch (error) {

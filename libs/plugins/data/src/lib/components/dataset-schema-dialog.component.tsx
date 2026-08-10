@@ -63,6 +63,7 @@ import {
   useOrgDataScope,
   useScopeTokens,
   useUser,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 
 /** Types surfaced in the picker; the rest exist for compat, not authoring. */
@@ -97,6 +98,16 @@ export interface DatasetSchemaDialogProps {
     model?: DatasetModel
   }>
   recordCount: number
+  /**
+   * The listener that produced `dataset` has NOT been confirmed by the
+   * server (AGL-1358). Required rather than optional on purpose: the
+   * listener lives in the parent card, so this dialog cannot compute the
+   * verdict, and an optional prop a caller forgets is a guard that is off
+   * while looking present — which is exactly how AGL-1356 stayed open.
+   */
+  seedFromCache: boolean
+  /** That listener FAILED (`status === 'error'`). */
+  seedUnreadable?: boolean
   onClose: () => void
 }
 
@@ -111,7 +122,15 @@ export interface DatasetSchemaDialogProps {
  * names rename.
  */
 export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
-  const { hostId, dataset, datasets, recordCount, onClose } = props
+  const {
+    hostId,
+    dataset,
+    datasets,
+    recordCount,
+    seedFromCache,
+    seedUnreadable,
+    onClose,
+  } = props
   // Org-shared data root (AGL-237/239). Null until the async org lookup
   // settles (AGL-1061), and for a host with no owning org. Saving is held
   // on it rather than redirected: the host path this used to fall back to
@@ -361,23 +380,60 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         persist: false,
       })
     }
-    await updateDoc(doc(firestore, dataScope[0], dataScope[1], 'datasets', dataset.$id), {
-      model,
-      names: {
-        singular: names.singular.trim(),
-        plural: names.plural.trim(),
+    /**
+     * Refuse the write when the seeding listener is unconfirmed (AGL-1358).
+     *
+     * Everything below is seeded from `dataset` and written back whole, so
+     * `updateDoc` field-level merging protects nothing — the untouched
+     * fields are all in the payload. Two of them make a stale seed worse
+     * than an inconvenience:
+     *
+     * - `visibleTo` is the AGL-1041/1042 scoping PREDICATE. Rewriting it
+     *   from a cached seed re-exposes a collection that was narrowed, or
+     *   hides one that was widened, and the confirmation above is computed
+     *   against `previousScope` read from that same stale seed — so it does
+     *   not even warn about the sites it is really taking access from.
+     * - `model` is the entire schema. A cached seed reinstates fields that
+     *   were deleted and drops fields that were added.
+     */
+    await writeGuardedBySeed(
+      {
+        subject: 'collection schema',
+        unreadable: seedUnreadable,
+        fromCache: seedFromCache,
       },
-      ...(names.plural.trim() ? { displayName: names.plural.trim() } : {}),
-      // v1 compat: keep the flat column list mirroring the model order so
-      // unmigrated consumers (AGL-103 bindings) keep working.
-      fields: model.order,
-      // Only an org-wide member may change the scope — the AGL-1041 rules
-      // deny anyone else, and a rejected field fails the WHOLE write.
-      ...(orgId && viewerOrgWide && scopeChanged
-        ? { visibleTo: normalizeVisibleTo(visibleTo) ?? [ORG_SCOPE_TOKEN] }
-        : {}),
-    })
-      .then(() => {
+      async () =>
+        void (await updateDoc(
+          doc(firestore, dataScope[0], dataScope[1], 'datasets', dataset.$id),
+          {
+            model,
+            names: {
+              singular: names.singular.trim(),
+              plural: names.plural.trim(),
+            },
+            ...(names.plural.trim()
+              ? { displayName: names.plural.trim() }
+              : {}),
+            // v1 compat: keep the flat column list mirroring the model order
+            // so unmigrated consumers (AGL-103 bindings) keep working.
+            fields: model.order,
+            // Only an org-wide member may change the scope — the AGL-1041
+            // rules deny anyone else, and a rejected field fails the WHOLE
+            // write.
+            ...(orgId && viewerOrgWide && scopeChanged
+              ? { visibleTo: normalizeVisibleTo(visibleTo) ?? [ORG_SCOPE_TOKEN] }
+              : {}),
+          },
+        )),
+    )
+      .then((result) => {
+        // A refusal leaves the dialog open with the edited schema intact.
+        if (!result.ok) {
+          return void enqueueSnackbar(result.message, {
+            variant: 'warning',
+            persist: false,
+          })
+        }
         enqueueSnackbar('Schema saved', { variant: 'success', persist: false })
         onClose()
       })
@@ -395,6 +451,8 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     firestore,
     dataScope,
     orgId,
+    seedFromCache,
+    seedUnreadable,
     enqueueSnackbar,
     onClose,
   ])

@@ -49,7 +49,10 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestoreCollection,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import ProductEditorDialog from './product-editor-dialog.component'
@@ -101,7 +104,19 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const [keysFor, setKeysFor] = useState<ProductRow | null>(null)
   const [keysText, setKeysText] = useState('')
 
-  const { data: productDocs } = useFirestoreCollection<any>(
+  const {
+    data: productDocs,
+    status: productsStatus,
+    /**
+     * The product rows the stock dialog is seeded from are unconfirmed by
+     * the server (AGL-1358). A stock adjustment does not write the delta —
+     * it recomputes the WHOLE `variants` array from the seeded product and
+     * replaces it, so a cached seed silently reverts every sale, return and
+     * adjustment the server has recorded since that snapshot, on every
+     * variant and every location.
+     */
+    fromCache: productsFromCache,
+  } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'products'), limit(500)),
     [firestore, hostId],
@@ -332,26 +347,63 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       delta,
       adjusting.locationId || undefined,
     )
-    await updateDoc(
-      doc(firestore, 'hosts', hostId, 'products', adjusting.product.$id),
+    /**
+     * Refuse the adjustment when the seed is unconfirmed (AGL-1358).
+     *
+     * `adjustVariantInventory` reads counts off the seeded product and
+     * returns a whole new `variants` array, which is then written over the
+     * stored one — so this is a full replace of live stock, not a delta, and
+     * `merge` could not help. The refusal also has to cover the ADJUSTMENT
+     * LOG, which is why the guard wraps both writes: a logged adjustment
+     * whose stock write never happened is worse than neither, because the
+     * history then disagrees with the count it is supposed to explain.
+     */
+    const verdict = await writeGuardedBySeed(
       {
-        variants,
-        inventory: CommerceModel.productInventory({ variants }),
-        updatedAtMs: Date.now(),
+        subject: 'stock',
+        unreadable: productsStatus === 'error',
+        fromCache: productsFromCache,
+      },
+      async () => {
+        await updateDoc(
+          doc(firestore, 'hosts', hostId, 'products', adjusting.product.$id),
+          {
+            variants,
+            inventory: CommerceModel.productInventory({ variants }),
+            updatedAtMs: Date.now(),
+          },
+        )
+        // Adjustment history (AGL-281): the same log the sale webhook writes.
+        await addDoc(
+          collection(firestore, 'hosts', hostId, 'inventoryAdjustments'),
+          {
+            productId: adjusting.product.$id,
+            variantId: adjusting.variantId,
+            delta,
+            reason: adjusting.reason,
+            ...(adjusting.locationId ? { locationId: adjusting.locationId } : {}),
+            atMs: Date.now(),
+          } satisfies CommerceModel.InventoryAdjustment,
+        )
       },
     )
-    // Adjustment history (AGL-281): the same log the sale webhook writes.
-    await addDoc(collection(firestore, 'hosts', hostId, 'inventoryAdjustments'), {
-      productId: adjusting.product.$id,
-      variantId: adjusting.variantId,
-      delta,
-      reason: adjusting.reason,
-      ...(adjusting.locationId ? { locationId: adjusting.locationId } : {}),
-      atMs: Date.now(),
-    } satisfies CommerceModel.InventoryAdjustment)
+    // Keep the dialog open with the typed delta rather than failing silently.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     setAdjusting(null)
     enqueueSnackbar('Stock adjusted', { variant: 'success', persist: false })
-  }, [adjusting, firestore, hostId, enqueueSnackbar])
+  }, [
+    adjusting,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+    productsFromCache,
+    productsStatus,
+  ])
 
   const formatPrice = (product: ProductRow) => {
     const [min, max] = CommerceModel.productPriceRange(product)
