@@ -839,15 +839,39 @@ service cloud.firestore {
               'datasets', 'counters', 'analytics', 'members']));
       }
       // Editors keep full client control of a collection doc EXCEPT the two
-      // identity keys: `slug` is its public address (uniqueness is claimed in
-      // /api/hosts/collections) and `kind` decides which console surface owns
-      // it — a client rewrite of either is the AGL-954 collision or the
-      // AGL-957 shadowing, back again.
+      // identity keys and the three template pointers. `slug` is its public
+      // address (uniqueness is claimed in /api/hosts/collections) and `kind`
+      // decides which console surface owns it — a client rewrite of either is
+      // the AGL-954 collision or the AGL-957 shadowing, back again.
+      //
+      // `listScreenId`/`entryScreenId`/`templateScreenId` join them
+      // (AGL-1390), and for the same shape of reason one layer over: they are
+      // the last exclusion `countBillableScreens` makes that the metered party
+      // can both apply and REVERSE. Point `entryScreenId` at a live screen and
+      // it stops counting; create a screen through the create-time gate;
+      // clear the pointer and the screen counts again — one free slot per
+      // cycle, unbounded, and a create-time gate cannot see any of it. That is
+      // the third time this file has met the same sentence: AGL-1383 froze
+      // `kind` and `deletedAt` on `screens` with it written out, and its own
+      // comment says the loop is what a correct count cannot catch.
+      //
+      // Frozen against a DIRECT write only. Re-pointing a collection at a
+      // different template screen is a first-class console action (the Content
+      // page's list/entry selects, including their "built-in themed page"
+      // clear) and stays one — /api/hosts/collections' `templates` action owns
+      // the write now and evaluates the cap against the state it would leave,
+      // exactly as this route has owned `slug` since AGL-978 while the console
+      // has gone on renaming collections. All THREE fields, not just the one
+      // the loop was found on: `templateScreenId` is the legacy pointer and
+      // always excludes, and `listScreenId` still excludes whenever its
+      // collection is catalog-kind or slugless, which is where AGL-1387's
+      // condition stops. Freezing one door and leaving two is not a fix.
       match /collections/{collectionId} {
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['slug', 'kind']));
+              .hasAny(['slug', 'kind', 'listScreenId', 'entryScreenId',
+                       'templateScreenId']));
       }
       // Entries are a separate resource that merely lives underneath, so the
       // name-based exclusions above must not reach them: create/update/delete

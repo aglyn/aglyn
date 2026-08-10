@@ -45,6 +45,21 @@ interface FieldSnapshot {
 }
 
 /**
+ * One screen, reduced to the three things the rule below asks about.
+ *
+ * The rule is exported over rows rather than over a Firestore query
+ * (AGL-1390) because the quota now has a second enforcement point that must
+ * ask about a state that does not exist yet: `/api/hosts/collections`
+ * evaluates a template-pointer write against the count it WOULD leave behind.
+ * A function that does its own reads can only answer for the present.
+ */
+export interface BillableScreenSource {
+  id: string
+  kind?: unknown
+  deletedAt?: unknown
+}
+
+/**
  * The host's `screens` routing map (screen id → route path) as
  * `publishScreenRoute` writes it. Only membership is read here, never the path.
  */
@@ -126,6 +141,28 @@ interface HostRefLike {
  * that nothing serves — the same thing as an unpublished draft, which has
  * always counted.
  *
+ * ## WHEN this is asked is the other half (AGL-1390)
+ *
+ * Counting correctly is necessary and not sufficient, and this is the third
+ * issue to say so. `screensPerHost` was a CREATE-time gate: any field that can
+ * be flipped on to lower the count and back off afterwards mints a permanent
+ * slot, and no amount of counting correctly at the moment of create can see
+ * it. AGL-1383 closed two such fields by freezing them; AGL-1387 closed a
+ * third by counting it. What was left is the one exclusion that must stay
+ * reversible, because re-pointing a collection at a different template screen
+ * is a first-class console action.
+ *
+ * Enumerated rather than argued: the only client-reachable writes that LOWER
+ * this number are soft-delete (write-once since AGL-1383, so it costs the page
+ * for good) and a collection's template pointers. The routing map cannot lower
+ * it at all — a routed screen counts, and an unpublished live screen counts
+ * too, so publish/unpublish is monotone. Deleting the collection cannot either:
+ * AGL-1324 refuses a delete that still holds live template bindings. So the
+ * pointers are the whole of it, and `/api/hosts/collections` now owns their
+ * write and evaluates this rule against the state the write WOULD leave
+ * (`billableScreenIds` below). The rules freeze all three against a direct
+ * client write, exactly as `slug` and `kind` on the same document already are.
+ *
  * `routingMap` costs no read: both callers hold the host snapshot already.
  */
 export async function countBillableScreens(
@@ -136,31 +173,52 @@ export async function countBillableScreens(
     hostRef.collection('screens').select('kind', 'deletedAt').get(),
     hostRef.collection('collections').select(...COLLECTION_FIELDS).get(),
   ])
-
-  // Read into the shape the console's own surfaces use, so the API and the
-  // screens page's precheck cannot answer this differently (AGL-1269).
-  const collectionRows: CollectionTemplateSource[] = collections.docs.map(
-    (contentCollection) => ({
+  return billableScreenIds(
+    screens.docs.map((screen) => ({
+      id: screen.id,
+      kind: screen.get('kind'),
+      deletedAt: screen.get('deletedAt'),
+    })),
+    // Read into the shape the console's own surfaces use, so the API and the
+    // screens page's precheck cannot answer this differently (AGL-1269).
+    collections.docs.map((contentCollection) => ({
       slug: contentCollection.get('slug'),
       kind: contentCollection.get('kind'),
       listScreenId: contentCollection.get('listScreenId'),
       entryScreenId: contentCollection.get('entryScreenId'),
       templateScreenId: contentCollection.get('templateScreenId'),
-    }),
-  )
-  const templateScreenIds = collectionTemplateScreenIds(collectionRows)
-  const listTemplateScreenIds = collectionListTemplateScreenIds(collectionRows)
+    })),
+    routingMap,
+  ).size
+}
 
+/**
+ * The rule itself, over rows: WHICH screens spend the plan's allowance.
+ *
+ * The ids rather than the count, because the second enforcement point needs
+ * the difference between two states and not just its size — a refusal that
+ * cannot name the screen that just became a page again is a refusal the
+ * person reading it cannot act on.
+ */
+export function billableScreenIds(
+  screens: ReadonlyArray<BillableScreenSource>,
+  collections: ReadonlyArray<CollectionTemplateSource>,
+  routingMap?: ScreenRoutingMap,
+): Set<string> {
+  const templateScreenIds = collectionTemplateScreenIds(collections)
+  const listTemplateScreenIds = collectionListTemplateScreenIds(collections)
   const routed = new Set(Object.keys(routingMap ?? {}))
 
-  return screens.docs.filter((screen) => {
+  const billable = new Set<string>()
+  for (const screen of screens) {
     const claimsToBeAPage = screenClaimsToBeAPage({
-      kind: screen.get('kind') as string,
-      deletedAt: screen.get('deletedAt'),
+      kind: screen.kind as string,
+      deletedAt: screen.deletedAt,
     })
     const servesACollectionList =
       listTemplateScreenIds.has(screen.id) && claimsToBeAPage
-    if (templateScreenIds.has(screen.id) && !servesACollectionList) return false
-    return routed.has(screen.id) || claimsToBeAPage
-  }).length
+    if (templateScreenIds.has(screen.id) && !servesACollectionList) continue
+    if (routed.has(screen.id) || claimsToBeAPage) billable.add(screen.id)
+  }
+  return billable
 }
