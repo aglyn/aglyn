@@ -51,7 +51,12 @@ import {
   setDoc,
 } from 'firebase/firestore'
 import { useState } from 'react'
-import { useFirestore, useFirestoreCollection, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  useHostActivityLogger,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 
 export interface HostExperimentsCardProps {
   hostId: string
@@ -84,7 +89,20 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
   const logActivity = useHostActivityLogger(hostId)
   const entitled = checkEntitlement(org, 'abTesting')
 
-  const { data: experimentDocs } = useFirestoreCollection<any>(
+  const {
+    data: experimentDocs,
+    status: experimentsStatus,
+    /**
+     * The rows this editor is seeded from are unconfirmed by the server
+     * (AGL-1358). Editing spreads a whole stored experiment into `editor`
+     * and writes all of it back, so `merge: true` protects nothing — every
+     * field is in the payload. `status` is the one that bites: it is
+     * otherwise only ever moved by the start/pause/finish controls below, so
+     * a cached seed can quietly restart a finished test, or stop a running
+     * one, along with reverting its variant weights and goal.
+     */
+    fromCache: experimentsFromCache,
+  } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'experiments'), limit(50)),
     [firestore, hostId],
@@ -177,27 +195,61 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
     const id = editor.$id ?? createResourceUid()
     const { $id: _ignored, ...payload } = editor
     try {
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'experiments', id),
+      /**
+       * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
+       *
+       * `merge: true` is here so a cleared end date or auto-winner overwrites
+       * (AGL-273), not to protect untouched fields — there are none, because
+       * the payload is the whole stored row spread into `editor`. `status`
+       * and `winnerVariantId` ride along with it, and those are otherwise
+       * only moved by `setStatus`, so a cached seed can restart a test the
+       * owner finished or halt one that is splitting live traffic.
+       *
+       * Only the edit path. A NEW experiment comes from `newExperiment()` at
+       * a fresh uid and can overwrite nothing, and the first snapshot of any
+       * listener is `fromCache: true`, so guarding a create would refuse a
+       * save that was never unsafe.
+       *
+       * The guard WRAPS the write, and the activity log with it: a logged
+       * "Updated experiment" whose write never happened leaves the history
+       * disagreeing with the experiment it claims to explain.
+       */
+      const verdict = await writeGuardedBySeed(
         {
-          ...JSON.parse(JSON.stringify(payload)),
-          // Clearing the end date / auto-winner must overwrite — a
-          // merge-set keeps absent keys otherwise (AGL-273).
-          endAtMs: editor.endAtMs ?? null,
-          autoWinner: editor.autoWinner ?? null,
-          updatedAt: Timestamp.now(),
-          ...(editor.$id ? {} : { createdAt: Timestamp.now() }),
+          subject: 'experiment',
+          unreadable: Boolean(editor.$id) && experimentsStatus === 'error',
+          fromCache: Boolean(editor.$id) && experimentsFromCache,
         },
-        { merge: true },
+        async () => {
+          await setDoc(
+            doc(firestore, 'hosts', hostId, 'experiments', id),
+            {
+              ...JSON.parse(JSON.stringify(payload)),
+              // Clearing the end date / auto-winner must overwrite — a
+              // merge-set keeps absent keys otherwise (AGL-273).
+              endAtMs: editor.endAtMs ?? null,
+              autoWinner: editor.autoWinner ?? null,
+              updatedAt: Timestamp.now(),
+              ...(editor.$id ? {} : { createdAt: Timestamp.now() }),
+            },
+            { merge: true },
+          )
+          logActivity(
+            editor.$id ? 'Updated experiment' : 'Created experiment',
+            { type: 'content', id, name: editor.name },
+          )
+        },
       )
+      // A refusal keeps the editor open with everything that was typed.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       enqueueSnackbar('Experiment saved', {
         variant: 'success',
         persist: false,
-      })
-      logActivity(editor.$id ? 'Updated experiment' : 'Created experiment', {
-        type: 'content',
-        id,
-        name: editor.name,
       })
       setEditor(null)
     } catch (error) {
