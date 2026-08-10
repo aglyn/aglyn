@@ -111,6 +111,22 @@ export interface ObservableStatus<T> {
    * nothing, and clears itself the instant a server snapshot lands.
    */
   fromCache: boolean
+  /**
+   * The server has REFUSED this listen for longer than the retry budget, and
+   * no server snapshot has arrived since (AGL-1066).
+   *
+   * `fromCache` says "unconfirmed", which is also true offline and true for
+   * the first snapshot of a perfectly healthy load. This says "refused" —
+   * only `permission-denied` counts it, and it takes a whole budget's worth
+   * in a row, so it cannot fire offline and cannot fire on the AGL-216/217
+   * post-sign-in token race.
+   *
+   * It is what `status` would say if the retry budget were spendable. It is
+   * carried separately because correcting `status` in place would blank
+   * every surface that renders cached data through an `error` branch — see
+   * the note on `attempt = 0` in `use-firestore-collection`.
+   */
+  serverDenied: boolean
 }
 
 /** Replaces reactfire's `ReactFireOptions<T>` — drops the `suspense` field, which was never read. */

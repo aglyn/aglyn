@@ -33,6 +33,23 @@
  * cache, exhaust five retries and report themselves to `session-health`;
  * listeners never exhaust anything and keep reporting `success` over data of
  * unbounded age.
+ *
+ * ## Why `status` is still `'success'` below
+ *
+ * The correction — gating `attempt = 0` on `!snapshot.metadata.fromCache` —
+ * is one line, and it is NOT landed. Making a denied listen reach
+ * `status: 'error'` also makes it reach every consumer's error branch, and
+ * two of those blank a working screen (the besigner editors swap the canvas
+ * for "Not found"; the host setup Theme tab renders nothing). Worse, the
+ * budget is two seconds and the error branch stops retrying for good, while
+ * the heal — an AGL-664 in-place re-auth — takes as long as a human takes to
+ * type a password. Nothing re-subscribes, so every listener would have given
+ * up before the session came back.
+ *
+ * So the verdict is carried on `serverDenied` first, consumers migrate onto
+ * it, and `status` moves last. These tests pin BOTH halves: the corrected
+ * verdict fires, and `status` does not move yet. When the flip lands, the
+ * `status` assertions here are the ones that change — deliberately.
  */
 
 import { act, renderHook } from '@testing-library/react'
@@ -62,6 +79,8 @@ jest.mock('firebase/firestore', () => ({
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
+/** The slow cadence a refusal that outlives the budget falls back to. */
+const REFUSED_RETRY_DELAY_MS = 5_000
 
 /** What IndexedDB still holds for this query — unconfirmed by definition. */
 const cached = {
@@ -69,6 +88,15 @@ const cached = {
   docs: [{ id: 'stale', data: () => ({ name: 'stale' }) }],
   metadata: { fromCache: true, hasPendingWrites: false },
 }
+
+/** A snapshot the server actually answered. */
+const live = {
+  empty: false,
+  docs: [{ id: 'live', data: () => ({ name: 'live' }) }],
+  metadata: { fromCache: false, hasPendingWrites: false },
+}
+
+const denied = { code: 'permission-denied' }
 
 const buildQuery = () => ({}) as never
 
@@ -96,20 +124,83 @@ describe('useFirestoreCollection under persistentLocalCache (AGL-1066)', () => {
         // The persistent cache answers immediately...
         handler.onNext(cached)
         // ...and only then does the server refuse the listen.
-        handler.onError()
-        jest.advanceTimersByTime(RETRY_DELAY_MS)
+        handler.onError(denied)
+        jest.advanceTimersByTime(REFUSED_RETRY_DELAY_MS)
       }
     })
 
-    // A fresh listener was opened for every single cycle. Nothing bounded it.
+    // A fresh listener was opened for every single cycle. `attempt` bounded
+    // nothing — this is the defect, and it is still here.
     expect(mockHandlers).toHaveLength(CYCLES + 1)
-    // And the page still believes it is looking at live data.
+    // STILL the broken half, on purpose: see the file header. Fifty refusals
+    // in and the page's own status says it is looking at live data.
     expect(result.current.status).toBe('success')
     expect(result.current.error).toBeUndefined()
     expect(result.current.data).toHaveLength(1)
-    // `fromCache` is the one field that tells the truth here, which is why
-    // write guards key on it rather than on `status` (AGL-1066).
+    // The two fields that tell the truth. `fromCache` says "unconfirmed",
+    // which is also true offline and true of a healthy first snapshot;
+    // `serverDenied` says "refused", which is what `status` would say if the
+    // budget were spendable. Write guards key on the former; anything asking
+    // "will this ever refresh?" wants the latter.
     expect(result.current.fromCache).toBe(true)
+    expect(result.current.serverDenied).toBe(true)
+  })
+
+  /**
+   * The corrected verdict has to arrive on the SAME schedule the budget
+   * would have produced — a signal that needs fifty refusals to admit a dead
+   * session is not a substitute for one that needs five.
+   */
+  it('denies after a budget of refusals, not before', () => {
+    const { result } = renderHook(() =>
+      useFirestoreCollection(buildQuery, [], { idField: '$id' }),
+    )
+
+    const cycle = () =>
+      act(() => {
+        const handler = mockHandlers[mockHandlers.length - 1]
+        handler.onNext(cached)
+        handler.onError(denied)
+        jest.advanceTimersByTime(REFUSED_RETRY_DELAY_MS)
+      })
+
+    for (let i = 0; i < MAX_RETRIES - 1; i += 1) cycle()
+    // Below the bar this is indistinguishable from the AGL-216/217
+    // post-sign-in token race, which resolves in well under two seconds.
+    expect(result.current.serverDenied).toBe(false)
+
+    cycle()
+    expect(result.current.serverDenied).toBe(true)
+  })
+
+  /**
+   * A dead session denies forever, and the old loop answered by opening a
+   * fresh listener every 400ms for as long as it lasted. It must keep
+   * retrying — that is the only thing that heals the page after an AGL-664
+   * in-place re-auth — but not at that price.
+   */
+  it('backs the doomed loop off without ever abandoning it', () => {
+    renderHook(() => useFirestoreCollection(buildQuery, [], { idField: '$id' }))
+
+    act(() => {
+      for (let i = 0; i <= MAX_RETRIES; i += 1) {
+        const handler = mockHandlers[mockHandlers.length - 1]
+        handler.onNext(cached)
+        handler.onError(denied)
+        jest.advanceTimersByTime(RETRY_DELAY_MS)
+      }
+    })
+    const opened = mockHandlers.length
+
+    // The last refusal scheduled the slow cadence, so the fast one reopens
+    // nothing...
+    act(() => jest.advanceTimersByTime(RETRY_DELAY_MS * 4))
+    expect(mockHandlers).toHaveLength(opened)
+
+    // ...but the listener is not abandoned, and a server answer at any later
+    // moment still hands the page back.
+    act(() => jest.advanceTimersByTime(REFUSED_RETRY_DELAY_MS))
+    expect(mockHandlers).toHaveLength(opened + 1)
   })
 
   /**
@@ -130,15 +221,101 @@ describe('useFirestoreCollection under persistentLocalCache (AGL-1066)', () => {
     })
     expect(result.current.fromCache).toBe(true)
 
-    act(() =>
-      mockHandlers[mockHandlers.length - 1].onNext({
-        empty: false,
-        docs: [{ id: 'live', data: () => ({ name: 'live' }) }],
-        metadata: { fromCache: false, hasPendingWrites: false },
-      }),
-    )
+    act(() => mockHandlers[mockHandlers.length - 1].onNext(live))
     expect(result.current.fromCache).toBe(false)
     expect(result.current.status).toBe('success')
+  })
+
+  /**
+   * THE positive control, and the one that breaks everything if it is wrong.
+   *
+   * Every healthy load emits from cache first — latency compensation — and
+   * then again from the server. If a from-cache emission could deny, or could
+   * consume the budget, this would fire on literally every page in the
+   * console. It must cost nothing.
+   */
+  it('a healthy from-cache-then-server load never denies', () => {
+    const { result } = renderHook(() =>
+      useFirestoreCollection(buildQuery, [], { idField: '$id' }),
+    )
+
+    act(() => mockHandlers[mockHandlers.length - 1].onNext(cached))
+    expect(result.current.status).toBe('success')
+    expect(result.current.serverDenied).toBe(false)
+    expect(result.current.fromCache).toBe(true)
+
+    act(() => mockHandlers[mockHandlers.length - 1].onNext(live))
+    expect(result.current.status).toBe('success')
+    expect(result.current.serverDenied).toBe(false)
+    expect(result.current.fromCache).toBe(false)
+
+    // No error, so nothing was ever rescheduled: one listener, start to
+    // finish.
+    act(() => jest.advanceTimersByTime(REFUSED_RETRY_DELAY_MS * 10))
+    expect(mockHandlers).toHaveLength(1)
+    expect(result.current.error).toBeUndefined()
+  })
+
+  /**
+   * The second half of that control: a refusal storm SHORTER than the budget
+   * — the AGL-216/217 token race — must leave no residue once the server
+   * answers. Otherwise every sign-in would arm the verdict.
+   */
+  it('a token race that resolves leaves nothing armed', () => {
+    const { result } = renderHook(() =>
+      useFirestoreCollection(buildQuery, [], { idField: '$id' }),
+    )
+
+    act(() => {
+      for (let i = 0; i < MAX_RETRIES - 1; i += 1) {
+        mockHandlers[mockHandlers.length - 1].onError(denied)
+        jest.advanceTimersByTime(RETRY_DELAY_MS)
+      }
+    })
+    expect(result.current.serverDenied).toBe(false)
+
+    act(() => mockHandlers[mockHandlers.length - 1].onNext(live))
+    expect(result.current.status).toBe('success')
+    expect(result.current.serverDenied).toBe(false)
+
+    // And the streak was reset, not merely un-published: a second storm has
+    // to earn the verdict from zero.
+    act(() => {
+      for (let i = 0; i < MAX_RETRIES - 1; i += 1) {
+        const handler = mockHandlers[mockHandlers.length - 1]
+        handler.onNext(cached)
+        handler.onError(denied)
+        jest.advanceTimersByTime(REFUSED_RETRY_DELAY_MS)
+      }
+    })
+    expect(result.current.serverDenied).toBe(false)
+  })
+
+  /**
+   * Offline, which this must never touch. A lost network produces no error
+   * callback at all — the listener just keeps serving cache — so the loop
+   * below is already more than reality offers. Anything that does surface an
+   * error carries `unavailable`, and that is not a dead session.
+   */
+  it('is inert offline', () => {
+    const { result } = renderHook(() =>
+      useFirestoreCollection(buildQuery, [], { idField: '$id' }),
+    )
+
+    act(() => {
+      for (let i = 0; i < MAX_RETRIES * 4; i += 1) {
+        const handler = mockHandlers[mockHandlers.length - 1]
+        handler.onNext(cached)
+        handler.onError({ code: 'unavailable' })
+        jest.advanceTimersByTime(RETRY_DELAY_MS)
+      }
+    })
+
+    expect(result.current.serverDenied).toBe(false)
+    expect(result.current.status).toBe('success')
+    expect(result.current.data).toHaveLength(1)
+    // And the cadence is untouched — every cycle reopened at 400ms.
+    expect(mockHandlers).toHaveLength(MAX_RETRIES * 4 + 1)
   })
 
   /**
@@ -154,12 +331,17 @@ describe('useFirestoreCollection under persistentLocalCache (AGL-1066)', () => {
 
     act(() => {
       for (let i = 0; i <= MAX_RETRIES; i += 1) {
-        mockHandlers[mockHandlers.length - 1].onError()
+        mockHandlers[mockHandlers.length - 1].onError(denied)
         jest.advanceTimersByTime(RETRY_DELAY_MS)
       }
     })
 
     expect(result.current.status).toBe('error')
+    expect(result.current.serverDenied).toBe(true)
+    // The one path that already worked must keep its timing exactly: six
+    // refusals, no cached emission to refund the budget, and the terminal
+    // error at 2.4s. The slow cadence must never delay THIS.
+    expect(mockHandlers).toHaveLength(MAX_RETRIES + 1)
   })
 })
 
@@ -189,15 +371,15 @@ describe('useFirestoreCollection denial reporting (AGL-1066)', () => {
     setFirestoreSessionReporters(null)
   })
 
-  const denied = { code: 'permission-denied' }
-
+  // Advances past the SLOW cadence a surviving refusal streak falls back to,
+  // so every cycle genuinely reopens a listener whichever cadence is in force.
   const denyCycles = (count: number, err: { code?: string } = denied) =>
     act(() => {
       for (let i = 0; i < count; i += 1) {
         const handler = mockHandlers[mockHandlers.length - 1]
         handler.onNext(cached)
         handler.onError(err)
-        jest.advanceTimersByTime(RETRY_DELAY_MS)
+        jest.advanceTimersByTime(REFUSED_RETRY_DELAY_MS)
       }
     })
 

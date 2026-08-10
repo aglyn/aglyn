@@ -18,12 +18,15 @@
 import { onSnapshot, type DocumentReference } from 'firebase/firestore'
 import { useEffect, useRef, useState } from 'react'
 import type { ObservableStatus, FirestoreDocOptions } from '../firebase/firebase-services'
+import { DENIAL_STREAK_TO_REPORT } from '../firestore-denial-reporter'
 import useModifyDocCallback, {
   type UseModifyDocCallback,
 } from './use-modify-doc-callback'
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
+/** See `use-firestore-collection`'s copy of this (AGL-1066). */
+const REFUSED_RETRY_DELAY_MS = 5_000
 
 /**
  * Raw `onSnapshot` listener with its own retry/backoff instead of
@@ -52,6 +55,7 @@ export function useDocData<T>(
   const [hasPendingWrites, setHasPendingWrites] = useState(false)
   // Un-confirmed until a snapshot says otherwise (AGL-1066).
   const [fromCache, setFromCache] = useState(true)
+  const [serverDenied, setServerDenied] = useState(false)
   const resolveFirstValueRef = useRef<(() => void) | undefined>(undefined)
   const firstValuePromiseRef = useRef<Promise<void> | undefined>(undefined)
   if (!firstValuePromiseRef.current) {
@@ -68,13 +72,32 @@ export function useDocData<T>(
     let unsubscribe: (() => void) | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     let attempt = 0
+    /**
+     * Refusals since the last SERVER snapshot (AGL-1066).
+     *
+     * Deliberately not `attempt`: that one is reset by ANY snapshot,
+     * including a cached one, so under `persistentLocalCache` it never
+     * reaches its budget and this hook can never report anything. Counted
+     * here only to publish `serverDenied` — the `session-health` reporting
+     * that the other two listener hooks do is a separate decision, and this
+     * hook's callers (the besigner document family) are exactly the ones a
+     * false verdict would hurt most.
+     */
+    let deniedStreak = 0
 
     const subscribe = () => {
       unsubscribe = onSnapshot(
         ref,
         (snapshot) => {
           if (cancelled) return
+          // Ungated on purpose — see the long note on the same line in
+          // `use-firestore-collection` for why the correction is staged
+          // behind `serverDenied` rather than applied here (AGL-1066).
           attempt = 0
+          if (!snapshot.metadata.fromCache) {
+            deniedStreak = 0
+            setServerDenied(false)
+          }
           setStatus('success')
           setError(undefined)
           setHasEmitted(true)
@@ -96,9 +119,21 @@ export function useDocData<T>(
         (err) => {
           if (cancelled) return
           unsubscribe?.()
+          // Only a refusal — a lost network produces no error callback at
+          // all, and anything that does surface one carries `unavailable`,
+          // which must never read as a dead session.
+          if ((err as { code?: string })?.code === 'permission-denied') {
+            deniedStreak += 1
+            if (deniedStreak >= DENIAL_STREAK_TO_REPORT) setServerDenied(true)
+          }
           if (attempt < MAX_RETRIES) {
             attempt += 1
-            timer = setTimeout(subscribe, RETRY_DELAY_MS)
+            timer = setTimeout(
+              subscribe,
+              deniedStreak > MAX_RETRIES
+                ? REFUSED_RETRY_DELAY_MS
+                : RETRY_DELAY_MS,
+            )
           } else {
             setStatus('error')
             setError(err)
@@ -126,6 +161,7 @@ export function useDocData<T>(
     firstValuePromise: firstValuePromiseRef.current,
     hasPendingWrites,
     fromCache,
+    serverDenied,
   }
 }
 export type UseDocData<T> = typeof useDocData<T>

@@ -32,6 +32,8 @@ import {
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
+/** See `use-firestore-collection`'s copy of this (AGL-1066). */
+const REFUSED_RETRY_DELAY_MS = 5_000
 
 export type FirestoreDocStatus = 'loading' | 'success' | 'error'
 
@@ -55,6 +57,13 @@ export interface UseFirestoreDocResult<T> {
    * why it is the signal to reach for rather than `staleSession`.
    */
   fromCache: boolean
+  /**
+   * The server has REFUSED this listen for longer than the retry budget and
+   * no server snapshot has arrived since — what `status` would say if the
+   * budget were spendable (AGL-1066). See
+   * `UseFirestoreCollectionResult.serverDenied`.
+   */
+  serverDenied: boolean
 }
 
 /**
@@ -79,6 +88,7 @@ export function useFirestoreDoc<T = DocumentData>(
   // Un-confirmed until a snapshot says otherwise: a hook that has not heard
   // from the server yet must not read as server-confirmed.
   const [fromCache, setFromCache] = useState(true)
+  const [serverDenied, setServerDenied] = useState(false)
   const buildRefRef = useRef(buildRef)
   buildRefRef.current = buildRef
   const idField = options.idField
@@ -92,6 +102,7 @@ export function useFirestoreDoc<T = DocumentData>(
     setData(undefined)
     setHasPendingWrites(false)
     setFromCache(true)
+    setServerDenied(false)
 
     const ref = buildRefRef.current()
     if (!ref) {
@@ -113,6 +124,9 @@ export function useFirestoreDoc<T = DocumentData>(
         ref,
         (snapshot) => {
           if (cancelled) return
+          // Ungated on purpose — see the long note on the same line in
+          // `use-firestore-collection` for why the correction is staged
+          // behind `serverDenied` rather than applied here (AGL-1066).
           attempt = 0
           setStatus('success')
           setError(undefined)
@@ -122,6 +136,7 @@ export function useFirestoreDoc<T = DocumentData>(
           if (!snapshot.metadata.fromCache) {
             deniedStreak = 0
             denialReported = false
+            setServerDenied(false)
             // Proof the session can read — stronger than any accumulated
             // denial, and what stops a scoped collaborator's by-design
             // denials from ever adding up to a re-auth prompt.
@@ -142,14 +157,22 @@ export function useFirestoreDoc<T = DocumentData>(
           // produces no error callback at all, so this cannot fire offline.
           if (err?.code === 'permission-denied') {
             deniedStreak += 1
-            if (deniedStreak >= DENIAL_STREAK_TO_REPORT && !denialReported) {
-              denialReported = true
-              reportFirestoreDenial(denialLabel)
+            if (deniedStreak >= DENIAL_STREAK_TO_REPORT) {
+              setServerDenied(true)
+              if (!denialReported) {
+                denialReported = true
+                reportFirestoreDenial(denialLabel)
+              }
             }
           }
           if (attempt < MAX_RETRIES) {
             attempt += 1
-            timer = setTimeout(subscribe, RETRY_DELAY_MS)
+            timer = setTimeout(
+              subscribe,
+              deniedStreak > MAX_RETRIES
+                ? REFUSED_RETRY_DELAY_MS
+                : RETRY_DELAY_MS,
+            )
           } else {
             setStatus('error')
             setError(err)
@@ -167,7 +190,7 @@ export function useFirestoreDoc<T = DocumentData>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
-  return { data, status, error, hasPendingWrites, fromCache }
+  return { data, status, error, hasPendingWrites, fromCache, serverDenied }
 }
 
 export default useFirestoreDoc
