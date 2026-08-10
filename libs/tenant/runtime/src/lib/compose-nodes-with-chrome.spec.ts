@@ -255,3 +255,88 @@ describe('composeNodesWithChrome resolves host tokens (AGL-1022)', () => {
     expect(textOf(composed)).not.toContain('{{host.')
   })
 })
+
+/**
+ * AGL-1385: an Entry Meta block on an entry template renders its entry.
+ *
+ * `expandCollectionEntryMeta` is unit-tested on its own, and — exactly as with
+ * the host tokens above — a pure stamper that nothing calls stamps nothing.
+ * What only a call-site test can catch is the ORDER: the stamp has to land
+ * after the per-entry clones exist (so it can skip them) and before binding
+ * resolution and denormalization (so the values reach the output).
+ *
+ * The negative control is the shape MEASURED on the live blog: a block with
+ * the three switches on and nothing bound, composed to an empty div.
+ */
+describe('composeNodesWithChrome fills Entry Meta blocks (AGL-1385)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    setup()
+  })
+
+  /** As stored on `blogEntryTmpl`: three switches, zero values. */
+  const withMeta = () => ({
+    root: { $id: 'root', componentId: 'div', nodes: ['meta'] },
+    meta: {
+      $id: 'meta',
+      componentId: 'collectionEntryMeta',
+      parentId: 'root',
+      props: { showDate: true, showCategory: true, showTags: true },
+      nodes: [],
+    },
+  })
+
+  const entry = {
+    $id: 'e1',
+    title: 'From a form to a dataset in five minutes',
+    slug: 'from-a-form-to-a-dataset-in-five-minutes',
+    categoryId: 'guides',
+    tags: ['forms'],
+    publishedAt: { seconds: 1_754_714_956 },
+  }
+  const collection = {
+    slug: 'blog',
+    entry,
+    categories: [{ id: 'guides', name: 'Guides' }],
+  }
+  const expectedDate = new Date(1_754_714_956 * 1000).toLocaleDateString()
+
+  it('stamps the routed entry’s date, category and tags into the tree', async () => {
+    const composed = await composeNodesWithChrome({
+      hostId: 'h1',
+      screenNodes: withMeta(),
+      collection,
+    })
+
+    const json = JSON.stringify(composed)
+    expect(json).toContain(expectedDate)
+    expect(json).toContain('Guides')
+    expect(json).toContain('forms')
+  })
+
+  it('CONTROL — the block carries none of it beforehand, so a pass is not vacuous', () => {
+    const json = JSON.stringify(withMeta())
+    expect(json).not.toContain(expectedDate)
+    expect(json).not.toContain('Guides')
+  })
+
+  it('leaves the block empty on a LIST route, where there is no current entry', async () => {
+    // A list template has no routed entry: the block must stay unbound rather
+    // than borrow whichever entry happened to be first.
+    const composed = await composeNodesWithChrome({
+      hostId: 'h1',
+      screenNodes: withMeta(),
+      collection: { slug: 'blog', entries: [entry], categories: collection.categories },
+    })
+
+    expect(JSON.stringify(composed)).not.toContain(expectedDate)
+  })
+
+  it('composes normally with no collection context at all', async () => {
+    const composed = await composeNodesWithChrome({
+      hostId: 'h1',
+      screenNodes: withMeta(),
+    })
+    expect(composed).toBeTruthy()
+  })
+})

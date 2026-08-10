@@ -31,6 +31,58 @@ import {
 export const CNAME_HOST_PREFIX = 'cname--'
 
 /**
+ * The alias this resolver can actually query, from whatever spelling a caller
+ * wrote (AGL-1385).
+ *
+ * `hosts` is queryable by exactly two fields — `subdomain` and `cname` — and
+ * the branch between them is the `cname--` sentinel the MIDDLEWARE stamps.
+ * That sentinel is an internal encoding of an edge-runtime limitation, and
+ * until now it was also the only spelling a `?host=` caller could use:
+ * `/api/collections-rss` documents its parameter as "your site's subdomain (or
+ * custom domain)" and returned 404 for every custom domain, because
+ * `aglyn.com` was matched against `subdomain` and nothing else was ever tried.
+ * MEASURED against production before the fix: `?host=aglyn.com`,
+ * `?host=marketing` and `?host=marketing.aglyn.app` all 404'd while
+ * `?host=cname--aglyn.com` returned the feed.
+ *
+ * So map the three PUBLIC spellings onto the two internal ones:
+ *
+ *  - `{sub}.aglyn.app` → `{sub}`, the platform origin a site advertises.
+ *  - any other dotted name → `cname--{name}`, a custom domain. The dot is an
+ *    unambiguous discriminator: `SUBDOMAIN_PATTERN` admits only
+ *    `[a-z0-9-]`, so a subdomain can never contain one.
+ *  - everything else — a bare subdomain, an already-stamped `cname--…`, a
+ *    host document id — is returned unchanged.
+ *
+ * That last clause is what makes this safe to apply to every caller rather
+ * than to the one broken route: it is the IDENTITY on every form the
+ * middleware produces, so no render, rewrite or revalidation changes shape.
+ * Applying it here rather than in a route also keeps the two-level cache
+ * honest — the key and `tenantHostAliasTag` are both derived from the result,
+ * so two spellings of one site share an entry instead of each holding their
+ * own, and the alias tag `/api/revalidate` busts (always the subdomain) keeps
+ * matching what a `{sub}.aglyn.app` request stored.
+ */
+export function normalizeHostAlias(host: string | null | undefined): string {
+  const trimmed = String(host ?? '')
+    .trim()
+    .toLowerCase()
+  if (!trimmed || trimmed.startsWith(CNAME_HOST_PREFIX)) return trimmed
+  // A `Host:`-derived value can carry a port or a fully-qualified trailing
+  // dot; a host record's `cname` never does.
+  const bare = trimmed.split(':')[0].replace(/\.+$/, '')
+  if (!bare.includes('.')) return bare
+  const apexSuffix = `.${Aglyn.TENANT_APEX}`
+  if (bare.endsWith(apexSuffix)) {
+    const subdomain = bare.slice(0, -apexSuffix.length)
+    // A deeper name under the apex is not a subdomain we could look up, so it
+    // falls through to the cname branch rather than resolving its last label.
+    if (subdomain && !subdomain.includes('.')) return subdomain
+  }
+  return `${CNAME_HOST_PREFIX}${bare}`
+}
+
+/**
  * Every render and every SEO route starts with this read, so it is the single
  * most amplified read in the tenant runtime (AGL-1302). Cached in TWO levels
  * rather than one, because the two halves invalidate for different reasons:
@@ -84,7 +136,9 @@ async function readHostDoc(hostId: string): Promise<Aglyn.AglynHost | null> {
 }
 
 export async function getHost(options: { host: Aglyn.HostUid }) {
-  const { host } = options
+  // Normalized BEFORE the cache key and the tag, never after: see
+  // `normalizeHostAlias` (AGL-1385).
+  const host = normalizeHostAlias(options.host as string) as Aglyn.HostUid
   const data = {
     host: undefined as Aglyn.AglynHost,
     nextPageToken: '',

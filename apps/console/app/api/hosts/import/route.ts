@@ -18,10 +18,12 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
+  decodeStoredNodes,
   effectiveDatasetModel,
   hostScopeToken,
   legacyCollectionKind,
   nameSearchKey,
+  resolveOrgEntitlements,
   rewriteBindingTokensDeep,
   validateDocument,
 } from '@aglyn/aglyn/server'
@@ -34,29 +36,231 @@ import {
 import {
   EXPORT_COLLECTION_LIMITS,
   EXPORTABLE_HOST_FIELDS,
+  IMPORTABLE_FIELDS,
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../../_lib/site-export'
+import {
+  billableScreenIds,
+  type BillableScreenSource,
+} from '../resources/count-billable-screens'
+import {
+  COLLECTION_TEMPLATE_SCREEN_FIELDS,
+  type CollectionTemplateSource,
+} from '../../../../constants/collection-templates'
 
-// Bundles are JSON text; 20MB covers the export caps comfortably.
-/** Firestore rejects `undefined`; timestamps re-mint on import. */
-function cleanDoc(input: Record<string, unknown>): Record<string, unknown> {
-  // Destructure-to-drop: ids/children re-key explicitly, timestamps re-mint.
-  const {
-    $id: _id,
-    version: _version,
-    entries: _entries,
-    records: _records,
-    createdAt: _createdAt,
-    updatedAt: _updatedAt,
-    ...rest
-  } = input as any
+/**
+ * The document to store, built from a bundle item by ALLOW-list (AGL-1382).
+ *
+ * This was a deny-list: six structural keys destructured away and everything
+ * else stored, with `merge: false`, from a file the user uploaded. The route
+ * already did the right thing one block down — host settings are copied
+ * through `EXPORTABLE_HOST_FIELDS` — so a single file held both disciplines
+ * and the subcollection half was the one that failed open.
+ *
+ * The permitted sets live in `_lib/site-export` beside the rest of the bundle
+ * contract, so a field cannot be exportable but not importable without the
+ * round-trip spec noticing.
+ *
+ * An unknown collection THROWS rather than defaulting to an empty list: the
+ * fail-closed default would be silent total data loss for that collection,
+ * and every caller here passes a literal.
+ */
+function cleanDoc(
+  collection: string,
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  const permitted = IMPORTABLE_FIELDS[collection]
+  if (!permitted) {
+    throw new Error(`No import allow-list declared for '${collection}'`)
+  }
+  const allowed = new Set(permitted)
   const clean: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(rest)) {
-    if (value !== undefined) clean[key] = value
+  for (const [key, value] of Object.entries(input ?? {})) {
+    // Only `undefined` is absence — Firestore rejects it outright. A literal
+    // `null` is a real stored state (a workflow's cleared `trigger`), so it
+    // has to survive the filter.
+    if (allowed.has(key) && value !== undefined) clean[key] = value
   }
   clean['updatedAt'] = firebaseAdmin.firestore.FieldValue.serverTimestamp()
   return clean
+}
+
+/**
+ * Refuse a bundle that would put the host over `screensPerHost` — the third
+ * enforcement point for that cap, and the only one that is a BULK create
+ * (AGL-1398).
+ *
+ * `/api/hosts/resources` gates the cap on the way to creating ONE screen, and
+ * AGL-1390 added `/api/hosts/collections` for the writes that free a slot. This
+ * route creates screens too — `importVersioned('screens')`, by id, additive —
+ * and never called `checkQuota` at all. Not a laundering loop needing a
+ * reversal and not a mis-count: import a bundle and the screens exist.
+ * `EXPORT_COLLECTION_LIMITS.screens` is 200 against a Pro cap of 100, so the
+ * bundle format alone holds twice the plan of the cheapest tier that can use
+ * the feature.
+ *
+ * ## The whole bundle, or none of it
+ *
+ * A bulk create faces a choice a single create does not, and it is the one this
+ * had to make deliberately: refuse the bundle up front, or import up to the cap
+ * and report what was dropped. It refuses up front, before the first write.
+ *
+ * The route commits in chunks of 400, so it is NOT atomic once it starts — and
+ * the host patch, which carries the bundle's ROUTING MAP, is the first thing
+ * batched. An import that stopped at the 101st screen would leave a site whose
+ * restored map advertises 200 pages of which 100 exist, with layouts,
+ * collections and entries referencing the missing half. For a RESTORE feature
+ * that is worse than either extreme, because the site was working before the
+ * import. Which screens survived would be bundle order, and nothing would say
+ * so. Refusing is recoverable in one click — upgrade, or restore elsewhere; a
+ * half-written site is not.
+ *
+ * So the only place the decision can be made atomically is before the first
+ * write, and getting it there costs two projected reads.
+ *
+ * ## The post state, not the verb (AGL-1390)
+ *
+ * What is refused is the RAISE, never the state of being over. An org can be
+ * over its cap by legitimate means — a downgrade, an import that predates this
+ * — and a backup is the one file nobody may be locked out of on the day they
+ * need it. A bundle is keyed by id, so restoring a site into ITSELF replaces
+ * rather than adds and leaves the count exactly where it was: that restore is
+ * allowed at the cap and above it. A check written as
+ * `existing + bundle.length > limit` would have refused every restore of a site
+ * anywhere near full, which is every restore that matters.
+ *
+ * The post state is modelled through `cleanDoc` rather than by reading the
+ * bundle's fields directly, so it cannot drift from the allow-list that decides
+ * what is actually stored. Two consequences of `merge: false` then fall out for
+ * free: an imported screen holds only what the bundle gave it, and because
+ * `deletedAt` is not importable, a screen the bundle carries comes BACK from a
+ * soft delete and counts again.
+ *
+ * ## Which makes this the issue's option 3, without trusting the file
+ *
+ * "Refuse a fresh copy into a different host, allow a restore into the source
+ * host" is what the arithmetic already does, because the ids ARE the
+ * provenance. The bundle also carries a `sourceHostId`, and it is precisely the
+ * wrong thing to gate on: an unsigned string in a file the metered party
+ * uploads, so `sourceHostId === hostId` is "a gated field is an entitlement
+ * input" for the third time (AGL-1354, AGL-1383) — one edit and the cap is
+ * gone. The ids cannot be forged in the direction that pays. Taking the allow
+ * path requires the bundle's screens to be on the host already, which is to say
+ * bought already; renaming them to ids the target holds overwrites those screens
+ * instead of adding any.
+ *
+ * The restore that is allowed OVER the cap is not unobserved either: AGL-1390
+ * shipped the reconciliation half — `screensOverCapHostIds` on the monthly
+ * rollup and a `screens` check in the usage-alerts cron — so an over-cap host
+ * is reported rather than silently tolerated. Detection is the companion to
+ * this refusal, which is why the refusal only has to cover the case where
+ * something is being provisioned rather than given back.
+ *
+ * Nothing is re-priced. `billableScreenIds` decides which screens spend the
+ * allowance, exactly as it does at the other two enforcement points — AGL-1173,
+ * AGL-1383, AGL-1387 and AGL-1390 each declined to change what counts, and this
+ * is not the issue that gets to either.
+ */
+async function screenCapRefusal(options: {
+  hostRef: FirebaseFirestore.DocumentReference
+  /** The host's current `screens` routing map. */
+  routingMap: unknown
+  /** The map the bundle's host settings carry, merged over it below. */
+  bundleRoutingMap: unknown
+  org: unknown
+  bundleScreens: Array<Record<string, any>>
+  bundleCollections: Array<Record<string, any>>
+}): Promise<Response | null> {
+  const { hostRef, routingMap, bundleRoutingMap, org } = options
+  const limit = resolveOrgEntitlements(org as any).screensPerHost
+  // Unlimited plans skip the two reads outright — most orgs entitled to
+  // `siteExport` are on one, and a cap that cannot be exceeded needs no count.
+  if (!Number.isFinite(limit)) return null
+
+  const [screensSnapshot, collectionsSnapshot] = await Promise.all([
+    hostRef.collection('screens').select('kind', 'deletedAt').get(),
+    hostRef
+      .collection('collections')
+      .select('slug', 'kind', ...COLLECTION_TEMPLATE_SCREEN_FIELDS)
+      .get(),
+  ])
+
+  const priorScreens = new Map<string, BillableScreenSource>(
+    screensSnapshot.docs.map((screen) => [
+      screen.id,
+      { id: screen.id, kind: screen.get('kind'), deletedAt: screen.get('deletedAt') },
+    ]),
+  )
+  const priorCollections = new Map<string, CollectionTemplateSource>(
+    collectionsSnapshot.docs.map((row) => [
+      row.id,
+      {
+        slug: row.get('slug'),
+        kind: row.get('kind'),
+        listScreenId: row.get('listScreenId'),
+        entryScreenId: row.get('entryScreenId'),
+        templateScreenId: row.get('templateScreenId'),
+      },
+    ]),
+  )
+
+  // The state the import WOULD leave: the bundle's documents keyed by their
+  // export ids, so a document the host already has is replaced and not added.
+  const nextScreens = new Map(priorScreens)
+  let bundleScreenCount = 0
+  for (const item of options.bundleScreens) {
+    if (!item?.$id) continue
+    const id = String(item.$id)
+    const stored = cleanDoc('screens', item)
+    nextScreens.set(id, {
+      id,
+      kind: stored['kind'],
+      deletedAt: stored['deletedAt'],
+    })
+    bundleScreenCount += 1
+  }
+  const nextCollections = new Map(priorCollections)
+  for (const item of options.bundleCollections) {
+    if (!item?.$id) continue
+    const stored = cleanDoc('collections', item)
+    nextCollections.set(String(item.$id), {
+      slug: stored['slug'],
+      // What `importCollections` stores, inferred for bundles that predate the
+      // discriminator (AGL-979) — a catalog collection excuses no list template.
+      kind: legacyCollectionKind(stored),
+      listScreenId: stored['listScreenId'],
+      entryScreenId: stored['entryScreenId'],
+      templateScreenId: stored['templateScreenId'],
+    })
+  }
+
+  const prior = billableScreenIds(
+    [...priorScreens.values()],
+    [...priorCollections.values()],
+    routingMap as any,
+  )
+  const next = billableScreenIds(
+    [...nextScreens.values()],
+    [...nextCollections.values()],
+    // The host patch is written with `merge: true`, which deep-merges a map
+    // field, so the restored routing map is the union rather than the bundle's.
+    {
+      ...((routingMap as Record<string, unknown>) ?? {}),
+      ...(bundleRoutingMap && typeof bundleRoutingMap === 'object'
+        ? (bundleRoutingMap as Record<string, unknown>)
+        : {}),
+    },
+  )
+  if (next.size <= prior.size || next.size <= limit) return null
+
+  return Response.json({
+    error:
+      `This backup holds ${bundleScreenCount} screens and this site has ` +
+      `${prior.size}, which would put it at ${next.size} of ${limit} ` +
+      'screens. Nothing was imported — upgrade in Billing, or restore into a ' +
+      'site with room.',
+  }, { status: 403 })
 }
 
 /**
@@ -116,6 +320,30 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Site restore requires a Pro plan' }, { status: 403 })
     }
 
+    /**
+     * The bundle's per-collection caps, applied in ONE place. The screen-cap
+     * check below has to count what will actually be WRITTEN, and a separate
+     * `.slice()` at each import site is a second answer waiting to drift from
+     * the first — which is exactly what the export/import media limit did
+     * before AGL-1382 gave it one home.
+     */
+    const bundleItems = (name: string): Array<Record<string, any>> => {
+      const items: any[] = Array.isArray(bundle[name]) ? bundle[name] : []
+      return items.slice(0, EXPORT_COLLECTION_LIMITS[name] ?? 100)
+    }
+
+    // Before the first write, because a half-restored site is worse than a
+    // refused one (AGL-1398).
+    const overCap = await screenCapRefusal({
+      hostRef,
+      routingMap: hostSnapshot.get('screens'),
+      bundleRoutingMap: bundle.host?.screens,
+      org: owningOrg?.org,
+      bundleScreens: bundleItems('screens'),
+      bundleCollections: bundleItems('collections'),
+    })
+    if (overCap) return overCap
+
     let written = 0
     // Firestore batches cap at 500 writes; chunk conservatively.
     let batch = firestore.batch()
@@ -147,15 +375,11 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const importPlain = async (name: string) => {
-      const items: any[] = Array.isArray(bundle[name]) ? bundle[name] : []
-      for (const item of items.slice(
-        0,
-        EXPORT_COLLECTION_LIMITS[name] ?? 100,
-      )) {
+      for (const item of bundleItems(name)) {
         if (!item?.$id) continue
         await write(
           hostRef.collection(name).doc(String(item.$id)),
-          cleanDoc(item),
+          cleanDoc(name, item),
         )
       }
     }
@@ -179,11 +403,10 @@ async function handler(request: Request): Promise<Response> {
 
     // Screens/layouts restore the doc plus its published version.
     const importVersioned = async (name: 'screens' | 'layouts') => {
-      const items: any[] = Array.isArray(bundle[name]) ? bundle[name] : []
-      for (const item of items.slice(0, EXPORT_COLLECTION_LIMITS[name])) {
+      for (const item of bundleItems(name)) {
         if (!item?.$id) continue
         const docRef = hostRef.collection(name).doc(String(item.$id))
-        const cleaned = cleanDoc(item)
+        const cleaned = cleanDoc(name, item)
         // Re-derive the name-search key on restore (AGL-835) — bundles may
         // predate the field, and only screens are queried by name.
         if (name === 'screens' && typeof cleaned['displayName'] === 'string') {
@@ -191,12 +414,42 @@ async function handler(request: Request): Promise<Response> {
         }
         await write(docRef, cleaned)
         if (item.version?.$id) {
-          const version = cleanDoc(item.version)
-          version['nodes'] = rewriteBindingTokensDeep(
-            version['nodes'],
-            bundleVariables,
-            bundleFunctions,
-          ).value
+          const version = cleanDoc('versions', item.version)
+          /**
+           * Decode a bundle that predates the export fix (AGL-1391).
+           *
+           * The export now decodes `nodes` on the way out, but that cannot
+           * reach a file already sitting on a customer's disk — and the only
+           * day anyone opens a year-old backup is the day they need it, so
+           * "restored blank" is the worst failure this feature has. A bundle
+           * exported before the fix carries `{"type":"Buffer","data":[…]}`,
+           * which `decodeStoredNodes` now recognises as a third storage form.
+           *
+           * It lands as a PLAIN MAP rather than being re-encoded to `Bytes`:
+           * both forms are live and every reader handles both, so old and new
+           * bundles converge on one restored shape instead of two, and the
+           * besigner re-compresses on the next save anyway.
+           *
+           * It also has to happen BEFORE the rewrite below. Over an opaque
+           * envelope `rewriteBindingTokensDeep` finds no `{{` strings and
+           * reports `changed: false`, so legacy binding tokens in every
+           * besigner-saved page were silently never normalized on restore.
+           */
+          for (const key of ['nodes', 'elements']) {
+            // Only a key the bundle HAS. Assigning `nodes` unconditionally
+            // wrote an explicit `undefined` for a version carrying just the
+            // legacy `elements` alias, and the Admin SDK rejects that outright
+            // — it is configured without `ignoreUndefinedProperties`. The
+            // rewrite now covers `elements` too, which is where a legacy
+            // document's tree, and so its legacy tokens, actually live.
+            if (version[key] === undefined) continue
+            const decoded = decodeStoredNodes(version[key]) ?? version[key]
+            version[key] = rewriteBindingTokensDeep(
+              decoded,
+              bundleVariables,
+              bundleFunctions,
+            ).value
+          }
           await write(
             docRef.collection('versions').doc(String(item.version.$id)),
             version,
@@ -206,13 +459,10 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const importCollections = async () => {
-      const items: any[] = Array.isArray(bundle.collections)
-        ? bundle.collections
-        : []
-      for (const item of items.slice(0, 20)) {
+      for (const item of bundleItems('collections')) {
         if (!item?.$id) continue
         const docRef = hostRef.collection('collections').doc(String(item.$id))
-        const cleaned = cleanDoc(item)
+        const cleaned = cleanDoc('collections', item)
         // `collections` holds both content and catalog documents (AGL-954).
         // A bundle exported before that discriminator existed carries no
         // `kind`, so this is the one place that still infers it from shape
@@ -227,7 +477,7 @@ async function handler(request: Request): Promise<Response> {
           if (!entry?.$id) continue
           await write(
             docRef.collection('entries').doc(String(entry.$id)),
-            cleanDoc(entry),
+            cleanDoc('entries', entry),
           )
         }
       }
@@ -259,26 +509,22 @@ async function handler(request: Request): Promise<Response> {
     const importedScope = { visibleTo: [hostScopeToken(hostId)] }
 
     const importOrgPlain = async (name: 'media') => {
-      const items: any[] = Array.isArray(bundle[name]) ? bundle[name] : []
       if (!orgId) return
-      for (const item of items.slice(0, EXPORT_COLLECTION_LIMITS[name] ?? 100)) {
+      for (const item of bundleItems(name)) {
         if (!item?.$id) continue
         await write(orgScopedRef(name, String(item.$id)), {
-          ...cleanDoc(item),
+          ...cleanDoc(name, item),
           ...importedScope,
         })
       }
     }
 
     const importDatasets = async () => {
-      const items: any[] = Array.isArray(bundle.datasets)
-        ? bundle.datasets
-        : []
       if (!orgId) return
-      for (const item of items.slice(0, 50)) {
+      for (const item of bundleItems('datasets')) {
         if (!item?.$id) continue
         const docRef = orgScopedRef('datasets', String(item.$id))
-        await write(docRef, { ...cleanDoc(item), ...importedScope })
+        await write(docRef, { ...cleanDoc('datasets', item), ...importedScope })
         // v1 exports (no model) validate through the derived text model,
         // same as the live migration — everything passes, by design.
         const model = effectiveDatasetModel(item)
@@ -295,7 +541,7 @@ async function handler(request: Request): Promise<Response> {
           }
           await write(
             docRef.collection('records').doc(String(record.$id)),
-            cleanDoc(record),
+            cleanDoc('records', record),
           )
         }
       }

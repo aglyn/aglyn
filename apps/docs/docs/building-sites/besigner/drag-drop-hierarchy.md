@@ -54,18 +54,23 @@ Whether the **center** zone means "drop inside" depends on the kind of element y
 
 ### Containers accept children
 
-**Containers** are built to hold other elements: **Stack**, **Box**, **Section**, layout slots,
+**Containers** are built to hold other elements: **Stack**, **Box**, **Section**, **Card**,
 **App Bar**, **Toolbar**, and similar. Dropping onto a container's center nests your element inside
 it. This is how you build structure — a Stack of buttons, a Section full of blocks, and so on.
 
 ### Leaf elements don't — dropping on one makes a sibling
 
-**Leaf elements** have no slot for child elements. There are two kinds:
+**Leaf elements** have no slot for child elements. There are three kinds:
 
 - **Text elements** render their content as inline text — a **Screen Link**, a **Button**, or a
   **Text** element. Their words *are* their content; there's nowhere to nest a child.
 - **Self-closing elements** draw themselves and take no children at all — an **Image**, an
   **Icon**, or a **Video**.
+- **Elements whose content is an attribute** look like containers but draw only what their
+  attributes say — a **Markdown** block (its document is the **Content** attribute), a **List Item
+  Text** row (its words are **Primary**/**Secondary**), a **Reusable Component** instance (its
+  content lives in the definition), and a **Layout Slot** (filled by the screen bound to the
+  layout). Anything nested inside one of these has nowhere to appear on the published page.
 
 Dropping onto a leaf places your element **as a sibling right after it**, inside the leaf's
 **parent** — never nested inside the leaf. Over a leaf you'll only ever see a *before/after*
@@ -76,6 +81,11 @@ lands.
 Aiming at the middle of a small element like a Screen Link used to tuck the new element *inside* it,
 where it wouldn't render as expected. Now a leaf's center reads as "place next to me," which is
 almost always what you want — and you don't have to aim precisely at its edges.
+
+The third kind is the one that used to bite hardest. A Markdown block accepted a drop and then drew
+only its Content attribute, so the element sat in the hierarchy looking placed and never appeared on
+the page — work that read as *never done* rather than broken. Those elements now behave like every
+other leaf, so what you see in the tree is what the site publishes.
 :::
 
 ## Adding a new element

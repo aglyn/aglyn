@@ -77,7 +77,10 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
         resource: 'reusableComponent',
         id: componentId,
         data: {
-          hostId,
+          // No `hostId` here (AGL-1384): it duplicated the document's own
+          // path — hosts/{hostId}/components/{id} — and nothing read it. The
+          // other two component creators never sent it, so the collection was
+          // already inconsistent about carrying it.
           displayName: values.displayName,
           description: values.description ?? '',
           // A canvas needs a ROOT node to render — an empty `{}` renders as

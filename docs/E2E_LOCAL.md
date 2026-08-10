@@ -146,7 +146,8 @@ What to assert (all against `http://localhost:4500`):
 | `/home`                                          | 200 — the seeded `seed-home` screen (its `versionId` pointer is what publishes a screen)                        |
 | `/robots.txt`, `/sitemap.xml`                    | middleware rewrites into `app/api/robots` / `app/api/sitemap` (text/plain + xml)                                |
 | `/api/screen?host=demo`                          | 200 with the `{status, statusCode, data}` JSON envelope                                                         |
-| `/api/collections-rss?host=demo&collection=blog` | 200 RSS                                                                                                         |
+| `/api/collections-rss?host=demo&collection=blog` | 200 RSS — `host` also accepts `demo.aglyn.app` / a custom domain (AGL-1385)                                      |
+| `/blog/rss.xml`                                  | 200 RSS — middleware rewrites into `app/api/collections-rss` with the resolved host (AGL-1385)                   |
 | `/api/bookings/slots?hostId=demo`                | 200 seeded service — proves the `[...pluginApi]` dispatcher → adapter → unchanged plugin handler chain          |
 | `/api/anything-unregistered`                     | 404                                                                                                             |
 | `POST /api/analytics/collect`                    | 204                                                                                                             |

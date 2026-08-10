@@ -1,7 +1,7 @@
 # Self-Healing CI Configuration
 
 ## Off-Limits Areas
-- Do not modify files in `tools/eslint-rules/`
+- Do not modify files in `tools/lint-rules/`
 - Do not modify `nx.json`, `tsconfig.base.json`, or `workspace.json`
 - Do not modify any `.github/workflows/` files
 

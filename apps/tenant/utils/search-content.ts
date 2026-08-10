@@ -134,10 +134,20 @@ export async function searchContent(options: {
   ).query
     .limit(20)
     .get()
-  let screenVersionCache: Map<string, any> | null = null
-  const loadVersions = async () => {
-    if (screenVersionCache) return screenVersionCache
-    screenVersionCache = new Map()
+  // Decoded node maps, not raw version data (AGL-1396). `nodes` is stored in
+  // TWO live forms — a plain map and msgpack bytes, the besigner writing the
+  // compressed one — and the Admin SDK hands the compressed form back as a
+  // Node `Buffer`. `Object.values` over a Buffer yields the byte NUMBERS, none
+  // of which has `props.repeatDataset`, so every besigner-saved screen looked
+  // like it repeated over nothing and its records never surfaced.
+  //
+  // The decode belongs HERE rather than at the loop below because this map is
+  // memoised for the whole call: decoding at the consumer would fix the cold
+  // read and go on serving the Buffer to every dataset after the first.
+  let screenNodesCache: Map<string, Record<string, any>> | null = null
+  const loadScreenNodes = async () => {
+    if (screenNodesCache) return screenNodesCache
+    screenNodesCache = new Map()
     for (const snapshot of screenSnapshots.slice(0, 30)) {
       if (!snapshot?.exists) continue
       const versionId = (snapshot.data() as any)?.versionId
@@ -149,9 +159,13 @@ export async function searchContent(options: {
         .doc(String(versionId))
         .get()
         .catch(() => null)
-      if (version?.exists) screenVersionCache.set(snapshot.id, version.data())
+      if (!version?.exists) continue
+      screenNodesCache.set(
+        snapshot.id,
+        Aglyn.decodeStoredNodes(version.get('nodes')) ?? {},
+      )
     }
-    return screenVersionCache
+    return screenNodesCache
   }
   for (const datasetDoc of datasets.docs) {
     if (datasetDoc.get('deletedAt')) continue
@@ -169,10 +183,9 @@ export async function searchContent(options: {
         .some((value) => matches(String(value), needle)),
     )
     if (!matching.length) continue
-    const versions = await loadVersions()
+    const screenNodes = await loadScreenNodes()
     let targetPath: string | undefined
-    for (const [screenId, version] of versions) {
-      const nodes = (version?.nodes ?? {}) as Record<string, any>
+    for (const [screenId, nodes] of screenNodes) {
       const repeats = Object.values(nodes).some((node) => {
         const key = node?.props?.repeatDataset
         return (

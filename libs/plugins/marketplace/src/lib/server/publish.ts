@@ -117,6 +117,11 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
       .collection('components')
       .doc(componentId)
       .get()
+    // Raw on purpose, unlike the screen and layout publish paths (AGL-1395):
+    // this is the component DOCUMENT, not its versions subcollection, and
+    // `use-component.tsx` stores that `nodes` PLAINLY so the tenant runtime
+    // can read it without decoding. Component *versions* are compressed; this
+    // route never reads them.
     const definition = definitionSnapshot.data() as any
     if (!definition || definition.deletedAt) {
       return res.status(404).json({ error: 'Unknown component' })

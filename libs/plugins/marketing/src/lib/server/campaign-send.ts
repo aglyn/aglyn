@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-import { checkQuota, contactMatchesSegment, createResourceUid, resolveBrandingProfile, visibleToHost } from '@aglyn/aglyn/server'
+import {
+  checkQuota,
+  contactMatchesSegment,
+  createResourceUid,
+  decodeStoredNodes,
+  resolveBrandingProfile,
+  visibleToHost,
+} from '@aglyn/aglyn/server'
 import { renderEmailHtml, resolveMergeTags, type EmailRenderProduct } from '@aglyn/plugins-email/model'
 import { assignExperimentVariant, type HostExperiment } from '../model'
 import { productPriceRange } from '@aglyn/plugins-commerce/model'
@@ -27,7 +34,11 @@ import {
   getOrgForHost,
 } from '@aglyn/tenant-data-admin'
 import { createHash, createHmac } from 'crypto'
-import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import {
+  EMAIL_NODE_ROOT_ID,
+  isEmailConfigured,
+  sendEmail,
+} from '@aglyn/shared-util-email'
 
 const MAX_RECIPIENTS_PER_SEND = 500
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -99,7 +110,29 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
   const versionSnapshot = versionId
     ? await screenRef.collection('versions').doc(String(versionId)).get()
     : null
-  const nodes = (versionSnapshot?.get('nodes') ?? {}) as Record<string, any>
+  /**
+   * Decoded, because a `kind: 'email'` screen is a SCREEN document and its
+   * versions are compressed msgpack `Bytes` from the first designer save
+   * onward (AGL-1394). `createEmailScreen` writes it under
+   * `hosts/{h}/screens/{id}` and the Emails list opens it in the SCREEN
+   * besigner, which saves through `use-screen-version`'s converter —
+   * `Bytes.fromUint8Array(compress(nodes))`. Only the very first version,
+   * seeded from a JSON body through `/api/hosts/versions`, is a plain map.
+   *
+   * `publish-email-template.ts` reading `nodes` raw is not evidence that this
+   * one may: that reads `emailTemplates`, a different collection whose
+   * besigner saves with a bare `setDoc` and no converter.
+   *
+   * The guard below is why this was silent rather than loud. `Object.keys` of
+   * a Buffer yields the byte INDICES, so a compressed version read as a
+   * populated template, `Object.values` found no `emailProduct` node, and a
+   * designed campaign went out to real customer inboxes with its product
+   * blocks missing — discovered by the recipients. Decoding first is also what
+   * makes the guard mean something: `decodeStoredNodes` returns null for an
+   * undecodable payload, so the send is refused instead of mailed empty.
+   */
+  const nodes = (decodeStoredNodes(versionSnapshot?.get('nodes')) ??
+    {}) as Record<string, any>
   if (!Object.keys(nodes).length) {
     throw new CampaignSendError('The email template is empty', 400)
   }
@@ -369,8 +402,22 @@ export async function performCampaignSend(
       const name = names.get(email) ?? ''
       rendered = renderEmailHtml({
         nodes: template.nodes,
+        // Besigner maps are rooted at '_@_', not renderEmailHtml's default
+        // 'root' (AGL-765). Without this the renderer finds no root and emits
+        // an empty 600px shell — for BOTH storage forms, so every designed
+        // campaign shipped a blank body regardless of how it was stored. The
+        // other two send paths, renderLoadedSystemEmail and
+        // renderLoadedHostEmail, have always passed it; this one never did.
+        rootId: EMAIL_NODE_ROOT_ID,
         subject: recipientSubject,
         preheader: template.preheader,
+        // An image the author picked is stored as a `media:` reference and
+        // resolves site-RELATIVE; an inbox has no page to resolve it against,
+        // so without an origin the renderer drops it (AGL-1224). `siteBase` is
+        // this site's own origin, and the host id qualifies an `org:`-scoped
+        // asset so the unauthenticated CDN will serve it.
+        mediaOrigin: siteBase,
+        mediaHostId: hostId,
         merge: {
           'contact.email': email,
           'contact.name': name,

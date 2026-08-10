@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { checkEntitlement, createResourceUid } from '@aglyn/aglyn/server'
+import {
+  CANVAS_ROOT_ELEMENT_ID,
+  checkEntitlement,
+  createResourceUid,
+  decodeStoredNodes,
+} from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -122,16 +127,30 @@ export const publishLayoutHandler: PluginApiHandler = async (req, res) => {
       .collection('versions')
       .doc(String(versionId))
       .get()
-    const nodes = versionSnapshot.get('nodes') as Record<string, any> | undefined
+    // `nodes` is stored in more than one form and the besigner writes the
+    // COMPRESSED one, which the Admin SDK materialises as a Node `Buffer`
+    // (AGL-1395). Read raw, this was worse than the template path: the length
+    // check passed on the BYTE COUNT, and the root search below walked byte
+    // INDICES — byte 0 is a number, a number has no `parentId`, so `rootId`
+    // resolved to `'0'` and the sanitizer built a wrapper around nothing.
+    // Every besigner-edited layout was refused as empty or slotless.
+    const nodes = decodeStoredNodes<Record<string, any>>(
+      versionSnapshot.get('nodes'),
+    )
     if (!nodes || !Object.keys(nodes).length) {
       return res.status(422).json({ error: 'Layout version has no content' })
     }
 
-    // Layout versions have no explicit rootId; the root is the node without
-    // a parent, matching how the renderer walks them.
+    // Layout versions have no explicit rootId. The besigner canvas roots them
+    // at the same wrapper screens use, so prefer it outright; the parentless
+    // search stays as the fallback for anything authored before that, and
+    // matches how the renderer walks them. Preferring the wrapper also means a
+    // top-level node that relies on child arrays alone — legal, see
+    // `compose-layout-nodes` — can no longer win the search over the real root.
     const rootId: string =
-      Object.keys(nodes).find((id) => !nodes[id]?.parentId) ??
-      Object.keys(nodes)[0] ??
+      (nodes[CANVAS_ROOT_ELEMENT_ID] && CANVAS_ROOT_ELEMENT_ID) ||
+      Object.keys(nodes).find((id) => !nodes[id]?.parentId) ||
+      Object.keys(nodes)[0] ||
       ''
     const sanitized = sanitizeMarketplaceDefinition(
       { rootId, nodes },

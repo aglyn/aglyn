@@ -26,6 +26,7 @@ import {
   estimateMonthlyUsageCost,
   type HostUsageSnapshot,
 } from '../../../../utils/usage-metering'
+import { measureScreenCaps } from '../../../../utils/screen-cap-reconciliation'
 import {
   firebaseAdmin,
   readOrgBilling,
@@ -264,9 +265,14 @@ async function handler(request: Request): Promise<Response> {
     // Group hosts by org — the sole billing subject (AGL-238; the legacy
     // per-tenant rollups retired with the tenants collection).
     const byOrg: Record<string, FirebaseFirestore.DocumentReference[]> = {}
+    // The `screens` routing map per host, kept from this sweep so the AGL-1390
+    // screen-cap reconciliation below re-reads nothing: the documents are
+    // already in hand here, and the map is what decides which screens count.
+    const routingByHost: Record<string, unknown> = {}
     for (const host of hosts.docs) {
       const orgId = host.get('orgId')
       if (orgId) (byOrg[orgId] ??= []).push(host.ref)
+      routingByHost[host.id] = host.get('screens')
     }
 
     const usageCache = new Map<string, Promise<HostUsageSnapshot>>()
@@ -347,6 +353,20 @@ async function handler(request: Request): Promise<Response> {
       const apiQuota = checkApiRequestQuota(orgData, apiRequests)
       const contactsCount = Number(contactsSnap.data().count ?? 0)
       const contactQuota = checkContactQuota(orgData, contactsCount)
+      // Screen-cap reconciliation (AGL-1390). Not priced and not enforced —
+      // recorded, so that a site past the plan's screen allowance leaves a
+      // dated trace somebody can find. `screensPerHost` is otherwise only ever
+      // asked at the moment of a write, and three separate ways past that gate
+      // were found in one night with nothing anywhere the wiser. Sequenced
+      // after the batch above because it needs `orgData` to know the plan.
+      const screenCaps = await measureScreenCaps(
+        hostRefs.map((hostRef) => ({
+          id: hostRef.id,
+          ref: hostRef,
+          routingMap: routingByHost[hostRef.id],
+        })),
+        orgData,
+      )
       const billedCents =
         estimate.billedCents +
         Math.round(dataQuota.overageMonthlyUsd * 100) +
@@ -408,6 +428,12 @@ async function handler(request: Request): Promise<Response> {
           apiOverageUsd: apiQuota.overageMonthlyUsd,
           contactsCount,
           contactsOverageUsd: contactQuota.overageMonthlyUsd,
+          // AGL-1390: the org's worst host, and every host past its cap. An
+          // empty array is the answer we expect every month; a non-empty one
+          // means a screen was created through something the create-time gate
+          // does not sit on, and names where to look.
+          maxBillableScreens: screenCaps.maxBillable,
+          screensOverCapHostIds: screenCaps.overCapHostIds,
           billedCents,
           computedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           ...(reported && {

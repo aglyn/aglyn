@@ -885,11 +885,16 @@ describe('Aglyn: Screen Manager', () => {
     const LEAF_TEXT = 'testLeafText575'
     const LEAF_SELF = 'testLeafSelf575'
     const UNKNOWN = 'testUnregistered575'
+    // A component that is neither self-closing nor a text leaf, but still has
+    // no canvas child slot — Markdown, a Reusable Component instance, a
+    // Layout Slot (AGL-1388).
+    const NO_DROP = 'testNoDrop1388'
     const schemas: Record<string, any> = {
       div: {},
       [CONTAINER]: {},
       [LEAF_TEXT]: { flags: { textEditable: FEATURE_FLAG.ENABLED } },
       [LEAF_SELF]: { flags: { selfClosing: FEATURE_FLAG.ENABLED } },
+      [NO_DROP]: { flags: { dropping: FEATURE_FLAG.DISABLED } },
     }
     const fakeAglyn = {
       components: { getSchema: (id: string) => schemas[id] },
@@ -914,7 +919,7 @@ describe('Aglyn: Screen Manager', () => {
           componentId: CONTAINER,
           props: {},
           sx: {},
-          nodes: ['a', 'b', 'c'],
+          nodes: ['a', 'b', 'c', 'd'],
         },
         a: {
           $id: 'a',
@@ -943,6 +948,15 @@ describe('Aglyn: Screen Manager', () => {
           sx: {},
           nodes: [],
         },
+        d: {
+          $id: 'd',
+          type: NodeType.NODE,
+          parentId: 'stack',
+          componentId: NO_DROP,
+          props: {},
+          sx: {},
+          nodes: [],
+        },
       })
       return canvas
     }
@@ -957,6 +971,28 @@ describe('Aglyn: Screen Manager', () => {
       expect(canvas.nodeAcceptsChildren(canvas.getNode('b')!)).toBe(false)
       // Unregistered components default to accepting children.
       expect(canvas.nodeAcceptsChildren(canvas.getNode('c')!)).toBe(true)
+    })
+
+    /**
+     * `flags.dropping: DISABLED` (AGL-1388). It was declared on Markdown,
+     * Reusable Component and Layout Slot, and NOTHING read it — so a
+     * Markdown node advertised a children slot it does not have, and three
+     * /press screenshots were dropped inside, saved, shipped in the page
+     * payload and never drawn.
+     */
+    it('nodeAcceptsChildren: `dropping: DISABLED` has no children slot', () => {
+      const canvas = makeCanvas()
+      expect(canvas.nodeAcceptsChildren(canvas.getNode('d')!)).toBe(false)
+    })
+
+    it('resolveInsertTarget: a dropping-disabled target redirects to its container', () => {
+      const canvas = makeCanvas()
+      expect(canvas.resolveInsertTarget(canvas.getNode('d'))).toMatchObject({
+        index: 4,
+      })
+      expect(canvas.resolveInsertTarget(canvas.getNode('d')).parent.$id).toBe(
+        'stack',
+      )
     })
 
     it('resolveInsertTarget: a container appends as a child (NaN index)', () => {

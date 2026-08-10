@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-// Standalone RuleTester harness (run: `node tools/eslint-rules/*.test.mjs`).
+// Standalone RuleTester harness (run: `node tools/lint-rules/*.test.mjs`).
 // Wired into CI via the `test:eslint-rules` npm script.
 //
 // The invalid cases are the negative control the rule exists for: each one is

@@ -19,6 +19,7 @@ import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { resolveOrgEntitlements, UNLIMITED } from '@aglyn/aglyn/server'
 import { bandwidthGbFromPageViews } from '../../../../utils/usage-metering'
+import { measureScreenCaps } from '../../../../utils/screen-cap-reconciliation'
 import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 
 /**
@@ -123,6 +124,22 @@ async function handler(request: Request): Promise<Response> {
       // and the meter is what moved to match it.
       const bandwidthGb = bandwidthGbFromPageViews(pageViews)
 
+      // Screens per site (AGL-1390): the ONLY thing that ever re-asks whether
+      // a live site is inside the plan's screen allowance. Everywhere else the
+      // cap is a gate on a write, and three issues in one night found three
+      // different ways past it — each invisible until somebody read the code,
+      // because nothing counted afterwards. Keyed on the org's worst host,
+      // since the cap is per site and the alert is per org. Detection only:
+      // over-cap sites keep serving every page they serve today.
+      const screenCaps = await measureScreenCaps(
+        hosts.docs.map((host) => ({
+          id: host.id,
+          ref: host.ref,
+          routingMap: host.get('screens'),
+        })),
+        orgData,
+      )
+
       // Org datasets: count + approximate storage from the rollup the
       // monthly report writes (fresh enough for an alert).
       const datasetCount = Number(
@@ -146,6 +163,16 @@ async function handler(request: Request): Promise<Response> {
           label: 'sites',
           used: hostCount,
           limit: entitlements.hostLimit,
+        },
+        {
+          // AGL-1390: per SITE, so the org-level alert reports the worst one.
+          // Reaching it is not an error — a site at its cap is a site using
+          // what it bought — but crossing it means something created screens
+          // the gate never saw, and this is the only place that would notice.
+          key: 'screens',
+          label: 'screens on a site',
+          used: screenCaps.maxBillable,
+          limit: entitlements.screensPerHost,
         },
         {
           key: 'mediaStorage',

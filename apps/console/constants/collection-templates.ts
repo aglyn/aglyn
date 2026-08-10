@@ -51,9 +51,24 @@ export interface CollectionTemplateRoute {
 export interface CollectionTemplateSource {
   slug?: unknown
   displayName?: unknown
+  /** `'content'` | `'catalog'` (AGL-954); absent reads as content. */
+  kind?: unknown
   listScreenId?: unknown
   entryScreenId?: unknown
   templateScreenId?: unknown
+}
+
+/**
+ * Whether this collection is the kind that serves `/{slug}` (AGL-954).
+ *
+ * Mirrors `hostCollectionKind` exactly — only `kind: 'catalog'` is catalog,
+ * and a document that does not say what it is reads as content. Re-stated
+ * rather than imported for the reason at the top of this file: every reader
+ * here is either a `'use client'` page or an API route, and neither
+ * `@aglyn/aglyn` barrel is importable from both.
+ */
+function servesAContentRoute(source: CollectionTemplateSource): boolean {
+  return source.kind !== 'catalog'
 }
 
 function screenIdOf(value: unknown): string | undefined {
@@ -82,6 +97,57 @@ export function collectionTemplateScreenIds(
       const screenId = screenIdOf(contentCollection[field])
       if (screenId) ids.add(screenId)
     }
+  }
+  return ids
+}
+
+/**
+ * The template screens that ARE pages of the site: a collection's LIST
+ * template (AGL-1387).
+ *
+ * The set above is "designated as a template", which AGL-1173 subtracts from
+ * the plan's screen allowance and AGL-1267 subtracts from the host's routing
+ * map. Both are sound for an ENTRY template — one screen serving every entry
+ * at no URL of its own, so it genuinely 404s at a slug of its own. Neither is
+ * sound for a list template: `/{collectionSlug}` renders that exact screen,
+ * with its entries and `{{collection.*}}` tokens, through
+ * `composeCollectionTemplatePage`. So it is a designed, reachable page, and
+ * excluding it let an editor turn any screen into a free one by creating a
+ * collection and pointing `listScreenId` at it.
+ *
+ * Two conditions, and both are about the ROUTE existing rather than about
+ * publishing:
+ *
+ *  - **A slug.** `/{slug}` is the whole address; a collection with no slug
+ *    has no list route for a template to serve.
+ *  - **Content kind.** Only a content collection answers `/{slug}` — the
+ *    tenant's `findContentCollection` takes the first content-kind match,
+ *    because a catalog collection's slug names `/collections/{slug}` and its
+ *    listing is composed by commerce out of `settings/store`.
+ *
+ * Publishing is deliberately NOT one of them. The collection branch resolves
+ * the screen through `listScreenId`, never through the routing map, so an
+ * unpublished list template is served at `/{slug}` exactly like a published
+ * one — `resolveScreenLiveUrl` says the same thing where it builds the
+ * "View live" URL. The live blog on aglyn.com is this case: its list template
+ * is routed at `blog-list-template` (a path AGL-1267 makes 404) and serves
+ * `/blog`.
+ */
+export function collectionListTemplateScreenIds(
+  collections:
+    | ReadonlyArray<CollectionTemplateSource | null | undefined>
+    | null
+    | undefined,
+): Set<string> {
+  const ids = new Set<string>()
+  for (const contentCollection of collections ?? []) {
+    if (!contentCollection) continue
+    if (!servesAContentRoute(contentCollection)) continue
+    const slug =
+      typeof contentCollection.slug === 'string' ? contentCollection.slug : ''
+    if (!slug) continue
+    const listScreenId = screenIdOf(contentCollection.listScreenId)
+    if (listScreenId) ids.add(listScreenId)
   }
   return ids
 }

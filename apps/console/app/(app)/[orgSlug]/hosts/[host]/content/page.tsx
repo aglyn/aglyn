@@ -149,21 +149,55 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   // Template screens (AGL-105/551): /{collection} renders through the list
   // template, /{collection}/{entry} through the entry template; both go
   // through the normal published pipeline (theme + shared layout + tokens).
+  //
+  // Written through the API rather than with `updateDoc` (AGL-1390), and the
+  // rules now deny the direct write. These three fields are the last exclusion
+  // `countBillableScreens` makes that an editor can both apply and reverse:
+  // pointing at a live screen drops it from the plan's screen allowance,
+  // creating a screen spends the freed slot, and clearing the pointer leaves
+  // the screen counted — one free page per cycle, and a create-time gate never
+  // sees it. The route checks the cap against the state the write would leave,
+  // so a clear that would put the site over is refused with the screen named.
+  // Assigning and moving are unaffected: neither raises the count.
   const handleTemplateChange = useCallback(
     (collectionId: string, kind: 'list' | 'entry') =>
       async (event: { target: { value: string } }) => {
         const value = event.target.value
-        await updateDoc(
-          doc(firestore, 'hosts', hostId, 'collections', collectionId),
-          kind === 'list'
-            ? { listScreenId: value || deleteField() }
-            : {
-                entryScreenId: value || deleteField(),
-                // Superseded AGL-105 pointer; clear it so the entry select
-                // stays the single source of truth.
-                templateScreenId: deleteField(),
-              },
-        )
+        try {
+          const idToken = await (user as any)?.getIdToken?.()
+          const response = await fetch('/api/hosts/collections', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({
+              hostId,
+              action: 'templates',
+              id: collectionId,
+              // `null` is the clear — `deleteField()` does not survive JSON,
+              // and an empty string has meant cleared in older documents too.
+              data:
+                kind === 'list'
+                  ? { listScreenId: value || null }
+                  : {
+                      entryScreenId: value || null,
+                      // Superseded AGL-105 pointer; clear it so the entry
+                      // select stays the single source of truth.
+                      templateScreenId: null,
+                    },
+            }),
+          })
+          const result = await response.json().catch(() => ({}))
+          if (!response.ok) {
+            throw new Error(result?.error ?? 'Template assignment failed')
+          }
+        } catch (error: any) {
+          return void enqueueSnackbar(
+            error?.message ?? 'Template assignment failed',
+            { variant: 'error' },
+          )
+        }
         enqueueSnackbar(
           value
             ? `${kind === 'list' ? 'List' : 'Entry'} template assigned — ` +
@@ -173,7 +207,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           { variant: 'success', persist: false },
         )
       },
-    [firestore, hostId, enqueueSnackbar],
+    [user, hostId, enqueueSnackbar],
   )
   // Live-entry links (AGL-123): custom domain first, subdomain fallback.
   const siteBase = hostDoc?.cname

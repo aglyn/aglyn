@@ -16,7 +16,7 @@
  */
 
 // The sandbox CSP that ACTUALLY ships (AGL-1092). Standalone harness in the
-// style of tools/eslint-rules/*.test.mjs, because this deployment is not part
+// style of tools/lint-rules/*.test.mjs, because this deployment is not part
 // of an nx project and had no coverage at all: the only tested plugin CSP was
 // an uncalled helper in libs/aglyn that disagreed with this one.
 //

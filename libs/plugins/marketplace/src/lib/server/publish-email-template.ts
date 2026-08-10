@@ -142,6 +142,11 @@ export const publishEmailTemplateHandler: PluginApiHandler = async (
       .collection('versions')
       .doc(String(activeVersionId))
       .get()
+    // Raw on purpose, unlike the screen and layout publish paths (AGL-1395):
+    // the email besigner saves through `saveNodesGuarded` on a converter-less
+    // `doc()` ref, so email template versions are plain maps in both the staff
+    // and host collections — the same conclusion AGL-1223 reached for the two
+    // email RENDER sites. Nothing to decode here.
     const nodes = versionSnapshot.get('nodes') as Record<string, any> | undefined
     if (!nodes || !Object.keys(nodes).length) {
       return res.status(404).json({ error: 'This email design is empty' })

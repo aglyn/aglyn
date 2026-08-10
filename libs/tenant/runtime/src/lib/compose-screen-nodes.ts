@@ -277,8 +277,19 @@ export async function composeNodesWithChrome(options: {
     repeated,
     options.collection,
   )
-  const bound = Aglyn.resolveNodesBindings(
+  // Entry Meta blocks (AGL-1385): fill in the routed entry's date/category/
+  // tags. Needs no source fetch — the routed entry and its taxonomy are
+  // already in hand — so it sits outside `expandCollectionEntryBlocks`, which
+  // returns early when no block asks for a collection read. AFTER it, so the
+  // per-entry clones it just produced already carry their own resolved values
+  // and are skipped.
+  const withEntryMeta = Aglyn.expandCollectionEntryMeta(
     withEntries as any,
+    options.collection?.entry,
+    options.collection?.categories,
+  )
+  const bound = Aglyn.resolveNodesBindings(
+    withEntryMeta as any,
     variables,
     functions,
   )

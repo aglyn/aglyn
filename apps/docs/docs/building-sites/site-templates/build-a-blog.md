@@ -154,9 +154,12 @@ mechanism as commerce product/collection templates).
 Besides **Collection Entries** and **Entry Body**, three entry-page blocks are available
 in the block library:
 
-- **Entry Meta** — a `date · category` line plus tag chips. Keep the default
-  `{{entry.date}}` / `{{entry.category}}` / `{{entry.tags}}` bindings on entry
-  templates; each part can be hidden with its **Show** switch.
+- **Entry Meta** — a `date · category` line plus tag chips. On an entry template it
+  fills itself in from the entry being rendered, so drop it on and it works; each part
+  can be hidden with its **Show** switch. Typing into **Date** / **Category** / **Tags**
+  overrides what it would have shown — including the `{{entry.date}}` /
+  `{{entry.category}}` / `{{entry.tags}}` bindings, which still work and are still what
+  the block's preset seeds.
 - **Related Posts** — other entries of the same collection that share the current
   entry's **category or a tag**, newest first. Attributes: **Heading** (default
   "Related articles") and **Limit** (default 3). Renders nothing when the entry has no
@@ -275,14 +278,25 @@ cover image as the social card.
 Aglyn also generates an **RSS feed** per collection, at:
 
 ```
+https://your-domain.com/<collection-slug>/rss.xml
+```
+
+e.g. `https://acme.com/blog/rss.xml`. **This is the URL to link** — it names no site, so
+it keeps working if you connect a custom domain later, and it is the one to put behind a
+"Subscribe" link.
+
+The same feed answers on the explicit form, if you need to point at another site's:
+
+```
 https://your-domain.com/api/collections-rss?host=<your-site>&collection=<collection-slug>
 ```
 
-`host` is your site's subdomain (or custom domain) and `collection` is the collection's
-slug — e.g. `?host=acme&collection=blog`. Items carry the entry's title, link, publish
-date, excerpt, and its category and tags as feed categories, newest first. Link it from
-your own footer or share it with aggregators — feed readers don't discover it
-automatically yet.
+`host` accepts your site's platform origin (`acme.aglyn.app`), your custom domain
+(`acme.com`), or the bare subdomain (`acme`), and `collection` is the collection's slug.
+
+Items carry the entry's title, link, publish date, excerpt, and its category and tags as
+feed categories, newest first. Link it from your own footer or share it with
+aggregators — feed readers don't discover it automatically yet.
 
 ## Tips
 

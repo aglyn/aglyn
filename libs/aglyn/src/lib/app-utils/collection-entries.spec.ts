@@ -29,6 +29,7 @@ import {
   entryMatchesFilter,
   expandCollectionCategories,
   expandCollectionEntries,
+  expandCollectionEntryMeta,
   expandCollectionRelated,
   parseCollectionRoute,
   resolveCollectionAllLabel,
@@ -1106,5 +1107,111 @@ describe('expandCollectionRelated (AGL-582)', () => {
     expect(nodes['related'].props.entries).toEqual([
       { title: 'Match', url: '/blog/match', category: 'Guides' },
     ])
+  })
+})
+
+describe('expandCollectionEntryMeta (AGL-1385)', () => {
+  /**
+   * The node as it is ACTUALLY stored on the live `blogEntryTmpl`, read out of
+   * the rendered page: three switches on, and not one value bound. It rendered
+   * an empty `<div>` at height 0 while the same entry's date and category were
+   * in its feed item and its JSON-LD.
+   */
+  const metaNodes = () =>
+    ({
+      root: { $id: 'root', componentId: 'div', nodes: ['meta'] },
+      meta: {
+        $id: 'meta',
+        componentId: 'collectionEntryMeta',
+        parentId: 'root',
+        props: { showDate: true, showCategory: true, showTags: true },
+        sx: { textAlign: 'center' },
+      },
+    }) as any
+
+  const categories = [{ id: 'guides', name: 'Guides' }]
+  const entry = {
+    $id: 'fHkaaFRRWF',
+    title: 'From a form to a dataset in five minutes',
+    slug: 'from-a-form-to-a-dataset-in-five-minutes',
+    categoryId: 'guides',
+    tags: ['forms', 'datasets'],
+    publishedAt: { seconds: 1_754_714_956 },
+  }
+
+  it('fills a block that binds nothing — the shape that rendered empty', () => {
+    const nodes = expandCollectionEntryMeta(metaNodes(), entry, categories)
+
+    expect(nodes['meta'].props).toEqual({
+      showDate: true,
+      showCategory: true,
+      showTags: true,
+      date: new Date(1_754_714_956 * 1000).toLocaleDateString(),
+      category: 'Guides',
+      tags: 'forms, datasets',
+    })
+  })
+
+  it('reads identically to the tokens an author can bind by hand', () => {
+    const stamped = expandCollectionEntryMeta(metaNodes(), entry, categories)
+    const tokens = collectionEntryTokens(entry, 'blog', categories)
+
+    expect(stamped['meta'].props.date).toBe(tokens['entry.date'])
+    expect(stamped['meta'].props.category).toBe(tokens['entry.category'])
+    expect(stamped['meta'].props.tags).toBe(tokens['entry.tags'])
+  })
+
+  it('never overwrites an authored value or a token awaiting substitution', () => {
+    const authored = metaNodes()
+    authored['meta'].props = {
+      date: 'Updated weekly',
+      category: '{{entry.category}}',
+    }
+
+    const nodes = expandCollectionEntryMeta(authored, entry, categories)
+
+    expect(nodes['meta'].props.date).toBe('Updated weekly')
+    // Still the literal token: substitution runs later and must win.
+    expect(nodes['meta'].props.category).toBe('{{entry.category}}')
+    expect(nodes['meta'].props.tags).toBe('forms, datasets')
+  })
+
+  it('skips the per-entry clones a listing block produced', () => {
+    // A card inside a Collection entries block resolves its OWN entry's
+    // tokens; stamping the routed entry here would date every card the same.
+    const cloned = metaNodes()
+    cloned['centry__list__0__meta'] = {
+      ...cloned['meta'],
+      $id: 'centry__list__0__meta',
+    }
+    const snapshot = JSON.parse(JSON.stringify(cloned['centry__list__0__meta']))
+
+    const nodes = expandCollectionEntryMeta(cloned, entry, categories)
+
+    expect(nodes['centry__list__0__meta']).toEqual(snapshot)
+  })
+
+  it('leaves the block alone without a routed entry, and never mutates', () => {
+    const untouched = metaNodes()
+    const snapshot = JSON.parse(JSON.stringify(untouched))
+
+    // A list route or a plain screen: the besigner affordance stands.
+    expect(expandCollectionEntryMeta(untouched, null, categories)).toEqual(
+      snapshot,
+    )
+    expandCollectionEntryMeta(untouched, entry, categories)
+    expect(untouched).toEqual(snapshot)
+  })
+
+  it('omits a value the entry genuinely lacks rather than stamping blank', () => {
+    const nodes = expandCollectionEntryMeta(
+      metaNodes(),
+      { $id: 'x', slug: 'x', publishedAt: null, tags: [] },
+      categories,
+    )
+
+    expect(nodes['meta'].props).not.toHaveProperty('date')
+    expect(nodes['meta'].props).not.toHaveProperty('category')
+    expect(nodes['meta'].props).not.toHaveProperty('tags')
   })
 })

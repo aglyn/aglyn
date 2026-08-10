@@ -117,15 +117,18 @@ const RESOURCES: Record<string, {
       'seo',
     ],
   },
-  // `versions` is the array the layouts page seeds alongside `versionId`;
-  // the console reads the `versions` SUBCOLLECTION, so the field looks
-  // vestigial — permitted because dropping what a caller sends is a
-  // silent change, and noted for removal at the caller instead.
+  // `versions` used to sit here: an array the layouts page seeded alongside
+  // `versionId` while every reader used the `versions` SUBCOLLECTION, and
+  // nothing kept it in step as versions were added, so it was stale from the
+  // second version onward. Removed at the caller first and then here
+  // (AGL-1384) — the other order is the silent narrowing AGL-1377 warns
+  // about, and it would have dropped the field while a live caller still
+  // sent it.
   layout: {
     collection: 'layouts',
     quotaKey: 'sharedLayoutsPerHost',
     label: 'shared layouts',
-    fields: ['displayName', 'description', 'versionId', 'versions'],
+    fields: ['displayName', 'description', 'versionId'],
   },
   variable: {
     collection: 'variables',
@@ -225,13 +228,16 @@ const RESOURCES: Record<string, {
   // components render on the live site, so a Starter+ gate must be
   // server-enforced, not just hidden in the console (AGL-473).
   //
-  // `hostId` duplicates the document's own path and nothing reads it —
-  // permitted only because the components page sends it today.
+  // `hostId` used to sit here: it duplicated the document's own path,
+  // hosts/{hostId}/components/{id}, nothing read it, and the other two
+  // component creators never sent it — so the collection was already
+  // inconsistent about carrying it. Removed at the components page first and
+  // then here (AGL-1384).
   reusableComponent: {
     collection: 'components',
     entitlement: 'reusableComponents',
     label: 'reusable components',
-    fields: ['hostId', 'displayName', 'description', 'rootId', 'nodes'],
+    fields: ['displayName', 'description', 'rootId', 'nodes'],
   },
   // POS registers (AGL-472): the `posRegisters` cap becomes enforceable
   // by routing register creation here. `pos` gates access to POS at all

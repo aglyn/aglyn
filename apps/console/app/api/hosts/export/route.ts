@@ -16,7 +16,7 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { checkEntitlement } from '@aglyn/aglyn/server'
+import { checkEntitlement, decodeStoredNodes } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -96,6 +96,47 @@ async function handler(request: Request): Promise<Response> {
         .map((doc) => ({ $id: doc.id, ...doc.data() }))
     }
 
+    /**
+     * A version's `nodes`, decoded to the map a bundle can actually carry
+     * (AGL-1391).
+     *
+     * `nodes` is stored in TWO live forms — a plain Firestore map, and msgpack
+     * `Bytes` — and the besigner writes the compressed one, so it is the
+     * majority of live screens and layouts. This route reads `version.data()`
+     * RAW, with no converter, so the Admin SDK hands back a Node `Buffer`, and
+     * `JSON.stringify` turns that into `{"type":"Buffer","data":[…]}`. The
+     * import wrote that object straight back. Every besigner-saved page in
+     * every bundle therefore restored EMPTY — silently, exactly as AGL-1223
+     * failed: nothing in the envelope has a `componentId`, so nothing throws.
+     *
+     * Decoding here rather than re-encoding on the way in is the deliberate
+     * choice. A backup whose content nobody can read is most of the way to no
+     * backup: a bundle is a JSON file customers diff, grep and hand-edit, and
+     * it is the only artefact that survives losing the account. It is also
+     * SMALLER — `JSON.stringify` of a Buffer emits a decimal array at ~4
+     * characters per byte, which is roughly 3x the plain map it encodes, so
+     * "compressed" was never compact once it left Firestore.
+     *
+     * `elements` gets the same treatment. It is the legacy alias migrated
+     * inside `screenVersionConverter`, so it only exists on documents written
+     * before compression and is always a plain map — which passes through
+     * unchanged. Covering it costs nothing and means one rule, not two.
+     *
+     * A decode failure keeps the RAW value rather than dropping to null: the
+     * bytes are the only copy of that page, so shipping them opaque leaves a
+     * recovery possible, and the import re-encodes an envelope losslessly.
+     */
+    const readableNodes = (data: Record<string, any>) => {
+      const readable: Record<string, unknown> = {}
+      for (const key of ['nodes', 'elements']) {
+        // Only rewrite a field the document actually has — writing an explicit
+        // `null` over an absent key would restore as a cleared tree.
+        if (data[key] === undefined) continue
+        readable[key] = decodeStoredNodes(data[key]) ?? data[key]
+      }
+      return readable
+    }
+
     // Screens/layouts carry only their published version's nodes.
     const withPublishedVersion = async (name: 'screens' | 'layouts') => {
       const docs = await exportCollection(name)
@@ -108,9 +149,12 @@ async function handler(request: Request): Promise<Response> {
             .collection('versions')
             .doc(String(item.versionId))
             .get()
-          return version.exists
-            ? { ...item, version: { $id: version.id, ...version.data() } }
-            : item
+          if (!version.exists) return item
+          const data = version.data() ?? {}
+          return {
+            ...item,
+            version: { $id: version.id, ...data, ...readableNodes(data) },
+          }
         }),
       )
     }
@@ -215,8 +259,11 @@ async function handler(request: Request): Promise<Response> {
       withRecords(),
       // Media manifest only — bytes stay in storage; URLs keep working
       // because download tokens are stable. Org-owned and scope-filtered
-      // for the same reason as datasets (AGL-1046).
-      exportOrgCollection('media', 500),
+      // for the same reason as datasets (AGL-1046). The cap reads from the
+      // shared table rather than a literal: this side said 500 and the
+      // import side fell through to its `?? 100` default, so every manifest
+      // over 100 assets restored short and silently (AGL-1382).
+      exportOrgCollection('media', EXPORT_COLLECTION_LIMITS['media']),
     ])
 
     const bundle = {

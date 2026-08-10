@@ -612,12 +612,20 @@ describe('hosts', () => {
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'hosts', HOST, 'collections', 'blog'), {
         displayName: 'Blog', slug: 'blog', kind: 'content',
+        // Seeded SET, so the clear below is a real diff. `deleteField()` on a
+        // field the document does not have produces no affected key at all,
+        // and rules would allow it — correctly, since it changes nothing, but
+        // an assertion written against an absent field proves nothing either.
+        listScreenId: 'screen-9',
+        entryScreenId: 'screen-9',
+        templateScreenId: 'screen-9',
       })
     })
-    // Editors still manage the rest of the doc client-side...
+    // Editors still manage the rest of the doc client-side — the category
+    // taxonomy is what the Content page writes here, and it stays direct.
     await assertSucceeds(
       updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog'), {
-        listScreenId: 'screen-1',
+        categories: [{ id: 'c1', name: 'News' }],
       }),
     )
     // ...but not the two identity keys.
@@ -631,6 +639,31 @@ describe('hosts', () => {
         kind: 'catalog',
       }),
     )
+    // ...and not the three template pointers (AGL-1390). `listScreenId` was
+    // the positive control here until this issue: it is an INPUT TO A PAID
+    // LIMIT, and the one the metered party could both set and unset. Pointing
+    // it at a live screen takes that screen off `screensPerHost`, a create
+    // spends the freed slot, and clearing it hands the screen back — a
+    // create-time gate cannot see the loop, so the write moved to
+    // /api/hosts/collections' `templates` action, which evaluates the cap
+    // against the state the write would leave. All three, because
+    // `templateScreenId` is the legacy pointer and always excludes, and
+    // `listScreenId` still excludes on a catalog or slugless collection.
+    for (const field of ['listScreenId', 'entryScreenId', 'templateScreenId']) {
+      await mustDeny(
+        `collections/blog { ${field}: 'screen-1' }`,
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog'), {
+          [field]: 'screen-1',
+        }),
+      )
+      // Clearing is the direction that mints the slot, and is denied too.
+      await mustDeny(
+        `collections/blog { ${field}: deleteField() }`,
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog'), {
+          [field]: deleteField(),
+        }),
+      )
+    }
     // Entries are a separate resource underneath and stay fully writable.
     await assertSucceeds(
       setDoc(

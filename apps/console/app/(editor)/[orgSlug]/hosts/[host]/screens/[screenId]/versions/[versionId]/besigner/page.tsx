@@ -785,7 +785,12 @@ function BesignerPage(props) {
               String(parentVersionId),
             ),
           )
-          chain.push(versionSnapshot.get('nodes'))
+          // Decoded (AGL-1397). The immediate layout above arrives through
+          // `useLayoutVersion`'s converter and is already a node map; this
+          // raw `getDoc` walks the GRANDPARENT chain with no converter, so
+          // every ancestor came back as a `Bytes` and composed to nothing —
+          // preview silently lost the outer chrome.
+          chain.push(Aglyn.decodeStoredNodes(versionSnapshot.get('nodes')))
           parentId = layoutSnapshot.get('layoutId')
         } catch (error) {
           // A preview is worth showing without the outer chrome; it is not
