@@ -387,6 +387,16 @@ there with `initializeAuth(app, { persistence: inMemoryPersistence })` and **no
   server-side revocation short of `revokeRefreshTokens`, can reach. In-memory
   persistence means the only credential that survives a tab close is our
   `HttpOnly` cookie, which we *can* invalidate.
+  **This property is not self-enforcing** — a single `setPersistence(auth,
+  browserLocalPersistence)` puts the refresh token straight back on disk, no
+  error and no warning (PoC §4), and the console already makes that call in six
+  places. So the instance is not built with a bare `initializeAuth`: build it
+  with `createAuthInstance(app, 'ephemeral')`
+  (`libs/tenant/feature/instance/src/lib/hooks/firebase/auth-persistence.ts`),
+  which seals `setPersistence` shut on the instance (AGL-1379). Second Firebase
+  apps on the same origin — `apps/console/hooks/use-presence.ts` is the one that
+  exists — must inherit the class via `useAuthPersistence()` rather than take
+  the SDK default.
 - **The 1-hour cookie TTL becomes free.** Each page load already bootstraps from
   the cookie via `GET /api/auth/session` → custom token →
   `signInWithCustomToken`, which is the mechanism workspace subdomains have used
@@ -888,6 +898,31 @@ once at connect time and never re-checked.
 9. `cookieAttributes` emits `Secure` on a custom domain and no `Domain`
    attribute — the regression test for the bug in D6.
 10. A cross-site POST to `/redeem` is rejected on `Origin` alone.
+11. **`setPersistence` is refused on the custom domain's auth instance** —
+    AGL-1379. Not "we passed the right argument to `initializeAuth`", which is
+    the assertion that does not survive: the PoC measured `setPersistence(auth,
+    browserLocalPersistence)` accepted at runtime on an in-memory instance,
+    flipping the refresh token from absent to present in IndexedDB. Built as
+    `createAuthInstance(app, 'ephemeral')` in
+    `libs/tenant/feature/instance/src/lib/hooks/firebase/auth-persistence.ts`,
+    which seals `setPersistence` on the instance itself, so all six existing
+    call sites and every future one are covered without being touched. Tests in
+    `auth-persistence.spec.ts` (the seal) and `auth-persistence-provider.spec.tsx`
+    (that `useAuth()` actually hands out the sealed instance), each with a
+    `durable` positive control so the guard cannot silently become a behaviour
+    change on `*.aglyn.com`.
+12. **No refresh token in the origin's IndexedDB after sign-in** on a custom
+    domain. Still owed, and it needs a real browser — jsdom has no IndexedDB, so
+    the unit tests above assert the *guard*, not the *storage*. The PoC's dump
+    harness (`docs/design/agl-1099a-poc-findings.md` §5) is the shape to reuse
+    when 1099c has a domain to run it against.
+
+**Not structural, and the design must not say it is.** D6's `initializeAuth`
+blocks the **federated** family and nothing else — `signInWithEmailAndPassword`,
+`createUserWithEmailAndPassword` and `signInWithPhoneNumber` all still run on an
+in-memory instance (PoC §3). The persistence half is now enforced by the seal
+above; the *route* half — a custom console domain must not render `(auth)`
+routes — is still route-level discipline owed a test, and belongs to 1099c.
 
 `apps/console/middleware.ts` had **no tests at all** before AGL-1135, which is
 most of why that gate shipped disabled and stayed that way for its whole life.

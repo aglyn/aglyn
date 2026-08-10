@@ -29,13 +29,13 @@ import {
 import { FIREBASE_CLIENT_APP_NAME } from '@aglyn/tenant-feature-instance'
 import { RECAPTCHA_API_KEY } from '@aglyn/tenant-feature-instance'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import {
+  createAuthInstance,
+  useAuthPersistence,
+} from '@aglyn/tenant-feature-instance'
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app'
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
-import {
-  getAuth,
-  signInWithCustomToken,
-  connectAuthEmulator,
-} from 'firebase/auth'
+import { signInWithCustomToken, connectAuthEmulator } from 'firebase/auth'
 import {
   type Database,
   connectDatabaseEmulator,
@@ -263,6 +263,9 @@ export function usePresence(options: {
   } = options
   const { data: user } = useUser()
   const uid = (user as { uid?: string } | undefined)?.uid
+  // A primitive, so it is safe in effect 1's dependency list — see the note
+  // below on why that list must stay primitives-only.
+  const authPersistence = useAuthPersistence()
   // `user` is a NEW OBJECT on every render, so depending on it re-runs
   // these effects forever: effect 1 re-minted a token each pass, and
   // effect 2's cleanup removed the presence entry immediately after
@@ -337,7 +340,13 @@ export function usePresence(options: {
         // BEFORE the first authenticated call on this app, not after — the
         // sign-in below is itself App Check enforced.
         startPresenceAppCheck(presenceApp)
-        const auth = getAuth(presenceApp)
+        // Persistence class INHERITED from the provider's instance, never
+        // re-decided here (AGL-1379). Presence is a second Firebase app on
+        // the same origin, so a bare `getAuth(presenceApp)` — which is what
+        // this was — takes the SDK default and writes a refresh token to
+        // IndexedDB even on an origin the provider deliberately kept clean.
+        // Configuring only the shared provider would have left exactly that.
+        const auth = createAuthInstance(presenceApp, authPersistence)
         if (FIREBASE_AUTH_EMULATOR_ENABLED) {
           try {
             connectAuthEmulator(auth, 'http://localhost:9099', {
@@ -375,7 +384,7 @@ export function usePresence(options: {
     return () => {
       active = false
     }
-  }, [hostId, uid])
+  }, [hostId, uid, authPersistence])
 
   // 2. Announce ourselves and watch the room.
   useEffect(() => {

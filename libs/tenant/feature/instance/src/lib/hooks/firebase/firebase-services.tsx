@@ -30,7 +30,6 @@ import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
 import {
   type Auth,
   connectAuthEmulator,
-  getAuth as getAuthInstance,
   onIdTokenChanged,
   type User,
 } from 'firebase/auth'
@@ -66,6 +65,10 @@ import {
   FIREBASE_FIRESTORE_EMULATOR_ENABLED,
 } from '@aglyn/shared-data-enums'
 import { RECAPTCHA_API_KEY } from '../../constants/firebase-config'
+import {
+  type AuthPersistenceClass,
+  createAuthInstance,
+} from './auth-persistence'
 
 /**
  * Drop-in replacement for reactfire's `ObservableStatus<T>` — reactfire is
@@ -143,6 +146,17 @@ interface FirebaseServices {
   storage: FirebaseStorage
   analytics: Analytics
   remoteConfig: RemoteConfig
+  /**
+   * The persistence class `auth` was actually created with (AGL-1379).
+   *
+   * Published so a **second** auth instance derives its class from the
+   * primary rather than re-deciding it. `apps/console/hooks/use-presence.ts`
+   * builds its own Firebase app and its own `Auth`; before this it took the
+   * SDK default unconditionally, so configuring only the provider would have
+   * left presence persisting a refresh token on an origin the provider had
+   * just been careful not to persist one on.
+   */
+  authPersistence: AuthPersistenceClass
 }
 
 const FirebaseServicesContext = createContext<FirebaseServices | undefined>(undefined)
@@ -157,18 +171,31 @@ let connectedAuth = false
 export interface FirebaseServicesProviderProps {
   firebaseConfig: FirebaseOptions
   appName: string
+  /**
+   * How much of a session this origin may keep (AGL-1379). Defaults to
+   * `durable`, which is what every host serving this provider today is:
+   * `*.aglyn.com` and `*.aglyn.app`, whose DNS we own and whose 14-day
+   * session is the product.
+   *
+   * A **custom console domain** (AGL-1099c) must pass `ephemeral`. That is
+   * the whole reason this is a prop rather than a constant: the class differs
+   * per origin, not per build, and the decision belongs to whoever knows
+   * which origin is being served.
+   */
+  authPersistence?: AuthPersistenceClass
   children?: ReactNode
 }
 
 export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
-  const { firebaseConfig, appName, children } = props
+  const { firebaseConfig, appName, authPersistence = 'durable', children } = props
   const servicesRef = useRef<FirebaseServices | undefined>(undefined)
 
   if (!servicesRef.current) {
     const app =
       getApps().find((existing) => existing.name === appName) ??
       initializeApp(firebaseConfig, appName)
-    const auth = getAuthInstance(app)
+    // `durable` resolves to the same `getAuth(app)` this always called.
+    const auth = createAuthInstance(app, authPersistence)
     const database = getDatabaseInstance(app)
 
     if (!connectedFirestore) {
@@ -277,6 +304,7 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
       storage: getStorageInstance(app),
       analytics,
       remoteConfig,
+      authPersistence,
     }
   }
 
@@ -306,6 +334,16 @@ export function useFirestore(): Firestore {
 }
 export function useAuth(): Auth {
   return useFirebaseServices().auth
+}
+/**
+ * The persistence class the provider's `Auth` was created with (AGL-1379).
+ *
+ * Read it — never re-derive it — when building a **second** Firebase app on
+ * the same origin, so the second instance cannot end up more persistent than
+ * the first. `apps/console/hooks/use-presence.ts` is the existing case.
+ */
+export function useAuthPersistence(): AuthPersistenceClass {
+  return useFirebaseServices().authPersistence
 }
 export function useDatabase(): Database {
   return useFirebaseServices().database
