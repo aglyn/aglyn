@@ -702,12 +702,49 @@ service cloud.firestore {
         // a flat platform cap that was only ever checked in the console, by
         // counting listener rows, so it did not survive a stale cache.
         // /api/hosts/resources now counts the live webhooks server-side.
+        //
+        // `counters`, `analytics` and `members` join all THREE lists
+        // (AGL-1367). AGL-1360 moved a cap off a client-held COUNT; these are
+        // the same untrusted number persisted in a client-writable DOCUMENT,
+        // which is strictly worse — it survives the page.
+        //
+        //   - `counters` is the entire enforcement state of five quotas.
+        //     `formSubmissionsPerMonth`, `emailSendsPerMonth`,
+        //     `workflowRunsPerMonth` and `actionRunsPerMonth` each read
+        //     `counters/<name>[YYYY-MM]`, compare, and proceed; `storagePerHostMb`
+        //     reads `counters/media.bytes`. Every one is read-compare-proceed,
+        //     so writing the counter back to 0 removes the wall — and for
+        //     storage that is unbounded Firebase Storage against a Free plan's
+        //     250 MB, real infrastructure cost rather than a feature.
+        //   - `analytics/{day}.total` is the month's page views.
+        //   - Both are ALSO the metered invoice: /api/billing/report-usage
+        //     computes `storageBytes`, `formSubmissions` and `pageViews` from
+        //     exactly these documents, and AGL-1280 turned the metered
+        //     pass-through on for every paid plan. Lowering a counter lowers
+        //     the customer's bill. `rateLimits` states the principle above —
+        //     a client that can write a counter can reset its own counter.
+        //   - `members` is the site roster. A raw delete does NOT revoke
+        //     anything (real access lives in `orgs/{orgId}/members/{uid}
+        //     .hostAccess`, which is `write: false`, projected into the frozen
+        //     `memberRoles`), but the seat cap in /api/hosts/members counts
+        //     these rows — so deleting N rows leaves N collaborators working
+        //     and frees N seats to sell to nobody, at $1-3/seat.
+        //
+        // A dedicated `match /counters/{counterId} { allow write: if false; }`
+        // would NOT have closed any of this: sibling match blocks are OR'd and
+        // the LOOSER one wins, so the catch-all would have re-granted every
+        // write. The exclusion lists ARE the mechanism, exactly as for
+        // `webhooks`. Nothing is lost: every writer of all three is an
+        // Admin-SDK route, and every client reference in the console and the
+        // plugin components is a read, which the catch-all's `allow read`
+        // above still grants.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
               'locations', 'products', 'components', 'registers', 'installs',
-              'templates', 'collections', 'datasets', 'webhooks']));
+              'templates', 'collections', 'datasets', 'webhooks',
+              'counters', 'analytics', 'members']));
         // `templates` is excluded from update as well as create: its
         // dedicated block above freezes `source`, and leaving it here would
         // re-grant the unrestricted update this catch-all allows (AGL-666).
@@ -720,7 +757,8 @@ service cloud.firestore {
         allow update: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'installs',
-              'templates', 'collections', 'datasets']));
+              'templates', 'collections', 'datasets',
+              'counters', 'analytics', 'members']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -730,7 +768,7 @@ service cloud.firestore {
         allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'collections',
-              'datasets']));
+              'datasets', 'counters', 'analytics', 'members']));
       }
       // Editors keep full client control of a collection doc EXCEPT the two
       // identity keys: `slug` is its public address (uniqueness is claimed in

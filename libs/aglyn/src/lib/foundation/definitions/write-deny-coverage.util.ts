@@ -97,6 +97,125 @@ export function topLevelBody(source: string, header: string): string {
 }
 
 /**
+ * The FULL text of a `{ … }` block, nested blocks INCLUDED.
+ *
+ * The opposite of `topLevelBody`, and needed for the opposite question. That
+ * one answers "what does THIS block say", so it drops nested bodies — which is
+ * exactly right for a deny-list on one document, and exactly wrong for
+ * `hosts/{hostId}`, whose subcollection rules all live in nested `match`
+ * blocks. AGL-1367 lived in one of them.
+ *
+ * `header` must end with the opening brace.
+ */
+export function rawBlockBody(source: string, header: string): string {
+  const at = source.indexOf(header)
+  if (at < 0) throw new Error(`Guard cannot parse: no \`${header}\` found.`)
+  let depth = 1
+  let out = ''
+  for (let index = at + header.length; index < source.length; index += 1) {
+    const character = source[index]
+    if (character === '{') depth += 1
+    else if (character === '}') {
+      depth -= 1
+      if (depth === 0) return out
+    }
+    out += character
+  }
+  throw new Error(`Guard cannot parse: \`${header}\` never closes.`)
+}
+
+/** The subcollection write rules of `hosts/{hostId}`, as the rules state them. */
+export interface ParsedSubcollectionRules {
+  /** The `subcollection in […]` exclusion list of each catch-all allow. */
+  excluded: { create: string[]; update: string[]; delete: string[] }
+  /** Collections with a dedicated `match` block, which can RE-GRANT. */
+  dedicated: string[]
+  /** Excluded from all three AND re-granted by nothing: denied outright. */
+  serverOnly: string[]
+}
+
+/**
+ * Parse the host catch-all's three exclusion lists (AGL-1367).
+ *
+ * Membership in ONE list is not denial and never was — `variables` is
+ * create-excluded and freely updatable, `webhooks` is create-excluded and
+ * freely updatable on purpose (the soft delete is how a capped site frees a
+ * slot). And a dedicated `match` block RE-GRANTS, because Firestore ORs its
+ * allows and the LOOSER one wins: `screens`, `layouts` and `collections` all
+ * sit in three lists and stay editor-writable through the blocks above.
+ *
+ * So "denied outright" is the intersection of the three lists MINUS everything
+ * with a block of its own. That subtraction is the reason a dedicated
+ * `allow write: if false` block would not have closed AGL-1367 — a deny can
+ * never win an OR.
+ */
+export function parseHostSubcollectionRules(
+  rulesSource: string,
+): ParsedSubcollectionRules {
+  const rules = normalizePathVariables(stripComments(rulesSource))
+  const host = rawBlockBody(rules, 'match /hosts/<hostId> {')
+
+  const catchAllHeader = 'match /<subcollection>/<document=**> {'
+  const occurrences = host.split(catchAllHeader).length - 1
+  if (occurrences !== 1) {
+    throw new Error(
+      `Expected exactly one \`${catchAllHeader}\` under match /hosts/{hostId}, ` +
+        `found ${occurrences}. A second one would OR another set of allows ` +
+        `onto every subcollection, so these lists would be half the answer.`,
+    )
+  }
+  const catchAll = rawBlockBody(host, catchAllHeader)
+
+  const listFor = (operation: 'create' | 'update' | 'delete'): string[] => {
+    const statement = catchAll
+      .split(';')
+      .find((entry) =>
+        new RegExp(`\\ballow\\b[^:]*\\b${operation}\\b`).test(entry),
+      )
+    if (!statement) {
+      throw new Error(
+        `No \`allow … ${operation}\` in the host catch-all. The block has been ` +
+          `restructured; re-read it before trusting this guard.`,
+      )
+    }
+    const list = statement.match(/subcollection\s+in\s+\[([^\]]*)\]/)
+    if (!list) {
+      throw new Error(
+        `The host catch-all's \`allow ${operation}\` has no ` +
+          `\`subcollection in […]\` exclusion list. Every server-owned host ` +
+          `subcollection is denied by NAME in that list and nowhere else, so ` +
+          `this guard cannot see what is protected any more.`,
+      )
+    }
+    return [...list[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1])
+  }
+
+  const excluded = {
+    create: listFor('create'),
+    update: listFor('update'),
+    delete: listFor('delete'),
+  }
+  // Named `match` blocks only. After `normalizePathVariables` a wildcard
+  // segment starts with `<`, so a leading letter is what distinguishes a
+  // collection block from `match /<subcollection>/…` or the nested
+  // `match /<sub>/…` inside the screens/layouts/components blocks.
+  const dedicated = [
+    ...new Set(
+      [...host.matchAll(/match\s+\/([A-Za-z][A-Za-z0-9]*)\//g)].map(
+        (entry) => entry[1],
+      ),
+    ),
+  ]
+  const serverOnly = excluded.create.filter(
+    (name) =>
+      excluded.update.includes(name) &&
+      excluded.delete.includes(name) &&
+      !dedicated.includes(name),
+  )
+  return { excluded, dedicated, serverOnly }
+}
+
+/**
  * Split an expression on `||` at parenthesis depth 0 only.
  *
  * A naive `split('||')` tears a branch apart at any nested alternation, and
