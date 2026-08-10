@@ -215,8 +215,11 @@ async function handler(request: Request): Promise<Response> {
       withRecords(),
       // Media manifest only — bytes stay in storage; URLs keep working
       // because download tokens are stable. Org-owned and scope-filtered
-      // for the same reason as datasets (AGL-1046).
-      exportOrgCollection('media', 500),
+      // for the same reason as datasets (AGL-1046). The cap reads from the
+      // shared table rather than a literal: this side said 500 and the
+      // import side fell through to its `?? 100` default, so every manifest
+      // over 100 assets restored short and silently (AGL-1382).
+      exportOrgCollection('media', EXPORT_COLLECTION_LIMITS['media']),
     ])
 
     const bundle = {

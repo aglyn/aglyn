@@ -34,26 +34,43 @@ import {
 import {
   EXPORT_COLLECTION_LIMITS,
   EXPORTABLE_HOST_FIELDS,
+  IMPORTABLE_FIELDS,
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../../_lib/site-export'
 
-// Bundles are JSON text; 20MB covers the export caps comfortably.
-/** Firestore rejects `undefined`; timestamps re-mint on import. */
-function cleanDoc(input: Record<string, unknown>): Record<string, unknown> {
-  // Destructure-to-drop: ids/children re-key explicitly, timestamps re-mint.
-  const {
-    $id: _id,
-    version: _version,
-    entries: _entries,
-    records: _records,
-    createdAt: _createdAt,
-    updatedAt: _updatedAt,
-    ...rest
-  } = input as any
+/**
+ * The document to store, built from a bundle item by ALLOW-list (AGL-1382).
+ *
+ * This was a deny-list: six structural keys destructured away and everything
+ * else stored, with `merge: false`, from a file the user uploaded. The route
+ * already did the right thing one block down — host settings are copied
+ * through `EXPORTABLE_HOST_FIELDS` — so a single file held both disciplines
+ * and the subcollection half was the one that failed open.
+ *
+ * The permitted sets live in `_lib/site-export` beside the rest of the bundle
+ * contract, so a field cannot be exportable but not importable without the
+ * round-trip spec noticing.
+ *
+ * An unknown collection THROWS rather than defaulting to an empty list: the
+ * fail-closed default would be silent total data loss for that collection,
+ * and every caller here passes a literal.
+ */
+function cleanDoc(
+  collection: string,
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  const permitted = IMPORTABLE_FIELDS[collection]
+  if (!permitted) {
+    throw new Error(`No import allow-list declared for '${collection}'`)
+  }
+  const allowed = new Set(permitted)
   const clean: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(rest)) {
-    if (value !== undefined) clean[key] = value
+  for (const [key, value] of Object.entries(input ?? {})) {
+    // Only `undefined` is absence — Firestore rejects it outright. A literal
+    // `null` is a real stored state (a workflow's cleared `trigger`), so it
+    // has to survive the filter.
+    if (allowed.has(key) && value !== undefined) clean[key] = value
   }
   clean['updatedAt'] = firebaseAdmin.firestore.FieldValue.serverTimestamp()
   return clean
@@ -155,7 +172,7 @@ async function handler(request: Request): Promise<Response> {
         if (!item?.$id) continue
         await write(
           hostRef.collection(name).doc(String(item.$id)),
-          cleanDoc(item),
+          cleanDoc(name, item),
         )
       }
     }
@@ -183,7 +200,7 @@ async function handler(request: Request): Promise<Response> {
       for (const item of items.slice(0, EXPORT_COLLECTION_LIMITS[name])) {
         if (!item?.$id) continue
         const docRef = hostRef.collection(name).doc(String(item.$id))
-        const cleaned = cleanDoc(item)
+        const cleaned = cleanDoc(name, item)
         // Re-derive the name-search key on restore (AGL-835) — bundles may
         // predate the field, and only screens are queried by name.
         if (name === 'screens' && typeof cleaned['displayName'] === 'string') {
@@ -191,7 +208,7 @@ async function handler(request: Request): Promise<Response> {
         }
         await write(docRef, cleaned)
         if (item.version?.$id) {
-          const version = cleanDoc(item.version)
+          const version = cleanDoc('versions', item.version)
           version['nodes'] = rewriteBindingTokensDeep(
             version['nodes'],
             bundleVariables,
@@ -212,7 +229,7 @@ async function handler(request: Request): Promise<Response> {
       for (const item of items.slice(0, 20)) {
         if (!item?.$id) continue
         const docRef = hostRef.collection('collections').doc(String(item.$id))
-        const cleaned = cleanDoc(item)
+        const cleaned = cleanDoc('collections', item)
         // `collections` holds both content and catalog documents (AGL-954).
         // A bundle exported before that discriminator existed carries no
         // `kind`, so this is the one place that still infers it from shape
@@ -227,7 +244,7 @@ async function handler(request: Request): Promise<Response> {
           if (!entry?.$id) continue
           await write(
             docRef.collection('entries').doc(String(entry.$id)),
-            cleanDoc(entry),
+            cleanDoc('entries', entry),
           )
         }
       }
@@ -264,7 +281,7 @@ async function handler(request: Request): Promise<Response> {
       for (const item of items.slice(0, EXPORT_COLLECTION_LIMITS[name] ?? 100)) {
         if (!item?.$id) continue
         await write(orgScopedRef(name, String(item.$id)), {
-          ...cleanDoc(item),
+          ...cleanDoc(name, item),
           ...importedScope,
         })
       }
@@ -278,7 +295,7 @@ async function handler(request: Request): Promise<Response> {
       for (const item of items.slice(0, 50)) {
         if (!item?.$id) continue
         const docRef = orgScopedRef('datasets', String(item.$id))
-        await write(docRef, { ...cleanDoc(item), ...importedScope })
+        await write(docRef, { ...cleanDoc('datasets', item), ...importedScope })
         // v1 exports (no model) validate through the derived text model,
         // same as the live migration — everything passes, by design.
         const model = effectiveDatasetModel(item)
@@ -295,7 +312,7 @@ async function handler(request: Request): Promise<Response> {
           }
           await write(
             docRef.collection('records').doc(String(record.$id)),
-            cleanDoc(record),
+            cleanDoc('records', record),
           )
         }
       }
