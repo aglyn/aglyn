@@ -33,7 +33,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -102,6 +102,21 @@ function CopyField({ label, value }: { label: string; value: string }) {
   )
 }
 
+/** The card chrome, identical in every state the card can be in. */
+function SsoCardShell({ children }: { children: ReactNode }) {
+  return (
+    <CardDisplay
+      header="Single sign-on"
+      help={docsHelp('sso')}
+      contentGutterX
+      contentGutterY
+      sx={{ mt: 3 }}
+    >
+      {children}
+    </CardDisplay>
+  )
+}
+
 /**
  * Self-serve enterprise SSO (AGL-1210).
  *
@@ -121,7 +136,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
 export function OrgSsoCard() {
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const orgId = currentOrg?.$id
@@ -138,6 +153,18 @@ export function OrgSsoCard() {
   const [displayName, setDisplayName] = useState('')
   const [preview, setPreview] = useState<EnforcementPreview | null>(null)
   const [busy, setBusy] = useState(false)
+  /**
+   * Three states, not two (AGL-1376). `sso = {}` is the value BEFORE an answer
+   * as much as it is the value of an org that never set SSO up, so rendering
+   * "Not set up" off an empty config is a claim about the org's security
+   * posture made without having asked anything. On a failed or hanging status
+   * request that claim is confidently wrong — and wrong in the direction that
+   * invites an admin to turn SSO on, which for an attested org is a one-way
+   * door (AGL-1375). Only `loaded` may speak about the org's actual state.
+   */
+  const [loadState, setLoadState] = useState<'pending' | 'error' | 'loaded'>(
+    'pending',
+  )
 
   const request = useCallback(
     async (body: Record<string, unknown>) => {
@@ -166,8 +193,19 @@ export function OrgSsoCard() {
   )
 
   const refresh = useCallback(async () => {
-    const payload = await request({ action: 'status' })
-    if (!payload) return
+    let payload: Awaited<ReturnType<typeof request>> = null
+    try {
+      payload = await request({ action: 'status' })
+    } catch {
+      // A rejected fetch — offline, a wedged route, a dev server mid-restart —
+      // throws straight past the snackbar inside `request`, so this is the
+      // only place it can be turned into something the card can render.
+      payload = null
+    }
+    if (!payload) {
+      setLoadState('error')
+      return
+    }
     setSso(payload.sso ?? {})
     setClaims(payload.claims ?? [])
     setMetadata(payload.metadata ?? null)
@@ -178,7 +216,13 @@ export function OrgSsoCard() {
       setCertificate((idp.certificates ?? [])[0] ?? '')
     }
     setDisplayName(payload.sso?.displayName ?? '')
+    setLoadState('loaded')
   }, [request])
+
+  const retry = useCallback(() => {
+    setLoadState('pending')
+    void refresh()
+  }, [refresh])
 
   useEffect(() => {
     if (orgId && user && entitled) void refresh()
@@ -198,18 +242,27 @@ export function OrgSsoCard() {
     }
   }
 
+  // The entitlement branch is the same shape of claim (AGL-1376): `org` is
+  // undefined both while the billing doc is loading and while the read is
+  // failing, and `checkEntitlement` on undefined answers "no". Telling an
+  // Enterprise org the feature it pays for is not part of its plan is the
+  // recorded "a loading default answers a question" bug, so wait for `ready`.
+  if (!orgReady) {
+    return (
+      <SsoCardShell>
+        <Typography variant="body2" color="text.secondary">
+          {'Checking your plan…'}
+        </Typography>
+      </SsoCardShell>
+    )
+  }
+
   if (!entitled) {
     // Deliberately NOT "email us to enable SSO". The self-serve rule carves out
     // exactly one conversation — the pricing plan — so this points at that and
     // promises the rest is theirs.
     return (
-      <CardDisplay
-        header="Single sign-on"
-        help={docsHelp('sso')}
-        contentGutterX
-        contentGutterY
-        sx={{ mt: 3 }}
-      >
+      <SsoCardShell>
         <Stack spacing={2} sx={{ maxWidth: 560 }}>
           <Alert severity="info">
             {'Single sign-on is part of Enterprise.'}
@@ -221,7 +274,45 @@ export function OrgSsoCard() {
               'step on our side and nothing to wait for.'}
           </Typography>
         </Stack>
-      </CardDisplay>
+      </SsoCardShell>
+    )
+  }
+
+  if (loadState === 'error') {
+    // No status chip: every label it could carry — "On", "Off", "Not set up" —
+    // asserts something we did not manage to find out. Whatever SSO is doing
+    // right now, it carries on doing while this renders; nothing below is
+    // reachable, so nothing below can be acted on against a config we do not
+    // have.
+    return (
+      <SsoCardShell>
+        <Stack spacing={2} sx={{ maxWidth: 560 }}>
+          <Alert
+            severity="error"
+            action={
+              <Button color="inherit" size="small" onClick={retry}>
+                {'Retry'}
+              </Button>
+            }
+          >
+            {'We couldn’t load your single sign-on settings.'}
+          </Alert>
+          <Typography variant="body2" color="text.secondary">
+            {'This says nothing about whether single sign-on is on — we ' +
+              'could not reach the setting to find out. Nothing has changed.'}
+          </Typography>
+        </Stack>
+      </SsoCardShell>
+    )
+  }
+
+  if (loadState === 'pending') {
+    return (
+      <SsoCardShell>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Chip size="small" label="Checking…" />
+        </Stack>
+      </SsoCardShell>
     )
   }
 
@@ -235,13 +326,7 @@ export function OrgSsoCard() {
   const isActive = sso.status === 'active'
 
   return (
-    <CardDisplay
-      header="Single sign-on"
-      help={docsHelp('sso')}
-      contentGutterX
-      contentGutterY
-      sx={{ mt: 3 }}
-    >
+    <SsoCardShell>
       <Stack spacing={4} sx={{ maxWidth: 720 }}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Chip
@@ -627,7 +712,7 @@ export function OrgSsoCard() {
           ) : null}
         </Stack>
       </Stack>
-    </CardDisplay>
+    </SsoCardShell>
   )
 }
 
