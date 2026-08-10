@@ -116,7 +116,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
-import { WEBHOOK_MAX_PER_HOST } from '../../../libs/aglyn/src/lib/app-utils/actions'
+// The workspace alias, not a relative path: a static import that reaches into
+// another project's source crosses the nx boundary and fails
+// `@nx/enforce-module-boundaries`. The `requireActual` strings above are
+// runtime lookups inside a mock factory, so they stay as-is.
+import { WEBHOOK_MAX_PER_HOST } from '@aglyn/aglyn/app-utils/actions'
 import { POST } from '../app/api/hosts/resources/route'
 
 const createWebhook = (body: Record<string, unknown> = {}) =>
