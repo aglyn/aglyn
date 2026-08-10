@@ -39,6 +39,7 @@
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setFirestoreSessionReporters } from '@aglyn/tenant-feature-instance'
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import EventsConsolePage from './events-console-page'
@@ -46,8 +47,12 @@ import EventsConsolePage from './events-console-page'
 /** Mutable so each spec picks the snapshot's verdict before rendering. */
 const listener = {
   fromCache: false,
-  /** `error` fails every subscribe attempt, so the read never succeeds. */
-  mode: 'ok' as 'ok' | 'error',
+  /**
+   * `error` fails every subscribe attempt, so the read never succeeds.
+   * `stale` is production's shape: the persistent cache answers, and only
+   * then does the server refuse the listen (AGL-1066).
+   */
+  mode: 'ok' as 'ok' | 'error' | 'stale',
 }
 
 const eventDocs = [
@@ -78,6 +83,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // the page passed it, which is the one thing this spec disproves.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+  // Also real: the listener is the shared hook now (AGL-1066), and it is the
+  // thing that reads `metadata.fromCache` off the snapshot below. Stubbing it
+  // would move the signal under test into the mock.
+  useFirestoreCollection: jest.requireActual('@aglyn/tenant-feature-instance')
+    .useFirestoreCollection,
+  setFirestoreSessionReporters: jest.requireActual(
+    '@aglyn/tenant-feature-instance',
+  ).setFirestoreSessionReporters,
 }))
 
 // The listener under test is the page's own `onSnapshot`, so this drives the
@@ -96,16 +109,21 @@ jest.mock('firebase/firestore', () => ({
     next: (snapshot: unknown) => void,
     onError: (error: unknown) => void,
   ) => {
+    const snapshot = (fromCache: boolean) => ({
+      docs: eventDocs.map((record) => ({
+        id: record.$id,
+        data: () => record,
+      })),
+      metadata: { fromCache, hasPendingWrites: false },
+    })
     if (listener.mode === 'error') {
       onError(new Error('permission-denied'))
+    } else if (listener.mode === 'stale') {
+      // The order that defeats the retry budget: cache first, refusal second.
+      next(snapshot(true))
+      onError({ code: 'permission-denied' })
     } else {
-      next({
-        docs: eventDocs.map((record) => ({
-          id: record.$id,
-          data: () => record,
-        })),
-        metadata: { fromCache: listener.fromCache, hasPendingWrites: false },
-      })
+      next(snapshot(listener.fromCache))
     }
     return () => undefined
   },
@@ -172,15 +190,23 @@ describe('EventsConsolePage (AGL-1358)', () => {
   })
 
   /**
-   * `unreadable` gets no refusal test, and the reason is the AGL-1356 finding
-   * turning up again on this hook rather than an omission.
+   * `unreadable` gets no refusal test, and the reason survived the hook swap.
    *
-   * `useHostEvents` resets `attempt = 0` in its SUCCESS handler. A listen that
-   * keeps serving cached snapshots while failing therefore refills the retry
-   * budget on every snapshot, so the exhausted branch is never reached — the
-   * dangerous state, populated editor over a read that stopped working, can
-   * never raise `unreadable`. (Asserting that here would hang the suite: the
-   * retry loop is genuinely unbounded in that state.)
+   * This page used to carry its own `onSnapshot` with `attempt = 0` in the
+   * SUCCESS handler — a fourth copy of the AGL-1066 defect. A listen that
+   * keeps serving cached snapshots while failing refills the retry budget on
+   * every snapshot, so the exhausted branch was never reached and the
+   * dangerous state (populated editor over a read that stopped working) could
+   * never raise `unreadable`. Asserting that here hung the suite, because the
+   * retry loop was genuinely unbounded in that state.
+   *
+   * The hand-rolled copy is gone: this is `useFirestoreCollection` now. The
+   * defect is not fixed by that — the shared hook has the same ungated reset,
+   * deliberately, because flipping it blanks besigner canvases and outlives
+   * no re-auth. What the shared hook adds is the corrected verdict on
+   * `serverDenied`, and a bounded retry cadence so the doomed loop no longer
+   * spins at 400ms. When `status` is eventually flipped, THIS is the test
+   * that gains a refusal case.
    *
    * What `unreadable` can report is a read that never succeeded at all — and
    * then there are no rows, so there is no editor to save from. That is
@@ -228,6 +254,44 @@ describe('EventsConsolePage (AGL-1358)', () => {
    * overwrite nothing — and the first snapshot of any listener is
    * `fromCache: true`, so an unconditional guard would refuse every create.
    */
+  /**
+   * What replacing the hand-rolled listener actually bought (AGL-1066).
+   *
+   * The old hook discarded the fault entirely: it retried at 400ms forever
+   * and told nobody, so this page could sit over a dead session indefinitely
+   * without contributing a single denial to `session-health` — the AGL-1063
+   * banner could never be raised from here. The shared hook reports the
+   * streak once it outlives the budget, and only for a refusal.
+   *
+   * This is also the first time the cached-then-refused state is assertable
+   * on this page at all. It used to hang the suite.
+   */
+  it('now reports the refusal that the hand-rolled listener swallowed', async () => {
+    const onDenied = jest.fn()
+    const onServerRead = jest.fn()
+    setFirestoreSessionReporters({ onDenied, onServerRead })
+    jest.useFakeTimers()
+    try {
+      listener.mode = 'stale'
+      renderPage()
+
+      // The first subscribe already refused once; four more at 400ms spend
+      // the streak. Bounded on purpose — the loop this drives is the one
+      // that used to be unbounded.
+      await act(async () => {
+        jest.advanceTimersByTime(400 * 4)
+      })
+
+      expect(onDenied).toHaveBeenCalled()
+      // ...and never on the strength of a cached emission, of which there
+      // were five.
+      expect(onServerRead).not.toHaveBeenCalled()
+    } finally {
+      jest.useRealTimers()
+      setFirestoreSessionReporters(null)
+    }
+  })
+
   it('still creates a NEW event while the listener is unconfirmed', async () => {
     listener.fromCache = true
     renderPage()

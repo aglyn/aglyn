@@ -80,7 +80,7 @@ jest.mock('firebase/firestore', () => ({
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
 /** The slow cadence a refusal that outlives the budget falls back to. */
-const REFUSED_RETRY_DELAY_MS = 5_000
+const REFUSED_RETRY_DELAY_MS = 2_000
 
 /** What IndexedDB still holds for this query — unconfirmed by definition. */
 const cached = {
@@ -192,9 +192,9 @@ describe('useFirestoreCollection under persistentLocalCache (AGL-1066)', () => {
     })
     const opened = mockHandlers.length
 
-    // The last refusal scheduled the slow cadence, so the fast one reopens
-    // nothing...
-    act(() => jest.advanceTimersByTime(RETRY_DELAY_MS * 4))
+    // The last refusal scheduled the slow cadence, so a fast-cadence tick
+    // reopens nothing...
+    act(() => jest.advanceTimersByTime(RETRY_DELAY_MS))
     expect(mockHandlers).toHaveLength(opened)
 
     // ...but the listener is not abandoned, and a server answer at any later

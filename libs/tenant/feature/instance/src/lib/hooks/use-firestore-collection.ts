@@ -44,8 +44,15 @@ const MAX_RETRIES = 5
  * this listen and reopening 2.5 listeners a second buys nothing — but the
  * loop must NOT stop, because the heal (an AGL-664 in-place re-auth) takes as
  * long as a human takes to type a password, and nothing else re-subscribes.
+ *
+ * The ceiling on this number is not the churn — it is the 38 AGL-1358 write
+ * guards, which refuse a save while `fromCache` is true and can only learn
+ * otherwise from a reopened listener that the server answers. Whatever this
+ * is, it is also how long a save stays refused AFTER the session heals. Two
+ * seconds still cuts the churn fivefold and is inside the latency of the
+ * click that follows a re-auth.
  */
-const REFUSED_RETRY_DELAY_MS = 5_000
+const REFUSED_RETRY_DELAY_MS = 2_000
 
 export type FirestoreCollectionStatus = 'loading' | 'success' | 'error'
 

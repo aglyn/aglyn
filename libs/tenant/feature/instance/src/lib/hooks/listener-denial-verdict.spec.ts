@@ -56,7 +56,7 @@ jest.mock('firebase/firestore', () => ({
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
-const REFUSED_RETRY_DELAY_MS = 5_000
+const REFUSED_RETRY_DELAY_MS = 2_000
 
 const snapshot = (fromCache: boolean) => ({
   id: 'doc',

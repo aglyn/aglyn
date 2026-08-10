@@ -33,7 +33,7 @@ import {
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
 /** See `use-firestore-collection`'s copy of this (AGL-1066). */
-const REFUSED_RETRY_DELAY_MS = 5_000
+const REFUSED_RETRY_DELAY_MS = 2_000
 
 export type FirestoreDocStatus = 'loading' | 'success' | 'error'
 

@@ -24,6 +24,7 @@ import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   useConsoleHostRoute,
   useFirestore,
+  useFirestoreCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
@@ -42,12 +43,11 @@ import {
   collection,
   doc,
   limit,
-  onSnapshot,
   query,
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 interface EventDraft {
   id: string | null
@@ -74,26 +74,23 @@ interface EventRecord {
   deletedAt?: unknown
 }
 
-const RETRY_DELAY_MS = 400
-const MAX_RETRIES = 5
-
 /**
- * A host's events, subscribed with a raw `onSnapshot` (plus retry) rather
- * than `useFirestoreCollection`. The retry recovers the one transient
- * `permission-denied` this read can hit right after sign-in, before
- * Firestore's credential provider has attached the user's ID token, which
- * is why it is still hand-rolled — not, as this comment used to say,
- * because a lib cannot reach the shared hooks. It can; this file has
- * imported `useFirestore` from `@aglyn/tenant-feature-instance` all along.
+ * A host's events.
  *
- * It reports the same staleness signals the shared hooks do (AGL-1358),
- * because the save below writes a whole event back and needs them:
+ * This was a hand-rolled `onSnapshot` with its own retry, and it carried a
+ * FOURTH copy of the AGL-1066 defect: `attempt = 0` in the success handler.
+ * Under `persistentLocalCache` the cached emission that precedes every
+ * refusal handed the budget back, so `unreadable` — the whole point of the
+ * counter — could not fire in the one state that needed it, a populated
+ * editor over a read that had stopped working.
  *
- * - `fromCache` — straight off `snapshot.metadata`, and `true` until a
- *   server snapshot says otherwise, matching `useFirestoreCollection`.
- * - `unreadable` — the retry budget is exhausted and the read never
- *   succeeded. This deliberately does not fire while retries remain: those
- *   are the transient denial the retry exists to absorb.
+ * Rather than repair a fourth counter, the copy is gone. `useFirestoreCollection`
+ * is the same `onSnapshot`-plus-retry that absorbs the AGL-216/217
+ * post-sign-in denial, and it carries the signals this page's save needs
+ * (`fromCache`, and `serverDenied` for the refusal the budget cannot yet
+ * express) plus denial reporting into `session-health` this page never had.
+ * There was never a reason it could not: the file has imported from
+ * `@aglyn/tenant-feature-instance` all along.
  */
 function useHostEvents(hostId: string): {
   events: EventRecord[]
@@ -101,55 +98,16 @@ function useHostEvents(hostId: string): {
   unreadable: boolean
 } {
   const firestore = useFirestore()
-  const [events, setEvents] = useState<EventRecord[]>([])
-  const [fromCache, setFromCache] = useState(true)
-  const [unreadable, setUnreadable] = useState(false)
+  const { data, status, fromCache } = useFirestoreCollection<EventRecord>(
+    () =>
+      hostId
+        ? query(collection(firestore, 'hosts', hostId, 'events'), limit(200))
+        : null,
+    [firestore, hostId],
+    { idField: '$id' },
+  )
 
-  useEffect(() => {
-    if (!hostId) return
-    let cancelled = false
-    let unsubscribe: (() => void) | null = null
-    let timer: ReturnType<typeof setTimeout> | null = null
-    let attempt = 0
-    // A different host is a different read: unconfirmed again until its own
-    // snapshot lands.
-    setFromCache(true)
-    setUnreadable(false)
-
-    const subscribe = () => {
-      unsubscribe = onSnapshot(
-        query(collection(firestore, 'hosts', hostId, 'events'), limit(200)),
-        (snapshot) => {
-          if (cancelled) return
-          attempt = 0
-          setUnreadable(false)
-          setFromCache(snapshot.metadata.fromCache)
-          setEvents(
-            snapshot.docs.map(
-              (record) => ({ $id: record.id, ...record.data() }) as EventRecord,
-            ),
-          )
-        },
-        (error) => {
-          if (cancelled || attempt >= MAX_RETRIES) {
-            console.error(error)
-            if (!cancelled) setUnreadable(true)
-            return
-          }
-          attempt += 1
-          timer = setTimeout(subscribe, RETRY_DELAY_MS)
-        },
-      )
-    }
-    subscribe()
-    return () => {
-      cancelled = true
-      if (unsubscribe) unsubscribe()
-      if (timer) clearTimeout(timer)
-    }
-  }, [firestore, hostId])
-
-  return { events, fromCache, unreadable }
+  return { events: data, fromCache, unreadable: status === 'error' }
 }
 
 /** datetime-local ↔ epoch-ms without timezone surprises. */
