@@ -60,7 +60,6 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
-  Box,
   Button,
   MenuItem,
   Stack,
@@ -82,7 +81,7 @@ import BindingPickerProvider from '../../../../../../../../../../components/bind
 import InteractionsProvider from '../../../../../../../../../../components/interactions-provider.component'
 import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
 import BesignerMediaPickerProvider from '../../../../../../../../../../components/besigner-media-picker-provider.component'
-import MediaPickerDialog from '../../../../../../../../../../components/media/media-picker-dialog.component'
+import ScreenSocialImageField from '../../../../../../../../../../components/screen-social-image-field.component'
 import BesignerAppBarComponent from '../../../../../../../../../../components/besigner-app-bar.component'
 import BesignerDocumentSwitcherComponent from '../../../../../../../../../../components/besigner-document-switcher.component'
 import BesignerVersionsComponent, {
@@ -193,7 +192,6 @@ function BesignerPage(props) {
     imageWidth: number
     imageHeight: number
   } | null>(null)
-  const [seoImagePicker, setSeoImagePicker] = useState(false)
   // Screen password protection (AGL-87); null = untouched.
   const [protectPassword, setProtectPassword] = useState<string | null>(null)
   const handleAddElementClick = useAddElementDrawerCallback()
@@ -213,18 +211,6 @@ function BesignerPage(props) {
     hostId,
     screenId,
   })
-  /**
-   * The social image as the panel should show it (AGL-1337): the staged draft
-   * if the author has touched it, otherwise what the screen doc holds. A
-   * staged `''` is a pending CLEAR and must win over the saved value, which is
-   * why this reads the draft's presence rather than its truthiness.
-   */
-  const seoSocialValue =
-    seoImage != null ? seoImage.image : (screenResult?.data?.seo?.image ?? '')
-  // Stored as a `media:` reference; the preview needs the CDN path. Relative
-  // is right here — the console is same-origin. Only the tenant head has to
-  // absolutise it.
-  const seoSocialPreview = Aglyn.resolveMediaSrc(seoSocialValue, { hostId })
   const layoutId = screenResult?.data?.layoutId
   const {doc: layoutResult} = useLayout({
     hostId,
@@ -1242,49 +1228,14 @@ function BesignerPage(props) {
             onChange={(e) => setSeoDescription(e.target.value)}
             helperText="Search snippet / social share text (≤160 chars works best)"
           />
-          {/* Social image (AGL-1337). A media pick from the site's own DAM,
-              through the same dialog the content editor uses — never a URL
-              field, which is how you end up with a card that 404s the moment
-              someone moves the asset into a folder. */}
-          <Typography variant="caption" color="text.secondary">
-            {'Social image — the picture shown when this screen is shared. ' +
-              'Leave it unset to use the site default from Site setup ▸ SEO.'}
-          </Typography>
-          {seoSocialPreview ? (
-            <Box
-              component="img"
-              src={seoSocialPreview}
-              alt="Social image"
-              sx={{
-                width: '100%',
-                aspectRatio: '1200 / 630',
-                objectFit: 'cover',
-                borderRadius: 1,
-                border: 1,
-                borderColor: 'divider',
-              }}
-            />
-          ) : null}
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => setSeoImagePicker(true)}
-            >
-              {seoSocialValue ? 'Replace image' : 'Choose image'}
-            </Button>
-            {seoSocialValue ? (
-              <Button
-                size="small"
-                color="error"
-                onClick={() =>
-                  setSeoImage({ image: '', imageWidth: 0, imageHeight: 0 })
-                }
-              >
-                {'Clear'}
-              </Button>
-            ) : null}
-          </Stack>
+          {/* Social image (AGL-1337), shared with the screen detail page's
+              SEO card so the two surfaces cannot drift (AGL-1368). */}
+          <ScreenSocialImageField
+            hostId={hostId}
+            saved={screenResult?.data?.seo?.image}
+            value={seoImage}
+            onChange={setSeoImage}
+          />
           <Button
             size="small"
             variant="outlined"
@@ -1324,27 +1275,6 @@ function BesignerPage(props) {
           </Stack>
         </Stack>
       </PropertiesDialogComponent>
-      {/* Social image picker (AGL-1337) — the one canonical media dialog
-          (AGL-821), so the site library and the org's shared library are both
-          reachable and a restricted asset stays invisible to sites that may
-          not render it. Outside the properties dialog so it is not clipped by
-          it. */}
-      <MediaPickerDialog
-        hostId={hostId}
-        open={seoImagePicker}
-        onClose={() => setSeoImagePicker(false)}
-        onPick={(media) => {
-          const src = Aglyn.mediaNodeSrc(media)
-          if (!src) return
-          // Dimensions read off the media record (captured at upload,
-          // AGL-173) and staged WITH the reference, never separately.
-          setSeoImage({
-            image: src,
-            imageWidth: media.width ?? 0,
-            imageHeight: media.height ?? 0,
-          })
-        }}
-      />
       {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
         <JsonEditor
           open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}

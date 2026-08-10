@@ -59,10 +59,11 @@ full pages throughout.
 - **Docs page:** `building-sites/seo/overview.md` → `#per-screen-seo`
 - **Capture:** console → any screen's detail page → the **SEO** card, with Title and
   Description filled so the character counters (`…/60`, `…/155`) show non-zero
-  numbers, and the **Save SEO** button visible.
+  numbers, a social image picked so its preview shows, and the **Save SEO**
+  button visible.
 - **Frame:** the SEO card only.
-- **Alt text:** A screen's SEO card with Title, Description and Social image URL
-  fields and the Save SEO button.
+- **Alt text:** A screen's SEO card with Title and Description fields, a Social
+  image preview with Replace and Clear buttons, and the Save SEO button.
 
 ### 5. `static/img/seo/search-engines-card-on.png`
 
