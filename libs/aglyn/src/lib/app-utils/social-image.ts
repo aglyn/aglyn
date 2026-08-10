@@ -147,9 +147,21 @@ function dimensions(source: SocialImageSource) {
  */
 export function resolveSocialImage(options: {
   sources: Array<SocialImageSource | null | undefined>
-  host: SocialImageHost | null | undefined
+  host?: SocialImageHost | null | undefined
+  /**
+   * The origin to absolutize a site-relative URL against, for a surface that
+   * is not a tenant site and therefore has no host record to derive one from
+   * (AGL-876: the console's marketplace listing card).
+   *
+   * Takes precedence over the host, so a caller that has both is stating the
+   * origin it actually serves from rather than the one the host doc names.
+   * With neither, a relative URL still resolves to `undefined` — the rule in
+   * `absolutize` is unchanged, this only widens where the origin may come
+   * from.
+   */
+  origin?: string | null
 }): ResolvedSocialImage | undefined {
-  const { sources, host } = options
+  const { sources, host, origin } = options
   const source = sources.find((candidate) => Boolean(candidate?.image))
   if (!source?.image) return undefined
   // A `media:` reference becomes the site-relative CDN path, host-qualified
@@ -158,7 +170,7 @@ export function resolveSocialImage(options: {
   // URLs the content and favicon pickers have always written).
   const resolved = resolveMediaSrc(source.image, { hostId: host?.$id })
   if (!resolved) return undefined
-  const url = absolutize(resolved, hostPublicOrigin(host))
+  const url = absolutize(resolved, origin || hostPublicOrigin(host))
   if (!url) return undefined
   return { url, ...dimensions(source) }
 }

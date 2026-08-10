@@ -97,6 +97,109 @@ const ORG_ADMIN_DENIED = (() => {
   return [...list[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1])
 })()
 
+/**
+ * The host subcollections that are denied to the client OUTRIGHT — parsed
+ * out of the catch-all's three exclusion lists rather than retyped (AGL-1367).
+ *
+ * A name has to appear in ALL THREE lists to be here, and must have no
+ * dedicated `match` block of its own inside `match /hosts/{hostId}`. Both
+ * halves matter, and each one is a bug this repo has already shipped:
+ *
+ *  - Appearing in one list is not denial. `variables` is create-excluded and
+ *    freely updatable; `webhooks` is create-excluded and freely updatable
+ *    (deliberately — the soft delete). A guard that read one list would call
+ *    those closed.
+ *  - A dedicated block RE-GRANTS. Rules OR their allows and the LOOSER one
+ *    wins, so `screens`, `layouts` and `collections` sit in all three lists
+ *    and are still editor-writable through the blocks above the catch-all.
+ *    That is why a dedicated `allow write: if false` block would not have
+ *    closed AGL-1367, and why this set is computed by subtracting them.
+ */
+const HOST_SERVER_ONLY_SUBCOLLECTIONS = (() => {
+  const rules = RULES_SOURCE.replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '')
+    .replace(/\{([A-Za-z_][A-Za-z0-9_]*(?:=\*\*)?)\}/g, '<$1>')
+
+  const hostHeader = 'match /hosts/<hostId> {'
+  const hostAt = rules.indexOf(hostHeader)
+  assert.ok(hostAt >= 0, 'no `match /hosts/{hostId}` block in the rules')
+  let depth = 1
+  let hostBlock = ''
+  for (let index = hostAt + hostHeader.length; index < rules.length; index += 1) {
+    const character = rules[index]
+    if (character === '{') depth += 1
+    else if (character === '}') {
+      depth -= 1
+      if (depth === 0) break
+    }
+    hostBlock += character
+  }
+  assert.equal(depth, 0, 'the hosts rules block never closes')
+
+  // The catch-all, by its own header. The extra `{subcollection}` segment is
+  // what keeps a bare `{document=**}` off the host doc itself (AGL-235), so
+  // the header is stable and unique.
+  const catchAllHeader = 'match /<subcollection>/<document=**> {'
+  const occurrences = hostBlock.split(catchAllHeader).length - 1
+  assert.equal(
+    occurrences,
+    1,
+    `expected exactly one \`${catchAllHeader}\` under match /hosts/{hostId}, ` +
+      `found ${occurrences}. A second one would OR another set of allows onto ` +
+      `every subcollection and this parse would be reading half the answer.`,
+  )
+  const catchAllAt = hostBlock.indexOf(catchAllHeader)
+  depth = 1
+  let catchAll = ''
+  for (
+    let index = catchAllAt + catchAllHeader.length;
+    index < hostBlock.length;
+    index += 1
+  ) {
+    const character = hostBlock[index]
+    if (character === '{') depth += 1
+    else if (character === '}') {
+      depth -= 1
+      if (depth === 0) break
+    }
+    catchAll += character
+  }
+  assert.equal(depth, 0, 'the host catch-all block never closes')
+
+  const exclusionList = (operation) => {
+    const statement = catchAll
+      .split(';')
+      .find((entry) => new RegExp(`\\ballow\\b[^:]*\\b${operation}\\b`).test(entry))
+    assert.ok(statement, `no \`allow … ${operation}\` in the host catch-all`)
+    const list = statement.match(/subcollection\s+in\s+\[([^\]]*)\]/)
+    assert.ok(
+      list,
+      `the host catch-all's \`allow ${operation}\` has no ` +
+        `\`subcollection in […]\` exclusion list — it has been restructured, ` +
+        `so re-read it before trusting this parse.`,
+    )
+    return [...list[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1])
+  }
+
+  const create = exclusionList('create')
+  const update = exclusionList('update')
+  const remove = exclusionList('delete')
+
+  // Dedicated blocks, by name. `match /<subcollection>/…` and the nested
+  // `match /<sub>/…` start with an angle bracket after normalization, so a
+  // leading letter is exactly what distinguishes a named collection block.
+  const dedicated = new Set(
+    [...hostBlock.matchAll(/match\s+\/([A-Za-z][A-Za-z0-9]*)\//g)].map(
+      (entry) => entry[1],
+    ),
+  )
+
+  return create.filter(
+    (name) =>
+      update.includes(name) && remove.includes(name) && !dedicated.has(name),
+  )
+})()
+
 /** @type {import('@firebase/rules-unit-testing').RulesTestEnvironment} */
 let env
 
@@ -115,6 +218,38 @@ const STAFF = 'uid-staff'
 
 const authed = (uid, tokens) => env.authenticatedContext(uid, tokens).firestore()
 const anon = () => env.unauthenticatedContext().firestore()
+
+/**
+ * `assertFails`, but the failure NAMES the path (AGL-1367).
+ *
+ * These suites drive a list, so a bare `assertFails` reports only "expected
+ * request to fail" and leaves whoever broke it to work out which of a dozen
+ * collections it was. The per-key mutation proof this issue is held to —
+ * remove one name from one exclusion list, watch the suite go red naming that
+ * name — needs the name in the message.
+ */
+const mustDeny = async (label, operation) => {
+  try {
+    await assertFails(operation)
+  } catch (error) {
+    assert.fail(
+      `${label} was NOT denied — the client SDK write went through. ` +
+        `(${error?.message ?? error})`,
+    )
+  }
+}
+
+/** The positive-control twin: a legitimate write that must still land. */
+const mustAllow = async (label, operation) => {
+  try {
+    await assertSucceeds(operation)
+  } catch (error) {
+    assert.fail(
+      `${label} was denied, but it is a legitimate write. A deny that breaks ` +
+        `the product is worse than the hole it closes. (${error?.message ?? error})`,
+    )
+  }
+}
 
 before(async () => {
   env = await initializeTestEnvironment({
@@ -178,6 +313,25 @@ beforeEach(async () => {
     await setDoc(doc(db, 'hosts', HOST, 'templates', 'tpl-1'), {
       kind: 'page', displayName: 'Hero page',
       source: { type: 'marketplace', listingId: 'listing-1', version: 2 },
+    })
+    // The server-owned meters (AGL-1367), seeded the way the Admin SDK
+    // leaves them. `counters/media.bytes` is the storagePerHostMb wall;
+    // the month-keyed docs are the other four quota gates; `analytics/{day}
+    // .total` is the page-view arm of the metered invoice. `members` is the
+    // roster the seat cap counts.
+    await setDoc(doc(db, 'hosts', HOST, 'counters', 'media'), {
+      bytes: 249_000_000, count: 812,
+    })
+    await setDoc(doc(db, 'hosts', HOST, 'counters', 'formSubmissions'), {
+      '2026-08': 100,
+    })
+    await setDoc(doc(db, 'hosts', HOST, 'counters', 'emailSends'), { '2026-08': 500 })
+    await setDoc(doc(db, 'hosts', HOST, 'counters', 'workflowRuns'), { '2026-08': 1000 })
+    await setDoc(doc(db, 'hosts', HOST, 'counters', 'actionRuns'), { '2026-08': 1000 })
+    await setDoc(doc(db, 'hosts', HOST, 'analytics', '2026-08-01'), { total: 900_000 })
+    await setDoc(doc(db, 'hosts', HOST, 'members', 'm-collab'), {
+      email: 'collab@acme.test', role: 'editor', status: 'active',
+      uid: 'uid-collab',
     })
     // Suspension write-block (AGL-238): host owned by a suspended org.
     await setDoc(doc(db, 'orgs', SUSPENDED_ORG), {
@@ -645,6 +799,237 @@ describe('hosts', () => {
     // reads for a member, so "denied" here means the host path only.
     await assertSucceeds(
       getDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1')),
+    )
+  })
+
+  /**
+   * AGL-1367. The catch-all's exclusion lists are the ONLY thing standing
+   * between an editor and these documents, so this asserts the two halves
+   * separately: that the parsed set still names what it must (nothing was
+   * quietly dropped from a list), and that every name in it is genuinely
+   * denied against a live emulator (nothing looser OR'd it back open).
+   *
+   * The floor is what makes the per-key mutation proof work. Without it,
+   * deleting `counters` from any one exclusion list would drop it out of the
+   * parsed intersection and this suite would go green testing three
+   * collections instead of four — the exact shape of AGL-1354, where the test
+   * could only fail for a key somebody had already remembered.
+   */
+  it('the host catch-all still denies every server-owned subcollection (AGL-1367)', () => {
+    for (const name of ['counters', 'analytics', 'members', 'datasets']) {
+      assert.ok(
+        HOST_SERVER_ONLY_SUBCOLLECTIONS.includes(name),
+        `\`${name}\` is no longer denied outright under hosts/{hostId}. It ` +
+          `must appear in ALL THREE \`subcollection in […]\` exclusion lists ` +
+          `of the host catch-all AND have no dedicated match block re-granting ` +
+          `it. Removing it from one list is enough to reopen the hole: ` +
+          `AGL-1367 was an editor rewriting counters/media.bytes to 0 for ` +
+          `unbounded storage on a Free plan, and lowering the same documents ` +
+          `to lower a live metered Stripe invoice.`,
+      )
+    }
+  })
+
+  it('every parsed server-only host subcollection is create/update/delete denied (AGL-1367)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const name of HOST_SERVER_ONLY_SUBCOLLECTIONS) {
+        await setDoc(doc(db, 'hosts', HOST, name, 'agl1367-seed'), { total: 7 })
+      }
+    })
+    // Both roles: this is a PATH question, not a role one. A site admin has
+    // the same billing incentive as an editor and no more right to the meter.
+    for (const uid of [EDITOR, OWNER]) {
+      for (const name of HOST_SERVER_ONLY_SUBCOLLECTIONS) {
+        const at = `hosts/{hostId}/${name} as ${uid}`
+        await mustDeny(
+          `create ${at}`,
+          setDoc(doc(authed(uid), 'hosts', HOST, name, 'agl1367-new'), {
+            total: 0,
+          }),
+        )
+        await mustDeny(
+          `update ${at}`,
+          updateDoc(doc(authed(uid), 'hosts', HOST, name, 'agl1367-seed'), {
+            total: 0,
+          }),
+        )
+        await mustDeny(
+          `delete ${at}`,
+          deleteDoc(doc(authed(uid), 'hosts', HOST, name, 'agl1367-seed')),
+        )
+        // `{document=**}` spans deeper paths and nothing re-grants under
+        // these names, so the whole subtree goes with them.
+        await mustDeny(
+          `create ${at}/agl1367-seed/nested`,
+          setDoc(
+            doc(authed(uid), 'hosts', HOST, name, 'agl1367-seed', 'nested', 'n1'),
+            { total: 0 },
+          ),
+        )
+      }
+    }
+  })
+
+  /**
+   * The named exploits, spelled out. The loop above proves the property; this
+   * proves the specific writes AGL-1367 reported, so a future reader can see
+   * what was actually reachable rather than inferring it from a list.
+   */
+  it('an editor cannot move the five quota counters or the invoice inputs (AGL-1367)', async () => {
+    // storagePerHostMb: `counters/media.bytes` IS the wall. Zeroing it is
+    // unbounded Firebase Storage against a Free plan's 250 MB — real
+    // infrastructure cost, and the storage arm of the metered invoice.
+    await mustDeny(
+      'zeroing counters/media.bytes',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'counters', 'media'), {
+        bytes: 0,
+        count: 0,
+      }),
+    )
+    // The four month-keyed gates, all read-compare-proceed on `[YYYY-MM]`.
+    for (const counter of [
+      'formSubmissions',
+      'emailSends',
+      'workflowRuns',
+      'actionRuns',
+    ]) {
+      await mustDeny(
+        `zeroing counters/${counter}[month]`,
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'counters', counter), {
+          '2026-08': 0,
+        }),
+      )
+    }
+    // Deleting the doc is the same bypass by another route — the readers all
+    // default a missing counter to 0.
+    await mustDeny(
+      'deleting counters/media outright',
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'counters', 'media')),
+    )
+    // The bandwidth arm of the invoice (AGL-1280 turned the metered
+    // pass-through on for every paid plan, so this is money).
+    await mustDeny(
+      'zeroing analytics/{day}.total',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'analytics', '2026-08-01'), {
+        total: 0,
+      }),
+    )
+    await mustDeny(
+      'deleting an analytics day',
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'analytics', '2026-08-01')),
+    )
+  })
+
+  /**
+   * The seat-recycling half (AGL-1367). Deleting a roster row revokes
+   * NOTHING — real access lives in `orgs/{orgId}/members/{uid}.hostAccess`,
+   * which is `write: false`, projected into the frozen `memberRoles` — but
+   * /api/hosts/members counts these rows for the seat cap. So the roster was
+   * a free seat dispenser: delete N rows, keep N working collaborators, add N
+   * more, each passing the count. `extraCollaboratorMonthlyUsd` is $1-3/seat.
+   */
+  it('an editor cannot recycle collaborator seats through the host roster (AGL-1367)', async () => {
+    await mustDeny(
+      'deleting a hosts/{hostId}/members row',
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'members', 'm-collab')),
+    )
+    await mustDeny(
+      'forging a hosts/{hostId}/members row',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'members', 'm-forged'), {
+        email: 'me@acme.test', role: 'admin', status: 'active',
+      }),
+    )
+    await mustDeny(
+      'promoting a roster row to admin',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'members', 'm-collab'), {
+        role: 'admin',
+      }),
+    )
+    // The roster row is not access, and the deny does not pretend otherwise:
+    // the projection it is a shadow of was already frozen.
+    await mustDeny(
+      'writing the real access record',
+      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'members', 'uid-collab'), {
+        role: 'editor', hostAccess: { [HOST]: 'admin' },
+      }),
+    )
+  })
+
+  /**
+   * Positive controls (AGL-1367). A deny that breaks quota accounting or the
+   * usage rollup would be worse than the bug: the counters exist to be
+   * WRITTEN by the server and READ by the console, and both still work.
+   *
+   * `withSecurityRulesDisabled` is the Admin SDK in the emulator — the same
+   * bypass /api/billing/report-usage, /api/media/upload, the forms endpoint
+   * and the analytics collector run under in production.
+   */
+  it('the server still writes the meters and every member still reads them (AGL-1367)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      // The media/upload + upload-url accounting write.
+      await updateDoc(doc(db, 'hosts', HOST, 'counters', 'media'), {
+        bytes: 250_000_000, count: 813,
+      })
+      // The forms endpoint's per-month increment.
+      await updateDoc(doc(db, 'hosts', HOST, 'counters', 'formSubmissions'), {
+        '2026-08': 101,
+      })
+      // The analytics collector's daily rollup.
+      await setDoc(doc(db, 'hosts', HOST, 'analytics', '2026-08-02'), {
+        total: 12,
+      })
+      // The members API's roster write.
+      await setDoc(doc(db, 'hosts', HOST, 'members', 'm-new'), {
+        email: 'new@acme.test', role: 'viewer', status: 'invited',
+      })
+    })
+    // report-usage reads all three back through the Admin SDK; the console
+    // renders the same documents through the client SDK, for EVERY role —
+    // billing-usage, billing-metered-estimate, quota-warnings-banner and the
+    // media library all `getDoc` them, and denying the read would blank the
+    // usage meters instead of closing anything.
+    for (const uid of [OWNER, EDITOR, VIEWER]) {
+      const counter = await getDoc(
+        doc(authed(uid), 'hosts', HOST, 'counters', 'media'),
+      )
+      assert.equal(counter.data().bytes, 250_000_000)
+      await mustAllow(
+        `${uid} reads analytics/{day}`,
+        getDoc(doc(authed(uid), 'hosts', HOST, 'analytics', '2026-08-02')),
+      )
+      await mustAllow(
+        `${uid} reads the host roster`,
+        getDoc(doc(authed(uid), 'hosts', HOST, 'members', 'm-new')),
+      )
+    }
+    // Not to an outsider, though — the catch-all's read is still membership
+    // gated, and this proves the read control is a grant and not a blanket.
+    await assertFails(
+      getDoc(doc(authed(OUTSIDER), 'hosts', HOST, 'counters', 'media')),
+    )
+    // And the editor's own authoring is untouched: the catch-all still GRANTS
+    // everywhere it did before, so a passing suite above cannot be a rules
+    // file that denies the whole host subtree.
+    await mustAllow(
+      'editor updates a variable',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'variables', 'var-1'), {
+        value: '3',
+      }),
+    )
+    await mustAllow(
+      'editor writes screen version history',
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v9'),
+        { nodes: {} },
+      ),
+    )
+    await mustAllow(
+      'editor soft-deletes a webhook',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'webhooks', 'wh1'), {
+        deletedAt: new Date(),
+      }),
     )
   })
 

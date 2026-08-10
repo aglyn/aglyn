@@ -27,6 +27,31 @@
 // the browser). Neither is safe from here; the deep path has no dependencies.
 import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 import type { ListingVerificationRequest } from '@aglyn/aglyn/app-utils/marketplace-verification'
+// Visibility lives in core (AGL-876), for the same reason the artifact-type
+// union and the verification policy do: the console's listing route asks the
+// question and `scope:app` may not depend on `aglyn:addons`. Imported AND
+// re-exported — `installTargetsFor` and `listingArtifactLabel` below call
+// `listingArtifactType` locally, and a bare `export … from` binds nothing.
+// The write-deny classification (AGL-1361) rides along for the same reason:
+// it is a statement about the fields this policy reads, and the guard that
+// enforces it lives in core beside the rules parser.
+import {
+  isListingBrowsable,
+  isListingDeleted,
+  isPrivateListing,
+  LISTING_CLIENT_WRITABLE_FIELDS,
+  LISTING_UNPERSISTED_FIELDS,
+  listingArtifactType,
+} from '@aglyn/aglyn/app-utils/marketplace-listing-visibility'
+
+export {
+  isListingBrowsable,
+  isListingDeleted,
+  isPrivateListing,
+  LISTING_CLIENT_WRITABLE_FIELDS,
+  LISTING_UNPERSISTED_FIELDS,
+  listingArtifactType,
+}
 
 /**
  * `profiles/{uid}` — a person's public identity.
@@ -476,25 +501,6 @@ export function resolveInstallPlan(
   return hosts.selectedHostIds.map((hostId) => ({ scope: 'host', hostId }))
 }
 
-/**
- * The listing's artifact type, tolerating the pre-AGL-654 shape.
- *
- * Legacy listings carry `type`/`kind` instead; a component was the absence
- * of both, which is why this defaults there rather than throwing. Keeping
- * the fallback means old docs keep resolving correctly instead of silently
- * becoming un-installable.
- */
-export function listingArtifactType(listing: {
-  artifactType?: string
-  type?: string
-  kind?: string
-}): MarketplaceArtifactType {
-  if (listing.artifactType) return listing.artifactType as MarketplaceArtifactType
-  if (listing.kind === 'template') return 'template'
-  if (listing.type === 'plugin') return 'plugin'
-  return 'component'
-}
-
 export type ListingReviewStatus =
   | 'submitted'
   | 'in_review'
@@ -604,42 +610,6 @@ export function newestApprovedVersion<T extends ReviewableVersion>(
 }
 
 /**
- * Private plugins (AGL-968): an org builds for its own sites without
- * publishing to anyone. Never browsable — not even for the owner, who
- * reaches it through their own plugins area — and installable only by the
- * owning org (enforced in `install-plugin`, not in the UI). The review bar
- * is identical: private code still runs on our infrastructure.
- */
-export function isPrivateListing(listing: {
-  visibility?: string
-}): boolean {
-  return listing.visibility === 'private'
-}
-
-/**
- * Whether a listing has been soft-deleted (AGL-1196).
- *
- * Browse used to express this as `where('deletedAt','==',null)` in the query
- * itself. That put a MUTABLE field in a predicate: `deletedAt` flips on every
- * unpublish/republish, and a document that stops matching a live query can
- * leave a `noDocument` tombstone at its own path — which the detail page then
- * reads BY ID and 404s on (AGL-827, AGL-929). Filtering in memory removes the
- * mechanism instead of healing it.
- *
- * FALSY, not `=== null`. Firestore's `== null` matches only an explicit null
- * and cannot express "field is absent", so a listing written without the field
- * was invisible to the old query. Absent means live.
- *
- * Deliberately NOT folded into `isListingBrowsable`: that check carries an
- * owner exemption, so a publisher can watch their own submission move through
- * review. Deletion has no such exemption — a deleted listing is gone for
- * everyone, including the org that owns it.
- */
-export function isListingDeleted(listing: { deletedAt?: unknown }): boolean {
-  return Boolean(listing.deletedAt)
-}
-
-/**
  * What a listing is still missing before it can face the marketplace
  * (AGL-968/994).
  *
@@ -663,31 +633,6 @@ export function missingPublicListingContent(listing: {
   if (!listing.readme?.trim()) missing.push('a README')
   if (!listing.license?.trim()) missing.push('a license')
   return missing
-}
-
-/** Whether a plugin listing is publicly browsable (AGL-432). */
-export function isListingBrowsable(listing: {
-  artifactType?: string
-  type?: string
-  kind?: string
-  reviewStatus?: string
-  hiddenAt?: unknown
-  visibility?: string
-}): boolean {
-  // Staff takedown applies to EVERY artifact type (AGL-658). Pre-publication
-  // review is plugin-only — plugins execute code, so they earn the wait —
-  // but a component or template that turns out to be abusive must be
-  // removable too, and before this it simply was not: the early return
-  // below meant anything non-plugin was permanently browsable.
-  if (listing.hiddenAt) return false
-  // Private listings never reach the marketplace (AGL-968).
-  if (isPrivateListing(listing)) return false
-  if (listingArtifactType(listing) !== 'plugin') return true
-  return (
-    listing.reviewStatus === undefined ||
-    listing.reviewStatus === 'listed' ||
-    listing.reviewStatus === 'verified'
-  )
 }
 
 /** Fixed category taxonomy for marketplace listings (AGL-430). */

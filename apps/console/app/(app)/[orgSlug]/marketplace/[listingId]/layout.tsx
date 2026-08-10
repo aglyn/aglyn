@@ -17,13 +17,29 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { listingSocialCard } from './listing-social-card'
+import { readListingForSocialCard } from './listing-social-card.server'
 
-// Title-only shell (AGL-1059): the page is a client component, and a client
-// component cannot export `metadata` — so its title lives here, in the
-// nearest server layout. The suffix comes from the root title template.
-export const metadata: Metadata = { title: 'Marketplace listing' }
+// Server shell (AGL-1059): the page is a client component, and a client
+// component cannot export `metadata` — so the head lives here, in the nearest
+// server layout. The `· Aglyn` suffix comes from the root title template.
+//
+// It was a title-only constant until AGL-876. Now it also builds the social
+// card from the listing itself, so a link shared into Slack unfurls as the
+// listing rather than as the generic console card every listing shared. The
+// read is best-effort and the card falls back to exactly the old constant —
+// see `listing-social-card.ts` for why a page behind a client-side auth gate
+// has a card worth getting right, and which listings deliberately do not.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ listingId: string }>
+}): Promise<Metadata> {
+  const { listingId } = await params
+  return listingSocialCard(await readListingForSocialCard(listingId))
+}
 
-export default function MarketplaceListingTitleLayout({
+export default function MarketplaceListingMetaLayout({
   children,
 }: {
   children: ReactNode

@@ -189,6 +189,39 @@ describe('social card image resolution (AGL-1337)', () => {
     })
   })
 
+  describe('an explicit origin (AGL-876)', () => {
+    it('absolutises for a surface with no host record at all', () => {
+      // The console marketplace listing card: not a tenant site, so there is
+      // no host doc to derive an origin from, and without this the resolver
+      // could only ever return absolute URLs unchanged.
+      const resolved = resolveSocialImage({
+        sources: [{ image: '/api/media/cdn/org:org-9/logo.png' }],
+        origin: 'https://app.aglyn.com',
+      })
+
+      expect(resolved?.url).toBe(
+        'https://app.aglyn.com/api/media/cdn/org:org-9/logo.png',
+      )
+    })
+
+    it('wins over the origin the host record would have named', () => {
+      // A caller passing both is stating the origin it actually serves from.
+      const resolved = resolveSocialImage({
+        sources: [{ image: '/api/media/cdn/host-1/img' }],
+        host: HOST,
+        origin: 'https://app.aglyn.com',
+      })
+
+      expect(resolved?.url).toBe('https://app.aglyn.com/api/media/cdn/host-1/img')
+    })
+
+    it('still refuses a relative URL when neither is supplied', () => {
+      expect(
+        resolveSocialImage({ sources: [{ image: '/api/media/cdn/h/img' }] }),
+      ).toBeUndefined()
+    })
+  })
+
   describe('dimensions', () => {
     it('emits a pair only when both sides are positive', () => {
       const only = (source: Record<string, unknown>) =>
