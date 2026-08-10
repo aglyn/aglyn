@@ -46,6 +46,7 @@ import {
   saveNodesGuarded,
   useFirestore,
   useUser,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material'
 import { doc, setDoc, Timestamp } from 'firebase/firestore'
@@ -163,7 +164,19 @@ function SystemEmailBesignerPage() {
   const [subjectInput, setSubjectInput] = useState<string | null>(null)
   const [preheaderInput, setPreheaderInput] = useState<string | null>(null)
 
-  const { data: template } = useFirestoreDoc<SystemEmailTemplateState>(
+  const {
+    data: template,
+    status: templateStatus,
+    /**
+     * The template doc the properties drawer is seeded from is unconfirmed
+     * by the server (AGL-1358). Both fields of that form fall back to
+     * `template?.…` whenever the staffer edited only one of them, so the
+     * save carries BOTH — `merge: true` protects neither — and a cached seed
+     * writes yesterday's preheader back over a newer one on a platform email
+     * that every account on Aglyn receives.
+     */
+    fromCache: templateFromCache,
+  } = useFirestoreDoc<SystemEmailTemplateState>(
     () =>
       editable ? doc(firestore, SYSTEM_EMAIL_COLLECTION, templateKey) : null,
     [firestore, templateKey, editable],
@@ -273,16 +286,56 @@ function SystemEmailBesignerPage() {
   const handlePropertiesSave = useCallback(async () => {
     if (!definition) return
     try {
-      await setDoc(
-        doc(firestore, SYSTEM_EMAIL_COLLECTION, templateKey),
+      /**
+       * Refuse a subject seeded from a read the server never confirmed
+       * (AGL-1358). The host-scoped twin of this page carried this guard
+       * from AGL-1066 and this one never got it — the whole reason the two
+       * are named as a pair on the issue.
+       *
+       * `fromCache` rather than `staleSession` alone: this is a
+       * listener-only page, and the console's stale-session heuristic needs
+       * two distinct labelled collections denied inside 60s, which no route
+       * that only listens can ever reach. That is exactly how AGL-1356
+       * stayed open. The guard still consults it — as the third signal, not
+       * the only one.
+       *
+       * The node save needs no such guard: `use-besigner-document` stamps
+       * and compares `updatedAt` (AGL-674) and `saveNodesGuarded` re-checks
+       * the baseline inside a transaction (AGL-1301), so a stale-seeded node
+       * write is refused server-side before it can land.
+       *
+       * The guard WRAPS the write. An early return is a shape you can keep
+       * while losing the protection.
+       */
+      const verdict = await writeGuardedBySeed(
         {
-          subject: (subjectInput ?? template?.subject ?? '').trim(),
-          preheader: (preheaderInput ?? template?.preheader ?? '').trim(),
-          updatedAt: Timestamp.now(),
-          updatedByEmail: (user as { email?: string } | undefined)?.email ?? '',
+          subject: 'email',
+          unreadable: templateStatus === 'error',
+          fromCache: templateFromCache,
         },
-        { merge: true },
+        async () => {
+          await setDoc(
+            doc(firestore, SYSTEM_EMAIL_COLLECTION, templateKey),
+            {
+              subject: (subjectInput ?? template?.subject ?? '').trim(),
+              preheader: (preheaderInput ?? template?.preheader ?? '').trim(),
+              updatedAt: Timestamp.now(),
+              updatedByEmail:
+                (user as { email?: string } | undefined)?.email ?? '',
+            },
+            { merge: true },
+          )
+        },
       )
+      // A refusal leaves the drawer open with what was typed. Clearing the
+      // inputs would send the staffer back to retype a form that will be
+      // refused again just as quietly.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       setSubjectInput(null)
       setPreheaderInput(null)
       enqueueSnackbar('Subject and preheader saved', {
@@ -302,6 +355,8 @@ function SystemEmailBesignerPage() {
     subjectInput,
     preheaderInput,
     template,
+    templateFromCache,
+    templateStatus,
     user,
     enqueueSnackbar,
   ])
