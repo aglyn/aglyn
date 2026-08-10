@@ -41,10 +41,19 @@ export const Leaf = observer(
     // Pull sx/className/style out of the node's props so the spreads below
     // can never clobber the merged values composed explicitly afterwards
     // (AGL-569: `props.sx` used to overwrite the node-level sx entirely).
+    //
+    // The visibility directives (AGL-1314) come out here too. The compose
+    // step consumes and strips them, so a rendered page never carries one —
+    // but the component EDITOR renders definition nodes ungrafted, on
+    // purpose (the author has to see and select the part a page will hide),
+    // and there the raw `hideIf` would spread onto the element as an
+    // unknown `hideif` DOM attribute.
     const {
       sx: propsSx,
       className: propsClassName,
       style: propsStyle,
+      [Aglyn.NODE_HIDE_IF_PROP]: _hideIf,
+      [Aglyn.NODE_HIDE_UNLESS_PROP]: _hideUnless,
       ...resolvedProps
     } = (node?.resolvedProps ?? node?.props ?? {}) as Record<string, any>
     const Factory = Aglyn.components.getFactory(node?.componentId)

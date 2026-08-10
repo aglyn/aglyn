@@ -24,6 +24,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   ATTRIBUTE_COMMIT_DEBOUNCE_MS,
   buildInstancePropFields,
+  buildVisibilityFields,
   elementPropsComponentMapper,
   useDebouncedCommit,
 } from './element-props-form.component'
@@ -247,5 +248,53 @@ describe('buildInstancePropFields (AGL-1247)', () => {
   it('negative control: an unparameterised definition adds no fields', () => {
     expect(buildInstancePropFields(undefined)).toEqual([])
     expect(buildInstancePropFields([])).toEqual([])
+  })
+})
+
+// Making part of a component optional (AGL-1314). The contract that matters
+// is the same one AGL-1247 has: the field NAME must be the prop key the
+// graft evaluates, or the toggle saves somewhere nothing reads.
+describe('buildVisibilityFields (AGL-1314)', () => {
+  it('names each field for the directive the graft evaluates', () => {
+    const fields = buildVisibilityFields()
+    expect(fields.map((field) => field.name)).toEqual([
+      Aglyn.NODE_HIDE_IF_PROP,
+      Aglyn.NODE_HIDE_UNLESS_PROP,
+    ])
+    // Both polarities, not just one: "hide the mockup" needs the first and
+    // "no link, no button" (AGL-1348) needs the second.
+    expect(fields).toHaveLength(2)
+  })
+
+  it('uses a registered, token-capable editor for both', () => {
+    const fields = buildVisibilityFields()
+    for (const field of fields) {
+      // AGL-584: an unregistered editor throws and blanks the whole panel.
+      expect(String(field.component) in elementPropsComponentMapper).toBe(true)
+      expect(field.component).toBe(TOKEN_TEXT_FIELD_COMPONENT)
+    }
+  })
+
+  it('passes token options through, since the value is almost always a prop', () => {
+    const options = [{ value: '{{prop.hideMedia}}', label: 'Hide the mockup' }]
+    const fields = buildVisibilityFields(options, { a: 1 })
+    for (const field of fields) {
+      expect(field).toMatchObject({
+        tokenOptions: options,
+        tokenLabelContext: { a: 1 },
+      })
+    }
+  })
+
+  it('describes both directions rather than leaving the author to guess', () => {
+    const [hideIf, hideUnless] = buildVisibilityFields()
+    expect(hideIf.label).toBe('Hide when')
+    expect(hideUnless.label).toBe('Hide unless')
+    // AGL-600 gives every described attribute a tooltip; these fields are
+    // appended after that map runs, so they carry their own.
+    for (const field of buildVisibilityFields()) {
+      expect(field.help).toMatchObject({ title: field.label })
+      expect(String(field.description).length).toBeGreaterThan(0)
+    }
   })
 })

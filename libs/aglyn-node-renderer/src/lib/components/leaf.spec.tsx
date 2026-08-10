@@ -111,3 +111,36 @@ describe('Leaf positional children (AGL-1237)', () => {
     expect(container.querySelector('[data-testid="kid"]')).toBeTruthy()
   })
 })
+
+/**
+ * Visibility directives (AGL-1314) are compose-time instructions. The graft
+ * consumes and strips them, so a published page never carries one — but the
+ * component EDITOR renders definition nodes ungrafted on purpose, and there
+ * the raw directive would spread straight onto the element.
+ */
+describe('Leaf visibility directives (AGL-1314)', () => {
+  it('keeps the directives out of the DOM while everything else passes through', () => {
+    registerSchemas(false)
+    render(
+      <TreeRoot
+        node={
+          node('root', 'plain', [], {
+            'data-testid': 'lone',
+            title: 'kept',
+            [Aglyn.NODE_HIDE_IF_PROP]: '{{prop.hideMedia}}',
+            [Aglyn.NODE_HIDE_UNLESS_PROP]: '{{prop.ctaLink}}',
+          }) as any
+        }
+      />,
+    )
+    const el = screen.getByTestId('lone')
+    expect(el.getAttribute('title')).toBe('kept')
+    expect(el.hasAttribute(Aglyn.NODE_HIDE_IF_PROP.toLowerCase())).toBe(false)
+    expect(el.hasAttribute(Aglyn.NODE_HIDE_UNLESS_PROP.toLowerCase())).toBe(
+      false,
+    )
+    // Nothing else named like them either — a renamed spelling would be the
+    // same leak wearing a different attribute.
+    expect(el.outerHTML.toLowerCase()).not.toContain('hide')
+  })
+})
