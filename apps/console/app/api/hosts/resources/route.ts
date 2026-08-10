@@ -356,7 +356,9 @@ async function handler(request: Request): Promise<Response> {
                 .get()
             ).data().count
           : resourceKey === 'screen'
-            ? await countBillableScreens(hostRef)
+            ? // The routing map decides which screens count (AGL-1383), and
+              // the host snapshot above already holds it — no second read.
+              await countBillableScreens(hostRef, hostSnapshot.get('screens'))
             : (await collectionRef.count().get()).data().count
       const quota = checkQuota(org, resource.quotaKey as any, used)
       if (!quota.allowed) {

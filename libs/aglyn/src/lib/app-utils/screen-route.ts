@@ -182,3 +182,45 @@ export function findScreenIdByRoutePath(
 export function screenRoutePathToUrl(path: string): string {
   return path === SCREEN_ROOT_PATH ? SCREEN_ROOT_PATH : `/${path}`
 }
+
+/**
+ * `kind` of a besigner email document (AGL-395): a screen authored on the
+ * Emails page and sent by a campaign, never served at a URL.
+ */
+export const SCREEN_KIND_EMAIL = 'email'
+
+/** The two self-describing fields {@link screenClaimsToBeAPage} reads. */
+export interface ScreenPageClaim {
+  kind?: string
+  deletedAt?: unknown
+}
+
+/**
+ * Whether a screen document claims to be a page of the site at all (AGL-1383).
+ *
+ * Two fields say it is not: `deletedAt` (soft-deleted — delete stamps the field
+ * rather than removing the doc) and `kind: 'email'` (an Emails-page document,
+ * which has no URL and is rendered only by the campaign sender, straight off
+ * the doc). Both are also the two exclusions `countBillableScreens` subtracts
+ * before enforcing `screensPerHost`.
+ *
+ * That is exactly why this is ONE function with TWO callers rather than two
+ * matching filters. Both fields are ordinary client-writable fields on
+ * `hosts/{hostId}/screens/{screenId}`, and until AGL-1383 only the count read
+ * them: an editor on a Free site could `updateDoc(screenRef, {kind: 'email'})`
+ * and the screen stopped counting against the plan while the routing map still
+ * pointed at it and the runtime still served it — a live page, for free. An
+ * exclusion is only sound if an excluded screen genuinely is not a page, so the
+ * serve path asks this question too, and flipping either field now costs the
+ * page instead of the plan.
+ *
+ * A CLAIM, not the answer: the routing map decides reachability, and this only
+ * says what the document says about itself. `countBillableScreens` trusts it
+ * only for screens the map does not route.
+ */
+export function screenClaimsToBeAPage(
+  screen: ScreenPageClaim | null | undefined,
+): boolean {
+  if (!screen) return false
+  return screen.deletedAt == null && screen.kind !== SCREEN_KIND_EMAIL
+}

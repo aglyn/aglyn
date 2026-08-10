@@ -22,6 +22,7 @@ import {
   findScreenIdByRoutePath,
   normalizeScreenSlug,
   SCREEN_ROOT_PATH,
+  screenClaimsToBeAPage,
   screenRoutePathToUrl,
   wouldCreateScreenCycle,
 } from './screen-route'
@@ -173,5 +174,34 @@ describe('wouldCreateScreenCycle', () => {
     expect(wouldCreateScreenCycle('company', 'team', screens)).toBe(true)
     expect(wouldCreateScreenCycle('team', 'company', screens)).toBe(false)
     expect(wouldCreateScreenCycle('company', undefined, screens)).toBe(false)
+  })
+})
+
+/**
+ * One predicate, two callers (AGL-1383): `getScreen` refuses what
+ * `countBillableScreens` does not charge for. Two matching filters in two
+ * repos' worth of distance is how the disagreement started — the runtime
+ * served `kind: 'email'` screens the cap had already forgiven.
+ */
+describe('screenClaimsToBeAPage', () => {
+  it('accepts an ordinary screen', () => {
+    expect(screenClaimsToBeAPage({})).toBe(true)
+    expect(screenClaimsToBeAPage({ kind: 'page' })).toBe(true)
+    // Explicit nulls are what importers and a restore leave behind.
+    expect(screenClaimsToBeAPage({ deletedAt: null, kind: undefined })).toBe(true)
+  })
+
+  it('rejects the two claims the screen cap subtracts on', () => {
+    expect(screenClaimsToBeAPage({ kind: 'email' })).toBe(false)
+    expect(screenClaimsToBeAPage({ deletedAt: { seconds: 1 } })).toBe(false)
+    // A Firestore Timestamp is an object; so is the `_seconds` shape a JSON
+    // round trip leaves. Any non-null value means deleted.
+    expect(screenClaimsToBeAPage({ deletedAt: { _seconds: 1 } })).toBe(false)
+    expect(screenClaimsToBeAPage({ deletedAt: 0 })).toBe(false)
+  })
+
+  it('treats a missing document as not a page', () => {
+    expect(screenClaimsToBeAPage(null)).toBe(false)
+    expect(screenClaimsToBeAPage(undefined)).toBe(false)
   })
 })

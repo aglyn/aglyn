@@ -630,10 +630,38 @@ service cloud.firestore {
       // the id about to be created, create, then point it back. Counting
       // documents is not something rules can do, which is why this is a route
       // and not a condition.
+      // The two fields `countBillableScreens` subtracts on are frozen against
+      // the client (AGL-1383), for the same reason `collections.kind` is
+      // frozen below: a field the console reads as descriptive metadata is an
+      // INPUT TO A PAID LIMIT, and it was writable by the party the limit is
+      // enforced against.
+      //
+      // `kind` is set once, by /api/hosts/resources, and no client path has
+      // ever written it again — the email composer sends it on the CREATE the
+      // route owns, and `kind: 'email'` is what takes a screen off
+      // `screensPerHost`. `deletedAt` is write-ONCE rather than frozen,
+      // because soft-delete is a legitimate client write (the screens page and
+      // the Emails card both stamp it) — what is denied is clearing or moving
+      // it, i.e. UN-deleting, which no console surface offers.
+      //
+      // Both halves matter because the quota is a CREATE-TIME gate and nothing
+      // re-counts afterwards. Without this, either field could be flipped on
+      // and back off in a loop — create five, mark them excluded, create five
+      // more — minting permanent slots a plan never sold, which no amount of
+      // counting correctly at the moment of create can see. Serve-side refusal
+      // and the routing-map count make an excluded screen worthless while it
+      // is excluded; this is what stops it being laundered back into a page.
       match /screens/{screenId} {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
-        allow update, delete: if isStaff() ||
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+            !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['kind']) &&
+            !(('deletedAt' in resource.data) &&
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['deletedAt'])));
+        allow delete: if isStaff() ||
           (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);

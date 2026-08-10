@@ -34,6 +34,7 @@ import {
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -1195,6 +1196,206 @@ describe('hosts', () => {
         'editor publishes a version (moves the parent pointer)',
         updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
           versionId: 'v1',
+        }),
+      )
+    })
+  })
+
+  /**
+   * AGL-1383. `screensPerHost` is enforced at CREATE by
+   * `countBillableScreens`, which counts screens minus three exclusions. Two
+   * of them — `deletedAt` and `kind: 'email'` — were ordinary fields on the
+   * screen's own document, writable by the very editor the cap is enforced
+   * against, so `updateDoc(screenRef, {kind: 'email'})` took a live page off
+   * the plan in one write while the routing map still served it.
+   *
+   * The count and the runtime were fixed to agree (a routed screen counts;
+   * an excluded screen is not served). These rules close the third leg, which
+   * neither of those can reach: the cap is a create-time gate and nothing
+   * re-counts afterwards, so flipping a field on and back off in a loop —
+   * create five, exclude them, create five more, restore — mints permanent
+   * slots no plan sold. Freezing the fields is what stops the laundering.
+   *
+   * The positive controls are the point of the exercise. `deletedAt` is
+   * write-ONCE, not frozen, because soft-delete is a legitimate client write
+   * on two console surfaces; and every email document is authored, saved and
+   * deleted through the client SDK, so denying too much here breaks the
+   * Emails page rather than the bypass.
+   */
+  describe('the fields the screen cap counts on are not the client\'s to write (AGL-1383)', () => {
+    /** A published page and an Emails-page document, as the product leaves them. */
+    const seedScreens = async () => {
+      await env.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await setDoc(doc(db, 'hosts', HOST, 'screens', 'page-1'), {
+          displayName: 'Pricing', slug: 'pricing', versionId: 'v1',
+        })
+        await setDoc(doc(db, 'hosts', HOST, 'screens', 'email-1'), {
+          displayName: 'Welcome', kind: 'email', versionId: 'v1',
+        })
+        await setDoc(doc(db, 'hosts', HOST, 'screens', 'deleted-1'), {
+          displayName: 'Old', deletedAt: new Date('2026-01-01'),
+        })
+      })
+    }
+
+    it('an editor cannot relabel a page as an email document', async () => {
+      await seedScreens()
+      // The bypass itself: one write, no route change, page stays live, and
+      // the screen stops counting against `screensPerHost`.
+      await mustDeny(
+        'screens/page-1 { kind: "email" }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'page-1'), {
+          kind: 'email',
+        }),
+      )
+      // And the return leg, which is what would turn a cheaply-minted email
+      // document back into a page after the count was taken.
+      await mustDeny(
+        'screens/email-1 { kind: "page" }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'email-1'), {
+          kind: 'page',
+        }),
+      )
+      // Removing the field answers the same question as setting it.
+      await mustDeny(
+        'screens/email-1 { kind: deleteField() }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'email-1'), {
+          kind: deleteField(),
+        }),
+      )
+    })
+
+    it('an editor cannot un-delete a screen', async () => {
+      await seedScreens()
+      await mustDeny(
+        'screens/deleted-1 { deletedAt: deleteField() }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'deleted-1'), {
+          deletedAt: deleteField(),
+        }),
+      )
+      await mustDeny(
+        'screens/deleted-1 { deletedAt: null }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'deleted-1'), {
+          deletedAt: null,
+        }),
+      )
+      await mustDeny(
+        'screens/deleted-1 { deletedAt: <a different time> }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'deleted-1'), {
+          deletedAt: new Date('2026-02-02'),
+        }),
+      )
+    })
+
+    it('but deleting is still a client write, on both surfaces', async () => {
+      await seedScreens()
+      // The screens page: `updateDoc(screenRef, { deletedAt: Timestamp.now() })`.
+      await mustAllow(
+        'screens/page-1 soft delete',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'page-1'), {
+          deletedAt: new Date(),
+        }),
+      )
+      // The Emails card's Delete button, which is the same write on a
+      // document whose `kind` this rule now freezes — an over-broad deny
+      // would have taken it with it.
+      await mustAllow(
+        'screens/email-1 soft delete',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'email-1'), {
+          deletedAt: new Date(),
+        }),
+      )
+      // Renaming a screen that is ALREADY deleted still works: the rule bites
+      // on touching `deletedAt`, not on the document carrying it.
+      await mustAllow(
+        'screens/deleted-1 rename',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'deleted-1'), {
+          displayName: 'Old (archived)',
+        }),
+      )
+      // And hard delete is untouched — /api/resources/erase aside, the rules
+      // never denied it.
+      await mustAllow(
+        'screens/deleted-1 delete',
+        deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'deleted-1')),
+      )
+    })
+
+    it('leaves publishing, unpublishing and authoring alone', async () => {
+      await seedScreens()
+      // `publishScreenRoute`: a merge-set of slug + publishedAt. This is the
+      // write that makes a screen a page, so denying it would be far worse
+      // than the bypass.
+      await mustAllow(
+        'screens/page-1 publish (merge-set slug + publishedAt)',
+        setDoc(
+          doc(authed(EDITOR), 'hosts', HOST, 'screens', 'page-1'),
+          { slug: 'plans', publishedAt: new Date() },
+          { merge: true },
+        ),
+      )
+      // `unpublishScreenRoute`: the mirror, clearing both.
+      await mustAllow(
+        'screens/page-1 unpublish (clear publishedAt + slug)',
+        setDoc(
+          doc(authed(EDITOR), 'hosts', HOST, 'screens', 'page-1'),
+          { publishedAt: deleteField(), slug: deleteField() },
+          { merge: true },
+        ),
+      )
+      // The hierarchy drag handler, the SEO panel, and the version switcher.
+      await mustAllow(
+        'screens/page-1 re-parent + reorder',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'page-1'), {
+          parentId: 'screen-1', order: 2, updatedAt: new Date(),
+        }),
+      )
+      await mustAllow(
+        'screens/page-1 seo + protection',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'page-1'), {
+          seo: { title: 'Plans' }, protection: { passwordHash: 'abc' },
+        }),
+      )
+      // The Emails page end to end, minus the API-owned create: an email
+      // document is opened in the besigner, its canvas saved, and its name
+      // edited — all client writes on a `kind: 'email'` document.
+      await mustAllow(
+        'screens/email-1 rename',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'email-1'), {
+          displayName: 'Welcome v2', updatedAt: new Date(),
+        }),
+      )
+      await env.withSecurityRulesDisabled(async (context) => {
+        await setDoc(
+          doc(context.firestore(), 'hosts', HOST, 'screens', 'email-1', 'versions', 'v1'),
+          { screenId: 'email-1', nodes: { root: {} } },
+        )
+      })
+      await mustAllow(
+        'screens/email-1/versions/v1 canvas save',
+        setDoc(
+          doc(authed(EDITOR), 'hosts', HOST, 'screens', 'email-1', 'versions', 'v1'),
+          { nodes: { root: { id: 'root' } } },
+          { merge: true },
+        ),
+      )
+    })
+
+    // Staff tooling and the Admin SDK routes are unaffected — the erase route
+    // and any support fix would otherwise need a rules change to do their job.
+    it('staff can still write both fields', async () => {
+      await seedScreens()
+      await mustAllow(
+        'staff clears deletedAt',
+        updateDoc(doc(authed(STAFF, { staff: true }), 'hosts', HOST, 'screens', 'deleted-1'), {
+          deletedAt: deleteField(),
+        }),
+      )
+      await mustAllow(
+        'staff sets kind',
+        updateDoc(doc(authed(STAFF, { staff: true }), 'hosts', HOST, 'screens', 'page-1'), {
+          kind: 'email',
         }),
       )
     })

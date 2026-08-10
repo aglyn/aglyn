@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { screenClaimsToBeAPage } from '@aglyn/aglyn/server'
+
 /**
  * The three fields a content collection can point at a template screen
  * with. `templateScreenId` is the legacy AGL-105 field the tenant runtime
@@ -32,6 +34,12 @@ interface FieldSnapshot {
   id: string
   get(field: string): unknown
 }
+
+/**
+ * The host's `screens` routing map (screen id → route path) as
+ * `publishScreenRoute` writes it. Only membership is read here, never the path.
+ */
+export type ScreenRoutingMap = Record<string, unknown> | null | undefined
 
 interface QuerySnapshotLike {
   docs: Array<FieldSnapshot>
@@ -63,9 +71,33 @@ interface HostRefLike {
  * templates predate this need no backfill, and so re-pointing a collection
  * at a different screen takes effect immediately. The field mask keeps the
  * read to the two fields the filter looks at.
+ *
+ * ## The routing map outranks the document (AGL-1383)
+ *
+ * Two of those three exclusions are ordinary client-writable fields on the
+ * screen's OWN document, and the party they are subtracted on behalf of is the
+ * party being metered. `updateDoc(screenRef, {kind: 'email'})` — one write, no
+ * route change — used to take a live page off a Free plan's five and leave it
+ * serving, because nothing else read either field.
+ *
+ * So the document's account of itself is only consulted for screens the host's
+ * routing map does not route. **A routed screen counts, whatever it says about
+ * itself**, which is the invariant: what the site serves is what the plan pays
+ * for, and the only way to stop paying for a page is to stop publishing it.
+ * Since AGL-1383 the runtime refuses to serve an excluded screen too
+ * (`screenClaimsToBeAPage` in `getScreen`), so the two answers cannot drift:
+ * flipping either field costs the page rather than the slot.
+ *
+ * Template screens stay excluded even while routed. Publishing is how the
+ * compose pipeline picks a template up — it is the reason they HAVE a map
+ * entry — but AGL-1267 drops them from routing when the request arrives, so a
+ * template is not a page of the site by the same reachability test.
+ *
+ * `routingMap` costs no read: both callers hold the host snapshot already.
  */
 export async function countBillableScreens(
   hostRef: HostRefLike,
+  routingMap?: ScreenRoutingMap,
 ): Promise<number> {
   const [screens, collections] = await Promise.all([
     hostRef.collection('screens').select('kind', 'deletedAt').get(),
@@ -82,10 +114,15 @@ export async function countBillableScreens(
     }
   }
 
+  const routed = new Set(Object.keys(routingMap ?? {}))
+
   return screens.docs.filter(
     (screen) =>
-      screen.get('deletedAt') == null &&
-      screen.get('kind') !== 'email' &&
-      !templateScreenIds.has(screen.id),
+      !templateScreenIds.has(screen.id) &&
+      (routed.has(screen.id) ||
+        screenClaimsToBeAPage({
+          kind: screen.get('kind') as string,
+          deletedAt: screen.get('deletedAt'),
+        })),
   ).length
 }
