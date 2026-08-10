@@ -43,7 +43,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useHostVersionApi,
+} from '@aglyn/tenant-feature-instance'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
@@ -74,6 +77,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const firestore = useFirestore()
+  const createHostVersion = useHostVersionApi()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
@@ -167,17 +171,16 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
         if (!versionId) {
           versionId = Aglyn.createResourceUid()
           const timestamp = Timestamp.now()
-          await setDoc(
-            doc(
-              firestore,
-              'hosts',
-              hostId,
-              'components',
-              componentId,
-              'versions',
-              versionId,
-            ),
-            {
+          // Minting the first version rides /api/hosts/versions (AGL-1369):
+          // rules deny the client create, and the route allows a resource's
+          // FIRST version on every plan — which this always is, since the
+          // component reached here with no `versionId` at all.
+          await createHostVersion({
+            hostId,
+            kind: 'component',
+            parentId: componentId,
+            id: versionId,
+            data: {
               componentId,
               hostId,
               displayName: 'Initial version',
@@ -196,10 +199,8 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
                     },
                   },
               ...(definition?.rootId ? { rootId: definition.rootId } : {}),
-              createdAt: timestamp,
-              updatedAt: timestamp,
             },
-          )
+          })
           await updateDoc(
             doc(firestore, 'hosts', hostId, 'components', componentId),
             { versionId, updatedAt: timestamp },
@@ -224,6 +225,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
     },
     [
       opening,
+      createHostVersion,
       publishedVersionId,
       versions,
       firestore,

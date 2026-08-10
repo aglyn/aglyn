@@ -64,7 +64,11 @@ import { buildRoute, Route } from '../constants/route-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
 import { useCallback, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useHostVersionApi,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import ComponentIconField from './component-icon-field.component'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
@@ -88,6 +92,7 @@ export interface HostComponentsCardProps {
 export function HostComponentsCard(props: HostComponentsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const createHostVersion = useHostVersionApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { data: componentDocs } = useFirestoreCollection<any>(
@@ -205,30 +210,26 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         let versionId = definition.versionId as string | undefined
         if (!versionId) {
           versionId = Aglyn.createResourceUid()
-          const timestamp = Timestamp.now()
-          await setDoc(
-            doc(
-              firestore,
-              'hosts',
-              hostId,
-              'components',
-              definition.$id,
-              'versions',
-              versionId,
-            ),
-            {
+          // Minting the first version rides /api/hosts/versions (AGL-1369):
+          // rules deny the client create, and the route allows a resource's
+          // FIRST version on every plan — which this always is, since the
+          // component reached here with no `versionId` at all.
+          await createHostVersion({
+            hostId,
+            kind: 'component',
+            parentId: definition.$id,
+            id: versionId,
+            data: {
               componentId: definition.$id,
               hostId,
               displayName: 'Initial version',
               rootId: definition.rootId ?? null,
               nodes: definition.nodes ?? {},
-              createdAt: timestamp,
-              updatedAt: timestamp,
             },
-          )
+          })
           await updateDoc(
             doc(firestore, 'hosts', hostId, 'components', definition.$id),
-            { versionId, updatedAt: timestamp },
+            { versionId, updatedAt: Timestamp.now() },
           )
         }
         router.push(
@@ -248,7 +249,16 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         setOpening(null)
       }
     },
-    [opening, firestore, hostId, orgSlug, host, router, enqueueSnackbar],
+    [
+      opening,
+      firestore,
+      hostId,
+      orgSlug,
+      host,
+      router,
+      enqueueSnackbar,
+      createHostVersion,
+    ],
   )
 
   const handleDelete = useCallback(

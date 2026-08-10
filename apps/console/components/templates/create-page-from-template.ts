@@ -16,9 +16,7 @@
  */
 import * as Aglyn from '@aglyn/aglyn'
 import { resolveNamedTokens } from '@aglyn/aglyn'
-import { Timestamp } from '@aglyn/shared-util-timestamp'
 import type { Firestore } from 'firebase/firestore'
-import { doc, setDoc } from 'firebase/firestore'
 import { publishScreenRoute } from '../../constants/screen-publishing'
 
 /** Firestore-safe slug: lowercase, dashes, no leading/trailing dash. */
@@ -49,6 +47,13 @@ export async function createPageFromTemplate(
     resource: 'screen'
     data: Record<string, unknown>
     id?: string
+  }) => Promise<{ id: string }>,
+  createHostVersion: (options: {
+    hostId: string
+    kind: 'screen'
+    parentId: string
+    id?: string
+    data?: Record<string, unknown>
   }) => Promise<{ id: string }>,
   input: {
     hostId: string
@@ -87,10 +92,11 @@ export async function createPageFromTemplate(
 
   const screenId = Aglyn.createResourceUid()
   const versionId = Aglyn.createResourceUid()
-  const timestamp = Timestamp.now()
 
-  // Screen doc rides the quota-enforcing resources API (AGL-473); the
-  // version stays client-written, matching every other creation path.
+  // Screen doc rides the quota-enforcing resources API (AGL-473); the version
+  // rides /api/hosts/versions (AGL-1369), which allows a resource's FIRST
+  // version on any plan and charges `versioning` only for retaining more.
+  // This one is always a first — the screen above did not exist a line ago.
   await createHostResource({
     hostId,
     resource: 'screen',
@@ -102,16 +108,17 @@ export async function createPageFromTemplate(
       versionId,
     },
   })
-  await setDoc(
-    doc(firestore, 'hosts', hostId, 'screens', screenId, 'versions', versionId),
-    {
+  await createHostVersion({
+    hostId,
+    kind: 'screen',
+    parentId: screenId,
+    id: versionId,
+    data: {
       screenId,
       displayName: versionLabel,
       nodes: resolved,
-      createdAt: timestamp,
-      updatedAt: timestamp,
     },
-  )
+  })
   await publishScreenRoute(firestore, { hostId, screenId }, slug)
 
   return { screenId, slug, requestedSlug: base }

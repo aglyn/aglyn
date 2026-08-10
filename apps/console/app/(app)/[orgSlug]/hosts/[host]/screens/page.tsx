@@ -78,7 +78,11 @@ import {
 } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore, useHostResourceApi } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useHostResourceApi,
+  useHostVersionApi,
+} from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from '../../../../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../../../../components/auth-form-template.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -139,6 +143,7 @@ function Screens(props) {
   }, [])
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
+  const createHostVersion = useHostVersionApi()
   // The hierarchy table renders the whole tree, so no page-sized query: a
   // paginated slice could orphan children whose parent fell off the page.
   const { status, data } = useFirestoreCollection<any>(
@@ -242,10 +247,11 @@ function Screens(props) {
         ...(path && { slug: path }),
         versionId: newVersionId,
       }
+      // No createdAt/updatedAt: /api/hosts/versions stamps both server-side
+      // (AGL-1369), and a client Timestamp does not survive the JSON hop —
+      // the same reason the resources API stamps the doc above.
       const newVersionValue = {
         screenId: newId,
-        createdAt: timestamp,
-        updatedAt: timestamp,
         nodes: {
           [CANVAS_ROOT_ELEMENT_ID]: {
             $id: CANVAS_ROOT_ELEMENT_ID,
@@ -254,9 +260,11 @@ function Screens(props) {
           },
         },
       }
-      // Screen doc rides the quota-enforcing resources API (AGL-473);
-      // the first version doc stays client-written (versions aren't
-      // quota-governed and remain editor-writable in rules).
+      // Screen doc rides the quota-enforcing resources API (AGL-473); the
+      // first version rides /api/hosts/versions (AGL-1369). Rules deny client
+      // `create` under a screen's `versions` now, because that create is what
+      // the `versioning` entitlement sells — the route allows a resource's
+      // FIRST version on every plan and charges only for retaining more.
       await createHostResource({
         hostId,
         resource: 'screen',
@@ -264,18 +272,13 @@ function Screens(props) {
         data: newValues,
       })
         .then(() =>
-          setDoc(
-            doc(
-              firestore,
-              'hosts',
-              hostId,
-              'screens',
-              newId,
-              'versions',
-              newVersionId,
-            ),
-            newVersionValue,
-          ),
+          createHostVersion({
+            hostId,
+            kind: 'screen',
+            parentId: newId,
+            id: newVersionId,
+            data: newVersionValue,
+          }),
         )
         .then(() =>
           path
@@ -313,6 +316,7 @@ function Screens(props) {
       org,
       billableScreenCount,
       createHostResource,
+      createHostVersion,
       logActivity,
     ],
   )

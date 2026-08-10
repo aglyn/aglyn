@@ -37,6 +37,7 @@ import {
   useFirestoreCollection,
   useOrgDataScope,
   useHostResourceApi,
+  useHostVersionApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 
@@ -67,6 +68,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
   const { scope: dataScope } = useOrgDataScope({ hostId })
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
+  const createHostVersion = useHostVersionApi()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -167,9 +169,9 @@ export function HostCampaignsCard(props: { hostId: string }) {
   const handleCreateTemplate = useCallback(async () => {
     try {
       const { screenId, versionId } = await createEmailScreen(
-        firestore,
         hostId,
         createHostResource,
+        createHostVersion,
       )
       if (orgSlug && subdomain) {
         void router.push(besignerHref(orgSlug, subdomain, screenId, versionId))
@@ -180,7 +182,15 @@ export function HostCampaignsCard(props: { hostId: string }) {
         variant: 'error',
       })
     }
-  }, [firestore, hostId, createHostResource, router, enqueueSnackbar])
+  }, [
+    hostId,
+    createHostResource,
+    createHostVersion,
+    orgSlug,
+    subdomain,
+    router,
+    enqueueSnackbar,
+  ])
 
   const handleTestSend = useCallback(async () => {
     if (busy) return

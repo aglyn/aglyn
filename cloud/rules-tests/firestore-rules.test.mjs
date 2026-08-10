@@ -40,6 +40,7 @@ import {
   limit,
   orderBy,
   query,
+  runTransaction,
   setDoc,
   updateDoc,
   where,
@@ -304,6 +305,13 @@ beforeEach(async () => {
       memberRoles: { [OWNER]: 'admin', [EDITOR]: 'editor', [VIEWER]: 'viewer' },
     })
     await setDoc(doc(db, 'hosts', HOST, 'screens', 'screen-1'), { name: 'Home' })
+    // An EXISTING version doc, so the AGL-1369 create/update split can be told
+    // apart: creating one more version is the paid `versioning` feature and is
+    // API-only, while saving the canvas — a merge-set onto this doc — is an
+    // UPDATE and has to keep working on every plan.
+    await setDoc(doc(db, 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v1'), {
+      screenId: 'screen-1', nodes: { root: {} },
+    })
     await setDoc(doc(db, 'hosts', HOST, 'variables', 'var-1'), { name: 'v', value: '1' })
     // An existing webhook, so the AGL-1360 create/update split can be told
     // apart: create is API-only, update (the soft delete) stays client-side.
@@ -1018,11 +1026,14 @@ describe('hosts', () => {
         value: '3',
       }),
     )
+    // Saving the canvas is an UPDATE of the open version (AGL-1369). Creating
+    // a NEW version is the paid feature and now rides /api/hosts/versions.
     await mustAllow(
-      'editor writes screen version history',
+      'editor saves the open screen version',
       setDoc(
-        doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v9'),
-        { nodes: {} },
+        doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v1'),
+        { nodes: { root: { id: 'root' } } },
+        { merge: true },
       ),
     )
     await mustAllow(
@@ -1040,18 +1051,25 @@ describe('hosts', () => {
    * `components/{id}/versions/{v}` was denied along with the component doc
    * itself. The component doc must STAY API-only; only its history opens up.
    */
-  it('component versions are editor-writable; the component doc stays API-only', async () => {
+  it('component versions are editor-SAVEABLE; the component doc stays API-only', async () => {
     await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', HOST, 'components', 'cmp-1'), {
+        displayName: 'Hero', rootId: 'r', nodes: { r: {} },
+      })
+      // The version the editor is editing. Since AGL-1369 minting it is the
+      // route's job, so the fixture has to stand in for the route.
       await setDoc(
-        doc(context.firestore(), 'hosts', HOST, 'components', 'cmp-1'),
-        { displayName: 'Hero', rootId: 'r', nodes: { r: {} } },
+        doc(db, 'hosts', HOST, 'components', 'cmp-1', 'versions', 'v1'),
+        { componentId: 'cmp-1', nodes: {} },
       )
     })
-    // Editors write history…
+    // Editors save the version they have open…
     await assertSucceeds(
       setDoc(
         doc(authed(EDITOR), 'hosts', HOST, 'components', 'cmp-1', 'versions', 'v1'),
-        { componentId: 'cmp-1', nodes: {} },
+        { componentId: 'cmp-1', nodes: { r: {} } },
+        { merge: true },
       ),
     )
     await assertSucceeds(
@@ -1066,22 +1084,120 @@ describe('hosts', () => {
         displayName: 'Sneak',
       }),
     )
-    // Viewers read but never write.
+    // Viewers read but never write. Aimed at the EXISTING version on purpose:
+    // a create is denied to everyone since AGL-1369, so asserting one here
+    // would pass without the role axis ever being consulted.
     await assertSucceeds(
       getDoc(doc(authed(VIEWER), 'hosts', HOST, 'components', 'cmp-1', 'versions', 'v1')),
     )
     await assertFails(
       setDoc(
-        doc(authed(VIEWER), 'hosts', HOST, 'components', 'cmp-1', 'versions', 'v2'),
+        doc(authed(VIEWER), 'hosts', HOST, 'components', 'cmp-1', 'versions', 'v1'),
         { nodes: {} },
+        { merge: true },
       ),
     )
     await assertFails(
       setDoc(
-        doc(authed(OUTSIDER), 'hosts', HOST, 'components', 'cmp-1', 'versions', 'v2'),
+        doc(authed(OUTSIDER), 'hosts', HOST, 'components', 'cmp-1', 'versions', 'v1'),
         { nodes: {} },
+        { merge: true },
       ),
     )
+  })
+
+  /**
+   * AGL-1369. `versioning` (Pro+) used to be a UI gate: the console checked
+   * the entitlement and then wrote the new version with the client SDK, so a
+   * Free org got Pro version history by writing the document directly.
+   *
+   * The split that closes it is create-vs-update, and the whole plan rests on
+   * one fact this suite has to hold down: an ordinary canvas save is a
+   * merge-set onto a version doc that ALREADY EXISTS — a rules UPDATE — and
+   * only "one more version than before" is a CREATE. If that were ever untrue,
+   * denying create would break authoring on every plan, which is far worse
+   * than the bypass. So the positive controls here matter more than the
+   * negative one, and they are written in the shape the product actually
+   * uses: `saveNodesGuarded` saves inside a transaction.
+   */
+  describe('version create is API-only; saving is not (AGL-1369)', () => {
+    for (const [kind, parent, seed] of [
+      ['screen', 'screens', 'screen-1'],
+      ['layout', 'layouts', 'layout-1'],
+      ['component', 'components', 'cmp-1'],
+    ]) {
+      it(`${kind}: editor saves the open version but cannot mint another`, async () => {
+        await env.withSecurityRulesDisabled(async (context) => {
+          const db = context.firestore()
+          await setDoc(doc(db, 'hosts', HOST, parent, seed), { name: kind })
+          await setDoc(doc(db, 'hosts', HOST, parent, seed, 'versions', 'v1'), {
+            nodes: { root: {} },
+          })
+        })
+        // The paid path: one more version document than there was before.
+        await mustDeny(
+          `${parent}/${seed}/versions/{new} client create`,
+          setDoc(
+            doc(authed(EDITOR), 'hosts', HOST, parent, seed, 'versions', 'v2'),
+            { nodes: {} },
+          ),
+        )
+        // The unpaid path, which must survive: saving what is open.
+        await mustAllow(
+          `${parent}/${seed}/versions/v1 save (merge-set)`,
+          setDoc(
+            doc(authed(EDITOR), 'hosts', HOST, parent, seed, 'versions', 'v1'),
+            { nodes: { root: { id: 'root' } } },
+            { merge: true },
+          ),
+        )
+        // The same save the besigner really performs (AGL-1301): a
+        // transaction that reads the doc, then merge-sets it. A transaction
+        // is evaluated write-by-write, so this is still an update — but it is
+        // the exact call the product makes, and asserting the simpler shape
+        // alone would leave the real one unproven.
+        // One db handle: `authed()` mints a fresh Firestore instance per call,
+        // and a transaction refuses a ref from a different one.
+        const editorDb = authed(EDITOR)
+        await mustAllow(
+          `${parent}/${seed}/versions/v1 guarded save (transaction)`,
+          runTransaction(editorDb, async (transaction) => {
+            const ref = doc(
+              editorDb, 'hosts', HOST, parent, seed, 'versions', 'v1',
+            )
+            await transaction.get(ref)
+            transaction.set(ref, { nodes: { root: { id: 'r2' } } }, { merge: true })
+          }),
+        )
+        // Deleting history stays client-side: it frees nothing the cap has
+        // not already granted, and the console's delete button is not gated.
+        await mustAllow(
+          `${parent}/${seed}/versions/v1 delete`,
+          deleteDoc(
+            doc(authed(EDITOR), 'hosts', HOST, parent, seed, 'versions', 'v1'),
+          ),
+        )
+      })
+    }
+
+    /**
+     * The bypass the rules CANNOT close on their own, pinned so nobody
+     * re-derives it and thinks the route is redundant.
+     *
+     * The tempting condition is "allow the create when the parent's
+     * `versionId` already points at it" — seeds satisfy it, snapshots do not.
+     * But publishing moves that pointer and is a legitimate client write, so
+     * the client can point it at the id it is about to create, create, and
+     * point it back. Two writes, both individually legal.
+     */
+    it('the parent versionId pointer is client-writable, so it cannot gate the create', async () => {
+      await mustAllow(
+        'editor publishes a version (moves the parent pointer)',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+          versionId: 'v1',
+        }),
+      )
+    })
   })
 
   // AGL-655 / AGL-652. Two things this pins:
