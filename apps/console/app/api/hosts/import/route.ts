@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
+  decodeStoredNodes,
   effectiveDatasetModel,
   hostScopeToken,
   legacyCollectionKind,
@@ -209,11 +210,41 @@ async function handler(request: Request): Promise<Response> {
         await write(docRef, cleaned)
         if (item.version?.$id) {
           const version = cleanDoc('versions', item.version)
-          version['nodes'] = rewriteBindingTokensDeep(
-            version['nodes'],
-            bundleVariables,
-            bundleFunctions,
-          ).value
+          /**
+           * Decode a bundle that predates the export fix (AGL-1391).
+           *
+           * The export now decodes `nodes` on the way out, but that cannot
+           * reach a file already sitting on a customer's disk — and the only
+           * day anyone opens a year-old backup is the day they need it, so
+           * "restored blank" is the worst failure this feature has. A bundle
+           * exported before the fix carries `{"type":"Buffer","data":[…]}`,
+           * which `decodeStoredNodes` now recognises as a third storage form.
+           *
+           * It lands as a PLAIN MAP rather than being re-encoded to `Bytes`:
+           * both forms are live and every reader handles both, so old and new
+           * bundles converge on one restored shape instead of two, and the
+           * besigner re-compresses on the next save anyway.
+           *
+           * It also has to happen BEFORE the rewrite below. Over an opaque
+           * envelope `rewriteBindingTokensDeep` finds no `{{` strings and
+           * reports `changed: false`, so legacy binding tokens in every
+           * besigner-saved page were silently never normalized on restore.
+           */
+          for (const key of ['nodes', 'elements']) {
+            // Only a key the bundle HAS. Assigning `nodes` unconditionally
+            // wrote an explicit `undefined` for a version carrying just the
+            // legacy `elements` alias, and the Admin SDK rejects that outright
+            // — it is configured without `ignoreUndefinedProperties`. The
+            // rewrite now covers `elements` too, which is where a legacy
+            // document's tree, and so its legacy tokens, actually live.
+            if (version[key] === undefined) continue
+            const decoded = decodeStoredNodes(version[key]) ?? version[key]
+            version[key] = rewriteBindingTokensDeep(
+              decoded,
+              bundleVariables,
+              bundleFunctions,
+            ).value
+          }
           await write(
             docRef.collection('versions').doc(String(item.version.$id)),
             version,

@@ -78,6 +78,50 @@ describe('decodeStoredNodes', () => {
     expect(decodeStoredNodes(view)).toEqual(NODES)
   })
 
+  /**
+   * The third storage form (AGL-1391): what `JSON.stringify` makes of a Node
+   * `Buffer`. It reaches this helper from site-export bundles downloaded
+   * before the export learned to decode, and it is the nastiest of the three
+   * — an `ArrayBuffer` view is at least recognisable, but this is a plain
+   * object, so without the branch it returns UNCHANGED and every caller walks
+   * an object whose only keys are `type` and `data`.
+   */
+  describe('the JSON Buffer envelope', () => {
+    it('decodes it back to the node map', () => {
+      const envelope = JSON.parse(JSON.stringify(pooledBuffer()))
+      expect(envelope).toEqual({ type: 'Buffer', data: expect.any(Array) })
+
+      expect(decodeStoredNodes(envelope)).toEqual(NODES)
+    })
+
+    it('leaves a node map whose keys merely resemble it alone', () => {
+      // The test has to be exact, or a legitimate map could be swallowed. It
+      // cannot actually collide — a node map's values are node OBJECTS, so
+      // `type` would have to hold the string 'Buffer' — but the guard is what
+      // makes that reasoning hold rather than being an argument in a comment.
+      for (const map of [
+        { type: { componentId: 'text' }, data: { componentId: 'text' } },
+        { type: 'Buffer', data: [1, 2, 3], extra: { componentId: 'text' } },
+        { type: 'Buffer' },
+        { data: [1, 2, 3] },
+      ]) {
+        expect(decodeStoredNodes(map)).toBe(map)
+      }
+    })
+
+    it('returns null rather than throwing on an undecodable envelope', () => {
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+      try {
+        expect(
+          decodeStoredNodes({ type: 'Buffer', data: [0xc1, 0xc1, 0xc1] }),
+        ).toBeNull()
+        expect(spy).toHaveBeenCalled()
+      } finally {
+        spy.mockRestore()
+      }
+    })
+  })
+
   it('reports absent nodes as null', () => {
     expect(decodeStoredNodes(undefined)).toBeNull()
     expect(decodeStoredNodes(null)).toBeNull()

@@ -148,6 +148,14 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/binding-tokens'),
+  // The REAL decode too (AGL-1391). Stubbing it would let the export ship an
+  // opaque Buffer envelope and this suite would still be green — which is
+  // exactly how the feature shipped broken.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
+  // `compress` too — the seed below must be packed by the same encoder the
+  // besigner writes with, and re-exporting it here keeps the spec off a
+  // relative deep import into another project (@nx/enforce-module-boundaries).
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/compress'),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: Object.fromEntries(new URL(request.url).searchParams),
@@ -162,6 +170,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 import { GET as EXPORT_GET } from '../app/api/hosts/export/route'
 import { POST as IMPORT_POST } from '../app/api/hosts/import/route'
 import { IMPORTABLE_FIELDS } from '../app/api/_lib/site-export'
+// Through the mocked specifier, which re-exports the REAL implementation above.
+import { compress } from '@aglyn/aglyn/server'
 
 /**
  * A fully-populated document of every shape the bundle carries, keyed by the
@@ -169,7 +179,59 @@ import { IMPORTABLE_FIELDS } from '../app/api/_lib/site-export'
  * (create route, client-direct update, or marketplace install) — narrowing the
  * allow-list past any of them loses site content on restore with no error.
  */
-const SEEDS: Array<{ collection: string; path: string; id: string; doc: Doc }> = [
+/**
+ * The node map a besigner save actually produces — the COMPRESSED storage form
+ * (AGL-1391). `nodes` lives in two forms and only one of them is a map: the
+ * tenant editor hooks write `Bytes.fromUint8Array(compress(rest.nodes))`, so
+ * the compressed form is the majority of live screens and layouts.
+ */
+const BESIGNER_NODES = {
+  root: { $id: 'root', componentId: 'container', nodes: ['heading', 'body'] },
+  heading: {
+    $id: 'heading',
+    componentId: 'typography',
+    nodes: [],
+    props: { children: 'Welcome' },
+  },
+  body: {
+    $id: 'body',
+    componentId: 'typography',
+    nodes: [],
+    props: { children: 'Copy that has to survive a backup.' },
+  },
+}
+
+/**
+ * What firebase-admin hands back for a `Bytes` field: a Node `Buffer` carved
+ * out of the shared allocation pool, so `byteOffset` is non-zero and
+ * `buffer.byteLength` is the whole pool rather than the field.
+ *
+ * Carved from a dedicated slab rather than `Buffer.from`, which lands at
+ * whatever offset the rest of the process left behind — the premise guard
+ * below would then pass or fail by luck (same reasoning as
+ * `stored-nodes.spec.ts`).
+ */
+const pooledNodes = () => {
+  const bytes = compress(BESIGNER_NODES)
+  const pool = Buffer.allocUnsafeSlow(Buffer.poolSize)
+  const packed = pool.subarray(64, 64 + bytes.byteLength)
+  packed.set(bytes)
+  return packed
+}
+
+/**
+ * `restored` names the value a field is expected to hold AFTER the round trip
+ * when it differs from what was seeded. Only the compressed `nodes` needs it:
+ * the bundle is meant to carry a readable map, so the restored document holds
+ * the decoded tree rather than the bytes it was stored as.
+ */
+const SEEDS: Array<{
+  collection: string
+  path: string
+  id: string
+  doc: Doc
+  restored?: Doc
+}> = [
   {
     collection: 'screens',
     path: 'hosts/host-1/screens',
@@ -209,6 +271,50 @@ const SEEDS: Array<{ collection: string; path: string; id: string; doc: Doc }> =
       screenId: 'screen-1',
       hostId: 'host-1',
     },
+  },
+  {
+    /**
+     * A screen whose published version was last saved through the BESIGNER —
+     * the common case, and the one the suite had no seed for (AGL-1391).
+     */
+    collection: 'screens',
+    path: 'hosts/host-1/screens',
+    id: 'screen-2',
+    doc: {
+      displayName: 'Home',
+      slug: '/',
+      nameLower: 'home',
+      versionId: 'screen-version-2',
+    },
+  },
+  {
+    /**
+     * The COMPRESSED version shape, and the whole point of AGL-1391.
+     *
+     * The seed above it is honest about the FIELD surviving; it does not model
+     * the STORAGE FORM, which is why this suite was green against a feature
+     * that restores every besigner-saved page blank. `nodes` here is a pooled
+     * Node `Buffer` because that is what the Admin SDK materialises a `Bytes`
+     * field as, and the export reads `version.data()` with no converter.
+     *
+     * `JSON.stringify(Buffer)` yields `{"type":"Buffer","data":[…]}`. That
+     * object is not an `ArrayBuffer` view, so `decodeStoredNodes` returns it
+     * unchanged, nothing in it has a `componentId`, and NOTHING THROWS — the
+     * restored page is simply empty. Silent, like AGL-1223 before it.
+     */
+    collection: 'versions',
+    path: 'hosts/host-1/screens/screen-2/versions',
+    id: 'screen-version-2',
+    doc: {
+      displayName: 'Besigner save',
+      nodes: pooledNodes(),
+      rootId: 'root',
+      screenId: 'screen-2',
+      hostId: 'host-1',
+    },
+    // A bundle must carry a readable tree, so the restore lands the decoded
+    // map rather than the bytes.
+    restored: { nodes: BESIGNER_NODES },
   },
   {
     collection: 'layouts',
@@ -539,15 +645,16 @@ describe('the export/import round trip is lossless (AGL-1382)', () => {
     expect(bundle.format).toBe('aglyn-site-export')
     // The bundle really does carry the documents the assertions below rely on
     // — an empty export would make every round-trip test vacuously green.
-    expect(bundle.screens).toHaveLength(1)
+    expect(bundle.screens).toHaveLength(2)
     expect(bundle.screens[0].version.$id).toBe('screen-version-1')
+    expect(bundle.screens[1].version.$id).toBe('screen-version-2')
     expect(bundle.layouts[0].version.$id).toBe('layout-version-1')
     expect(bundle.collections[0].entries).toHaveLength(1)
     expect(bundle.datasets[0].records).toHaveLength(1)
     expect(bundle.media).toHaveLength(1)
   })
 
-  describe.each(SEEDS)('$collection/$id', ({ path, id, doc }) => {
+  describe.each(SEEDS)('$collection/$id', ({ path, id, doc, restored }) => {
     it('restores every field it was exported with', async () => {
       const bundle = await runExport()
       await runImport(bundle)
@@ -555,7 +662,7 @@ describe('the export/import round trip is lossless (AGL-1382)', () => {
       expect(stored).toBeDefined()
       // Field by field rather than a whole-object match: the failure message
       // then names the key that stopped round-tripping.
-      for (const [key, value] of Object.entries(doc)) {
+      for (const [key, value] of Object.entries({ ...doc, ...restored })) {
         expect({ [key]: stored[key] }).toEqual({ [key]: value })
       }
     })
@@ -594,6 +701,80 @@ describe('the export/import round trip is lossless (AGL-1382)', () => {
     expect(storedAt('orgs/org-1/datasets/dataset-1')['visibleTo']).toEqual([
       'host:host-1',
     ])
+  })
+})
+
+/**
+ * AGL-1391: a besigner-saved page must survive a backup.
+ *
+ * The differentiator feature (AGL-163, "HubSpot famously has no site backup")
+ * was restoring EVERY besigner-saved screen and layout blank. The export read
+ * `version.data()` raw, `JSON.stringify` turned the Node `Buffer` into
+ * `{"type":"Buffer","data":[…]}`, and the import wrote that object back as the
+ * document's `nodes`. No error anywhere — a backup that reads as a success and
+ * restores nothing.
+ */
+describe('a besigner-saved version survives the round trip (AGL-1391)', () => {
+  const VERSION_PATH = 'hosts/host-1/screens/screen-2/versions/screen-version-2'
+
+  it('is seeded in the compressed storage form, not a plain map', () => {
+    // Guard the premise. A seed that quietly became a plain map would make
+    // every assertion below pass against the broken route — which is the
+    // precise reason this suite was green before AGL-1391.
+    const seeded = store.get('hosts/host-1/screens/screen-2/versions')
+      .get('screen-version-2')['nodes'] as Buffer
+    expect(ArrayBuffer.isView(seeded)).toBe(true)
+    // Pooled, like firebase-admin's: a zero-offset buffer would let the
+    // byteOffset bug decode the whole pool and still look fine here.
+    expect(seeded.byteOffset).toBeGreaterThan(0)
+    expect(seeded.buffer.byteLength).toBeGreaterThan(seeded.byteLength)
+  })
+
+  it('exports a readable node map rather than a Buffer envelope', async () => {
+    const bundle = await runExport()
+    const version = bundle.screens.find((s: any) => s.$id === 'screen-2').version
+
+    // The exact broken shape, pinned so it cannot come back green.
+    expect(version.nodes).not.toHaveProperty('type', 'Buffer')
+    expect(version.nodes).not.toHaveProperty('data')
+    expect(version.nodes).toEqual(BESIGNER_NODES)
+  })
+
+  it('restores a node map with a reachable root', async () => {
+    const bundle = await runExport()
+    await runImport(bundle)
+    const stored = storedAt(VERSION_PATH)
+    const nodes = stored['nodes'] as Record<string, any>
+
+    // "The key survived" is what the pre-AGL-1391 suite proved, and it is not
+    // enough: `{type:'Buffer'}` is a present `nodes` too. A page renders only
+    // if the root resolves and its children are real nodes.
+    expect(nodes[stored['rootId'] as string]).toBeDefined()
+    expect(nodes[stored['rootId'] as string].componentId).toBe('container')
+    for (const childId of nodes[stored['rootId'] as string].nodes) {
+      expect({ childId, componentId: nodes[childId]?.componentId }).toEqual({
+        childId,
+        componentId: 'typography',
+      })
+    }
+    expect(nodes).toEqual(BESIGNER_NODES)
+  })
+
+  it('restores an already-downloaded bundle that carries the Buffer envelope', async () => {
+    // Belt and braces (AGL-1391). Decoding on export cannot help a bundle a
+    // customer downloaded BEFORE the fix — that file is on their disk and
+    // already carries the opaque blob. Restoring one has to work, because the
+    // only time anyone opens a year-old backup is the day they need it.
+    const bundle = await runExport()
+    const version = bundle.screens.find((s: any) => s.$id === 'screen-2').version
+    version.nodes = JSON.parse(JSON.stringify(pooledNodes()))
+    // Precisely the shape an old bundle carries.
+    expect(version.nodes.type).toBe('Buffer')
+
+    await runImport(bundle)
+    const nodes = storedAt(VERSION_PATH)['nodes'] as Record<string, any>
+    expect(nodes['root']?.componentId).toBe('container')
+    expect(nodes).toEqual(BESIGNER_NODES)
   })
 })
 

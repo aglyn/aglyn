@@ -46,14 +46,24 @@ import { decompress } from './decompress'
  * plainly so the tenant runtime can read them without decoding, and email
  * template versions are written by a bare `setDoc` with no converter. Passing
  * those through here is still correct: a plain map returns unchanged.
+ *
+ * A THIRD form arrives from outside Firestore: `{type: 'Buffer', data: […]}`,
+ * which is what `JSON.stringify` makes of a Node `Buffer` (AGL-1391). Site
+ * export bundles downloaded before that fix carry it, and it is the nastiest
+ * of the three — an `ArrayBuffer` view survives this helper, but a envelope is
+ * a plain object, so without this branch it returns UNCHANGED and every reader
+ * downstream walks an object whose only keys are `type` and `data`.
  */
 export function decodeStoredNodes<T = Record<string, any>>(
   raw: unknown,
 ): T | null {
   if (raw === null || raw === undefined) return null
-  if (ArrayBuffer.isView(raw)) {
+  const bytes = ArrayBuffer.isView(raw)
+    ? raw
+    : bufferEnvelopeBytes(raw)
+  if (bytes) {
     try {
-      return decompress<T>(raw)
+      return decompress<T>(bytes)
     } catch (error) {
       // Undecodable nodes must never read as "no references".
       console.error('could not decode stored nodes', error)
@@ -61,6 +71,23 @@ export function decodeStoredNodes<T = Record<string, any>>(
     }
   }
   return raw as T
+}
+
+/**
+ * A JSON-serialized Node `Buffer`, or `null` for anything else.
+ *
+ * The test is deliberately exact — `type === 'Buffer'`, an array `data`, and
+ * NOTHING else — because the alternative reading of this object is a node map
+ * with nodes called `type` and `data`. That map cannot exist: a node map's
+ * values are node objects, so `type` would have to hold the literal string
+ * `'Buffer'` and `data` an array, at the same time, in the same document.
+ */
+function bufferEnvelopeBytes(raw: unknown): Uint8Array | null {
+  if (typeof raw !== 'object' || Array.isArray(raw)) return null
+  const value = raw as { type?: unknown; data?: unknown }
+  if (value.type !== 'Buffer' || !Array.isArray(value.data)) return null
+  if (Object.keys(value).length !== 2) return null
+  return Uint8Array.from(value.data as number[])
 }
 
 export default decodeStoredNodes
