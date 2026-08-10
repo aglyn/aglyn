@@ -324,6 +324,23 @@ export function OrgSsoCard() {
     (claim) => claim.verified || claim.attested,
   )
   const isActive = sso.status === 'active'
+  /**
+   * What `activate` will actually publish (AGL-1375).
+   *
+   * `publishSsoDomains` re-reads each claim document and skips anything
+   * without `verified === true`, so a domain that is merely attested
+   * publishes nothing and the route answers 400 "No verified domains to
+   * publish". `governedDomains` is the wider set — right for "is this org
+   * live", wrong for "will the server accept this" — and gating the button on
+   * it offered an action the server refuses.
+   *
+   * The consequence is not a failed click. Turning off succeeds, turning back
+   * on does not, so an org whose domains are only attested cannot restore SSO
+   * from here at all: a one-way door with the button on the wrong side of it.
+   */
+  const canActivate = verifiedDomains.length > 0
+  /** Live, but on an attestation no DNS record backs — the trap's precondition. */
+  const attestedOnly = Boolean(governedDomains.length) && !verifiedDomains.length
 
   return (
     <SsoCardShell>
@@ -571,21 +588,28 @@ export function OrgSsoCard() {
             <Alert severity="info">
               {'Verify at least one domain before turning single sign-on on.'}
             </Alert>
-          ) : !verifiedDomains.length && isActive ? (
-            <Alert severity="info">
-              {'Single sign-on is on. None of your domains have DNS proof yet ' +
-                '— add it above when you get the chance.'}
+          ) : attestedOnly && isActive ? (
+            // The one-way door, stated before it is opened rather than after
+            // (AGL-1375). "Add DNS proof when you get the chance" was true of
+            // everything except the button sitting next to it.
+            <Alert severity="warning">
+              {'Single sign-on is on, but none of your domains have DNS proof ' +
+                'yet — we set yours up for you. Turning it off would be ' +
+                'permanent for now: turning it back on needs a domain we have ' +
+                'seen a DNS record for. Add that proof above first.'}
+            </Alert>
+          ) : attestedOnly ? (
+            <Alert severity="warning">
+              {'Single sign-on cannot be turned on until one of your domains ' +
+                'has DNS proof. Use “Set up DNS proof” above, publish the ' +
+                'record, then verify.'}
             </Alert>
           ) : null}
           <Stack direction="row" spacing={1}>
             <Button
               variant="contained"
               disabled={
-                busy ||
-                !canManage ||
-                !governedDomains.length ||
-                !sso.tenantId ||
-                isActive
+                busy || !canManage || !canActivate || !sso.tenantId || isActive
               }
               onClick={() => void run({ action: 'activate' }, 'Single sign-on is on')}
             >
@@ -598,11 +622,27 @@ export function OrgSsoCard() {
               onClick={async () => {
                 try {
                   await confirm({
-                    title: 'Turn single sign-on off?',
-                    description:
-                      'Your team will go back to signing in with a password. ' +
-                      'Your identity pool and its accounts are kept, so you can ' +
-                      'turn it back on without anyone losing their account.',
+                    title: attestedOnly
+                      ? 'Turn single sign-on off? You will not be able to turn it back on'
+                      : 'Turn single sign-on off?',
+                    description: attestedOnly
+                      ? // The old copy — "you can turn it back on" — was the
+                        // single most misleading sentence on the card for
+                        // exactly the orgs this applies to (AGL-1375). Turning
+                        // on republishes the routing docs, and that step only
+                        // accepts a domain with DNS proof, which this org has
+                        // none of. Anyone signing in ONLY through the identity
+                        // provider is locked out until the proof exists.
+                        'Your domains are live on an attestation we made for ' +
+                        'you, not on a DNS record. Turning single sign-on back ' +
+                        'on needs a domain we have seen a record for, so this ' +
+                        'cannot be undone here until you add that proof. ' +
+                        'Anyone who signs in only through your identity ' +
+                        'provider will have no way in. Add DNS proof first.'
+                      : 'Your team will go back to signing in with a password. ' +
+                        'Your identity pool and its accounts are kept, so you ' +
+                        'can turn it back on without anyone losing their ' +
+                        'account.',
                     confirmationButtonProps: { color: 'error' },
                   })
                 } catch {

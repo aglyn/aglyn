@@ -30,7 +30,10 @@
  * would be a different bug with the same test result.
  */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+
+/** Every `confirm()` the card opened, in order (AGL-1375). */
+const mockConfirmCalls: Array<{ title?: string; description?: string }> = []
 
 /** Swapped per case; the card reads it through `useCurrentOrg`. */
 const mockOrgState: { org: Record<string, unknown>; ready: boolean } = {
@@ -48,7 +51,15 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children }: { children: React.ReactNode }) => (
     <section>{children}</section>
   ),
-  useConfirmationContext: () => ({ confirm: async () => undefined }),
+  useConfirmationContext: () => ({
+    // Records the prompt and then CANCELS — `confirm()` rejects on cancel, so
+    // rejecting lets a case assert what the user was told without carrying
+    // out the destructive action it was warning about.
+    confirm: (options: { title?: string; description?: string }) => {
+      mockConfirmCalls.push(options)
+      return Promise.reject(new Error('cancelled'))
+    },
+  }),
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
@@ -98,6 +109,7 @@ beforeEach(() => {
   mockOrgState.org = { plan: 'enterprise' }
   mockOrgState.ready = true
   mockEntitled = true
+  mockConfirmCalls.length = 0
 })
 
 describe('OrgSsoCard status claims (AGL-1376)', () => {
@@ -185,5 +197,111 @@ describe('OrgSsoCard status claims (AGL-1376)', () => {
     await screen.findByText('Checking your plan…')
     expect(screen.queryByText('Single sign-on is part of Enterprise.')).toBeNull()
     expect(statusClaims()).toEqual([null, null, null])
+  })
+})
+
+/**
+ * AGL-1375: the card must not offer an action the server will refuse.
+ *
+ * `activate` publishes through `publishSsoDomains`, which re-reads each claim
+ * document and skips anything without `verified === true`. A domain that is
+ * only ATTESTED — governing sign-in today because a human wrote it onto the
+ * org before self-serve existed — publishes nothing, and the route answers
+ * 400. The card gated "Turn on" on the wider governed set, so for those orgs
+ * the off switch worked and the on switch could not: a one-way door.
+ *
+ * These cases are about the GATE and the WARNING, which is all part 1 can fix
+ * from the client. Restoring an attested org is part 2 and is asserted
+ * server-side, where it is still red on purpose.
+ */
+const claim = (over: Partial<Record<string, unknown>> = {}) => ({
+  domain: 'acme.com',
+  verified: false,
+  attested: false,
+  recordHost: '_aglyn-challenge.acme.com',
+  recordValue: 'aglyn-domain-verification=tok',
+  lastRecords: null,
+  ...over,
+})
+
+const statusPayload = (
+  claims: unknown[],
+  sso: Record<string, unknown> = {},
+) => ({
+  ok: true,
+  sso: { tenantId: 't-1', providerId: 'p-1', domains: ['acme.com'], ...sso },
+  claims,
+  metadata: null,
+})
+
+const serve = (payload: unknown) => {
+  global.fetch = jest.fn(async () =>
+    jsonResponse(payload),
+  ) as unknown as typeof fetch
+}
+
+const button = (name: string) =>
+  screen.getByRole('button', { name }) as HTMLButtonElement
+
+describe('OrgSsoCard activation gate (AGL-1375)', () => {
+  it('does not offer Turn on for a domain the server would refuse to publish', async () => {
+    // `aglyn-org` exactly: live SSO, an empty `ssoDomains` subcollection, and
+    // a domain that exists only in `sso.domains`.
+    serve(
+      statusPayload([claim({ attested: true })], { status: 'disabled' }),
+    )
+
+    render(<OrgSsoCard />)
+
+    await screen.findByText('Off')
+    expect(button('Turn on').disabled).toBe(true)
+    expect(
+      screen.getByText(/cannot be turned on until one of your domains/),
+    ).toBeTruthy()
+  })
+
+  it('offers Turn on once a domain has DNS proof', async () => {
+    // The paired positive: the gate has to still open, or "disabled" would
+    // pass on a card that never enables the button at all.
+    serve(statusPayload([claim({ verified: true })], { status: 'disabled' }))
+
+    render(<OrgSsoCard />)
+
+    await screen.findByText('Off')
+    expect(button('Turn on').disabled).toBe(false)
+  })
+
+  it('warns that Turn off is one-way for an attested org', async () => {
+    serve(statusPayload([claim({ attested: true })], { status: 'active' }))
+
+    render(<OrgSsoCard />)
+
+    await screen.findByText('On')
+    // The alert is on screen before anyone reaches for the button.
+    expect(screen.getByText(/Turning it off would be permanent for now/)).toBeTruthy()
+
+    fireEvent.click(button('Turn off'))
+
+    expect(mockConfirmCalls).toHaveLength(1)
+    expect(mockConfirmCalls[0].title).toMatch(/not be able to turn it back on/)
+    expect(mockConfirmCalls[0].description).toMatch(/cannot be undone here/)
+    // The promise that turning it back on is free is precisely the claim that
+    // does not hold for this org.
+    expect(mockConfirmCalls[0].description).not.toMatch(/turn it back on without/)
+  })
+
+  it('keeps the reassuring Turn off copy for a verified org', async () => {
+    // Because for a verified org it is true — publishing again republishes
+    // the same routing doc from the same claim.
+    serve(statusPayload([claim({ verified: true })], { status: 'active' }))
+
+    render(<OrgSsoCard />)
+
+    await screen.findByText('On')
+    fireEvent.click(button('Turn off'))
+
+    expect(mockConfirmCalls).toHaveLength(1)
+    expect(mockConfirmCalls[0].title).toBe('Turn single sign-on off?')
+    expect(mockConfirmCalls[0].description).toMatch(/turn it back on without/)
   })
 })
