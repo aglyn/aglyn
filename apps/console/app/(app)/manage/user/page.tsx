@@ -17,7 +17,6 @@
 
 'use client'
 
-import { writeGuardedBySeed } from '../../../../utils/guarded-seed-write'
 import {
   canLinkSocialProvider,
   normalizeAddress,
@@ -78,6 +77,7 @@ import {
   useFirestore,
   useUser,
   useUserPhoto,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import CardDisplayFormTemplate from '../../../../components/card-display-form-template'

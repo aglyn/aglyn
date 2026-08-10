@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-import { getSessionHealth } from './session-health'
-
 /**
  * Refuse a whole-object write whose form was seeded from a read we cannot
- * trust (AGL-1356, AGL-1066).
+ * trust (AGL-1356, AGL-1358, AGL-1066).
  *
  * ## The shape this exists for
  *
@@ -55,9 +53,50 @@ import { getSessionHealth } from './session-health'
  *    unconfirmed), but it must never be the ONLY guard: it needs two
  *    distinct labelled collections denied inside 60s, which is unreachable
  *    on a listener-only page. That was exactly how AGL-1356 stayed open.
+ *
+ * ## Why this lives in the library rather than the console (AGL-1358)
+ *
+ * Most of the ~forty sites wearing this shape are plugin cards in
+ * `libs/plugins/**`, which cannot import from `apps/console`. The guard
+ * itself is pure, and `fromCache` — the signal that actually fires —
+ * originates here, on the listener hooks. What it cannot own is
+ * `session-health`, which is console state.
+ *
+ * So the third signal is INJECTED, through the same seam
+ * `firestore-denial-reporter` already uses for the reverse direction: the
+ * console registers a check at startup and the guard pulls it. That keeps a
+ * single guard for every call site with no new dependency edge and nothing
+ * inverted — the library still knows nothing about the app. An unregistered
+ * check simply reports "not stale", which is what the tenant runtime and the
+ * unit tests want; the other two signals are unaffected, and they are the
+ * ones the doc above says must carry the guard anyway.
  */
 
 export type StaleSeedReason = 'unreadable' | 'unconfirmed' | 'stale-session'
+
+/**
+ * The console's `session-health` verdict, injected because it is app state.
+ * Null until the app registers one — see {@link setStaleSessionCheck}.
+ */
+let staleSessionCheck: (() => boolean) | null = null
+
+/**
+ * Register the app's stale-session verdict. Called once, by the app that owns
+ * `session-health`. Pass `null` to unregister (tests).
+ *
+ * Registered at module scope alongside `setFirestoreSessionReporters` rather
+ * than in an effect, for the same reason: a save can be clicked before any
+ * effect has run, and a guard that consults a check which does not exist yet
+ * silently loses its third signal.
+ */
+export function setStaleSessionCheck(check: (() => boolean) | null): void {
+  staleSessionCheck = check
+}
+
+/** The registered verdict, or `false` when nothing is registered. */
+function isSessionStale(): boolean {
+  return staleSessionCheck ? staleSessionCheck() : false
+}
 
 export interface GuardedSeedWriteOptions {
   /**
@@ -124,7 +163,7 @@ export function checkSeedFreshness(
     ? 'unreadable'
     : fromCache
       ? 'unconfirmed'
-      : checkSession && getSessionHealth().staleSession
+      : checkSession && isSessionStale()
         ? 'stale-session'
         : undefined
   if (!reason) return { ok: true }
