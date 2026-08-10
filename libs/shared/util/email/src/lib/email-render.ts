@@ -158,9 +158,17 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
    * With no origin to absolutize against, the image is DROPPED rather than
    * emitted relative. Both are a missing picture; a dropped one leaves a gap,
    * while `src="/api/media/cdn/…"` renders as a broken-image box, which reads
-   * to a recipient as a broken email rather than a plain one. Neither send
-   * path relies on this — both supply an origin — so reaching it means an
-   * ad-hoc caller forgot, and the quieter failure is the right one.
+   * to a recipient as a broken email rather than a plain one.
+   *
+   * ⚠️ This comment used to claim "neither send path relies on this — both
+   * supply an origin", and treated reaching the drop as hypothetical. It was
+   * wrong, and it was wrong in the direction that hides the bug: campaign-send
+   * passed no `mediaOrigin`/`mediaHostId` at all, so every author-picked image
+   * was silently dropped from every marketing campaign until AGL-1394. The
+   * quiet failure IS still the right one for a caller that genuinely has no
+   * origin — but "no caller reaches this" is a claim about the whole repo, and
+   * it decays the moment someone adds a third send path. Verify it before
+   * relying on it; do not restore a count here.
    *
    * A protocol-relative `//host/x.png` is passed through untouched: it is
    * already absolute enough to name a host, and prefixing an origin would
