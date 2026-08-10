@@ -57,7 +57,11 @@ import {
 } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useState } from 'react'
-import { useFirestore, useHostResourceApi } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useHostResourceApi,
+  useHostVersionApi,
+} from '@aglyn/tenant-feature-instance'
 import CreateArtifactDrawer from '../../../../../../components/create-artifact-drawer.component'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
@@ -110,6 +114,7 @@ function Layouts(props) {
   const [pageSize, setPageSize] = useState<number>(5)
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
+  const createHostVersion = useHostVersionApi()
   // Save as template (AGL-668). A layout's nodes live on its published
   // version doc, so they are read on confirm rather than per row.
   const buildTemplateSource = useCallback(
@@ -182,10 +187,10 @@ function Layouts(props) {
       }
       // Seed with a single LayoutSlot so bound screens have a graft point
       // from the first save.
+      // No createdAt/updatedAt: /api/hosts/versions stamps both server-side
+      // (AGL-1369), and a client Timestamp does not survive the JSON hop.
       const newVersionValue = {
         layoutId: newId,
-        createdAt: timestamp,
-        updatedAt: timestamp,
         nodes: {
           [CANVAS_ROOT_ELEMENT_ID]: {
             $id: CANVAS_ROOT_ELEMENT_ID,
@@ -201,8 +206,10 @@ function Layouts(props) {
           },
         },
       }
-      // Layout doc rides the quota-enforcing resources API (AGL-473);
-      // the seeded first version stays client-written.
+      // Layout doc rides the quota-enforcing resources API (AGL-473); the
+      // seeded first version rides /api/hosts/versions (AGL-1369), which
+      // allows a resource's FIRST version on every plan and charges the
+      // `versioning` entitlement only for retaining more than one.
       await createHostResource({
         hostId,
         resource: 'layout',
@@ -210,18 +217,13 @@ function Layouts(props) {
         data: newValues,
       })
         .then(() =>
-          setDoc(
-            doc(
-              firestore,
-              'hosts',
-              hostId,
-              'layouts',
-              newId,
-              'versions',
-              newVersionId,
-            ),
-            newVersionValue,
-          ),
+          createHostVersion({
+            hostId,
+            kind: 'layout',
+            parentId: newId,
+            id: newVersionId,
+            data: newVersionValue,
+          }),
         )
         .catch((error) => {
           console.error(error)
@@ -244,6 +246,7 @@ function Layouts(props) {
       hostId,
       handleFormClose,
       createHostResource,
+      createHostVersion,
       enqueueSnackbar,
     ],
   )

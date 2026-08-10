@@ -43,6 +43,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useHostResourceApi,
+  useHostVersionApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { checkOrgQuota } from '../../constants/entitlements'
@@ -132,6 +133,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const { org } = useCurrentOrg()
   const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
+  const createHostVersion = useHostVersionApi()
   const router = useRouter()
   const orgSlug = useOrgSlug()
   const hostSubdomain = useHostSubdomain()
@@ -432,15 +434,20 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           // implementation of create-screen → write-version → publish-route,
           // including the slug de-confliction that must not overwrite a
           // live page.
-          await createPageFromTemplate(firestore, createHostResource as any, {
-            hostId,
-            displayName: screen.displayName,
-            nodes: screen.nodes as Record<string, unknown>,
-            description: screen.description,
-            seo: screen.seo,
-            slug: screen.slug,
-            usedSlugs: used,
-          })
+          await createPageFromTemplate(
+            firestore,
+            createHostResource as any,
+            createHostVersion as any,
+            {
+              hostId,
+              displayName: screen.displayName,
+              nodes: screen.nodes as Record<string, unknown>,
+              description: screen.description,
+              seo: screen.seo,
+              slug: screen.slug,
+              usedSlugs: used,
+            },
+          )
         }
         enqueueSnackbar(
           `Added ${template.screens.length} screen${
@@ -466,6 +473,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
       firestore,
       hostId,
       createHostResource,
+      createHostVersion,
       queueLoading,
       enqueueSnackbar,
       onClose,

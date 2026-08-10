@@ -47,6 +47,7 @@ import {
   useFirestoreCollection,
   useHostResourceApi,
   useUser,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import WhereUsedDialog from './where-used-dialog.component'
 import {
@@ -165,7 +166,20 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
     result: WhereUsedResult
   } | null>(null)
   const [usageLoading, setUsageLoading] = useState<string | null>(null)
-  const { data: variableDocs } = useFirestoreCollection<any>(
+  const {
+    data: variableDocs,
+    status: variablesStatus,
+    /**
+     * The rows this editor is seeded from are unconfirmed by the server
+     * (AGL-1358). Editing copies a whole stored variable into `draft` and
+     * writes all of it back, so `merge: true` protects nothing — every field
+     * is in the payload. `value` is the literal every `{{name}}` binding on
+     * every published page resolves to, and `workflowId` is what rebinds a
+     * computed variable to its source (AGL-261), so a cached seed can point
+     * a live binding back at a value or a workflow the author replaced.
+     */
+    fromCache: variablesFromCache,
+  } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
     [firestore, hostId],
     { idField: '$id' },
@@ -214,12 +228,39 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
     }
     try {
       if (draft.id) {
-        // Edit stays client-direct (no quota consumed).
-        await setDoc(
-          doc(firestore, 'hosts', hostId, 'variables', draft.id),
-          { ...fields, updatedAt: Timestamp.now() },
-          { merge: true },
+        /**
+         * Edit stays client-direct (no quota consumed) — and is refused when
+         * its seed was never confirmed by the server (AGL-1358). `merge:
+         * true` protects nothing here: `fields` is every editable key of the
+         * stored row, copied off the listener whether or not it was touched.
+         *
+         * The guard WRAPS the write. An early return is a shape you can keep
+         * while losing the protection; here the write is only reachable
+         * through the verdict.
+         */
+        const verdict = await writeGuardedBySeed(
+          {
+            subject: 'variable',
+            unreadable: variablesStatus === 'error',
+            fromCache: variablesFromCache,
+          },
+          async () => {
+            await setDoc(
+              doc(firestore, 'hosts', hostId, 'variables', draft.id),
+              { ...fields, updatedAt: Timestamp.now() },
+              { merge: true },
+            )
+          },
         )
+        // Before `setDraft(null)`, so a refusal keeps the dialog open with
+        // what was typed. A save that silently does nothing sends the user
+        // back to retype a form that will be refused again just as quietly.
+        if (!verdict.ok) {
+          return void enqueueSnackbar(verdict.message, {
+            variant: 'warning',
+            persist: false,
+          })
+        }
       } else {
         // New variable rides the quota-enforcing resources API (AGL-473).
         await createHostResource({ hostId, resource: 'variable', data: fields })
@@ -236,7 +277,17 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
         allowDuplicate: true,
       })
     }
-  }, [draft, validName, nameTaken, firestore, hostId, createHostResource, enqueueSnackbar])
+  }, [
+    draft,
+    validName,
+    nameTaken,
+    firestore,
+    hostId,
+    createHostResource,
+    enqueueSnackbar,
+    variablesStatus,
+    variablesFromCache,
+  ])
 
   const handleShowUsage = useCallback(
     (variable: any) => async () => {

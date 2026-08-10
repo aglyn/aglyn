@@ -84,6 +84,9 @@ import AuthenticatedLayout from '../../../../../../../../../../components/layout
 import DashboardLayout from '../../../../../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import SecondaryNavBarComponent from '../../../../../../../../../../components/secondary-nav-bar.component'
+import ScreenSocialImageField, {
+  type ScreenSocialImageDraft,
+} from '../../../../../../../../../../components/screen-social-image-field.component'
 import revalidateLivePages from '../../../../../../../../../../utils/revalidate-live-pages'
 import HostDisplayNameComponent from '../../../../../../../../../../components/host-display-name.component'
 import { hasEntitlement } from '../../../../../../../../../../constants/entitlements'
@@ -645,8 +648,14 @@ function ScreenDetails() {
   const setSeoField = (field: 'title' | 'description') =>
     (event: { target: { value: string } }) =>
       setSeoDraft({ ...seoValue, [field]: event.target.value })
+  /**
+   * Staged social image (AGL-1368); `null` = untouched, `''` = cleared. Kept
+   * separate from `seoDraft` so picking an image does not stage the title and
+   * description as edits, and so either can be saved on its own.
+   */
+  const [seoImage, setSeoImage] = useState<ScreenSocialImageDraft | null>(null)
   const handleSeoSave = useCallback(async () => {
-    if (!seoDraft) return
+    if (!seoDraft && !seoImage) return
     /**
      * Carry forward everything this panel does not edit (AGL-1337).
      *
@@ -659,11 +668,28 @@ function ScreenDetails() {
      */
     const existing = (screen?.seo ?? {}) as Record<string, unknown>
     const seo: Record<string, unknown> = { ...existing }
-    if (seoDraft.title.trim()) seo.title = seoDraft.title.trim()
-    else delete seo.title
-    if (seoDraft.description.trim())
-      seo.description = seoDraft.description.trim()
-    else delete seo.description
+    if (seoDraft) {
+      if (seoDraft.title.trim()) seo.title = seoDraft.title.trim()
+      else delete seo.title
+      if (seoDraft.description.trim())
+        seo.description = seoDraft.description.trim()
+      else delete seo.description
+    }
+    // The image and its dimensions are written as ONE group (AGL-1337) —
+    // an image beside the previous image's size describes a card that does
+    // not exist. A cleared image drops all three, which the head reads the
+    // same as absent: inherit the site default.
+    if (seoImage) {
+      if (seoImage.image) {
+        seo.image = seoImage.image
+        seo.imageWidth = seoImage.imageWidth
+        seo.imageHeight = seoImage.imageHeight
+      } else {
+        delete seo.image
+        delete seo.imageWidth
+        delete seo.imageHeight
+      }
+    }
     await updateDoc(
       screenRef,
       Object.keys(seo).length
@@ -678,12 +704,14 @@ function ScreenDetails() {
           name: displayName,
         })
         setSeoDraft(null)
+        setSeoImage(null)
       })
       .catch(() =>
         enqueueSnackbar('An error has occurred', { variant: 'error' }),
       )
   }, [
     seoDraft,
+    seoImage,
     screen,
     screenRef,
     enqueueSnackbar,
@@ -1109,23 +1137,25 @@ function ScreenDetails() {
                         helperText={`${seoValue.description.length}/155`}
                         error={seoValue.description.length > 155}
                       />
-                      {/* The social image is a media PICK, not a URL you type
-                          (AGL-1337): the reference is stored by identity so it
-                          survives a folder move, and the picker records the
-                          asset's dimensions alongside it so the head can emit
-                          `og:image:width`/`height`. A free-text URL here could
-                          express neither, and would leave the dimensions
-                          describing an image that is no longer there. */}
-                      <Typography variant="caption" color="text.secondary">
-                        {'Social image — choose it in the designer’s Screen ' +
-                          'properties ▸ SEO panel, or set a site-wide default ' +
-                          'in Site setup ▸ SEO.'}
-                      </Typography>
+                      {/* The same field the besigner's Screen Properties ▸
+                          SEO panel uses (AGL-1368), not a second one: the
+                          docs have always sent people here for all three
+                          fields, and this is where they look. A media PICK,
+                          not a URL you type (AGL-1337) — the reference is
+                          stored by identity so it survives a folder move, and
+                          the picker records the asset's dimensions alongside
+                          it so the head can emit `og:image:width`/`height`. */}
+                      <ScreenSocialImageField
+                        hostId={hostId}
+                        saved={screen?.seo?.image}
+                        value={seoImage}
+                        onChange={setSeoImage}
+                      />
                       <Button
                         size="small"
                         variant="outlined"
                         color="primary"
-                        disabled={!seoDraft}
+                        disabled={!seoDraft && !seoImage}
                         onClick={handleSeoSave}
                         sx={{ alignSelf: 'flex-start' }}
                       >

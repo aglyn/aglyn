@@ -24,6 +24,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
+  useHostVersionApi,
 } from '@aglyn/tenant-feature-instance'
 import { Button, Stack, Typography } from '@mui/material'
 import {
@@ -61,6 +62,7 @@ export function EmailScreensCard(props: { hostId: string }) {
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
+  const createHostVersion = useHostVersionApi()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -79,9 +81,9 @@ export function EmailScreensCard(props: { hostId: string }) {
   const handleCreate = async () => {
     try {
       const { screenId, versionId } = await createEmailScreen(
-        firestore,
         hostId,
         createHostResource,
+        createHostVersion,
       )
       if (orgSlug && subdomain) {
         void router.push(

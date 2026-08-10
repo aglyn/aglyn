@@ -597,6 +597,19 @@ should not be needed at all.
   call `signInWithCustomToken`, and confirm it succeeds;
 - confirm the network log shows **no** request to `auth.aglyn.com/__/auth/iframe`.
 
+> **Both were run — see `docs/design/agl-1099a-poc-findings.md`.** Both pass, and
+> the bet holds. Three corrections come back from it and are *not* yet folded
+> into the text below: (a) App Check is **enforced on Identity Platform**, so the
+> reCAPTCHA allowlist entry is a hard functional prerequisite rather than only a
+> commercial ceiling — which makes 1099d a blocker for 1099c; (b) the
+> `initializeAuth` config blocks the **federated** family only — password, phone
+> and passkey sign-in all still run on the custom domain, and six existing
+> `setPersistence(auth, browserLocalPersistence)` calls will silently re-persist
+> a refresh token there, so "structural" overstates it; (c) Firestore's
+> `persistentLocalCache` writes document bodies to the same origin's IndexedDB,
+> so D6's "the only credential that survives a tab close is our `HttpOnly`
+> cookie" is true of credentials but not of the origin.
+
 ### The allowlist that *is* the real ceiling: App Check's reCAPTCHA key
 
 `libs/shared/util/fbclient/src/lib/firebase-app.ts` initializes App Check with

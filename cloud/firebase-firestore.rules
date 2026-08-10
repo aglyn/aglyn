@@ -593,6 +593,29 @@ service cloud.firestore {
       // other) subcollections stay editor-writable — not quota-governed.
       // These are carved OUT of the catch-all below (rules OR their allows,
       // so a dedicated deny can't win unless the catch-all stops matching).
+      // Version CREATE is API-only (AGL-1369); update/delete stay client-side.
+      //
+      // `versioning` (Pro+) was a UI gate only: the console checked the
+      // entitlement and then wrote `versions/{new}` with the client SDK, so a
+      // Free org got Pro version history by writing the document directly.
+      //
+      // The split that makes this enforceable is create-vs-update, and it is
+      // exact. An ordinary canvas save is `transaction.set(ref, …, {merge:true})`
+      // on a version doc that ALREADY EXISTS (see `saveNodesGuarded`) — a rules
+      // UPDATE, which stays open on every plan. Authoring is untouched.
+      // A rules CREATE means one more version document than there was before,
+      // which is precisely what the entitlement sells. /api/hosts/versions owns
+      // it: the route counts the existing versions with the Admin SDK and
+      // allows the FIRST one on any plan (a resource must have a version to be
+      // editable at all), requiring `versioning` only to retain a second.
+      //
+      // Rules alone cannot make that call. The tempting test — "allow the
+      // create when the parent's `versionId` already points at it" — is
+      // defeated in two writes, because publishing is a legitimate client
+      // action and so the parent's `versionId` is client-writable: point it at
+      // the id about to be created, create, then point it back. Counting
+      // documents is not something rules can do, which is why this is a route
+      // and not a condition.
       match /screens/{screenId} {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
@@ -600,7 +623,8 @@ service cloud.firestore {
           (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
-          allow write: if isStaff() ||
+          allow create: if isStaff();
+          allow update, delete: if isStaff() ||
             (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
         }
       }
@@ -611,7 +635,8 @@ service cloud.firestore {
           (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
-          allow write: if isStaff() ||
+          allow create: if isStaff();
+          allow update, delete: if isStaff() ||
             (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
         }
       }
@@ -629,7 +654,8 @@ service cloud.firestore {
           (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
-          allow write: if isStaff() ||
+          allow create: if isStaff();
+          allow update, delete: if isStaff() ||
             (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
         }
       }

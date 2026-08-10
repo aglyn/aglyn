@@ -66,7 +66,11 @@ import {
 import { observer } from 'mobx-react-lite'
 import { useRouter } from 'next/navigation'
 import { useCallback, useImperativeHandle, useState, type Ref } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useHostVersionApi,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../utils/revalidate-live-pages'
@@ -189,6 +193,7 @@ export const BesignerVersionsComponent = observer(
     const { enqueueSnackbar } = useSnackbar()
     const { queueLoading } = useLoading()
     const { org } = useCurrentOrg()
+    const createHostVersion = useHostVersionApi()
     const { confirm } = useConfirmationContext()
     const [open, setOpen] = useState(false)
     // Name dialog serves both "create with a name" (AGL-59) and rename.
@@ -366,6 +371,9 @@ export const BesignerVersionsComponent = observer(
     )
 
     const handleCreateVersion = useCallback(() => {
+      // UX only. /api/hosts/versions re-checks `versioning` server-side and is
+      // the actual gate (AGL-1369) — this just names the wall before the user
+      // types a version name for a create that would be refused.
       if (!hasEntitlement('versioning', org)) {
         return enqueueSnackbar(
           'Versioning requires a Pro plan — see Billing to upgrade',
@@ -420,16 +428,19 @@ export const BesignerVersionsComponent = observer(
             persist: false,
           })
         }
-        const source = await getDoc(
-          doc(firestore, ...parentPath, 'versions', versionId),
-        )
-        if (!source.exists()) throw new Error('Source version missing')
-        const newVersionId = Aglyn.createResourceUid()
-        await setDoc(doc(firestore, ...parentPath, 'versions', newVersionId), {
-          ...source.data(),
-          displayName: nameValue.trim(),
-          createdAt: timestamp,
-          updatedAt: timestamp,
+        // The snapshot rides /api/hosts/versions (AGL-1369). The rules deny
+        // client `create` under a screen/layout/component's `versions`, so
+        // this is the only path — and the route, not the check above, is what
+        // actually enforces `versioning`: it counts the versions already
+        // stored and requires the entitlement to retain more than one. The
+        // copy is made server-side from `sourceVersionId`, so the node map is
+        // never round-tripped through the browser to get here.
+        const { id: newVersionId } = await createHostVersion({
+          hostId,
+          kind: parent.kind,
+          parentId: parent.id,
+          sourceVersionId: versionId,
+          data: { displayName: nameValue.trim() },
         })
         enqueueSnackbar(`Version "${nameValue.trim()}" created`, {
           variant: 'success',
@@ -438,9 +449,10 @@ export const BesignerVersionsComponent = observer(
         setNameDialog(null)
         setOpen(false)
         void router.push(besignerUrl(newVersionId))
-      } catch (error) {
+      } catch (error: any) {
         console.error(error)
-        enqueueSnackbar('An error has occurred', {
+        // The route's message is the useful one — it names the plan wall.
+        enqueueSnackbar(error?.message ?? 'An error has occurred', {
           variant: 'error',
           allowDuplicate: true,
         })
@@ -457,6 +469,10 @@ export const BesignerVersionsComponent = observer(
       enqueueSnackbar,
       router,
       besignerUrl,
+      createHostVersion,
+      hostId,
+      parent.kind,
+      parent.id,
     ])
 
     const handleDelete = useCallback(

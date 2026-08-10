@@ -16,7 +16,6 @@
  */
 
 import { CANVAS_ROOT_ELEMENT_ID, createResourceUid } from '@aglyn/aglyn'
-import { doc, setDoc, Timestamp, type Firestore } from 'firebase/firestore'
 
 /**
  * Creates the quota-governed screen doc — the caller passes
@@ -32,22 +31,36 @@ export type CreateScreenResource = (options: {
 }) => Promise<{ id: string }>
 
 /**
+ * Creates the screen's first version — the caller passes
+ * `useHostVersionApi()` so the create rides /api/hosts/versions (AGL-1369),
+ * which the rules now make the only path. A parameter for the same reason
+ * `CreateScreenResource` is one: this helper is not a hook.
+ */
+export type CreateScreenVersion = (options: {
+  hostId: string
+  kind: 'screen'
+  parentId: string
+  id: string
+  data: Record<string, unknown>
+}) => Promise<{ id: string }>
+
+/**
  * Creates a besigner email document (AGL-347/349): a screen with kind
  * 'email' plus a first version seeded with an email section + a greeting
  * text block. Shared by the campaigns composer and the email-screens list
  * so both scaffold identical documents. The screen doc goes through the
- * quota-enforcing resources API (AGL-473); the first version stays
- * client-written. Returns the ids for navigation.
+ * quota-enforcing resources API (AGL-473) and the first version through
+ * /api/hosts/versions (AGL-1369), which allows a resource's FIRST version on
+ * every plan. Returns the ids for navigation.
  */
 export async function createEmailScreen(
-  firestore: Firestore,
   hostId: string,
   createScreen: CreateScreenResource,
+  createVersion: CreateScreenVersion,
   displayName = 'Untitled email',
 ): Promise<{ screenId: string; versionId: string }> {
   const screenId = createResourceUid()
   const versionId = createResourceUid()
-  const timestamp = Timestamp.now()
   const sectionId = createResourceUid()
   const textId = createResourceUid()
   await createScreen({
@@ -56,12 +69,13 @@ export async function createEmailScreen(
     id: screenId,
     data: { displayName, kind: 'email', versionId },
   })
-  await setDoc(
-    doc(firestore, 'hosts', hostId, 'screens', screenId, 'versions', versionId),
-    {
+  await createVersion({
+    hostId,
+    kind: 'screen',
+    parentId: screenId,
+    id: versionId,
+    data: {
       screenId,
-      createdAt: timestamp,
-      updatedAt: timestamp,
       nodes: {
         [CANVAS_ROOT_ELEMENT_ID]: {
           $id: CANVAS_ROOT_ELEMENT_ID,
@@ -87,6 +101,6 @@ export async function createEmailScreen(
         },
       },
     },
-  )
+  })
   return { screenId, versionId }
 }

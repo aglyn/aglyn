@@ -40,6 +40,7 @@ import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   useFirestore,
   useHostResourceApi,
+  useHostVersionApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { Chip, Tooltip } from '@mui/material'
@@ -121,6 +122,7 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
   const { data: user } = useUser()
   const { org } = useCurrentOrg()
   const createHostResource = useHostResourceApi()
+  const createHostVersion = useHostVersionApi()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const router = useRouter()
@@ -438,15 +440,20 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
           // Same helper the single-template Use flow calls (AGL-672), so
           // create-screen → write-version → publish-route and its slug
           // de-confliction have one implementation.
-          await createPageFromTemplate(firestore, createHostResource as any, {
-            hostId,
-            displayName: page.displayName ?? page.$id,
-            nodes: (page.nodes ?? {}) as Record<string, unknown>,
-            description: page.description,
-            seo: page.seo,
-            slug: page.slug,
-            usedSlugs: used,
-          })
+          await createPageFromTemplate(
+            firestore,
+            createHostResource as any,
+            createHostVersion as any,
+            {
+              hostId,
+              displayName: page.displayName ?? page.$id,
+              nodes: (page.nodes ?? {}) as Record<string, unknown>,
+              description: page.description,
+              seo: page.seo,
+              slug: page.slug,
+              usedSlugs: used,
+            },
+          )
           created += 1
         }
         enqueueSnackbar(
@@ -475,6 +482,7 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
       hostId,
       org,
       createHostResource,
+      createHostVersion,
       enqueueSnackbar,
     ],
   )

@@ -43,7 +43,10 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestoreCollection,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 
 export interface ReservationsCardProps {
   hostId: string
@@ -77,7 +80,20 @@ export function ReservationsCard(props: ReservationsCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { data: resourceDocs } = useFirestoreCollection<any>(
+  const {
+    data: resourceDocs,
+    status: resourcesStatus,
+    /**
+     * The rows this editor is seeded from are unconfirmed by the server
+     * (AGL-1358). Editing spreads a whole stored resource into
+     * `resourceDraft` and writes all of it back, so `merge: true` protects
+     * nothing. `blocks` is the field that costs more than money: it is the
+     * manually blocked date ranges `isRangeAvailable` reads, so a cached seed
+     * re-opens dates that were closed and lets the next guest book a room
+     * that is already spoken for.
+     */
+    fromCache: resourcesFromCache,
+  } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'resources'), limit(50)),
     [firestore, hostId],
     { idField: '$id' },
@@ -121,23 +137,61 @@ export function ReservationsCard(props: ReservationsCardProps) {
       return
     }
     const { id, ...data } = resourceDraft
-    await setDoc(
-      doc(
-        firestore,
-        'hosts',
-        hostId,
-        'resources',
-        id ?? Aglyn.createResourceUid(),
-      ),
+    /**
+     * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
+     * `data` is the whole stored row spread out of the listener, so
+     * `merge: true` has nothing left to protect — every field is present,
+     * `blocks` and the seasonal multipliers included.
+     *
+     * Only the edit path. A NEW resource is built from defaults at a fresh
+     * uid and can overwrite nothing, and the first snapshot of any listener
+     * is `fromCache: true`, so guarding a create would refuse a save that was
+     * never unsafe.
+     *
+     * The guard WRAPS the write — an early return is a shape you can keep
+     * while losing the protection.
+     */
+    const verdict = await writeGuardedBySeed(
       {
-        ...data,
-        name: resourceDraft.name!.trim().slice(0, 120),
+        subject: 'resource',
+        unreadable: Boolean(id) && resourcesStatus === 'error',
+        fromCache: Boolean(id) && resourcesFromCache,
       },
-      { merge: true },
+      async () => {
+        await setDoc(
+          doc(
+            firestore,
+            'hosts',
+            hostId,
+            'resources',
+            id ?? Aglyn.createResourceUid(),
+          ),
+          {
+            ...data,
+            name: resourceDraft.name!.trim().slice(0, 120),
+          },
+          { merge: true },
+        )
+      },
     )
+    // Before `setResourceDraft(null)`, so a refusal keeps the dialog open
+    // with what was typed.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     setResourceDraft(null)
     enqueueSnackbar('Resource saved', { variant: 'success', persist: false })
-  }, [resourceDraft, firestore, hostId, enqueueSnackbar])
+  }, [
+    resourceDraft,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+    resourcesStatus,
+    resourcesFromCache,
+  ])
 
   const handleStatus = useCallback(
     (reservation: any, status: CommerceModel.ReservationStatus) => async () => {

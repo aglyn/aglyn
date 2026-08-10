@@ -19,8 +19,11 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { resolveNamedTokens } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { useFirestore, useHostResourceApi } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useHostResourceApi,
+  useHostVersionApi,
+} from '@aglyn/tenant-feature-instance'
 import {
   Button,
   Dialog,
@@ -31,7 +34,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import createPageFromTemplate, {
   slugifyPageName as slugify,
@@ -61,6 +64,7 @@ export function UseTemplateDialog({
 }) {
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
+  const createHostVersion = useHostVersionApi()
   const { enqueueSnackbar } = useSnackbar()
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
@@ -94,7 +98,6 @@ export function UseTemplateDialog({
         (template.nodes ?? {}) as any,
         placeholders.length ? values : null,
       )
-      const timestamp = Timestamp.now()
 
       if (kind === 'component') {
         const { id } = await createHostResource({
@@ -128,17 +131,22 @@ export function UseTemplateDialog({
             versionId,
           },
         })
-        await setDoc(
-          doc(firestore, 'hosts', hostId, 'layouts', layoutId, 'versions', versionId),
-          {
+        // The layout's first version rides /api/hosts/versions (AGL-1369):
+        // rules deny the client create, and the route allows a resource's
+        // FIRST version on every plan. `createdAt`/`updatedAt` are stamped
+        // server-side there, so no client Timestamp goes over the wire.
+        await createHostVersion({
+          hostId,
+          kind: 'layout',
+          parentId: layoutId,
+          id: versionId,
+          data: {
             layoutId,
             hostId,
             displayName: 'Initial version',
             nodes,
-            createdAt: timestamp,
-            updatedAt: timestamp,
           },
-        )
+        })
         enqueueSnackbar(`Created the layout “${name.trim()}”`, {
           variant: 'success',
           persist: false,
@@ -155,6 +163,7 @@ export function UseTemplateDialog({
       const created = await createPageFromTemplate(
         firestore,
         createHostResource as any,
+        createHostVersion as any,
         {
           hostId,
           displayName: name.trim(),
@@ -195,6 +204,7 @@ export function UseTemplateDialog({
     hostId,
     firestore,
     createHostResource,
+    createHostVersion,
     enqueueSnackbar,
     onClose,
   ])
