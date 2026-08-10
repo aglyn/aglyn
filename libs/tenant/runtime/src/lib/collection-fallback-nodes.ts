@@ -50,6 +50,45 @@ interface FallbackEntry {
 const formatDate = (value?: { seconds: number } | null) =>
   value?.seconds ? new Date(value.seconds * 1000).toLocaleDateString() : ''
 
+/**
+ * What may be interpolated into the cover block's CSS `url("…")` (AGL-1407).
+ *
+ * The gate this replaces was `/^https?:\/\//i`, which answered the safety
+ * question correctly and the coverage question wrongly: it admitted only the
+ * OLDEST of the stored generations. A `media:` reference failed it and the
+ * cover block was never emitted — a SILENT drop, no error, no placeholder,
+ * just a page missing its picture — and so did the AGL-175 relative CDN path
+ * that the first pass at media references wrote. Resolving before testing is
+ * what closes that, and the test then has to accept a site-relative path,
+ * which is what {@link Aglyn.resolveMediaSrc} returns for a reference.
+ *
+ * Still a scheme allowlist rather than "anything non-empty": this value lands
+ * inside a stylesheet rather than in an `<img src>`, so `data:` and friends
+ * have no business here even though {@link cssUrlValue} already makes
+ * quote-breaking impossible. A bare relative `cover.png` stays rejected
+ * exactly as before — there is no page for it to resolve against at compose
+ * time.
+ */
+const RENDERABLE_COVER_URL = /^(?:https?:\/\/|\/)/i
+
+/**
+ * A URL made safe to sit inside `url("…")`, WITHOUT re-encoding it.
+ *
+ * This replaces `encodeURI`, which was the wrong tool and quietly broke the
+ * commonest stored form: `encodeURI` escapes `%`, so every raw firebasestorage
+ * download URL — whose object path is `orgs%2F…%2Fmedia%2F…` — came out
+ * double-encoded as `%252F` and 404'd. The block rendered, the image did not,
+ * which is why it survived: the page looks composed and the picture is just
+ * missing.
+ *
+ * Only the characters that could END the CSS string are escaped, and they are
+ * escaped percent-wise rather than with a backslash so the result is still a
+ * valid URL if anything downstream reads it as one. `encodeURI` was never
+ * needed for anything else here — a stored URL is already URL-encoded.
+ */
+const cssUrlValue = (url: string) =>
+  url.replace(/["\\\n\r]/g, (char) => encodeURIComponent(char))
+
 /** Root → centered container → content stack; children slot underneath. */
 function shell(childIds: string[]): NodesMap {
   return {
@@ -102,6 +141,13 @@ type AglynNodeEntry = [string, Aglyn.AglynNodeSchema]
 export function buildCollectionEntryFallbackNodes(
   collection: FallbackCollection,
   entry: FallbackEntry,
+  /**
+   * The site being composed, so an org-scoped reference is host-qualified the
+   * way every other render surface qualifies one (AGL-1043/AGL-1407). Optional
+   * because a bare org reference still resolves without it; passing it is what
+   * lets an asset restricted to this site resolve at all.
+   */
+  hostId?: string,
 ): NodesMap {
   const entries: AglynNodeEntry[] = [
     typography('title', {
@@ -133,7 +179,12 @@ export function buildCollectionEntryFallbackNodes(
       },
     ])
   }
-  if (entry.coverImage && /^https?:\/\//i.test(entry.coverImage)) {
+  // The cover, through the ONE shared resolver (AGL-1407). A `media:`
+  // reference becomes the site-relative CDN path; a raw storage URL, an
+  // AGL-175 CDN path and an author's own hotlinked URL all pass through
+  // untouched, which is the documented precedence in `media-ref.ts`.
+  const coverImage = Aglyn.resolveMediaSrc(entry.coverImage, { hostId })
+  if (coverImage && RENDERABLE_COVER_URL.test(coverImage)) {
     // Rendered as a background image on a plain stack, NOT through the
     // first-party `image` component — that component crashes tenant SSR
     // (AGL-579); the background-image approach is proven safe.
@@ -148,7 +199,7 @@ export function buildCollectionEntryFallbackNodes(
           role: 'img',
           'aria-label': entry.title ?? '',
           sx: {
-            backgroundImage: `url("${encodeURI(entry.coverImage)}")`,
+            backgroundImage: `url("${cssUrlValue(coverImage)}")`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             borderRadius: 1,
@@ -428,9 +479,15 @@ export function buildCollectionFallbackNodes(content: {
   entry: FallbackEntry | null
   pagination?: FallbackListPagination | null
   category?: FallbackListCategory | null
+  /** The composing site, for host-qualifying a media reference (AGL-1407). */
+  hostId?: string
 }): NodesMap {
   return content.entry
-    ? buildCollectionEntryFallbackNodes(content.collection, content.entry)
+    ? buildCollectionEntryFallbackNodes(
+        content.collection,
+        content.entry,
+        content.hostId,
+      )
     : buildCollectionListFallbackNodes(
         content.collection,
         content.entries.length > 0,

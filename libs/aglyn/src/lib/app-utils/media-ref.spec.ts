@@ -16,6 +16,7 @@
  */
 
 import {
+  absoluteMediaSrc,
   formatMediaRef,
   hostQualifiedScope,
   isMediaCdnUrl,
@@ -203,6 +204,59 @@ describe('media references (AGL-1215)', () => {
     it('matches nothing for an id that sanitizes away', () => {
       expect(mediaRefPattern('../').test('media:site-a/med123')).toBe(false)
       expect(mediaRefPattern('').test('media:site-a/med123')).toBe(false)
+    })
+  })
+
+  /**
+   * The out-of-band variant (AGL-1407). Extracted from `resolveSocialImage`,
+   * whose private copy this replaces, so the manifest icon, the inbox and
+   * `og:image` share ONE rule about when a stored value may become an
+   * absolute URL and when it must become nothing at all.
+   */
+  describe('absoluteMediaSrc — for consumers with no page to resolve against', () => {
+    const ORIGIN = 'https://northwind.coffee'
+
+    it('absolutizes a reference against the stated origin', () => {
+      expect(
+        absoluteMediaSrc('media:org:acme/med123', {
+          hostId: 'site-a',
+          origin: ORIGIN,
+        }),
+      ).toBe(`${ORIGIN}${MEDIA_CDN_ROUTE}/org:acme:site-a/med123`)
+    })
+
+    it('absolutizes the AGL-175 relative CDN path', () => {
+      expect(
+        absoluteMediaSrc('/api/media/cdn/org:acme/med123', { origin: ORIGIN }),
+      ).toBe(`${ORIGIN}/api/media/cdn/org:acme/med123`)
+    })
+
+    it('leaves an already-absolute URL alone, origin or not', () => {
+      expect(absoluteMediaSrc(RAW_URL, { origin: ORIGIN })).toBe(RAW_URL)
+      expect(absoluteMediaSrc(RAW_URL)).toBe(RAW_URL)
+      expect(absoluteMediaSrc('https://x.test/a.png')).toBe(
+        'https://x.test/a.png',
+      )
+    })
+
+    it('gives a protocol-relative URL a scheme, never an origin', () => {
+      // Prefixing an origin would corrupt it — it already names a host.
+      expect(absoluteMediaSrc('//cdn.test/a.png', { origin: ORIGIN })).toBe(
+        'https://cdn.test/a.png',
+      )
+    })
+
+    it('returns undefined rather than a relative URL when no origin is known', () => {
+      // Never interpolate an unknown origin, and never emit a URL that is
+      // well-formed but wrong (AGL-1160/AGL-1272).
+      expect(absoluteMediaSrc('media:org:acme/med123')).toBeUndefined()
+      expect(absoluteMediaSrc('/api/media/cdn/org:acme/med123')).toBeUndefined()
+    })
+
+    it('returns undefined for an unparseable reference and for nothing', () => {
+      expect(absoluteMediaSrc('media:junk', { origin: ORIGIN })).toBeUndefined()
+      expect(absoluteMediaSrc('', { origin: ORIGIN })).toBeUndefined()
+      expect(absoluteMediaSrc(undefined, { origin: ORIGIN })).toBeUndefined()
     })
   })
 

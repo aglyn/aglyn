@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
+import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { absoluteMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import getHost from '../../../utils/get-host'
 
 export const dynamic = 'force-dynamic'
@@ -77,11 +79,38 @@ export async function GET(request: Request): Promise<Response> {
    * back to a screenshot of the page. An entry pointing at a missing image
    * would install a broken tile, which is the failure this whole issue is
    * about — someone else's branding, or none, on a customer's home screen.
+   *
+   * ## Why ABSOLUTE here, when the page's own `<img>` tags are relative
+   *
+   * `logoUrl` has three stored generations, and two of them — a `media:`
+   * reference and the AGL-175 relative CDN path — resolve to
+   * `/api/media/cdn/…` (AGL-1407). A manifest icon is not fetched by the page
+   * that linked it: the install prompt, the OS icon cache and every
+   * installability checker fetch it out of band, so a site-relative `src`
+   * produces a manifest that parses and installs a blank tile. That is
+   * precisely the AGL-1337 defect in a new place, and it is the reason this
+   * call site uses {@link absoluteMediaSrc} while the tenant page's own cover
+   * `<img>` is happy with the relative form.
+   *
+   * The origin comes from the host record, the same source the sitemap, the
+   * canonical and `og:image` use — never from `request.url`, which after the
+   * middleware rewrite names an internal path rather than the customer's
+   * domain.
+   *
+   * A reference we cannot absolutize (a site with no `cname` and no
+   * `subdomain`) therefore yields NO icons, which is the existing empty-case
+   * rule rather than a new one: a blank tile is the failure being avoided.
+   * An already-absolute URL — the raw storage URL, or one an author typed —
+   * never depends on the origin and is unchanged.
    */
-  const icons = site?.logoUrl
+  const iconSrc = absoluteMediaSrc(site?.logoUrl, {
+    hostId: site?.$id,
+    origin: hostPublicOrigin(site),
+  })
+  const icons = iconSrc
     ? [
         {
-          src: site.logoUrl,
+          src: iconSrc,
           // `any` rather than `maskable`: a logo that has not been designed
           // with a safe zone gets cropped into a circle on Android, and we
           // cannot know whether a customer's has one.

@@ -207,6 +207,42 @@ export function resolveMediaSrc(
 }
 
 /**
+ * {@link resolveMediaSrc}, then made ABSOLUTE against a stated origin.
+ *
+ * Two of the three stored generations — a `media:` reference and the AGL-175
+ * relative CDN path — resolve site-RELATIVE, which is right for an `<img>` on
+ * a page and wrong for every consumer that reads the URL out of band: a
+ * crawler fetching `og:image` (AGL-1337), an inbox rendering a campaign
+ * (AGL-1224), an installer fetching a PWA manifest icon (AGL-1407). None of
+ * them has a page to resolve against, and the tenant app declares no
+ * `metadataBase`, so Next resolves nothing for us either.
+ *
+ * With no origin a relative value returns **undefined** rather than a
+ * relative URL — the rule the canonical and the RSS feed already follow
+ * (AGL-1160/AGL-1272): never interpolate an unknown origin, and never emit a
+ * URL that is well-formed but wrong. An absolute value is unaffected, so the
+ * author-typed external URL and the raw storage URL never depend on knowing
+ * the origin at all.
+ *
+ * A protocol-relative `//host/x.png` only lacks a scheme; it is given `https:`
+ * rather than an origin, which would corrupt it.
+ */
+export function absoluteMediaSrc(
+  value: string | undefined | null,
+  options?: ResolveMediaSrcOptions & { origin?: string | null },
+): string | undefined {
+  const resolved = resolveMediaSrc(value, options)
+  if (!resolved) return undefined
+  if (/^[a-z][a-z0-9+.-]*:/i.test(resolved)) return resolved
+  if (resolved.startsWith('//')) return `https:${resolved}`
+  const origin = options?.origin
+  if (!origin) return undefined
+  return resolved.startsWith('/')
+    ? `${origin}${resolved}`
+    : `${origin}/${resolved}`
+}
+
+/**
  * Whether a resolved URL is served by our CDN, and therefore carries the
  * generated WebP variants selected by `?w=`. Widths without a variant fall
  * back to the original server-side, so a static srcSet is safe for any

@@ -68,7 +68,7 @@
  */
 
 import { hostPublicOrigin } from './host-naming'
-import { resolveMediaSrc } from './media-ref'
+import { absoluteMediaSrc } from './media-ref'
 
 /**
  * One candidate in the precedence list — the persisted shape of a social
@@ -94,25 +94,6 @@ export interface SocialImageHost {
   $id?: string | null
   cname?: string | null
   subdomain?: string | null
-}
-
-/**
- * Makes a resolved media URL absolute.
- *
- * Returns undefined rather than a relative URL when the host record names no
- * origin, following the same rule as the canonical and the RSS feed
- * (AGL-1160/AGL-1272): never interpolate an unknown origin, and never emit a
- * URL that is well-formed but wrong. A missing `og:image` degrades to the
- * small card; a relative one is a broken image in every preview that renders
- * it.
- */
-function absolutize(url: string, origin: string | undefined) {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url
-  // Protocol-relative: the scheme is the only thing missing, and every
-  // surface that consumes `og:image` is https.
-  if (url.startsWith('//')) return `https:${url}`
-  if (!origin) return undefined
-  return url.startsWith('/') ? `${origin}${url}` : `${origin}/${url}`
 }
 
 /**
@@ -165,12 +146,16 @@ export function resolveSocialImage(options: {
   const source = sources.find((candidate) => Boolean(candidate?.image))
   if (!source?.image) return undefined
   // A `media:` reference becomes the site-relative CDN path, host-qualified
-  // so a restricted org asset resolves for the site actually rendering; any
-  // other string passes through untouched (back-compat with the raw storage
-  // URLs the content and favicon pickers have always written).
-  const resolved = resolveMediaSrc(source.image, { hostId: host?.$id })
-  if (!resolved) return undefined
-  const url = absolutize(resolved, origin || hostPublicOrigin(host))
+  // so a restricted org asset resolves for the site actually rendering, and is
+  // then absolutized because a crawler reads `og:image` out of band; any other
+  // string passes through untouched (back-compat with the raw storage URLs the
+  // content and favicon pickers have always written). Both halves live in
+  // `media-ref.ts` (AGL-1407) so the manifest and the inbox share this rule
+  // rather than each keeping a copy that can drift.
+  const url = absoluteMediaSrc(source.image, {
+    hostId: host?.$id,
+    origin: origin || hostPublicOrigin(host),
+  })
   if (!url) return undefined
   return { url, ...dimensions(source) }
 }

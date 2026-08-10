@@ -18,6 +18,7 @@
 // Deep import (not the barrel) so this Server Component doesn't pull the
 // theme lib's createContext HOCs into the RSC graph (AGL-405).
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
 import type { ReactNode } from 'react'
 import AdminBarSlot from './admin-bar/admin-bar-slot'
@@ -45,10 +46,18 @@ export default async function HostLayout({
   // applied below by HostThemeProvider; these are the upper two layers.
   const hostTheme = resolveSiteTheme(hostRes.host)
   const fontsHref = getGoogleFontsUrl(hostTheme?.fonts)
+  // The navigation loader's logo is a THIRD reader of `logoUrl`, alongside the
+  // manifest icon and the white-label badge, and it resolved none of the stored
+  // forms (AGL-1407). Site-RELATIVE is correct here — unlike the manifest icon,
+  // this one really is an `<img>` on the page, with a base URL to resolve
+  // against — so the plain resolver rather than the absolute one.
+  const brandLogoUrl = resolveMediaSrc(hostRes.host?.logoUrl, {
+    hostId: hostRes.host?.$id,
+  })
   return (
     <HostThemeProviders
       hostTheme={hostTheme}
-      brandLogoUrl={hostRes.host?.logoUrl}
+      brandLogoUrl={brandLogoUrl}
       brandName={hostRes.host?.displayName}
     >
       {/* Per-host manifest (AGL-1252). A relative href on purpose: the

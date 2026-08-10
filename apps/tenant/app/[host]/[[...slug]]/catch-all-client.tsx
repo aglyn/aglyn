@@ -429,16 +429,29 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     const { collection, entries, entry } = props.content
     const formatDate = (value?: { seconds: number } | null) =>
       value ? new Date(value.seconds * 1000).toLocaleDateString() : ''
+    // The cover through the ONE shared resolver (AGL-1407). A `media:`
+    // reference becomes the CDN path for THIS site; a raw storage URL, an
+    // AGL-175 relative CDN path and an author's own hotlinked URL all pass
+    // through untouched, per the precedence documented in `media-ref.ts`.
+    //
+    // A site-RELATIVE result is correct on this surface, unlike `og:image`
+    // (AGL-1337) or a manifest icon: a browser rendering the page has a base
+    // URL to resolve it against. And a reference that does not parse resolves
+    // to undefined, so the `<img>` is dropped rather than emitted with a
+    // literal `src="media:…"`.
+    const entryCover = Aglyn.resolveMediaSrc((entry as any)?.coverImage, {
+      hostId: host?.$id,
+    })
     return (
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px' }}>
         {entry ? (
           <article>
             <h1>{entry.title}</h1>
             <p style={{ opacity: 0.7 }}>{formatDate(entry.publishedAt)}</p>
-            {(entry as any).coverImage ? (
+            {entryCover ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={(entry as any).coverImage}
+                src={entryCover}
                 alt=""
                 style={{ maxWidth: '100%', borderRadius: 8 }}
               />
@@ -681,6 +694,13 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         // decides whether the badge shows at all.
         (() => {
           const brand = props.branding ?? Aglyn.AGLYN_BRANDING_PROFILE
+          // Same resolver as every other surface (AGL-1407). The org branding
+          // card writes a typed URL today, which passes straight through; this
+          // is what stops a picked `media:` reference reaching the badge as a
+          // literal string once `logoUrl` is converted.
+          const brandLogo = Aglyn.resolveMediaSrc(brand.logoUrl, {
+            hostId: host?.$id,
+          })
           return (
             <a
               href={brand.supportUrl}
@@ -703,9 +723,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                 textDecoration: 'none',
               }}
             >
-              {brand.logoUrl ? (
+              {brandLogo ? (
                 <img
-                  src={brand.logoUrl}
+                  src={brandLogo}
                   alt=""
                   aria-hidden
                   style={{ height: 14, width: 'auto', display: 'block' }}

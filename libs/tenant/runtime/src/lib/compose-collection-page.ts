@@ -223,6 +223,10 @@ export async function composeCollectionFallbackPage(options: {
       entry: content.entry,
       pagination: content.pagination,
       category: content.category,
+      // The cover resolves through `resolveMediaSrc` (AGL-1407), and an
+      // org-scoped reference has to name the site asking or a site-restricted
+      // asset will not serve.
+      hostId,
     })
     const nodes = await composeNodesWithChrome({
       hostId,
