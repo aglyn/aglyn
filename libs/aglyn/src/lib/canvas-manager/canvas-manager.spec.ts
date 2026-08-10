@@ -548,8 +548,8 @@ describe('Aglyn: Screen Manager', () => {
       // Seed a brand-new empty container, then duplicate a node into it.
       const box = canvas.setNode(
         canvas.createNode({ componentId: 'div', parentId: NODE_ROOT_ID }),
+        NODE_ROOT_ID,
       )!
-      canvas.getNode(NODE_ROOT_ID)!.nodes!.push(box.$id!)
       canvas.reparentNode(canvas.getNode('child1-1')!, box)
 
       const copy = canvas.duplicateNode(canvas.getNode('child1-1')!)
@@ -570,10 +570,10 @@ describe('Aglyn: Screen Manager', () => {
           parentId: NODE_ROOT_ID,
           nodes: undefined as never,
         }),
+        NODE_ROOT_ID,
       )!
       expect(Array.isArray(bare.nodes)).toBe(true)
 
-      canvas.getNode(NODE_ROOT_ID)!.nodes!.push('bare')
       canvas.reparentNode(canvas.getNode('child1-2')!, canvas.getNode('bare')!)
 
       expect(canvas.getNode('bare')!.nodes).toContain('child1-2')
@@ -1327,6 +1327,208 @@ describe('Aglyn: Screen Manager', () => {
       canvas.setNodes({ [NODE_ROOT_ID]: staleRoot.toJSON!() } as any, true)
 
       canvas.reparentNode(canvas.getNode('child1')!, staleRoot)
+
+      const saved = canvas.toJSON().nodes as Record<string, any>
+      const reachable = new Set<string>()
+      const walk = (id: string) => {
+        if (reachable.has(id) || !saved[id]) return
+        reachable.add(id)
+        for (const childId of saved[id].nodes ?? []) walk(childId)
+      }
+      walk(NODE_ROOT_ID)
+      expect(Object.keys(saved).filter((id) => !reachable.has(id))).toEqual([])
+    })
+  })
+
+  /**
+   * AGL-1366 — `setNode` was the last public way to put an entry in the node
+   * map with no parent linkage at all, which is the whole orphan class of
+   * AGL-1363 in one call: the map is serialized wholesale, the tree is walked
+   * from the root, and a node in the first but not the second is saved every
+   * save and drawn never.
+   *
+   * It was not a live defect — `duplicateNode` linked afterwards and the
+   * `NODE_SET` event has no emitter — so these tests do not reproduce a
+   * shipped bug. They pin the SHAPE, because the alternative is a comment,
+   * and a comment is exactly what let the link-element invariant be
+   * re-broken a day after its fix landed (AGL-1268 → AGL-1357).
+   */
+  describe('setNode requires and links a live parent (AGL-1366)', () => {
+    const makeCanvas = () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+      return canvas
+    }
+
+    /** Ids the renderer can never reach — the walk it actually does. */
+    const collectUnreachable = (canvas: CanvasManager): NodeId[] => {
+      const seen = new Set<NodeId>()
+      const walk = (id: NodeId) => {
+        if (seen.has(id)) return
+        seen.add(id)
+        for (const childId of canvas.getNode(id)?.nodes ?? []) walk(childId)
+      }
+      walk(NODE_ROOT_ID)
+      return [...canvas.nodes.keys()].filter((id) => !seen.has(id))
+    }
+
+    // The reproduction. This is the call the old signature accepted happily:
+    // a node lands in the map, no parent lists it, and it is now permanent.
+    it('refuses a parent that is not in the map instead of stranding the node', () => {
+      const canvas = makeCanvas()
+      const before = canvas.toJSON().nodes
+      // A parent a co-editor deleted out from under this session — truthy,
+      // shaped like a node, absent from the map.
+      const ghost = { $id: 'gone', nodes: [] } as any
+
+      expect(() =>
+        canvas.setNode(
+          canvas.createNode({ $id: 'stray', componentId: 'div' }),
+          ghost,
+        ),
+      ).toThrow('Invalid parent node')
+
+      // Refused BEFORE the insert: the node never entered the map at all,
+      // so there is nothing for the next save to carry.
+      expect(canvas.nodes.has('stray')).toBe(false)
+      expect(ghost.nodes).toEqual([])
+      expect(collectUnreachable(canvas)).toEqual([])
+      expect(canvas.toJSON().nodes).toEqual(before)
+    })
+
+    it('refuses a bare parent id that resolves to nothing', () => {
+      const canvas = makeCanvas()
+
+      expect(() =>
+        canvas.setNode(
+          canvas.createNode({ $id: 'stray', componentId: 'div' }),
+          'nope',
+        ),
+      ).toThrow('Invalid parent node')
+
+      expect(canvas.nodes.has('stray')).toBe(false)
+      expect(collectUnreachable(canvas)).toEqual([])
+    })
+
+    it('links the node onto its parent, so a set node is always reachable', () => {
+      const canvas = makeCanvas()
+
+      const added = canvas.setNode(
+        canvas.createNode({ $id: 'fresh', componentId: 'div' }),
+        canvas.getNode('child2')!,
+      )
+
+      expect(added.$id).toBe('fresh')
+      expect(canvas.getNode('child2')!.nodes).toEqual(['fresh'])
+      // Both directions, or a later `getNodeParent` walks off the tree.
+      expect(canvas.getNode('fresh')!.parentId).toBe('child2')
+      expect(collectUnreachable(canvas)).toEqual([])
+    })
+
+    it('links onto the LIVE parent when handed a stale instance of it', () => {
+      const canvas = makeCanvas()
+      // Every `setNodes` mints a fresh `AglynNode` per id, so a co-editor's
+      // merge silently replaces the instance a panel closure is holding.
+      const staleChild2 = canvas.getNode('child2')!
+      canvas.setNodes({ child2: staleChild2.toJSON!() } as any, true)
+      expect(canvas.getNode('child2')).not.toBe(staleChild2)
+
+      canvas.setNode(
+        canvas.createNode({ $id: 'fresh', componentId: 'div' }),
+        staleChild2,
+      )
+
+      // On the live entry, not the detached array the caller passed.
+      expect(canvas.getNode('child2')!.nodes).toEqual(['fresh'])
+      expect(collectUnreachable(canvas)).toEqual([])
+    })
+
+    it('honours an index, and appends without one', () => {
+      const canvas = makeCanvas()
+
+      canvas.setNode(
+        canvas.createNode({ $id: 'first', componentId: 'div' }),
+        'child1',
+        0,
+      )
+      canvas.setNode(
+        canvas.createNode({ $id: 'last', componentId: 'div' }),
+        'child1',
+      )
+
+      expect(canvas.getNode('child1')!.nodes).toEqual([
+        'first',
+        'child1-1',
+        'child1-2',
+        'last',
+      ])
+      expect(collectUnreachable(canvas)).toEqual([])
+    })
+
+    // It still has to work as an update, or callers route around it.
+    it('does not list a node twice when it is set again', () => {
+      const canvas = makeCanvas()
+
+      canvas.setNode(
+        canvas.createNode({ $id: 'child1-1', componentId: 'span' }),
+        'child1',
+      )
+
+      expect(canvas.getNode('child1')!.nodes).toEqual(['child1-1', 'child1-2'])
+      expect(canvas.getNode('child1-1')!.componentId).toBe('span')
+      expect(collectUnreachable(canvas)).toEqual([])
+    })
+
+    it('refuses the root, which has no parent to be listed on', () => {
+      const canvas = makeCanvas()
+
+      expect(() =>
+        canvas.setNode(canvas.getNode(NODE_ROOT_ID)!, NODE_ROOT_ID),
+      ).toThrow('Cannot set root node')
+    })
+
+    // `duplicateNode` is the one live caller, and it linked correctly on its
+    // own. Its behaviour must be unchanged now that `setNode` does the work.
+    it('leaves duplicateNode placing the copy right after the original', () => {
+      const canvas = makeCanvas()
+
+      const copy = canvas.duplicateNode(canvas.getNode('child1-1')!)
+
+      expect(canvas.getNode('child1')!.nodes).toEqual([
+        'child1-1',
+        copy.$id,
+        'child1-2',
+      ])
+      expect(collectUnreachable(canvas)).toEqual([])
+    })
+
+    it('duplicates a subtree with every copy reachable', () => {
+      const canvas = makeCanvas()
+
+      const copy = canvas.duplicateNode(canvas.getNode('child1')!)
+
+      expect(canvas.getNode(NODE_ROOT_ID)!.nodes).toEqual([
+        'child1',
+        copy.$id,
+        'child2',
+      ])
+      expect(copy.nodes).toHaveLength(2)
+      for (const childId of copy.nodes!) {
+        expect(canvas.getNode(childId)!.parentId).toBe(copy.$id)
+      }
+      expect(collectUnreachable(canvas)).toEqual([])
+    })
+
+    // The point of all of it: unreachable is not a glitch, it is a permanent
+    // passenger in every saved payload.
+    it('never lets a node set through it into the payload unreachable', () => {
+      const canvas = makeCanvas()
+
+      canvas.setNode(
+        canvas.createNode({ $id: 'fresh', componentId: 'div' }),
+        'child2',
+      )
+      canvas.duplicateNode(canvas.getNode('child1')!)
 
       const saved = canvas.toJSON().nodes as Record<string, any>
       const reachable = new Set<string>()

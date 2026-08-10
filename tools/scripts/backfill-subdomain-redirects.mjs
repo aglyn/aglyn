@@ -55,8 +55,11 @@ async function currentRedirect(name) {
 }
 
 async function upsert(name, target) {
+  // BARE HOSTNAME, never a URL — see the note in attach/route.ts. Vercel
+  // rejects `https://…` with a `bad_request` that blames the target for not
+  // being on the project, which reads like a different problem entirely.
   const body = JSON.stringify({
-    redirect: `https://${target}`,
+    redirect: target,
     redirectStatusCode: 307,
   })
   const patch = await fetch(
@@ -75,7 +78,7 @@ async function upsert(name, target) {
       headers,
       body: JSON.stringify({
         name,
-        redirect: `https://${target}`,
+        redirect: target,
         redirectStatusCode: 307,
       }),
     },
@@ -104,7 +107,7 @@ for (const host of hosts.docs) {
     // so the run says what would change, not just what exists in Firestore.
     if (token && projectId) {
       const state = await currentRedirect(name)
-      const correct = state.exists && state.redirect === `https://${cname}`
+      const correct = state.exists && state.redirect === cname
       if (correct) {
         alreadyCorrect += 1
         console.log(`  ok            ${name} → https://${cname}`)
@@ -121,7 +124,7 @@ for (const host of hosts.docs) {
   }
 
   const state = await currentRedirect(name)
-  if (state.exists && state.redirect === `https://${cname}`) {
+  if (state.exists && state.redirect === cname) {
     alreadyCorrect += 1
     continue
   }

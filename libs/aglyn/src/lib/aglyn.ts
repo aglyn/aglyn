@@ -83,8 +83,13 @@ function wireRuntime(instance: Aglyn): Aglyn {
   instance.on(AglynEvent.NODE_SET_ITEMS, ({ nodes }) => {
     canvas.setNodes(nodes)
   })
-  instance.on(AglynEvent.NODE_SET, ({ node, create }) => {
-    canvas.setNode(node, create)
+  // `parent` is required by `setNode` (AGL-1366) and so is required in this
+  // payload: an emitter that omits it gets a thrown `Invalid parent node`
+  // rather than a node stranded in the map. There is no emitter for this
+  // event in the repo today, which is exactly why the guard belongs on the
+  // method and not in a note here.
+  instance.on(AglynEvent.NODE_SET, ({ node, parent, index, create }) => {
+    canvas.setNode(node, parent, index, create)
   })
   instance.on(AglynEvent.NODE_DELETE, ({ node }) => {
     canvas.deleteNode(node)

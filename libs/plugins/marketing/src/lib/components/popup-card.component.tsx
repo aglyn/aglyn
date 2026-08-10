@@ -35,7 +35,12 @@ import {
 } from '@mui/material'
 import { doc, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useFirestore, useFirestoreDoc, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useFirestoreDoc,
+  useHostActivityLogger,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 import OverlayStatsRow from './overlay-stats-row.component'
 
 export interface PopupCardProps {
@@ -70,7 +75,19 @@ export function PopupCard(props: PopupCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const logActivity = useHostActivityLogger(hostId)
-  const { data: host } = useFirestoreDoc<any>(
+  const {
+    data: host,
+    status: hostStatus,
+    /**
+     * The host doc this form is seeded from is unconfirmed by the server
+     * (AGL-1358). The save writes the whole `popup` map — a nested map value
+     * REPLACES atomically, so `updateDoc` protects only the host doc's other
+     * fields, never the popup's own — and every field of it comes off this
+     * seed. Against a cached read, retyping the headline restores yesterday's
+     * body, link, schedule and enabled flag on a live site.
+     */
+    fromCache: hostFromCache,
+  } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
     { idField: '$id' },
@@ -94,24 +111,59 @@ export function PopupCard(props: PopupCardProps) {
   const handleSave = async () => {
     const dequeue = queueLoading()
     try {
-      await updateDoc(doc(firestore, 'hosts', hostId), {
-        popup: {
-          enabled: Boolean(draft.enabled),
-          headline: (draft.headline ?? '').slice(0, 120),
-          body: (draft.body ?? '').slice(0, 1000),
-          imageUrl: (draft.imageUrl ?? '').trim(),
-          ctaLabel: (draft.ctaLabel ?? '').slice(0, 60),
-          ctaHref: (draft.ctaHref ?? '').trim(),
-          collectEmail: Boolean(draft.collectEmail),
-          trigger: draft.trigger ?? 'delay',
-          triggerValue: Math.max(0, Number(draft.triggerValue ?? 3)),
-          frequencyDays: Math.max(1, Number(draft.frequencyDays ?? 7)),
-          startAtMs: draft.startAtMs ?? null,
-          endAtMs: draft.endAtMs ?? null,
+      /**
+       * Refuse a save whose seed the server never confirmed (AGL-1358).
+       *
+       * There is no create path to exempt here, and that is the point: unlike
+       * a new row at a fresh uid, this writes a FIXED document path, so a
+       * blank `draft` — what `host?.popup ?? {}` yields when the cache has
+       * never seen a popup — is not harmless. It replaces whatever popup the
+       * server really holds with an empty one. Both the populated and the
+       * empty seed are guarded for the same reason.
+       *
+       * The activity log rides inside the guard: a logged "Updated popup"
+       * whose write never happened leaves the history disagreeing with the
+       * popup it claims to explain.
+       *
+       * The guard WRAPS the write — an early return is a shape you can keep
+       * while losing the protection.
+       */
+      const verdict = await writeGuardedBySeed(
+        {
+          subject: 'popup',
+          unreadable: hostStatus === 'error',
+          fromCache: hostFromCache,
         },
-      })
+        async () => {
+          await updateDoc(doc(firestore, 'hosts', hostId), {
+            popup: {
+              enabled: Boolean(draft.enabled),
+              headline: (draft.headline ?? '').slice(0, 120),
+              body: (draft.body ?? '').slice(0, 1000),
+              imageUrl: (draft.imageUrl ?? '').trim(),
+              ctaLabel: (draft.ctaLabel ?? '').slice(0, 60),
+              ctaHref: (draft.ctaHref ?? '').trim(),
+              collectEmail: Boolean(draft.collectEmail),
+              trigger: draft.trigger ?? 'delay',
+              triggerValue: Math.max(0, Number(draft.triggerValue ?? 3)),
+              frequencyDays: Math.max(1, Number(draft.frequencyDays ?? 7)),
+              startAtMs: draft.startAtMs ?? null,
+              endAtMs: draft.endAtMs ?? null,
+            },
+          })
+          logActivity('Updated popup', { type: 'host', id: hostId })
+        },
+      )
+      // A refusal leaves every typed value on screen. A save that silently
+      // does nothing sends the user back to retype a form that will be
+      // refused again just as quietly.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       enqueueSnackbar('Popup saved', { variant: 'success', persist: false })
-      logActivity('Updated popup', { type: 'host', id: hostId })
     } catch (error) {
       console.error(error)
       enqueueSnackbar('An error has occurred', {

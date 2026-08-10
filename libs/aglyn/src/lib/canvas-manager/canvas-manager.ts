@@ -614,12 +614,69 @@ export class CanvasManager {
     this._initialConfirmed = options?.confirmed ?? true
     return this
   }
-  public setNode(node: NodeSchema<any>, create = false) {
+  /**
+   * Registers a node in the map AND lists it on `parent`, in one action
+   * (AGL-1366).
+   *
+   * `parent` is required, and that is the whole point: this was the last way
+   * left to put an entry in `this.nodes` with no parent linkage at all. The
+   * besigner saves a flat map and renders a tree — `serializeNodes` dumps
+   * every entry in the map while the renderer walks child lists down from
+   * `NODE_ROOT_ID` — so a node the map holds and no parent lists is not a
+   * rendering glitch that a reload clears. It is saved on every save,
+   * shipped in every payload, counted against the 1 MiB ceiling, and never
+   * drawn. That is the mechanism behind the 61 unreachable nodes `/product`
+   * served, 26 of them carrying the only copy of two Hero sections' text
+   * (AGL-1363).
+   *
+   * An *optional* parent would not have closed it, because the caller who
+   * omits it is precisely the caller who creates the orphan. So the linkage
+   * is not a second step a caller may forget — it happens here, and the
+   * parent is resolved through `getNode($id)` and throws on a miss: the same
+   * guard `addNodeFromNested` has carried since AGL-537 and `reparentNode`
+   * took on in AGL-1363, rather than a second mechanism. A stale instance a
+   * panel closure kept across a co-editor's merge, or a parent a peer has
+   * since deleted, therefore fails loud instead of stranding the node.
+   *
+   * Linking is idempotent: re-setting a node its parent already lists
+   * replaces the map entry and leaves the child list untouched, so this
+   * stays usable as an update.
+   *
+   * The root is refused outright — it has no parent to be listed on, and
+   * seeding it belongs to `setNodes`, which alone keeps its canonical id.
+   */
+  public setNode(
+    node: NodeSchema<any>,
+    parent: NodeSchema<any> | NodeId,
+    index = NaN,
+    create = false,
+  ): NodeSchema<any> {
     if (!node) throw new Error('Invalid node')
     if (!create && !node.$id) throw new Error('Invalid node id')
-    const _node = create ? this.createNode(node) : node
-    this.nodes.set(_node.$id!, _node)
-    return this.nodes.get(_node.$id)
+    if (this.isRootNode(node)) throw new Error('Cannot set root node')
+
+    // Resolve through the LIVE map BEFORE anything is inserted, so a refused
+    // call leaves the canvas exactly as it found it.
+    const parentId = typeof parent === 'string' ? parent : parent?.$id
+    const target = parentId != null ? this.getNode(parentId) : undefined
+    if (!target) throw new Error('Invalid parent node')
+
+    return runInAction(() => {
+      const _node = create ? this.createNode(node) : node
+      // Both directions of the link are set here; a `parentId` disagreeing
+      // with the list that holds the id is the same orphan by another route.
+      _node.parentId = target.$id
+      this.nodes.set(_node.$id!, _node)
+      // Read-back, not `(target.nodes ||= []).push()` — see reparentNode
+      // (AGL-763): the `||=` value is the detached plain array on an
+      // observable.
+      if (!target.nodes) target.nodes = []
+      if (!target.nodes.includes(_node.$id!)) {
+        if (isNaN(index)) target.nodes.push(_node.$id!)
+        else target.nodes.splice(index, 0, _node.$id!)
+      }
+      return this.nodes.get(_node.$id!)!
+    })
   }
   public setNodes(schemas: NodesMap, merge = false): this {
     if (!schemas) throw new Error('Invalid schemas')
@@ -756,10 +813,14 @@ export class CanvasManager {
     const duplicateNodeAndChildren = (
       node: NodeSchema<any>,
       parentId: NodeId,
+      index = NaN,
     ): NodeSchema<any> => {
       if (!node) throw new Error('Invalid node')
 
       const json = toJS(node)
+      // `setNode` registers the copy AND lists it on its parent, so no copy
+      // can be left in the map unreferenced — the linkage is no longer a
+      // separate step this recursion could get wrong (AGL-1366).
       const newNode = this.setNode(
         this.createNode({
           ...json,
@@ -767,15 +828,14 @@ export class CanvasManager {
           parentId,
           nodes: [],
         }),
-      )!
+        parentId,
+        index,
+      )
       if (!json) return newNode
 
       for (const childId of arraySafe(json.nodes)) {
         const child = childId && this.getNode(childId)
-        if (child) {
-          const copy = duplicateNodeAndChildren(child, newNode.$id!)
-          if (copy) newNode.nodes!.push(copy.$id!)
-        }
+        if (child) duplicateNodeAndChildren(child, newNode.$id!)
       }
 
       return newNode
@@ -785,13 +845,11 @@ export class CanvasManager {
     const nodeIndex = this.getNodeIndex(node)
     const index =
       nodeIndex === -1 ? parent.nodes?.length ?? 0 : nodeIndex + 1
-    const newNode = duplicateNodeAndChildren(node, node.parentId!)
-    // Read-back, not `(parent.nodes ||= []).splice()` — see reparentNode
-    // (AGL-763): the `||=` value is the detached plain array on an observable.
-    if (!parent.nodes) parent.nodes = []
-    parent.nodes.splice(index, 0, newNode.$id)
-
-    return newNode
+    // One action, so observers never see the copy listed on its parent
+    // before its own subtree has been built under it.
+    return runInAction(() =>
+      duplicateNodeAndChildren(node, node.parentId!, index),
+    )
   }
   public createDuplicateNode(
     node: NodeSchemaNested<any>,

@@ -34,7 +34,12 @@ import {
 } from '@mui/material'
 import { doc, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useFirestore, useFirestoreDoc, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useFirestoreDoc,
+  useHostActivityLogger,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 import OverlayStatsRow from './overlay-stats-row.component'
 
 export interface AnnouncementBarCardProps {
@@ -57,7 +62,20 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const logActivity = useHostActivityLogger(hostId)
-  const { data: host } = useFirestoreDoc<any>(
+  const {
+    data: host,
+    status: hostStatus,
+    /**
+     * The host doc this form is seeded from is unconfirmed by the server
+     * (AGL-1358). The save writes the whole `announcementBar` map — a nested
+     * map value REPLACES atomically, so `updateDoc` protects only the host
+     * doc's other fields, never the bar's own — and every field of it comes
+     * off this seed. Against a cached read, editing the text reinstates the
+     * colours, link and `enabled` flag from that snapshot on a banner shown
+     * on every page of a published site.
+     */
+    fromCache: hostFromCache,
+  } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
     { idField: '$id' },
@@ -80,21 +98,55 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
   const handleSave = async () => {
     const dequeue = queueLoading()
     try {
-      await updateDoc(doc(firestore, 'hosts', hostId), {
-        announcementBar: {
-          enabled: Boolean(draft.enabled),
-          text: (draft.text ?? '').slice(0, 300),
-          href: (draft.href ?? '').trim(),
-          backgroundColor: (draft.backgroundColor ?? '').trim(),
-          textColor: (draft.textColor ?? '').trim(),
-          dismissible: draft.dismissible !== false,
+      /**
+       * Refuse a save whose seed the server never confirmed (AGL-1358).
+       *
+       * There is no create path to exempt, and that is the point: unlike a
+       * new row at a fresh uid, this writes a FIXED document path, so the
+       * blank `draft` that `host?.announcementBar ?? {}` yields when the
+       * cache has never seen a bar is not harmless — it replaces whatever
+       * bar the server really holds with an empty, disabled one.
+       *
+       * The activity log rides inside the guard: a logged "Updated
+       * announcement bar" whose write never happened leaves the history
+       * disagreeing with the bar it claims to explain.
+       *
+       * The guard WRAPS the write — an early return is a shape you can keep
+       * while losing the protection.
+       */
+      const verdict = await writeGuardedBySeed(
+        {
+          subject: 'announcement bar',
+          unreadable: hostStatus === 'error',
+          fromCache: hostFromCache,
         },
-      })
+        async () => {
+          await updateDoc(doc(firestore, 'hosts', hostId), {
+            announcementBar: {
+              enabled: Boolean(draft.enabled),
+              text: (draft.text ?? '').slice(0, 300),
+              href: (draft.href ?? '').trim(),
+              backgroundColor: (draft.backgroundColor ?? '').trim(),
+              textColor: (draft.textColor ?? '').trim(),
+              dismissible: draft.dismissible !== false,
+            },
+          })
+          logActivity('Updated announcement bar', { type: 'host', id: hostId })
+        },
+      )
+      // A refusal leaves every typed value on screen. A save that silently
+      // does nothing sends the user back to retype a form that will be
+      // refused again just as quietly.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       enqueueSnackbar('Announcement bar saved', {
         variant: 'success',
         persist: false,
       })
-      logActivity('Updated announcement bar', { type: 'host', id: hostId })
     } catch (error) {
       console.error(error)
       enqueueSnackbar('An error has occurred', {

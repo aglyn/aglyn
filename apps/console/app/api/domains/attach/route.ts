@@ -61,8 +61,14 @@ async function upsertSubdomainRedirect(options: {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   }
+  // Vercel's `redirect` is a BARE HOSTNAME, not a URL (`aglyn.com`, never
+  // `https://aglyn.com`). A scheme-prefixed value is rejected with
+  // `bad_request: Unable to redirect to "https://…", because that domain is
+  // not added to the project` — a message that blames the target's absence
+  // rather than the format, which is why this shipped looking correct and
+  // never once succeeded (AGL-1365).
   const body = JSON.stringify({
-    redirect: `https://${target}`,
+    redirect: target,
     // Mirrors the app-level redirect's 307: revocable, method-preserving.
     redirectStatusCode: 307,
   })
@@ -85,7 +91,7 @@ async function upsertSubdomainRedirect(options: {
       headers,
       body: JSON.stringify({
         name,
-        redirect: `https://${target}`,
+        redirect: target,
         redirectStatusCode: 307,
       }),
     },
