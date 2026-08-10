@@ -30,7 +30,10 @@ import {
 import { doc, setDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestoreDoc,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 
 export interface StoreSettingsCardProps {
   hostId: string
@@ -57,7 +60,20 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { data: store } = useFirestoreDoc<any>(
+  const {
+    data: store,
+    status: storeStatus,
+    /**
+     * The settings doc this form is seeded from is unconfirmed by the server
+     * (AGL-1358). `current` is `draft ?? {…store}` and the save writes all
+     * six keys, so `merge: true` protects only the tax and shipping maps that
+     * belong to other cards — never this card's own fields. Against a cached
+     * read, changing the currency rewrites `guestCheckout`, and the two
+     * template ids fall back to `|| null`, which is how a storefront's
+     * product and collection URLs start returning 404.
+     */
+    fromCache: storeFromCache,
+  } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
   )
@@ -83,24 +99,55 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
   ).sort(([, a], [, b]) => String(a).localeCompare(String(b)))
 
   const handleSave = useCallback(async () => {
-    await setDoc(
-      doc(firestore, 'hosts', hostId, 'settings', 'store'),
+    /**
+     * Refuse a save whose seed the server never confirmed (AGL-1358).
+     *
+     * There is no create path to exempt, and that is deliberate rather than
+     * an oversight: unlike a new row at a fresh uid, this writes a FIXED
+     * document path, so the all-defaults `current` produced when the cache
+     * has never seen this doc is not the harmless blank a fresh uid would
+     * be. It would put `USD`, guest checkout on and two null template ids
+     * over whatever the server really holds.
+     *
+     * The guard WRAPS the write — an early return is a shape you can keep
+     * while losing the protection.
+     */
+    const verdict = await writeGuardedBySeed(
       {
-        pdpScreenId: current.pdpScreenId || null,
-        collectionScreenId: current.collectionScreenId || null,
-        currency: current.currency ?? 'USD',
-        guestCheckout: current.guestCheckout !== false,
-        termsUrl: current.termsUrl || null,
-        receiptFooter: current.receiptFooter || null,
+        subject: 'store settings',
+        unreadable: storeStatus === 'error',
+        fromCache: storeFromCache,
       },
-      { merge: true },
+      async () => {
+        await setDoc(
+          doc(firestore, 'hosts', hostId, 'settings', 'store'),
+          {
+            pdpScreenId: current.pdpScreenId || null,
+            collectionScreenId: current.collectionScreenId || null,
+            currency: current.currency ?? 'USD',
+            guestCheckout: current.guestCheckout !== false,
+            termsUrl: current.termsUrl || null,
+            receiptFooter: current.receiptFooter || null,
+          },
+          { merge: true },
+        )
+      },
     )
+    // Before `setDraft(null)`, so a refusal keeps every typed value on
+    // screen. A save that silently does nothing sends the user back to
+    // retype a form that will be refused again just as quietly.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     setDraft(null)
     enqueueSnackbar('Store settings saved', {
       variant: 'success',
       persist: false,
     })
-  }, [current, firestore, hostId, enqueueSnackbar])
+  }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache])
 
   return (
     <CardDisplay header={'Store settings'} contentGutterX contentGutterY>

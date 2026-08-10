@@ -32,7 +32,10 @@ import {
 import { doc, setDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestoreDoc,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 
 export interface TaxSettingsCardProps {
   hostId: string
@@ -48,7 +51,20 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { data: store } = useFirestoreDoc<any>(
+  const {
+    data: store,
+    status: storeStatus,
+    /**
+     * The settings doc this form is seeded from is unconfirmed by the server
+     * (AGL-1358). `current` is `draft ?? store?.tax ?? {mode: 'manual'}` and
+     * the save writes `{tax: current}`, so `merge: true` protects the doc's
+     * other maps and nothing inside this one. `mode` is the field that costs
+     * money: a cached seed flipping `stripe` back to `manual` stops automatic
+     * tax calculation — `resolveTaxRate` returns null in stripe mode — and
+     * the store under-collects with nothing anywhere reporting it.
+     */
+    fromCache: storeFromCache,
+  } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
   )
@@ -67,14 +83,41 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
   }
 
   const handleSave = useCallback(async () => {
-    await setDoc(
-      doc(firestore, 'hosts', hostId, 'settings', 'store'),
-      { tax: current },
-      { merge: true },
+    /**
+     * Refuse a save whose seed the server never confirmed (AGL-1358).
+     *
+     * No create path to exempt: this is a FIXED document path, so the
+     * `{mode: 'manual'}` default produced when the cache has never seen the
+     * map is not the harmless blank a fresh uid would be — writing it turns
+     * automatic tax calculation off on a store that had it on.
+     *
+     * The guard WRAPS the write — an early return is a shape you can keep
+     * while losing the protection.
+     */
+    const verdict = await writeGuardedBySeed(
+      {
+        subject: 'tax settings',
+        unreadable: storeStatus === 'error',
+        fromCache: storeFromCache,
+      },
+      async () => {
+        await setDoc(
+          doc(firestore, 'hosts', hostId, 'settings', 'store'),
+          { tax: current },
+          { merge: true },
+        )
+      },
     )
+    // Before `setDraft(null)`, so a refusal keeps every typed rate on screen.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     setDraft(null)
     enqueueSnackbar('Tax settings saved', { variant: 'success', persist: false })
-  }, [current, firestore, hostId, enqueueSnackbar])
+  }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache])
 
   return (
     <CardDisplay header={'Taxes'} contentGutterX contentGutterY>

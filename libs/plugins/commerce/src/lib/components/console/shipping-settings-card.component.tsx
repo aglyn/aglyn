@@ -33,7 +33,10 @@ import {
 import { doc, setDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestoreDoc,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 
 export interface ShippingSettingsCardProps {
   hostId: string
@@ -49,7 +52,21 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { data: store } = useFirestoreDoc<any>(
+  const {
+    data: store,
+    status: storeStatus,
+    /**
+     * The settings doc this form is seeded from is unconfirmed by the server
+     * (AGL-1358). `current` is `draft ?? store?.shipping ?? {}` and the save
+     * writes `{shipping: current}`, so `merge: true` protects the doc's other
+     * maps and nothing inside this one — `zones` and `rates` are arrays, and
+     * a merge replaces an array wholesale. Against a cached read, adding one
+     * rate restores that snapshot's whole price table, and a zone that
+     * disappears with it means `resolveShippingRates` matches nothing, which
+     * is a checkout offering no shipping option at all.
+     */
+    fromCache: storeFromCache,
+  } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
   )
@@ -102,17 +119,45 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
   }
 
   const handleSave = useCallback(async () => {
-    await setDoc(
-      doc(firestore, 'hosts', hostId, 'settings', 'store'),
-      { shipping: current },
-      { merge: true },
+    /**
+     * Refuse a save whose seed the server never confirmed (AGL-1358).
+     *
+     * No create path to exempt: this is a FIXED document path, so the empty
+     * `{}` that `store?.shipping ?? {}` yields when the cache has never seen
+     * the map is not the harmless blank a fresh uid would be — it replaces
+     * the real zones and rates with nothing.
+     *
+     * The guard WRAPS the write — an early return is a shape you can keep
+     * while losing the protection.
+     */
+    const verdict = await writeGuardedBySeed(
+      {
+        subject: 'shipping settings',
+        unreadable: storeStatus === 'error',
+        fromCache: storeFromCache,
+      },
+      async () => {
+        await setDoc(
+          doc(firestore, 'hosts', hostId, 'settings', 'store'),
+          { shipping: current },
+          { merge: true },
+        )
+      },
     )
+    // Before `setDraft(null)`, so a refusal keeps every zone and rate that
+    // was typed on screen.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     setDraft(null)
     enqueueSnackbar('Shipping settings saved', {
       variant: 'success',
       persist: false,
     })
-  }, [current, firestore, hostId, enqueueSnackbar])
+  }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache])
 
   const usd = (cents: number | undefined) =>
     cents == null ? '' : String(cents / 100)

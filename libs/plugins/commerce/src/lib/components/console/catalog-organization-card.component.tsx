@@ -47,7 +47,10 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestoreCollection,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 
 export interface CatalogOrganizationCardProps {
   hostId: string
@@ -85,7 +88,19 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
   const { confirm } = useConfirmationContext()
   const { data: user } = useUser()
 
-  const { data: categoryDocs } = useFirestoreCollection<any>(
+  const {
+    data: categoryDocs,
+    status: categoriesStatus,
+    /**
+     * The category rows are unconfirmed by the server (AGL-1358). Two writes
+     * are seeded from them: the editor carries `parentId` off the row whether
+     * or not the author touched it, and the delete REPARENTS every child with
+     * `{...child}` — a whole cached row, written with no options argument at
+     * all, so it is a full document replace of a document the author never
+     * opened.
+     */
+    fromCache: categoriesFromCache,
+  } = useFirestoreCollection<any>(
     () =>
       query(
         collection(firestore, 'hosts', hostId, 'productCategories'),
@@ -94,7 +109,19 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: collectionDocs } = useFirestoreCollection<any>(
+  const {
+    data: collectionDocs,
+    status: collectionsStatus,
+    /**
+     * The collection rows are unconfirmed by the server (AGL-1358). The
+     * editor copies a whole stored row and the save posts all of it — the
+     * transport is the AGL-978 route rather than a client `setDoc`, but the
+     * shape is identical, and so is the damage: `productIds` is the manual
+     * membership, so a cached seed drops every product added since that
+     * snapshot and the storefront blocks pointing at the collection go empty.
+     */
+    fromCache: collectionsFromCache,
+  } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'collections'), limit(250)),
     [firestore, hostId],
@@ -169,15 +196,56 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
   const handleCategorySave = useCallback(async () => {
     if (!categoryDraft?.name.trim()) return
     const id = categoryDraft.id ?? Aglyn.createResourceUid()
-    await setDoc(doc(firestore, 'hosts', hostId, 'productCategories', id), {
-      name: categoryDraft.name.trim().slice(0, 80),
-      slug: CommerceModel.commerceSlug(categoryDraft.name),
-      parentId: categoryDraft.parentId || null,
-      updatedAt: Timestamp.now(),
-    })
+    /**
+     * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
+     *
+     * The payload is narrower than most sites in this issue, but `parentId`
+     * is carried off the seeded row on every save whether or not the author
+     * opened the parent picker — so renaming a category against a cached read
+     * can move it, and the whole subtree under it, back to a parent someone
+     * had already reorganised away from.
+     *
+     * Only the edit path. A NEW category is built from blanks at a fresh uid
+     * and can overwrite nothing, and the first snapshot of any listener is
+     * `fromCache: true`, so guarding a create would refuse a save that was
+     * never unsafe.
+     *
+     * The guard WRAPS the write — an early return is a shape you can keep
+     * while losing the protection.
+     */
+    const verdict = await writeGuardedBySeed(
+      {
+        subject: 'category',
+        unreadable: Boolean(categoryDraft.id) && categoriesStatus === 'error',
+        fromCache: Boolean(categoryDraft.id) && categoriesFromCache,
+      },
+      async () => {
+        await setDoc(doc(firestore, 'hosts', hostId, 'productCategories', id), {
+          name: categoryDraft.name.trim().slice(0, 80),
+          slug: CommerceModel.commerceSlug(categoryDraft.name),
+          parentId: categoryDraft.parentId || null,
+          updatedAt: Timestamp.now(),
+        })
+      },
+    )
+    // Before `setCategoryDraft(null)`, so a refusal keeps the dialog open
+    // with what was typed.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     setCategoryDraft(null)
     enqueueSnackbar('Category saved', { variant: 'success', persist: false })
-  }, [categoryDraft, firestore, hostId, enqueueSnackbar])
+  }, [
+    categoryDraft,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+    categoriesStatus,
+    categoriesFromCache,
+  ])
 
   const handleCategoryDelete = useCallback(
     (category: CategoryRow) => async () => {
@@ -192,21 +260,62 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
-      // Reparent children to root, then remove.
-      const children = (categoryDocs ?? []).filter(
-        (row: any) => row.parentId === category.$id,
+      /**
+       * Refuse the whole sequence when the rows it reads were never confirmed
+       * by the server (AGL-1358).
+       *
+       * The reparent is this issue's shape at its least visible: the author
+       * opened no editor, so there is nothing on screen to look stale, and
+       * `{...child}` is a full document replace — no options argument — of a
+       * row copied straight out of the cache. Every field of every child is
+       * rewritten to that snapshot.
+       *
+       * The guard encloses the DELETE as well, for the reason the site
+       * details rename did: `children` is computed from the same seed, so a
+       * cached read can miss children entirely, and deleting the parent
+       * without reparenting them leaves them pointing at a category that no
+       * longer exists. Half of this sequence is worse than none of it.
+       */
+      const verdict = await writeGuardedBySeed(
+        {
+          subject: 'categories',
+          unreadable: categoriesStatus === 'error',
+          fromCache: categoriesFromCache,
+        },
+        async () => {
+          // Reparent children to root, then remove.
+          const children = (categoryDocs ?? []).filter(
+            (row: any) => row.parentId === category.$id,
+          )
+          for (const child of children) {
+            await setDoc(
+              doc(firestore, 'hosts', hostId, 'productCategories', child.$id),
+              { ...child, parentId: null },
+            )
+          }
+          await deleteDoc(
+            doc(firestore, 'hosts', hostId, 'productCategories', category.$id),
+          )
+        },
       )
-      for (const child of children) {
-        await setDoc(
-          doc(firestore, 'hosts', hostId, 'productCategories', child.$id),
-          { ...child, parentId: null },
-        )
+      // This path had no report of its own. A delete that silently does
+      // nothing after the user confirmed it reads as a delete that worked.
+      if (!verdict.ok) {
+        enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
       }
-      await deleteDoc(
-        doc(firestore, 'hosts', hostId, 'productCategories', category.$id),
-      )
     },
-    [confirm, categoryDocs, firestore, hostId],
+    [
+      confirm,
+      categoryDocs,
+      firestore,
+      hostId,
+      enqueueSnackbar,
+      categoriesStatus,
+      categoriesFromCache,
+    ],
   )
 
   const draftSlug = collectionDraft
@@ -254,36 +363,83 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     // the whole document including `slug`, which is the collection's public
     // address and is claimed transactionally there. Rules deny a client
     // create, and freeze `slug`/`kind` on update.
+    /**
+     * Refuse an UPDATE whose seed the server never confirmed (AGL-1358).
+     *
+     * The transport is the route rather than a client `setDoc`, but the shape
+     * is the one this issue is about: `data` is the whole stored row copied
+     * out of the listener, and the route writes what it is sent. `productIds`
+     * is the manual membership, so a cached seed drops every product added
+     * since that snapshot and the storefront blocks pointing at the
+     * collection go empty; `rules` and `matchAll` do the same for a smart
+     * collection. That the write leaves the browser over HTTP changes who
+     * performs it, not what it destroys.
+     *
+     * Only the update path. A CREATE is built from blanks, and the route
+     * claims a fresh slug transactionally, so it can overwrite nothing.
+     *
+     * The guard WRAPS the request — an early return is a shape you can keep
+     * while losing the protection.
+     */
+    let verdict: Awaited<ReturnType<typeof writeGuardedBySeed>>
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/collections', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      verdict = await writeGuardedBySeed(
+        {
+          subject: 'collection',
+          unreadable: Boolean(draftId) && collectionsStatus === 'error',
+          fromCache: Boolean(draftId) && collectionsFromCache,
         },
-        body: JSON.stringify({
-          hostId,
-          action: draftId ? 'update' : 'create',
-          kind: 'catalog',
-          ...(draftId ? { id: draftId } : {}),
-          data: {
-            ...data,
-            name: collectionDraft.name.trim().slice(0, 80),
-            slug: draftSlug,
-          },
-        }),
-      })
-      const result = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(result?.error ?? 'Collection save failed')
+        async () => {
+          const idToken = await (user as any)?.getIdToken?.()
+          const response = await fetch('/api/hosts/collections', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({
+              hostId,
+              action: draftId ? 'update' : 'create',
+              kind: 'catalog',
+              ...(draftId ? { id: draftId } : {}),
+              data: {
+                ...data,
+                name: collectionDraft.name.trim().slice(0, 80),
+                slug: draftSlug,
+              },
+            }),
+          })
+          const result = await response.json().catch(() => ({}))
+          if (!response.ok) {
+            throw new Error(result?.error ?? 'Collection save failed')
+          }
+        },
+      )
     } catch (error: any) {
       return void enqueueSnackbar(error?.message ?? 'Collection save failed', {
         variant: 'error',
       })
     }
+    // Before `setCollectionDraft(null)`, so a refusal keeps the dialog open
+    // with the membership that was picked.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     setCollectionDraft(null)
     enqueueSnackbar('Collection saved', { variant: 'success', persist: false })
-  }, [collectionDraft, collectionError, draftSlug, user, hostId, enqueueSnackbar])
+  }, [
+    collectionDraft,
+    collectionError,
+    draftSlug,
+    user,
+    hostId,
+    enqueueSnackbar,
+    collectionsStatus,
+    collectionsFromCache,
+  ])
 
   const handleCollectionDelete = useCallback(
     (row: CollectionRow) => async () => {
