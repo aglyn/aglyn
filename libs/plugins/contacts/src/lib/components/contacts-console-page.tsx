@@ -31,6 +31,7 @@ import {
   useFirestoreCollection,
   useFirestoreDoc,
   useOrgDataScope,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -101,7 +102,21 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
-  const { data: contactDocs } = useFirestoreCollection<any>(
+  const {
+    data: contactDocs,
+    status: contactsStatus,
+    /**
+     * The rows the profile drawer is seeded from are unconfirmed by the
+     * server (AGL-1358). This payload is narrower than most sites in this
+     * issue — `email`, `sources` and `interactions` are not in it — but the
+     * two fields that are, `tags` and `notes`, are BOTH written on every
+     * save and both come off the seed. Edit the notes against a cached read
+     * and the tags go back with them, and tags are what
+     * `contactMatchesSegment` runs on: a saved segment is a campaign
+     * audience, so a rollback here silently changes who gets emailed.
+     */
+    fromCache: contactsFromCache,
+  } = useFirestoreCollection<any>(
     () =>
       dataScope
         ? query(
@@ -275,13 +290,42 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
       ),
     ]
     try {
-      await updateDoc(
-        doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId),
+      /**
+       * Refuse a save whose seed the server never confirmed (AGL-1358).
+       *
+       * There is no create path to reach here — a new contact is written by
+       * the capture endpoints, and the only create on this page,
+       * `handleSaveSegment`, is a separate function building an `addDoc` out
+       * of the filter UI rather than a listener row.
+       *
+       * The guard WRAPS the write — an early return is a shape you can keep
+       * while losing the protection.
+       */
+      const verdict = await writeGuardedBySeed(
         {
-          tags,
-          notes: notesDraft.slice(0, 2000),
+          subject: 'contact',
+          unreadable: contactsStatus === 'error',
+          fromCache: contactsFromCache,
+        },
+        async () => {
+          await updateDoc(
+            doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId),
+            {
+              tags,
+              notes: notesDraft.slice(0, 2000),
+            },
+          )
         },
       )
+      // The drawer is never closed by this handler, so a refusal leaves the
+      // typed tags and notes exactly where they are — but it still has to
+      // say so, or it reads as a save that worked.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       enqueueSnackbar('Contact saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
@@ -297,6 +341,8 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     firestore,
     dataScope,
     enqueueSnackbar,
+    contactsStatus,
+    contactsFromCache,
   ])
 
   const handleExport = useCallback(() => {

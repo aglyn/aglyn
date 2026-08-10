@@ -87,17 +87,72 @@ function nodesBytes(nodes: unknown): number {
 }
 
 /**
+ * Ceiling on published documents measured per host, and the page size the
+ * sweep walks them in.
+ *
+ * This replaced a `.limit(200)` on screens and `.limit(50)` on layouts, which
+ * SILENTLY truncated (AGL-1371): Business and above have
+ * `screensPerHost: UNLIMITED`, so any site past 200 screens had its size
+ * undercounted with nothing anywhere to say so. Harmless while only an alert
+ * reads it — an undercount can only under-warn — but a lower bound presented
+ * as a total is a billing bug the moment anything prices from it.
+ *
+ * A ceiling is still needed: this is the most expensive thing the rollup does
+ * and it runs inside a 60 s function. So the cap stays, ~25× higher (past any
+ * real site), and hitting it now sets `siteSizeTruncated` on the rollup
+ * instead of quietly shrinking the number.
+ */
+const SITE_SIZE_DOC_CEILING = 5_000
+const SITE_SIZE_PAGE_SIZE = 500
+
+/** Published-version refs for one collection, paged to the ceiling. */
+async function publishedVersionRefs(
+  collectionRef: FirebaseFirestore.CollectionReference,
+  ceiling: number,
+): Promise<{ refs: FirebaseFirestore.DocumentReference[]; truncated: boolean }> {
+  const refs: FirebaseFirestore.DocumentReference[] = []
+  let scanned = 0
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined
+  for (;;) {
+    // `select('versionId')` — the only field read. Projecting keeps a page of
+    // 500 screens from dragging their whole documents across the wire.
+    let query = collectionRef
+      .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
+      .select('versionId')
+      .limit(SITE_SIZE_PAGE_SIZE)
+    if (cursor) query = query.startAfter(cursor)
+    const page = await query.get()
+    for (const doc of page.docs) {
+      const versionId = doc.get('versionId')
+      if (versionId) {
+        refs.push(doc.ref.collection('versions').doc(String(versionId)))
+      }
+    }
+    scanned += page.size
+    // A short page is the end of the collection — the only proof the sweep is
+    // complete. Anything else and we cannot claim it is.
+    if (page.size < SITE_SIZE_PAGE_SIZE) return { refs, truncated: false }
+    if (scanned >= ceiling) return { refs, truncated: true }
+    cursor = page.docs[page.size - 1]
+  }
+}
+
+/**
  * Aggregate published-site-size bytes for an org (AGL-1107): the published
- * screen/layout version node payloads across the org's hosts — the same
- * measure the per-host billing meter (`host-usage`) shows, summed here so
- * the `totalSiteSizeMb` cap can be alerted on (it was measured + displayed
- * but never enforced). O(hosts × published docs) reads; the monthly rollup
- * is the right place to pay for it.
+ * screen/layout version node payloads across the org's hosts, summed so the
+ * `totalSiteSizeMb` cap can be alerted on (it was measured + displayed but
+ * never enforced). O(hosts × published docs) reads; the monthly rollup is the
+ * right place to pay for it — and since AGL-1371 it is the ONLY place that
+ * measures it, so the console meter and the usage-alerts cron read one figure
+ * rather than computing two.
+ *
+ * Returns the truncation flag as well as the bytes: see
+ * `SITE_SIZE_DOC_CEILING`.
  */
 async function orgSiteSizeBytes(
   firestore: FirebaseFirestore.Firestore,
   hostRefs: FirebaseFirestore.DocumentReference[],
-): Promise<number> {
+): Promise<{ bytes: number; truncated: boolean }> {
   // Hosts in parallel (AGL-1141). This is the most expensive thing the
   // rollup does — O(hosts × published docs) — and it ran host after host, so
   // an org's site-size measurement alone took as long as all its hosts put
@@ -105,25 +160,38 @@ async function orgSiteSizeBytes(
   const perHost = await Promise.all(
     hostRefs.map(async (hostRef) => {
       const [screens, layouts] = await Promise.all([
-        hostRef.collection('screens').limit(200).get(),
-        hostRef.collection('layouts').limit(50).get(),
+        publishedVersionRefs(
+          hostRef.collection('screens'),
+          SITE_SIZE_DOC_CEILING,
+        ),
+        publishedVersionRefs(
+          hostRef.collection('layouts'),
+          SITE_SIZE_DOC_CEILING,
+        ),
       ])
-      const versionRefs: FirebaseFirestore.DocumentReference[] = []
-      for (const doc of [...screens.docs, ...layouts.docs]) {
-        const versionId = doc.get('versionId')
-        if (versionId) {
-          versionRefs.push(doc.ref.collection('versions').doc(String(versionId)))
-        }
+      const versionRefs = [...screens.refs, ...layouts.refs]
+      const truncated = screens.truncated || layouts.truncated
+      if (!versionRefs.length) return { bytes: 0, truncated }
+      // `getAll` takes the refs as varargs, so a 5,000-document site would
+      // spread one call across 5,000 arguments; chunked to keep the call —
+      // and the response held in memory — a bounded size.
+      let bytes = 0
+      for (let index = 0; index < versionRefs.length; index += 300) {
+        const versions = await firestore.getAll(
+          ...versionRefs.slice(index, index + 300),
+        )
+        bytes += versions.reduce(
+          (sum, version) => sum + nodesBytes(version.get('nodes')),
+          0,
+        )
       }
-      if (!versionRefs.length) return 0
-      const versions = await firestore.getAll(...versionRefs)
-      return versions.reduce(
-        (sum, version) => sum + nodesBytes(version.get('nodes')),
-        0,
-      )
+      return { bytes, truncated }
     }),
   )
-  return perHost.reduce((sum, bytes) => sum + bytes, 0)
+  return {
+    bytes: perHost.reduce((sum, host) => sum + host.bytes, 0),
+    truncated: perHost.some((host) => host.truncated),
+  }
 }
 
 async function hostUsage(
@@ -242,7 +310,7 @@ async function handler(request: Request): Promise<Response> {
         usage,
         orgSnapshot,
         datasetBytes,
-        siteSizeBytes,
+        siteSize,
         apiUsageSnap,
         contactsSnap,
       ] = await Promise.all([
@@ -252,8 +320,9 @@ async function handler(request: Request): Promise<Response> {
         // metered on top of the infra estimate.
         orgDatasetBytes(orgRef),
         // Published-site size (AGL-1107): stored on the rollup so the daily
-        // usage-alerts cron can warn on the `totalSiteSizeMb` cap cheaply,
-        // without re-reading every version payload itself.
+        // usage-alerts cron — and, since AGL-1371, the console meter — can
+        // read the `totalSiteSizeMb` figure cheaply, without re-reading every
+        // version payload themselves. One measurement, three readers.
         orgSiteSizeBytes(firestore, hostRefs),
         // Customer REST API request overage (AGL-635): plan-priced per 1,000
         // requests over the included quota. The durable counter is written
@@ -272,7 +341,7 @@ async function handler(request: Request): Promise<Response> {
       const estimate = estimateMonthlyUsageCost(usage, orgData)
       const dataStorageMb =
         Math.round((datasetBytes / (1024 * 1024)) * 10) / 10
-      const siteSizeMb = Math.round((siteSizeBytes / (1024 * 1024)) * 10) / 10
+      const siteSizeMb = Math.round((siteSize.bytes / (1024 * 1024)) * 10) / 10
       const dataQuota = checkDataStorageQuota(orgData, dataStorageMb)
       const apiRequests = Number(apiUsageSnap.get('count') ?? 0)
       const apiQuota = checkApiRequestQuota(orgData, apiRequests)
@@ -328,6 +397,11 @@ async function handler(request: Request): Promise<Response> {
           // number marked up, plus the three plan-priced overages.
           billableCostUsd: estimate.billableCostUsd,
           siteSizeMb,
+          // A LOWER BOUND when true — the sweep hit `SITE_SIZE_DOC_CEILING`
+          // (AGL-1371). Nothing prices from site size today; anything that
+          // ever does must refuse to bill from a truncated figure, and this
+          // is how it can tell.
+          siteSizeTruncated: siteSize.truncated,
           dataStorageMb,
           dataOverageUsd: dataQuota.overageMonthlyUsd,
           apiRequests,

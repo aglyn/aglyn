@@ -46,6 +46,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -99,7 +100,20 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
-  const { data: serviceDocs } = useFirestoreCollection<any>(
+  const {
+    data: serviceDocs,
+    status: servicesStatus,
+    /**
+     * The rows this editor is seeded from are unconfirmed by the server
+     * (AGL-1358). Editing copies a whole stored service into `draft` and
+     * writes all of it back, so `merge: true` protects nothing. `windows` is
+     * the weekly availability map, rebuilt in full on every save: a cached
+     * seed re-opens slots that were closed and closes ones customers can
+     * already book, and `priceUsd` goes back to whatever that snapshot
+     * charged.
+     */
+    fromCache: servicesFromCache,
+  } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'services'), limit(100)),
     [firestore, hostId],
@@ -175,12 +189,40 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
     }
     try {
       if (draft.id) {
-        // Edit stays client-direct (no quota consumed).
-        await setDoc(
-          doc(firestore, 'hosts', hostId, 'services', draft.id),
-          { ...fields, updatedAt: Timestamp.now() },
-          { merge: true },
+        /**
+         * Edit stays client-direct (no quota consumed) — and is refused when
+         * its seed was never confirmed by the server (AGL-1358). `fields` is
+         * every editable key of the stored service, `windows` included, so
+         * `merge: true` has nothing left to protect.
+         *
+         * The guard WRAPS the write. An early return is a shape you can keep
+         * while losing the protection; here the write is only reachable
+         * through the verdict.
+         */
+        const verdict = await writeGuardedBySeed(
+          {
+            subject: 'service',
+            unreadable: servicesStatus === 'error',
+            fromCache: servicesFromCache,
+          },
+          async () => {
+            await setDoc(
+              doc(firestore, 'hosts', hostId, 'services', draft.id),
+              { ...fields, updatedAt: Timestamp.now() },
+              { merge: true },
+            )
+          },
         )
+        // Before `setDraft(null)`, so a refusal keeps the dialog open with
+        // every window that was typed. A save that silently does nothing
+        // sends the user back to retype a form that will be refused again
+        // just as quietly.
+        if (!verdict.ok) {
+          return void enqueueSnackbar(verdict.message, {
+            variant: 'warning',
+            persist: false,
+          })
+        }
       } else {
         // New service rides the quota-enforcing resources API (AGL-473) —
         // it also re-checks the `bookings` entitlement server-side.
@@ -195,7 +237,15 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
         allowDuplicate: true,
       })
     }
-  }, [draft, firestore, hostId, createHostResource, enqueueSnackbar])
+  }, [
+    draft,
+    firestore,
+    hostId,
+    createHostResource,
+    enqueueSnackbar,
+    servicesStatus,
+    servicesFromCache,
+  ])
 
   const handleDeleteService = useCallback(
     (service: any) => async () => {

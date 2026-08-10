@@ -18,7 +18,7 @@
 import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { resolveOrgEntitlements, UNLIMITED } from '@aglyn/aglyn/server'
-import { ESTIMATED_PAGE_TRANSFER_BYTES } from '../../../../utils/usage-metering'
+import { bandwidthGbFromPageViews } from '../../../../utils/usage-metering'
 import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 
 /**
@@ -116,8 +116,11 @@ async function handler(request: Request): Promise<Response> {
       }
       const hostCount = hosts.size
       const mediaMb = mediaBytes / (1024 * 1024)
-      const bandwidthGb =
-        (pageViews * ESTIMATED_PAGE_TRANSFER_BYTES) / (1024 * 1024 * 1024)
+      // Org-wide: the loop above summed every host's page views, and
+      // `bandwidthGb` is an org-wide band. Shared with the console meter and
+      // the metered estimate since AGL-1371 — this cron was already right,
+      // and the meter is what moved to match it.
+      const bandwidthGb = bandwidthGbFromPageViews(pageViews)
 
       // Org datasets: count + approximate storage from the rollup the
       // monthly report writes (fresh enough for an alert).

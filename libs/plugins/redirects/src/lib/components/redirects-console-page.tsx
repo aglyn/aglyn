@@ -51,6 +51,7 @@ import {
   useFirestoreCollection,
   useFirestoreDoc,
   useHostResourceApi,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 
 interface RedirectDraft {
@@ -78,7 +79,21 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
-  const { data: redirectDocs } = useFirestoreCollection<any>(
+  const {
+    data: redirectDocs,
+    status: redirectsStatus,
+    /**
+     * The rows this editor is seeded from are unconfirmed by the server
+     * (AGL-1358). Editing copies a whole stored rule into `draft` and writes
+     * all of it back, so `merge: true` protects nothing. This is the site
+     * where a rollback is hardest to undo: a reverted `destination` on a
+     * **301** is cached by every browser that has already followed it, so the
+     * stale target outlives the fix in the console. `kind` reverting from
+     * exact to prefix silently widens a rule over a whole subtree, and
+     * `priority` reorders which rule fires when several match.
+     */
+    fromCache: redirectsFromCache,
+  } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'redirects'), limit(200)),
     [firestore, hostId],
     { idField: '$id' },
@@ -249,12 +264,40 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
     }
     try {
       if (draft.id) {
-        // Edit stays client-direct (no quota consumed).
-        await setDoc(
-          doc(firestore, 'hosts', hostId, 'redirects', draft.id),
-          { ...fields, updatedAt: Timestamp.now() },
-          { merge: true },
+        /**
+         * Edit stays client-direct (no quota consumed) — and is refused when
+         * its seed was never confirmed by the server (AGL-1358). `fields` is
+         * every key of the stored rule, so `merge: true` has nothing left to
+         * protect, and the eight validation refusals above have all already
+         * returned by here.
+         *
+         * The guard WRAPS the write. An early return is a shape you can keep
+         * while losing the protection; here the write is only reachable
+         * through the verdict.
+         */
+        const verdict = await writeGuardedBySeed(
+          {
+            subject: 'redirect',
+            unreadable: redirectsStatus === 'error',
+            fromCache: redirectsFromCache,
+          },
+          async () => {
+            await setDoc(
+              doc(firestore, 'hosts', hostId, 'redirects', draft.id),
+              { ...fields, updatedAt: Timestamp.now() },
+              { merge: true },
+            )
+          },
         )
+        // Before `setDraft(null)`, so a refusal keeps the dialog open with
+        // what was typed, in the same warning vocabulary as the validation
+        // refusals above it.
+        if (!verdict.ok) {
+          return void enqueueSnackbar(verdict.message, {
+            variant: 'warning',
+            persist: false,
+          })
+        }
       } else {
         // New redirect rides the quota-enforcing resources API (AGL-473) —
         // it also re-checks the `redirects` entitlement server-side.
@@ -272,7 +315,17 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
         allowDuplicate: true,
       })
     }
-  }, [draft, redirects, host, firestore, hostId, createHostResource, enqueueSnackbar])
+  }, [
+    draft,
+    redirects,
+    host,
+    firestore,
+    hostId,
+    createHostResource,
+    enqueueSnackbar,
+    redirectsStatus,
+    redirectsFromCache,
+  ])
 
   const handleToggle = useCallback(
     (redirect: any) => async (event: { target: { checked: boolean } }) => {

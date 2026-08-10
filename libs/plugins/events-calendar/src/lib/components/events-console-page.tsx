@@ -24,6 +24,7 @@ import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   useConsoleHostRoute,
   useFirestore,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -78,14 +79,31 @@ const MAX_RETRIES = 5
 
 /**
  * A host's events, subscribed with a raw `onSnapshot` (plus retry) rather
- * than the console app's `useFirestoreCollection` — the lib can't reach
- * app hooks. The retry recovers the one transient `permission-denied` this
- * read can hit right after sign-in, before Firestore's credential provider
- * has attached the user's ID token.
+ * than `useFirestoreCollection`. The retry recovers the one transient
+ * `permission-denied` this read can hit right after sign-in, before
+ * Firestore's credential provider has attached the user's ID token, which
+ * is why it is still hand-rolled — not, as this comment used to say,
+ * because a lib cannot reach the shared hooks. It can; this file has
+ * imported `useFirestore` from `@aglyn/tenant-feature-instance` all along.
+ *
+ * It reports the same staleness signals the shared hooks do (AGL-1358),
+ * because the save below writes a whole event back and needs them:
+ *
+ * - `fromCache` — straight off `snapshot.metadata`, and `true` until a
+ *   server snapshot says otherwise, matching `useFirestoreCollection`.
+ * - `unreadable` — the retry budget is exhausted and the read never
+ *   succeeded. This deliberately does not fire while retries remain: those
+ *   are the transient denial the retry exists to absorb.
  */
-function useHostEvents(hostId: string): EventRecord[] {
+function useHostEvents(hostId: string): {
+  events: EventRecord[]
+  fromCache: boolean
+  unreadable: boolean
+} {
   const firestore = useFirestore()
   const [events, setEvents] = useState<EventRecord[]>([])
+  const [fromCache, setFromCache] = useState(true)
+  const [unreadable, setUnreadable] = useState(false)
 
   useEffect(() => {
     if (!hostId) return
@@ -93,6 +111,10 @@ function useHostEvents(hostId: string): EventRecord[] {
     let unsubscribe: (() => void) | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     let attempt = 0
+    // A different host is a different read: unconfirmed again until its own
+    // snapshot lands.
+    setFromCache(true)
+    setUnreadable(false)
 
     const subscribe = () => {
       unsubscribe = onSnapshot(
@@ -100,6 +122,8 @@ function useHostEvents(hostId: string): EventRecord[] {
         (snapshot) => {
           if (cancelled) return
           attempt = 0
+          setUnreadable(false)
+          setFromCache(snapshot.metadata.fromCache)
           setEvents(
             snapshot.docs.map(
               (record) => ({ $id: record.id, ...record.data() }) as EventRecord,
@@ -109,6 +133,7 @@ function useHostEvents(hostId: string): EventRecord[] {
         (error) => {
           if (cancelled || attempt >= MAX_RETRIES) {
             console.error(error)
+            if (!cancelled) setUnreadable(true)
             return
           }
           attempt += 1
@@ -124,7 +149,7 @@ function useHostEvents(hostId: string): EventRecord[] {
     }
   }, [firestore, hostId])
 
-  return events
+  return { events, fromCache, unreadable }
 }
 
 /** datetime-local ↔ epoch-ms without timezone surprises. */
@@ -157,7 +182,20 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
-  const eventDocs = useHostEvents(hostId)
+  const {
+    events: eventDocs,
+    /**
+     * The rows this editor is seeded from are unconfirmed by the server
+     * (AGL-1358). Editing copies a whole stored event into `draft` and one
+     * `setDoc` writes all of it back, so `merge: true` protects nothing.
+     * `status` is the field that costs the most: a cached seed can
+     * UNPUBLISH a live, indexed event — or republish one that was pulled
+     * down — from the Save button of an unrelated edit, and `endsAtMs` is
+     * rewritten on every save whether or not anyone touched the schedule.
+     */
+    fromCache: eventsFromCache,
+    unreadable: eventsUnreadable,
+  } = useHostEvents(hostId)
   const events = eventDocs
     .filter((event) => !event.deletedAt)
     .sort((a, b) => (b.startsAtMs ?? 0) - (a.startsAtMs ?? 0))
@@ -176,32 +214,64 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
     }
     try {
       const id = draft.id ?? createResourceUid()
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'events', id),
+      /**
+       * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
+       *
+       * One `setDoc` serves create and edit here, so the guard has to be
+       * conditioned on `draft.id` rather than sitting on a branch of its
+       * own. A NEW event is built from blanks at a fresh uid and can
+       * overwrite nothing, while the first snapshot of any listener is
+       * `fromCache: true` — an unconditional guard would refuse every
+       * create, which is the common case, not a corner.
+       *
+       * The guard WRAPS the write. An early return is a shape you can keep
+       * while losing the protection; here the write is only reachable
+       * through the verdict.
+       */
+      const verdict = await writeGuardedBySeed(
         {
-          title: draft.title.trim().slice(0, 150),
-          startsAtMs,
-          ...(endsAtMs > startsAtMs
-            ? { endsAtMs }
-            : { endsAtMs: startsAtMs + 60 * 60 * 1000 }),
-          ...(draft.location.trim() && {
-            location: draft.location.trim().slice(0, 200),
-          }),
-          ...(draft.organizer.trim() && {
-            organizer: draft.organizer.trim().slice(0, 100),
-          }),
-          ...(draft.description.trim() && {
-            description: draft.description.trim().slice(0, 2000),
-          }),
-          ...(draft.coverImage.trim() && {
-            coverImage: draft.coverImage.trim(),
-          }),
-          status: draft.status,
-          updatedAt: Timestamp.now(),
-          ...(draft.id ? {} : { createdAt: Timestamp.now() }),
+          subject: 'event',
+          unreadable: Boolean(draft.id) && eventsUnreadable,
+          fromCache: Boolean(draft.id) && eventsFromCache,
         },
-        { merge: true },
+        async () => {
+          await setDoc(
+            doc(firestore, 'hosts', hostId, 'events', id),
+            {
+              title: draft.title.trim().slice(0, 150),
+              startsAtMs,
+              ...(endsAtMs > startsAtMs
+                ? { endsAtMs }
+                : { endsAtMs: startsAtMs + 60 * 60 * 1000 }),
+              ...(draft.location.trim() && {
+                location: draft.location.trim().slice(0, 200),
+              }),
+              ...(draft.organizer.trim() && {
+                organizer: draft.organizer.trim().slice(0, 100),
+              }),
+              ...(draft.description.trim() && {
+                description: draft.description.trim().slice(0, 2000),
+              }),
+              ...(draft.coverImage.trim() && {
+                coverImage: draft.coverImage.trim(),
+              }),
+              status: draft.status,
+              updatedAt: Timestamp.now(),
+              ...(draft.id ? {} : { createdAt: Timestamp.now() }),
+            },
+            { merge: true },
+          )
+        },
       )
+      // Before `setDraft(null)`, so a refusal keeps the dialog open with
+      // what was typed — in the same warning vocabulary as the start-time
+      // refusal above it.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       setDraft(null)
       enqueueSnackbar('Event saved', { variant: 'success', persist: false })
     } catch (error) {
@@ -211,7 +281,14 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
         allowDuplicate: true,
       })
     }
-  }, [draft, firestore, hostId, enqueueSnackbar])
+  }, [
+    draft,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+    eventsFromCache,
+    eventsUnreadable,
+  ])
 
   const handleDelete = useCallback(
     (event: EventRecord) => async () => {
