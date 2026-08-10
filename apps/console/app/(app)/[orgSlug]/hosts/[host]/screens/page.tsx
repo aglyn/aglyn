@@ -23,6 +23,7 @@ import {
   createResourceUid,
   findScreenIdByRoutePath,
   normalizeScreenSlug,
+  screenClaimsToBeAPage,
   screenRoutePathToUrl,
   wouldCreateScreenCycle,
   type ScreenRouteNode,
@@ -171,19 +172,29 @@ function Screens(props) {
   // different number than the API enforces is worse than no precheck at all.
   const collectionTemplates = useCollectionTemplates(hostId)
   const { templateScreenIds } = collectionTemplates
-  // `screens` already drops soft-deleted and email screens, matching the
-  // other two exclusions the server makes.
-  const billableScreenCount = useMemo(
-    () =>
-      screens.filter((screen) => !templateScreenIds.has(screen.$id)).length,
-    [screens, templateScreenIds],
-  )
   const { data: hostData } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
     { idField: '$id' },
   )
   const routingMap = hostData?.screens as Record<ScreenUid, string> | undefined
+  // Counted off the UNFILTERED `data`, and off the routing map first
+  // (AGL-1383): a published screen counts whatever its own document says about
+  // itself, so that flipping `kind` or `deletedAt` cannot buy a free page. The
+  // `screens` list above drops those two for the hierarchy table, which is the
+  // right filter for a table and the wrong one for a quota. Same order as the
+  // server's `countBillableScreens` — a precheck that warns on a different
+  // number than the API enforces is worse than no precheck at all.
+  const billableScreenCount = useMemo(
+    () =>
+      (data ?? []).filter(
+        (screen: any) =>
+          !templateScreenIds.has(screen.$id) &&
+          (routingMap?.[screen.$id] !== undefined ||
+            screenClaimsToBeAPage(screen)),
+      ).length,
+    [data, templateScreenIds, routingMap],
+  )
   const screensById = useMemo(() => {
     const map: Record<ScreenUid, ScreenRouteNode> = {}
     for (const screen of screens) {

@@ -372,15 +372,67 @@ export interface SsoServiceMetadata {
   authDomain: string
 }
 
+/**
+ * A HOST, never a URL.
+ *
+ * These strings are compared byte for byte — by GCIP against the assertion's
+ * Audience, and by the IdP against the Reply URL it posts to. An operator who
+ * pastes `https://auth.aglyn.com/` into the env var would otherwise produce
+ * `https://https://auth.aglyn.com//__/auth/handler` and reject every
+ * assertion, which presents as "SSO stopped working" with nothing in the
+ * config that looks wrong.
+ */
+function normalizeAuthHost(value: string): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .toLowerCase()
+}
+
+/**
+ * The auth origin this deployment actually serves (AGL-1381).
+ *
+ * Mirrors `resolveFirebaseAuthDomain()` in the client's `firebase-config`: on a
+ * workspace deployment the whole OAuth/SAML handshake is funnelled through one
+ * dedicated same-site origin, `auth.<workspaceDomain>`, which reverse-proxies
+ * Firebase's `/__/auth/*` helpers (AGL-462). The IdP has to post the assertion
+ * to THAT origin — the one holding the pending-redirect state — or browser
+ * storage partitioning severs the two halves of the flow.
+ *
+ * The order is load-bearing:
+ *
+ *   1. `NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST` — an explicit override wins.
+ *   2. `auth.<NEXT_PUBLIC_WORKSPACE_DOMAIN>` — the deployed workspace origin.
+ *      Derived only when the variable is actually set, never defaulted: falling
+ *      back to `auth.aglyn.com` would point a self-hosted install at OUR auth
+ *      origin, and it would also make the `firebaseapp.com` arm unreachable.
+ *      It sits ABOVE `AUTH_DOMAIN` because production sets both, and the
+ *      branded host is the one production serves.
+ *   3–4. the project's `*.firebaseapp.com` domain — localhost, previews that
+ *      are not on the workspace domain, the emulator, and self-host installs
+ *      that have not stood up an auth subdomain.
+ *
+ * `entityId` carries the scheme. It is not cosmetic: live GCIP for the first
+ * SSO org holds `https://auth.aglyn.com`, and Google Workspace is already
+ * sending that exact Audience. Emitting the bare host here would be written
+ * over the working config by the next `provisionSsoPool()` save and lock out
+ * every SSO-only user in the org. `sso-provisioning.spec.ts` pins both strings
+ * character for character for that reason.
+ */
 export function ssoServiceMetadata(): SsoServiceMetadata {
+  const workspaceDomain = normalizeAuthHost(
+    process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN'],
+  )
   const authDomain =
-    process.env['NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST'] ||
-    process.env['NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN'] ||
-    `${process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID'] ?? 'aglyn-main'}.firebaseapp.com`
+    normalizeAuthHost(process.env['NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST']) ||
+    (workspaceDomain ? `auth.${workspaceDomain}` : '') ||
+    normalizeAuthHost(process.env['NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN']) ||
+    `${process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID'] || 'aglyn-main'}.firebaseapp.com`
   return {
     authDomain,
     acsUrl: `https://${authDomain}/__/auth/handler`,
-    entityId: authDomain,
+    entityId: `https://${authDomain}`,
   }
 }
 

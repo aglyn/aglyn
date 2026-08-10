@@ -94,10 +94,11 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     /**
      * The category rows are unconfirmed by the server (AGL-1358). Two writes
      * are seeded from them: the editor carries `parentId` off the row whether
-     * or not the author touched it, and the delete REPARENTS every child with
-     * `{...child}` — a whole cached row, written with no options argument at
-     * all, so it is a full document replace of a document the author never
-     * opened.
+     * or not the author touched it, and the delete REPARENTS every child of
+     * the deleted category — a set computed entirely from this cached read,
+     * so a stale snapshot can miss children that should have been moved.
+     * (The reparent write itself is narrow since AGL-1374; what remains
+     * cache-dependent is WHICH rows it runs on.)
      */
     fromCache: categoriesFromCache,
   } = useFirestoreCollection<any>(
@@ -220,12 +221,34 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
         fromCache: Boolean(categoryDraft.id) && categoriesFromCache,
       },
       async () => {
-        await setDoc(doc(firestore, 'hosts', hostId, 'productCategories', id), {
-          name: categoryDraft.name.trim().slice(0, 80),
-          slug: CommerceModel.commerceSlug(categoryDraft.name),
-          parentId: categoryDraft.parentId || null,
-          updatedAt: Timestamp.now(),
-        })
+        /**
+         * `merge: true`, because this payload is NARROWER than the document
+         * (AGL-1372). A replacing write deletes every stored key the form
+         * does not send, and this form sends four:
+         *
+         * - `order` — the tree position. Both sorts read it (the walk above,
+         *   and `queryPublicCatalog`'s facet chips), and nothing in this card
+         *   can set it, so it is not the form's to send: a rename dropped it
+         *   and the category fell back to `?? 0`, reordering the storefront's
+         *   filter chips.
+         * - `createdAt` — written at creation by the seeder, never by this
+         *   card, so a rename erased it too.
+         *
+         * Carrying `order` in the payload would have fixed the field we
+         * happened to notice and left `createdAt`, plus whatever the document
+         * grows next. Merging fixes the shape. Nothing here needs delete
+         * semantics — `parentId` clears to an explicit `null`, which merges.
+         */
+        await setDoc(
+          doc(firestore, 'hosts', hostId, 'productCategories', id),
+          {
+            name: categoryDraft.name.trim().slice(0, 80),
+            slug: CommerceModel.commerceSlug(categoryDraft.name),
+            parentId: categoryDraft.parentId || null,
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true },
+        )
       },
     )
     // Before `setCategoryDraft(null)`, so a refusal keeps the dialog open
@@ -266,9 +289,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
        *
        * The reparent is this issue's shape at its least visible: the author
        * opened no editor, so there is nothing on screen to look stale, and
-       * `{...child}` is a full document replace — no options argument — of a
-       * row copied straight out of the cache. Every field of every child is
-       * rewritten to that snapshot.
+       * `children` is read straight out of the cache. The write itself is
+       * now narrow (see below), so a stale row can no longer be copied back
+       * over a child — but WHICH rows are children is still a cached answer.
        *
        * The guard encloses the DELETE as well, for the reason the site
        * details rename did: `children` is computed from the same seed, so a
@@ -287,10 +310,35 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           const children = (categoryDocs ?? []).filter(
             (row: any) => row.parentId === category.$id,
           )
+          /**
+           * Write only the field the reparent changes (AGL-1374).
+           *
+           * `{...child}` spread the listener row, and that row carries a
+           * SYNTHETIC `$id` — `idField: '$id'` stamps the document id onto
+           * the in-memory object, where nothing persists it. Spreading it
+           * into the payload persisted it: every delete-with-children added
+           * a real `$id` key to each child, permanently, and a child
+           * reparented twice could end up carrying one that no longer
+           * matched its own document id. Nothing reads it, so nothing broke
+           * — it is the listener's bookkeeping leaking into storage, and
+           * once there no reader can tell it from a real field.
+           *
+           * `{ parentId: null }` with `{ merge: true }` is what the reparent
+           * actually means, and it is the stronger fix than stripping `$id`
+           * off a full spread: the old write had no options argument, so it
+           * was also a whole-document REPLACE of a cached row — the AGL-1358
+           * hazard in miniature (and AGL-1372's, one collection over). A
+           * narrow merge cannot carry a synthetic key it never names, and
+           * cannot rewrite a field the delete has no business touching.
+           *
+           * `null` is a value, not a deletion, so it merges: the child ends
+           * up at the top level, which is what the confirmation promised.
+           */
           for (const child of children) {
             await setDoc(
               doc(firestore, 'hosts', hostId, 'productCategories', child.$id),
-              { ...child, parentId: null },
+              { parentId: null },
+              { merge: true },
             )
           }
           await deleteDoc(

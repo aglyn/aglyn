@@ -67,10 +67,35 @@ describe('binding token catalog (AGL-583)', () => {
   describe('COLLECTION_TOKEN_CATALOG', () => {
     it('covers the collection page tokens', () => {
       const tokens = COLLECTION_TOKEN_CATALOG.map((entry) => entry.token)
-      expect(tokens).toEqual(['{{collection.name}}', '{{collection.slug}}'])
+      expect(tokens).toEqual([
+        '{{collection.name}}',
+        '{{collection.slug}}',
+        // The routed category (AGL-1321)…
+        '{{collection.category}}',
+        '{{collection.categorySlug}}',
+        // …and the pager (AGL-1386). Browsable, or the only way to build a
+        // pager on a list template is to know the grammar by heart — and an
+        // unlisted token renders as a warning-colored pill in the editor.
+        '{{pagination.page}}',
+        '{{pagination.totalPages}}',
+        '{{pagination.prevUrl}}',
+        '{{pagination.nextUrl}}',
+      ])
       for (const entry of COLLECTION_TOKEN_CATALOG) {
         expect(entry.label.length).toBeGreaterThan(0)
+        expect(entry.description?.length).toBeGreaterThan(0)
       }
+    })
+
+    it('says which pager tokens go empty, since nothing else can', () => {
+      const byToken = Object.fromEntries(
+        COLLECTION_TOKEN_CATALOG.map((entry) => [
+          entry.token,
+          entry.description ?? '',
+        ]),
+      )
+      expect(byToken['{{pagination.prevUrl}}']).toContain('first page')
+      expect(byToken['{{pagination.nextUrl}}']).toContain('last page')
     })
   })
 

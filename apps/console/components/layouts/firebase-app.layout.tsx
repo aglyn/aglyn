@@ -38,6 +38,7 @@ import {
   reportDeniedRead,
   reportSuccessfulRead,
 } from '../../utils/session-health'
+import { watchSessionHeal } from '../../utils/session-heal'
 
 /**
  * Let listeners feed the stale-session verdict (AGL-1066).
@@ -71,6 +72,19 @@ setFirestoreSessionReporters({
  * the two signals that actually carry this guard are untouched.
  */
 setStaleSessionCheck(() => getSessionHealth().staleSession)
+
+/**
+ * And the return leg: refused listeners learn the session came back
+ * (AGL-1066).
+ *
+ * Module scope for a different reason than the two above — not because it
+ * could be needed early, but because there is nothing to mount it on. The
+ * whole point is that the page tree does NOT remount across an AGL-664
+ * re-auth, so a component-scoped watcher would be watching from inside the
+ * thing whose survival is the problem. See `utils/session-heal` for why the
+ * re-auth store's falling edge is the signal and a token event is not.
+ */
+watchSessionHeal()
 
 function AnalyticsGlobalEvents({ children }) {
   // Cross-subdomain session cookie sync (AGL-236).

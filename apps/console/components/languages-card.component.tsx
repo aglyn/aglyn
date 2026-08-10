@@ -21,7 +21,10 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { deleteField, doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -40,7 +43,19 @@ export function LanguagesCard(props: { hostId: string }) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { org } = useCurrentOrg()
-  const { data: host } = useFirestoreDoc<any>(
+  const {
+    data: host,
+    status: hostStatus,
+    /**
+     * The host doc this form is seeded from is unconfirmed by the server
+     * (AGL-1358). Both fields are written on every save and both come off the
+     * seed, so editing one re-asserts the other — and the empty case does not
+     * merely rewrite them, it `deleteField()`s both. A cached read that has
+     * never seen a locale list therefore de-configures multilingual routing
+     * on a site whose published screens are already translated.
+     */
+    fromCache: hostFromCache,
+  } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
     { idField: '$id' },
@@ -69,15 +84,46 @@ export function LanguagesCard(props: { hostId: string }) {
       )
     }
     try {
-      await updateDoc(doc(firestore, 'hosts', hostId), {
-        locales: parsed.length ? parsed : deleteField(),
-        defaultLocale:
-          parsed.length && parsed.includes(defaultLocale)
-            ? defaultLocale
-            : parsed.length
-              ? parsed[0]
-              : deleteField(),
-      })
+      /**
+       * Refuse a save whose seed the server never confirmed (AGL-1358).
+       *
+       * No create path to exempt: this is a FIXED document path, and the
+       * blank state a cache that has never seen a locale list produces is
+       * the worst input rather than a harmless one — both keys resolve to
+       * `deleteField()`, so the save does not roll the configuration back,
+       * it removes it.
+       *
+       * The guard WRAPS the write — an early return is a shape you can keep
+       * while losing the protection, and this handler already has one above
+       * it for the entitlement.
+       */
+      const verdict = await writeGuardedBySeed(
+        {
+          subject: 'language settings',
+          unreadable: hostStatus === 'error',
+          fromCache: hostFromCache,
+        },
+        async () => {
+          await updateDoc(doc(firestore, 'hosts', hostId), {
+            locales: parsed.length ? parsed : deleteField(),
+            defaultLocale:
+              parsed.length && parsed.includes(defaultLocale)
+                ? defaultLocale
+                : parsed.length
+                  ? parsed[0]
+                  : deleteField(),
+          })
+        },
+      )
+      // Nothing on this card is cleared by a save, so a refusal leaves the
+      // typed locales where they are — it still has to say so, in the same
+      // warning vocabulary as the entitlement refusal above.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       enqueueSnackbar('Languages saved', {
         variant: 'success',
         persist: false,
@@ -89,7 +135,16 @@ export function LanguagesCard(props: { hostId: string }) {
         allowDuplicate: true,
       })
     }
-  }, [org, firestore, hostId, parsed, defaultLocale, enqueueSnackbar])
+  }, [
+    org,
+    firestore,
+    hostId,
+    parsed,
+    defaultLocale,
+    enqueueSnackbar,
+    hostStatus,
+    hostFromCache,
+  ])
 
   return (
     <CardDisplay

@@ -1,7 +1,16 @@
 # AGL-1370 — `totalSiteSizeMb` and `bandwidthGb`: enforce, meter, or unpublish
 
-Status: decision memo. Filed out of AGL-1367's quota sweep. Nothing here is
-implemented; this exists to make the call cheap.
+Status: decided and **half implemented**. Filed out of AGL-1367's quota sweep.
+
+The code half of the execution list below is landed: the plan card's `· {n}
+site` clause (step 1), the console usage meter's site-size row (step 2), and
+the dead `siteSize` check in the usage-alerts cron (step 4) are gone; the
+entitlement, the rollup measurement and the staff override editor stay (step
+5), as does everything to do with `bandwidthGb`.
+
+**Outstanding: step 3**, the marketing `/pricing` comparison row. It is
+besigner work — the "Total site size" row appears in both the desktop table
+and the mobile per-plan list, so two canvas edits plus a revalidate.
 
 ## Verdict up front
 

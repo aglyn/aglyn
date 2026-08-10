@@ -30,10 +30,33 @@ import {
   denialLabelForQuery,
   reportFirestoreDenial,
   reportFirestoreServerRead,
+  subscribeFirestoreSessionHeal,
 } from './firestore-denial-reporter'
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
+
+/**
+ * Cadence once a refusal streak has outlived the retry budget (AGL-1066).
+ *
+ * Until that point the fault is indistinguishable from the AGL-216/217
+ * post-sign-in token race, which resolves in well under two seconds, so the
+ * fast cadence is what recovers the page. Past it the session is refusing
+ * this listen and reopening 2.5 listeners a second buys nothing — but the
+ * loop must NOT stop, because the heal (an AGL-664 in-place re-auth) takes as
+ * long as a human takes to type a password. A heal broadcast now reopens the
+ * listen the instant that lands (see `subscribeFirestoreSessionHeal`), so
+ * this cadence is the fallback for a recovery nobody announced, not the only
+ * road back.
+ *
+ * The ceiling on this number is not the churn — it is the 38 AGL-1358 write
+ * guards, which refuse a save while `fromCache` is true and can only learn
+ * otherwise from a reopened listener that the server answers. Whatever this
+ * is, it is also how long a save stays refused AFTER the session heals. Two
+ * seconds still cuts the churn fivefold and is inside the latency of the
+ * click that follows a re-auth.
+ */
+const REFUSED_RETRY_DELAY_MS = 2_000
 
 export type FirestoreCollectionStatus = 'loading' | 'success' | 'error'
 
@@ -67,6 +90,21 @@ export interface UseFirestoreCollectionResult<T> {
    * why it is the signal to reach for rather than `staleSession`.
    */
   fromCache: boolean
+  /**
+   * The server has REFUSED this listen for longer than the retry budget, and
+   * no server snapshot has arrived since (AGL-1066).
+   *
+   * This is what `status` would say if the budget were spendable — see the
+   * note on the retry loop below for why it is not, and why correcting
+   * `status` in place is a staged change rather than a one-liner. Until that
+   * flip lands, this is the honest verdict: any `data` alongside it is
+   * cache-only and will not refresh on its own.
+   *
+   * Only `permission-denied` counts, so it cannot fire offline, and a single
+   * server snapshot clears it — the same two properties that make the
+   * `session-health` reporting safe.
+   */
+  serverDenied: boolean
 }
 
 /**
@@ -94,6 +132,7 @@ export function useFirestoreCollection<T = DocumentData>(
   // Un-confirmed until a snapshot says otherwise: a hook that has not heard
   // from the server yet must not read as server-confirmed.
   const [fromCache, setFromCache] = useState(true)
+  const [serverDenied, setServerDenied] = useState(false)
   const buildQueryRef = useRef(buildQuery)
   buildQueryRef.current = buildQuery
   const idField = options.idField
@@ -109,6 +148,7 @@ export function useFirestoreCollection<T = DocumentData>(
     // hold-nothing-rather-than-show-the-wrong-org rule as useOrgHosts.
     setData([])
     setFromCache(true)
+    setServerDenied(false)
 
     const q = buildQueryRef.current()
     if (!q) {
@@ -154,11 +194,34 @@ export function useFirestoreCollection<T = DocumentData>(
         q,
         (snapshot) => {
           if (cancelled) return
+          /**
+           * Ungated ON PURPOSE, and this is the open half of AGL-1066.
+           *
+           * Under `persistentLocalCache` the cached emission that precedes a
+           * refusal lands here and hands the budget back, so `attempt` never
+           * reaches `MAX_RETRIES` and `status` can never become `'error'`.
+           * Gating this on `!snapshot.metadata.fromCache` is the correction —
+           * one line — but it is NOT safe to make in isolation:
+           *
+           *  - the budget is 5 x 400ms = two seconds, after which the error
+           *    branch stops retrying for good, while an AGL-664 in-place
+           *    re-auth takes as long as a human takes to type a password.
+           *    That was the hard blocker and it is now CLEARED: a resolved
+           *    re-auth broadcasts a heal and this listener reopens on it,
+           *    terminal or not (`subscribeFirestoreSessionHeal` below);
+           *  - `error` blanks surfaces that today render cached data — the
+           *    besigner editors swap the canvas for "Not found", and the host
+           *    setup Theme tab renders nothing.
+           *
+           * `serverDenied` below carries the corrected verdict in the
+           * meantime, so consumers can migrate before `status` moves.
+           */
           attempt = 0
           // Only the SERVER answering is evidence the session can read.
           if (!snapshot.metadata.fromCache) {
             deniedStreak = 0
             denialReported = false
+            setServerDenied(false)
             // Proof the session can read — stronger than any accumulated
             // denial, and what stops a scoped collaborator's by-design
             // denials from ever adding up to a re-auth prompt.
@@ -206,14 +269,22 @@ export function useFirestoreCollection<T = DocumentData>(
           // produces no error callback at all, so this cannot fire offline.
           if (err?.code === 'permission-denied') {
             deniedStreak += 1
-            if (deniedStreak >= DENIAL_STREAK_TO_REPORT && !denialReported) {
-              denialReported = true
-              reportFirestoreDenial(denialLabel)
+            if (deniedStreak >= DENIAL_STREAK_TO_REPORT) {
+              setServerDenied(true)
+              if (!denialReported) {
+                denialReported = true
+                reportFirestoreDenial(denialLabel)
+              }
             }
           }
           if (attempt < MAX_RETRIES) {
             attempt += 1
-            timer = setTimeout(subscribe, RETRY_DELAY_MS)
+            timer = setTimeout(
+              subscribe,
+              deniedStreak > MAX_RETRIES
+                ? REFUSED_RETRY_DELAY_MS
+                : RETRY_DELAY_MS,
+            )
           } else {
             setStatus('error')
             setError(err)
@@ -223,15 +294,50 @@ export function useFirestoreCollection<T = DocumentData>(
     }
     subscribe()
 
+    /**
+     * The session came back — reopen NOW rather than on the next tick of a
+     * cadence tuned for a session that has not (AGL-1066).
+     *
+     * Gated on this listener actually being refused. A healthy listener has
+     * an open subscription and nothing to recover, so it must ignore the
+     * broadcast entirely: without this gate a heal would tear down and
+     * reopen every listen in the console at once, which is a listener storm
+     * dressed up as a fix.
+     *
+     * What is refunded is `attempt` — the retry BUDGET, which was spent on a
+     * fault that is now over. `deniedStreak` is deliberately left alone: it
+     * is evidence about the server, and only the server answering may clear
+     * it. So `serverDenied` stays true across the heal and goes false on the
+     * snapshot that actually proves the read works, and a heal that turns
+     * out to be wishful thinking falls straight back to the slow cadence
+     * instead of resuming a 400ms storm.
+     *
+     * `denialReported` IS reset: the outage ended here. If reads are still
+     * refused afterwards that is a new one, and it has to be able to raise
+     * the AGL-1063 banner again.
+     */
+    const unsubscribeHeal = subscribeFirestoreSessionHeal(() => {
+      if (cancelled || deniedStreak === 0) return
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+      unsubscribe?.()
+      attempt = 0
+      denialReported = false
+      subscribe()
+    })
+
     return () => {
       cancelled = true
+      unsubscribeHeal()
       if (timer) clearTimeout(timer)
       unsubscribe?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
-  return { data, status, error, fromCache }
+  return { data, status, error, fromCache, serverDenied }
 }
 
 export default useFirestoreCollection

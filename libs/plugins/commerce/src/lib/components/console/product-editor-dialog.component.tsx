@@ -213,8 +213,27 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     const primaryVariant = current.variants[0]
     // JSON-safe base (no Firestore Timestamp — it won't survive the API
     // hop); millis fields are what the checkout + Product block read.
+    /**
+     * `$id` is dropped, not carried (AGL-1374).
+     *
+     * `current` is `draft ?? liftLegacyProduct(product)`, and the hub stamps
+     * `$id` onto every row it lists (`{...liftLegacyProduct(p), $id: p.$id}`)
+     * — a SYNTHETIC key `idField: '$id'` puts on the in-memory object, which
+     * nothing persists. Spreading `current` carried it into the payload, and
+     * this write is `merge: false`, so it was stored as a real field on every
+     * product save. Nothing reads it; it is the listener's bookkeeping
+     * leaking into storage, and once there no reader can tell it from a field
+     * the editor meant to write. Excluding it also CLEANS the key off any
+     * product a previous save corrupted, because a replacing write stores
+     * exactly the payload.
+     *
+     * `product.$id` is still the doc path below — reading the synthetic key
+     * is what it is for. Writing it is the bug.
+     */
+    const seeded = current as typeof current & { $id?: string }
+    const { $id: _syntheticId, ...currentFields } = seeded
     const base = {
-      ...current,
+      ...currentFields,
       name: current.name.trim().slice(0, 120),
       slug: current.slug || CommerceModel.commerceSlug(current.name),
       priceUsd: primaryVariant?.priceUsd ?? 0,

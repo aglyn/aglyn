@@ -105,7 +105,12 @@ async function handler(request: Request): Promise<Response> {
     }
 
     return Response.json(
-      { screens: await countBillableScreens(hostRef) },
+      {
+        // Same count the create route enforces, from the same routing map
+        // (AGL-1383) — a usage number that disagreed with the gate would be
+        // worse than none. The host snapshot above already holds it.
+        screens: await countBillableScreens(hostRef, hostSnapshot.get('screens')),
+      },
       { status: 200 },
     )
   } catch (error) {

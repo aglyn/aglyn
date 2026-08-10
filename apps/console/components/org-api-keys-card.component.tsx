@@ -75,7 +75,7 @@ const formatDate = (iso: string | null): string =>
 export function OrgApiKeysCard() {
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const orgId = currentOrg?.$id
@@ -83,6 +83,16 @@ export function OrgApiKeysCard() {
   const entitled = checkEntitlement(org, 'apiAccess')
 
   const [keys, setKeys] = useState<PublicApiKey[]>([])
+  /**
+   * Three outcomes, not two (AGL-1380). `keys = []` is the value before the
+   * list has answered and after it has failed, as much as it is the value of
+   * an org with no keys — and "No API keys yet" is a claim about what can
+   * currently authenticate against this org's data. Wrong in the direction
+   * that stops an admin going to revoke one.
+   */
+  const [listState, setListState] = useState<'pending' | 'error' | 'loaded'>(
+    'pending',
+  )
   const [draft, setDraft] = useState<CreateDraft | null>(null)
   const [revealed, setRevealed] = useState<{ name: string; token: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -119,13 +129,29 @@ export function OrgApiKeysCard() {
   )
 
   const refresh = useCallback(async () => {
-    const payload = await request('GET')
-    if (payload?.keys) setKeys(payload.keys)
+    let payload: Awaited<ReturnType<typeof request>> = null
+    try {
+      payload = await request('GET')
+    } catch {
+      // A rejected fetch throws straight past the snackbar inside `request`.
+      payload = null
+    }
+    if (!payload?.keys) {
+      setListState('error')
+      return
+    }
+    setKeys(payload.keys)
+    setListState('loaded')
   }, [request])
 
+  const retryList = useCallback(() => {
+    setListState('pending')
+    void refresh()
+  }, [refresh])
+
   useEffect(() => {
-    if (orgId && user && entitled) void refresh()
-  }, [orgId, user, entitled, refresh])
+    if (orgId && user && orgReady && entitled) void refresh()
+  }, [orgId, user, orgReady, entitled, refresh])
 
   const toggleScope = (scope: string) =>
     setDraft((current) => {
@@ -196,7 +222,18 @@ export function OrgApiKeysCard() {
       contentGutterX
       contentGutterY
     >
-      {!entitled ? (
+      {/*
+        `checkEntitlement(undefined)` answers "no", and `org` is undefined
+        both in flight and while the read is failing — so this upsell used to
+        be shown to Business orgs that already have the REST API, telling
+        them to buy something they own (AGL-1380). Say nothing until the plan
+        is known.
+      */}
+      {!orgReady ? (
+        <Typography variant="body2" color="text.secondary">
+          {'Checking your plan…'}
+        </Typography>
+      ) : !entitled ? (
         <Alert severity="info">
           {'The REST API and API keys are included on the '}
           <strong>{'Business'}</strong>
@@ -212,7 +249,23 @@ export function OrgApiKeysCard() {
             {'. A key is shown once at creation — store it somewhere safe. Each key is scoped to exactly what it needs.'}
           </Typography>
 
-          {activeKeys.length === 0 ? (
+          {listState === 'error' ? (
+            <Alert
+              severity="error"
+              action={
+                <Button color="inherit" size="small" onClick={retryList}>
+                  {'Retry'}
+                </Button>
+              }
+            >
+              {'We couldn’t load your API keys. This does not mean there are ' +
+                'none — any that exist are still live.'}
+            </Alert>
+          ) : listState === 'pending' ? (
+            <Typography variant="body2" color="text.secondary">
+              {'Checking your API keys…'}
+            </Typography>
+          ) : activeKeys.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               {'No API keys yet.'}
             </Typography>

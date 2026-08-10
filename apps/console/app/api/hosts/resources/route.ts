@@ -40,6 +40,23 @@ import { countBillableScreens } from './count-billable-screens'
  * itself is paid) the entitlement flag. Firestore rules deny client-side
  * `create` on these collections, so this route is the only creation path
  * — updates and deletes stay client-direct (they don't consume quota).
+ *
+ * Every entry carries `fields`: the keys the client may set, and nothing
+ * else is stored (AGL-1377). This was a deny-list — everything persisted
+ * unless a `serverManagedFields` entry named it — which is the bet this
+ * repo lost three times in one night: AGL-1354 (four entitlement-bearing
+ * org fields client-writable because the rules deny-list never learned
+ * them), AGL-1364 (two more, each the sibling of a field somebody DID
+ * remember), and AGL-1355/AGL-1361 filed to stop the recurrence. A
+ * deny-list is only correct while somebody keeps it current; an
+ * allow-list makes the next field fail until it is classified, which is
+ * the property the sibling route /api/hosts/collections already has.
+ *
+ * `createdAt`/`updatedAt` appear in no list: they are stamped below on
+ * every create, so a client clock is never a fact about the document.
+ * Nor does any list carry `deletedAt` — soft-delete state is what the
+ * caps count, and a client that could create an already-deleted doc
+ * could create any number of them.
  */
 const RESOURCES: Record<string, {
   collection: string
@@ -62,63 +79,159 @@ const RESOURCES: Record<string, {
   /** Human label for quota error messages. */
   label: string
   /**
-   * Fields the client may never set, stripped from `data` before the write.
-   * For anything the UI later presents as trustworthy — provenance, counts,
-   * review verdicts — the client must not be the one writing it.
+   * Keys the client may set. Anything else in `data` is dropped rather
+   * than stored — including the fields the UI later presents as
+   * trustworthy (provenance, counts, review verdicts), which the client
+   * must never be the one writing. Derived from what the console's
+   * creation paths actually send, not guessed: a list narrower than its
+   * callers loses authoring input silently, which is the worse failure.
    */
-  serverManagedFields?: Array<string>
+  fields: Array<string>
 }> = {
-  screen: { collection: 'screens', quotaKey: 'screensPerHost', label: 'screens' },
+  // Sent by the screens page (displayName/description/slug), the template
+  // installers (adds `seo`) and the email composer (`kind: 'email'`).
+  // `versionId` points at the first version the caller is about to mint.
+  screen: {
+    collection: 'screens',
+    quotaKey: 'screensPerHost',
+    label: 'screens',
+    fields: ['displayName', 'description', 'slug', 'seo', 'kind', 'versionId'],
+  },
   // Templates (AGL-666) are inert until instantiated, so they carry no
   // entitlement of their own — the gate is on what you make FROM them
   // (screensPerHost, sharedLayoutsPerHost, reusableComponents). `source`
-  // is stamped here so a client cannot claim marketplace provenance.
+  // is stamped below and absent here, so a client cannot claim
+  // marketplace provenance by sending it.
   template: {
     collection: 'templates',
     quotaKey: 'templatesPerHost',
     label: 'templates',
-    serverManagedFields: ['source'],
+    fields: [
+      'kind',
+      'displayName',
+      'description',
+      'placeholders',
+      'nodes',
+      'rootId',
+      'slug',
+      'seo',
+    ],
   },
-  layout: { collection: 'layouts', quotaKey: 'sharedLayoutsPerHost', label: 'shared layouts' },
-  variable: { collection: 'variables', quotaKey: 'variablesPerHost', label: 'variables' },
-  function: { collection: 'functions', quotaKey: 'functionsPerHost', label: 'functions' },
+  // `versions` is the array the layouts page seeds alongside `versionId`;
+  // the console reads the `versions` SUBCOLLECTION, so the field looks
+  // vestigial — permitted because dropping what a caller sends is a
+  // silent change, and noted for removal at the caller instead.
+  layout: {
+    collection: 'layouts',
+    quotaKey: 'sharedLayoutsPerHost',
+    label: 'shared layouts',
+    fields: ['displayName', 'description', 'versionId', 'versions'],
+  },
+  variable: {
+    collection: 'variables',
+    quotaKey: 'variablesPerHost',
+    label: 'variables',
+    fields: ['name', 'type', 'value', 'workflowId', 'workflowName'],
+  },
+  function: {
+    collection: 'functions',
+    quotaKey: 'functionsPerHost',
+    label: 'functions',
+    fields: ['name', 'parameters', 'variables', 'operations', 'returnValue'],
+  },
   workflow: {
     collection: 'workflows',
     quotaKey: 'workflowsPerHost',
     entitlement: 'workflows',
     label: 'workflows',
+    fields: ['name', 'steps', 'returnValue', 'trigger'],
   },
   service: {
     collection: 'services',
     quotaKey: 'servicesPerHost',
     entitlement: 'bookings',
     label: 'services',
+    fields: [
+      'name',
+      'description',
+      'durationMinutes',
+      'priceUsd',
+      'timezone',
+      'windows',
+    ],
   },
   redirect: {
     collection: 'redirects',
     quotaKey: 'redirectsPerHost',
     entitlement: 'redirects',
     label: 'redirects',
+    fields: [
+      'source',
+      'destination',
+      'statusCode',
+      'kind',
+      'priority',
+      'enabled',
+    ],
   },
   location: {
     collection: 'locations',
     quotaKey: 'inventoryLocations',
     entitlement: 'commerce',
     label: 'inventory locations',
+    fields: ['name', 'isDefault', 'address'],
   },
+  // The whole `HostProduct` model: the editor, the duplicate action and
+  // the CSV importer each send a full product, so this list is the model
+  // rather than one form's subset. `deletedAt` is excluded — duplicating
+  // a product must not carry its predecessor's soft-delete state.
   product: {
     collection: 'products',
     quotaKey: 'productsPerHost',
     entitlement: 'commerce',
     label: 'products',
+    fields: [
+      'name',
+      'slug',
+      'description',
+      'type',
+      'status',
+      'mediaUrls',
+      'categoryIds',
+      'tags',
+      'options',
+      'variants',
+      'seo',
+      'supplierId',
+      'oversellPolicy',
+      'taxExempt',
+      'digitalFiles',
+      'downloadLimit',
+      'subscription',
+      'subscriptionOptional',
+      'gatedVideos',
+      'relatedProductIds',
+      'giftCard',
+      'lowStockThreshold',
+      'createdAtMs',
+      'updatedAtMs',
+      // Legacy Commerce Starter fields, still written by every caller.
+      'priceUsd',
+      'inventory',
+      'imageUrl',
+    ],
   },
   // Entitlement-only (boolean feature, no numeric cap): reusable
   // components render on the live site, so a Starter+ gate must be
   // server-enforced, not just hidden in the console (AGL-473).
+  //
+  // `hostId` duplicates the document's own path and nothing reads it —
+  // permitted only because the components page sends it today.
   reusableComponent: {
     collection: 'components',
     entitlement: 'reusableComponents',
     label: 'reusable components',
+    fields: ['hostId', 'displayName', 'description', 'rootId', 'nodes'],
   },
   // POS registers (AGL-472): the `posRegisters` cap becomes enforceable
   // by routing register creation here. `pos` gates access to POS at all
@@ -128,6 +241,7 @@ const RESOURCES: Record<string, {
     quotaKey: 'posRegisters',
     entitlement: 'pos',
     label: 'POS registers',
+    fields: ['name', 'locationId'],
   },
   // Webhooks (AGL-1360): the cap used to be checked in the console by
   // counting the rows the card held from a Firestore LISTENER. The console
@@ -138,8 +252,8 @@ const RESOURCES: Record<string, {
   // (the same lesson as AGL-1354's `brandingProfile`), so the cap moved
   // here and the rules deny client `create` on `webhooks`.
   //
-  // `deletedAt` is server-managed BECAUSE the cap counts live docs: a client
-  // allowed to create an already-soft-deleted webhook could create any
+  // `deletedAt` is absent from `fields` BECAUSE the cap counts live docs: a
+  // client allowed to create an already-soft-deleted webhook could create any
   // number of them (each one counting zero) and then clear the field with
   // the update that stays client-side, arriving at an uncapped set of live
   // webhooks through a cap that never said no.
@@ -153,7 +267,7 @@ const RESOURCES: Record<string, {
     maxPerHost: WEBHOOK_MAX_PER_HOST,
     softDeletes: true,
     label: 'webhooks',
-    serverManagedFields: ['deletedAt'],
+    fields: ['name', 'direction', 'url', 'workflowName', 'secret', 'enabled'],
   },
 }
 
@@ -162,9 +276,10 @@ const MAX_DATA_BYTES = 256 * 1024
 
 /**
  * Generic quota-enforced creation for host resources (AGL-473). Body:
- * `{ hostId, resource, data, id?, count? }` — `data` is written as the
- * doc (server-stamped createdAt/updatedAt added when absent), `id` lets
- * the console pre-generate ids it needs to reference immediately, and
+ * `{ hostId, resource, data, id?, count? }` — the permitted keys of `data`
+ * are written as the doc (AGL-1377), with createdAt/updatedAt stamped
+ * server-side, `id` lets the console pre-generate ids it needs to
+ * reference immediately, and
  * batch creates pass `records: [data...]` via `resource` importers later.
  * Role model mirrors the rules' canWriteHostContent: host member role
  * admin/editor, owning org not suspended. Quotas/entitlements ride the
@@ -241,7 +356,9 @@ async function handler(request: Request): Promise<Response> {
                 .get()
             ).data().count
           : resourceKey === 'screen'
-            ? await countBillableScreens(hostRef)
+            ? // The routing map decides which screens count (AGL-1383), and
+              // the host snapshot above already holds it — no second read.
+              await countBillableScreens(hostRef, hostSnapshot.get('screens'))
             : (await collectionRef.count().get()).data().count
       const quota = checkQuota(org, resource.quotaKey as any, used)
       if (!quota.allowed) {
@@ -273,11 +390,19 @@ async function handler(request: Request): Promise<Response> {
     const id = typeof body?.id === 'string' && body.id
       ? String(body.id).slice(0, 64)
       : createResourceUid()
-    const doc = { ...(data as Record<string, unknown>) }
-    // Dropped, not rejected: a client sending one is more likely stale than
-    // hostile, and failing the create would be a worse experience than
-    // ignoring a field it was never allowed to set.
-    for (const field of resource.serverManagedFields ?? []) delete doc[field]
+    // Allow-list, not deny-list (AGL-1377): a key nobody classified is not
+    // stored, so the next field added to a model is inert here until it is
+    // named — rather than persisted by default and noticed later.
+    //
+    // Dropped, not rejected: a client sending an unknown key is more likely
+    // stale than hostile, and failing the create would be a worse experience
+    // than ignoring a field it was never allowed to set. That is also why
+    // the lists above are derived from what the console actually sends.
+    const allowed = new Set(resource.fields)
+    const doc: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      if (allowed.has(key) && value !== undefined) doc[key] = value
+    }
     // Normalized search key for the name-prefix query (AGL-835). Only screens
     // are queried by name (the switcher loads the rest client-side), so only
     // screens carry the field — stamping it on every resource kind would be an
@@ -290,8 +415,12 @@ async function handler(request: Request): Promise<Response> {
       ...doc,
       ...nameLower,
       ...(resourceKey === 'template' ? { source: { type: 'authored' } } : {}),
-      ...(doc['createdAt'] === undefined ? { createdAt: Timestamp.now() } : {}),
-      ...(doc['updatedAt'] === undefined ? { updatedAt: Timestamp.now() } : {}),
+      // Unconditional now that no allow-list carries them: the client cannot
+      // supply either, so there is no client value left to preserve. The
+      // callers already relied on this — a Timestamp does not survive the
+      // JSON hop, so what they used to be able to send was junk anyway.
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     })
     return Response.json({ ok: true, id }, { status: 200 })
   } catch (error: any) {

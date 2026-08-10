@@ -20,7 +20,7 @@ import { docsHelp } from '../constants/docs-links'
 import { describeHostTokens } from '@aglyn/aglyn/app-utils/host-tokens'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useHost } from '@aglyn/tenant-feature-instance'
+import { useHost, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
 import {
   Box,
   Button,
@@ -56,7 +56,7 @@ const MAX_LINKS = 8
 export function BusinessDetailsCard(props: { hostId: string }) {
   const { hostId } = props
   const {
-    doc: { data },
+    doc: { data, status: hostStatus, fromCache: hostFromCache },
     setDoc,
   } = useHost({ hostId })
   const { enqueueSnackbar } = useSnackbar()
@@ -95,27 +95,65 @@ export function BusinessDetailsCard(props: { hostId: string }) {
   const save = async () => {
     setSaving(true)
     try {
-      await setDoc(
+      /**
+       * Refuse a save whose seed the server never confirmed (AGL-1358).
+       *
+       * The `mergeFields` below is exactly what makes this dangerous rather
+       * than merely lossy: it replaces the whole `business` map atomically,
+       * on purpose, so that removing a social link is possible at all. Every
+       * key in that map is written from this form, and this form was seeded
+       * from the listener — so against a cached read, correcting the support
+       * email restores that snapshot's address and social links, and any key
+       * inside `business` this card does not know about goes with them.
+       *
+       * There is no create path to exempt. Unlike a new row at a fresh uid,
+       * this writes a FIXED document path, so the all-blank form the seeding
+       * effect produces when the cache has never seen `business` is not
+       * harmless: it replaces the real details with empty strings.
+       *
+       * The guard WRAPS the write — an early return is a shape you can keep
+       * while losing the protection.
+       */
+      const verdict = await writeGuardedBySeed(
         {
-          business: {
-            supportEmail: supportEmail.trim(),
-            address: address.trim(),
-            // A link with no URL is not a link. Dropping them on save keeps
-            // the stored shape clean rather than making every reader defend
-            // against half-filled rows.
-            socialLinks: links
-              .filter((link) => link.url.trim())
-              .map((link) => ({
-                label: link.label.trim(),
-                url: link.url.trim(),
-              })),
-          },
+          subject: 'business details',
+          unreadable: hostStatus === 'error',
+          fromCache: hostFromCache,
         },
-        // `mergeFields` and not `merge: true`: Firestore deep-merges maps, so
-        // merging would union the new social links with the old ones and make
-        // removing one impossible through the button that says Save.
-        { mergeFields: ['business'] },
+        async () => {
+          await setDoc(
+            {
+              business: {
+                supportEmail: supportEmail.trim(),
+                address: address.trim(),
+                // A link with no URL is not a link. Dropping them on save
+                // keeps the stored shape clean rather than making every
+                // reader defend against half-filled rows.
+                socialLinks: links
+                  .filter((link) => link.url.trim())
+                  .map((link) => ({
+                    label: link.label.trim(),
+                    url: link.url.trim(),
+                  })),
+              },
+            },
+            // `mergeFields` and not `merge: true`: Firestore deep-merges
+            // maps, so merging would union the new social links with the old
+            // ones and make removing one impossible through the button that
+            // says Save.
+            { mergeFields: ['business'] },
+          )
+        },
       )
+      // Nothing here is cleared by a save, so a refusal leaves every typed
+      // value on screen — it still has to say so, or it reads as a save that
+      // worked.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       enqueueSnackbar('Business details saved.', {
         variant: 'success',
         persist: false,

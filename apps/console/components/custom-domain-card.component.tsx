@@ -60,7 +60,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const { data: host } = useFirestoreDoc<any>(
@@ -287,7 +287,18 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
             </Button>
           </Stack>
         ) : null}
-        {!entitled ? (
+        {/*
+          `hasEntitlement` on an undefined org answers "no", and `org` is
+          undefined both in flight and on a failed read (AGL-1380). This
+          branch replaces the connected domain and its Disconnect control, so
+          a paying site's live custom domain read as a feature it had not
+          bought. Hold until the plan is known.
+        */}
+        {!orgReady ? (
+          <Typography variant="body2" color="text.secondary">
+            {'Checking your plan…'}
+          </Typography>
+        ) : !entitled ? (
           <Alert severity="info">
             {'Custom domains are included from the Starter plan — see ' +
               'Billing to upgrade.'}

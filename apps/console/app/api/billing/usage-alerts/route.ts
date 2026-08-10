@@ -28,9 +28,10 @@ import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
  * or 100%. One alert per quota per threshold per month, guarded by
  * `orgs/{orgId}.usageAlerts`. Covers sites, media storage, monthly email
  * sends, dataset count + storage, workflow/automation runs, and — added
- * AGL-1106/1107 — monthly bandwidth and published-site size (previously
- * displayed but never alerted). Scheduler-invoked (x-cron-secret, like
- * report-usage).
+ * AGL-1106 — monthly bandwidth, which is the included band the invoice meters
+ * page views against, so the alert is a real pre-invoice heads-up. The
+ * published-site-size check AGL-1107 added was removed in AGL-1370 as
+ * unreachable. Scheduler-invoked (x-cron-secret, like report-usage).
  */
 async function handler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -136,10 +137,6 @@ async function handler(request: Request): Promise<Response> {
       const dataStorageMb = Number(
         latestUsage.docs[0]?.get('dataStorageMb') ?? 0,
       )
-      // Published-site size (AGL-1107): read from the monthly rollup (site
-      // size changes slowly, so last month's figure is fine for an alert —
-      // and recomputing every version payload here would be too costly).
-      const siteSizeMb = Number(latestUsage.docs[0]?.get('siteSizeMb') ?? 0)
 
       const checks: Array<{ key: string; label: string; used: number; limit: number }> = [
         {
@@ -194,14 +191,12 @@ async function handler(request: Request): Promise<Response> {
           used: bandwidthGb,
           limit: entitlements.bandwidthGb,
         },
-        {
-          // AGL-1107: published-site size was measured + shown but never
-          // enforced; alert on it like the other soft caps.
-          key: 'siteSize',
-          label: 'published site size',
-          used: siteSizeMb,
-          limit: entitlements.totalSiteSizeMb,
-        },
+        // No `siteSize` check (AGL-1370). It was added in AGL-1107 and could
+        // never fire: `measure-node-map.ts` refuses any node map over 900 KB
+        // (AGL-678) and the rollup sweep is bounded per host, so the measured
+        // total tops out at 2.3–20.9% of `totalSiteSizeMb` depending on plan —
+        // never the 80% this loop alerts at. The measurement itself stays on
+        // the rollup as an internal signal; the dead alert does not.
       ]
 
       const guards =

@@ -36,8 +36,11 @@ import {
   listOrgMembers,
   logOrgActivity,
   readOrgBilling,
+  registerConsoleDomain,
+  releasePendingConsoleDomain,
   resolveOrgMembership,
   transferOrgOwnership,
+  validateConsoleDomain,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -409,7 +412,7 @@ async function handler(request: Request): Promise<Response> {
       const faviconUrl = clean(input.faviconUrl, 500)
       const emailLogoUrl = clean(input.emailLogoUrl, 500)
       const primaryColor = clean(input.primaryColor, 32)
-      const customConsoleDomain = clean(input.customConsoleDomain, 253).toLowerCase()
+      let customConsoleDomain = clean(input.customConsoleDomain, 253).toLowerCase()
       const urlFields: Array<[string, string]> = [
         ['Support URL', supportUrl],
         ['Logo URL', logoUrl],
@@ -430,14 +433,53 @@ async function handler(request: Request): Promise<Response> {
           { status: 400 },
         )
       }
-      if (
-        customConsoleDomain &&
-        !/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(customConsoleDomain)
-      ) {
-        return Response.json(
-          { error: 'Enter a valid custom console domain' },
-          { status: 400 },
-        )
+      // The shape regex this replaces accepted `aglyn.com`, `app.aglyn.com`
+      // and `console.aglyn.com` — our own hostnames — and had no uniqueness
+      // check at all, so two orgs could store the same value (AGL-1353 D3,
+      // AGL-1373). Inert only while nothing routes on the field; the moment
+      // 1099c does, an unguarded value here is an account-takeover surface.
+      //
+      // This is the whole gate today, because AGL-1354 removed
+      // `brandingProfile` from the Firestore rules' writable keys — a client
+      // can no longer set it directly, so this route is the only writer, and
+      // it already sits behind `checkEntitlement(org, 'whiteLabel')` above.
+      const previousConsoleDomain = String(
+        (orgSnapshot.get('brandingProfile') ?? {}).customConsoleDomain ?? '',
+      )
+      if (customConsoleDomain) {
+        const { domain, error: domainError } =
+          validateConsoleDomain(customConsoleDomain)
+        if (!domain) {
+          return Response.json(
+            { error: domainError ?? 'Enter a valid custom console domain' },
+            { status: 400 },
+          )
+        }
+        // Uniqueness is a RESERVATION, not a lookup. Two orgs storing the same
+        // value is inert only while nothing routes on it, and `registerConsoleDomain`
+        // claims the name — and every twin — in one transaction, so the check
+        // and the write cannot come apart under a race (AGL-743).
+        //
+        // No DNS proof and no Vercel call happen here: the claim lands
+        // `pending`, which reserves the name and nothing else. Attaching it is
+        // 1099c's job and is blocked on 1099d.
+        const claimed = await registerConsoleDomain({ orgId, domain })
+        if (!claimed.claim) {
+          return Response.json(
+            { error: claimed.error ?? 'Enter a valid custom console domain' },
+            { status: claimed.status },
+          )
+        }
+        customConsoleDomain = domain
+      }
+      // Clearing or changing the field must not strand the old reservation, or
+      // it locks another org out of a name nobody is using. Only ever drops a
+      // `pending` claim this org owns — see `releasePendingConsoleDomain`.
+      if (previousConsoleDomain && previousConsoleDomain !== customConsoleDomain) {
+        await releasePendingConsoleDomain({
+          orgId,
+          domain: previousConsoleDomain,
+        }).catch(() => false)
       }
       // Keep only the fields that were actually set — a blank drops out and
       // the resolver fills that gap with the Aglyn default at read time.

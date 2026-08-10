@@ -47,6 +47,31 @@ const PARENTS: Record<string, string> = {
 const MAX_DATA_BYTES = 1024 * 1024
 
 /**
+ * Keys a client may set on a version document (AGL-1377). This route had
+ * neither an allow-list nor a deny-list — `{ ...data }` went to Firestore
+ * whole — which is the same bet /api/hosts/resources lost, one route over
+ * and with the guard removed entirely.
+ *
+ * The list is every key the console's create paths send: the back-pointer
+ * to the parent (whichever of the three kinds it is), the host, the label,
+ * the node map, and the canvas root. `createdAt`/`updatedAt` are absent
+ * because they are stamped below on every create.
+ *
+ * Saving a version stays client-direct and is unaffected — a save is a
+ * merge-set onto the document already open, so a besigner that adds a
+ * field to a version it OWNS keeps working. This governs the seed only.
+ */
+const VERSION_KEYS = new Set([
+  'hostId',
+  'screenId',
+  'layoutId',
+  'componentId',
+  'displayName',
+  'nodes',
+  'rootId',
+])
+
+/**
  * Creates a besigner version document (AGL-1369).
  *
  * `versioning` (Pro+) was enforced in the console only: the component checked
@@ -182,7 +207,15 @@ async function handler(request: Request): Promise<Response> {
         ...(typeof label === 'string' ? { displayName: label.slice(0, 200) } : {}),
       }
     } else {
-      payload = { ...(data as Record<string, unknown>) }
+      // Allow-listed, like the snapshot branch above already was in spirit:
+      // there, the caller gets to name the copy and nothing else. Here it
+      // gets the seed's declared keys and nothing else (AGL-1377).
+      payload = {}
+      for (const [key, value] of Object.entries(
+        data as Record<string, unknown>,
+      )) {
+        if (VERSION_KEYS.has(key) && value !== undefined) payload[key] = value
+      }
     }
 
     const id =

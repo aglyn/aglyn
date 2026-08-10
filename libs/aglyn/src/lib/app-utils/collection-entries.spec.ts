@@ -23,6 +23,7 @@ import {
   collectionCategorySlug,
   collectionEntryTokens,
   collectionListUrl,
+  collectionPaginationLinks,
   collectionTotalPages,
   entryMatchesCategoryRoute,
   entryMatchesFilter,
@@ -351,6 +352,97 @@ describe('collectionListUrl (AGL-1321)', () => {
       collectionListUrl({ collectionSlug: 'blog', categorySlug }),
     )
     expect(new Set([...urls, '/blog']).size).toBe(4)
+  })
+})
+
+describe('collectionPaginationLinks (AGL-1386)', () => {
+  it('resolves BOTH URLs to the empty string on a single-page listing', () => {
+    // The whole point: /blog/category/open-source has exactly one page, and a
+    // template that binds prevUrl/nextUrl unconditionally must render inert
+    // placeholders there rather than an "Older →" onto a page that isn't.
+    expect(
+      collectionPaginationLinks({
+        collectionSlug: 'blog',
+        categorySlug: 'open-source',
+        page: 1,
+        totalPages: 1,
+      }),
+    ).toEqual({ page: 1, totalPages: 1, prevUrl: '', nextUrl: '' })
+  })
+
+  it('empties only the edge it is at, never both, mid-set', () => {
+    expect(
+      collectionPaginationLinks({
+        collectionSlug: 'blog',
+        page: 1,
+        totalPages: 3,
+      }),
+    ).toEqual({
+      page: 1,
+      totalPages: 3,
+      prevUrl: '',
+      nextUrl: '/blog/page/2',
+    })
+    expect(
+      collectionPaginationLinks({
+        collectionSlug: 'blog',
+        page: 3,
+        totalPages: 3,
+      }),
+    ).toEqual({
+      page: 3,
+      totalPages: 3,
+      prevUrl: '/blog/page/2',
+      nextUrl: '',
+    })
+  })
+
+  it('CARRIES THE CATEGORY on both links', () => {
+    // A "next" built without the filter returns the reader to the unfiltered
+    // list — the exact failure this exists to prevent.
+    expect(
+      collectionPaginationLinks({
+        collectionSlug: 'blog',
+        categorySlug: 'Open source',
+        page: 2,
+        totalPages: 3,
+      }),
+    ).toEqual({
+      page: 2,
+      totalPages: 3,
+      prevUrl: '/blog/category/open-source',
+      nextUrl: '/blog/category/open-source/page/3',
+    })
+  })
+
+  it('reads a missing/unusable page count as a single page 1', () => {
+    // An unpaginated listing IS page 1 of 1 — "Page 1 of 1", no links.
+    expect(collectionPaginationLinks({ collectionSlug: 'blog' })).toEqual({
+      page: 1,
+      totalPages: 1,
+      prevUrl: '',
+      nextUrl: '',
+    })
+    expect(
+      collectionPaginationLinks({
+        collectionSlug: 'blog',
+        page: 0,
+        totalPages: -4,
+      }),
+    ).toEqual({ page: 1, totalPages: 1, prevUrl: '', nextUrl: '' })
+  })
+
+  it('agrees with collectionListUrl about page 1 being the bare listing', () => {
+    const { prevUrl } = collectionPaginationLinks({
+      collectionSlug: 'blog',
+      categorySlug: 'guides',
+      page: 2,
+      totalPages: 2,
+    })
+    expect(prevUrl).toBe(
+      collectionListUrl({ collectionSlug: 'blog', categorySlug: 'guides' }),
+    )
+    expect(prevUrl).not.toContain('/page/1')
   })
 })
 

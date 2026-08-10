@@ -101,8 +101,15 @@ export const ENTRY_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
 ]
 
 /**
- * `{{collection.*}}` tokens (AGL-551) — resolve on collection list/entry
- * template screens (see the tenant compose pipeline's collection tokens).
+ * `{{collection.*}}` and `{{pagination.*}}` tokens (AGL-551/1321/1386) —
+ * resolve on collection list/entry template screens (see the tenant compose
+ * pipeline's collection tokens).
+ *
+ * The category and pagination tokens all resolve to the empty string where
+ * they do not apply, so they are safe to bind unconditionally: ONE list
+ * screen serves the bare listing, every `/page/{n}` and every
+ * `/category/{slug}`, and a template has no runtime conditional to vary
+ * itself with.
  */
 export const COLLECTION_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
   {
@@ -114,6 +121,36 @@ export const COLLECTION_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
     token: '{{collection.slug}}',
     label: 'Collection slug',
     description: 'URL slug of the routed collection.',
+  },
+  {
+    token: '{{collection.category}}',
+    label: 'Filtered category',
+    description: 'Category the URL filtered on; empty when unfiltered.',
+  },
+  {
+    token: '{{collection.categorySlug}}',
+    label: 'Filtered category slug',
+    description: 'That category’s URL segment; empty when unfiltered.',
+  },
+  {
+    token: '{{pagination.page}}',
+    label: 'Current page',
+    description: 'Page number this URL is showing.',
+  },
+  {
+    token: '{{pagination.totalPages}}',
+    label: 'Total pages',
+    description: 'Pages in the listing, after any category filter.',
+  },
+  {
+    token: '{{pagination.prevUrl}}',
+    label: 'Previous page link',
+    description: 'Keeps the category; empty on the first page.',
+  },
+  {
+    token: '{{pagination.nextUrl}}',
+    label: 'Next page link',
+    description: 'Keeps the category; empty on the last page.',
   },
 ]
 

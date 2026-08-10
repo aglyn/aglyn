@@ -229,26 +229,30 @@ function paginationNodes(
   pagination: FallbackListPagination,
   category?: FallbackListCategory,
 ): { childId: string; nodes: NodesMap } {
-  const { page, totalPages } = pagination
   // Page 1 lives at the bare listing; deeper pages at .../page/{n}. Built
-  // through the shared URL builder so the pager stays inside the category it
-  // is paging (AGL-1321) — a "next" that dropped the filter would silently
-  // return the reader to the unfiltered list.
-  const href = (n: number) =>
-    Aglyn.collectionListUrl({
+  // through the shared pager computation so this fallback and the
+  // `{{pagination.*}}` tokens an authored template binds (AGL-1386) can never
+  // disagree — and so the pager stays inside the category it is paging
+  // (AGL-1321): a "next" that dropped the filter would silently return the
+  // reader to the unfiltered list. An edge is the empty string, which is
+  // exactly the "no link here" this fallback already meant.
+  const { page, totalPages, prevUrl, nextUrl } = Aglyn.collectionPaginationLinks(
+    {
       collectionSlug: collection.slug,
       ...(category ? { categorySlug: category.slug } : {}),
-      page: n,
-    })
+      page: pagination.page,
+      totalPages: pagination.totalPages,
+    },
+  )
   const children: string[] = []
   const nodes: NodesMap = {}
-  if (page > 1) {
+  if (prevUrl) {
     nodes[id('prev')] = {
       $id: id('prev'),
       componentId: 'muiScreenLink',
       pluginId: 'mui',
       parentId: id('pager'),
-      props: { href: href(page - 1), children: '← Newer' },
+      props: { href: prevUrl, children: '← Newer' },
     }
     children.push(id('prev'))
   }
@@ -264,13 +268,13 @@ function paginationNodes(
     },
   }
   children.push(id('pageinfo'))
-  if (page < totalPages) {
+  if (nextUrl) {
     nodes[id('next')] = {
       $id: id('next'),
       componentId: 'muiScreenLink',
       pluginId: 'mui',
       parentId: id('pager'),
-      props: { href: href(page + 1), children: 'Older →' },
+      props: { href: nextUrl, children: 'Older →' },
     }
     children.push(id('next'))
   }

@@ -56,12 +56,12 @@ export function ScreenAnalyticsCard(props: {
   const { hostId, screenId } = props
   const firestore = useFirestore()
   const orgSlug = useOrgSlug()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const entitled = hasEntitlement('screen-analytics', org)
   const [days, setDays] = useState<DayStat[] | null>(null)
 
   useEffect(() => {
-    if (!entitled) return
+    if (!orgReady || !entitled) return
     let active = true
     const ids = Array.from({ length: DAYS }, (_, index) => {
       const date = new Date()
@@ -96,7 +96,26 @@ export function ScreenAnalyticsCard(props: {
     return () => {
       active = false
     }
-  }, [entitled, firestore, hostId, screenId])
+  }, [orgReady, entitled, firestore, hostId, screenId])
+
+  if (!orgReady) {
+    // `hasEntitlement(undefined)` answers "no" (AGL-1380), and this card's
+    // "no" is an upsell with an Upgrade button — shown to a Pro org for the
+    // analytics it already pays for. The effect above holds too: gating the
+    // fetch on a guessed "no" meant the pending window suppressed the load.
+    return (
+      <CardDisplay
+        header={'Screen traffic'}
+        help={docsHelp('analytics', { anchor: '#per-screen-traffic' })}
+        contentGutterX
+        contentGutterY
+      >
+        <Typography variant="body2" color="text.secondary">
+          {'Checking your plan…'}
+        </Typography>
+      </CardDisplay>
+    )
+  }
 
   if (!entitled) {
     return (

@@ -43,7 +43,28 @@ async function readScreenDoc(
     .withConverter(screenConverter)
     .doc(screenId)
     .get()
-  return snapshot.exists ? (snapshot.data() as Aglyn.AglynScreen) : null
+  if (!snapshot.exists) return null
+  const screen = snapshot.data() as Aglyn.AglynScreen
+  // Serve-side agreement with the quota (AGL-1383). `countBillableScreens`
+  // subtracts soft-deleted and `kind: 'email'` screens from `screensPerHost`,
+  // and both fields are client-writable — so before this, one `updateDoc` on
+  // the screen's own document took it off the plan while leaving it live: the
+  // host's routing map still pointed at it and nothing on this path ever
+  // looked. Refusing them here is what makes the exclusion honest — an
+  // excluded screen genuinely is not a page — and it turns the bypass into a
+  // trade (the field costs you the page) rather than a discount.
+  //
+  // Indistinguishable from a missing screen on purpose: every caller already
+  // treats `null` as a 404, and this must not become a probe for which
+  // screens exist. Not cached either (`store` refuses `null`), so clearing
+  // the field brings the page back on the next request rather than in 60s.
+  //
+  // The Emails page is untouched: campaign sends read the email screen and
+  // its version straight off Firestore in `loadEmailTemplate`, never through
+  // the tenant runtime — email documents are not, and never were, URLs.
+  return Aglyn.screenClaimsToBeAPage(screen as Aglyn.ScreenPageClaim)
+    ? screen
+    : null
 }
 
 export async function getScreen(options: {

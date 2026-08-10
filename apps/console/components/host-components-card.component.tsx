@@ -68,6 +68,7 @@ import {
   useFirestore,
   useHostVersionApi,
   useUser,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import ComponentIconField from './component-icon-field.component'
 import { docsHelp } from '../constants/docs-links'
@@ -95,7 +96,21 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   const createHostVersion = useHostVersionApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { data: componentDocs } = useFirestoreCollection<any>(
+  const {
+    data: componentDocs,
+    status: componentsStatus,
+    /**
+     * The rows the rename dialog is seeded from are unconfirmed by the server
+     * (AGL-1358). The payload here is narrow — `nodes`, `versionId` and
+     * `deletedAt` are not in it, and a plain `updateDoc` leaves them alone —
+     * but `description` and `icon` are written on every save whether or not
+     * the author opened them, and both are echoes of the seed. Against a
+     * cached read, retyping the name restores that snapshot's description
+     * and icon, which is the identity this component wears in every besigner
+     * drawer and in its marketplace listing.
+     */
+    fromCache: componentsFromCache,
+  } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
     [firestore, hostId],
@@ -177,21 +192,58 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
 
   const handleSave = useCallback(async () => {
     if (!editor || !editor.name.trim()) return
-    await updateDoc(
-      doc(firestore, 'hosts', hostId, 'components', editor.id),
+    /**
+     * Refuse a rename whose seed the server never confirmed (AGL-1358).
+     *
+     * The dialog only ever opens on a stored row, so there is no create path
+     * here to exempt — `handleOpenInBesigner`'s new version document is a
+     * different handler writing a fresh uid, and it is deliberately left
+     * alone.
+     *
+     * The guard WRAPS the write — an early return is a shape you can keep
+     * while losing the protection.
+     */
+    const verdict = await writeGuardedBySeed(
       {
-        displayName: editor.name.trim(),
-        description: editor.description.trim(),
-        // Only when the dialog was opened on a component that has one or the
-        // picker set one — an untouched dialog must not write `icon: {}` over
-        // a component whose icon was chosen on the detail page.
-        ...(editor.icon && { icon: editor.icon }),
-        updatedAt: Timestamp.now(),
+        subject: 'component',
+        unreadable: componentsStatus === 'error',
+        fromCache: componentsFromCache,
+      },
+      async () => {
+        await updateDoc(
+          doc(firestore, 'hosts', hostId, 'components', editor.id),
+          {
+            displayName: editor.name.trim(),
+            description: editor.description.trim(),
+            // Only when the dialog was opened on a component that has one or
+            // the picker set one — an untouched dialog must not write
+            // `icon: {}` over a component whose icon was chosen on the
+            // detail page.
+            ...(editor.icon && { icon: editor.icon }),
+            updatedAt: Timestamp.now(),
+          },
+        )
       },
     )
+    // This handler had no report of its own — it has no try/catch either, so
+    // a failed write left the dialog open and said nothing. A refusal that
+    // did the same would be indistinguishable from a click that missed.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     setEditor(null)
     enqueueSnackbar('Component updated', { variant: 'success', persist: false })
-  }, [editor, firestore, hostId, enqueueSnackbar])
+  }, [
+    editor,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+    componentsStatus,
+    componentsFromCache,
+  ])
 
   /**
    * Open a component in its own besigner (AGL-680).

@@ -63,6 +63,14 @@ interface RedirectDraft {
   kind: string
   /** Lower fires first. */
   priority: number
+  /**
+   * The rule's on/off state, carried through the editor rather than reset by
+   * it (AGL-1372). The save used to hardcode `true`, so changing a **disabled**
+   * rule's target turned it back on and rerouted the site without the author
+   * asking. A new rule seeds this `true`; an edit seeds it from the stored
+   * rule, which is also where the row's switch reads from.
+   */
+  enabled: boolean
 }
 
 /**
@@ -84,8 +92,9 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
     status: redirectsStatus,
     /**
      * The rows this editor is seeded from are unconfirmed by the server
-     * (AGL-1358). Editing copies a whole stored rule into `draft` and writes
-     * all of it back, so `merge: true` protects nothing. This is the site
+     * (AGL-1358). Editing copies every field the form owns out of the stored
+     * rule and writes all of them back, so `merge: true` protects only the
+     * fields written elsewhere (`lastHitAt`, `deletedAt`). This is the site
      * where a rollback is hardest to undo: a reverted `destination` on a
      * **301** is cached by every browser that has already followed it, so the
      * stale target outlives the fix in the console. `kind` reverting from
@@ -173,6 +182,10 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
       statusCode: 302,
       kind: 'exact',
       priority: REDIRECT_DEFAULT_PRIORITY,
+      // A NEW rule is on: the author is adding it to make it fire, and
+      // enforcement queries `where('enabled', '==', true)`, so a rule created
+      // without the field would never resolve (AGL-1372).
+      enabled: true,
     })
   }, [entitled, org, redirects.length, enqueueSnackbar])
 
@@ -260,16 +273,34 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
       priority: Number.isFinite(Number(draft.priority))
         ? Number(draft.priority)
         : REDIRECT_DEFAULT_PRIORITY,
-      enabled: true,
+      /**
+       * Whatever the rule already was (AGL-1372). This was `true`, so editing
+       * a **disabled** rule's target silently re-enabled it — a deliberate
+       * "off" (a retired campaign, a rule that broke something) undone by a
+       * routine save, changing site routing without the author asking.
+       *
+       * `!== false` rather than the raw value, because the switch below reads
+       * the stored field the same way: absent means on. Enforcement's query is
+       * `where('enabled', '==', true)`, so a rule missing the field is not
+       * served, and normalising it here makes the console's claim true.
+       *
+       * The create default lives in `handleAdd` — a new rule seeds the draft
+       * `true`, so both defaults hold without either one reading the other.
+       */
+      enabled: draft.enabled !== false,
     }
     try {
       if (draft.id) {
         /**
          * Edit stays client-direct (no quota consumed) — and is refused when
-         * its seed was never confirmed by the server (AGL-1358). `fields` is
-         * every key of the stored rule, so `merge: true` has nothing left to
-         * protect, and the eight validation refusals above have all already
-         * returned by here.
+         * its seed was never confirmed by the server (AGL-1358); the eight
+         * validation refusals above have all already returned by here.
+         *
+         * `merge: true` is load-bearing, contrary to what this said before
+         * (AGL-1372): `fields` is every key the FORM owns, not every key the
+         * document holds. `lastHitAt` is written by enforcement
+         * (`resolve-redirect`), and `deletedAt` by the delete below — a
+         * replacing write would erase both.
          *
          * The guard WRAPS the write. An early return is a shape you can keep
          * while losing the protection; here the write is only reachable
@@ -428,6 +459,9 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
                     statusCode: redirect.statusCode ?? 302,
                     kind: redirect.kind ?? 'exact',
                     priority: redirect.priority ?? REDIRECT_DEFAULT_PRIORITY,
+                    // Read exactly as the switch beside it does (AGL-1372):
+                    // an edit must not be a way to turn a rule back on.
+                    enabled: redirect.enabled !== false,
                   })
                 }
               >

@@ -218,6 +218,9 @@ on the empty listing above. Prefer linking with the pills.
 | `{{collection.name}}` / `{{collection.slug}}` | The routed collection |
 | `{{collection.category}}` | Name of the category the URL filtered on (empty when unfiltered) |
 | `{{collection.categorySlug}}` | That category's URL segment (empty when unfiltered) |
+| `{{pagination.page}}` / `{{pagination.totalPages}}` | Which page this URL shows, and how many there are |
+| `{{pagination.prevUrl}}` | Link to the previous page (empty on the first page) |
+| `{{pagination.nextUrl}}` | Link to the next page (empty on the last page) |
 
 :::tip Recent posts anywhere
 The Collection Entries block also works on **any** screen — set its **Collection slug**
@@ -248,6 +251,20 @@ Entries** block's **Entries per page** attribute; it then renders the page from 
 (the **Page** attribute overrides it for a fixed page). Without **Entries per page**, the
 block shows the top **Entries limit** entries as before. The same applies inside a
 category: `/{collection}/category/{category}/page/2`.
+
+#### Build your own pager
+
+One list template screen serves every one of those URLs, so a pager built from
+hardcoded links would read the same on all of them. Bind the `{{pagination.*}}` tokens
+instead: a **Text** block with `Page {{pagination.page}} of {{pagination.totalPages}}`,
+and two **Link** blocks whose **URL** is `{{pagination.prevUrl}}` and
+`{{pagination.nextUrl}}`.
+
+Both URLs **keep the category you are inside**, so "next" never drops the reader back
+onto the unfiltered list. And both are **empty where there is nowhere to go** — no
+previous page, no `{{pagination.prevUrl}}` — which makes a link with no target render as
+inert text rather than a link to a page that doesn't exist. That is why you can bind them
+on every route without building a variant of the screen for each.
 
 ## 4. Publish & syndicate
 
