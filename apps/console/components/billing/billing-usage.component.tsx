@@ -248,17 +248,17 @@ function HostUsageMeters(props: {
         used={counts.workflowRuns}
         limit={entitlements.workflowRunsPerMonth}
       />
-      {/* Site size and bandwidth are NOT per-site meters — their limits
-          (`totalSiteSizeMb`, `bandwidthGb`) are org-wide, so they render once
-          in `BillingUsageComponent` against an org-wide numerator (AGL-1371). */}
+      {/* Bandwidth is NOT a per-site meter — its limit (`bandwidthGb`) is
+          org-wide, so it renders once in `BillingUsageComponent` against an
+          org-wide numerator (AGL-1371). Site size moved there too and was then
+          removed outright (AGL-1370): unreachable on every plan. */}
     </>
   )
 }
 
 /**
  * Usage section of the billing page (AGL-70): the hosts meter plus per-host
- * screens/layouts/members/storage meters, and org-level site size and
- * bandwidth rows.
+ * screens/layouts/members/storage meters, and the org-level bandwidth row.
  */
 export function BillingUsageComponent(props: BillingUsageProps) {
   const { org, hosts } = props
@@ -280,12 +280,6 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   const [apiRequests, setApiRequests] = useState<number | null>(null)
   // Contacts audience band (AGL-890/891): org-scoped aggregate count.
   const [contactsCount, setContactsCount] = useState<number | null>(null)
-  // Published site size (AGL-1107) — read from the SAME rollup field the
-  // usage-alerts cron reads (`siteSizeMb`, written org-wide by report-usage),
-  // so the meter and the email cannot disagree about it (AGL-1371). It used
-  // to be recomputed live per host, which is both a different number and 250
-  // extra document reads per site per page load.
-  const [siteSizeMb, setSiteSizeMb] = useState<number | null>(null)
   // Month bandwidth (AGL-1106/1371): org-wide, summed across the org's sites
   // below — `entitlements.bandwidthGb` is an org-wide band, and the invoice
   // and the cron both compare it against the org-wide total.
@@ -339,10 +333,11 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
       })
-    // Dataset storage AND published site size come from the monthly rollup
-    // (report-usage); the current month may not exist yet, so fall back to the
-    // previous one. Both fields ride the same document, so this is one read —
-    // and site size is then the exact figure usage-alerts alerts on.
+    // Dataset storage comes from the monthly rollup (report-usage); the
+    // current month may not exist yet, so fall back to the previous one. The
+    // rollup's `siteSizeMb` was read here too until AGL-1370 removed the site
+    // size meter — the field is still written, as an internal signal, but no
+    // console surface renders it.
     void (async () => {
       const now = new Date()
       const month = now.toISOString().slice(0, 7)
@@ -350,19 +345,15 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         .toISOString()
         .slice(0, 7)
       let storage: number | null = null
-      let siteSize: number | null = null
       for (const key of [month, previous]) {
-        if (storage != null && siteSize != null) break
+        if (storage != null) break
         try {
           const rollup = await getDoc(
             doc(firestore, 'orgs', orgId, 'usage', key),
           )
           const data = rollup.exists() ? (rollup.data() ?? {}) : {}
-          if (storage == null && typeof data['dataStorageMb'] === 'number') {
+          if (typeof data['dataStorageMb'] === 'number') {
             storage = data['dataStorageMb']
-          }
-          if (siteSize == null && typeof data['siteSizeMb'] === 'number') {
-            siteSize = data['siteSizeMb']
           }
         } catch {
           // Meter keeps its "not yet metered" state on failure.
@@ -370,7 +361,6 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       }
       if (!active) return
       if (storage != null) setDataStorageMb(storage)
-      if (siteSize != null) setSiteSizeMb(siteSize)
     })()
     return () => {
       active = false
@@ -472,16 +462,16 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           limit={entitlements.apiRequestsPerMonth}
         />
       ) : null}
-      {/* Org-wide by definition (AGL-1371): `totalSiteSizeMb` and
-          `bandwidthGb` are org limits, not per-site ones, and the invoice and
-          the usage-alerts cron both measure the org-wide total against them.
-          Rendered here, once, rather than once per site. */}
-      <UsageMeter
-        label="Total site size (organization)"
-        used={siteSizeMb}
-        limit={entitlements.totalSiteSizeMb}
-        unit="MB"
-      />
+      {/* Org-wide by definition (AGL-1371): `bandwidthGb` is an org limit, not
+          a per-site one, and the invoice and the usage-alerts cron both
+          measure the org-wide total against it. Rendered here, once, rather
+          than once per site.
+
+          A "Total site size (organization)" row sat beside it until AGL-1370.
+          It metered `totalSiteSizeMb`, which no plan can reach — the 900 KB
+          node-map wall (AGL-678) bounds the measurable total to a few percent
+          of the cap — so the meter could only ever read near zero. The
+          entitlement and the rollup measurement stay as an internal signal. */}
       <UsageMeter
         label="Bandwidth (this month, organization)"
         used={bandwidthGb}

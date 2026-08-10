@@ -277,9 +277,15 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   <Typography variant="body2">
                     {`${quotaLabel(entitlements.sharedLayoutsPerHost)} shared layouts`}
                   </Typography>
+                  {/* Media storage only. The `totalSiteSizeMb` figure used to
+                      sit beside it and was dropped in AGL-1370: it is
+                      structurally unreachable (the 900 KB node-map wall of
+                      AGL-678 bounds a whole site to a few percent of the
+                      advertised cap), so the card was publishing a number we
+                      do not back. The entitlement stays as an internal
+                      signal. */}
                   <Typography variant="body2">
-                    {`${mbLabel(entitlements.storagePerHostMb)} storage · ` +
-                      `${mbLabel(entitlements.totalSiteSizeMb)} site`}
+                    {`${mbLabel(entitlements.storagePerHostMb)} storage`}
                   </Typography>
                   <Typography variant="body2">
                     {`${entitlements.bandwidthGb} GB bandwidth`}

@@ -24,7 +24,7 @@
  * One org, one denominator (AGL-1371).
  *
  * `bandwidthGb` and `totalSiteSizeMb` are ORG-wide limits. Three surfaces
- * measure against them and they had drifted into measuring different things:
+ * measured against them and they had drifted into measuring different things:
  *
  * | surface | numerator (before) |
  * | -- | -- |
@@ -41,6 +41,11 @@
  * single-site org cannot tell the two readings apart — which is exactly how
  * three implementations of the same fraction went unnoticed. Every figure
  * asserted here differs between the per-host and the org-wide reading.
+ *
+ * AGL-1370 then deleted the site-size row entirely — `totalSiteSizeMb` is
+ * unreachable on every plan, so the meter could only read near zero. The
+ * fixture still serves the rollup field, and the site-size case now asserts
+ * that nothing renders it.
  */
 
 import { render, screen, waitFor } from '@testing-library/react'
@@ -101,9 +106,9 @@ jest.mock('firebase/firestore', () => ({
   }),
   getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
   getDoc: async (ref: { path: string }) => {
-    // The monthly rollup — the SAME document and the SAME `siteSizeMb` field
-    // the usage-alerts cron reads. Agreement on site size is structural now,
-    // not coincidental.
+    // The monthly rollup. `siteSizeMb` is still written by report-usage as an
+    // internal signal, and is deliberately still served here so the "no site
+    // size row" assertion below cannot pass for want of data.
     if (/^orgs\/org-1\/usage\//.test(ref.path)) {
       return {
         exists: () => true,
@@ -173,19 +178,25 @@ describe('the console meter measures the org, like the invoice does', () => {
     expect(row.textContent).toContain('Upgrade')
   })
 
-  it('reads site size from the rollup field the cron alerts on', async () => {
+  it('renders NO site size row, even with the rollup field present', async () => {
     render(<BillingUsageComponent org={ORG} hosts={HOSTS} />)
 
-    const label = 'Total site size (organization)'
+    // Wait for the meters that do render, so this is not just asserting
+    // against an unmounted tree.
     await waitFor(() => {
-      expect(meterRow(label).textContent).toContain(
-        `${ROLLUP_SITE_SIZE_MB} / 5120 MB`,
-      )
+      expect(
+        meterRow('Bandwidth (this month, organization)').textContent,
+      ).toContain(EXPECTED_ORG_GB)
     })
-    expect(screen.getAllByText(label)).toHaveLength(1)
-    // 4300 / 5120 = 84% of the org-wide cap. Divided across three sites it
-    // would have been ~1433 MB each — 28%, and silent.
-    expect(meterRow(label).textContent).toContain('Upgrade')
+
+    // AGL-1370 removed the row. The fixture still serves
+    // `siteSizeMb: ${ROLLUP_SITE_SIZE_MB}` on the rollup — 84% of Pro's
+    // 5120 MB cap, which under the old code rendered a meter in its warning
+    // state — so nothing here passes for want of data.
+    expect(screen.queryAllByText(/site size/i)).toHaveLength(0)
+    expect(
+      screen.queryAllByText(String(ROLLUP_SITE_SIZE_MB), { exact: false }),
+    ).toHaveLength(0)
   })
 })
 
