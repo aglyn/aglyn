@@ -87,6 +87,53 @@ export const METERED_UNIT_RATES_USD = {
  */
 export const ESTIMATED_PAGE_TRANSFER_BYTES = 600 * 1024
 
+/**
+ * Bandwidth ⇄ page views: the one conversion three surfaces used to each
+ * write out by hand (AGL-1371).
+ *
+ * `bandwidthGb` is not a second cap next to metered page views — it IS the
+ * included band of the page-view meter, expressed in the unit customers
+ * understand. It is therefore used in both directions: forward by
+ * `meteredIncludedAllowance` to size the band the invoice subtracts, backward
+ * by the usage-alerts cron and the console meter to render live page views as
+ * GB. Three hand-rolled copies of `× 1024³ / ESTIMATED_PAGE_TRANSFER_BYTES` is
+ * how the numerators drifted apart in the first place; there is one now.
+ */
+export function pageViewsFromBandwidthGb(bandwidthGb: number): number {
+  return (bandwidthGb * 1024 * 1024 * 1024) / ESTIMATED_PAGE_TRANSFER_BYTES
+}
+
+/** @see pageViewsFromBandwidthGb — the same constant, the other way. */
+export function bandwidthGbFromPageViews(pageViews: number): number {
+  return (
+    (Math.max(0, Number(pageViews) || 0) * ESTIMATED_PAGE_TRANSFER_BYTES) /
+    (1024 * 1024 * 1024)
+  )
+}
+
+/**
+ * Org-wide monthly bandwidth from per-SITE page-view readings.
+ *
+ * The denominator is `entitlements.bandwidthGb`, which is an ORG-wide band —
+ * unlike storage and form submissions it is not multiplied by `hostLimit`
+ * (see `meteredIncludedAllowance`). The invoice sums every host in the org
+ * before subtracting it (`report-usage` → `estimateMonthlyUsageCost`), and so
+ * does the usage-alerts cron. The console meter did not: it rendered ONE
+ * host's reading against the org-wide band, understating by up to `hostLimit`×
+ * on every plan above Starter (AGL-1371). The numerator is summed here, once,
+ * so all three read the same fraction.
+ */
+export function orgBandwidthGb(
+  perHostPageViews: Array<number | null | undefined>,
+): number {
+  return bandwidthGbFromPageViews(
+    perHostPageViews.reduce<number>(
+      (sum, views) => sum + Math.max(0, Number(views) || 0),
+      0,
+    ),
+  )
+}
+
 /** One month of usage for a single host (from the per-host counters). */
 export interface HostUsageSnapshot {
   storageBytes: number
@@ -132,9 +179,7 @@ export function meteredIncludedAllowance(
   const hostLimit = Math.max(1, entitlements.hostLimit)
   return {
     storageGb: (hostLimit * entitlements.storagePerHostMb) / 1024,
-    pageViews:
-      (entitlements.bandwidthGb * 1024 * 1024 * 1024) /
-      ESTIMATED_PAGE_TRANSFER_BYTES,
+    pageViews: pageViewsFromBandwidthGb(entitlements.bandwidthGb),
     formSubmissions: hostLimit * entitlements.formSubmissionsPerMonth,
     metered: planMetersInfraOverage(org),
   }

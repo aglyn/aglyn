@@ -225,19 +225,39 @@ Copy changes, no enforcement work:
 
 ## Defects found in passing (not part of this decision)
 
-1. **The site-size measurement silently truncates.** `orgSiteSizeBytes` caps
+All three were filed as **AGL-1371** and are **fixed**. Recorded here because
+they change the execution notes above.
+
+1. **The site-size measurement silently truncated.** `orgSiteSizeBytes` capped
    at `.limit(200)` screens and `.limit(50)` layouts per host, but Business
    and above have `screensPerHost: UNLIMITED`. Past 200 screens the number
-   quietly undercounts. Harmless today because nothing acts on it; it would
-   be a live billing bug the moment anything did.
-2. **The console meter and the cron use different numerators.**
-   `host-usage/route.ts:120-122` returns **per-host** site size and
-   bandwidth, and `billing-usage.component.tsx:289-296` renders them against
-   the **org-wide** `entitlements.totalSiteSizeMb` / `bandwidthGb`, while
-   `usage-alerts` compares the **org-wide sum** against the same limits. On
-   Pro (3 hosts) through Agency (100 hosts) the meter and the warning email
-   disagree about what fraction is used. This one is worth fixing whatever is
-   decided about the cap, because it affects the bandwidth row too — the row
-   that is real.
-3. **The bandwidth meter row understates by `hostLimit`.** Same root cause as
-   2: the band is org-wide, the displayed usage is one host's.
+   quietly undercounted. ~~Harmless today because nothing acts on it~~ — now
+   a paged sweep to `SITE_SIZE_DOC_CEILING` (5,000 docs/host), and hitting the
+   ceiling writes `siteSizeTruncated: true` onto the rollup rather than
+   shrinking the figure in silence.
+2. **The console meter and the cron used different numerators.** `host-usage`
+   returned **per-host** site size and bandwidth and the meter rendered them
+   against the **org-wide** `totalSiteSizeMb` / `bandwidthGb`, while
+   `usage-alerts` and the invoice both used the **org-wide sum**. The invoice
+   is the authority and it was right; the meter was the bug. Both rows are now
+   org-level, rendered once in `BillingUsageComponent`.
+3. **The bandwidth meter row understated by `hostLimit`.** Same root cause as
+   2. The org-wide sum is computed through `orgBandwidthGb`, and the
+   `bandwidthGb ⇄ pageViews` conversion all three surfaces need is one pair of
+   functions in `usage-metering.ts` instead of three hand-rolled copies.
+
+### What that means for the execution list above
+
+- **Step 2 is now a one-line delete.** The site-size row moved to
+  `BillingUsageComponent` ("Total site size (organization)") and reads
+  `siteSizeMb` off the monthly rollup. Removing it is deleting that one
+  `<UsageMeter>`; no measurement code goes with it.
+- **The AGL-1371 work is not undone by removing the row.** The truncation fix
+  lives in `orgSiteSizeBytes`, which step 5 keeps deliberately ("internal-only,
+  it is how we would notice a runaway canvas"). The conversion helpers and the
+  org-wide bandwidth sum serve the bandwidth row, which step 3 keeps.
+- **Step 4 still stands.** The `siteSize` check in `usage-alerts` is still
+  unreachable for the reason this memo gives — a bounded measurement against an
+  unreachable cap — and dropping it is still the right call.
+- `host-usage` no longer returns `siteSizeBytes`; its live per-site sweep had
+  exactly one reader and that reader now uses the rollup.

@@ -16,32 +16,27 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { ESTIMATED_PAGE_TRANSFER_BYTES } from '../../../../utils/usage-metering'
+import { bandwidthGbFromPageViews } from '../../../../utils/usage-metering'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 
-/** Approximate persisted size of one version doc's node payload. */
-function nodesBytes(nodes: unknown): number {
-  if (nodes == null) return 0
-  if (ArrayBuffer.isView(nodes)) return (nodes as Uint8Array).byteLength
-  try {
-    return JSON.stringify(nodes).length
-  } catch {
-    return 0
-  }
-}
-
 /**
- * Site-size and bandwidth metering for the Billing usage meters (AGL-41
- * follow-up — these rows previously showed "not yet metered"). Site size =
- * the published content: every screen/layout's published version node
- * payload (media lives under the separate storage quota by design).
- * Bandwidth = this month's analytics views × the average page transfer.
- * Admin SDK because version node payloads aren't worth streaming to the
- * client just to measure.
+ * This month's page views for ONE site (AGL-41 follow-up — the bandwidth row
+ * previously showed "not yet metered"). The console sums this across the
+ * org's sites, because the `bandwidthGb` band it is rendered against is
+ * org-wide, as are the usage-alerts cron and the invoice (AGL-1371).
+ *
+ * Authorization is per-site membership, which is why this endpoint stayed
+ * per-site while the arithmetic moved up to the org.
+ *
+ * It used to return `siteSizeBytes` too — a live per-site sweep of every
+ * published version payload, ~250 document reads per site per page load. That
+ * had exactly one reader, the site-size meter, and that meter now reads the
+ * org-wide `siteSizeMb` the monthly rollup writes (the same field the cron
+ * alerts on), so the sweep here was pure cost for a number nothing rendered.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -75,52 +70,26 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const month = new Date().toISOString().slice(0, 7)
-    const [screens, layouts, analytics] = await Promise.all([
-      hostRef.collection('screens').limit(200).get(),
-      hostRef.collection('layouts').limit(50).get(),
-      hostRef
-        .collection('analytics')
-        .where(
-          firebaseAdmin.firestore.FieldPath.documentId(),
-          '>=',
-          `${month}-01`,
-        )
-        .where(
-          firebaseAdmin.firestore.FieldPath.documentId(),
-          '<=',
-          `${month}-31`,
-        )
-        .get(),
-    ])
-
-    // Published version payloads only — drafts don't count against the
-    // published-site-size quota.
-    const versionRefs: FirebaseFirestore.DocumentReference[] = []
-    for (const docSnapshot of [...screens.docs, ...layouts.docs]) {
-      const versionId = docSnapshot.get('versionId')
-      if (versionId) {
-        versionRefs.push(
-          docSnapshot.ref.collection('versions').doc(String(versionId)),
-        )
-      }
-    }
-    let siteSizeBytes = 0
-    if (versionRefs.length) {
-      const versions = await firestore.getAll(...versionRefs)
-      for (const version of versions) {
-        siteSizeBytes += nodesBytes(version.get('nodes'))
-      }
-    }
+    const analytics = await hostRef
+      .collection('analytics')
+      .where(firebaseAdmin.firestore.FieldPath.documentId(), '>=', `${month}-01`)
+      .where(firebaseAdmin.firestore.FieldPath.documentId(), '<=', `${month}-31`)
+      .get()
 
     const monthPageViews = analytics.docs.reduce(
       (sum, day) => sum + Number(day.get('total') ?? 0),
       0,
     )
-    return Response.json({
-      siteSizeBytes,
-      monthPageViews,
-      bandwidthBytes: monthPageViews * ESTIMATED_PAGE_TRANSFER_BYTES,
-    }, { status: 200 })
+    return Response.json(
+      {
+        monthPageViews,
+        // Per-site GB, for a caller that wants one site's share. The METER
+        // does not use it — it sums `monthPageViews` org-wide and converts
+        // once, so rounding cannot accumulate per site (AGL-1371).
+        bandwidthGb: bandwidthGbFromPageViews(monthPageViews),
+      },
+      { status: 200 },
+    )
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Usage lookup failed' }, { status: 500 })

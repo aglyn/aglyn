@@ -34,6 +34,7 @@ import {
 import { useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import fetchSeatCounts from '../../utils/fetch-seat-counts'
+import { orgBandwidthGb } from '../../utils/usage-metering'
 
 export interface BillingUsageProps {
   org: Partial<AglynOrgBilling> | null | undefined
@@ -141,10 +142,6 @@ function HostUsageMeters(props: {
     storageMb: null,
     workflowRuns: null,
   })
-  const [usage, setUsage] = useState<{
-    siteSizeMb: number | null
-    bandwidthGb: number | null
-  }>({ siteSizeMb: null, bandwidthGb: null })
   const entitlements = resolveOrgEntitlements(org)
 
   // Aggregation counts instead of full collection reads — one billed read
@@ -203,39 +200,6 @@ function HostUsageMeters(props: {
     }
   }, [firestore, host.$id, user])
 
-  // Site size (published version payloads) and month bandwidth are summed
-  // server-side — version node payloads aren't client-readable at a
-  // reasonable cost (AGL-41 follow-up).
-  useEffect(() => {
-    let active = true
-    void (async () => {
-      try {
-        const idToken = await (user as any)?.getIdToken?.()
-        if (!idToken) return
-        const response = await fetch(
-          `/api/billing/host-usage?hostId=${encodeURIComponent(host.$id)}`,
-          { headers: { Authorization: `Bearer ${idToken}` } },
-        )
-        if (!response.ok) return
-        const payload = await response.json()
-        if (!active) return
-        setUsage({
-          siteSizeMb:
-            Math.round((payload.siteSizeBytes / (1024 * 1024)) * 10) / 10,
-          bandwidthGb:
-            Math.round(
-              (payload.bandwidthBytes / (1024 * 1024 * 1024)) * 100,
-            ) / 100,
-        })
-      } catch {
-        // Meters keep their "not yet metered" state on failure.
-      }
-    })()
-    return () => {
-      active = false
-    }
-  }, [user, host.$id])
-
   // Effective seat limit includes purchased addon seats (AGL-112).
   const memberSeatLimit = checkSeatQuota(org, 'members', 0).limit
 
@@ -284,18 +248,9 @@ function HostUsageMeters(props: {
         used={counts.workflowRuns}
         limit={entitlements.workflowRunsPerMonth}
       />
-      <UsageMeter
-        label="Total site size"
-        used={usage.siteSizeMb}
-        limit={entitlements.totalSiteSizeMb}
-        unit="MB"
-      />
-      <UsageMeter
-        label="Bandwidth (this month)"
-        used={usage.bandwidthGb}
-        limit={entitlements.bandwidthGb}
-        unit="GB"
-      />
+      {/* Site size and bandwidth are NOT per-site meters — their limits
+          (`totalSiteSizeMb`, `bandwidthGb`) are org-wide, so they render once
+          in `BillingUsageComponent` against an org-wide numerator (AGL-1371). */}
     </>
   )
 }
@@ -325,6 +280,16 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   const [apiRequests, setApiRequests] = useState<number | null>(null)
   // Contacts audience band (AGL-890/891): org-scoped aggregate count.
   const [contactsCount, setContactsCount] = useState<number | null>(null)
+  // Published site size (AGL-1107) — read from the SAME rollup field the
+  // usage-alerts cron reads (`siteSizeMb`, written org-wide by report-usage),
+  // so the meter and the email cannot disagree about it (AGL-1371). It used
+  // to be recomputed live per host, which is both a different number and 250
+  // extra document reads per site per page load.
+  const [siteSizeMb, setSiteSizeMb] = useState<number | null>(null)
+  // Month bandwidth (AGL-1106/1371): org-wide, summed across the org's sites
+  // below — `entitlements.bandwidthGb` is an org-wide band, and the invoice
+  // and the cron both compare it against the org-wide total.
+  const [bandwidthGb, setBandwidthGb] = useState<number | null>(null)
   useEffect(() => {
     if (!orgId) return
     let active = true
@@ -374,33 +339,88 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
       })
-    // Dataset storage comes from the monthly rollup (report-usage); the
-    // current month may not exist yet, so fall back to the previous one.
+    // Dataset storage AND published site size come from the monthly rollup
+    // (report-usage); the current month may not exist yet, so fall back to the
+    // previous one. Both fields ride the same document, so this is one read —
+    // and site size is then the exact figure usage-alerts alerts on.
     void (async () => {
       const now = new Date()
       const month = now.toISOString().slice(0, 7)
       const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1)
         .toISOString()
         .slice(0, 7)
+      let storage: number | null = null
+      let siteSize: number | null = null
       for (const key of [month, previous]) {
+        if (storage != null && siteSize != null) break
         try {
           const rollup = await getDoc(
             doc(firestore, 'orgs', orgId, 'usage', key),
           )
-          const value = rollup.exists() ? rollup.data()?.dataStorageMb : null
-          if (typeof value === 'number') {
-            if (active) setDataStorageMb(value)
-            return
+          const data = rollup.exists() ? (rollup.data() ?? {}) : {}
+          if (storage == null && typeof data['dataStorageMb'] === 'number') {
+            storage = data['dataStorageMb']
+          }
+          if (siteSize == null && typeof data['siteSizeMb'] === 'number') {
+            siteSize = data['siteSizeMb']
           }
         } catch {
           // Meter keeps its "not yet metered" state on failure.
         }
       }
+      if (!active) return
+      if (storage != null) setDataStorageMb(storage)
+      if (siteSize != null) setSiteSizeMb(siteSize)
     })()
     return () => {
       active = false
     }
   }, [firestore, orgId, user])
+
+  // Month bandwidth, summed ACROSS THE ORG'S SITES (AGL-1371). The band is
+  // org-wide and so is the figure the invoice is computed from — the meter
+  // used to render one site's reading against it, understating by up to
+  // `hostLimit`×. `host-usage` stays per-site (its authorization is per-site
+  // membership); the summing moved here, where the denominator lives.
+  const hostKey = hosts.map((host) => host?.$id).filter(Boolean).join(',')
+  useEffect(() => {
+    const hostIds = hostKey ? hostKey.split(',') : []
+    if (!hostIds.length) return
+    let active = true
+    void (async () => {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        if (!idToken) return
+        const readings = await Promise.all(
+          hostIds.map(async (hostId) => {
+            try {
+              const response = await fetch(
+                `/api/billing/host-usage?hostId=${encodeURIComponent(hostId)}`,
+                { headers: { Authorization: `Bearer ${idToken}` } },
+              )
+              if (!response.ok) return null
+              const payload = await response.json()
+              return typeof payload?.monthPageViews === 'number'
+                ? payload.monthPageViews
+                : null
+            } catch {
+              return null
+            }
+          }),
+        )
+        // A partial sum is the SAME defect in a smaller size: one unreadable
+        // site and the meter would quietly understate again. Better to keep
+        // the "not yet metered" state than to publish a number that is low.
+        if (!active || readings.some((views) => views == null)) return
+        setBandwidthGb(Math.round(orgBandwidthGb(readings) * 100) / 100)
+      } catch {
+        // Meter keeps its "not yet metered" state on failure.
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [hostKey, user])
   const teamSeatLimit = checkSeatQuota(org, 'managers', 0).limit
   // Contacts meter past the band on a paid plan is billing, not blocking
   // (AGL-890) — the caption under the meter says so with the estimate.
@@ -452,6 +472,22 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           limit={entitlements.apiRequestsPerMonth}
         />
       ) : null}
+      {/* Org-wide by definition (AGL-1371): `totalSiteSizeMb` and
+          `bandwidthGb` are org limits, not per-site ones, and the invoice and
+          the usage-alerts cron both measure the org-wide total against them.
+          Rendered here, once, rather than once per site. */}
+      <UsageMeter
+        label="Total site size (organization)"
+        used={siteSizeMb}
+        limit={entitlements.totalSiteSizeMb}
+        unit="MB"
+      />
+      <UsageMeter
+        label="Bandwidth (this month, organization)"
+        used={bandwidthGb}
+        limit={entitlements.bandwidthGb}
+        unit="GB"
+      />
       {hosts.map((host) => (
         <HostUsageMeters
           key={host.$id}
