@@ -58,6 +58,7 @@ import {
   recordsProveOwnership,
   resolveChallengeTxt,
   SSO_CHALLENGE_PREFIX,
+  ssoServiceMetadata,
   validateSsoDomain,
 } from './sso-provisioning'
 
@@ -169,6 +170,137 @@ describe('the token is what proves ownership', () => {
 
   it('rejects an empty zone outright', () => {
     expect(recordsProveOwnership([], 'abc')).toBe(false)
+  })
+})
+
+/**
+ * AGL-1381. These two strings are the only thing standing between a routine
+ * certificate rotation and a locked-out org.
+ *
+ * `provisionSsoPool()` writes `rpEntityId`/`callbackURL` into GCIP on EVERY
+ * save, so whatever `ssoServiceMetadata()` returns overwrites the live SAML
+ * config. Live GCIP for the first SSO org holds `https://auth.aglyn.com` and
+ * `https://auth.aglyn.com/__/auth/handler`, and Google Workspace is already
+ * sending that Audience. A missing scheme, a trailing slash, or a silent drift
+ * back to the `firebaseapp.com` host does not degrade sign-in — it stops the
+ * assertion being accepted at all, and the owner of that org has no password
+ * to fall back to.
+ *
+ * So these are pinned as LITERALS, character for character, and not derived
+ * from the same expression the implementation uses. A test that rebuilt the
+ * string from the env would pass under every mutation worth catching.
+ */
+describe('the service metadata an IdP is configured with (AGL-1381)', () => {
+  const AUTH_ENV = [
+    'NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST',
+    'NEXT_PUBLIC_WORKSPACE_DOMAIN',
+    'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+    'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+  ]
+  const saved: Record<string, string | undefined> = {}
+
+  /** Start from a KNOWN-EMPTY env — the root `.env` leaks into `nx test`. */
+  function env(overrides: Record<string, string> = {}) {
+    for (const key of AUTH_ENV) delete process.env[key]
+    Object.assign(process.env, overrides)
+  }
+
+  beforeAll(() => {
+    for (const key of AUTH_ENV) saved[key] = process.env[key]
+  })
+
+  afterAll(() => {
+    for (const key of AUTH_ENV) {
+      if (saved[key] === undefined) delete process.env[key]
+      else process.env[key] = saved[key]
+    }
+  })
+
+  it('emits BYTE-IDENTICALLY what production GCIP already holds', () => {
+    // Production's env, as deployed: the workspace domain is set and
+    // AUTH_DOMAIN still names the unbranded firebaseapp host.
+    env({
+      NEXT_PUBLIC_WORKSPACE_DOMAIN: 'aglyn.com',
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'aglyn-main.firebaseapp.com',
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'aglyn-main',
+    })
+    expect(ssoServiceMetadata()).toEqual({
+      authDomain: 'auth.aglyn.com',
+      entityId: 'https://auth.aglyn.com',
+      acsUrl: 'https://auth.aglyn.com/__/auth/handler',
+    })
+  })
+
+  it('carries the scheme on the audience, and no trailing slash', () => {
+    // The bug was `entityId: authDomain` — a bare host. Google Workspace sends
+    // `https://auth.aglyn.com`; GCIP compares the Audience as an opaque
+    // string, so `auth.aglyn.com` is simply a different audience.
+    env({ NEXT_PUBLIC_WORKSPACE_DOMAIN: 'aglyn.com' })
+    const { entityId, acsUrl } = ssoServiceMetadata()
+    expect(entityId.startsWith('https://')).toBe(true)
+    expect(entityId.endsWith('/')).toBe(false)
+    expect(acsUrl.endsWith('/__/auth/handler')).toBe(true)
+    expect(acsUrl).toBe(`${entityId}/__/auth/handler`)
+  })
+
+  it('prefers the workspace auth origin over the configured firebaseapp domain', () => {
+    // Production sets BOTH. Reading AUTH_DOMAIN first is what emitted the
+    // unbranded pair, so the precedence is the fix.
+    env({
+      NEXT_PUBLIC_WORKSPACE_DOMAIN: 'aglyn.com',
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'aglyn-main.firebaseapp.com',
+    })
+    expect(ssoServiceMetadata().authDomain).toBe('auth.aglyn.com')
+  })
+
+  it('lets HANDLER_HOST override the derived origin outright', () => {
+    env({
+      NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST: 'auth.aglyn.com',
+      NEXT_PUBLIC_WORKSPACE_DOMAIN: 'elsewhere.test',
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'aglyn-main.firebaseapp.com',
+    })
+    expect(ssoServiceMetadata().entityId).toBe('https://auth.aglyn.com')
+  })
+
+  it('tracks the deployment rather than hardcoding aglyn.com', () => {
+    env({ NEXT_PUBLIC_WORKSPACE_DOMAIN: 'example.test' })
+    expect(ssoServiceMetadata()).toEqual({
+      authDomain: 'auth.example.test',
+      entityId: 'https://auth.example.test',
+      acsUrl: 'https://auth.example.test/__/auth/handler',
+    })
+  })
+
+  it('falls back to the firebaseapp domain when no workspace domain is set', () => {
+    // Self-host and previews. The workspace domain must never be DEFAULTED to
+    // aglyn.com here — that would point a self-hosted install at our own auth
+    // origin, and make this arm unreachable.
+    env({
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'acme-selfhost.firebaseapp.com',
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'acme-selfhost',
+    })
+    const metadata = ssoServiceMetadata()
+    expect(metadata.authDomain).toBe('acme-selfhost.firebaseapp.com')
+    expect(metadata.entityId).toBe('https://acme-selfhost.firebaseapp.com')
+    expect(metadata.entityId).not.toContain('aglyn.com')
+  })
+
+  it('falls back to the project id when nothing at all is configured', () => {
+    env({ NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'acme-selfhost' })
+    expect(ssoServiceMetadata().acsUrl).toBe(
+      'https://acme-selfhost.firebaseapp.com/__/auth/handler',
+    )
+  })
+
+  it('takes a HOST even when an operator pastes a URL', () => {
+    // `https://auth.aglyn.com/` in the env var would otherwise emit
+    // `https://https://auth.aglyn.com//__/auth/handler`.
+    env({ NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST: ' HTTPS://Auth.Aglyn.com/ ' })
+    expect(ssoServiceMetadata()).toEqual({
+      authDomain: 'auth.aglyn.com',
+      entityId: 'https://auth.aglyn.com',
+      acsUrl: 'https://auth.aglyn.com/__/auth/handler',
+    })
   })
 })
 
