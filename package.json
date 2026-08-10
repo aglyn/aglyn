@@ -65,7 +65,7 @@
     "profile:nx-run-console:serve:development": "cargo instruments -t time --bin nx run console:serve:development profile",
     "postinstall": "patch-package",
     "test:rules": "bash tools/scripts/test-rules.sh",
-    "test:eslint-rules": "node tools/eslint-rules/no-plan-gated-entitlement.test.mjs && node tools/eslint-rules/no-sx-after-spread.test.mjs && node tools/eslint-rules/no-cross-graph-import.test.mjs && node tools/eslint-rules/no-link-element-switch.test.mjs",
+    "test:eslint-rules": "node tools/eslint-rules/no-plan-gated-entitlement.test.mjs && node tools/eslint-rules/no-sx-after-spread.test.mjs && node tools/eslint-rules/no-cross-graph-import.test.mjs && node tools/eslint-rules/no-link-element-switch.test.mjs && node tools/eslint-rules/no-listener-row-spread-into-write.test.mjs",
     "test:plugin-loader": "node tools/plugin-loader/origin/api/load.csp.test.mjs",
     "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",

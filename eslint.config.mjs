@@ -9,6 +9,7 @@ import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import eslintPluginTsdoc from 'eslint-plugin-tsdoc'
 import noCrossGraphImport from './tools/eslint-rules/no-cross-graph-import.mjs'
 import noLinkElementSwitch from './tools/eslint-rules/no-link-element-switch.mjs'
+import noListenerRowSpreadIntoWrite from './tools/eslint-rules/no-listener-row-spread-into-write.mjs'
 import noPlanGatedEntitlement from './tools/eslint-rules/no-plan-gated-entitlement.mjs'
 import noSxAfterSpread from './tools/eslint-rules/no-sx-after-spread.mjs'
 import noUnguardedLoadingHook from './tools/eslint-rules/no-unguarded-loading-hook.mjs'
@@ -18,6 +19,7 @@ const aglynPlugin = {
   rules: {
     'no-cross-graph-import': noCrossGraphImport,
     'no-link-element-switch': noLinkElementSwitch,
+    'no-listener-row-spread-into-write': noListenerRowSpreadIntoWrite,
     'no-plan-gated-entitlement': noPlanGatedEntitlement,
     'no-sx-after-spread': noSxAfterSpread,
     'no-unguarded-loading-hook': noUnguardedLoadingHook,
@@ -114,6 +116,18 @@ export default [
       // block everyone on a design decision that is not theirs. Flip to
       // `'error'` with AGL-1347's fix; the rule is clean everywhere else.
       'aglyn/no-link-element-switch': 'warn',
+      // `idField: '$id'` stamps the document id onto the in-memory row and
+      // nothing persists it. Spreading such a row into a write payload stores
+      // it as a real field — silently, since nothing reads it, and
+      // permanently. Three issues have now come out of this one affordance
+      // (AGL-1358 overwrites whole documents, AGL-1372 omits fields, AGL-1374
+      // invents one), which is the AGL-1357 threshold.
+      //
+      // ERROR from the start, unlike no-link-element-switch: the pre-fix tree
+      // at `86270af4a^` gives it exactly the four instances AGL-1374 listed
+      // and nothing else across 14,742 files, and today's tree is clean. It
+      // has no backlog to work off.
+      'aglyn/no-listener-row-spread-into-write': 'error',
       'mobx/exhaustive-make-observable': 'off',
       'mobx/unconditional-make-observable': 'off',
       'mobx/missing-make-observable': 'off',
