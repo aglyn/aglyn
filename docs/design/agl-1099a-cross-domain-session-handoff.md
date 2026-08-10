@@ -625,36 +625,136 @@ Firebase authorized domains — is the per-customer provisioning step and the
 commercial ceiling. Google's documentation for keys managed in Cloud is explicit:
 "You can add up to a maximum of 250 domains", with the escape hatch being to
 disable domain verification entirely, which the same page calls "a security risk
-because there are no restrictions on the site". Two caveats I could not resolve:
+because there are no restrictions on the site".
 
-- I did not verify whether this specific key is now a Cloud-managed
-  (Enterprise) key or still a classic v3 key — the 2026-08-03 note says it was
-  migrated to GCP but that **the project-ownership invitation was unaccepted**.
-  Until that is cleared, API-driven domain management may not be available at
-  all, which would make every custom domain a manual console click.
-- I found no documented figure for classic (non-migrated) reCAPTCHA v3 keys.
+#### Can the allowlist be managed by API? Measured 2026-08-09: **no, not today**
+
+Both caveats above are now settled, and the answer is the one that costs money.
+
+**The key is a classic reCAPTCHA v3 key, not a Cloud-managed one.** Read from
+App Check's own configuration rather than inferred:
+
+```
+GET firebaseappcheck.googleapis.com/v1/projects/aglyn-main/apps/{webAppId}/recaptchaV3Config
+→ 200  { siteSecretSet: true, tokenTtl: "86400s", minValidScore: 0.5 }
+
+GET .../recaptchaEnterpriseConfig
+→ 200  { tokenTtl: "3600s", riskAnalysis: { minValidScore: 0.5 } }   ← no siteKey
+```
+
+`siteSecretSet: true` is the tell: a classic v3 config needs the **site secret**
+pasted in, an Enterprise config needs only a site key. The Enterprise resource
+exists but carries no `siteKey`, so it is an unconfigured default. The client
+agrees — `new ReCaptchaV3Provider(...)` at
+`libs/tenant/feature/instance/src/lib/hooks/firebase/firebase-services.tsx:247`
+and `apps/console/hooks/use-presence.ts:208`; `ReCaptchaEnterpriseProvider`
+appears nowhere in the tree.
+
+**Classic keys have no management API.** Domains are edited only in the
+reCAPTCHA admin console UI. The API that *can* do it —
+`recaptchaenterprise.googleapis.com` `projects.keys.patch`, writing
+`webSettings.allowedDomains` (250 max, or `allowAllDomains` to switch enforcement
+off) — addresses keys as `projects/{project}/keys/{key}`, so it can only reach a
+key that lives in a project we hold IAM on. Ours does not:
+
+```
+gcloud services list --enabled --project aglyn-main | grep recaptcha   → 0 rows
+  (same for aglyn-app, aglyn-org)
+gcloud recaptcha keys list --project aglyn-main
+  → SERVICE_DISABLED  reCAPTCHA Enterprise API has not been used in project aglyn-main
+```
+
+**And that is not a switch we can flip.** The 2026-08-03 note is right that the
+key was auto-migrated to a Google-created GCP project whose **ownership
+invitation is unaccepted**. Google's migration documentation draws exactly this
+line: existing v2/v3 keys keep working without accepting the invitation, *"however,
+to manage the keys, such as to create, delete, or modify them, you must accept
+the project."* That matches what we observed — the admin-console UI still edits
+the key (a `vercel.app` entry was removed on 2026-08-09 and sign-in broke on
+those hosts as intended), while no API path exists.
+
+**So the per-customer allowlist entry is a manual console click, and that is a
+commercial fact, not a scheduling one.** It gates the feature per customer, on
+top of the 250 ceiling.
+
+Two routes unblock it, and **both are account actions belonging to the project
+owner, not to this codebase**:
+
+1. **Accept the GCP project-ownership invitation** for the migration project.
+   The key becomes manageable by `projects.keys.patch` there.
+2. **`projects.keys.migrate` the key into `aglyn-main`**, where owner IAM already
+   exists. The API requires the caller to be an owner of the reCAPTCHA key *and*
+   to hold reCAPTCHA Enterprise Admin in the destination project, and it is a
+   write against the live key — so it is a deliberate decision, not a probe.
+
+Either route also changes the *shape* of the automation: once the key is
+API-manageable, adding a domain on attach and reclaiming it on detach is a small
+mechanism driven off the stored `consoleDomains` claim. Until then, no mechanism
+should be built, because a half-built one that records a manual step is the wrong
+mechanism the moment the invitation clears.
 
 **250 is a real ceiling for a white-label product and it should be established
 before the feature is sold** — that instinct in AGL-1099 is right; it just
-pointed at the wrong list.
+pointed at the wrong list. The documented 250 applies to Cloud-managed keys; no
+figure is published for classic v3 keys, so the ceiling is unknown for the key we
+actually run.
 
 ### A third allowlist nobody has named: GCP API-key referrer restrictions
 
-`NEXT_PUBLIC_FIREBASE_API_KEY` may carry HTTP-referrer restrictions in the GCP
-credentials console. If it does, every custom console domain needs adding there
-too, and the symptom would be a generic Identity Toolkit rejection. **Unverified —
-check the key's restrictions in GCP before scoping 1099d.**
+Settled 2026-08-09, from the key's own configuration rather than by probing it.
+`aglyn-main` holds exactly one API key — "Browser key (auto created by Firebase)"
+— and it carries **an API-target restriction and no referrer restriction at all**:
 
-### `frame-ancestors` — smaller than AGL-1099 says, but not zero
+```
+gcloud services api-keys list --project aglyn-main
+  restrictions.browserKeyRestrictions.allowedReferrers  → (empty)
+  restrictions.apiTargets[].service                     → 50 services, incl.
+    identitytoolkit.googleapis.com, securetoken.googleapis.com, firestore, appcheck
+```
 
-`security-origins.js` at the repo root is a static `PRODUCTION_DOMAINS` list
-consumed by both `apps/console/middleware.ts` and `with-aglyn.nextjs.config.js`.
-Under this design the custom domain never frames the auth helper, so no entry is
-needed for sign-in. **But** if the console frames a tenant surface — the besigner
-canvas, the preview — then the *tenant* app's `frame-ancestors` would have to
-include the custom console domain, or that iframe is blocked. I did not verify
-whether the tenant app emits the same policy. Scope 1099d around **that**
-question, not around Firebase authorized domains.
+This agrees with the PoC's black-box result — a hostile `Referer` passed key
+validation on `securetoken.googleapis.com`. **There is no third allowlist. A
+custom console domain needs nothing here.** The caveat is that a referrer
+restriction *could* be added later and would break every custom domain at once
+with a generic Identity Toolkit rejection, so this is a constraint to record, not
+a step to automate.
+
+### `frame-ancestors` — measured 2026-08-09: **nothing is needed, on either side**
+
+`security-origins.js:48-77` is a static `PRODUCTION_DOMAINS` list with no
+wildcards and no database read; `baseCspDirectives()` at `:88-93` turns it into
+`object-src 'none'; base-uri 'self'; frame-ancestors {list}`. It is emitted once
+per response by `apps/console/middleware.ts:205-208` and once by
+`apps/tenant/middleware.ts:294-295`. No `X-Frame-Options` is set anywhere, and no
+`frame-src` directive exists, so nothing constrains what either app may frame.
+
+**Console side: no entry, and adding one would be backwards.** `frame-ancestors`
+governs who may frame *you*. Putting `console.acme-agency.com` in
+`PRODUCTION_DOMAINS` would only make the console framable from that origin. Its
+absence is the correct posture.
+
+**Tenant side: the premise is false.** This section previously assumed the
+console frames a tenant surface. It does not:
+
+- the besigner canvas is a `div` —
+  `libs/besigner/feature/designer/src/lib/components/viewport-frame.component.tsx:58`,
+  and `libs/besigner` contains no iframe at all;
+- the preview mounts the tenant runtimes in-process, same origin —
+  `apps/console/components/document-preview.component.tsx`;
+- `apps/console/components/besigner-iframe.component.tsx` — the one component
+  that *would* frame a tenant origin — has **no importer** anywhere in the tree,
+  and the `AGLYN_SILOED_HOST` it reads is empty;
+- marketplace plugin iframes never execute console-side; the resolved
+  `listingId`/`version`/`sha256` a `PluginFrame` needs are injected only by the
+  tenant compose pass (`libs/tenant/runtime/src/lib/compose-screen-nodes.ts:300`).
+
+Combined with the PoC's measurement of **zero `/__/auth/` requests**, the CSP half
+of AGL-1099 item 3 is closed. One latent constraint survives and is worth
+recording: `tools/plugin-loader/origin/api/load.mjs:26` hard-codes
+`frame-ancestors https://app.aglyn.com https://*.aglyn.app`, widened per-site by
+`sanitizeAncestors()` from a *tenant* `hosts/{hostId}.cname`. If a live plugin
+ever has to render inside a custom-domain console, that is the one file needing a
+`consoleDomains`-keyed entry — a future constraint, not a current blocker.
 
 ### Are the two defects in D6 latent or live? Measured 2026-08-09: **live, and currently harmless**
 
@@ -929,7 +1029,11 @@ Recorded because disagreeing with evidence is more useful than elaborating.
 - **1099d** — rescoped: the App Check reCAPTCHA allowlist provisioning step and
   its 250-domain ceiling, the GCP API-key referrer question, and tenant-side
   `frame-ancestors` for framing the besigner canvas from a custom console domain.
-  **Not** Firebase authorized domains.
+  **Not** Firebase authorized domains. *Scoped 2026-08-09: two of its three parts
+  are now closed as "nothing to build" — the API-key referrer allowlist does not
+  exist, and neither `frame-ancestors` needs an entry. What remains is the
+  reCAPTCHA allowlist, which **cannot be automated today** and is blocked on an
+  account action. See §5.*
 - **1099e** — the handoff itself, per this document, plus the two extractions in
   D8.
 
@@ -982,3 +1086,33 @@ its four prerequisites are the same code.
 Still open, and deliberately not built here: everything in D6/D7 that needs the
 handoff, the `setPersistence` guard the PoC's §4 asks for, and the Firestore
 cache decision in its §5.
+
+### 1099d, as scoped — **nothing was built, and that is the finding**
+
+Scoped 2026-08-09 against the question 1099b left blocking: *can the App Check
+reCAPTCHA allowlist be driven by API?* All three parts of 1099d were taken to an
+answer, and none of them produced code.
+
+| Part | Answer | Evidence |
+| --- | --- | --- |
+| App Check reCAPTCHA allowlist | **Cannot be automated today.** The key is classic v3; classic keys have no management API; the Enterprise API cannot reach a key in a project we hold no IAM on | §5 above |
+| GCP API-key referrer allowlist | **Does not exist.** No entry is ever needed | §5 above |
+| `frame-ancestors`, console and tenant | **No entry needed on either side.** The console frames no cross-origin surface | §5 above |
+
+The consequence is commercial, and it should be stated before the feature is
+sold: **each custom console domain requires a manual click in the reCAPTCHA admin
+console**, and it is a click no one can delegate to the product. A domain that
+attaches and routes without it renders a console that can never sign anyone in.
+
+**No mechanism was built on purpose.** Both routes that unblock automation are
+owner account actions, and each one changes what the mechanism should be — an
+API-manageable key wants add-on-attach/reclaim-on-detach driven off the stored
+`consoleDomains` claim (never re-derived, per 1099b), while a permanently manual
+key wants an operator checklist and a refusal to mark a domain `active` before
+someone confirms the entry. Building either before the question is settled builds
+the wrong one.
+
+**Precondition for resuming 1099d:** the key is manageable by
+`recaptchaenterprise.googleapis.com` from a project we own — provable by
+`gcloud recaptcha keys list` returning the key. Until that command works, 1099d
+has nothing to build, and it still blocks 1099c.
