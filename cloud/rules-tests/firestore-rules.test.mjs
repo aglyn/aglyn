@@ -170,6 +170,11 @@ beforeEach(async () => {
     })
     await setDoc(doc(db, 'hosts', HOST, 'screens', 'screen-1'), { name: 'Home' })
     await setDoc(doc(db, 'hosts', HOST, 'variables', 'var-1'), { name: 'v', value: '1' })
+    // An existing webhook, so the AGL-1360 create/update split can be told
+    // apart: create is API-only, update (the soft delete) stays client-side.
+    await setDoc(doc(db, 'hosts', HOST, 'webhooks', 'wh1'), {
+      name: 'Ship', direction: 'outbound', url: 'https://hook.example',
+    })
     await setDoc(doc(db, 'hosts', HOST, 'templates', 'tpl-1'), {
       kind: 'page', displayName: 'Hero page',
       source: { type: 'marketplace', listingId: 'listing-1', version: 2 },
@@ -411,6 +416,25 @@ describe('hosts', () => {
         setDoc(doc(authed(EDITOR), 'hosts', HOST, coll, 'new-doc'), { name: 'x' }),
       )
     }
+    // Webhooks joined the API-only creates (AGL-1360). WEBHOOK_MAX_PER_HOST
+    // was enforced ONLY by the console counting the rows its Firestore
+    // listener held; with `persistentLocalCache` that count could be
+    // arbitrarily stale and low, so the cap did not survive a stale session.
+    // /api/hosts/resources counts the live webhooks with the Admin SDK.
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'webhooks', 'wh-new'), {
+        name: 'w', direction: 'outbound', url: 'https://hook.example',
+      }),
+    )
+    // The webhooks block above this one grants READ only, so it cannot
+    // re-grant the create the catch-all just denied — but update/delete must
+    // still work: delete is a soft delete (`deletedAt`), which is how a
+    // capped site frees a slot.
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'webhooks', 'wh1'), {
+        deletedAt: new Date(),
+      }),
+    )
     // Deleting a COLLECTION doc is API-only (AGL-947): it owns `entries`,
     // which Firestore won't cascade into. Single entries stay deletable —
     // the dedicated entries block re-grants what the name-based exclusion
