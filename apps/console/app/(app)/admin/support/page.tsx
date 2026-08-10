@@ -64,7 +64,8 @@ function formatWhen(ms: number | null): string {
 
 /**
  * Staff support queue (AGL-849): the operator side of the subscriber
- * `MANAGE_SUPPORT` page. `/api/support/tickets` already returns every org's
+ * `MANAGE_SUPPORT_TICKETS` page (its own surface since AGL-1158; it used to
+ * be half of `MANAGE_SUPPORT`). `/api/support/tickets` already returns every org's
  * ticket to a `staff` claim and threads a `staff: true` reply — this page is
  * the surface that was missing. Open/close and reply drive the same PATCH the
  * subscriber uses; a reply reopens a closed ticket unless it is also closed.

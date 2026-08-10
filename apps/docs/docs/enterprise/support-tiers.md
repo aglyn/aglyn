@@ -11,7 +11,7 @@ Every plan gets the [community forum](../workspace-and-billing/support-and-commu
 for our time.
 
 The commitment below is a **first response**, not a resolution. It is what the
-support page shows you, and what the staff queue is ordered by.
+Support tickets page shows you, and what the staff queue is ordered by.
 
 | Plan | Tier | First response | Named success manager |
 | --- | --- | --- | --- |
@@ -44,9 +44,11 @@ regress into the wrong order.
 
 ## Where to see it
 
-**Organization → Support**, or **Support** in your account menu. The page
-states your own commitment rather than a generic promise, so what you read
-there is what your plan actually carries.
+**Organization → Support → Support tickets**, reached from **Support** in the
+org tabs or in your account menu. On a plan that carries tickets that is where
+Support opens; on Free and Starter it opens on the forum, with a link across.
+The page states your own commitment rather than a generic promise, so what you
+read there is what your plan actually carries.
 
 Your plan is per organization. If you belong to more than one, the commitment
 follows the workspace you are looking at — not your account.

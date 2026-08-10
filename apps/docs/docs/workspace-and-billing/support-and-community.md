@@ -6,11 +6,14 @@ description: Open a support ticket with the Aglyn team, and ask other builders i
 
 # Support & community
 
-Two places to get help, both on the same page: **private support tickets** with the
-Aglyn team, and a **community forum** shared with other Aglyn builders.
+Two ways to get help, each with its own page under **Support**: **private support
+tickets** with the Aglyn team, and a **community forum** shared with other Aglyn
+builders.
 
-Open it from **Organization → Support**, or from **Support** in your
-[account menu](../getting-started/console-tour.md#the-app-bar).
+Open Support from **Organization → Support**, or from **Support** in your
+[account menu](../getting-started/console-tour.md#the-app-bar). It lands on whichever
+channel your plan makes primary — the forum on Free and Starter, tickets from Pro
+upward — and each page links to the other, so you always have both.
 
 :::note If you were invited to a single site
 Support isn't part of a [site collaborator's console](teams-and-roles/overview.md#what-a-site-collaborator-sees).
@@ -27,8 +30,8 @@ any of their teammates can carry the thread on.
 **The community forum is on every plan, including Free.** Private support tickets
 start on **Pro** — Free and Starter are forum-only tiers.
 
-Each plan with tickets carries a first-response target, shown on the Support page
-itself:
+Each plan with tickets carries a first-response target, shown on the Support tickets
+page itself:
 
 | Plan | Tier | First response |
 | --- | --- | --- |
@@ -46,8 +49,13 @@ range, measured to our **first reply** — not to resolution. See
 
 ## Support tickets
 
+At **Organization → Support → Support tickets**.
+
 A ticket is a private conversation between your organization and Aglyn staff. Anyone
 in the organization can open one and follow the thread.
+
+On Free and Starter this page explains where ticket support starts and points you at
+the forum instead — it never offers a **New ticket** button the server would refuse.
 
 1. Choose **New ticket**.
 2. Give it a **Subject** (up to 150 characters) and describe what's going on in the
@@ -76,6 +84,9 @@ expected versus what happened, and the exact error text if there is one. If it's
 billing, say which plan and which invoice.
 
 ## Community forum
+
+At **Organization → Support → Community forum**, and the page Free and Starter
+workspaces land on.
 
 The forum is for questions other builders can answer, and for sharing what you've
 made. Threads are visible to everyone with forum access across all organizations — so

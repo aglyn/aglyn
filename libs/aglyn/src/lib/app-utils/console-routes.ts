@@ -40,7 +40,7 @@ export enum Route {
   // verifier findings and acts.
   ADMIN_PLUGIN_REVIEW = '/admin/plugin-reviews/[listingId]',
   // Staff support-ticket queue (AGL-849): the operator side of the
-  // subscriber `MANAGE_SUPPORT` page — every org's tickets in one place.
+  // subscriber `MANAGE_SUPPORT_TICKETS` page — every org's tickets in one place.
   ADMIN_SUPPORT = '/admin/support',
   ADMIN_EMAILS = '/admin/emails',
   // The one besigner route with no host and no org in it (AGL-749). A system
@@ -81,7 +81,20 @@ export enum Route {
   HOST_CONTENT = '/[orgSlug]/hosts/[host]/content',
   MANAGE_TEAM = '/[orgSlug]/team',
   MANAGE_TEAM_MEMBER = '/[orgSlug]/team/[uid]',
+  // Support is an UMBRELLA, not a page (AGL-1158). The two channels beneath
+  // it are separate features that were only ever one screen: they are gated
+  // differently (tickets need a first-response commitment, from Pro; the
+  // forum is open to every tier including Free) and they fail independently.
+  // Sharing one route made them share a blast radius — AGL-1157 was one bad
+  // line in the common loader that emptied BOTH lists at once.
+  //
+  // `MANAGE_SUPPORT` itself stays, and stays the nav tab's href: it now
+  // forwards to whichever channel the org's tier makes primary, so a
+  // forum-only workspace lands on a whole forum instead of a half-empty page
+  // beside a ticket card it may not use.
   MANAGE_SUPPORT = '/[orgSlug]/support',
+  MANAGE_SUPPORT_TICKETS = '/[orgSlug]/support/tickets',
+  MANAGE_SUPPORT_FORUM = '/[orgSlug]/support/forum',
   HOST_DASHBOARD = '/[orgSlug]/hosts/[host]',
   // The catch-all console page a plugin's own nav items resolve against
   // (`app/(app)/[orgSlug]/hosts/[host]/[pluginSlug]/page.tsx`). Plugin slugs
@@ -214,6 +227,8 @@ export interface RoutePayload {
   [Route.MANAGE_TEAM]: { orgSlug: string }
   [Route.MANAGE_TEAM_MEMBER]: { orgSlug: string; uid: string }
   [Route.MANAGE_SUPPORT]: { orgSlug: string }
+  [Route.MANAGE_SUPPORT_TICKETS]: { orgSlug: string }
+  [Route.MANAGE_SUPPORT_FORUM]: { orgSlug: string }
   [Route.MANAGE_BILLING]: { orgSlug: string }
   [Route.HOST_INBOX]: { orgSlug: string; host: string }
   [Route.HOST_CONTACTS]: { orgSlug: string; host: string }

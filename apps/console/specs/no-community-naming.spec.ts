@@ -62,9 +62,30 @@ const ALLOWED = new Map<string, string>([
     'apps/console/app/api/support/forum/route.ts',
     'THE forum — AGL-142, categories/threads/replies for paid plans.',
   ],
+  // The Support umbrella and its two channels (AGL-1158). The forum was half
+  // of one page; splitting it moved the word across four new files, and this
+  // map is the record that each one means the FORUM.
   [
     'apps/console/app/(app)/[orgSlug]/support/page.tsx',
-    'Links to the community forum and its docs anchor.',
+    'The Support umbrella — names both channels while explaining which one ' +
+      'it forwards a workspace to.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/support/forum/page.tsx',
+    'THE forum’s own page — its heading, its docs anchor, its route.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/support/forum/layout.tsx',
+    'The forum page’s browser title.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/support/tickets/page.tsx',
+    'Points a forum-only tier at the forum, which is its whole support ' +
+      'channel — the copy AGL-1103 requires this page to carry.',
+  ],
+  [
+    'apps/console/components/support/support-channel-link.component.tsx',
+    'The label on the link between the two Support channels.',
   ],
   [
     'apps/console/constants/docs-help.generated.ts',
