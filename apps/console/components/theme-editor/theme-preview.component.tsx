@@ -212,6 +212,33 @@ export function ThemePreview(props: ThemePreviewProps) {
               {'Raised panels and toolbars sit on the surface color.'}
             </Typography>
           </Box>
+          {/* Same reasoning as the surface block above, for the tints
+              (AGL-1244): the pairing is the whole point of the token, so the
+              preview renders each wash under the accent that belongs on it
+              rather than as three bare swatches. */}
+          <Stack direction="row" spacing={1}>
+            {(
+              [
+                ['tint.primary', 'primary.dark', 'Primary'],
+                ['tint.secondary', 'secondary.main', 'Secondary'],
+                ['tint.tertiary', 'tertiary.main', 'Tertiary'],
+              ] as const
+            ).map(([fill, ink, label]) => (
+              <Box
+                key={fill}
+                sx={{
+                  flex: 1,
+                  backgroundColor: fill,
+                  color: ink,
+                  borderRadius: 1,
+                  p: 1.5,
+                }}
+              >
+                <Typography variant="subtitle2">{label}</Typography>
+                <Typography variant="caption">{'tint'}</Typography>
+              </Box>
+            ))}
+          </Stack>
           <Stack direction="row" spacing={1}>
             <TextField label="Text field" size="small" fullWidth />
             <TextField

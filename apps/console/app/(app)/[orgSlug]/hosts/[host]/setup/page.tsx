@@ -34,7 +34,7 @@ import {
 } from '@aglyn/shared-ui-jsx-forms'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useHost } from '@aglyn/tenant-feature-instance'
+import { useHost, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { InputAdornment, Tab } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
@@ -353,7 +353,18 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const router = useRouter()
   const pathname = usePathname()
   const {
-    doc: { data, status },
+    doc: {
+      data,
+      status,
+      /**
+       * The host doc every form on this page is seeded from is unconfirmed
+       * by the server (AGL-1358). All three writers below replace whole maps
+       * rather than patching fields — the theme, the override patch, and the
+       * entire details/SEO form — so a cached seed does not lose one edit,
+       * it reverts everything the author did not touch.
+       */
+      fromCache: hostFromCache,
+    },
     setDoc,
   } = useHost({ hostId })
   const [themeSaving, setThemeSaving] = useState(false)
@@ -379,55 +390,112 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
    */
   const handleWriteOverride = useCallback(
     async (value: unknown) => {
-      await setDoc(
-        { themeOverride: value },
-        { mergeFields: ['themeOverride'] },
+      /**
+       * Refuse a patch computed from an unconfirmed seed (AGL-1358).
+       *
+       * The caller builds `value` by resolving the STORED patch against the
+       * stored theme and re-diffing — both read off `data`, this listener —
+       * and `mergeFields` then replaces the patch atomically. So a cached
+       * seed does not fail to reset one path: it reinstates every override
+       * the author has cleared since that snapshot, on a live site's theme.
+       *
+       * The verdict is returned rather than swallowed, so the card reports
+       * a refusal instead of announcing a reset that never happened.
+       */
+      return writeGuardedBySeed(
+        {
+          subject: 'theme overrides',
+          unreadable: status === 'error',
+          fromCache: hostFromCache,
+        },
+        async () => {
+          await setDoc(
+            { themeOverride: value },
+            { mergeFields: ['themeOverride'] },
+          )
+        },
       )
     },
-    [setDoc],
+    [setDoc, status, hostFromCache],
   )
 
   const handleThemeSave = useCallback(
     async (theme: Aglyn.AglynHostTheme) => {
       setThemeSaving(true)
       const dequeueLoading = queueLoading()
-      // mergeFields replaces the field atomically, so cleared colors do not
-      // linger from a deep merge with the previous document — and, for the
-      // override, so that removing one stops overriding rather than unioning
-      // with the patch already stored.
-      const write = themeIsInstalled
-        ? setDoc(
-            {
-              themeOverride: overrideWriteValue(
-                themeOverridePatch(data, theme),
-                data?.themeInstalledFrom?.sha256 ?? null,
-              ),
-            },
-            { mergeFields: ['themeOverride'] },
-          )
-        : setDoc({ theme }, { mergeFields: ['theme'] })
-      await write
-        .then(() => {
+      /**
+       * Refuse a theme write seeded from an unconfirmed read (AGL-1358).
+       *
+       * `mergeFields` replaces the field atomically, deliberately, so cleared
+       * colours do not linger from a deep merge — and, for the override, so
+       * removing one stops overriding rather than unioning with the patch
+       * already stored. That is also exactly why a stale seed is dangerous
+       * here rather than merely wasteful: the editor is seeded from
+       * `resolveSiteTheme(data)`, so `theme` carries EVERY token, not the one
+       * that changed. Save a single colour against a cached seed and every
+       * other token on a live site reverts to whatever the cache last held.
+       *
+       * The installed-theme branch is worse still: `themeOverridePatch` diffs
+       * against the same stale `data`, so the patch it computes describes
+       * differences from a theme that may no longer be the stored one.
+       *
+       * The guard WRAPS both branches — neither is reachable without a
+       * verdict.
+       */
+      try {
+        const verdict = await writeGuardedBySeed(
+          {
+            subject: 'theme',
+            unreadable: status === 'error',
+            fromCache: hostFromCache,
+          },
+          async () => {
+            await (themeIsInstalled
+              ? setDoc(
+                  {
+                    themeOverride: overrideWriteValue(
+                      themeOverridePatch(data, theme),
+                      data?.themeInstalledFrom?.sha256 ?? null,
+                    ),
+                  },
+                  { mergeFields: ['themeOverride'] },
+                )
+              : setDoc({ theme }, { mergeFields: ['theme'] }))
+          },
+        )
+        // A refusal leaves the editor exactly as the author left it, so the
+        // colours they picked survive to be saved once the page reloads.
+        if (!verdict.ok) {
+          enqueueSnackbar(verdict.message, { variant: 'warning' })
+        } else {
           enqueueSnackbar(
             themeIsInstalled ? 'Your changes are saved.' : 'Theme saved!',
             { variant: 'success' },
           )
           logActivity('Updated theme', { type: 'theme' })
-        })
-        .catch((e) => {
-          enqueueSnackbar(`Error: ${JSON.stringify(e)}`, { variant: 'error' })
-        })
-        .finally(() => {
-          dequeueLoading()
-          setThemeSaving(false)
-        })
+        }
+      } catch (e) {
+        enqueueSnackbar(`Error: ${JSON.stringify(e)}`, { variant: 'error' })
+      } finally {
+        dequeueLoading()
+        setThemeSaving(false)
+      }
     },
-    [enqueueSnackbar, queueLoading, setDoc, logActivity, themeIsInstalled, data],
+    [
+      enqueueSnackbar,
+      queueLoading,
+      setDoc,
+      logActivity,
+      themeIsInstalled,
+      data,
+      status,
+      hostFromCache,
+    ],
   )
 
-  const handleBasicSave = useCallback(
-    async (fields: any) => {
-      const dequeueLoading = queueLoading()
+  /** The save itself. Only reachable through the guard above. */
+  const runBasicSave = useCallback(
+    async (fields: any, dequeueLoading: () => void) => {
       const subdomainChanged =
         typeof fields.subdomain === 'string' &&
         fields.subdomain !== data?.subdomain
@@ -547,6 +615,44 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
       orgSlug,
       host,
     ],
+  )
+
+  const handleBasicSave = useCallback(
+    async (fields: any) => {
+      const dequeueLoading = queueLoading()
+      /**
+       * Refuse the whole save when the seed is unconfirmed (AGL-1358).
+       *
+       * `FormRenderer` is given `initialValues: data` — this listener — and
+       * submits EVERY field it holds, not the ones that changed. So
+       * `merge: true` protects nothing: the untouched fields are all in
+       * `clientFields`, and a cached seed rewrites the site's details and SEO
+       * to whatever the cache last held.
+       *
+       * The guard wraps the RENAME as well as the document write, and it has
+       * to: `subdomainChanged` is decided by comparing the form against
+       * `data?.subdomain`, so a stale seed can drive a public address change
+       * that nobody asked for. Guarding only the `setDoc` would leave a site
+       * renamed with none of the settings that were meant to go with it.
+       */
+      const verdict = await writeGuardedBySeed(
+        {
+          subject: 'site settings',
+          unreadable: status === 'error',
+          fromCache: hostFromCache,
+        },
+        async () => {
+          await runBasicSave(fields, dequeueLoading)
+        },
+      )
+      if (!verdict.ok) {
+        dequeueLoading()
+        // The form keeps its values, so the author can retry after reloading
+        // rather than discovering later that nothing was stored.
+        enqueueSnackbar(verdict.message, { variant: 'warning' })
+      }
+    },
+    [queueLoading, runBasicSave, status, hostFromCache, enqueueSnackbar],
   )
 
   const forms = [

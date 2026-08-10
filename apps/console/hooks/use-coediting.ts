@@ -97,12 +97,205 @@ function serializeNodes(): Record<string, unknown> {
 }
 
 /**
+ * What a node looked like when the current batch of remote entries started
+ * to land. Recorded before each apply so the reconcile can tell what THIS
+ * batch broke from what was already broken (AGL-1363).
+ */
+interface PriorNodeState {
+  /** It was in the node map. */
+  existed: boolean
+  /** Its `parentId` then. */
+  parentId?: string
+  /** Its position in that parent's child list, or -1 when unlisted. */
+  index: number
+  /** That parent was itself in the map. */
+  parentExisted: boolean
+  /** Its own child list then — the ids a list replacement can strand. */
+  children: string[]
+}
+
+/** The open batch: node id → its state before the batch touched it. */
+const batch = new Map<string, PriorNodeState>()
+let flushScheduled = false
+
+function recordPrior(nodeId: string): void {
+  // First touch wins: that is the state the whole batch is judged against.
+  if (batch.has(nodeId)) return
+  const node = Aglyn.canvas.nodes.get(nodeId)
+  const parent = node?.parentId
+    ? Aglyn.canvas.nodes.get(node.parentId)
+    : undefined
+  batch.set(nodeId, {
+    existed: Boolean(node),
+    parentId: node?.parentId,
+    index: parent?.nodes?.indexOf(nodeId) ?? -1,
+    parentExisted: Boolean(parent),
+    children: [...(node?.nodes ?? [])],
+  })
+}
+
+/**
+ * Reconciles the batch of remote entries applied since the last flush, so a
+ * peer's update cannot leave a node in the map that the tree does not reach
+ * (AGL-1363).
+ *
+ * ## Why a batch, and not each node as it lands
+ *
+ * A peer publishes one multi-path `update()` — the node AND its parent's new
+ * child list AND every tombstone — and RTDB raises those as separate child
+ * events off the one server message. Judging any of them alone fights a
+ * change that is about to arrive: a per-node reconcile would re-link every
+ * child of a section being deleted, in the gap before that child's own
+ * tombstone applied. Reconciling once, after the burst, sees the peer's
+ * intent whole. Callers get this for free — `applyRemoteNode` schedules the
+ * flush on a microtask, which lands after the synchronous run of events.
+ *
+ * ## What it repairs, and what it deliberately does not
+ *
+ * Only what THIS batch broke, judged against the state recorded before each
+ * apply. A node that was already unreachable stays exactly where it is: the
+ * `/product` screen carries 61 such nodes, and re-homing those onto the root
+ * the moment two people co-edit would rewrite a live page nobody touched.
+ *
+ * Nothing here deletes content. A subtree stranded by a delete whose
+ * per-child tombstones did not all arrive is re-homed onto the nearest
+ * surviving ancestor, at the position the deleted parent held — visible,
+ * and an author's call. That is the same reasoning that rules out a prune in
+ * `serializeNodes`: those 26 orphaned Hero nodes on `/product` held the only
+ * copy of their text, and anything silently destructive would have taken it.
+ *
+ * The repair is a plain child-list edit rather than `canvas.reparentNode`,
+ * because that one calls `saveHistory` — a remote change must never enter
+ * the local undo stack (AGL-677 rule 1).
+ *
+ * @returns the ids it had to repair; empty when the batch was consistent.
+ */
+export function flushRemoteReconcile(): string[] {
+  flushScheduled = false
+  if (!batch.size) return []
+  const prior = new Map(batch)
+  batch.clear()
+
+  const canvas = Aglyn.canvas
+  // Children of a node whose list this batch replaced are candidates too —
+  // they are how "the parent's update landed, the child's did not" strands a
+  // node. Untouched by the batch themselves, so their state now is their
+  // state then; anything the batch DID touch keeps its own record.
+  for (const [id, was] of [...prior]) {
+    was.children.forEach((childId, at) => {
+      if (prior.has(childId)) return
+      prior.set(childId, {
+        existed: canvas.nodes.has(childId),
+        parentId: id,
+        index: at,
+        parentExisted: true,
+        children: [],
+      })
+    })
+  }
+
+  /** The closest ancestor of a deleted parent that is still in the map. */
+  const survivingAncestor = (startId?: string) => {
+    const seen = new Set<string>()
+    let cursor = startId
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor)
+      const live = canvas.nodes.get(cursor)
+      if (live) return live
+      cursor = prior.get(cursor)?.parentId
+    }
+    return canvas.nodes.get(Aglyn.NODE_ROOT_ID)
+  }
+
+  const repaired: string[] = []
+  /** Where the next orphan of a given vanished parent goes, so siblings keep order. */
+  const rehomeCursor = new Map<string, number>()
+
+  runInAction(() => {
+    for (const [id, was] of prior) {
+      if (id === Aglyn.NODE_ROOT_ID) continue
+      const node = canvas.nodes.get(id)
+
+      // Deleted by this batch: drop the reference its parent still holds, or
+      // the saved document ships a child id that resolves to nothing.
+      if (!node) {
+        if (!was.existed || !was.parentId) continue
+        const parent = canvas.nodes.get(was.parentId)
+        const at = parent?.nodes?.indexOf(id) ?? -1
+        if (at < 0) continue
+        parent.nodes.splice(at, 1)
+        repaired.push(id)
+        continue
+      }
+
+      const parent = node.parentId
+        ? canvas.nodes.get(node.parentId)
+        : undefined
+
+      // Reachable through its parent: nothing to do.
+      if (parent?.nodes?.includes(id)) continue
+
+      if (parent) {
+        // Its parent is here and does not list it. Leave it alone if it was
+        // already like that before the batch — not ours to move.
+        if (
+          was.existed &&
+          was.parentExisted &&
+          was.parentId === node.parentId &&
+          was.index < 0
+        ) {
+          continue
+        }
+        if (!parent.nodes) parent.nodes = []
+        const at =
+          was.parentId === node.parentId && was.index > -1
+            ? Math.min(was.index, parent.nodes.length)
+            : parent.nodes.length
+        parent.nodes.splice(at, 0, id)
+        repaired.push(id)
+        continue
+      }
+
+      // Its parent is not in the map. Only act when THIS batch removed it —
+      // a parentId that never resolved locally is either a pre-existing
+      // orphan or a node whose parent is still in flight, and re-homing
+      // either would list the node twice once the parent shows up.
+      const goneId = node.parentId
+      const vanished = goneId ? prior.get(goneId) : undefined
+      if (!vanished?.existed) continue
+      const host = survivingAncestor(goneId)
+      if (!host || host.$id === id) continue
+      if (!host.nodes) host.nodes = []
+      // Siblings of one vanished parent land consecutively, in their old
+      // order, where that parent used to sit.
+      const base =
+        rehomeCursor.get(goneId) ??
+        (vanished.parentId === host.$id && vanished.index > -1
+          ? vanished.index
+          : host.nodes.length)
+      const at = Math.min(base, host.nodes.length)
+      node.parentId = host.$id
+      host.nodes.splice(at, 0, id)
+      rehomeCursor.set(goneId, at + 1)
+      repaired.push(id)
+    }
+  })
+
+  return repaired
+}
+
+/**
  * Applies one remote node into the canvas without disturbing local history.
  *
  * `setNodes(map, merge = true)` merges rather than replaces and is a mobx
  * action, so the canvas re-renders once; crucially it does NOT call
  * `saveHistory`, which is what keeps a remote edit out of the local undo
  * stack.
+ *
+ * It also does not touch the parent's child list, and the raw delete below
+ * does not touch the children — so each apply is scheduled for the batch
+ * reconcile in {@link flushRemoteReconcile}, which is what stops a lost
+ * companion entry from stranding a node in the map forever (AGL-1363).
  *
  * Exported for its spec: the AGL-677 rules it encodes (no history entry, no
  * `deleteNode` recursion) are asserted against the REAL canvas there.
@@ -114,18 +307,30 @@ export function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
     // node it removed, individually.
     return runInAction(() => {
       if (!Aglyn.canvas.nodes.has(nodeId)) return false
+      recordPrior(nodeId)
       Aglyn.canvas.nodes.delete(nodeId)
+      scheduleRemoteReconcile()
       return true
     })
   }
   if (!entry.json) return false
   try {
     const node = JSON.parse(entry.json)
+    recordPrior(nodeId)
     Aglyn.canvas.setNodes({ [nodeId]: node } as never, true)
+    scheduleRemoteReconcile()
     return true
   } catch {
     return false
   }
+}
+
+function scheduleRemoteReconcile(): void {
+  if (flushScheduled) return
+  flushScheduled = true
+  // A microtask, so it runs after the synchronous burst of child events one
+  // peer `update()` raises — see {@link flushRemoteReconcile}.
+  queueMicrotask(() => flushRemoteReconcile())
 }
 
 export function useCoEditing(options: {
@@ -271,6 +476,10 @@ export function useCoEditing(options: {
       offAdded()
       offChanged()
       offValue()
+      // Settle the open batch against the canvas it came from — the room is
+      // keyed by document, so leaving it pending would let the repair run
+      // against whatever is loaded next (AGL-1363).
+      flushRemoteReconcile()
       setLive(false)
     }
   }, [roomPath, session, loaded, enabled, storedStamp])

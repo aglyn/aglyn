@@ -170,6 +170,11 @@ beforeEach(async () => {
     })
     await setDoc(doc(db, 'hosts', HOST, 'screens', 'screen-1'), { name: 'Home' })
     await setDoc(doc(db, 'hosts', HOST, 'variables', 'var-1'), { name: 'v', value: '1' })
+    // An existing webhook, so the AGL-1360 create/update split can be told
+    // apart: create is API-only, update (the soft delete) stays client-side.
+    await setDoc(doc(db, 'hosts', HOST, 'webhooks', 'wh1'), {
+      name: 'Ship', direction: 'outbound', url: 'https://hook.example',
+    })
     await setDoc(doc(db, 'hosts', HOST, 'templates', 'tpl-1'), {
       kind: 'page', displayName: 'Hero page',
       source: { type: 'marketplace', listingId: 'listing-1', version: 2 },
@@ -411,6 +416,25 @@ describe('hosts', () => {
         setDoc(doc(authed(EDITOR), 'hosts', HOST, coll, 'new-doc'), { name: 'x' }),
       )
     }
+    // Webhooks joined the API-only creates (AGL-1360). WEBHOOK_MAX_PER_HOST
+    // was enforced ONLY by the console counting the rows its Firestore
+    // listener held; with `persistentLocalCache` that count could be
+    // arbitrarily stale and low, so the cap did not survive a stale session.
+    // /api/hosts/resources counts the live webhooks with the Admin SDK.
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'webhooks', 'wh-new'), {
+        name: 'w', direction: 'outbound', url: 'https://hook.example',
+      }),
+    )
+    // The webhooks block above this one grants READ only, so it cannot
+    // re-grant the create the catch-all just denied — but update/delete must
+    // still work: delete is a soft delete (`deletedAt`), which is how a
+    // capped site frees a slot.
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'webhooks', 'wh1'), {
+        deletedAt: new Date(),
+      }),
+    )
     // Deleting a COLLECTION doc is API-only (AGL-947): it owns `entries`,
     // which Firestore won't cascade into. Single entries stay deletable —
     // the dedicated entries block re-grants what the name-based exclusion
@@ -490,6 +514,45 @@ describe('hosts', () => {
     await assertFails(
       updateDoc(doc(authed(OWNER), 'hosts', HOST), {
         cname: 'someone-elses.example',
+      }),
+    )
+    // Denying `cname` alone was not enough (AGL-1364). `liveCustomDomain`
+    // refuses the redirect on three conditions, and two of them were
+    // client-writable: `cnameAttachmentPending` is set when the Vercel attach
+    // never landed, so it is what stops `{sub}.aglyn.app` sending visitors to
+    // a domain that serves nothing. An editor able to CLEAR it reaches the
+    // same takedown the `cname` deny exists to prevent.
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        cnameAttachmentPending: false,
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        cnameDetachmentPending: false,
+      }),
+    )
+    // Theme provenance is written by the install route; a client rewrite
+    // makes `isOverrideForCurrentTheme()` lie about which theme an override
+    // belongs to. The Enterprise project pointers have no client writer.
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        themeInstalledFrom: { listingId: 'mine', sha256: 'forged' },
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), { projectId: 'other-proj' }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), { projectNumber: 42 }),
+    )
+    // Authoring is untouched: the fields the editor legitimately owns still
+    // write, including the theme override the setup page saves wholesale.
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        maintenance: true,
+        themeOverride: { palette: { mode: 'dark' } },
+        seo: { title: 'Site A' },
       }),
     )
     await assertFails(deleteDoc(doc(authed(EDITOR), 'hosts', HOST)))
@@ -1509,6 +1572,58 @@ describe('pre-release hardening guards', () => {
       updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
         reviewedBy: OWNER,
         reviewedAt: new Date(),
+      }),
+    )
+    // AGL-1364: denying `reviewStatus` was not enough, because the gate that
+    // reads it only applies to PLUGINS — `isListingBrowsable` returns true
+    // outright for any other artifact type. A publisher sitting at
+    // 'submitted' or 'rejected' could therefore become browsable by
+    // relabelling the artifact instead of the verdict. All three
+    // discriminators are denied, because `listingArtifactType` falls back
+    // through them in turn.
+    for (const relabel of [
+      { artifactType: 'component' },
+      { kind: 'template' },
+      { type: 'component' },
+    ]) {
+      await assertFails(
+        updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), relabel),
+      )
+    }
+    // The verification ask is server-owned (AGL-1217): the staff queue is
+    // built by filtering `state == 'pending'`.
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
+        verificationRequest: { state: 'pending', requestedAt: new Date() },
+      }),
+    )
+    // `latestApprovedVersion` is the offer for plugins; `latestVersion` is
+    // the offer for everything else, and only one of them was denied.
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
+        latestVersion: 99,
+      }),
+    )
+    // The rest of the type's "Server-managed" banner.
+    for (const field of [
+      { publisherOrgId: OUTSIDER },
+      { sourceComponentId: 'cmp-x' },
+      { sourceHostId: 'host-x' },
+      { versionHistory: [{ version: 99 }] },
+      { screenCount: 99 },
+      { previewImageUrl: 'https://x.z/p.png' },
+      { createdAt: new Date() },
+      { updatedAt: new Date() },
+    ]) {
+      await assertFails(
+        updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), field),
+      )
+    }
+    // Publisher-authored listing CONTENT stays owner-writable — the point of
+    // the deny-list is that it names what is server-owned, not everything.
+    await assertSucceeds(
+      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
+        displayName: 'Plugin v2', readme: '# Docs', license: 'MIT',
       }),
     )
     // Non-owners still can't touch someone else's listing.

@@ -16,7 +16,6 @@
  */
 'use client'
 
-import { getSessionHealth } from '../utils/session-health'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { nodeElementSelector } from '@aglyn/besigner-ui'
@@ -43,7 +42,10 @@ import {
 import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -64,8 +66,11 @@ export interface InteractionBuilderDialogProps {
   /**
    * `existing` came from a cached snapshot the server has not confirmed
    * (AGL-1066). Passed in because the listener lives in the provider.
+   *
+   * Required rather than optional (AGL-1358): an optional prop a caller
+   * forgets is a guard that is off while looking present.
    */
-  existingFromCache?: boolean
+  existingFromCache: boolean
   onClose: () => void
 }
 
@@ -414,57 +419,67 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
 
   const handleSave = useCallback(async () => {
     if (problem) return
-    // Never write an interaction seeded from a read we know is stale
-    // (AGL-1066). Every field of this dialog is seeded from `existing`, which
-    // comes from the provider's `hosts/{h}/actions` LISTENER — and
-    // `persistentLocalCache` keeps serving listeners from IndexedDB after a
-    // session goes stale. The save writes `{...candidate}`, the whole action:
-    // name, trigger and every step. `merge: true` protects nothing here,
-    // because the untouched fields are all present in the payload. Editing one
-    // step would revert the rest to whatever the cache last saw, over a
-    // colleague's newer version.
-    //
-    // `existingFromCache` FIRST — it is the actions listener's own verdict
-    // on the doc this dialog was seeded from, whereas `staleSession` below
-    // needs two distinct LABELLED collections denied inside 60s and is
-    // unreachable on most of the routes this dialog opens over (AGL-1066).
-    // Only meaningful when EDITING: a brand-new action is seeded from the
-    // canvas, not from a read, so nothing can be stale about it.
-    if (existing && existingFromCache) {
-      enqueueSnackbar(
-        'This interaction has not been confirmed with the server, so it may ' +
-          'be out of date — saving now could overwrite newer changes. Check ' +
-          'your connection and reload.',
-        { variant: 'error' },
-      )
-      return
-    }
-    if (getSessionHealth().staleSession) {
-      enqueueSnackbar(
-        'Your session went stale, so this interaction may be out of date — ' +
-          'saving now could overwrite newer changes. Sign in again and reload.',
-        { variant: 'error' },
-      )
-      return
-    }
     const id = state.id ?? Aglyn.createResourceUid()
+    /**
+     * Never write an interaction seeded from a read we cannot trust
+     * (AGL-1066, AGL-1358). Every field of this dialog is seeded from
+     * `existing`, which comes from the provider's `hosts/{h}/actions`
+     * LISTENER — and `persistentLocalCache` keeps serving listeners from
+     * IndexedDB after a session goes stale. The save writes `{...candidate}`,
+     * the whole action: name, trigger and every step. `merge: true` protects
+     * nothing here, because the untouched fields are all present in the
+     * payload. Editing one step would revert the rest to whatever the cache
+     * last saw, over a colleague's newer version.
+     *
+     * `fromCache` leads: it is the actions listener's own verdict on the doc
+     * this dialog was seeded from, whereas the session heuristic needs two
+     * distinct LABELLED collections denied inside 60s and is unreachable on
+     * most of the routes this dialog opens over. The guard still consults it,
+     * as the third signal rather than the second gate.
+     *
+     * Only meaningful when EDITING: a brand-new action is seeded from the
+     * canvas, not from a read, so nothing can be stale about it — and the
+     * first snapshot of any listener is `fromCache: true`, so guarding a
+     * create would refuse a save that was never unsafe.
+     *
+     * This was two early returns in front of the write (AGL-1066). The write
+     * now sits INSIDE the guard: an early return is a shape you can keep
+     * while losing the protection, which is how AGL-1356's page lost it
+     * twice.
+     */
+    let verdict: Awaited<ReturnType<typeof writeGuardedBySeed>>
     try {
       // `candidate` is already pruned of `undefined` (AGL-570); wrap the
       // write so any real failure surfaces instead of a silent
       // unhandled rejection that leaves the dialog open with no feedback.
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'actions', id),
+      verdict = await writeGuardedBySeed(
         {
-          ...candidate,
-          updatedAt: new Date(),
-          ...(state.id ? {} : { createdAt: new Date() }),
+          subject: 'interaction',
+          fromCache: Boolean(existing) && existingFromCache,
         },
-        { merge: true },
+        async () => {
+          await setDoc(
+            doc(firestore, 'hosts', hostId, 'actions', id),
+            {
+              ...candidate,
+              updatedAt: new Date(),
+              ...(state.id ? {} : { createdAt: new Date() }),
+            },
+            { merge: true },
+          )
+        },
       )
     } catch (error) {
       console.error(error)
       enqueueSnackbar('Could not save the interaction', { variant: 'error' })
       return
+    }
+    // A refusal leaves the dialog open with every step as configured.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
+      })
     }
     enqueueSnackbar('Interaction saved and enabled', {
       variant: 'success',

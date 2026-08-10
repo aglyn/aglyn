@@ -106,8 +106,15 @@ export function ThemeOverridesCard(props: {
     themeOverride?: unknown
     themeInstalledFrom?: { sha256?: string | null; listingId?: string } | null
   } | null
-  /** Writes `themeOverride` wholesale — never `merge: true` (see below). */
-  onWriteOverride: (value: unknown) => Promise<void>
+  /**
+   * Writes `themeOverride` wholesale — never `merge: true` (see below).
+   *
+   * Returns the stale-seed verdict (AGL-1358) rather than `void`, because the
+   * patch below is computed from `host`, which is a LISTENER read: the writer
+   * can refuse, and a refusal this card could not see would be reported to
+   * the user as a successful reset.
+   */
+  onWriteOverride: (value: unknown) => Promise<{ ok: boolean; message?: string }>
 }) {
   const { hostId, host, onWriteOverride } = props
   const { data: user } = useUser()
@@ -140,12 +147,21 @@ export function ThemeOverridesCard(props: {
           entry.path.split('.'),
           readPath(base, entry.path),
         )
-        await onWriteOverride(
+        const verdict = await onWriteOverride(
           overrideWriteValue(
             diffOverride(base, restored),
             host?.themeInstalledFrom?.sha256 ?? null,
           ),
         )
+        // A refused write must not be announced as a reset (AGL-1358): the
+        // whole patch is recomputed from `host`, so if that read is stale the
+        // "reset" would restore paths the author cleared on purpose.
+        if (!verdict.ok) {
+          return void enqueueSnackbar(verdict.message, {
+            variant: 'warning',
+            persist: false,
+          })
+        }
         enqueueSnackbar(`${entry.label} is back to the theme’s value.`, {
           variant: 'success',
           persist: false,

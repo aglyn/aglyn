@@ -59,6 +59,7 @@ import {
   readToolbarHeight,
   SURFACE_COLOR_FIELDS,
   type SurfaceColorPath,
+  TINT_COLOR_FIELDS,
   TOOLBAR_SM_MIN_WIDTH,
 } from './theme-editor.constants'
 import ThemePreview from './theme-preview.component'
@@ -470,6 +471,20 @@ export function ThemeEditor(props: ThemeEditorProps) {
                     {'Background & text'}
                   </Typography>
                   {SURFACE_COLOR_FIELDS.map(({ path, label }) => (
+                    <ColorField
+                      key={path.join('.')}
+                      label={label}
+                      value={getSchemeColor(schemeColors, path)}
+                      inheritedValue={inheritedSurfaceColor(path)}
+                      onChange={setSurfaceColor(path)}
+                    />
+                  ))}
+                  {/* Pale accent washes (AGL-1244). Own heading rather than a
+                      tail on "Background & text": these are fills for tiles
+                      and panels, and each one is named after the accent whose
+                      icon sits on it. */}
+                  <Typography variant="subtitle2">{'Tints'}</Typography>
+                  {TINT_COLOR_FIELDS.map(({ path, label }) => (
                     <ColorField
                       key={path.join('.')}
                       label={label}

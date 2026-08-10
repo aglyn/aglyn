@@ -18,8 +18,11 @@
 import type { HostTheme } from '@aglyn/shared-data-types'
 import {
   buildToolbarMixin,
+  getSchemeColor,
   orderSensitiveKey,
   readToolbarHeight,
+  SURFACE_COLOR_FIELDS,
+  TINT_COLOR_FIELDS,
   TOOLBAR_LANDSCAPE_QUERY,
   TOOLBAR_SM_QUERY,
 } from './theme-editor.constants'
@@ -84,5 +87,33 @@ describe('orderSensitiveKey (AGL-1242)', () => {
     const b: HostTheme = { mixins: { toolbar: buildToolbarMixin(56, 72) } }
     expect(orderSensitiveKey(a)).toBe(orderSensitiveKey(b))
     expect(orderSensitiveKey({})).toBe(orderSensitiveKey({ spacing: 8 }))
+  })
+})
+
+describe('TINT_COLOR_FIELDS (AGL-1244)', () => {
+  // Tints ride `SurfaceColorPath` rather than `PALETTE_COLOR_FIELDS` because
+  // the palette fields all write `{ main: hex }` and a tint has no `main`.
+  // This pins that the shared path machinery reads and writes the group the
+  // converter actually looks for.
+  it('round-trips through the shared surface-path accessors', () => {
+    const theme: HostTheme = {
+      colorSchemes: { light: { tint: { primary: '#E6F5FF' } } },
+    }
+    const colors = theme.colorSchemes?.light
+    expect(getSchemeColor(colors, ['tint', 'primary'])).toBe('#E6F5FF')
+    expect(getSchemeColor(colors, ['tint', 'secondary'])).toBeUndefined()
+    expect(getSchemeColor(undefined, ['tint', 'primary'])).toBeUndefined()
+  })
+
+  it('offers all three tints and stays disjoint from the surface fields', () => {
+    expect(TINT_COLOR_FIELDS.map(({ path }) => path.join('.'))).toEqual([
+      'tint.primary',
+      'tint.secondary',
+      'tint.tertiary',
+    ])
+    const surfacePaths = SURFACE_COLOR_FIELDS.map(({ path }) => path.join('.'))
+    for (const { path } of TINT_COLOR_FIELDS) {
+      expect(surfacePaths).not.toContain(path.join('.'))
+    }
   })
 })

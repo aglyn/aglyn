@@ -80,6 +80,23 @@ declare module '@mui/material/styles' {
   type ExtraColorOptions = PaletteOptions['primary']
 
   /**
+   * Pale accent washes used as SURFACES (AGL-1244) — `tint.primary`,
+   * `tint.secondary`, `tint.tertiary`.
+   *
+   * A group of string leaves like `background` and `text`, NOT a
+   * `PaletteColor`: there is no ramp to walk and no `contrastText`, because a
+   * tint is never a component `color` — the ink on it is the accent token the
+   * tile's icon already uses. That is also why `tint` is absent from
+   * `ColorPropOverrides`: `<Button color="tint">` would have no foreground to
+   * pair with and must stay a type error.
+   */
+  interface PaletteTint {
+    primary: string
+    secondary: string
+    tertiary: string
+  }
+
+  /**
    * START EXAMPLE – MODULE AUGMENTATION ↓
    * ⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄
    * ```typescript
@@ -127,6 +144,7 @@ declare module '@mui/material/styles' {
     background?: PaletteOptions['background']
     tertiary?: ExtraColorOptions
     surface?: ExtraColorOptions
+    tint?: Partial<PaletteTint>
     svgBackground?: IActionStates
     svgFilled?: IActionStates
     svgStroke?: IActionStates
@@ -139,6 +157,7 @@ declare module '@mui/material/styles' {
     background: Palette['background']
     tertiary: ExtraColor
     surface: ExtraColor
+    tint: PaletteTint
     svgBackground: IActionStates
     svgFilled: IActionStates
     svgStroke: IActionStates

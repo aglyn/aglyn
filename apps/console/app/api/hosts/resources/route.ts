@@ -23,6 +23,7 @@ import {
   nameSearchKey,
   type OrgEntitlements,
   type OrgFeatureFlags,
+  WEBHOOK_MAX_PER_HOST,
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -44,6 +45,19 @@ const RESOURCES: Record<string, {
   collection: string
   /** Numeric per-plan cap; omit for entitlement-only (boolean) features. */
   quotaKey?: keyof OrgEntitlements & string
+  /**
+   * Flat platform cap that does NOT vary by plan, so it has no
+   * `OrgEntitlements` key to look up (AGL-1360). Enforced the same way a
+   * quota is — counted from a server read — because the alternative is
+   * trusting a number the client computed.
+   */
+  maxPerHost?: number
+  /**
+   * Set when the collection soft-deletes (delete stamps `deletedAt` rather
+   * than removing the doc). The cap must then count LIVE docs only, or
+   * deleting never frees a slot — the AGL-1173 screens bug, one cap over.
+   */
+  softDeletes?: boolean
   entitlement?: keyof OrgFeatureFlags
   /** Human label for quota error messages. */
   label: string
@@ -114,6 +128,32 @@ const RESOURCES: Record<string, {
     quotaKey: 'posRegisters',
     entitlement: 'pos',
     label: 'POS registers',
+  },
+  // Webhooks (AGL-1360): the cap used to be checked in the console by
+  // counting the rows the card held from a Firestore LISTENER. The console
+  // runs `persistentLocalCache`, so under a stale session that count could
+  // be arbitrarily old and low, and a site could exceed the cap — the write
+  // itself was legitimate, the count it was authorised against was not.
+  // A client-side count is not an enforcement point regardless of freshness
+  // (the same lesson as AGL-1354's `brandingProfile`), so the cap moved
+  // here and the rules deny client `create` on `webhooks`.
+  //
+  // `deletedAt` is server-managed BECAUSE the cap counts live docs: a client
+  // allowed to create an already-soft-deleted webhook could create any
+  // number of them (each one counting zero) and then clear the field with
+  // the update that stays client-side, arriving at an uncapped set of live
+  // webhooks through a cap that never said no.
+  //
+  // `secret` stays client-supplied: it is generated with `crypto`
+  // `.getRandomValues` and the site's own editors can read it off the card
+  // anyway, so nothing crosses a privilege boundary by their choosing it.
+  webhook: {
+    collection: 'webhooks',
+    entitlement: 'webhooks',
+    maxPerHost: WEBHOOK_MAX_PER_HOST,
+    softDeletes: true,
+    label: 'webhooks',
+    serverManagedFields: ['deletedAt'],
   },
 }
 
@@ -209,6 +249,23 @@ async function handler(request: Request): Promise<Response> {
           error:
             `Your plan includes ${quota.limit} ${resource.label} — ` +
             'upgrade in Billing for more',
+        }, { status: 403 })
+      }
+    }
+    // Flat platform cap (AGL-1360), counted from a server read for the same
+    // reason the quotas above are: the number the client believed is not a
+    // fact about the collection. `softDeletes` collections count LIVE docs
+    // only, so deleting one frees its slot.
+    if (resource.maxPerHost != null) {
+      const existing = resource.softDeletes
+        ? (await collectionRef.select('deletedAt').get()).docs.filter(
+            (entry) => entry.get('deletedAt') == null,
+          ).length
+        : (await collectionRef.count().get()).data().count
+      if (existing >= resource.maxPerHost) {
+        return Response.json({
+          error:
+            `${resource.label} are capped at ${resource.maxPerHost} per site`,
         }, { status: 403 })
       }
     }

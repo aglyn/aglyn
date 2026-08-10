@@ -683,6 +683,25 @@ export class CanvasManager {
     del(node)
     return this
   }
+  /**
+   * Moves a node under `newParent`, resolving BOTH ends through the live
+   * node map first (AGL-1363).
+   *
+   * The resolution is the guard, and it is the same one `addNodeFromNested`
+   * has carried since AGL-537. This method splices the node out of its
+   * *live* old parent and then attaches it to the object it was handed — so
+   * a `newParent` that is merely SHAPED like a node (a stale instance a
+   * panel closure kept across a co-editor's merge, a node a peer has since
+   * deleted, historically a click event) took the node out of the tree and
+   * pushed its id onto a detached array. Nothing put it back.
+   *
+   * That is not a recoverable glitch: `serializeNodes` dumps the whole map
+   * while the renderer walks the tree from `NODE_ROOT_ID`, so a node in the
+   * map that no live parent lists is saved on every save, shipped in every
+   * payload, counted against the 1 MiB ceiling — and never drawn. It is why
+   * `/product` served 61 unreachable nodes, 26 of them carrying the only
+   * copy of two Hero sections' text. Fail loud instead.
+   */
   public reparentNode(
     node: NodeSchema<any>,
     newParent: NodeSchema<any>,
@@ -692,11 +711,19 @@ export class CanvasManager {
     if (this.isRootNode(node)) throw new Error('Cannot move root node')
     if (!newParent) throw new Error('Invalid parent node')
 
+    // Before `saveHistory`: a refused move must not leave an undo step for
+    // something that never happened.
+    const target = node.$id != null ? this.getNode(node.$id) : undefined
+    if (!target) throw new Error('Invalid node')
+    const parent =
+      newParent.$id != null ? this.getNode(newParent.$id) : undefined
+    if (!parent) throw new Error('Invalid parent node')
+
     this.saveHistory()
-    const oldParent = this.getNodeParent(node)
-    const oldIndex = oldParent?.nodes?.indexOf(node?.$id) ?? -1
+    const oldParent = this.getNodeParent(target)
+    const oldIndex = oldParent?.nodes?.indexOf(target.$id) ?? -1
     if (oldIndex > -1) oldParent?.nodes?.splice(oldIndex, 1)
-    if (oldParent?.$id !== newParent.$id) node.parentId = newParent?.$id
+    if (oldParent?.$id !== parent.$id) target.parentId = parent.$id
 
     // Assign then read back, never `(x.nodes ||= []).push()` (AGL-763). A
     // live node is a `makeAutoObservable` proxy: assigning a fresh `[]` stores
@@ -705,16 +732,20 @@ export class CanvasManager {
     // and the child silently orphans. `AglynNode`'s constructor seeds `nodes`
     // so this never actually fires today, but relying on that invariant from
     // here is how the same defect returned as AGL-759.
-    if (!newParent.nodes) newParent.nodes = []
-    if (isNaN(index)) newParent.nodes.push(node?.$id)
-    else newParent.nodes.splice(index, 0, node?.$id)
-    return node
+    if (!parent.nodes) parent.nodes = []
+    if (isNaN(index)) parent.nodes.push(target.$id)
+    else parent.nodes.splice(index, 0, target.$id)
+    return target
   }
   public reorderNode(node: NodeSchema<any>, index = NaN): typeof node {
     if (!node) throw new Error('Invalid node')
-    const parent = this.getNodeParent(node)
+    // Resolve the node first, so the parent is read off the LIVE node's
+    // `parentId` rather than a stale copy's (AGL-1363).
+    const target = node.$id != null ? this.getNode(node.$id) : undefined
+    if (!target) throw new Error('Invalid node')
+    const parent = this.getNodeParent(target)
     if (!parent) throw new Error('Invalid parent node')
-    return this.reparentNode(node, parent, index)
+    return this.reparentNode(target, parent, index)
   }
   public duplicateNode(node: NodeSchema<any>): NodeSchema<any> {
     if (!node) throw new Error('Invalid node')

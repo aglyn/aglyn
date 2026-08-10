@@ -48,7 +48,12 @@ import {
 } from '@mui/material'
 import { collection, deleteDoc, doc, limit, query, setDoc } from 'firebase/firestore'
 import { useState } from 'react'
-import { useFirestore, useFirestoreCollection, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  useHostActivityLogger,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 
 export interface HostOverlaysCardProps {
   hostId: string
@@ -107,7 +112,20 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
   const logActivity = useHostActivityLogger(hostId)
   const entitled = checkEntitlement(org, 'marketingOverlays')
 
-  const { data: overlayDocs } = useFirestoreCollection<any>(
+  const {
+    data: overlayDocs,
+    status: overlaysStatus,
+    /**
+     * The overlay rows the editor is seeded from are unconfirmed by the
+     * server (AGL-1358). Editing one spreads the whole stored row into
+     * `editor` and writes it back with NO options argument at all — a full
+     * document replace — so a cached seed reverts every field nobody
+     * touched. Including `stats`, the lifetime impression/click/dismissal
+     * counters the org beacon increments: a save here would roll live
+     * engagement numbers back to whenever the snapshot was taken.
+     */
+    fromCache: overlaysFromCache,
+  } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'overlays'), limit(50)),
     [firestore, hostId],
@@ -164,17 +182,51 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
           name: (editor.name ?? '').trim() || null,
         }),
       )
-      await setDoc(doc(firestore, 'hosts', hostId, 'overlays', id), {
-        ...cleaned,
-        updatedAt: Timestamp.now(),
-        ...(editor.$id ? {} : { createdAt: Timestamp.now() }),
-      })
+      /**
+       * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
+       *
+       * This write has no options argument, so it is a full document replace
+       * of a payload copied wholesale off the listener — `merge` would not
+       * have helped anyway, since every field is present. The activity log
+       * is inside the guard too: a logged "Updated overlay" whose write never
+       * happened is worse than neither, because the history then disagrees
+       * with the overlay it claims to explain.
+       *
+       * Only the edit path. A NEW overlay starts from `EMPTY_BAR`/
+       * `EMPTY_POPUP` at a fresh uid and can overwrite nothing, and the first
+       * snapshot of any listener is `fromCache: true`, so guarding a create
+       * would refuse a save that was never unsafe.
+       *
+       * The guard WRAPS the write: an early return is a shape you can keep
+       * while losing the protection.
+       */
+      const verdict = await writeGuardedBySeed(
+        {
+          subject: 'overlay',
+          unreadable: Boolean(editor.$id) && overlaysStatus === 'error',
+          fromCache: Boolean(editor.$id) && overlaysFromCache,
+        },
+        async () => {
+          await setDoc(doc(firestore, 'hosts', hostId, 'overlays', id), {
+            ...cleaned,
+            updatedAt: Timestamp.now(),
+            ...(editor.$id ? {} : { createdAt: Timestamp.now() }),
+          })
+          logActivity(editor.$id ? 'Updated overlay' : 'Created overlay', {
+            type: 'content',
+            id,
+            ...(editor.name ? { name: editor.name } : {}),
+          })
+        },
+      )
+      // A refusal keeps the editor open with everything that was typed.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       enqueueSnackbar('Overlay saved', { variant: 'success', persist: false })
-      logActivity(editor.$id ? 'Updated overlay' : 'Created overlay', {
-        type: 'content',
-        id,
-        ...(editor.name ? { name: editor.name } : {}),
-      })
       setEditor(null)
     } catch (error) {
       console.error(error)

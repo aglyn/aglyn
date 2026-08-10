@@ -38,6 +38,7 @@ export type HostResourceKind =
   | 'reusableComponent'
   | 'register'
   | 'template'
+  | 'webhook'
 
 /**
  * Creates a quota-governed host resource through the console API

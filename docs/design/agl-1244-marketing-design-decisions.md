@@ -442,3 +442,89 @@ review. No decision required.
 - The `#161C21` / `#7FD4F5` / `#B7BEC8` on-dark cluster is a smaller version of the
   same question and can follow the same decision.
 - **5** only becomes a judgement call if you want a bigger mobile gutter than 16.
+
+---
+
+## Addendum — 1(c) decided, and the count was low
+
+**Decided 2026-08-09: Option A.** `palette.tint` now exists with `primary` /
+`secondary` / `tertiary` members, on the 8-file ledger this memo describes
+(commit `c97965532`). The dark scheme carries `#143043` / `#3D1443` / `#262B31`
+— the exact values the slices hand-wrote — so a repointed tile renders the same
+colour in dark as it does today, and the slice can go.
+
+Shape note the memo did not anticipate: `tint` is **not** a `PaletteColor`. It
+has no ramp and no `contrastText`, so it is a group of string leaves like
+`background` and `text`. That is why it rides `SurfaceColorPath` in the theme
+editor rather than `PALETTE_COLOR_FIELDS` (those all write `main`, and
+`pickPaletteColor` gates on `main` — routing tints through `colorKeys` would
+have dropped them silently, which is the `quaternary` failure one layer down).
+
+### The population is 131 nodes, not 15
+
+The memo counted the **nav component only**. Swept host-wide against production,
+the same three literals appear in **18 documents**:
+
+| | |
+| - | - |
+| Nav component `l3rzTXC4ng` (published + version) | 15 nodes × 2, key `backgroundColor` |
+| 16 screen version documents | 101 nodes, key `bgcolor` |
+| **Total writes** | **131** |
+
+The screen instances are the `Icon tile` nodes inside the `Card · …` frames of
+the Capabilities grids — the same three-way pairing, cloned per product page.
+
+Three measured facts make the repoint mechanical:
+
+- **Not one** of the 131 carries both `bgcolor` and `backgroundColor`. The
+  four-node shadowing trap does not intersect this population at all.
+- **Every** one carries an `@scheme dark` slice with **exactly one key**, the
+  same background key as the base. The whole slice can be deleted rather than
+  surgically edited.
+- The dark values are uniform across all 131 — no variants, no near-misses.
+
+`tools/scripts/tokenize-tile-tints.mjs` does it, dry run by default, and
+**refuses** per node on any deviation from that shape rather than guessing.
+
+⚠️ **The host is a moving target.** Two reads 15 minutes apart differed by six
+nodes on `/product` — the orphaned-hero prune of item 3 landing underneath.
+Re-run the dry run immediately before `--apply`.
+
+### `quaternary` should NOT exist — the site's own press kit says so
+
+`quaternary.main` is on **11 nodes**, not one: `j3-xhzRxT3` (the nav's 300px
+featured panel, `backgroundColor`) plus **ten `<section aria-label="Early
+access">` bands**, one per product page, on `bgcolor`.
+
+Their sibling sections alternate `background.paper` / `background.default`, so
+the Early-access band wants a third surface step — not a fourth *accent*.
+Nothing anywhere on the host uses `quaternary` for an icon, text or border; all
+11 uses are backgrounds.
+
+And the answer is already published. `/press` (screen `q3RLZRAhLZ`) renders the
+brand table straight out of `console.theme.ts`, and its Surfaces row reads:
+
+> **Surface** | #F8F9FA | Cards & quaternary
+
+So `quaternary` is a **misnamed reference to `surface.main`**, which exists in
+both schemes (`#F8F9FA` / `#202934`) and is distinct from paper and default in
+dark, where the missing background actually costs something. Repoint all 11 at
+`surface.main`; adding a palette key would be making a typo valid.
+
+`surface.main` is currently used **nowhere** on the marketing host, which is
+consistent with the slot having been referenced by the wrong name from the start.
+
+### The on-dark cluster is three concepts, not one
+
+Measured, it does not follow the same call — it splits:
+
+| Values | Nodes | What it actually is |
+| - | - | - |
+| `#161C21` bg → dark `#2a3440` | 10 | An **inverted surface**: dark panel on a light page that lifts in dark. Both values are dark-scheme `background.default`/`paper`; no light-scheme token matches. Wants its own key. |
+| `#161c21` text → dark `#e6e9ec` | 9 | Plain `text.primary`. Repoint, no new token. |
+| `#161C21` text, **no slice** | 7 | Same, and a latent dark-mode defect today — near-black text that never lifts. |
+| `#5A6675` → `#b4bcc5` | 6 | Plain `text.secondary`. |
+| `#7FD4F5` (6), `#B7BEC8` (9), `#9BAAB6` (2) | 17 | On-dark ink on the permanently dark nav/footer panels. Correctly slice-less. The only genuine new-token candidate here. |
+
+Only rows 1 and 5 need naming; rows 2–4 are repoints onto tokens that already
+exist. Worth a separate decision rather than folding into `tint`.

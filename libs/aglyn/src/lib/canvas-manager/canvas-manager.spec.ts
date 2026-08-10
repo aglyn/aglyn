@@ -1219,4 +1219,124 @@ describe('Aglyn: Screen Manager', () => {
       expect(canvas.isInitialSame).toBe(true)
     })
   })
+
+  /**
+   * AGL-1363 — a node that leaves its parent's child list without leaving
+   * the node map is PERMANENT: `serializeNodes` dumps the whole map, the
+   * renderer walks the tree from the root, and nothing reconciles the two.
+   * It is saved on every save, shipped in every payload, and never drawn.
+   *
+   * `reparentNode` splices the node out of the LIVE old parent, then pushes
+   * the id onto whatever object the caller handed it — so a `newParent` that
+   * is not the live map entry detaches the node and keeps it. This is the
+   * same defect `addNodeFromNested` was given a guard for in AGL-537; that
+   * one resolves the target through `getNode($id)` and throws on a miss.
+   */
+  describe('reparentNode resolves both ends through the live map (AGL-1363)', () => {
+    const makeCanvas = () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+      return canvas
+    }
+
+    /**
+     * Ids in the map that the renderer can never reach — the walk the
+     * renderer actually does (`branch.tsx`), from the root down child lists.
+     * Distinct from "referenced by nobody": a node hanging off an already
+     * detached parent is referenced and still invisible.
+     */
+    const collectUnreachable = (canvas: CanvasManager): NodeId[] => {
+      const seen = new Set<NodeId>()
+      const walk = (id: NodeId) => {
+        if (seen.has(id)) return
+        seen.add(id)
+        for (const childId of canvas.getNode(id)?.nodes ?? []) walk(childId)
+      }
+      walk(NODE_ROOT_ID)
+      return [...canvas.nodes.keys()].filter((id) => !seen.has(id))
+    }
+
+    it('reparents onto the live parent when handed a stale instance of it', () => {
+      const canvas = makeCanvas()
+      // Every `setNodes` mints a FRESH `AglynNode` per id, so a co-editor's
+      // merge silently replaces the instance a panel closure is holding.
+      // The stale object keeps the right id and a now-detached `nodes` array.
+      const staleRoot = canvas.getNode(NODE_ROOT_ID)!
+      canvas.setNodes({ [NODE_ROOT_ID]: staleRoot.toJSON!() } as any, true)
+      expect(canvas.getNode(NODE_ROOT_ID)).not.toBe(staleRoot)
+
+      const moved = canvas.reparentNode(canvas.getNode('child1-1')!, staleRoot)
+
+      expect(canvas.getNode(NODE_ROOT_ID)!.nodes).toContain('child1-1')
+      expect(moved.parentId).toBe(NODE_ROOT_ID)
+      expect(canvas.getNode('child1')!.nodes).toEqual(['child1-2'])
+      expect(collectUnreachable(canvas)).toEqual([])
+    })
+
+    it('refuses a parent that is not in the map instead of detaching the node', () => {
+      const canvas = makeCanvas()
+      const before = canvas.toJSON().nodes
+      // A parent a co-editor deleted out from under this session — truthy,
+      // shaped like a node, absent from the map.
+      const ghost = { $id: 'gone', nodes: [] } as any
+
+      expect(() =>
+        canvas.reparentNode(canvas.getNode('child1')!, ghost),
+      ).toThrow('Invalid parent node')
+
+      expect(ghost.nodes).toEqual([])
+      expect(collectUnreachable(canvas)).toEqual([])
+      // Refused outright: the tree is byte-identical and nothing was
+      // pushed onto the undo stack for a move that never happened.
+      expect(canvas.toJSON().nodes).toEqual(before)
+      expect(canvas.canUndo).toBe(false)
+    })
+
+    it('refuses a node that is not in the map', () => {
+      const canvas = makeCanvas()
+      const before = canvas.toJSON().nodes
+
+      expect(() =>
+        canvas.reparentNode(
+          { $id: 'gone', parentId: 'child1' } as any,
+          canvas.getNode('child2')!,
+        ),
+      ).toThrow('Invalid node')
+
+      expect(canvas.toJSON().nodes).toEqual(before)
+      expect(canvas.canUndo).toBe(false)
+    })
+
+    it('reorders through the live node when handed a stale instance', () => {
+      const canvas = makeCanvas()
+      const staleChild = canvas.getNode('child1')!
+      canvas.setNodes({ child1: staleChild.toJSON!() } as any, true)
+      expect(canvas.getNode('child1')).not.toBe(staleChild)
+
+      canvas.reorderNode(staleChild, 1)
+
+      expect(canvas.getNode(NODE_ROOT_ID)!.nodes).toEqual(['child2', 'child1'])
+      expect(collectUnreachable(canvas)).toEqual([])
+    })
+
+    // The whole point of the guard: an unreachable node is not a rendering
+    // glitch, it is a permanent passenger in the saved document.
+    it('never lets a detached node into the serialized payload', () => {
+      const canvas = makeCanvas()
+      const staleRoot = canvas.getNode(NODE_ROOT_ID)!
+      canvas.setNodes({ [NODE_ROOT_ID]: staleRoot.toJSON!() } as any, true)
+
+      canvas.reparentNode(canvas.getNode('child1')!, staleRoot)
+
+      const saved = canvas.toJSON().nodes as Record<string, any>
+      const reachable = new Set<string>()
+      const walk = (id: string) => {
+        if (reachable.has(id) || !saved[id]) return
+        reachable.add(id)
+        for (const childId of saved[id].nodes ?? []) walk(childId)
+      }
+      walk(NODE_ROOT_ID)
+      expect(Object.keys(saved).filter((id) => !reachable.has(id))).toEqual([])
+    })
+  })
 })

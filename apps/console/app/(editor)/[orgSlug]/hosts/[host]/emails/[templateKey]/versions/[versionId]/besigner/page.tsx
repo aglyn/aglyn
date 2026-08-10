@@ -17,7 +17,6 @@
 'use client'
 
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
-import { getSessionHealth } from '../../../../../../../../../../utils/session-health'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
@@ -49,6 +48,7 @@ import {
   saveNodesGuarded,
   useFirestore,
   useUser,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material'
 import { doc, setDoc, Timestamp } from 'firebase/firestore'
@@ -150,7 +150,17 @@ function HostEmailBesignerPage() {
   const [subjectInput, setSubjectInput] = useState<string | null>(null)
   const [preheaderInput, setPreheaderInput] = useState<string | null>(null)
 
-  const { data: template } = useFirestoreDoc<HostEmailTemplateState>(
+  const {
+    data: template,
+    status: templateStatus,
+    /**
+     * The template doc the properties drawer is seeded from is unconfirmed
+     * by the server (AGL-1358). Both fields of that form fall back to
+     * `template?.…` whenever the author edited only one of them, so the save
+     * carries BOTH and `merge: true` protects neither.
+     */
+    fromCache: templateFromCache,
+  } = useFirestoreDoc<HostEmailTemplateState>(
     () =>
       editable && hostId
         ? doc(firestore, 'hosts', hostId, TENANT_EMAIL_COLLECTION, templateKey)
@@ -287,34 +297,64 @@ function HostEmailBesignerPage() {
 
   const handlePropertiesSave = useCallback(async () => {
     if (!definition || !hostId) return
-    // Never write a subject seeded from a read we know is stale (AGL-1066).
-    // Both fields fall back to `template?.…` — the LISTENER read — whenever
-    // the author edited only one of them, and `persistentLocalCache` keeps
-    // serving listeners from IndexedDB after a session goes stale. Editing the
-    // subject would then write the cached preheader back over a newer one.
-    //
-    // The node save on this page needs no such guard: `use-besigner-document`
-    // stamps and compares `updatedAt` (AGL-674), so a save from a stale read
-    // is refused by the concurrency check before it can land.
-    if (getSessionHealth().staleSession) {
-      enqueueSnackbar(
-        'Your session went stale, so this email may be out of date — saving ' +
-          'now could overwrite newer changes. Sign in again and reload.',
-        { variant: 'error' },
-      )
-      return
-    }
     try {
-      await setDoc(
-        doc(firestore, 'hosts', hostId, TENANT_EMAIL_COLLECTION, templateKey),
+      /**
+       * Never write a subject seeded from a read we cannot trust (AGL-1066,
+       * AGL-1358). Both fields fall back to `template?.…` — the LISTENER
+       * read — whenever the author edited only one of them, so editing the
+       * subject writes the cached preheader back over a newer one.
+       *
+       * This was `staleSession` alone, as an early return. Both halves of
+       * that were wrong, which is why the staff twin of this page could be
+       * missed without anything noticing:
+       *
+       * - `staleSession` needs two distinct labelled collections denied
+       *   inside 60s, and this page only ever listens, so the heuristic
+       *   never fires here. `fromCache` is the per-listener verdict on the
+       *   very read this form was seeded from (AGL-1066). It leads now; the
+       *   session check remains as the guard's third signal.
+       * - An early return is a shape you can keep while losing the
+       *   protection — that is how AGL-1356's page lost it twice. The write
+       *   now sits INSIDE the guard and cannot be reached without a verdict.
+       *
+       * The node save on this page needs no such guard:
+       * `use-besigner-document` stamps and compares `updatedAt` (AGL-674)
+       * and `saveNodesGuarded` re-checks the baseline in a transaction
+       * (AGL-1301), so a stale-seeded node write is refused before it lands.
+       */
+      const verdict = await writeGuardedBySeed(
         {
-          subject: (subjectInput ?? template?.subject ?? '').trim(),
-          preheader: (preheaderInput ?? template?.preheader ?? '').trim(),
-          updatedAt: Timestamp.now(),
-          updatedByEmail: (user as { email?: string } | undefined)?.email ?? '',
+          subject: 'email',
+          unreadable: templateStatus === 'error',
+          fromCache: templateFromCache,
         },
-        { merge: true },
+        async () => {
+          await setDoc(
+            doc(
+              firestore,
+              'hosts',
+              hostId,
+              TENANT_EMAIL_COLLECTION,
+              templateKey,
+            ),
+            {
+              subject: (subjectInput ?? template?.subject ?? '').trim(),
+              preheader: (preheaderInput ?? template?.preheader ?? '').trim(),
+              updatedAt: Timestamp.now(),
+              updatedByEmail:
+                (user as { email?: string } | undefined)?.email ?? '',
+            },
+            { merge: true },
+          )
+        },
       )
+      // A refusal leaves the drawer open with what was typed.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       setSubjectInput(null)
       setPreheaderInput(null)
       enqueueSnackbar('Subject and preheader saved', {
@@ -335,6 +375,8 @@ function HostEmailBesignerPage() {
     subjectInput,
     preheaderInput,
     template,
+    templateFromCache,
+    templateStatus,
     user,
     enqueueSnackbar,
   ])

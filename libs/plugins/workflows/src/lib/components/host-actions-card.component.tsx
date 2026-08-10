@@ -66,6 +66,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useOrgDataScope,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import HostActivityCard from './host-activity-card.component'
 
@@ -166,7 +167,21 @@ export function HostActionsCard(props: {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
-  const { data: actionDocs } = useFirestoreCollection<any>(
+  const {
+    data: actionDocs,
+    status: actionsStatus,
+    /**
+     * The action rows this card's editor is seeded from are unconfirmed by
+     * the server (AGL-1358). Editing an action copies the whole stored row
+     * into `draft` — name, trigger and every step — and writes all of it
+     * back, so `merge: true` protects nothing and a cached seed reverts a
+     * colleague's newer version of the steps nobody here touched.
+     *
+     * The same shape the interaction builder guards (AGL-1066); this is its
+     * card twin, and it was the one that never got the guard.
+     */
+    fromCache: actionsFromCache,
+  } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'actions'), limit(100)),
     [firestore, hostId],
     { idField: '$id' },
@@ -409,33 +424,67 @@ export function HostActionsCard(props: {
     }
     try {
       const id = draft.id ?? createResourceUid()
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'actions', id),
+      /**
+       * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
+       *
+       * The payload is the whole action. `merge: true` is here so the
+       * frequency caps and conditions can be nulled explicitly, not to
+       * protect untouched fields — there are none, they are all in the
+       * payload. So a cached seed does not lose one edit, it reverts the
+       * trigger and every step to whatever the cache last held, on an
+       * automation that is running on a live site.
+       *
+       * Only the edit path. A NEW action is built from `EMPTY_*` defaults at
+       * a fresh uid and can overwrite nothing; the first snapshot of any
+       * listener is `fromCache: true`, so guarding a create would refuse a
+       * save that was never unsafe.
+       *
+       * The guard WRAPS the write — the interaction builder's early return
+       * is the shape you can keep while losing the protection.
+       */
+      const verdict = await writeGuardedBySeed(
         {
-          ...candidate,
-          // Frequency caps overwrite explicitly (AGL-274): a merge-set
-          // keeps omitted keys, so switching one off must write it out.
-          // Conditions follow suit (AGL-557/565): the list + combinator
-          // write null when cleared, and the legacy single `condition`
-          // is always nulled — `conditions` is canonical from now on.
-          trigger: {
-            ...candidate.trigger,
-            oncePerVisitor: draft.trigger.oncePerVisitor === true,
-            oncePerSession: draft.trigger.oncePerSession === true,
-            cooldownMinutes:
-              Number(draft.trigger.cooldownMinutes) >= 1
-                ? Number(draft.trigger.cooldownMinutes)
-                : null,
-            everyTime: draft.trigger.everyTime === true,
-            condition: null,
-            conditions: candidate.trigger.conditions ?? null,
-            combinator: candidate.trigger.combinator ?? null,
-          },
-          updatedAt: Timestamp.now(),
-          ...(draft.id ? {} : { createdAt: Timestamp.now() }),
+          subject: 'action',
+          unreadable: Boolean(draft.id) && actionsStatus === 'error',
+          fromCache: Boolean(draft.id) && actionsFromCache,
         },
-        { merge: true },
+        async () => {
+          await setDoc(
+            doc(firestore, 'hosts', hostId, 'actions', id),
+            {
+              ...candidate,
+              // Frequency caps overwrite explicitly (AGL-274): a merge-set
+              // keeps omitted keys, so switching one off must write it out.
+              // Conditions follow suit (AGL-557/565): the list + combinator
+              // write null when cleared, and the legacy single `condition`
+              // is always nulled — `conditions` is canonical from now on.
+              trigger: {
+                ...candidate.trigger,
+                oncePerVisitor: draft.trigger.oncePerVisitor === true,
+                oncePerSession: draft.trigger.oncePerSession === true,
+                cooldownMinutes:
+                  Number(draft.trigger.cooldownMinutes) >= 1
+                    ? Number(draft.trigger.cooldownMinutes)
+                    : null,
+                everyTime: draft.trigger.everyTime === true,
+                condition: null,
+                conditions: candidate.trigger.conditions ?? null,
+                combinator: candidate.trigger.combinator ?? null,
+              },
+              updatedAt: Timestamp.now(),
+              ...(draft.id ? {} : { createdAt: Timestamp.now() }),
+            },
+            { merge: true },
+          )
+        },
       )
+      // A refusal keeps the editor open with everything that was typed.
+      if (!verdict.ok) {
+        return void enqueueSnackbar(verdict.message, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       setDraft(null)
       enqueueSnackbar('Action saved', { variant: 'success', persist: false })
     } catch (error) {
@@ -445,7 +494,14 @@ export function HostActionsCard(props: {
         allowDuplicate: true,
       })
     }
-  }, [draft, firestore, hostId, enqueueSnackbar])
+  }, [
+    draft,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+    actionsFromCache,
+    actionsStatus,
+  ])
 
   const handleDelete = useCallback(
     (action: any) => async () => {

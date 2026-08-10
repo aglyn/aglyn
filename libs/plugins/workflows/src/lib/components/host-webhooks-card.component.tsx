@@ -37,19 +37,13 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import {
-  collection,
-  doc,
-  limit,
-  query,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore'
+import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
+  useHostResourceApi,
 } from '@aglyn/tenant-feature-instance'
 
 function generateSecret(): string {
@@ -83,6 +77,7 @@ export function HostWebhooksCard(props: {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const createResource = useHostResourceApi()
 
 
   const { data: webhookDocs } = useFirestoreCollection<any>(
@@ -125,6 +120,11 @@ export function HostWebhooksCard(props: {
         { variant: 'warning', persist: false },
       )
     }
+    // An affordance, NOT the limit (AGL-1360). `webhooks` comes from a
+    // Firestore listener and the console runs `persistentLocalCache`, so this
+    // count can be arbitrarily stale — it is here to fail fast when it
+    // happens to be right, never to authorise the create. The cap that holds
+    // is counted server-side in /api/hosts/resources.
     if (webhooks.length >= WEBHOOK_MAX_PER_HOST) {
       return void enqueueSnackbar(
         `Webhooks are capped at ${WEBHOOK_MAX_PER_HOST} per site`,
@@ -157,10 +157,15 @@ export function HostWebhooksCard(props: {
       })
     }
     try {
-      const id = draft.id ?? createResourceUid()
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'webhooks', id),
-        {
+      // Creates go through /api/hosts/resources (AGL-1360), which counts the
+      // live webhooks with the Admin SDK before allowing one more; Firestore
+      // rules deny client `create` on this collection. The card has no edit
+      // path — every save is a create — so there is no update branch here.
+      await createResource({
+        hostId,
+        resource: 'webhook',
+        id: createResourceUid(),
+        data: {
           name: draft.name.trim().slice(0, 60),
           direction: draft.direction,
           ...(draft.direction === 'outbound'
@@ -168,21 +173,20 @@ export function HostWebhooksCard(props: {
             : { workflowName: draft.workflowName.trim() }),
           secret: draft.secret,
           enabled: true,
-          updatedAt: Timestamp.now(),
-          ...(draft.id ? {} : { createdAt: Timestamp.now() }),
         },
-        { merge: true },
-      )
+      })
       setDraft(null)
       enqueueSnackbar('Webhook saved', { variant: 'success', persist: false })
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
+      // The route's message is the useful one — it names the cap, the
+      // entitlement or the role that refused.
+      enqueueSnackbar(error?.message || 'An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
     }
-  }, [draft, firestore, hostId, enqueueSnackbar])
+  }, [draft, createResource, hostId, enqueueSnackbar])
 
   const handleDelete = useCallback(
     (hook: any) => async () => {

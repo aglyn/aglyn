@@ -558,11 +558,30 @@ service cloud.firestore {
       // `disabledPlugins` is the per-site plugin boundary (AGL-1014) — an
       // owner/admin control, so an editor (or collaborator) must not be able
       // to widen their own site's plugin set by rewriting the deny-list.
+      // `cnameAttachmentPending`/`cnameDetachmentPending` join `cname` for the
+      // same reason `cname` is here at all (AGL-1364). `liveCustomDomain`
+      // refuses to redirect on THREE conditions and only one of them was
+      // protected: `cnameAttachmentPending` means the Vercel attach never
+      // landed — the domain is claimed in Firestore and serves nothing, no
+      // certificate, no routing — so it is the flag that stops
+      // `{sub}.aglyn.app` sending visitors onto a dead host. An editor able to
+      // clear it takes the site's last working origin down, which is the
+      // outcome denying `cname` was meant to prevent, through the key nobody
+      // listed. Both are written only by /api/domains/attach and
+      // /api/domains/detach; the console reads them and never writes them.
+      // `themeInstalledFrom` is theme provenance written only by the install
+      // route — a client rewrite makes `isOverrideForCurrentTheme()` lie about
+      // which marketplace theme an override belongs to, the same reason
+      // `templates.source` is frozen below.
+      // `projectId`/`projectNumber` are the Enterprise siloed-project pointers
+      // and have no client writer at all.
       allow update: if isStaff() ||
         (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['memberRoles', 'orgId', 'admins', 'hosts', 'subdomain',
-                     'cname']) &&
+                     'cname', 'cnameAttachmentPending',
+                     'cnameDetachmentPending', 'themeInstalledFrom',
+                     'projectId', 'projectNumber']) &&
           (hostMemberRole(hostId) == 'admin' ||
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['disabledPlugins'])));
@@ -636,9 +655,16 @@ service cloud.firestore {
       // Secret-/PII-bearing subcollections are carved out of the viewer-
       // readable catch-all below (AGL-502): `webhooks` docs hold an HMAC
       // signing secret + target URL, and `orders` hold customer PII/payment
-      // data — reads are admin/editor only, never viewer. Writes fall through
-      // to the catch-all (the console manages webhooks client-side; orders
-      // are server-written), so only the READ is tightened here.
+      // data — reads are admin/editor only, never viewer. `orders` writes
+      // fall through to the catch-all (they are server-written anyway).
+      //
+      // Webhook CREATE is now API-only (AGL-1360) — see the catch-all's
+      // create exclusion below. The console used to create them client-side
+      // and enforce WEBHOOK_MAX_PER_HOST by counting the rows its Firestore
+      // LISTENER held; with `persistentLocalCache` that count could be
+      // arbitrarily stale and low, so the cap was bypassable. Update/delete
+      // stay client-side (delete is a soft delete, and neither consumes a
+      // slot the cap has not already granted).
       match /webhooks/{webhookId} {
         allow read: if isStaff() || canWriteHostContent(hostId);
       }
@@ -672,12 +698,16 @@ service cloud.firestore {
         // every host) and AGL-1050 removed the client fallback that used to
         // address it, so the exclusion takes the whole subtree — `records`
         // included, since {document=**} spans them — with nothing to re-grant.
+        // `webhooks` joins the exclusion (AGL-1360): WEBHOOK_MAX_PER_HOST is
+        // a flat platform cap that was only ever checked in the console, by
+        // counting listener rows, so it did not survive a stale cache.
+        // /api/hosts/resources now counts the live webhooks server-side.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
               'locations', 'products', 'components', 'registers', 'installs',
-              'templates', 'collections', 'datasets']));
+              'templates', 'collections', 'datasets', 'webhooks']));
         // `templates` is excluded from update as well as create: its
         // dedicated block above freezes `source`, and leaving it here would
         // re-grant the unrestricted update this catch-all allows (AGL-666).
@@ -918,7 +948,41 @@ service cloud.firestore {
                      // Staff takedown (AGL-658). An owner who could clear
                      // `hiddenAt` could un-hide their own listing, which
                      // makes moderation a suggestion.
-                     'hiddenAt', 'hiddenBy', 'hiddenReason']));
+                     'hiddenAt', 'hiddenBy', 'hiddenReason',
+                     // The artifact discriminators (AGL-1364). Denying
+                     // `reviewStatus` closed self-promotion, but
+                     // `isListingBrowsable` only CONSULTS reviewStatus when
+                     // the listing is a plugin — pre-publication review is
+                     // plugin-only, because plugins execute code. So a
+                     // publisher whose plugin sits at 'submitted' or
+                     // 'rejected' could write `artifactType: 'component'` and
+                     // become publicly browsable without ever touching the
+                     // field the gate reads. All three are denied because
+                     // `listingArtifactType` falls back through them in turn:
+                     // `artifactType`, then `kind == 'template'`, then
+                     // `type == 'plugin'`.
+                     'artifactType', 'type', 'kind',
+                     // The publisher's standing ask for the Verified badge
+                     // (AGL-1217) is server-owned by its own doc comment: the
+                     // publisher route only moves it to pending/withdrawn and
+                     // only staff decide it. The staff queue is built by
+                     // filtering `state == 'pending'`, so a client write is a
+                     // way into the queue and a way to erase a declineReason.
+                     'verificationRequest',
+                     // `latestApprovedVersion` above is the offer for PLUGINS;
+                     // for every other artifact type the offer is
+                     // `latestVersion` (marketplace-update-state.ts). Denying
+                     // one sibling and not the other left the same advertise-
+                     // anything hole open one artifact type over.
+                     'latestVersion',
+                     // The rest of the type's own "Server-managed" banner:
+                     // written by the publish/install/review paths, never by
+                     // a client. The only client write to a listing anywhere
+                     // in the repo is the unpublish toggle, which writes
+                     // `deletedAt` alone — so denying these costs nothing.
+                     'publisherOrgId', 'sourceComponentId', 'sourceHostId',
+                     'versionHistory', 'screenCount', 'previewImageUrl',
+                     'createdAt', 'updatedAt']));
       allow delete: if isStaff() || listingManager();
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/marketplace/install, which
