@@ -49,6 +49,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // omitted this would leave the hook returning nothing for the wrong reason.
   useUser: () => ({ data: { uid: 'uid-test' } }),
   useFirestoreCollection: () => ({ data: [] }),
+  // The REAL guard (AGL-1358), not a stub. A mocked guard would let the
+  // write through no matter what the dialog passed it, which is the one
+  // thing these specs are here to disprove.
+  writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
+    .writeGuardedBySeed,
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
@@ -63,6 +68,7 @@ const renderDialog = (
   dataset: NonNullable<
     Parameters<typeof DatasetSchemaDialog>[0]['dataset']
   >,
+  seedFromCache = false,
 ) =>
   render(
     <DatasetSchemaDialog
@@ -70,6 +76,10 @@ const renderDialog = (
       dataset={dataset}
       datasets={[]}
       recordCount={0}
+      // Server-confirmed unless a spec says otherwise: every suite below
+      // exercises the ORDINARY save, which the AGL-1358 guard must leave
+      // alone.
+      seedFromCache={seedFromCache}
       onClose={jest.fn()}
     />,
   )
@@ -166,5 +176,53 @@ describe('DatasetSchemaDialog field names & descriptions (AGL-560)', () => {
       type: 'text',
     })
     expect(payload.fields).toEqual(['unit_price'])
+  })
+})
+
+/**
+ * The stale-seed guard (AGL-1358).
+ *
+ * The dialog is seeded from a listener that lives in the parent card, and it
+ * writes the whole `model` plus `visibleTo` back — so `updateDoc`'s field
+ * merging protects nothing, every field is in the payload. `visibleTo` is the
+ * AGL-1041/1042 access-control predicate: rewriting it from a snapshot the
+ * server never confirmed re-exposes a collection that was narrowed, or hides
+ * one that was widened.
+ *
+ * Both directions are asserted, and the POSITIVE one matters most: this guard
+ * stands in front of the ordinary schema save (every suite above is that
+ * control, all of them running through the real guard).
+ */
+describe('DatasetSchemaDialog refuses a stale seed (AGL-1358)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  const dataset = {
+    $id: 'products',
+    displayName: 'Products',
+    model: {
+      fields: { title: { name: 'Title', type: 'text' as const } },
+      order: ['title'],
+    },
+  }
+
+  it('does NOT write when the seeding listener is unconfirmed', async () => {
+    renderDialog(dataset, true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+
+    // Settle the click's promise chain before concluding nothing happened,
+    // so this cannot pass merely by asserting too early.
+    await waitFor(() => expect(doc).not.toHaveBeenCalled())
+    expect(updateDoc).not.toHaveBeenCalled()
+    // The refusal keeps the dialog open with the edited schema on screen.
+    expect(screen.getByRole('button', { name: 'Save schema' })).toBeTruthy()
+  })
+
+  it('DOES write the same schema once the server has confirmed it', async () => {
+    renderDialog(dataset, false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+
+    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
   })
 })

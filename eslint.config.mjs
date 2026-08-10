@@ -8,6 +8,7 @@ import reactPlugin from 'eslint-plugin-react'
 import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import eslintPluginTsdoc from 'eslint-plugin-tsdoc'
 import noCrossGraphImport from './tools/eslint-rules/no-cross-graph-import.mjs'
+import noLinkElementSwitch from './tools/eslint-rules/no-link-element-switch.mjs'
 import noPlanGatedEntitlement from './tools/eslint-rules/no-plan-gated-entitlement.mjs'
 import noSxAfterSpread from './tools/eslint-rules/no-sx-after-spread.mjs'
 import noUnguardedLoadingHook from './tools/eslint-rules/no-unguarded-loading-hook.mjs'
@@ -16,6 +17,7 @@ import noUnguardedLoadingHook from './tools/eslint-rules/no-unguarded-loading-ho
 const aglynPlugin = {
   rules: {
     'no-cross-graph-import': noCrossGraphImport,
+    'no-link-element-switch': noLinkElementSwitch,
     'no-plan-gated-entitlement': noPlanGatedEntitlement,
     'no-sx-after-spread': noSxAfterSpread,
     'no-unguarded-loading-hook': noUnguardedLoadingHook,
@@ -99,6 +101,19 @@ export default [
       // typechecks clean and passes every unit test, so it surfaces only at
       // `nx build` — i.e. at promotion time (AGL-1349, which took main down).
       'aglyn/no-cross-graph-import': 'error',
+      // An element type chosen from the screens map is a hydration mismatch:
+      // the map behind the ISR render is not the map behind the render that
+      // hydrates it (AGL-1268). Three components shipped this, one of them a
+      // DAY after the fix, and the invariant lived only in a comment in
+      // `link-box.tsx` where nobody editing another file would read it.
+      //
+      // WARN, deliberately and temporarily: it reports four live instances
+      // across three files — `screen-link.tsx:89`/`:91`, `button.tsx:101`,
+      // `language-switcher.tsx:105` — and three of them are the same
+      // `<button>`-vs-anchor question AGL-1347 is open to answer. Error would
+      // block everyone on a design decision that is not theirs. Flip to
+      // `'error'` with AGL-1347's fix; the rule is clean everywhere else.
+      'aglyn/no-link-element-switch': 'warn',
       'mobx/exhaustive-make-observable': 'off',
       'mobx/unconditional-make-observable': 'off',
       'mobx/missing-make-observable': 'off',

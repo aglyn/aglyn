@@ -40,7 +40,10 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestoreCollection,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 
 export interface SuppliersCardProps {
   hostId: string
@@ -57,7 +60,18 @@ export function SuppliersCard(props: SuppliersCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { data: supplierDocs } = useFirestoreCollection<any>(
+  const {
+    data: supplierDocs,
+    status: suppliersStatus,
+    /**
+     * The list this dialog is seeded from is unconfirmed by the server
+     * (AGL-1358). Editing a supplier copies the whole stored row into
+     * `draft` and writes all of it back, so a cached seed can restore a
+     * ROTATED `webhookSecret` — the supplier keeps signing with a key we
+     * meant to retire, and nothing anywhere reports it.
+     */
+    fromCache: suppliersFromCache,
+  } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'suppliers'), limit(50)),
     [firestore, hostId],
     { idField: '$id' },
@@ -69,22 +83,65 @@ export function SuppliersCard(props: SuppliersCardProps) {
   const handleSave = useCallback(async () => {
     if (!draft?.name.trim()) return
     const { id, ...data } = draft
-    await setDoc(
-      doc(
-        firestore,
-        'hosts',
-        hostId,
-        'suppliers',
-        id ?? Aglyn.createResourceUid(),
-      ),
+    /**
+     * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
+     *
+     * This write has no options argument at all, so it is a full document
+     * replace of a payload copied wholesale off the listener — `merge`
+     * would not have helped anyway, since every field is present. The one
+     * that matters is `webhookSecret`: rotate it somewhere else, come back
+     * to a console still serving the old row out of `persistentLocalCache`,
+     * rename the supplier, and the retired secret is stored again.
+     *
+     * Only the edit path is guarded. A NEW supplier is built from blanks at
+     * a fresh uid and can overwrite nothing, so refusing it would be a false
+     * positive on a path that is never unsafe — and this guard stands in
+     * front of the ordinary save.
+     *
+     * The guard WRAPS the write: an early return is a shape you can keep
+     * while losing the protection.
+     */
+    const verdict = await writeGuardedBySeed(
       {
-        ...data,
-        name: draft.name.trim().slice(0, 80),
+        subject: 'supplier',
+        unreadable: Boolean(id) && suppliersStatus === 'error',
+        fromCache: Boolean(id) && suppliersFromCache,
+      },
+      async () => {
+        await setDoc(
+          doc(
+            firestore,
+            'hosts',
+            hostId,
+            'suppliers',
+            id ?? Aglyn.createResourceUid(),
+          ),
+          {
+            ...data,
+            name: draft.name.trim().slice(0, 80),
+          },
+        )
       },
     )
+    // A refusal keeps the dialog open with what was typed. A save that
+    // silently does nothing sends the user back to retype a form that will
+    // be refused again just as quietly.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     setDraft(null)
     enqueueSnackbar('Supplier saved', { variant: 'success', persist: false })
-  }, [draft, firestore, hostId, enqueueSnackbar])
+  }, [
+    draft,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+    suppliersFromCache,
+    suppliersStatus,
+  ])
 
   const handleDelete = useCallback(
     (supplier: any) => async () => {

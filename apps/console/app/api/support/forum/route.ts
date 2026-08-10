@@ -116,7 +116,18 @@ async function handler(request: Request): Promise<Response> {
           .limit(200)
           .get()
         return Response.json({
-          thread: { $id: threadSnapshot.id, ...threadSnapshot.data() },
+          thread: {
+            $id: threadSnapshot.id,
+            ...threadSnapshot.data(),
+            // Timestamps do not survive JSON as anything a client can read —
+            // the LIST branch below has always converted them and this one
+            // never did, so the opening post carried `{_seconds, _nanoseconds}`
+            // where every other post carried millis. It went unnoticed only
+            // because the UI declined to show a time on the opening post; the
+            // moment it renders one (AGL-1158) it reads "Invalid Date".
+            createdAt: threadSnapshot.get('createdAt')?.toMillis?.() ?? null,
+            updatedAt: threadSnapshot.get('updatedAt')?.toMillis?.() ?? null,
+          },
           replies: replies.docs.map((doc) => ({
             $id: doc.id,
             ...doc.data(),

@@ -21,6 +21,7 @@ import {
   FIREBASE_CLIENT_APP_NAME,
   FirebaseServicesProvider,
   setFirestoreSessionReporters,
+  setStaleSessionCheck,
   useAnalytics,
   useUser,
 } from '@aglyn/tenant-feature-instance'
@@ -33,6 +34,7 @@ import BootSplash from '../boot-splash.component'
 import useSessionCookie from '../../hooks/use-session-cookie'
 import { ReleaseFlagsProvider } from '../../hooks/use-release-flags'
 import {
+  getSessionHealth,
   reportDeniedRead,
   reportSuccessfulRead,
 } from '../../utils/session-health'
@@ -53,6 +55,22 @@ setFirestoreSessionReporters({
   onDenied: reportDeniedRead,
   onServerRead: reportSuccessfulRead,
 })
+
+/**
+ * The same seam in the other direction, for `writeGuardedBySeed` (AGL-1358).
+ *
+ * The guard had to move into the library, because most of the write sites
+ * wearing the stale-seed shape are plugin cards that cannot import from the
+ * app. Its first two signals (`unreadable`, `fromCache`) come from the
+ * caller's own listener; only the third is console state, so the console
+ * hands it over here rather than the library reaching for it.
+ *
+ * Module scope, not an effect: a save can be clicked before any effect has
+ * run, and a guard consulting a check that does not exist yet quietly loses
+ * a signal. Unregistered is not a failure mode — it reports "not stale", and
+ * the two signals that actually carry this guard are untouched.
+ */
+setStaleSessionCheck(() => getSessionHealth().staleSession)
 
 function AnalyticsGlobalEvents({ children }) {
   // Cross-subdomain session cookie sync (AGL-236).

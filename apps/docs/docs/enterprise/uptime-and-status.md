@@ -45,5 +45,5 @@ than an error.
 If something is down and [/status](/status) disagrees, tell us — the status
 page checks reachability, which is not the same as everything working.
 
-Open a ticket from **Organization → Support**. Response is governed by your
+Open a ticket from **Organization → Support → Support tickets**. Response is governed by your
 [support commitment](./support-tiers.md); Enterprise is 24–48 clock hours.

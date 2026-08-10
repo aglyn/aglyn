@@ -149,7 +149,18 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     [user, orgId],
   )
 
-  const { data: datasetDocs } = useFirestoreCollection<any>(
+  const {
+    data: datasetDocs,
+    status: datasetsStatus,
+    /**
+     * The dataset rows are unconfirmed by the server (AGL-1358). The schema
+     * dialog is seeded from one of them and writes the whole `model` plus
+     * `visibleTo` back, so the freshness verdict belongs to THIS listener —
+     * the dialog has none of its own, which is why it is handed down rather
+     * than recomputed there.
+     */
+    fromCache: datasetsFromCache,
+  } = useFirestoreCollection<any>(
     () =>
       // `scopeReady` already implies a non-null `dataScope`; testing it
       // directly is what lets the compiler see that too.
@@ -1376,6 +1387,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         dataset={schemaOpen && selected ? selected : null}
         datasets={datasets}
         recordCount={records.length}
+        seedFromCache={datasetsFromCache}
+        seedUnreadable={datasetsStatus === 'error'}
         onClose={() => setSchemaOpen(false)}
       />
     </CardDisplay>

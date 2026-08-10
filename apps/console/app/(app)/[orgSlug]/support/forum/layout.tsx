@@ -18,19 +18,12 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
-import { segmentTitle } from '../../../page-title'
-
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
-// nearest server layout.
-//
-// `segmentTitle`, not a bare string: AGL-1158 put titled routes below this one
-// (`tickets/`, `forum/`). A plain string title carries no template of its own,
-// so it would consume the ancestor template and strip the brand suffix from
-// every route nested beneath it.
-export const metadata: Metadata = { title: segmentTitle('Support') }
+// nearest server layout. The suffix comes from the root title template.
+export const metadata: Metadata = { title: 'Community forum' }
 
-export default function OrgSupportTitleLayout({
+export default function SupportForumTitleLayout({
   children,
 }: {
   children: ReactNode

@@ -42,7 +42,10 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestoreCollection,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 
 export interface DiscountsCardProps {
   hostId: string
@@ -58,7 +61,18 @@ export function DiscountsCard(props: DiscountsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { data: discountDocs } = useFirestoreCollection<any>(
+  const {
+    data: discountDocs,
+    status: discountsStatus,
+    /**
+     * The row this dialog is seeded from is unconfirmed by the server
+     * (AGL-1358). `redemptions` is a LIVE counter the checkout engine
+     * increments, and editing a discount copies it out of the seed and
+     * writes it straight back — so a cached seed rolls the count backwards
+     * and hands out redemptions that were already spent.
+     */
+    fromCache: discountsFromCache,
+  } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'discounts'), limit(100)),
     [firestore, hostId],
     { idField: '$id' },
@@ -71,25 +85,60 @@ export function DiscountsCard(props: DiscountsCardProps) {
     if (!draft) return
     const { id, ...data } = draft
     const code = data.code?.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '')
-    await setDoc(
-      doc(
-        firestore,
-        'hosts',
-        hostId,
-        'discounts',
-        id ?? Aglyn.createResourceUid(),
-      ),
+    /**
+     * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
+     *
+     * `merge: true` protects nothing here — `{...data}` carries every field
+     * of the seeded row, `redemptions` included, so it is written back
+     * whether or not anyone touched it. Under `persistentLocalCache` that
+     * seed can be arbitrarily old, and a redemption cap silently regains
+     * uses that buyers already spent.
+     *
+     * Only the edit path is guarded: a NEW discount is built from blanks at
+     * a fresh uid and can overwrite nothing.
+     */
+    const verdict = await writeGuardedBySeed(
       {
-        ...data,
-        ...(code ? { code } : { code: null }),
-        enabled: data.enabled !== false,
-        redemptions: data.redemptions ?? 0,
+        subject: 'discount',
+        unreadable: Boolean(id) && discountsStatus === 'error',
+        fromCache: Boolean(id) && discountsFromCache,
       },
-      { merge: true },
+      async () => {
+        await setDoc(
+          doc(
+            firestore,
+            'hosts',
+            hostId,
+            'discounts',
+            id ?? Aglyn.createResourceUid(),
+          ),
+          {
+            ...data,
+            ...(code ? { code } : { code: null }),
+            enabled: data.enabled !== false,
+            redemptions: data.redemptions ?? 0,
+          },
+          { merge: true },
+        )
+      },
     )
+    // Keep the dialog open with what was typed rather than failing silently.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     setDraft(null)
     enqueueSnackbar('Discount saved', { variant: 'success', persist: false })
-  }, [draft, firestore, hostId, enqueueSnackbar])
+  }, [
+    draft,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+    discountsFromCache,
+    discountsStatus,
+  ])
 
   const describe = (discount: any) => {
     const value =

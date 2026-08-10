@@ -23,6 +23,7 @@ export * from './hooks/firebase/firebase-services'
 export * from './hooks/helpers/use-doc'
 export * from './hooks/helpers/use-modify-doc-callback'
 export * from './hooks/helpers/guarded-nodes-save'
+export * from './hooks/helpers/guarded-seed-write'
 
 export * from './hooks/firestore-denial-reporter'
 export * from './hooks/use-firestore-collection'
