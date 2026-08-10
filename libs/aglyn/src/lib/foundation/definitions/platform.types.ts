@@ -229,6 +229,87 @@ export interface AglynHost extends AglynDocument {
   projectNumber?: ProjectNumber
 }
 
+/**
+ * Host-document fields an editor may legitimately write, each with the reason
+ * (AGL-1361). Everything else must be denied in the rules' host key diff.
+ *
+ * `host-write-deny-coverage.spec.ts` fails the build for any field of this
+ * document that is in neither list, so "I forgot" is not a reachable state —
+ * the answer that costs nothing is always to deny. The reason strings are the
+ * point: they record that somebody decided, rather than that somebody did not
+ * notice. AGL-1364 is what this catches, found while writing it.
+ *
+ * The bar for landing here: could a client rewrite change what the platform
+ * DECIDES — an entitlement, a price, where a request routes, who may read? If
+ * so it belongs in the rules, whatever the console does today.
+ */
+export const HOST_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
+  displayName:
+    'The site name shown in the console. Cosmetic, org-scoped, and decides ' +
+    'nothing — the public address is `subdomain`/`cname`, both denied.',
+  logoUrl:
+    'The site brand mark rendered by the tenant nav (AGL-594). Authored ' +
+    'content pointing at already-public media; no gate reads it.',
+  seo:
+    'Title, description, favicon, social card and the AGL-1263 ' +
+    '`discourageSearchEngines` switch. All of it is authoring: the values ' +
+    'end up in the page the editor is already free to write.',
+  screens:
+    'The screen-id → slug directory. The screen DOCS are quota-governed and ' +
+    'API-create-only (AGL-473); this map is the routing index maintained ' +
+    'alongside them, and an editor who may add a screen may name it.',
+  layouts: 'The shared-layout directory. Same reasoning as `screens`.',
+  redirects:
+    'The redirect directory. The redirect DOCS are API-create-only so the ' +
+    '`redirectsPerHost` quota has somewhere to be enforced; this is the index.',
+  notFoundScreenId:
+    'Which screen renders unmatched paths (AGL-87). Points at a screen the ' +
+    'editor already owns, and serves their own visitors only.',
+  errorScreens:
+    'Designable error screens by status (AGL-131). Same reasoning as ' +
+    '`notFoundScreenId` — a binding to screens this editor already controls.',
+  maintenance:
+    'Maintenance mode (AGL-131): every path renders the 503 screen. A ' +
+    'site-wide availability switch, but it only ever takes the editor\'s OWN ' +
+    'site down, which they can equally do by deleting its screens.',
+  locales:
+    'Site languages (AGL-164). The `multilingual` entitlement is re-checked ' +
+    'server-side at page load, so writing this buys nothing a plan forbids.',
+  defaultLocale: 'Which of `locales` serves an unprefixed path. Authoring.',
+  theme:
+    'The persisted MUI theme for the published site. Authoring — the theme ' +
+    'editor writes it directly, and it renders only on this host.',
+  themeOverride:
+    'The editor\'s local diff on top of an installed marketplace theme, ' +
+    'written wholesale by the setup page. Authoring. Its PROVENANCE ' +
+    '(`themeInstalledFrom`) is denied instead, which is the half that has to ' +
+    'be true for `isOverrideForCurrentTheme` to mean anything.',
+  announcementBar:
+    'Site-wide announcement bar (AGL-195). `marketingOverlays`-gated, but ' +
+    'the gate is enforced where it counts — `site-page-enricher` re-checks ' +
+    'the entitlement at RENDER, so a free plan writing this bar never ships ' +
+    'it. The console gate is the affordance, not the boundary.',
+  popup: 'Promotional popup (AGL-196). Identical reasoning to `announcementBar`.',
+  business:
+    'Support email, address and social links behind the AGL-1022 host ' +
+    'tokens. Publisher-authored contact detail that renders into their own ' +
+    'pages and emails; undeclared on this interface, so the guard sees it ' +
+    'through the resolver sweep rather than the type.',
+  createdAt:
+    'Stamped by /api/hosts/create. Nothing gates on it — the org owns ' +
+    'billing dates — and console saves touch it freely.',
+  updatedAt:
+    'Bumped by console saves to drive "last edited" copy. Decides nothing; ' +
+    'a forged value misleads the editor about their own site.',
+}
+
+/**
+ * Host-document keys that never reach Firestore, so the rules have no opinion.
+ */
+export const HOST_UNPERSISTED_FIELDS: Readonly<Record<string, string>> = {
+  $id: 'The document id, attached on read by the Firestore hooks. Never a field.',
+}
+
 /** Error-screen bindings by HTTP-ish status (AGL-131). */
 export interface HostErrorScreens {
   notFound?: ScreenUid

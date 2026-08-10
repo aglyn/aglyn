@@ -84,6 +84,18 @@ import {
   ORG_CLIENT_WRITABLE_FIELDS,
   ORG_UNPERSISTED_FIELDS,
 } from './org-billing.types'
+// The parsing moved to a shared module when AGL-1361 extended this property to
+// `hosts/{hostId}` and `marketplaceListings/{listingId}`. Three documents, one
+// parser: a second copy would be a second thing to keep true.
+import {
+  declaredFields as declaredFieldsOf,
+  hasAnyKeys,
+  normalizePathVariables,
+  readFieldsOf,
+  seedFields as seedFieldsOf,
+  stripComments,
+  topLevelBody,
+} from './write-deny-coverage.util'
 
 const REPO_ROOT = resolve(__dirname, '../../../../../..')
 
@@ -95,75 +107,6 @@ const TYPES_FILE =
   'libs/aglyn/src/lib/foundation/definitions/org-billing.types.ts'
 const RESOLVER_DIR = 'libs/aglyn/src/lib/app-utils'
 const SEED_FILE = 'libs/tenant/data/admin/src/lib/server/organizations.ts'
-
-/**
- * Comments are stripped from every source before parsing. Prose in this repo
- * quotes rules fragments and field names constantly — the org block's own
- * comment names all four AGL-1354 keys — so parsing with comments in place
- * would read the explanation of a hole as the fix for it.
- */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
-}
-
-/**
- * Quoted strings, blanked. `org-permissions.ts` declares permission KEYS
- * spelled `'org.settings'` and `'org.auditLog'`, which read exactly like a
- * field access — the first run of this guard demanded the rules deny two
- * fields that do not exist. Template literals are left alone: a real read can
- * legitimately live inside `${…}`.
- */
-function stripQuotedStrings(source: string): string {
-  return source
-    .replace(/'(?:\\.|[^'\\\n])*'/g, "''")
-    .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
-}
-
-/**
- * Firestore path variables (`{orgId}`, `{document=**}`) carry braces that a
- * block-depth walker reads as nesting. Rewriting them to angle brackets makes
- * the rules parseable by brace counting without losing the path text — which
- * matters, because `{document=**}` IS the wildcard this guard has to see.
- */
-function normalizePathVariables(rules: string): string {
-  return rules.replace(/\{([A-Za-z_][A-Za-z0-9_]*(?:=\*\*)?)\}/g, '<$1>')
-}
-
-/**
- * The text of a `{ … }` block, keeping only what sits at the block's own
- * depth. Nested blocks — sub-`match` rules, inline object types — are dropped,
- * so a nested `allow` or a nested property can never be mistaken for one
- * belonging to the block asked for.
- *
- * `header` must end with the opening brace.
- */
-function topLevelBody(source: string, header: string): string {
-  const at = source.indexOf(header)
-  if (at < 0) throw new Error(`Guard cannot parse: no \`${header}\` found.`)
-  let depth = 1
-  let out = ''
-  for (let index = at + header.length; index < source.length; index += 1) {
-    const character = source[index]
-    if (character === '{') {
-      depth += 1
-      continue
-    }
-    if (character === '}') {
-      depth -= 1
-      if (depth === 0) return out
-      continue
-    }
-    if (depth === 1) out += character
-  }
-  throw new Error(`Guard cannot parse: \`${header}\` never closes.`)
-}
-
-/** The keys of the FIRST `hasAny([...])` literal in a rules branch. */
-function hasAnyKeys(branch: string): string[] {
-  const list = branch.match(/hasAny\(\s*\[([^\]]*)\]/)
-  if (!list) return []
-  return [...list[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1])
-}
 
 interface OrgUpdateRule {
   /** Denied to an org owner/admin holding the client SDK. */
@@ -232,13 +175,10 @@ function parseOrgUpdateRule(): OrgUpdateRule {
 
 /** Top-level property names declared on an interface. */
 function declaredFields(source: string, interfaceName: string): string[] {
-  const body = topLevelBody(
-    stripComments(source),
+  return declaredFieldsOf(
+    source,
     `export interface ${interfaceName} extends AglynDocument {`,
   )
-  return [
-    ...body.matchAll(/(?:^|\n)\s*(\$?[A-Za-z_][A-Za-z0-9_$]*)\s*\??\s*:/g),
-  ].map((entry) => entry[1])
 }
 
 /**
@@ -251,45 +191,28 @@ function declaredFields(source: string, interfaceName: string): string[] {
  */
 function entitlementInputs(): string[] {
   const directory = resolve(REPO_ROOT, RESOLVER_DIR)
-  const found = new Set<string>()
-  for (const file of readdirSync(directory)) {
-    if (!file.endsWith('.ts') || file.endsWith('.spec.ts')) continue
-    const source = stripQuotedStrings(
-      stripComments(readFileSync(resolve(directory, file), 'utf8')),
-    )
-    // `org?.field` / `org.field` — the ordinary read.
-    for (const hit of source.matchAll(
-      /\borg\s*\??\.\s*([A-Za-z_$][A-Za-z0-9_$]*)/g,
-    )) {
-      found.add(hit[1])
-    }
-    // `(org as { billingStatus?: unknown } | …)?.billingStatus` — the cast a
-    // field that is real but was undeclared gets read through.
-    for (const hit of source.matchAll(
-      /\borg\s+as\s*\{\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\??\s*:/g,
-    )) {
-      found.add(hit[1])
-    }
-  }
-  return [...found].sort()
+  return readFieldsOf(
+    readdirSync(directory)
+      .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts'))
+      .map((file) => readFileSync(resolve(directory, file), 'utf8')),
+    'org',
+  )
 }
 
 /** Top-level fields the org document is created with. */
 function seedFields(): string[] {
-  const source = stripComments(read(SEED_FILE))
-  const literal = source.match(
-    /collection\('orgs'\)\.doc\(orgId\)\s*,\s*\{([^}]*)\}/,
+  const fields = seedFieldsOf(
+    read(SEED_FILE),
+    /collection\('orgs'\)\.doc\(orgId\)\s*,\s*\{/,
   )
-  if (!literal) {
+  if (!fields) {
     throw new Error(
       `Guard cannot parse the org seed write in ${SEED_FILE}. It is one of ` +
         `the four sources of the org document's field set — fix the parse ` +
         `rather than dropping the source.`,
     )
   }
-  return [
-    ...literal[1].matchAll(/(?:^|,|\n)\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*[,:]/g),
-  ].map((entry) => entry[1])
+  return fields
 }
 
 describe('every server-owned org field is denied to client writes (AGL-1355)', () => {

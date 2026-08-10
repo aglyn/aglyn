@@ -32,10 +32,15 @@ import type { ListingVerificationRequest } from '@aglyn/aglyn/app-utils/marketpl
 // question and `scope:app` may not depend on `aglyn:addons`. Imported AND
 // re-exported — `installTargetsFor` and `listingArtifactLabel` below call
 // `listingArtifactType` locally, and a bare `export … from` binds nothing.
+// The write-deny classification (AGL-1361) rides along for the same reason:
+// it is a statement about the fields this policy reads, and the guard that
+// enforces it lives in core beside the rules parser.
 import {
   isListingBrowsable,
   isListingDeleted,
   isPrivateListing,
+  LISTING_CLIENT_WRITABLE_FIELDS,
+  LISTING_UNPERSISTED_FIELDS,
   listingArtifactType,
 } from '@aglyn/aglyn/app-utils/marketplace-listing-visibility'
 
@@ -43,6 +48,8 @@ export {
   isListingBrowsable,
   isListingDeleted,
   isPrivateListing,
+  LISTING_CLIENT_WRITABLE_FIELDS,
+  LISTING_UNPERSISTED_FIELDS,
   listingArtifactType,
 }
 
