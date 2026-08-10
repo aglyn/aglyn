@@ -180,10 +180,13 @@ function Layouts(props) {
       // createdAt/updatedAt are stamped server-side by the resources API
       // (AGL-473) — client Timestamps don't survive the JSON hop. This
       // also enforces sharedLayoutsPerHost, previously ungated here.
+      // No `versions` array (AGL-1384): every reader — the layouts list, the
+      // layout detail page — reads the `versions` SUBCOLLECTION, and nothing
+      // kept this array in step as versions were added, so it was stale from
+      // the second version onward. `versionId` is the pointer that matters.
       const newValues = {
         ...values,
         versionId: newVersionId,
-        versions: [newVersionId],
       }
       // Seed with a single LayoutSlot so bound screens have a graft point
       // from the first save.

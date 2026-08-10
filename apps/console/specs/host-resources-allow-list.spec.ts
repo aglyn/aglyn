@@ -222,14 +222,12 @@ const CALLERS: Array<{
       displayName: 'Site chrome',
       description: 'Header and footer',
       versionId: 'version-1',
-      versions: ['version-1'],
     },
   },
   {
     resource: 'reusableComponent',
     caller: 'hosts/[host]/components/page.tsx',
     data: {
-      hostId: 'host-1',
       displayName: 'Site nav',
       description: 'Shared navigation',
       rootId: 'root',
@@ -414,6 +412,44 @@ describe('/api/hosts/resources stores an allow-list (AGL-1377)', () => {
     expect(response.status).toBe(200)
     const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
     expect(stored['source']).toEqual({ type: 'authored' })
+  })
+
+  /**
+   * AGL-1384: two keys were on the allow-list only because a caller still
+   * sent them, neither justified on its merits. Both callers stopped sending
+   * them first — removing them from the route while a live caller still sent
+   * them is exactly the silent narrowing AGL-1377 warns about — and these
+   * assert the second half of that order.
+   */
+  it('no longer stores hostId on a reusable component', async () => {
+    // Duplicated the document's own path (hosts/{hostId}/components/{id}) and
+    // nothing read it; the other two component creators never sent it.
+    const response = await postResource('reusableComponent', {
+      displayName: 'Site nav',
+      rootId: 'root',
+      nodes: {},
+      hostId: 'host-1',
+    })
+    expect(response.status).toBe(200)
+    const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
+    expect(stored).not.toHaveProperty('hostId')
+    // The create still works — that is the half that would break if the
+    // ordering had been reversed.
+    expect(stored['displayName']).toBe('Site nav')
+  })
+
+  it('no longer stores the vestigial versions array on a layout', async () => {
+    // Every reader uses the `versions` SUBCOLLECTION, and nothing kept this
+    // array in step, so it was stale from the second version onward.
+    const response = await postResource('layout', {
+      displayName: 'Site chrome',
+      versionId: 'version-1',
+      versions: ['version-1'],
+    })
+    expect(response.status).toBe(200)
+    const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
+    expect(stored).not.toHaveProperty('versions')
+    expect(stored['versionId']).toBe('version-1')
   })
 
   it('still stamps the screen name-prefix key from the stored displayName', async () => {

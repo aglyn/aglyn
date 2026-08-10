@@ -135,10 +135,10 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'displayName',
     'description',
     'versionId',
-    // Vestigial: every reader uses the `versions` SUBCOLLECTION. Permitted
-    // here because the layouts page still seeds it, so real documents carry
-    // it — removed at the caller and from both lists by AGL-1384.
-    'versions',
+    // No `versions` array (AGL-1384): every reader uses the `versions`
+    // SUBCOLLECTION, nothing kept the array in step, and the caller that
+    // seeded it has stopped. Existing documents keep a harmless dead key that
+    // a restore now drops.
     // Nested-layout parent (AGL-703) — same key name as the doc id, which
     // makes it easy to mistake for a self-reference and drop.
     'layoutId',
@@ -169,9 +169,9 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'bundleId',
   ],
   components: [
-    // Duplicates the document's own path and nothing reads it; permitted
-    // only because the components page still sends it (AGL-1384 removes it).
-    'hostId',
+    // No `hostId` (AGL-1384): it duplicated the document's own path and
+    // nothing read it. Existing documents keep a harmless dead key that a
+    // restore now drops.
     'displayName',
     'description',
     // Neither `icon` (AGL-1193) nor `props` (AGL-1247) is in the create

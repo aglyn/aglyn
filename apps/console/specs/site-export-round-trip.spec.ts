@@ -218,7 +218,6 @@ const SEEDS: Array<{ collection: string; path: string; id: string; doc: Doc }> =
       displayName: 'Site chrome',
       description: 'Header and footer',
       versionId: 'layout-version-1',
-      versions: ['layout-version-1'],
       layoutId: 'layout-parent',
       publishSchedule: { versionId: 'lv2', action: 'publish', status: 'pending' },
     },
@@ -251,7 +250,6 @@ const SEEDS: Array<{ collection: string; path: string; id: string; doc: Doc }> =
     path: 'hosts/host-1/components',
     id: 'component-1',
     doc: {
-      hostId: 'host-1',
       displayName: 'Site nav',
       description: 'Shared navigation',
       // Neither of these is in the create allow-list — both arrive only by
