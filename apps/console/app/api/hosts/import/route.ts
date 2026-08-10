@@ -17,7 +17,9 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  checkDatasetQuota,
   checkEntitlement,
+  checkQuota,
   decodeStoredNodes,
   effectiveDatasetModel,
   hostScopeToken,
@@ -264,6 +266,226 @@ async function screenCapRefusal(options: {
 }
 
 /**
+ * The bundle collections that land in the HOST and carry a numeric plan cap,
+ * paired with the quota key `/api/hosts/resources` already enforces them on
+ * (AGL-1403).
+ *
+ * A table rather than five checks because the arithmetic really is the same
+ * for all of them: unlike screens these have no exclusion rule, so the state an
+ * import would leave is just `|existing ids ∪ bundle ids|`. The mapping is the
+ * only thing worth writing down, and writing it down is what makes the gap
+ * visible: this file named no quota key at all before AGL-1398, and the check
+ * that landed then reads `screensPerHost` off `resolveOrgEntitlements`, so
+ * `checkQuota` arrives here for the first time with this table. A cap nothing
+ * in the file mentions is a cap nobody reviewing the file can notice is
+ * missing.
+ *
+ * `layouts` and `services` are UNLIMITED on every plan that can reach this
+ * route, so today they refuse nothing and cost no read. They are in the table
+ * anyway: the table is the mapping between a bundle collection and its cap, not
+ * a judgement about the current price list, and a row that is dead today is how
+ * the next tier stays covered without anyone remembering this file.
+ *
+ * Deliberately absent, and none of them a judgement call:
+ *
+ * * `screens` — a different rule (`billableScreenIds`, with three exclusions)
+ *   and its own check above (AGL-1398).
+ * * `actions` — no `RESOURCES` entry and no quota key anywhere; all three
+ *   creators write the document client-direct.
+ * * `collections`/`entries` — uncapped by design; AGL-1387 declined
+ *   `collectionsPerHost` and this is not the issue that re-opens it.
+ * * `components` — `reusableComponents` is a BOOLEAN entitlement, true on
+ *   every plan that can reach here. There is no number to compare against.
+ * * `media` — the meter is bytes at upload, and an import copies no bytes.
+ */
+const CAPPED_HOST_COLLECTIONS = [
+  { collection: 'workflows', quotaKey: 'workflowsPerHost', label: 'workflows' },
+  { collection: 'functions', quotaKey: 'functionsPerHost', label: 'functions' },
+  { collection: 'variables', quotaKey: 'variablesPerHost', label: 'variables' },
+  {
+    collection: 'layouts',
+    quotaKey: 'sharedLayoutsPerHost',
+    label: 'shared layouts',
+  },
+  { collection: 'services', quotaKey: 'servicesPerHost', label: 'services' },
+] as const
+
+/** The ids a collection already holds. A field mask with no fields projects to
+ * the document id alone, so this is the cheapest form of the read. */
+async function existingDocIds(
+  ref: FirebaseFirestore.CollectionReference,
+): Promise<Set<string>> {
+  const snapshot = await ref.select().get()
+  return new Set(snapshot.docs.map((doc) => doc.id))
+}
+
+/**
+ * The ids a bundle collection would WRITE — distinct, because two items sharing
+ * an id are one document at `merge: false`, and because the count named in the
+ * refusal has to be the number of things that would exist.
+ */
+function bundleDocIds(items: Array<Record<string, any>>): Set<string> {
+  const bundleIds = new Set<string>()
+  for (const item of items) {
+    if (item?.$id) bundleIds.add(String(item.$id))
+  }
+  return bundleIds
+}
+
+/**
+ * Refuse a bundle that would put the org or the host over any of the OTHER
+ * numeric caps (AGL-1403) — the ones AGL-1398 left standing when it closed the
+ * screens leg.
+ *
+ * This route creates eleven other document classes and checked the quota of
+ * none of them. Against Pro, the cheapest plan that can import: `workflows` 100
+ * against 25, `functions` 100 against 50, `datasets` 50 against 15 included,
+ * and `variables` 100 against 100 — where the caps merely TIE, so it crosses on
+ * whatever the site already holds and no check that reads the file alone can
+ * see it.
+ *
+ * ## Datasets lead, because they are the only leg that leaks revenue
+ *
+ * The others under-meter. Datasets are SOLD — `extraDatasetMonthlyUsd`, org
+ * addons on top of the plan's included count — and the import writes them
+ * straight to `orgs/{orgId}/datasets/…`, past `/api/orgs/datasets`. There are
+ * three create paths for a dataset and this was the only one calling nothing:
+ * the console's own route and the marketplace's `installDatasetSchema` both
+ * call `checkDatasetQuota`, and the installer's comment already says why —
+ * "installing must not be a way around it". A 50-dataset bundle lands a Pro org
+ * at its 50-dataset HARD MAXIMUM, unpaid, in one button press.
+ *
+ * So datasets are checked first and their refusal is the one a bundle
+ * busting several caps reports: a restore blocked four times running is worse
+ * than one blocked once, and the arithmetic worth naming is the one with a
+ * price on it.
+ *
+ * `checkDatasetQuota` decides, not `checkQuota(org, 'datasetsPerOrg')`. An org
+ * that has PAID for extra datasets is entitled to them, and comparing against
+ * the plan's included number would refuse a customer their own backup after
+ * taking their money for the room to hold it. The escape the refusal names
+ * comes from the same helper: addons while `upgradeRequired` is false,
+ * upgrading once the addon runway is gone.
+ *
+ * ## Restore vs copy, when the resource is not host-scoped
+ *
+ * AGL-1398 identified a restore by document-id COLLISION rather than by the
+ * bundle's `sourceHostId`, which is an unsigned string in a file the metered
+ * party uploads. The collision argument transfers, but the sentence a collision
+ * proves changes with the scope of the METER, and datasets are the case where
+ * that matters:
+ *
+ * * host-scoped rows above — a collision means this SITE already holds the
+ *   document, exactly as for screens;
+ * * datasets — a collision means this WORKSPACE already holds the dataset.
+ *
+ * The org boundary is the right one here, and not a weaker version of the host
+ * one, because the meter is per-org. Restoring a bundle into a SIBLING host of
+ * the same workspace rewrites the same dataset documents the org is already
+ * paying for — all it changes is `visibleTo`, from one host scope to another —
+ * so it provisions nothing and raises nothing. A copy into a different
+ * workspace collides on nothing and provisions all of them, and is refused when
+ * it lands that workspace over. An id-collision test keyed on the HOST would
+ * have refused the first of those, which is half of what the feature is for.
+ *
+ * The forgery direction is unchanged: to reach the allow path the bundle's
+ * datasets must already be in the workspace, which is to say already bought,
+ * and renaming them to ids the workspace holds OVERWRITES those datasets
+ * instead of adding any.
+ *
+ * ## Before the first write, and for the whole bundle
+ *
+ * AGL-1398's decision, extended rather than re-argued: the route commits in
+ * chunks of 400 and batches the restored routing map first, so there is no
+ * point after the first write where a refusal leaves a coherent site. A partial
+ * import that dropped only the datasets would leave every restored page bound
+ * to data that is not there. Enforced by assertion — every refusal test in
+ * `import-resource-caps.spec.ts` asserts the writes are empty.
+ *
+ * The reads are bounded by the same rule: a collection the bundle does not
+ * carry cannot raise anything, and a cap that cannot be exceeded needs no
+ * count, so neither costs a read.
+ *
+ * Nothing is re-priced. Every number here comes from the helper that already
+ * owns it at the other enforcement point — AGL-1383, AGL-1387, AGL-1390 and
+ * AGL-1398 each declined to change what counts, and this is not the issue that
+ * gets to either.
+ */
+async function resourceCapRefusal(options: {
+  hostRef: FirebaseFirestore.DocumentReference
+  /** The owning org's `datasets` collection, or null for a host with no org. */
+  datasetsRef: FirebaseFirestore.CollectionReference | null
+  org: unknown
+  bundleItems: (name: string) => Array<Record<string, any>>
+}): Promise<Response | null> {
+  // Datasets lead. One refusal covers the bundle, and when several caps are
+  // crossed at once the one worth naming is the one with a price on it.
+  return (await datasetCapRefusal(options)) ?? (await hostCapRefusal(options))
+}
+
+/** The org-scoped leg (`orgs/{orgId}/datasets`), addon-aware. */
+async function datasetCapRefusal(options: {
+  datasetsRef: FirebaseFirestore.CollectionReference | null
+  org: unknown
+  bundleItems: (name: string) => Array<Record<string, any>>
+}): Promise<Response | null> {
+  const { datasetsRef, org, bundleItems } = options
+  // `importDatasets` returns early without an org id, so a host with no owning
+  // org writes none and can raise nothing.
+  const bundleDatasets = bundleDocIds(bundleItems('datasets'))
+  if (!datasetsRef || !bundleDatasets.size) return null
+  if (!Number.isFinite(checkDatasetQuota(org as any, 0).limit)) return null
+
+  const existing = await existingDocIds(datasetsRef)
+  const next = new Set([...existing, ...bundleDatasets]).size
+  // `allowed` asks "may I add one more to N", so the post state N is checked as
+  // `N - 1` — the idiom `/api/orgs/datasets` uses for its own bulk path
+  // (`import-records`).
+  const quota = checkDatasetQuota(org as any, next - 1)
+  if (next <= existing.size || quota.allowed) return null
+
+  return Response.json({
+    error:
+      `This backup holds ${bundleDatasets.size} datasets and this workspace ` +
+      `has ${existing.size}, which would put it at ${next} of ${quota.limit} ` +
+      'datasets. Nothing was imported — ' +
+      (quota.upgradeRequired
+        ? 'upgrade in Billing.'
+        : `add extra datasets for $${quota.addonPriceUsd}/mo each, or ` +
+          'upgrade in Billing.'),
+  }, { status: 403 })
+}
+
+/** The host-scoped legs, one row of `CAPPED_HOST_COLLECTIONS` at a time. */
+async function hostCapRefusal(options: {
+  hostRef: FirebaseFirestore.DocumentReference
+  org: unknown
+  bundleItems: (name: string) => Array<Record<string, any>>
+}): Promise<Response | null> {
+  const { hostRef, org, bundleItems } = options
+  for (const capped of CAPPED_HOST_COLLECTIONS) {
+    const bundleIds = bundleDocIds(bundleItems(capped.collection))
+    if (!bundleIds.size) continue
+    const limit = checkQuota(org as any, capped.quotaKey as any, 0).limit
+    if (!Number.isFinite(limit)) continue
+
+    const existing = await existingDocIds(hostRef.collection(capped.collection))
+    const next = new Set([...existing, ...bundleIds]).size
+    if (next <= existing.size) continue
+    if (checkQuota(org as any, capped.quotaKey as any, next - 1).allowed) continue
+
+    return Response.json({
+      error:
+        `This backup holds ${bundleIds.size} ${capped.label} and this site ` +
+        `has ${existing.size}, which would put it at ${next} of ${limit} ` +
+        `${capped.label}. Nothing was imported — upgrade in Billing, or ` +
+        'restore into a site with room.',
+    }, { status: 403 })
+  }
+  return null
+}
+
+/**
  * Whole-site restore/import (AGL-163): writes an export bundle into the
  * target host — additive-by-id (docs keep their export ids, so the
  * routing map, screen links, and layout references keep resolving; a
@@ -343,6 +565,18 @@ async function handler(request: Request): Promise<Response> {
       bundleCollections: bundleItems('collections'),
     })
     if (overCap) return overCap
+
+    // And every OTHER numeric cap this route creates against (AGL-1403) —
+    // datasets first, because they are the one sold as an addon.
+    const overResourceCap = await resourceCapRefusal({
+      hostRef,
+      datasetsRef: orgId
+        ? firestore.collection('orgs').doc(orgId).collection('datasets')
+        : null,
+      org: owningOrg?.org,
+      bundleItems,
+    })
+    if (overResourceCap) return overResourceCap
 
     let written = 0
     // Firestore batches cap at 500 writes; chunk conservatively.
