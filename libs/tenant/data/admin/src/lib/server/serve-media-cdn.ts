@@ -83,6 +83,81 @@ export function mediaCdnAllows(
 }
 
 /**
+ * Whether `?download=1` was asked for (AGL-1411). Strictly opt-in: absent,
+ * `0`, `false` or junk all keep the historical `inline`, because the default
+ * is what every `<img src>` in every published site relies on.
+ *
+ * Only `1` and `true` count, rather than "any truthy-looking string". The
+ * query string is part of the CDN cache key, so every accepted spelling is a
+ * separate edge entry for identical bytes; two is enough.
+ */
+export function wantsMediaDownload(value: unknown): boolean {
+  const raw = Array.isArray(value) ? value[0] : value
+  const normalized = String(raw ?? '').toLowerCase()
+  return normalized === '1' || normalized === 'true'
+}
+
+/** Anything that cannot appear literally in an HTTP field-value. */
+const NON_ASCII_FIELD_VALUE = /[^\x20-\x7e]/g
+/** ...and what additionally cannot appear inside a quoted-string. */
+const NOT_QUOTED_STRING_SAFE = /["\\]/g
+
+/**
+ * The download name for an asset: the stored `fileName`, reduced to its
+ * basename, falling back to the media id (the URL is id-keyed and
+ * extensionless, so without a name a "save as" lands as a nameless blob).
+ */
+export function mediaDownloadName(fileName: unknown, mediaId: string): string {
+  const raw = String(fileName ?? '').trim()
+  // A stored name can carry a path from whatever uploaded it; only the last
+  // segment is a filename, and `..` must never reach a client's save dialog.
+  const base = raw.split(/[\\/]/).pop() ?? ''
+  // Cap by CODE POINT so a truncation can't split a surrogate pair into a
+  // lone half, which is exactly the kind of thing that later throws in a
+  // header encoder.
+  return Array.from(base).slice(0, 200).join('') || mediaId
+}
+
+/**
+ * A `Content-Disposition` value for `name` (AGL-1411).
+ *
+ * A filename is attacker-adjacent data — it is whatever the uploader typed —
+ * and it is being pasted into a header, so a quote or a CRLF in it is a
+ * header-injection vector. The old code stripped `["\\\r\n]` and left
+ * everything else, which is safe against injection but silently mangles the
+ * name and passes non-ASCII through raw: a byte above 0x7e in a header is
+ * either mojibake at the client or, on a stricter encoder than ours, a
+ * throw. So both forms of RFC 6266 §4.1 are emitted:
+ *
+ * - `filename="…"` — ASCII only, every unrepresentable character replaced
+ *   (not dropped) so the extension and the shape of the name survive. This
+ *   is the fallback, and it always exists.
+ * - `filename*=UTF-8''…` — RFC 8187 percent-encoding of the real name, added
+ *   only when the ASCII form actually lost something. Every current browser
+ *   prefers it, so a non-ASCII name arrives intact.
+ */
+export function mediaContentDisposition(
+  name: string,
+  options: { download: boolean },
+): string {
+  const type = options.download ? 'attachment' : 'inline'
+  const ascii = name
+    .replace(NON_ASCII_FIELD_VALUE, '_')
+    .replace(NOT_QUOTED_STRING_SAFE, '_')
+  const header = `${type}; filename="${ascii}"`
+  if (ascii === name) return header
+  // `encodeURIComponent` leaves `!'()*` alone, and `'`, `(`, `)` and `*` are
+  // not `attr-char` (RFC 8187 §3.2.1) — a bare `'` in particular would be
+  // read as the charset/language delimiter. Encode them too.
+  const encoded = encodeURIComponent(name).replace(
+    /['()*]/g,
+    (character) =>
+      `%${character.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`,
+  )
+  return `${header}; filename*=UTF-8''${encoded}`
+}
+
+/**
  * CDN media delivery (AGL-175 / AGL-829). Two URL shapes resolve the same
  * asset by `mediaId`, so delivery never depends on the object's storage
  * location (folder moves don't change the URL):
@@ -97,9 +172,13 @@ export function mediaCdnAllows(
  *   so it can never serve stale bytes (older embeds keep working until the
  *   asset is replaced, then that exact URL 404s by design).
  *
- * `?w=[width]` selects a generated WebP variant. The same handler mounts in
- * both the tenant and console apps; raw storage URLs already embedded in
- * screens keep working unchanged.
+ * `?w=[width]` selects a generated WebP variant. `?download=1` swaps the
+ * `Content-Disposition` from `inline` to `attachment` (AGL-1411) — the press
+ * kit hands out links that must SAVE rather than open a tab. Both are read
+ * only after every access gate, so neither can widen what is served; both
+ * are part of the CDN cache key, so neither variant can poison the other.
+ * The same handler mounts in both the tenant and console apps; raw storage
+ * URLs already embedded in screens keep working unchanged.
  */
 export async function serveMediaCdn(
   req: NextApiRequest,
@@ -205,11 +284,23 @@ export async function serveMediaCdn(
     const width = Number(req.query['w'] ?? 0)
     const variants: number[] = snapshot.get('variants') ?? []
     const useVariant = Boolean(width) && variants.includes(width)
+    // Read only here, past every gate — a refusal above returns before the
+    // parameter is ever looked at, so `?download=1` can never be the reason
+    // a response happens (AGL-1411).
+    const download = wantsMediaDownload(req.query['download'])
 
     // Stable URL: revalidate against an ETag so a replaced asset is picked
     // up (a conditional GET returns 304 while the content is unchanged).
+    //
+    // The disposition is part of the ETag for the same reason the variant
+    // width is. The query string is already part of the CDN cache key, so
+    // the two URLs are separate edge entries — but a validator is not scoped
+    // to a URL in practice: a client holding the inline ETag that revalidates
+    // the download URL would be answered 304 and reuse its stored INLINE
+    // headers, and the file would open in a tab anyway. Same bytes, different
+    // representation, so: different validator.
     const etag = currentHash
-      ? `"${currentHash}${useVariant ? `-w${width}` : ''}"`
+      ? `"${currentHash}${useVariant ? `-w${width}` : ''}${download ? '-dl' : ''}"`
       : null
     if (!hashed) {
       setCacheControl('public, max-age=3600, stale-while-revalidate=86400')
@@ -250,14 +341,15 @@ export async function serveMediaCdn(
     if (metadata.size) res.setHeader('Content-Length', String(metadata.size))
     // Give downloads a real filename+extension (AGL-834): the URL is
     // mediaId-keyed and extensionless, so without this a "save image" lands
-    // as a name-less blob.
-    const downloadName = String(snapshot.get('fileName') ?? mediaId).replace(
-      /["\\\r\n]/g,
-      '',
+    // as a name-less blob. `?download=1` makes it an actual download rather
+    // than a tab (AGL-1411).
+    res.setHeader(
+      'Content-Disposition',
+      mediaContentDisposition(
+        mediaDownloadName(snapshot.get('fileName'), mediaId),
+        { download },
+      ),
     )
-    if (downloadName) {
-      res.setHeader('Content-Disposition', `inline; filename="${downloadName}"`)
-    }
     // `immutable` for a year is the strongest possible caching, and on a
     // private asset it would be a permanent public copy of a file whose
     // whole point is that it expires (AGL-1051) — `setCacheControl` holds
