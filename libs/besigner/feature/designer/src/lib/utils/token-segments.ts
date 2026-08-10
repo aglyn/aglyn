@@ -255,7 +255,10 @@ export function resolveTokenLabel(
     return { label: entry?.label ?? inner, group: 'entry', known: Boolean(entry) }
   }
 
-  if (inner.startsWith('collection.')) {
+  // `{{pagination.*}}` (AGL-1386) resolves on the same collection list pages
+  // and lives in the same catalog, so it shares the collection pill rather
+  // than reading as an unresolvable token in warning colors.
+  if (inner.startsWith('collection.') || inner.startsWith('pagination.')) {
     const entry = COLLECTION_TOKEN_CATALOG.find(
       (candidate) => canonical(candidate.token) === canonical(`{{${inner}}}`),
     )

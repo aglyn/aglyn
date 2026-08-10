@@ -49,16 +49,45 @@ export function resolveCollectionTemplateScreenId(
  * showing — "Guides" rather than a heading that says "Blog" on every filtered
  * URL. Both category tokens resolve to the empty string on the unfiltered
  * listing, which is what makes them safe to bind unconditionally.
+ *
+ * `{{pagination.*}}` follows the same design (AGL-1386). One static list
+ * screen serves the bare listing, every `/page/{n}` and every
+ * `/category/{slug}`, so a hand-built pager on it renders identically on all
+ * of them: "Older →" on a category that has one page, pointing at a URL that
+ * dropped the filter. The URLs come from `collectionPaginationLinks`, which
+ * builds them through the shared listing-URL builder (so they carry the
+ * category) and resolves the EDGES TO THE EMPTY STRING — no previous page,
+ * no `prevUrl`. There is no runtime conditional to hide a link with (the
+ * `condition` field on nodes is editor-side field visibility, not a render
+ * gate), so the empty string is what makes an unconditional binding correct
+ * on every route: a link whose href does not resolve renders as an inert
+ * placeholder of the same element (AGL-1268/1357).
+ *
+ * This SURFACES what the platform already computes — the built-in fallback
+ * pager reads the same function, so the two cannot drift.
  */
 export function collectionTokens(
   collection: Pick<CollectionDoc, 'displayName' | 'slug'>,
   category?: CollectionContent['category'],
+  pagination?: CollectionContent['pagination'],
 ): Record<string, string> {
+  // An unpaginated listing is page 1 of 1 — both URLs empty, which reads as
+  // the honest "nowhere to page to" rather than a broken link.
+  const pager = Aglyn.collectionPaginationLinks({
+    collectionSlug: collection.slug,
+    ...(category?.slug ? { categorySlug: category.slug } : {}),
+    page: pagination?.page,
+    totalPages: pagination?.totalPages,
+  })
   return {
     'collection.name': collection.displayName,
     'collection.slug': collection.slug,
     'collection.category': category?.name ?? '',
     'collection.categorySlug': category?.slug ?? '',
+    'pagination.page': String(pager.page),
+    'pagination.totalPages': String(pager.totalPages),
+    'pagination.prevUrl': pager.prevUrl,
+    'pagination.nextUrl': pager.nextUrl,
   }
 }
 
@@ -103,7 +132,7 @@ export async function composeCollectionTemplatePage(options: {
           collection.categories,
         ),
       }
-    : collectionTokens(collection, content.category)
+    : collectionTokens(collection, content.category, content.pagination)
   const nodes = await composeScreenNodes({
     hostId,
     screenId,

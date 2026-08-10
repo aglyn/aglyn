@@ -295,6 +295,65 @@ export function collectionListUrl(options: {
     : scoped
 }
 
+/** Where a listing's pager can go from here (AGL-1386). */
+export interface CollectionPaginationLinks {
+  /** 1-based current page; 1 when the listing is unpaginated. */
+  page: number
+  /** Total pages in the CURRENT (possibly category-filtered) set. */
+  totalPages: number
+  /** The previous page's URL, or `''` on the first page. */
+  prevUrl: string
+  /** The next page's URL, or `''` on the last page. */
+  nextUrl: string
+}
+
+/**
+ * Everything a pager needs for one listing (AGL-1386): which page it is on,
+ * how many there are, and where prev/next go — through
+ * {@link collectionListUrl}, so both links stay inside the category they are
+ * paging rather than dumping the reader back onto the unfiltered list.
+ *
+ * **The edges resolve to the empty string, never to a URL.** No previous page
+ * means `prevUrl` is `''`; no next page means `nextUrl` is `''`. That is what
+ * lets an authored template bind these unconditionally: one static list screen
+ * serves the bare listing, every `/page/{n}`, and every
+ * `/category/{slug}` — and there is no runtime conditional to hide a link
+ * with. A link whose href resolves to `''` renders as an inert placeholder of
+ * the same element (AGL-1268/1357), which is the correct pager on page 1 of 1.
+ *
+ * ONE computation, because it has two consumers that must agree: the built-in
+ * fallback pager's nodes and the `{{pagination.*}}` tokens an authored
+ * template binds. A second derivation is how a fallback and a template start
+ * disagreeing about which page they are on.
+ */
+export function collectionPaginationLinks(options: {
+  collectionSlug: string
+  categorySlug?: string | null
+  /** 1-based current page; anything unusable reads as page 1. */
+  page?: number | null
+  /** Total pages; anything unusable reads as a single page. */
+  totalPages?: number | null
+}): CollectionPaginationLinks {
+  const positive = (value: number | null | undefined): number => {
+    const parsed = Math.floor(Number(value))
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+  }
+  const page = positive(options.page)
+  const totalPages = positive(options.totalPages)
+  const href = (n: number) =>
+    collectionListUrl({
+      collectionSlug: options.collectionSlug,
+      ...(options.categorySlug ? { categorySlug: options.categorySlug } : {}),
+      page: n,
+    })
+  return {
+    page,
+    totalPages,
+    prevUrl: page > 1 ? href(page - 1) : '',
+    nextUrl: page < totalPages ? href(page + 1) : '',
+  }
+}
+
 /** A content-collection path resolved to what it addresses (AGL-1321). */
 export interface CollectionRoute {
   collectionSlug: string

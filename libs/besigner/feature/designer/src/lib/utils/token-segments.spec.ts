@@ -257,6 +257,21 @@ describe('resolveTokenLabel (AGL-586)', () => {
     })
   })
 
+  it('reads {{pagination.*}} as a KNOWN collection token (AGL-1386)', () => {
+    // It resolves on the same collection list pages, so it shares the
+    // collection pill instead of reading as an unresolvable token.
+    expect(resolveTokenLabel('{{pagination.nextUrl}}', {})).toEqual({
+      label: 'Next page link',
+      group: 'collection',
+      known: true,
+    })
+    expect(resolveTokenLabel('{{pagination.nope}}', {})).toEqual({
+      label: 'pagination.nope',
+      group: 'collection',
+      known: false,
+    })
+  })
+
   it('resolves dataset-item tokens against the ancestor model fields', () => {
     expect(resolveTokenLabel('{{item.fld1}}', context)).toEqual({
       label: 'Author',
