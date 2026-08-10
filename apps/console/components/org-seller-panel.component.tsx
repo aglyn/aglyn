@@ -80,12 +80,32 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { data: profile } = useFirestoreDoc<any>(
-    // The org's marketplace identity (AGL-652), not the personal one.
-    () => doc(firestore, 'publisherProfiles', orgId || '-none-'),
-    [firestore, orgId],
+  /** Bumped by Retry to re-subscribe the publisher profile (AGL-1380). */
+  const [profileRetryNonce, setProfileRetryNonce] = useState(0)
+  const { data: profile, status: profileStatus } = useFirestoreDoc<any>(
+    // The org's marketplace identity (AGL-652), not the personal one. Held
+    // at null rather than addressed as `publisherProfiles/-none-`: that
+    // sentinel issued a guaranteed-denied read, and a denial now lands in
+    // `status: 'error'`, which means something.
+    () => (orgId ? doc(firestore, 'publisherProfiles', orgId) : null),
+    [firestore, orgId, profileRetryNonce],
     { idField: '$id' },
   )
+  /**
+   * Three outcomes, not two (AGL-1380). An absent publisher profile is the
+   * value BEFORE an answer as much as it is the value of a publisher who
+   * never connected Stripe, so reading payout state off `stripeChargesEnabled`
+   * alone told a publisher already taking payouts to "Connect a Stripe
+   * account" and offered them the setup button that starts onboarding again.
+   */
+  const payoutsState: 'pending' | 'error' | 'loaded' =
+    !orgId || profileStatus === 'loading'
+      ? 'pending'
+      : profileStatus === 'error'
+        ? 'error'
+        : 'loaded'
+  const payoutsEnabled =
+    payoutsState === 'loaded' && Boolean(profile?.stripeChargesEnabled)
   const { data: listings } = useFirestoreCollection<any>(
     () =>
       query(
@@ -823,26 +843,53 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         contentGutterY
       >
         <Stack spacing={2}>
-          <Typography variant="body2" color="text.secondary">
-            {profile?.stripeChargesEnabled
-              ? 'Payouts are enabled — paid listings transfer to your ' +
-                'Stripe account automatically (platform fee 20%, 30% on the ' +
-                'Free plan).'
-              : 'Connect a Stripe account to sell components. The platform ' +
-                'fee is 20% per sale (30% on the Free plan).'}
-          </Typography>
-          <Button
-            variant={profile?.stripeChargesEnabled ? 'outlined' : 'contained'}
-            color="primary"
-            disabled={payoutsBusy}
-            onClick={handlePayouts}
-          >
-            {profile?.stripeChargesEnabled
-              ? 'Payouts enabled — recheck status'
-              : payoutsBusy
-                ? 'Opening Stripe…'
-                : 'Set up payouts'}
-          </Button>
+          {payoutsState === 'error' ? (
+            // Neither sentence is safe here: "Payouts are enabled" and
+            // "Connect a Stripe account" both state a payout arrangement we
+            // failed to read, and the button under them acts on it.
+            <Alert
+              severity="error"
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => setProfileRetryNonce((n) => n + 1)}
+                >
+                  {'Retry'}
+                </Button>
+              }
+            >
+              {'We couldn’t load your payout setup. This says nothing about ' +
+                'whether payouts are on — nothing has changed.'}
+            </Alert>
+          ) : payoutsState === 'pending' ? (
+            <Typography variant="body2" color="text.secondary">
+              {'Checking your payout setup…'}
+            </Typography>
+          ) : (
+            <>
+              <Typography variant="body2" color="text.secondary">
+                {payoutsEnabled
+                  ? 'Payouts are enabled — paid listings transfer to your ' +
+                    'Stripe account automatically (platform fee 20%, 30% on ' +
+                    'the Free plan).'
+                  : 'Connect a Stripe account to sell components. The ' +
+                    'platform fee is 20% per sale (30% on the Free plan).'}
+              </Typography>
+              <Button
+                variant={payoutsEnabled ? 'outlined' : 'contained'}
+                color="primary"
+                disabled={payoutsBusy}
+                onClick={handlePayouts}
+              >
+                {payoutsEnabled
+                  ? 'Payouts enabled — recheck status'
+                  : payoutsBusy
+                    ? 'Opening Stripe…'
+                    : 'Set up payouts'}
+              </Button>
+            </>
+          )}
         </Stack>
       </CardDisplay>
     ),

@@ -56,7 +56,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const host = useHostSubdomain()
   const hostId = useHostId()
   const pluginSlug = params?.pluginSlug ?? ''
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const { permissions } = useOrgPermissions()
 
   // Scoped to this workspace's plugins (AGL-758): the registry is a
@@ -92,6 +92,17 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       {"This page isn't available. It may have moved or the feature that " +
         'provided it is not installed.'}
     </Alert>
+  ) : !orgReady ? (
+    // The choke point for every plugin console page (AGL-1380). `org` is
+    // undefined both while the billing doc is in flight and while the read is
+    // failing, and `checkEntitlement(undefined)` answers NO — so this route
+    // handed every plugin page an `entitled={false}` that is a guess, and the
+    // raw `org` besides, which each card re-checks the same way. Twelve
+    // surfaces then told a paying org the feature it bought is not on its
+    // plan. Nothing renders a plan claim until there is a plan to claim from.
+    <Box sx={{ p: 2 }}>
+      <CircularProgress size={24} />
+    </Box>
   ) : (
     <Suspense
       fallback={

@@ -19,6 +19,7 @@
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
   Box,
   Button,
   List,
@@ -75,6 +76,17 @@ export function PasskeysCard() {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const [rows, setRows] = useState<PasskeyRow[] | null>(null)
+  /**
+   * The listen failed (AGL-1380). Kept apart from `rows` because the error
+   * callback used to answer it with `setRows([])`, which is the same value a
+   * user with no passkeys has — so a denied or dropped listen told someone
+   * with registered credentials that they had none, and offered them the
+   * setup CTA. It also hid any credential flagged `suspectedCloneAt` behind
+   * the same empty state, which is the one row nobody should be able to miss.
+   */
+  const [listFailed, setListFailed] = useState(false)
+  /** Bumped by Retry to re-subscribe. */
+  const [retryNonce, setRetryNonce] = useState(0)
   const [busy, setBusy] = useState(false)
   const supported = usePasskeysSupported()
   // Passkeys are project-pool only (AGL-662): enterprise-SSO tenant users
@@ -86,9 +98,12 @@ export function PasskeysCard() {
 
   useEffect(() => {
     if (!user?.uid) return undefined
+    setRows(null)
+    setListFailed(false)
     return onSnapshot(
       collection(firestore, 'users', user.uid, 'passkeys'),
       (snapshot) => {
+        setListFailed(false)
         setRows(
           snapshot.docs.map((docSnapshot) => {
             const data = docSnapshot.data() as Omit<PasskeyRow, 'id'>
@@ -98,10 +113,12 @@ export function PasskeysCard() {
       },
       (error) => {
         console.error('[passkeys-card] list failed', error)
-        setRows([])
+        // Deliberately NOT `setRows([])` — see `listFailed`. `rows` stays at
+        // whatever we actually know, which on a first-load failure is null.
+        setListFailed(true)
       },
     )
-  }, [firestore, user?.uid])
+  }, [firestore, user?.uid, retryNonce])
 
   const handleAdd = useCallback(async () => {
     if (!user) return
@@ -181,6 +198,24 @@ export function PasskeysCard() {
               })}
             </List>
           </Box>
+        ) : listFailed ? (
+          // No list and no "No passkeys yet" — both assert something about
+          // this account's credentials that we failed to read (AGL-1380).
+          <Alert
+            severity="error"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => setRetryNonce((n) => n + 1)}
+              >
+                {'Retry'}
+              </Button>
+            }
+          >
+            {'We couldn’t load your passkeys. This does not mean you have ' +
+              'none — any you have registered still work.'}
+          </Alert>
         ) : rows ? (
           <Typography variant="body2" color="text.secondary">
             {'No passkeys yet.'}

@@ -70,7 +70,7 @@ const EMPTY_DRAFT: BrandingDraft = {
 export function OrgBrandingCard() {
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const { enqueueSnackbar } = useSnackbar()
   const orgId = currentOrg?.$id
   const canManage = canManageOrg(currentOrg?.role)
@@ -154,7 +154,17 @@ export function OrgBrandingCard() {
       contentGutterX
       contentGutterY
     >
-      {!entitled ? (
+      {/*
+        Same shape as the API keys card (AGL-1380): an undefined `org` checks
+        as not entitled, so an Agency org — or an Enterprise org with the
+        per-org override it negotiated — was shown an upgrade prompt for the
+        white-labeling it already pays for. Wait for `ready`.
+      */}
+      {!orgReady ? (
+        <Typography variant="body2" color="text.secondary">
+          {'Checking your plan…'}
+        </Typography>
+      ) : !entitled ? (
         <Alert severity="info">
           {'White-labeling the platform is included on the '}
           <strong>{'Agency'}</strong>

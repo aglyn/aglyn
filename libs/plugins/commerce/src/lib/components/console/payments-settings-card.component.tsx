@@ -42,14 +42,36 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const [busy, setBusy] = useState(false)
   const { org, ready: planReady } = useOrgPlan(hostId)
-  const { data: profile } = useFirestoreDoc<any>(
-    () => doc(firestore, 'profiles', (user as any)?.uid ?? '-pending-'),
-    [firestore, (user as any)?.uid],
+  /** Bumped by Retry to re-subscribe the profile listen (AGL-1380). */
+  const [retryNonce, setRetryNonce] = useState(0)
+  const uid = (user as any)?.uid as string | undefined
+  const { data: profile, status: profileStatus } = useFirestoreDoc<any>(
+    // Held at null rather than addressed as `profiles/-pending-` — that
+    // sentinel issued a guaranteed-denied read on every pre-auth mount, and
+    // a denial lands in `status: 'error'`, which now means something.
+    () => (uid ? doc(firestore, 'profiles', uid) : null),
+    [firestore, uid, retryNonce],
   )
   const isOwner = Boolean(
     org?.ownerUid && (user as any)?.uid === org.ownerUid,
   )
-  const chargesEnabled = Boolean(profile?.stripeChargesEnabled)
+  /**
+   * Three outcomes, not two (AGL-1380). An absent profile doc is the value
+   * BEFORE an answer as much as it is the value of a merchant who never
+   * connected Stripe, so "Not set up" off a falsy `stripeChargesEnabled` is a
+   * claim about this org's payment setup made without having heard back. It
+   * is wrong in the direction that provokes action: the same falsy value
+   * turns the button into "Set up payments", which sends a merchant who is
+   * already taking money into Stripe onboarding.
+   */
+  const stripeState: 'pending' | 'error' | 'loaded' =
+    !uid || profileStatus === 'loading'
+      ? 'pending'
+      : profileStatus === 'error'
+        ? 'error'
+        : 'loaded'
+  const chargesEnabled =
+    stripeState === 'loaded' && Boolean(profile?.stripeChargesEnabled)
   const physicalPct = Aglyn.resolveTransactionFeePct(org, 'physical')
   const digitalPct = Aglyn.resolveTransactionFeePct(org, 'digital')
   const commerceEnabled = Aglyn.checkEntitlement(org, 'commerce')
@@ -104,13 +126,50 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
           <Typography variant="body2" sx={{ flex: 1 }}>
             {'Stripe account'}
           </Typography>
-          <Chip
-            size="small"
-            label={chargesEnabled ? 'Charges enabled' : 'Not set up'}
-            color={chargesEnabled ? 'success' : 'warning'}
-            variant="outlined"
-          />
+          {/*
+            No chip at all on error: both labels it could carry — "Charges
+            enabled" and "Not set up" — assert something we failed to find
+            out. Whatever Stripe is doing right now it carries on doing.
+          */}
+          {stripeState === 'error' ? null : (
+            <Chip
+              size="small"
+              label={
+                stripeState === 'pending'
+                  ? 'Checking…'
+                  : chargesEnabled
+                    ? 'Charges enabled'
+                    : 'Not set up'
+              }
+              color={
+                stripeState === 'pending'
+                  ? 'default'
+                  : chargesEnabled
+                    ? 'success'
+                    : 'warning'
+              }
+              variant="outlined"
+            />
+          )}
         </Stack>
+        {stripeState === 'error' ? (
+          <Alert
+            severity="error"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => setRetryNonce((n) => n + 1)}
+              >
+                {'Retry'}
+              </Button>
+            }
+          >
+            {'We couldn’t load your payment setup. This says nothing about ' +
+              'whether payments are on — we could not reach the setting to ' +
+              'find out. Nothing has changed.'}
+          </Alert>
+        ) : null}
         {/*
           Every line below reads the plan, and an org doc still in flight
           resolves to the FREE tier (AGL-1064) — which would flash "Selling
@@ -146,7 +205,14 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
             </Typography>
           </>
         )}
-        {!planReady ? null : isOwner ? (
+        {/*
+          The button's own label is a claim — "Set up payments" tells the
+          owner they have none. Withheld until the answer is in, for the same
+          reason as the chip (AGL-1380); on error the Retry above is the only
+          action offered, because acting on a setup we could not read is how
+          a connected merchant gets sent back through onboarding.
+        */}
+        {!planReady || stripeState !== 'loaded' ? null : isOwner ? (
           <Button
             size="small"
             variant={chargesEnabled ? 'text' : 'contained'}

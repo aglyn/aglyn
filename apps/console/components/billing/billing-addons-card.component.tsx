@@ -129,9 +129,39 @@ export default function BillingAddonsCardComponent({
   const [state, setState] = useState<AddonsState | null>(null)
   const [drafts, setDrafts] = useState<Record<string, number>>({})
   const [busy, setBusy] = useState(false)
+  /**
+   * Three outcomes, not two (AGL-1380). `state === null` used to render
+   * "Plan add-ons appear here once billing is configured" — a claim about
+   * this org's billing setup, made identically whether Stripe really is
+   * switched off on this deployment, the request failed, or nothing had
+   * come back yet. A paying org whose add-ons request 500s was told its
+   * billing does not exist, with no retry and no way to tell the difference.
+   */
+  const [loadState, setLoadState] = useState<
+    'pending' | 'error' | 'unconfigured' | 'loaded'
+  >('pending')
+  /** Bumped by Retry to re-run the load effect. */
+  const [retryNonce, setRetryNonce] = useState(0)
 
-  const addonsRequest = useCallback(
-    async (body: Record<string, unknown>) => {
+  /**
+   * The request with its failure reason intact. `addonsRequest` below
+   * collapses every failure to `null` because its callers only need "do not
+   * proceed"; the loader needs to tell a 501 — billing is genuinely off on
+   * this deployment, a fact we learned — from anything else, which is a fact
+   * we failed to learn.
+   */
+  const sendAddonsRequest = useCallback(
+    async (
+      body: Record<string, unknown>,
+    ): Promise<{
+      ok: boolean
+      payload?: any
+      /** Only meaningful when `ok` is false. */
+      reason?: 'unconfigured' | 'failed'
+      // Flat rather than a discriminated union on purpose: `strictNullChecks`
+      // is off repo-wide, and narrowing a union by a boolean discriminant
+      // does not survive that (TS2339 on the false leg).
+    }> => {
       const idToken = await (user as any)?.getIdToken?.()
       const response = await fetch('/api/billing/addons', {
         method: 'POST',
@@ -147,33 +177,53 @@ export default function BillingAddonsCardComponent({
           'Billing is not configured yet — Stripe keys are pending.',
           { variant: 'info', persist: false },
         )
-        return null
+        return { ok: false, reason: 'unconfigured' }
       }
       if (!response.ok) {
         enqueueSnackbar(payload?.error ?? 'Plan add-on request failed', {
           variant: 'warning',
           persist: false,
         })
-        return null
+        return { ok: false, reason: 'failed' }
       }
-      return payload
+      return { ok: true, payload }
     },
     [user, orgId, enqueueSnackbar],
+  )
+
+  const addonsRequest = useCallback(
+    async (body: Record<string, unknown>) => {
+      const outcome = await sendAddonsRequest(body)
+      return outcome.ok ? outcome.payload : null
+    },
+    [sendAddonsRequest],
   )
 
   useEffect(() => {
     if (!orgId || !user) return
     let cancelled = false
-    void addonsRequest({ action: 'get' }).then((payload) => {
-      if (!cancelled && payload) {
-        setState(payload as AddonsState)
-        setDrafts({})
-      }
-    })
+    setLoadState('pending')
+    sendAddonsRequest({ action: 'get' })
+      .then((outcome) => {
+        if (cancelled) return
+        if (outcome.ok) {
+          setState(outcome.payload as AddonsState)
+          setDrafts({})
+          setLoadState('loaded')
+          return
+        }
+        setLoadState(outcome.reason === 'unconfigured' ? 'unconfigured' : 'error')
+      })
+      // A rejected fetch — offline, a wedged route — never reached the
+      // snackbar inside the request at all, so this is the only place it can
+      // become something the card can render.
+      .catch(() => {
+        if (!cancelled) setLoadState('error')
+      })
     return () => {
       cancelled = true
     }
-  }, [orgId, user, addonsRequest])
+  }, [orgId, user, sendAddonsRequest, retryNonce])
 
   const applyChange = useCallback(
     async (row: AddonRow, quantity: number) => {
@@ -257,10 +307,43 @@ export default function BillingAddonsCardComponent({
     [state, addonsRequest, confirm, queueLoading, enqueueSnackbar],
   )
 
-  if (!state) {
+  if (loadState === 'error') {
+    // Not "billing is not configured" — that is a claim about this org that
+    // we failed to check. Nothing below renders, so no quantity can be
+    // acted on against a subscription we could not read (AGL-1380).
+    return (
+      <Alert
+        severity="error"
+        action={
+          <Button
+            color="inherit"
+            size="small"
+            onClick={() => setRetryNonce((n) => n + 1)}
+          >
+            {'Retry'}
+          </Button>
+        }
+      >
+        {'We couldn’t load your plan add-ons. This says nothing about your ' +
+          'billing — we could not reach it to find out. Nothing has changed.'}
+      </Alert>
+    )
+  }
+
+  if (loadState === 'unconfigured') {
+    // Earned, not assumed: the route answered 501, so billing really is off
+    // on this deployment.
     return (
       <Typography variant="body2" color="text.secondary">
         {'Plan add-ons appear here once billing is configured.'}
+      </Typography>
+    )
+  }
+
+  if (!state) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        {'Checking your plan add-ons…'}
       </Typography>
     )
   }

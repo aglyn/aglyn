@@ -47,7 +47,13 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
   products: productDocs,
 }
 
-const profile = { data: undefined as unknown }
+/**
+ * A settled, empty profile. `status` carries because the payments card reads
+ * it to tell "no Stripe account" from "no answer yet" (AGL-1380) — a stub
+ * without it would leave the card permanently pending and these plan
+ * assertions passing for the wrong reason.
+ */
+const profile = { data: undefined as unknown, status: 'success' }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
