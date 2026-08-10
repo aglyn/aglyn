@@ -78,7 +78,11 @@ import {
 } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useUser,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 import ScreenAnalyticsCard from '../../../../../../../../../../components/analytics/screen-analytics-card.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../../../../../components/layouts/dashboard.layout'
@@ -171,7 +175,22 @@ function ScreenDetails() {
   const logActivity = useHostActivityLogger(hostId)
 
   const screenRef = doc(firestore, 'hosts', hostId, 'screens', screenId)
-  const { status, data: screen } = useFirestoreDoc<any>(
+  const {
+    status,
+    data: screen,
+    /**
+     * The screen doc both editors below are seeded from is unconfirmed by the
+     * server (AGL-1358). The rename writes `description` on every save even
+     * when only the name was retyped, and the SEO panel writes the whole
+     * `seo` MAP — a nested map value replaces atomically, so `updateDoc`
+     * protects the screen's other fields and nothing inside `seo`. The
+     * carried-forward `image`, `imageWidth`, `imageHeight` and `breadcrumb`
+     * come off this same seed (AGL-1337), so a cached read reinstates that
+     * snapshot's social card while the author thought they were editing a
+     * title.
+     */
+    fromCache: screenFromCache,
+  } = useFirestoreDoc<any>(
     () => screenRef,
     [firestore, hostId, screenId],
     { idField: '$id' },
@@ -295,27 +314,64 @@ function ScreenDetails() {
   } | null>(null)
   const handleEditSave = useCallback(async () => {
     if (!editor?.displayName.trim()) return
-    await updateDoc(screenRef, {
-      displayName: editor.displayName.trim(),
-      // Keep the name-search key in sync on rename (AGL-835) so the switcher's
-      // prefix query finds the screen under its new name.
-      nameLower: nameSearchKey(editor.displayName.trim()),
-      description: editor.description.trim(),
-      updatedAt: Timestamp.now(),
-    })
-      .then(() => {
-        enqueueSnackbar('Screen updated', { variant: 'success', persist: false })
-        logActivity('Updated screen details', {
-          type: 'screen',
-          id: screenId,
-          name: editor.displayName.trim(),
+    /**
+     * Refuse a rename whose seed the server never confirmed (AGL-1358).
+     *
+     * `description` is written on every save, seeded from the listener, so a
+     * pure rename against a cached read rolls it back. The dialog only ever
+     * opens on the stored screen, so there is no create path to exempt.
+     *
+     * The guard WRAPS the write — an early return is a shape you can keep
+     * while losing the protection.
+     */
+    const verdict = await writeGuardedBySeed(
+      {
+        subject: 'screen details',
+        unreadable: status === 'error',
+        fromCache: screenFromCache,
+      },
+      async () => {
+        await updateDoc(screenRef, {
+          displayName: editor.displayName.trim(),
+          // Keep the name-search key in sync on rename (AGL-835) so the
+          // switcher's prefix query finds the screen under its new name.
+          nameLower: nameSearchKey(editor.displayName.trim()),
+          description: editor.description.trim(),
+          updatedAt: Timestamp.now(),
         })
-        setEditor(null)
+          .then(() => {
+            enqueueSnackbar('Screen updated', {
+              variant: 'success',
+              persist: false,
+            })
+            logActivity('Updated screen details', {
+              type: 'screen',
+              id: screenId,
+              name: editor.displayName.trim(),
+            })
+            setEditor(null)
+          })
+          .catch(() =>
+            enqueueSnackbar('An error has occurred', { variant: 'error' }),
+          )
+      },
+    )
+    // A refusal keeps the dialog open with both typed values.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
       })
-      .catch(() =>
-        enqueueSnackbar('An error has occurred', { variant: 'error' }),
-      )
-  }, [editor, screenRef, enqueueSnackbar, logActivity, screenId])
+    }
+  }, [
+    editor,
+    screenRef,
+    enqueueSnackbar,
+    logActivity,
+    screenId,
+    status,
+    screenFromCache,
+  ])
 
   // --- Delete -----------------------------------------------------------
   const handleDelete = useCallback(async () => {
@@ -690,25 +746,56 @@ function ScreenDetails() {
         delete seo.imageHeight
       }
     }
-    await updateDoc(
-      screenRef,
-      Object.keys(seo).length
-        ? { seo, updatedAt: Timestamp.now() }
-        : { seo: deleteField(), updatedAt: Timestamp.now() },
+    /**
+     * Refuse a save whose seed the server never confirmed (AGL-1358).
+     *
+     * AGL-1337 fixed the half of this that was unconditional — the panel no
+     * longer builds a fresh map — but carrying `existing` forward is exactly
+     * what makes it this issue's shape: `existing` is `screen?.seo` off the
+     * same listener, and `updateDoc` REPLACES a nested map, so a cached read
+     * reinstates that snapshot's `image`, `imageWidth`, `imageHeight` and
+     * `breadcrumb` while the author thought they were editing a title. The
+     * empty branch is worse still: `seo: deleteField()` removes the map.
+     *
+     * The guard WRAPS the write — an early return is a shape you can keep
+     * while losing the protection.
+     */
+    const verdict = await writeGuardedBySeed(
+      {
+        subject: 'SEO settings',
+        unreadable: status === 'error',
+        fromCache: screenFromCache,
+      },
+      async () => {
+        await updateDoc(
+          screenRef,
+          Object.keys(seo).length
+            ? { seo, updatedAt: Timestamp.now() }
+            : { seo: deleteField(), updatedAt: Timestamp.now() },
+        )
+          .then(() => {
+            enqueueSnackbar('SEO saved', { variant: 'success', persist: false })
+            logActivity('Updated SEO', {
+              type: 'screen',
+              id: screenId,
+              name: displayName,
+            })
+            setSeoDraft(null)
+            setSeoImage(null)
+          })
+          .catch(() =>
+            enqueueSnackbar('An error has occurred', { variant: 'error' }),
+          )
+      },
     )
-      .then(() => {
-        enqueueSnackbar('SEO saved', { variant: 'success', persist: false })
-        logActivity('Updated SEO', {
-          type: 'screen',
-          id: screenId,
-          name: displayName,
-        })
-        setSeoDraft(null)
-        setSeoImage(null)
+    // A refusal leaves the staged title, description and image where they
+    // are, with Save SEO still live.
+    if (!verdict.ok) {
+      return void enqueueSnackbar(verdict.message, {
+        variant: 'warning',
+        persist: false,
       })
-      .catch(() =>
-        enqueueSnackbar('An error has occurred', { variant: 'error' }),
-      )
+    }
   }, [
     seoDraft,
     seoImage,
@@ -718,6 +805,8 @@ function ScreenDetails() {
     displayName,
     logActivity,
     screenId,
+    status,
+    screenFromCache,
   ])
 
   const details = [
