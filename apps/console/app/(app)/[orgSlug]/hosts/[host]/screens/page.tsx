@@ -163,15 +163,17 @@ function Screens(props) {
       ),
     [data],
   )
-  // A content collection's list/entry template screens serve every entry
-  // from one screen at no URL of their own, so they don't spend the plan's
-  // screen allowance (AGL-1173) — and, since AGL-1267, they are not pages of
-  // the site at all. Both answers come from the same read of the collections,
-  // shared with the publish surfaces (AGL-1269); this precheck stays in step
-  // with the server's countBillableScreens, because a client that warns on a
-  // different number than the API enforces is worse than no precheck at all.
+  // A content collection's ENTRY template serves every entry from one screen
+  // at no URL of its own, so it doesn't spend the plan's screen allowance
+  // (AGL-1173) — and, since AGL-1267, it is not a page of the site at all. Its
+  // LIST template is the opposite on both counts: `/{collectionSlug}` renders
+  // that screen, so it is a page and it is billable (AGL-1387). All three
+  // answers come from the same read of the collections, shared with the
+  // publish surfaces (AGL-1269); this precheck stays in step with the server's
+  // countBillableScreens, because a client that warns on a different number
+  // than the API enforces is worse than no precheck at all.
   const collectionTemplates = useCollectionTemplates(hostId)
-  const { templateScreenIds } = collectionTemplates
+  const { templateScreenIds, listTemplateScreenIds } = collectionTemplates
   const { data: hostData } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
@@ -187,13 +189,18 @@ function Screens(props) {
   // number than the API enforces is worse than no precheck at all.
   const billableScreenCount = useMemo(
     () =>
-      (data ?? []).filter(
-        (screen: any) =>
-          !templateScreenIds.has(screen.$id) &&
-          (routingMap?.[screen.$id] !== undefined ||
-            screenClaimsToBeAPage(screen)),
-      ).length,
-    [data, templateScreenIds, routingMap],
+      (data ?? []).filter((screen: any) => {
+        const claimsToBeAPage = screenClaimsToBeAPage(screen)
+        // A LIST template is a page — `/{collectionSlug}` renders this exact
+        // screen (AGL-1387) — so the template exclusion does not reach it.
+        const servesACollectionList =
+          listTemplateScreenIds.has(screen.$id) && claimsToBeAPage
+        if (templateScreenIds.has(screen.$id) && !servesACollectionList) {
+          return false
+        }
+        return routingMap?.[screen.$id] !== undefined || claimsToBeAPage
+      }).length,
+    [data, templateScreenIds, listTemplateScreenIds, routingMap],
   )
   const screensById = useMemo(() => {
     const map: Record<ScreenUid, ScreenRouteNode> = {}

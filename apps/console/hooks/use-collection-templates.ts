@@ -20,6 +20,7 @@ import { useMemo } from 'react'
 import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import {
   collectCollectionTemplateRoutes,
+  collectionListTemplateScreenIds,
   collectionTemplateScreenIds,
   type CollectionTemplateRoute,
 } from '../constants/collection-templates'
@@ -27,6 +28,12 @@ import {
 export interface UseCollectionTemplatesResult {
   /** Screen ids designated as a list/entry template by any collection. */
   templateScreenIds: Set<string>
+  /**
+   * The subset of those that serve a collection's list page at `/{slug}`,
+   * and so ARE pages of the site and DO spend the screen allowance
+   * (AGL-1387).
+   */
+  listTemplateScreenIds: Set<string>
   /** What each of those screens renders, keyed by screen id. */
   routesByScreenId: Map<string, CollectionTemplateRoute[]>
 }
@@ -52,6 +59,7 @@ export function useCollectionTemplates(
   return useMemo(
     () => ({
       templateScreenIds: collectionTemplateScreenIds(data),
+      listTemplateScreenIds: collectionListTemplateScreenIds(data),
       routesByScreenId: collectCollectionTemplateRoutes(data),
     }),
     [data],

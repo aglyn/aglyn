@@ -16,16 +16,25 @@
  */
 
 import { screenClaimsToBeAPage } from '@aglyn/aglyn/server'
+import {
+  COLLECTION_TEMPLATE_SCREEN_FIELDS,
+  collectionListTemplateScreenIds,
+  collectionTemplateScreenIds,
+  type CollectionTemplateSource,
+} from '../../../../constants/collection-templates'
 
 /**
- * The three fields a content collection can point at a template screen
- * with. `templateScreenId` is the legacy AGL-105 field the tenant runtime
- * still falls back to, so hosts predating the list/entry split are covered.
+ * The collection fields this counts on: the three a collection can point at a
+ * template screen with (`templateScreenId` is the legacy AGL-105 field the
+ * tenant runtime still falls back to, so hosts predating the list/entry split
+ * are covered), plus the two that say whether a LIST template has a route to
+ * serve — the collection's `slug` and its `kind` (AGL-1387). Still one read;
+ * a field mask projects, it does not fan out.
  */
-const TEMPLATE_SCREEN_FIELDS = [
-  'listScreenId',
-  'entryScreenId',
-  'templateScreenId',
+const COLLECTION_FIELDS = [
+  ...COLLECTION_TEMPLATE_SCREEN_FIELDS,
+  'slug',
+  'kind',
 ] as const
 
 /** The shape this reads off a Firestore snapshot — kept structural so the
@@ -88,10 +97,34 @@ interface HostRefLike {
  * (`screenClaimsToBeAPage` in `getScreen`), so the two answers cannot drift:
  * flipping either field costs the page rather than the slot.
  *
- * Template screens stay excluded even while routed. Publishing is how the
+ * ENTRY templates stay excluded even while routed. Publishing is how the
  * compose pipeline picks a template up — it is the reason they HAVE a map
- * entry — but AGL-1267 drops them from routing when the request arrives, so a
- * template is not a page of the site by the same reachability test.
+ * entry — but AGL-1267 drops them from routing when the request arrives, so an
+ * entry template is not a page of the site by the same reachability test: it
+ * serves `/{collection}/{entry}` for every entry and 404s at a slug of its own.
+ *
+ * ## A LIST template is a page (AGL-1387)
+ *
+ * The same reachability test answers the other way for a list template, and
+ * this is the third exclusion — the one AGL-1383 left standing. `/{slug}`
+ * renders that exact screen through `composeCollectionTemplatePage`, so an
+ * editor could turn any screen into a free one by creating a collection and
+ * designating it. `collectionListTemplateScreenIds` is the condition, and it
+ * asks about the ROUTE (a content collection with a slug), not about
+ * publishing: the collection branch resolves the screen through `listScreenId`
+ * rather than through the routing map, so an unpublished list template serves
+ * `/{slug}` exactly like a published one.
+ *
+ * Gated on the screen's own claim, unlike the routed case: a soft-deleted or
+ * `kind: 'email'` template is refused by `getScreen`, so `/{slug}` falls back
+ * to the built-in themed list and the template really is not a page. That is
+ * the AGL-1383 trade unchanged — the field costs the page, not the slot.
+ *
+ * Nothing here asks whether the list template is SHADOWED by an ordinary
+ * screen published at the same path (which would win the route). That screen
+ * counts on its own, and the shadowed template is then a screen the plan sold
+ * that nothing serves — the same thing as an unpublished draft, which has
+ * always counted.
  *
  * `routingMap` costs no read: both callers hold the host snapshot already.
  */
@@ -101,28 +134,33 @@ export async function countBillableScreens(
 ): Promise<number> {
   const [screens, collections] = await Promise.all([
     hostRef.collection('screens').select('kind', 'deletedAt').get(),
-    hostRef.collection('collections').select(...TEMPLATE_SCREEN_FIELDS).get(),
+    hostRef.collection('collections').select(...COLLECTION_FIELDS).get(),
   ])
 
-  const templateScreenIds = new Set<string>()
-  for (const contentCollection of collections.docs) {
-    for (const field of TEMPLATE_SCREEN_FIELDS) {
-      const screenId = contentCollection.get(field)
-      if (typeof screenId === 'string' && screenId) {
-        templateScreenIds.add(screenId)
-      }
-    }
-  }
+  // Read into the shape the console's own surfaces use, so the API and the
+  // screens page's precheck cannot answer this differently (AGL-1269).
+  const collectionRows: CollectionTemplateSource[] = collections.docs.map(
+    (contentCollection) => ({
+      slug: contentCollection.get('slug'),
+      kind: contentCollection.get('kind'),
+      listScreenId: contentCollection.get('listScreenId'),
+      entryScreenId: contentCollection.get('entryScreenId'),
+      templateScreenId: contentCollection.get('templateScreenId'),
+    }),
+  )
+  const templateScreenIds = collectionTemplateScreenIds(collectionRows)
+  const listTemplateScreenIds = collectionListTemplateScreenIds(collectionRows)
 
   const routed = new Set(Object.keys(routingMap ?? {}))
 
-  return screens.docs.filter(
-    (screen) =>
-      !templateScreenIds.has(screen.id) &&
-      (routed.has(screen.id) ||
-        screenClaimsToBeAPage({
-          kind: screen.get('kind') as string,
-          deletedAt: screen.get('deletedAt'),
-        })),
-  ).length
+  return screens.docs.filter((screen) => {
+    const claimsToBeAPage = screenClaimsToBeAPage({
+      kind: screen.get('kind') as string,
+      deletedAt: screen.get('deletedAt'),
+    })
+    const servesACollectionList =
+      listTemplateScreenIds.has(screen.id) && claimsToBeAPage
+    if (templateScreenIds.has(screen.id) && !servesACollectionList) return false
+    return routed.has(screen.id) || claimsToBeAPage
+  }).length
 }
