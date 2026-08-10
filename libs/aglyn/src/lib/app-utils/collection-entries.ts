@@ -168,6 +168,30 @@ export function resolveEntryCategoryName(
 }
 
 /**
+ * The three values an Entry Meta block shows, in the exact spellings the
+ * `{{entry.date}}` / `{{entry.category}}` / `{{entry.tags}}` tokens produce
+ * (AGL-1385).
+ *
+ * Extracted so the token map and {@link expandCollectionEntryMeta} cannot
+ * drift: the same entry has to read the same way whether the author bound the
+ * tokens by hand or let the server fill the block in.
+ */
+export function collectionEntryMetaValues(
+  entry: CollectionEntryRecord,
+  categories?: readonly CollectionCategory[],
+): { date: string; category: string; tags: string } {
+  return {
+    date: entry.publishedAt?.seconds
+      ? new Date(entry.publishedAt.seconds * 1000).toLocaleDateString()
+      : '',
+    // Entry model v2 (AGL-582): category resolves by stable ID against the
+    // collection's taxonomy, falling back to the legacy free-typed string.
+    category: resolveEntryCategoryName(entry, categories) ?? '',
+    tags: (entry.tags ?? []).join(', '),
+  }
+}
+
+/**
  * The `{{entry.*}}` token map for one entry (AGL-105/551): substituted
  * globally on entry-template screens and per-clone inside the Collection
  * entries block. `entry.url` resolves to the entry's auto-route so links
@@ -178,6 +202,7 @@ export function collectionEntryTokens(
   collectionSlug: string,
   categories?: CollectionCategory[],
 ): Record<string, string> {
+  const meta = collectionEntryMetaValues(entry, categories)
   return {
     'entry.title': entry.title ?? '',
     'entry.excerpt': entry.excerpt ?? '',
@@ -185,15 +210,11 @@ export function collectionEntryTokens(
     'entry.coverImage': entry.coverImage ?? '',
     'entry.slug': entry.slug ?? '',
     'entry.url': `/${collectionSlug}/${entry.slug ?? ''}`,
-    'entry.date': entry.publishedAt?.seconds
-      ? new Date(entry.publishedAt.seconds * 1000).toLocaleDateString()
-      : '',
+    'entry.date': meta.date,
     // Entry model v2 (AGL-582): taxonomy + SEO tokens. The SEO pair falls
     // back to title/excerpt so templates can bind them unconditionally.
-    // Category resolves by stable ID against the collection's taxonomy,
-    // falling back to the legacy free-typed string.
-    'entry.category': resolveEntryCategoryName(entry, categories) ?? '',
-    'entry.tags': (entry.tags ?? []).join(', '),
+    'entry.category': meta.category,
+    'entry.tags': meta.tags,
     'entry.seoTitle': entry.seoTitle || entry.title || '',
     'entry.seoDescription': entry.seoDescription || entry.excerpt || '',
   }
@@ -740,6 +761,73 @@ export function expandCollectionCategories<
       ...container,
       props: { ...(container.props as any), items },
     }
+  }
+  return next
+}
+
+/**
+ * Entry Meta blocks (AGL-1385): stamps each `collectionEntryMeta` node with
+ * the routed entry's date, category and tags — the same server-stamped shape
+ * Category Pills and Related posts already use.
+ *
+ * MEASURED on the live marketing blog, which is what this fixes. The block was
+ * on `blogEntryTmpl` carrying props `{showDate: true, showCategory: true,
+ * showTags: true}` and NOTHING else, and rendered as an empty `<div>` at height
+ * 0 — while the very same entry's `<pubDate>` and `Guides` category appeared in
+ * its feed item, its JSON-LD, and a heading two nodes above it. So the data was
+ * never missing; the block simply had nothing bound to it.
+ *
+ * The design is what made that reachable. Every other collection block sources
+ * itself; this one required the author to type `{{entry.date}}` into a text
+ * field. Only the PRESET seeds those tokens — drag the bare component out of
+ * the palette and you get three switches labelled "Show date / Show category /
+ * Show tags", all defaulting to on, gating values that can never exist. That is
+ * an affordance promising something the component cannot deliver, so this is a
+ * defect in the block and not in anyone's content, and it hits every collection
+ * that uses it, not just blog.
+ *
+ * Deliberately narrow:
+ *
+ *  - An AUTHORED value always wins. Only an absent or blank prop is filled, so
+ *    a hand-typed byline, a pinned string, or a `{{entry.*}}` token still
+ *    awaiting substitution is never overwritten. (Blank counts as unset
+ *    because a cleared text field cannot persist `''` anyway — AGL-1336. The
+ *    way to hide a value is the switch that exists for it.)
+ *  - Nodes cloned per entry by {@link expandCollectionEntries} are SKIPPED by
+ *    their `centry__` id prefix. Their tokens resolve per clone; stamping the
+ *    routed entry into them would date every card in a listing the same.
+ *  - Without a routed entry — a list route, a plain screen — nothing is
+ *    stamped, so the besigner affordance and the empty site render stand.
+ *
+ * Inputs are never mutated.
+ */
+export function expandCollectionEntryMeta<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(
+  nodes: Record<NodeId, N>,
+  entry: CollectionEntryRecord | null | undefined,
+  categories?: readonly CollectionCategory[],
+): Record<NodeId, N> {
+  if (!entry) return nodes
+  const containers = Object.entries(nodes).filter(
+    ([id, node]) =>
+      node?.componentId === COLLECTION_ENTRY_META_COMPONENT_ID &&
+      !id.startsWith(COLLECTION_ENTRIES_NODE_ID_PREFIX),
+  )
+  if (!containers.length) return nodes
+
+  const values = collectionEntryMetaValues(entry, categories)
+  const next: Record<NodeId, N> = { ...nodes }
+  for (const [containerId, container] of containers) {
+    const props = (container.props ?? {}) as Record<string, unknown>
+    const filled: Record<string, string> = {}
+    for (const key of ['date', 'category', 'tags'] as const) {
+      if (String(props[key] ?? '').trim()) continue
+      if (!values[key]) continue
+      filled[key] = values[key]
+    }
+    if (!Object.keys(filled).length) continue
+    next[containerId] = { ...container, props: { ...props, ...filled } as any }
   }
   return next
 }

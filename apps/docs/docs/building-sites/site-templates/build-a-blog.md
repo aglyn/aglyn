@@ -154,9 +154,12 @@ mechanism as commerce product/collection templates).
 Besides **Collection Entries** and **Entry Body**, three entry-page blocks are available
 in the block library:
 
-- **Entry Meta** — a `date · category` line plus tag chips. Keep the default
-  `{{entry.date}}` / `{{entry.category}}` / `{{entry.tags}}` bindings on entry
-  templates; each part can be hidden with its **Show** switch.
+- **Entry Meta** — a `date · category` line plus tag chips. On an entry template it
+  fills itself in from the entry being rendered, so drop it on and it works; each part
+  can be hidden with its **Show** switch. Typing into **Date** / **Category** / **Tags**
+  overrides what it would have shown — including the `{{entry.date}}` /
+  `{{entry.category}}` / `{{entry.tags}}` bindings, which still work and are still what
+  the block's preset seeds.
 - **Related Posts** — other entries of the same collection that share the current
   entry's **category or a tag**, newest first. Attributes: **Heading** (default
   "Related articles") and **Limit** (default 3). Renders nothing when the entry has no

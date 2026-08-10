@@ -677,11 +677,15 @@ export const collectionShareSchema: Aglyn.ComponentSchema<CollectionShareProps> 
 /* ── Entry meta (AGL-582) ───────────────────────────────────────────────── */
 
 export interface CollectionEntryMetaProps extends StackProps {
-  /** Published date; keep `{{entry.date}}` on entry templates. */
+  /**
+   * Published date. Server-filled from the routed entry on entry templates
+   * (`expandCollectionEntryMeta`, AGL-1385); set it — or bind
+   * `{{entry.date}}` — only to override.
+   */
   date?: string
-  /** Category; keep `{{entry.category}}` on entry templates. */
+  /** Category; server-filled, or bind `{{entry.category}}` to override. */
   category?: string
-  /** Comma-joined tags; keep `{{entry.tags}}` on entry templates. */
+  /** Comma-joined tags; server-filled, or bind `{{entry.tags}}`. */
   tags?: string
   showDate?: boolean
   showCategory?: boolean
@@ -703,6 +707,12 @@ const metaValue = (
  * "{{entry.date}} · {{entry.category}}" meta line plus tag chips
  * (AGL-582). Values arrive through entry tokens on entry renders; on other
  * surfaces unresolved tokens collapse to nothing instead of leaking.
+ *
+ * On an entry template the tenant now also FILLS the three values from the
+ * routed entry when nothing is bound (`expandCollectionEntryMeta`, AGL-1385).
+ * Before that, a block dragged from the palette rather than dropped as the
+ * preset had no values at all — three "Show" switches gating nothing — and
+ * rendered as the empty `<Box>` below, at height 0.
  */
 const CollectionEntryMeta = forwardRef<
   HTMLDivElement,
@@ -785,21 +795,24 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
         name: 'date',
         label: 'Date',
         description:
-          'Keep {{entry.date}} on entry templates so each entry’s ' +
-          'published date renders.',
+          'Blank shows the entry’s own published date on entry templates. ' +
+          'Type here (or bind {{entry.date}}) only to override it.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {
         name: 'category',
         label: 'Category',
-        description: 'Keep {{entry.category}} on entry templates.',
+        description:
+          'Blank shows the entry’s own category. Type here (or bind ' +
+          '{{entry.category}}) only to override it.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {
         name: 'tags',
         label: 'Tags',
         description:
-          'Comma-separated; keep {{entry.tags}} on entry templates.',
+          'Comma-separated. Blank shows the entry’s own tags; type here (or ' +
+          'bind {{entry.tags}}) only to override them.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {
