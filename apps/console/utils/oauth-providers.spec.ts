@@ -47,7 +47,11 @@ const SKIP_DIRS = new Set([
   'tmp',
   'storybook-static',
 ])
-const CONSTRUCTION = /new\s+GoogleAuthProvider\s*\(/
+// All three, not just Google (AGL-1416): the SSO page built its own bare
+// `SAMLAuthProvider`, which is why the typed email never became a
+// `login_hint` and sign-in was decided by browser account ordering.
+const CONSTRUCTION =
+  /new\s+(GoogleAuthProvider|SAMLAuthProvider|OAuthProvider)\s*\(/
 
 function sourceFiles(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -86,7 +90,44 @@ describe('Google OAuth provider construction (AGL-1415)', () => {
     expect(provider.providerId).toBe('google.com')
   })
 
-  it('is the ONLY place that constructs a GoogleAuthProvider', () => {
+  it('passes the known email as login_hint, keeping the chooser (AGL-1416)', () => {
+    const {
+      createAuthProvider,
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+    } = require('./oauth-providers')
+
+    const google = createAuthProvider(null, 'zach@aglyn.com')
+    expect(google.getCustomParameters()).toEqual({
+      prompt: 'select_account',
+      login_hint: 'zach@aglyn.com',
+    })
+
+    // SAML is the flow the hint exists for: without it Google resolves the
+    // request against `authuser=0` and answers app_not_configured_for_user.
+    const saml = createAuthProvider('saml.aglyn-workspace', 'zach@aglyn.com')
+    expect(saml.providerId).toBe('saml.aglyn-workspace')
+    expect(saml.getCustomParameters()).toEqual({
+      login_hint: 'zach@aglyn.com',
+    })
+  })
+
+  it('omits login_hint when no email is known', () => {
+    const {
+      createAuthProvider,
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+    } = require('./oauth-providers')
+
+    // "Connect Google" must NOT hint: the whole point is linking a different
+    // identity than the one already in session.
+    expect(createAuthProvider().getCustomParameters()).toEqual({
+      prompt: 'select_account',
+    })
+    expect(createAuthProvider('saml.acme', '  ').getCustomParameters()).toEqual(
+      {},
+    )
+  })
+
+  it('is the ONLY place that constructs an auth provider', () => {
     const offenders = ['apps', 'libs']
       .flatMap((top) => sourceFiles(join(WORKSPACE_ROOT, top)))
       .filter((file) => CONSTRUCTION.test(readFileSync(file, 'utf8')))

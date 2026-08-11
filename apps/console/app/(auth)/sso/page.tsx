@@ -26,18 +26,20 @@ import { CircularProgress, Typography } from '@mui/material'
 import {
   browserLocalPersistence,
   getRedirectResult,
-  SAMLAuthProvider,
   setPersistence,
   signInWithPopup,
   signInWithRedirect,
 } from 'firebase/auth'
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
+import { AuthAppErrorCodes } from '@aglyn/shared-data-enums'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
+import { createAuthProvider } from '../../../utils/oauth-providers'
+import { describeSsoError } from '../../../utils/sso-errors'
 
 // Enterprise SSO (AGL-1101): the SAML redirect leaves and returns here, so the
 // tenant is stashed across the hop and restored before getRedirectResult.
@@ -59,7 +61,14 @@ const ssoSchema: FormSchema & { submitLabel?: string } = {
 function SsoSignIn() {
   const firebaseAuth = useAuth()
   const { queueLoading, loading } = useLoading()
-  const [error, setError] = useState<{ message?: string } | null>(null)
+  // `code` is not optional decoration: `AuthErrorAlertComponent` renders
+  // nothing without one, so an error built as `{ message }` alone is dropped
+  // on the floor — which is what happened to every message this page wrote
+  // for itself before AGL-1416.
+  const [error, setError] = useState<{
+    code?: string
+    message?: string
+  } | null>(null)
   const { data: signInCheckResult } = useSigninCheck()
   const signedIn = signInCheckResult?.signedIn === true
 
@@ -97,6 +106,7 @@ function SsoSignIn() {
         if (!jit.ok && !cancelled) {
           const payload = await jit.json().catch(() => ({}))
           setError({
+            code: AuthAppErrorCodes.SSO_NOT_AUTHORIZED,
             message:
               payload?.error ??
               'Signed in, but your account is not authorized for this organization.',
@@ -106,7 +116,10 @@ function SsoSignIn() {
       } catch (err) {
         if (!cancelled) {
           console.error(err)
-          setError(err as { message?: string })
+          // The mobile half of the same misdirection: the redirect returns
+          // carrying Google's verdict, and passing it through raw is what
+          // sends people to their administrator (AGL-1416).
+          setError(describeSsoError(err))
         }
         window.sessionStorage.removeItem(SSO_PENDING_KEY)
       } finally {
@@ -124,7 +137,10 @@ function SsoSignIn() {
       if (error) setError(null)
       const value = (rawEmail ?? '').trim().toLowerCase()
       if (!value || !value.includes('@')) {
-        setError({ message: 'Enter your work email to continue.' })
+        setError({
+          code: AuthAppErrorCodes.SSO_INPUT_REQUIRED,
+          message: 'Enter your work email to continue.',
+        })
         return
       }
       const dequeueLoading = queueLoading()
@@ -136,16 +152,19 @@ function SsoSignIn() {
         const payload = await res.json().catch(() => ({}))
         if (!payload?.ssoEnabled || !payload.tenantId || !payload.providerId) {
           setError({
-            message:
-              'No single sign-on is set up for that email domain. Use your ' +
-              'password or Google on the sign-in page instead.',
+            code: AuthAppErrorCodes.SSO_NOT_CONFIGURED,
+            message: 'No single sign-on is set up for that email domain.',
           })
           return
         }
         markInteractiveSignIn()
         await setPersistence(firebaseAuth, browserLocalPersistence)
         firebaseAuth.tenantId = payload.tenantId
-        const provider = new SAMLAuthProvider(payload.providerId)
+        // The typed email rides along as `login_hint` (AGL-1416). Without it
+        // Google resolves the SAML request against whichever account is
+        // `authuser=0`, so sign-in depends on browser account ordering — an
+        // input the user cannot see and never chose.
+        const provider = createAuthProvider(payload.providerId, value)
         if (isMobileBrowser()) {
           navigatingAway = true
           window.sessionStorage.setItem(
@@ -164,6 +183,7 @@ function SsoSignIn() {
         if (!jit.ok) {
           const jitPayload = await jit.json().catch(() => ({}))
           setError({
+            code: AuthAppErrorCodes.SSO_NOT_AUTHORIZED,
             message:
               jitPayload?.error ??
               'Signed in, but your account is not authorized for this organization.',
@@ -171,7 +191,9 @@ function SsoSignIn() {
         }
       } catch (err) {
         console.error(err)
-        setError(err as { message?: string })
+        // Classified rather than passed through raw: Google's own wording
+        // blames the administrator for something only the user can fix.
+        setError(describeSsoError(err))
         window.sessionStorage.removeItem(SSO_PENDING_KEY)
       } finally {
         if (!navigatingAway) dequeueLoading()

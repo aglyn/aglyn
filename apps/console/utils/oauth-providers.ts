@@ -56,15 +56,44 @@ import {
 export const ACCOUNT_CHOOSER_PROMPT = 'select_account'
 
 /**
+ * The email we mean, when we know it (AGL-1416).
+ *
+ * `login_hint` is the sibling of `prompt` and fixes the same bug one layer
+ * over. Google resolves an inbound SAML request against the DEFAULT signed-in
+ * account (`authuser=0`) unless the request names an account. A person with a
+ * personal Gmail at `authuser=0` and their work account further down the list
+ * gets the SAML request resolved against the personal one, which has no SAML
+ * app attached, and Google answers `app_not_configured_for_user` — an error
+ * about the *session* account that reads as if the admin misconfigured SSO.
+ *
+ * The SSO gate already asked for the work email. Passing it as a hint makes
+ * the flow independent of browser account ordering, which is otherwise a
+ * silent input that shifts whenever another Google account is added.
+ *
+ * It is a HINT: an IdP may ignore it, so it narrows the failure but never
+ * substitutes for the legible error on the other side.
+ */
+function accountHint(email?: string | null): Record<string, string> {
+  const value = String(email ?? '').trim()
+  return value ? { login_hint: value } : {}
+}
+
+/**
  * Google, with the account chooser forced on.
  *
  * `prompt` is an OAuth 2.0 authorization-request parameter, so it is carried
  * identically by the popup and redirect flows — mobile (redirect, AGL-462)
  * gets the chooser on the same terms as desktop.
  */
-export function createGoogleOAuthProvider(): GoogleAuthProvider {
+export function createGoogleOAuthProvider(email?: string | null): GoogleAuthProvider {
   const provider = new GoogleAuthProvider()
-  provider.setCustomParameters({ prompt: ACCOUNT_CHOOSER_PROMPT })
+  // Both, deliberately: the hint preselects the right account and the prompt
+  // still lets the person override it. A hint alone would silently pick for
+  // them, which is the very behaviour AGL-1415 removed.
+  provider.setCustomParameters({
+    prompt: ACCOUNT_CHOOSER_PROMPT,
+    ...accountHint(email),
+  })
   return provider
 }
 
@@ -79,12 +108,17 @@ export function createGoogleOAuthProvider(): GoogleAuthProvider {
  */
 export function createAuthProvider(
   providerId?: string | null,
+  email?: string | null,
 ): AuthProvider {
   if (providerId && providerId.startsWith('saml.')) {
-    return new SAMLAuthProvider(providerId)
+    const provider = new SAMLAuthProvider(providerId)
+    provider.setCustomParameters(accountHint(email))
+    return provider
   }
   if (providerId && providerId.startsWith('oidc.')) {
-    return new OAuthProvider(providerId)
+    const provider = new OAuthProvider(providerId)
+    provider.setCustomParameters(accountHint(email))
+    return provider
   }
-  return createGoogleOAuthProvider()
+  return createGoogleOAuthProvider(email)
 }
