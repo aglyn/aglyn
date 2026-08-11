@@ -170,6 +170,11 @@ export function OrgSwitcherNav() {
       : titleCase(plan ?? 'free')
     : undefined
 
+  // One label for the button text, the tooltip and the aria-label — the
+  // tooltip used to skip the slug fallback, so a slug-only org was "Workspace:
+  // org_abc123" on hover while the button read the slug (AGL-1414).
+  const orgLabel = currentOrg.orgName ?? currentOrg.slug ?? currentOrg.$id
+
   const orgAvatar = (url?: string) =>
     url ? (
       <Avatar src={url} variant="rounded" sx={{ width: 22, height: 22 }} />
@@ -194,7 +199,7 @@ export function OrgSwitcherNav() {
 
   return (
     <>
-      <Tooltip title={`Workspace: ${currentOrg.orgName ?? currentOrg.$id}`}>
+      <Tooltip title={`Workspace: ${orgLabel}`}>
         <Button
           size="small"
           variant="text"
@@ -204,26 +209,57 @@ export function OrgSwitcherNav() {
           endIcon={
             <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} fontSize="small" />
           }
+          // The visible name is hidden on phones (below), so the control must
+          // carry its own accessible name rather than borrow one from text
+          // that is no longer rendered (AGL-1414).
+          aria-label={`Workspace: ${orgLabel}`}
           sx={{
             maxWidth: 280,
+            // This button is the element that YIELDS when the top bar runs
+            // short (AGL-1414). Without min-width:0 it refuses to shrink
+            // below its content and pushes the icon cluster off-screen.
+            minWidth: 0,
             textTransform: 'none',
             gap: 0.5,
+            // The avatar and the caret are the control's affordance — they
+            // keep their size while the label absorbs the loss.
+            '& .MuiButton-startIcon, & .MuiButton-endIcon': { flexShrink: 0 },
             '& .MuiButton-endIcon': { marginLeft: 0.25 },
           }}
         >
           <Typography
             variant="subtitle2"
-            noWrap
-            sx={{ display: 'block', minWidth: 0 }}
+            sx={{
+              // Below `sm` the workspace name is dropped entirely rather than
+              // ellipsised down to two or three characters — at 375px there is
+              // only ~40px left for it, and "Nor…" tells you nothing that the
+              // avatar does not. The control stays an obvious target (avatar +
+              // caret) and keeps its name via the aria-label and the tooltip.
+              display: { xs: 'none', sm: 'block' },
+              // Written out rather than via `noWrap` so the ellipsis contract
+              // and the min-width that makes it work read as one rule.
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
           >
-            {currentOrg.orgName ?? currentOrg.slug ?? currentOrg.$id}
+            {orgLabel}
           </Typography>
           {currentBadge ? (
             <Chip
               label={currentBadge}
               size="small"
               variant="outlined"
-              sx={{ height: 20, '& .MuiChip-label': { px: 0.75, fontSize: 11 } }}
+              sx={{
+                // The plan pill goes with the label on phones — it is ~60px of
+                // the ~109px the switcher gets at 375px (AGL-1414). `sm` keeps
+                // Chip's own default display rather than restating a new one.
+                display: { xs: 'none', sm: 'inline-flex' },
+                flexShrink: 0,
+                height: 20,
+                '& .MuiChip-label': { px: 0.75, fontSize: 11 },
+              }}
             />
           ) : null}
         </Button>

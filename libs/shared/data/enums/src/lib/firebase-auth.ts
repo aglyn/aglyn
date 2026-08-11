@@ -22,7 +22,56 @@ import {
   type UserCredential,
 } from 'firebase/auth'
 
-export type AuthCode = IndexOf<typeof AuthErrorCodes> | 'general'
+/**
+ * Codes the console raises itself, for failures Firebase has no code for
+ * (AGL-1416).
+ *
+ * These exist because `AuthErrorAlertComponent` renders NOTHING unless the
+ * error carries a `code` — an error built as `{ message }` alone is silently
+ * dropped, which is how the SSO page's own messages never reached anyone.
+ * Giving each failure a real code is what makes it visible, and registering a
+ * caption below is what stops it falling back to the generic "contact the
+ * system administrator" line — the single worst thing to tell someone whose
+ * actual problem is that they have another Google account in session.
+ */
+export const AuthAppErrorCodes = {
+  /** Google resolved SSO against the wrong signed-in account. */
+  SSO_ACCOUNT_MISMATCH: 'auth/sso-account-mismatch',
+  /** No SSO configured for the email domain the user typed. */
+  SSO_NOT_CONFIGURED: 'auth/sso-not-configured',
+  /** The user submitted the SSO gate without a usable email. */
+  SSO_INPUT_REQUIRED: 'auth/sso-input-required',
+  /** Authenticated with the IdP, but not a member of the organization. */
+  SSO_NOT_AUTHORIZED: 'auth/sso-not-authorized',
+  /**
+   * The IdP window closed without a result. On the SSO path this is NOT the
+   * plain cancel it is elsewhere: when Google refuses the SAML request it
+   * renders its own error page inside that window, so the user closing it
+   * looks identical to a cancel. Suppressing it — as the shared
+   * `AuthErrorIgnore` list does for popup-closed — is what left the desktop
+   * flow with Google's raw error and nothing from us.
+   */
+  SSO_INCOMPLETE: 'auth/sso-incomplete',
+  /** SSO failed for a reason we could not classify. */
+  SSO_FAILED: 'auth/sso-failed',
+  /**
+   * The WebAuthn ceremony ended without an assertion (AGL-1417).
+   *
+   * Deliberately NOT called "cancelled". The spec overloads
+   * `NotAllowedError` to cover a dismissed prompt, a timeout, AND no
+   * discoverable credential for the RP ID — the last on purpose, so a site
+   * cannot probe for a credential's existence. Naming this "cancelled" is
+   * what let "you have no passkey on this device" render as nothing at all.
+   */
+  PASSKEY_NOT_COMPLETED: 'auth/passkey-not-completed',
+  /** The ceremony ran but the server refused the assertion. */
+  PASSKEY_SIGNIN_FAILED: 'auth/passkey-signin-failed',
+} as const
+
+export type AuthAppCode =
+  (typeof AuthAppErrorCodes)[keyof typeof AuthAppErrorCodes]
+
+export type AuthCode = IndexOf<typeof AuthErrorCodes> | AuthAppCode | 'general'
 export type AuthResultError = AuthError //& {credential?: OAuthCredential}
 export type AuthResultUser = UserCredential & { credential?: OAuthCredential }
 export type AuthCallbackResult = Promise<UserCredential>
@@ -36,6 +85,13 @@ export const AuthErrorIgnore = {
 export const AuthErrorNotice = {
   [AuthErrorCodes.USER_SIGNED_OUT]: true,
   [AuthErrorCodes.CREDENTIAL_TOO_OLD_LOGIN_AGAIN]: true,
+  // Situations the person can fix themselves in one step. Rendering these as
+  // red errors invites a support ticket for something that is not broken.
+  [AuthAppErrorCodes.SSO_ACCOUNT_MISMATCH]: true,
+  [AuthAppErrorCodes.SSO_NOT_CONFIGURED]: true,
+  [AuthAppErrorCodes.SSO_INPUT_REQUIRED]: true,
+  [AuthAppErrorCodes.SSO_INCOMPLETE]: true,
+  [AuthAppErrorCodes.PASSKEY_NOT_COMPLETED]: true,
 }
 
 export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
@@ -133,6 +189,38 @@ export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
     'You have been signed out. Sign in again to continue.',
   [AuthErrorCodes.WEAK_PASSWORD]:
     'Password is too weak. Enter a stronger password and try again.',
+  // AGL-1416. The captions carry the ACTION, because the headline above them
+  // is the diagnosis and a diagnosis with no next step is what sends people
+  // to their IT admin for a problem only they can fix.
+  [AuthAppErrorCodes.SSO_ACCOUNT_MISMATCH]:
+    'Your browser is signed in to another Google account, and single ' +
+    'sign-on was resolved against that one. Sign out of the other account, ' +
+    'or open this page in a private window, then try again.',
+  [AuthAppErrorCodes.SSO_NOT_CONFIGURED]:
+    'Check the spelling of your work email, or sign in with your password ' +
+    'or Google instead.',
+  [AuthAppErrorCodes.SSO_INPUT_REQUIRED]:
+    'Enter the full work email address your organization uses.',
+  [AuthAppErrorCodes.SSO_NOT_AUTHORIZED]:
+    'Ask an administrator of that organization to invite you, then sign in ' +
+    'again.',
+  [AuthAppErrorCodes.SSO_INCOMPLETE]:
+    'If you closed the window, just try again. If it showed an error about ' +
+    'the app not being configured for your account, you are signed in to a ' +
+    'different Google account — open this page in a private window and ' +
+    'enter your work email.',
+  [AuthAppErrorCodes.SSO_FAILED]:
+    'Single sign-on could not be completed. Try again, and if it keeps ' +
+    'happening contact an administrator of your organization.',
+  // AGL-1417. Both readings, because the browser deliberately refuses to say
+  // which one happened — and the far more common one is the first.
+  [AuthAppErrorCodes.PASSKEY_NOT_COMPLETED]:
+    'If you have not set one up on this device yet, sign in another way and ' +
+    'add one from Manage account → Security. If you closed the prompt, try ' +
+    'again.',
+  [AuthAppErrorCodes.PASSKEY_SIGNIN_FAILED]:
+    'Your other sign-in methods still work — password, Google, or single ' +
+    'sign-on.',
 }
 
 export const COOKIE_KEY_USER_TOKEN = 'aglyn-user-token'

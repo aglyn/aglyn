@@ -76,9 +76,12 @@ import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
 import { authSignInHost } from '../../../utils/auth-delegation'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
+import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
 
-const googleOAuthProvider = new GoogleAuthProvider()
+// Chooser forced on (AGL-1415): signing UP is the worst place to silently
+// reuse the device's account — it decides which identity owns the new org.
+const googleOAuthProvider = createGoogleOAuthProvider()
 
 /**
  * The org name has to survive becoming a workspace address (AGL-1115).

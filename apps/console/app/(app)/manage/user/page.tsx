@@ -62,7 +62,6 @@ import {
 import { mdiLockOutline } from '@aglyn/shared-data-mdi'
 import { logEvent } from 'firebase/analytics'
 import {
-  GoogleAuthProvider,
   linkWithPopup,
   signInWithEmailAndPassword,
   unlink,
@@ -90,6 +89,7 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import MediaUrlField from '../../../../components/media-url-field.component'
+import { createGoogleOAuthProvider } from '../../../../utils/oauth-providers'
 import { useOrgScope } from '../../../../hooks/use-org-scope'
 import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
 
@@ -423,7 +423,10 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     }
     setLinkBusy(true)
     try {
-      await linkWithPopup(user, new GoogleAuthProvider())
+      // The chooser matters most here (AGL-1415): without it this can only
+      // ever link the account the device already holds, so anyone with a
+      // second Google identity literally cannot connect the one they meant.
+      await linkWithPopup(user, createGoogleOAuthProvider())
       await refreshProviders()
       enqueueSnackbar('Google connected', { variant: 'success' })
     } catch (error: any) {

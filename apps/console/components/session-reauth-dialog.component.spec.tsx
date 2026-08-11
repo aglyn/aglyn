@@ -42,17 +42,36 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 const mockSignIn = jest.fn()
 const mockSignOut = jest.fn()
 const mockPopup = jest.fn()
-jest.mock('firebase/auth', () => ({
-  browserLocalPersistence: {},
-  GoogleAuthProvider: class GoogleAuthProvider {},
-  OAuthProvider: class OAuthProvider {},
-  SAMLAuthProvider: class SAMLAuthProvider {},
-  setPersistence: () => Promise.resolve(),
-  signInWithEmailAndPassword: (...args: unknown[]) => mockSignIn(...args),
-  signInWithPopup: (...args: unknown[]) => mockPopup(...args),
-  signInWithRedirect: jest.fn(),
-  signOut: (...args: unknown[]) => mockSignOut(...args),
-}))
+jest.mock('firebase/auth', () => {
+  // The provider stubs carry `setCustomParameters` because the real ones do:
+  // every provider is built through `createAuthProvider`, which sets the
+  // account-disambiguation parameters (AGL-1415). A stub without it turns a
+  // missing chooser into a TypeError, which is a worse way to find out.
+  // Declared inside the factory — jest hoists this above the file body, so an
+  // out-of-scope class reference would be rejected outright.
+  class StubProvider {
+    customParameters: Record<string, string> = {}
+    setCustomParameters(parameters: Record<string, string>) {
+      this.customParameters = parameters
+      return this
+    }
+  }
+  return {
+    // Real, not stubbed: `shared-data-enums` builds its error tables from
+    // these constants at module load, so mocking them away turns any import
+    // of the enums lib into a load-time crash (AGL-1417).
+    AuthErrorCodes: jest.requireActual('firebase/auth').AuthErrorCodes,
+    browserLocalPersistence: {},
+    GoogleAuthProvider: class GoogleAuthProvider extends StubProvider {},
+    OAuthProvider: class OAuthProvider extends StubProvider {},
+    SAMLAuthProvider: class SAMLAuthProvider extends StubProvider {},
+    setPersistence: () => Promise.resolve(),
+    signInWithEmailAndPassword: (...args: unknown[]) => mockSignIn(...args),
+    signInWithPopup: (...args: unknown[]) => mockPopup(...args),
+    signInWithRedirect: jest.fn(),
+    signOut: (...args: unknown[]) => mockSignOut(...args),
+  }
+})
 
 const mockMarkSignIn = jest.fn()
 const mockMarkSignOut = jest.fn()

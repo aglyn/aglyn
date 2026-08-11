@@ -30,9 +30,6 @@ import {
 } from '@mui/material'
 import {
   browserLocalPersistence,
-  GoogleAuthProvider,
-  OAuthProvider,
-  SAMLAuthProvider,
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -41,13 +38,19 @@ import {
   type AuthProvider,
 } from 'firebase/auth'
 import { useCallback, useEffect, useState } from 'react'
+import { AuthErrorMessage } from '@aglyn/shared-data-enums'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import {
   markInteractiveSignIn,
   markInteractiveSignOut,
 } from '../utils/interactive-signin'
 import isMobileBrowser from '../utils/is-mobile-browser'
-import { signInWithPasskey, usePasskeysSupported } from '../utils/passkeys'
+import { createAuthProvider } from '../utils/oauth-providers'
+import {
+  describePasskeySignInFailure,
+  signInWithPasskey,
+  usePasskeysSupported,
+} from '../utils/passkeys'
 import {
   clearSessionReauth,
   dismissSessionReauth,
@@ -95,13 +98,10 @@ import {
  * user object that carried `providerData` may already be signed out.
  */
 export function providerForId(providerId: string | null): AuthProvider {
-  if (providerId && providerId.startsWith('saml.')) {
-    return new SAMLAuthProvider(providerId)
-  }
-  if (providerId && providerId.startsWith('oidc.')) {
-    return new OAuthProvider(providerId)
-  }
-  return new GoogleAuthProvider()
+  // Delegated to the shared factory (AGL-1415), which also forces Google's
+  // account chooser — re-authenticating against silently-whichever-account
+  // the device holds is how a person verifies the wrong identity.
+  return createAuthProvider(providerId)
 }
 
 function reasonText(state: SessionReauthState): string {
@@ -206,7 +206,16 @@ export function SessionReauthDialog() {
         await credentialSignIn()
         clearSessionReauth()
       } catch (caught) {
-        setError(signInErrorText((caught as { code?: string })?.code))
+        const failure = caught as { code?: string; message?: string }
+        // A classified passkey failure already carries copy written for a
+        // person; the code table would flatten it back to a generic line.
+        setError(
+          failure?.code?.startsWith('auth/passkey-')
+            ? [failure.message, AuthErrorMessage[failure.code]]
+                .filter(Boolean)
+                .join(' ')
+            : signInErrorText(failure?.code),
+        )
       } finally {
         setBusy(false)
       }
@@ -235,13 +244,11 @@ export function SessionReauthDialog() {
   const handlePasskeyClick = useCallback(() => {
     void signInAgain(() =>
       signInWithPasskey(auth).catch((caught) => {
-        // Closing the browser's credential prompt is a cancel; reuse the
-        // existing cancel copy rather than reporting a failure.
-        const name = (caught as { name?: string })?.name
-        if (name === 'NotAllowedError' || name === 'AbortError') {
-          throw { code: 'auth/popup-closed-by-user' }
-        }
-        throw caught
+        // Classified, never relabelled "cancelled" (AGL-1417): WebAuthn also
+        // returns NotAllowedError when no credential exists for the RP ID,
+        // and this dialog's own comment used to assume that case was
+        // harmless — it is the one that leaves the user stuck.
+        throw describePasskeySignInFailure(caught)
       }),
     )
   }, [auth, signInAgain])

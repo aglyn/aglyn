@@ -166,7 +166,10 @@ const TopAppBar = (props: TopAppBarProps) => {
             sx={{
               alignItems: "center",
               justifyContent: "flex-start",
-              paddingLeft: { sx: 1, sm: 2 },
+              // `sx` was a typo for the `xs` breakpoint (AGL-1414), so the
+              // phone gutter silently fell through to Toolbar's 16px default
+              // and the narrowest viewport got the widest padding.
+              paddingLeft: { xs: 1, sm: 2 },
             }}
             divider={
               <Divider orientation="vertical" variant="middle" flexItem sx={{ opacity: 0.5 }} />
@@ -209,8 +212,14 @@ const TopAppBar = (props: TopAppBarProps) => {
                 maxWidth: { xs: '100%' },
                 paddingLeft: backButton ? 0.5 : undefined,
 
+                // The wordmark is a fixed-size brand mark, so it is never what
+                // gives when the bar runs out of room (AGL-1414) — the org
+                // switcher beside it is. Without this the logo compressed
+                // instead of the switcher yielding.
+                flexShrink: 0,
+
                 // width: DRAWER_WIDTH - 26,
-                paddingRight: 3
+                paddingRight: { xs: 1, sm: 3 }
               }}>
               <AppLink
                 href={orgHome}
@@ -290,7 +299,14 @@ const TopAppBar = (props: TopAppBarProps) => {
                 alignItems: "center",
                 justifyContent: "flex-start",
                 flexGrow: 1,
-                paddingLeft: 1.5
+                // THE fix for AGL-1414. A flex child defaults to
+                // `min-width: auto`, i.e. "never shrink below my content", so
+                // a long org name grew this column without bound and shoved
+                // the notifications bell and the avatar off the right edge —
+                // and every `text-overflow: ellipsis` further down silently
+                // did nothing, because nothing ever constrained the box.
+                minWidth: 0,
+                paddingLeft: { xs: 0.5, sm: 1.5 }
               }}>
               {!customCenter &&
               !centerPrefix &&
@@ -300,7 +316,10 @@ const TopAppBar = (props: TopAppBarProps) => {
                   direction="row"
                   sx={{
                     alignItems: "center",
-                    justifyContent: "flex-start"
+                    justifyContent: "flex-start",
+                    // The min-width:0 chain has to reach the label itself;
+                    // one `auto` anywhere between re-establishes the floor.
+                    minWidth: 0
                   }}>
                   {centerPrefix}
                   {/* The center nav is the besigner's FILE / EDIT / INSERT
@@ -320,7 +339,11 @@ const TopAppBar = (props: TopAppBarProps) => {
                 direction="row"
                 sx={{
                   alignItems: "center",
-                  justifyContent: "flex-end"
+                  justifyContent: "flex-end",
+                  // The icon cluster is the thing that must NEVER move or
+                  // compress (AGL-1414): it is anchored to the right edge and
+                  // its targets are already at the minimum tap size.
+                  flexShrink: 0
                 }}>
                 {actionsPrefix}
               </Stack>
@@ -332,7 +355,10 @@ const TopAppBar = (props: TopAppBarProps) => {
                 spacing={0.5}
                 sx={{
                   alignItems: "center",
-                  justifyContent: "flex-start"
+                  justifyContent: "flex-start",
+                  // Same contract as the actionsPrefix cluster above — the
+                  // avatar keeps its size and its place (AGL-1414).
+                  flexShrink: 0
                 }}>
                 {(quickActions ?? []).map(buildNav())}
               </Stack>

@@ -63,10 +63,18 @@ import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
 import { authSignInHost } from '../../../utils/auth-delegation'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
-import { signInWithPasskey, usePasskeysSupported } from '../../../utils/passkeys'
+import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
+import {
+  describePasskeySignInFailure,
+  signInWithPasskey,
+  usePasskeysSupported,
+} from '../../../utils/passkeys'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
 
-const googleOAuthProvider = new GoogleAuthProvider()
+// Built through the shared factory so the account chooser is forced on
+// (AGL-1415) — a bare provider signs straight in as whatever account the
+// device already holds, which on mobile is never a choice at all.
+const googleOAuthProvider = createGoogleOAuthProvider()
 
 const formSchema: FormSchema = {
   fields: [FIELD_SCHEMA_EMAIL, FIELD_SCHEMA_PASSWORD],
@@ -162,15 +170,13 @@ function SignIn() {
       await signInWithPasskey(firebaseAuth)
       logEvent(analytics, 'login', { method: 'passkey' })
     } catch (caught) {
-      // Closing the browser's credential prompt is a cancel, not an error.
-      const name = (caught as { name?: string })?.name
-      if (name !== 'NotAllowedError' && name !== 'AbortError') {
-        console.error(caught)
-        setError({
-          code: 'auth/passkey-signin-failed',
-          message: 'Passkey sign-in failed.',
-        } as AuthResultError)
-      }
+      // Every outcome speaks now (AGL-1417). This used to swallow
+      // NotAllowedError and AbortError as "the user cancelled" — but WebAuthn
+      // also returns NotAllowedError when NO credential exists for the RP ID,
+      // so the commonest case, a person who never registered a passkey, got a
+      // spinner and then nothing.
+      console.error(caught)
+      setError(describePasskeySignInFailure(caught) as AuthResultError)
     } finally {
       dequeueLoading()
     }
