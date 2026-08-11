@@ -145,13 +145,17 @@ const SCOPE_CHUNK_SIZE = 100
  * carries what the client needs to deep-link back to the resource.
  */
 interface MediaUsageRef {
-  kind: 'screen' | 'layout' | 'entry'
+  kind: 'screen' | 'layout' | 'entry' | 'component' | 'site'
   id: string
   name: string
   hostId: string
   hostSubdomain: string
   versionId?: string
   collectionId?: string
+  /** Whether the matching version is the published one (AGL-1413). */
+  live?: boolean
+  /** Field that carried it, for a match on a document's own fields. */
+  field?: string
 }
 
 /** How each reference kind is labelled in the "Used on" list. */
@@ -159,7 +163,28 @@ const REF_KIND_LABEL: Record<MediaUsageRef['kind'], string> = {
   screen: 'Screen',
   layout: 'Layout',
   entry: 'Content',
+  component: 'Component',
+  site: 'Site settings',
 }
+
+/**
+ * How much of the corpus the scan read (AGL-1413) — see
+ * `utils/server/scan-media-references`.
+ *
+ * The client's copy of the type exists so the DEFAULT can live here: an
+ * absent or unrecognized value reads as `partial`. A response shape that
+ * changed, an older deployment, a proxy that dropped the field — every one
+ * of those has to degrade to "we could not determine this", because the
+ * alternative is a delete confirmation quietly promising an asset is unused
+ * on the strength of a field that was not there.
+ */
+type MediaScanCoverage = 'full' | 'published' | 'partial'
+
+const coverageOf = (value: unknown): MediaScanCoverage =>
+  value === 'full' || value === 'published' ? value : 'partial'
+
+/** Whether an empty result from this scan may be shown as "nothing uses it". */
+const provesUnused = (coverage: MediaScanCoverage) => coverage !== 'partial'
 
 const formatBytes = (bytes: number) =>
   bytes >= 1024 * 1024
@@ -329,6 +354,41 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     : ((() => undefined) as typeof logHostActivity)
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+
+  /**
+   * One usage scan (AGL-176/AGL-845/AGL-1413).
+   *
+   * Four places in this component ask "where is this used", and every one of
+   * them is about to show the answer to somebody deciding whether to delete
+   * or restrict an asset. They shared the fetch shape and nothing else, so
+   * each read `references` alone — which cannot distinguish "we looked
+   * everywhere and found nothing" from "we stopped looking". Reading the
+   * coverage flag in one place is what makes that distinction impossible to
+   * forget at the fourth call site.
+   */
+  const scanReferences = useCallback(
+    async (
+      mediaId: string,
+    ): Promise<{ items: MediaUsageRef[]; coverage: MediaScanCoverage }> => {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/media/references', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ ...scopeBody, mediaId }),
+      })
+      if (!response.ok) throw new Error(`Scan failed (${response.status})`)
+      const payload = await response.json()
+      return {
+        items: (payload?.references ?? []) as MediaUsageRef[],
+        coverage: coverageOf(payload?.coverage),
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user, scopeId, orgId],
+  )
 
   // Paged media loading (AGL-174): cursor pagination over query-side
   // filters replaces the old limit(500)+client-filter read. The fetch
@@ -1155,22 +1215,19 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     if (scopeChanged && Aglyn.narrowsScope(previousScope, editor.visibleTo)) {
       // Inline rather than reusing runReferenceAudit below: that one drives
       // the drawer's "Used on" panel state, and this needs a plain answer.
-      const affected = await (async () => {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/media/references', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          body: JSON.stringify({ ...scopeBody, mediaId: editor.id }),
-        })
-        if (!response.ok) throw new Error('scan failed')
-        return ((await response.json())?.references ?? []) as MediaUsageRef[]
-      })().catch(() => null)
-      const losing = (affected ?? []).filter(
-        (host) => !Aglyn.visibleToHost(editor.visibleTo, host.hostId),
-      )
+      //
+      // A scan that could not cover the live corpus is folded into the same
+      // `null` a failed request produces (AGL-1413). The two are the same
+      // fact from the author's side — nobody checked — and the confirmation
+      // below already has the sentence for it.
+      const affected = await scanReferences(editor.id)
+        .then((scan) => (provesUnused(scan.coverage) ? scan.items : null))
+        .catch(() => null)
+      const losing = (affected ?? [])
+        // An org-level reference (the org's own logo) names no site, and a
+        // site scope decides nothing about it.
+        .filter((host) => host.hostId)
+        .filter((host) => !Aglyn.visibleToHost(editor.visibleTo, host.hostId))
       const names = [...new Set(losing.map((host) => host.hostSubdomain))]
       const proceed = await confirm({
         title: 'Limit who can use this file?',
@@ -1534,32 +1591,24 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const sitesLosingAccess = useCallback(
     async (mediaIds: string[], nextScope: string[]) => {
       if (!mediaIds.length || mediaIds.length > REFERENCE_SCAN_LIMIT) return null
-      const idToken = await (user as any)?.getIdToken?.()
-      const scans = await Promise.all(
-        mediaIds.map(async (mediaId) => {
-          const response = await fetch('/api/media/references', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
-            body: JSON.stringify({ ...scopeBody, mediaId }),
-          })
-          if (!response.ok) throw new Error('scan failed')
-          return ((await response.json())?.references ?? []) as MediaUsageRef[]
-        }),
-      ).catch(() => null)
+      const scans = await Promise.all(mediaIds.map(scanReferences)).catch(
+        () => null,
+      )
       if (!scans) return null
+      // ONE truncated scan makes the whole batch's answer unknowable: the
+      // site it failed to reach may be the site that loses the file.
+      if (!scans.every((scan) => provesUnused(scan.coverage))) return null
       return [
         ...new Set(
           scans
-            .flat()
+            .flatMap((scan) => scan.items)
+            .filter((ref) => ref.hostId)
             .filter((ref) => !Aglyn.visibleToHost(nextScope, ref.hostId))
             .map((ref) => ref.hostSubdomain),
         ),
       ]
     },
-    [user, scopeId, orgId],
+    [scanReferences],
   )
 
   const applyScopeToSelection = useCallback(
@@ -1733,41 +1782,50 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const [refsAudit, setRefsAudit] = useState<{
     status: 'idle' | 'loading' | 'done' | 'error'
     items: MediaUsageRef[]
-  }>({ status: 'idle', items: [] })
+    coverage: MediaScanCoverage
+  }>({ status: 'idle', items: [], coverage: 'partial' })
   // Reset the audit whenever the drawer switches assets.
   useEffect(() => {
-    setRefsAudit({ status: 'idle', items: [] })
+    setRefsAudit({ status: 'idle', items: [], coverage: 'partial' })
   }, [editorId])
   const runReferenceAudit = useCallback(async () => {
     if (!editorId) return
-    setRefsAudit({ status: 'loading', items: [] })
+    setRefsAudit({ status: 'loading', items: [], coverage: 'partial' })
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/media/references', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
-        body: JSON.stringify({ ...scopeBody, mediaId: editorId }),
-      })
-      if (!response.ok) throw new Error(`Scan failed (${response.status})`)
-      const payload = await response.json()
-      setRefsAudit({
-        status: 'done',
-        items: (payload?.references ?? []) as MediaUsageRef[],
-      })
+      const scan = await scanReferences(editorId)
+      setRefsAudit({ status: 'done', ...scan })
     } catch (error) {
       console.error('media reference audit failed', error)
-      setRefsAudit({ status: 'error', items: [] })
+      setRefsAudit({ status: 'error', items: [], coverage: 'partial' })
     }
-  }, [editorId, user, scopeId])
+  }, [editorId, scanReferences])
 
   // Deep link for a reference row — the `[host]` segment is the subdomain,
   // and org assets can live on any of the org's sites (hence per-ref host).
   const referenceHref = useCallback(
     (reference: MediaUsageRef): string | null => {
-      if (!orgSlug || !reference.hostSubdomain) return null
+      if (!orgSlug) return null
+      // An org-level reference (the org's own `logoUrl`) carries no site, so
+      // it links to org settings rather than falling through to plain text.
+      if (reference.kind === 'site' && !reference.hostSubdomain) {
+        return buildRoute(Route.ORG_SETTINGS, { orgSlug })
+      }
+      if (!reference.hostSubdomain) return null
+      // Site settings — `logoUrl`, `seo.favicon`, `seo.image` — are edited on
+      // the site's Setup page.
+      if (reference.kind === 'site') {
+        return buildRoute(Route.HOST_SETUP, {
+          orgSlug,
+          host: reference.hostSubdomain,
+        })
+      }
+      if (reference.kind === 'component') {
+        return buildRoute(Route.COMPONENT_DETAILS, {
+          orgSlug,
+          host: reference.hostSubdomain,
+          componentId: reference.id,
+        })
+      }
       if (reference.kind === 'screen' && reference.versionId) {
         return buildRoute(Route.SCREEN_DETAILS, {
           orgSlug,
@@ -2032,31 +2090,37 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   const handleDelete = useCallback(
     (media: Aglyn.AglynHostMedia) => async () => {
-      // Reference-aware warning (AGL-176): best-effort scan before the
-      // confirm so a used asset gets a real warning, not a generic one.
+      // Reference-aware warning (AGL-176/AGL-1413): scan before the confirm
+      // so a used asset gets a real warning, not a generic one — and so an
+      // UNUSED-looking one gets an honest account of how hard we looked.
+      //
+      // Deletion is irreversible and this dialog is the last thing between
+      // the author and it, so silence has to be earned. Before AGL-1413 the
+      // dialog said nothing whenever the scan came back empty, and the scan
+      // came back empty for every asset held by a component, by a site
+      // setting, or by any version other than the published one. Nothing on
+      // screen distinguished "checked, and nothing uses it" from "did not
+      // check the half of the corpus that had it".
+      const scan = await scanReferences(media.$id).catch(() => null)
       let referenceNote = ''
-      try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/media/references', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          body: JSON.stringify({ ...scopeBody, mediaId: media.$id }),
-        })
-        const payload = response.ok ? await response.json() : null
-        const references: Array<{ name: string }> =
-          payload?.references ?? []
-        if (references.length) {
-          referenceNote =
-            ` WARNING: it is referenced in ${references.length} ` +
-            `place${references.length === 1 ? '' : 's'} (${references
-              .map((reference) => reference.name)
-              .join(', ')}).`
-        }
-      } catch {
-        // Scan is advisory; deletion stays possible without it.
+      if (scan?.items.length) {
+        referenceNote =
+          ` WARNING: it is referenced in ${scan.items.length} ` +
+          `place${scan.items.length === 1 ? '' : 's'} (${scan.items
+            .map((reference) => reference.name)
+            .join(', ')}).`
+      } else if (!scan || !provesUnused(scan.coverage)) {
+        referenceNote =
+          ' We could not check everywhere it might be used, so this is not ' +
+          'a confirmation that nothing uses it.'
+      } else if (scan.coverage === 'published') {
+        referenceNote =
+          ' Nothing published uses it. Older and unpublished versions were ' +
+          'not all checked.'
+      } else {
+        referenceNote =
+          ' Nothing on this site uses it — no page, layout, component, ' +
+          'site setting, or content entry.'
       }
       const confirmed = await confirm({
         title: 'Delete this file?',
@@ -2861,22 +2925,45 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 </Button>
               </Stack>
             ) : refsAudit.items.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                {'Not referenced by any published screen, layout, or content ' +
-                  'entry.'}
+              // Three sentences for three answers (AGL-1413). The old one
+              // said "Not referenced by any published screen, layout, or
+              // content entry" whatever had actually been read — which was
+              // true of the corpus it named and false of the asset, for
+              // anything held by a component, a site setting, or an
+              // unpublished version.
+              <Typography
+                variant="body2"
+                color={
+                  refsAudit.coverage === 'partial'
+                    ? 'warning.main'
+                    : 'text.secondary'
+                }
+              >
+                {refsAudit.coverage === 'partial'
+                  ? 'We could not check everywhere this could be used. That ' +
+                    'is not the same as nothing using it — try again before ' +
+                    'deleting.'
+                  : refsAudit.coverage === 'published'
+                    ? 'Nothing published uses this file. Older and ' +
+                      'unpublished versions were not all checked.'
+                    : 'Not used by any page, layout, component, site ' +
+                      'setting, or content entry.'}
               </Typography>
             ) : (
               <Stack spacing={0.75}>
                 <Typography variant="caption" color="text.secondary">
                   {`Referenced in ${refsAudit.items.length} place${
                     refsAudit.items.length === 1 ? '' : 's'
-                  }.`}
+                  }.` +
+                    (refsAudit.coverage === 'partial'
+                      ? ' More may exist — the scan did not finish.'
+                      : '')}
                 </Typography>
                 {refsAudit.items.map((reference) => {
                   const href = referenceHref(reference)
                   return (
                     <Stack
-                      key={`${reference.kind}-${reference.hostId}-${reference.id}`}
+                      key={`${reference.kind}-${reference.hostId}-${reference.id}-${reference.versionId ?? ''}`}
                       direction="row"
                       spacing={1}
                       sx={{
@@ -2891,11 +2978,27 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                           {reference.name}
                         </Typography>
                       )}
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        label={REF_KIND_LABEL[reference.kind]}
-                      />
+                      <Stack direction="row" spacing={0.5}>
+                        {/* A row an author cannot act on is barely a report:
+                            `seo.favicon` says WHICH setting to change, and
+                            "Draft" says the page visitors see is not the one
+                            holding the file (AGL-1413). */}
+                        {reference.field ? (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={reference.field}
+                          />
+                        ) : null}
+                        {reference.live === false ? (
+                          <Chip size="small" color="warning" label={'Draft'} />
+                        ) : null}
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={REF_KIND_LABEL[reference.kind]}
+                        />
+                      </Stack>
                     </Stack>
                   )
                 })}
