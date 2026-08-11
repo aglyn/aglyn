@@ -88,6 +88,7 @@ describe('ScreenLink renderAs (AGL-1195)', () => {
     expect((field as any).options?.map((o: any) => o.value)).toEqual([
       '',
       'link',
+      'linkButton',
     ])
   })
 
@@ -198,5 +199,98 @@ describe('ScreenLink renderAs (AGL-1195)', () => {
     } = require('../constants/field-presets')
     expect(FIELD_SIZE.condition).toBeUndefined()
     expect(FIELD_FULL_WIDTH.condition).toBeUndefined()
+  })
+})
+
+describe('ScreenLink appearance is not semantics (AGL-1347)', () => {
+  /** How the attributes panel decides, i.e. data-driven-forms' own rule. */
+  const isVisible = (condition: any, renderAs: string) => {
+    if (!condition) return true
+    const value = renderAs
+    const matched = Array.isArray(condition.is)
+      ? condition.is.includes(value)
+      : value === condition.is
+    return condition.notMatch ? !matched : matched
+  }
+  const by = (name: string) =>
+    schema.attributes.find((a: any) => a.name === name) as any
+
+  it('gives a pill that navigates the LINK role, not the button role', () => {
+    // The 12 chips in "Dig in, or just say hello" on aglyn.com: every one
+    // navigates, none performs an action, and all 12 announced as buttons.
+    render(
+      <ScreenLink renderAs="linkButton" href="/docs" variant="outlined">
+        {'Documentation home'}
+      </ScreenLink>,
+    )
+    const link = screen.getByRole('link', { name: 'Documentation home' })
+    expect(link.tagName).toBe('A')
+    // `role="button"` is the accessibility defect itself — MUI's ButtonBase
+    // stamps it on any non-<button> root unless the caller clears it.
+    expect(link.getAttribute('role')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('keeps the button styling it was asked for on that link', () => {
+    // Semantics fixed AND the pill intact is the whole point: converting to
+    // Text link would have deleted the fill, border, padding and radius.
+    const { container } = render(
+      <ScreenLink
+        renderAs="linkButton"
+        href="https://linkedin.com/company/aglyn"
+        variant="outlined"
+        size="small"
+      >
+        {'LinkedIn'}
+      </ScreenLink>,
+    )
+    const link = container.querySelector('a') as HTMLElement
+    expect(link.className).toMatch(/MuiButton-outlined/)
+    expect(link.className).toMatch(/MuiButton-sizeSmall/)
+  })
+
+  it('leaves the plain Button mode announcing as a button', () => {
+    // Unset and `''` both mean Button, and Button keeps the role it had —
+    // nothing already authored changes shape.
+    render(<ScreenLink href="/pricing">{'Start free'}</ScreenLink>)
+    expect(screen.getByRole('button', { name: 'Start free' })).toBeTruthy()
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('does not repaint a Text link that still carries an authored variant', () => {
+    // The trap this mode exists to avoid. The shipped preset is
+    // `variant: 'outlined'`, and switching Render as to Text link leaves that
+    // value in the document — so honouring `variant` in `"link"` mode would
+    // have turned the site nav and footer into outlined pills.
+    const { container } = render(
+      <ScreenLink renderAs="link" href="/careers" variant="outlined" fullWidth>
+        {'Careers'}
+      </ScreenLink>,
+    )
+    const link = container.querySelector('a') as HTMLElement
+    expect(link.className).toMatch(/MuiLink/)
+    expect(link.className).not.toMatch(/MuiButton/)
+  })
+
+  it('shows the same pill on the canvas, and still not as a button', () => {
+    // Suppressed navigation must mirror the live shape: the look without a
+    // <button> and without the role, or the besigner lies about both.
+    renderEditor(
+      <ScreenLink renderAs="linkButton" variant="contained">
+        {'Security'}
+      </ScreenLink>,
+    )
+    expect(screen.queryByRole('button')).toBeNull()
+    const placeholder = screen.getByText('Security')
+    expect(placeholder.tagName).toBe('SPAN')
+    expect(placeholder.className).toMatch(/MuiButton-contained/)
+  })
+
+  it('offers Variant and Size in the styled-link mode, and only hides them for Text link', () => {
+    for (const name of ['size', 'fullWidth', 'variant']) {
+      expect(isVisible(by(name).condition, '')).toBe(true)
+      expect(isVisible(by(name).condition, 'linkButton')).toBe(true)
+      expect(isVisible(by(name).condition, 'link')).toBe(false)
+    }
   })
 })

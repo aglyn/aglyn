@@ -45,12 +45,27 @@ export interface ScreenLinkProps extends ButtonProps {
   /** External URL escape hatch, used only when no `screenId` is set. */
   href?: string
   /**
-   * Whether this reads as a button or as text (AGL-1195). Persisted in
-   * screen documents; never rename, and `undefined` must keep meaning
-   * `'button'` — every link authored before this existed is one.
+   * Which element this ships as (AGL-1195, AGL-1347). Persisted in screen
+   * documents; never rename, and `undefined` must keep meaning `'button'` —
+   * every link authored before this existed is one.
+   *
+   * - `'button'` (or unset) — `<a role="button">` with the button's look.
+   * - `'link'` — a plain text link; the button-only props are dropped.
+   * - `'linkButton'` — a plain `<a>` with NO role, wearing the button's
+   *   `variant`/`size`/`fullWidth`. Appearance without semantics: a pill
+   *   that navigates announces as the link it is.
    */
-  renderAs?: 'button' | 'link'
+  renderAs?: 'button' | 'link' | 'linkButton'
 }
+
+/**
+ * What a button-styled LINK renders as with nothing to point at (canvas,
+ * preview, unresolved screen). `role: undefined` is the load-bearing half:
+ * MUI's `ButtonBase` stamps `role="button"` onto any non-`<button>` root,
+ * and merges the caller's props AFTER its own, so an explicit `undefined`
+ * is what removes it.
+ */
+const STYLED_LINK_PLACEHOLDER = { component: 'span', role: undefined } as const
 
 /**
  * Link that targets a screen by id, never a hardcoded path. Degrades to a
@@ -63,6 +78,18 @@ export interface ScreenLinkProps extends ButtonProps {
  * The button-only props are dropped in that mode rather than passed through
  * — `variant` means the typography variant on a `Link`, so forwarding
  * `"contained"` would silently produce an unstyled element.
+ *
+ * `renderAs="linkButton"` splits the two halves that used to travel together
+ * (AGL-1347). A pill row whose chips all navigate — docs URLs, `mailto:`,
+ * social profiles — is a legitimate design, but every chip announced as a
+ * button, which tells a screen-reader user to expect an action and costs
+ * them the link-list and open-in-new-tab affordances. This mode keeps the
+ * button's `variant`/`size`/`fullWidth` and drops the role, exactly as MUI's
+ * own `Button component={Link}` does. It is a THIRD value rather than
+ * `variant` becoming live in `"link"` mode, because a node switched to Text
+ * link keeps whatever `variant` it was authored with (the shipped preset is
+ * `variant: 'outlined'`) — honouring those would repaint the site's nav and
+ * footer as outlined pills.
  */
 const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
   const { screenId, href: externalHref, renderAs, ...spread } = props
@@ -81,15 +108,20 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
     externalHref,
   )
   const asLink = renderAs === 'link'
+  // Semantics and appearance are independent choices now (AGL-1347): a
+  // styled link takes the button's styling props and none of its role.
+  const asStyledLink = renderAs === 'linkButton'
 
   if (!href || suppressNavigation) {
     // The canvas must not lie about which element the page will ship, so
-    // the unresolved/suppressed case mirrors the same two shapes.
-    return asLink ? (
-      <Link ref={ref} component="span" underline="hover" {...rest} />
-    ) : (
+    // the unresolved/suppressed case mirrors the same three shapes.
+    if (asLink) {
+      return <Link ref={ref} component="span" underline="hover" {...rest} />
+    }
+    return (
       <Button
         ref={ref}
+        {...(asStyledLink ? STYLED_LINK_PLACEHOLDER : {})}
         variant={variant}
         size={size}
         fullWidth={fullWidth}
@@ -104,6 +136,12 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
       ref={ref}
       componentVariant="button"
       href={href}
+      // The whole defect in one attribute. `ButtonBase` adds `role="button"`
+      // to every non-`<button>` root, so the button LOOK used to drag the
+      // button ROLE onto a navigating anchor. It spreads the caller's props
+      // after its own, so passing `undefined` here is what clears it — and
+      // only for the mode that asked to be a link.
+      role={asStyledLink ? undefined : 'button'}
       variant={variant}
       size={size}
       fullWidth={fullWidth}
@@ -114,11 +152,12 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
 ScreenLink.displayName = 'ScreenLink'
 
 /**
- * Shows an attribute only in button mode. `notMatch` inverts `is`, so an
- * unset `renderAs` — every link authored before AGL-1195 — still counts as
- * a button and keeps its controls.
+ * Shows an attribute in the two modes that wear button styling — Button and
+ * Link (button styling). `notMatch` inverts `is`, so an unset `renderAs` —
+ * every link authored before AGL-1195 — still counts as a button and keeps
+ * its controls, and only Text link hides them.
  */
-const BUTTON_ONLY = { when: 'renderAs', is: 'link', notMatch: true }
+const BUTTON_STYLED = { when: 'renderAs', is: 'link', notMatch: true }
 
 export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
   $id: ID,
@@ -152,23 +191,27 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
     {
       name: 'renderAs',
       description:
-        'Buttons for calls to action; text for navigation — a footer or ' +
-        'inline link rendered as a button gets button typography and reads ' +
-        'as a button to screen readers.',
+        'What this announces as. Button is for calls to action; both link ' +
+        'options announce as a link, which is what navigation should be — ' +
+        'pick "Link (button styling)" to keep the button look on something ' +
+        'that navigates.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Render as',
       options: [
         { value: '', label: 'Button' },
         { value: 'link', label: 'Text link' },
+        { value: 'linkButton', label: 'Link (button styling)' },
       ],
     },
     // `color` survives both shapes — MUI's Link takes it too.
     FIELD_COLOR,
-    // The rest are button-only: the renderer drops them in link mode, so
-    // leaving them on screen would offer three controls that silently do
-    // nothing. Spread rather than mutate — these presets are shared.
-    { ...FIELD_SIZE, condition: BUTTON_ONLY },
-    { ...FIELD_FULL_WIDTH, condition: BUTTON_ONLY },
+    // The rest are appearance: the renderer drops them in Text link mode, so
+    // leaving them on screen there would offer three controls that silently
+    // do nothing — but they are live in Link (button styling), which is the
+    // point of that mode. Spread rather than mutate — these presets are
+    // shared.
+    { ...FIELD_SIZE, condition: BUTTON_STYLED },
+    { ...FIELD_FULL_WIDTH, condition: BUTTON_STYLED },
     {
       name: 'variant',
       description: 'The variant to use.',
@@ -180,7 +223,7 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
         { value: 'outlined', label: 'Outlined' },
         { value: 'contained', label: 'Contained' },
       ],
-      condition: BUTTON_ONLY,
+      condition: BUTTON_STYLED,
     },
   ],
 }
