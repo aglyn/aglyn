@@ -1584,7 +1584,16 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               (media as any).alt ?? (media as any).fileName ?? '',
             )
             if (pickerTarget === 'cover') {
-              setEditor((prev) => (prev ? { ...prev, coverImage: url } : prev))
+              // The COVER takes a reference (AGL-1407): every surface that
+              // reads `coverImage` resolves one, so writing the raw URL here
+              // would put back exactly what the back-fill just converted.
+              //
+              // The body does NOT, and must keep the URL: a cover is one
+              // field with known readers, while a body image is markdown
+              // whose renderers resolve nothing, so a `media:` ref inside
+              // `![alt](…)` is a broken image on the page.
+              const src = Aglyn.mediaNodeSrc(media) ?? url
+              setEditor((prev) => (prev ? { ...prev, coverImage: src } : prev))
             } else if (bodyTab === 'visual') {
               // Visual tab (AGL-582): insert as an image block at the caret
               // row; the editor serializes it back to ![alt](url).

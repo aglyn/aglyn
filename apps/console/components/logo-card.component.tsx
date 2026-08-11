@@ -16,6 +16,7 @@
  */
 'use client'
 
+import * as Aglyn from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useHost } from '@aglyn/tenant-feature-instance'
@@ -43,6 +44,15 @@ export function LogoCard(props: LogoCardProps) {
   } = useHost({ hostId })
   const [pickerOpen, setPickerOpen] = useState(false)
   const logoUrl = data?.logoUrl
+  /**
+   * The stored value has three generations — a raw storage URL, an AGL-175
+   * CDN path, and a `media:` reference (AGL-1407) — and only the resolver
+   * knows all three. Handing the raw string to `<img src>` worked for exactly
+   * as long as no site's `logoUrl` held a reference; the tenant's three
+   * readers all resolve, so this preview was the last one that would have
+   * shown a broken image the moment the data was converted.
+   */
+  const preview = Aglyn.resolveMediaSrc(logoUrl, { hostId })
 
   return (
     <CardDisplay
@@ -60,10 +70,10 @@ export function LogoCard(props: LogoCardProps) {
           'site name is shown instead.'}
       </Typography>
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-        {logoUrl ? (
+        {preview ? (
           <Box
             component="img"
-            src={logoUrl}
+            src={preview}
             alt="Site logo"
             sx={{ maxHeight: 48, maxWidth: 160, objectFit: 'contain' }}
           />
@@ -107,8 +117,15 @@ export function LogoCard(props: LogoCardProps) {
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onPick={(media) => {
-          if (!media.url) return
-          void setDoc({ logoUrl: media.url }, { merge: true })
+          // `mediaNodeSrc`, not `media.url` — the same writer the besigner
+          // picker and the social-image card use. It mints a `media:`
+          // reference when the org is entitled to CDN delivery and falls back
+          // to the raw URL when it is not, so the entitlement gate keeps
+          // working and picking a logo stops undoing the AGL-1407 conversion
+          // the next time someone opens this card.
+          const src = Aglyn.mediaNodeSrc(media)
+          if (!src) return
+          void setDoc({ logoUrl: src }, { merge: true })
             .then(() =>
               enqueueSnackbar('Logo saved', {
                 variant: 'success',
