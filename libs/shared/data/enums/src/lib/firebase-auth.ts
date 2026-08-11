@@ -54,6 +54,18 @@ export const AuthAppErrorCodes = {
   SSO_INCOMPLETE: 'auth/sso-incomplete',
   /** SSO failed for a reason we could not classify. */
   SSO_FAILED: 'auth/sso-failed',
+  /**
+   * The WebAuthn ceremony ended without an assertion (AGL-1417).
+   *
+   * Deliberately NOT called "cancelled". The spec overloads
+   * `NotAllowedError` to cover a dismissed prompt, a timeout, AND no
+   * discoverable credential for the RP ID — the last on purpose, so a site
+   * cannot probe for a credential's existence. Naming this "cancelled" is
+   * what let "you have no passkey on this device" render as nothing at all.
+   */
+  PASSKEY_NOT_COMPLETED: 'auth/passkey-not-completed',
+  /** The ceremony ran but the server refused the assertion. */
+  PASSKEY_SIGNIN_FAILED: 'auth/passkey-signin-failed',
 } as const
 
 export type AuthAppCode =
@@ -79,6 +91,7 @@ export const AuthErrorNotice = {
   [AuthAppErrorCodes.SSO_NOT_CONFIGURED]: true,
   [AuthAppErrorCodes.SSO_INPUT_REQUIRED]: true,
   [AuthAppErrorCodes.SSO_INCOMPLETE]: true,
+  [AuthAppErrorCodes.PASSKEY_NOT_COMPLETED]: true,
 }
 
 export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
@@ -199,6 +212,15 @@ export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
   [AuthAppErrorCodes.SSO_FAILED]:
     'Single sign-on could not be completed. Try again, and if it keeps ' +
     'happening contact an administrator of your organization.',
+  // AGL-1417. Both readings, because the browser deliberately refuses to say
+  // which one happened — and the far more common one is the first.
+  [AuthAppErrorCodes.PASSKEY_NOT_COMPLETED]:
+    'If you have not set one up on this device yet, sign in another way and ' +
+    'add one from Manage account → Security. If you closed the prompt, try ' +
+    'again.',
+  [AuthAppErrorCodes.PASSKEY_SIGNIN_FAILED]:
+    'Your other sign-in methods still work — password, Google, or single ' +
+    'sign-on.',
 }
 
 export const COOKIE_KEY_USER_TOKEN = 'aglyn-user-token'

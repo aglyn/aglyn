@@ -57,6 +57,10 @@ jest.mock('firebase/auth', () => {
     }
   }
   return {
+    // Real, not stubbed: `shared-data-enums` builds its error tables from
+    // these constants at module load, so mocking them away turns any import
+    // of the enums lib into a load-time crash (AGL-1417).
+    AuthErrorCodes: jest.requireActual('firebase/auth').AuthErrorCodes,
     browserLocalPersistence: {},
     GoogleAuthProvider: class GoogleAuthProvider extends StubProvider {},
     OAuthProvider: class OAuthProvider extends StubProvider {},

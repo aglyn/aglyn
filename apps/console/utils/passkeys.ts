@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { AuthAppErrorCodes, type AuthAppCode } from '@aglyn/shared-data-enums'
 import {
   browserSupportsWebAuthn,
   startAuthentication,
@@ -65,6 +66,77 @@ export class PasskeyRequestError extends Error {
     super(reason)
     this.name = 'PasskeyRequestError'
   }
+}
+
+export interface PasskeySignInFailure {
+  code: AuthAppCode
+  message: string
+}
+
+/**
+ * Turns any passkey sign-in rejection into something the user can read
+ * (AGL-1417).
+ *
+ * ## Why every branch must return something
+ *
+ * Both ceremony sites used to special-case `NotAllowedError` and `AbortError`
+ * and then do nothing at all — the button showed a spinner, the spinner went
+ * away, and that was the entire experience.
+ *
+ * The reasoning was that those two names mean "the user closed the prompt",
+ * and for a REGISTRATION ceremony that is fair: the prompt is always shown,
+ * so a dismissal really is a dismissal. For AUTHENTICATION it is wrong.
+ * WebAuthn overloads `NotAllowedError` to also mean **no discoverable
+ * credential matched the RP ID**, and it does so deliberately, so that a site
+ * cannot use the error to probe whether someone has a credential. A person
+ * who has never registered a passkey can therefore tap the button and have
+ * the ceremony end without any chooser ever appearing.
+ *
+ * We cannot distinguish the two. So the copy names both possibilities and
+ * gives the way forward for each, and — this is the part that was missing —
+ * it is always returned. A silent failure is the defect regardless of which
+ * of the two actually happened.
+ */
+export function describePasskeySignInFailure(
+  caught: unknown,
+): PasskeySignInFailure {
+  const name = (caught as { name?: string })?.name
+
+  if (name === 'NotAllowedError' || name === 'AbortError') {
+    return {
+      code: AuthAppErrorCodes.PASSKEY_NOT_COMPLETED,
+      message: 'No passkey was used to sign in.',
+    }
+  }
+
+  const reason =
+    caught instanceof PasskeyRequestError ? caught.reason : undefined
+
+  return {
+    code: AuthAppErrorCodes.PASSKEY_SIGNIN_FAILED,
+    message: SERVER_REFUSALS[reason] ?? 'Passkey sign-in failed.',
+  }
+}
+
+/**
+ * The reasons the passkey routes emit, in the user's language. Left as one
+ * blanket "Passkey sign-in failed." these were indistinguishable, so a
+ * rate-limited user and a user with a flagged credential got identical,
+ * equally unactionable text.
+ */
+const SERVER_REFUSALS: Record<string, string> = {
+  'rate-limited':
+    'Too many passkey attempts from this network. Wait a few minutes and ' +
+    'try again.',
+  'bad-origin': 'Passkey sign-in is not available on this address.',
+  'credential-unknown':
+    'That passkey is not registered to an Aglyn account. It may have been ' +
+    'removed.',
+  'credential-cloned':
+    'That passkey was refused for security reasons. Sign in another way and ' +
+    'remove it from Manage account → Security.',
+  'challenge-invalid': 'The passkey request expired. Try again.',
+  'verification-failed': 'That passkey could not be verified.',
 }
 
 async function postJson(
