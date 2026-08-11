@@ -63,10 +63,14 @@ import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
 import { authSignInHost } from '../../../utils/auth-delegation'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
+import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import { signInWithPasskey, usePasskeysSupported } from '../../../utils/passkeys'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
 
-const googleOAuthProvider = new GoogleAuthProvider()
+// Built through the shared factory so the account chooser is forced on
+// (AGL-1415) — a bare provider signs straight in as whatever account the
+// device already holds, which on mobile is never a choice at all.
+const googleOAuthProvider = createGoogleOAuthProvider()
 
 const formSchema: FormSchema = {
   fields: [FIELD_SCHEMA_EMAIL, FIELD_SCHEMA_PASSWORD],

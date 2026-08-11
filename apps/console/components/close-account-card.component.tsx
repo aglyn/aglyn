@@ -37,9 +37,6 @@ import {
 } from '@mui/material'
 import {
   EmailAuthProvider,
-  GoogleAuthProvider,
-  OAuthProvider,
-  SAMLAuthProvider,
   reauthenticateWithCredential,
   reauthenticateWithPopup,
   type AuthProvider,
@@ -47,6 +44,7 @@ import {
 } from 'firebase/auth'
 import { useCallback, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { createAuthProvider } from '../utils/oauth-providers'
 
 /**
  * Close your own account (AGL-1140).
@@ -74,12 +72,12 @@ export function reauthProvider(user: Pick<User, 'providerData'>): AuthProvider {
   const providerId = user.providerData.find((entry) =>
     entry?.providerId?.startsWith('saml.'),
   )?.providerId
-  if (providerId) return new SAMLAuthProvider(providerId)
   const oidc = user.providerData.find((entry) =>
     entry?.providerId?.startsWith('oidc.'),
   )?.providerId
-  if (oidc) return new OAuthProvider(oidc)
-  return new GoogleAuthProvider()
+  // Construction is the shared factory's (AGL-1415); the selection above —
+  // reading the account's OWN providerData — is what stays local.
+  return createAuthProvider(providerId ?? oidc)
 }
 
 interface CloseAccountBlocker {

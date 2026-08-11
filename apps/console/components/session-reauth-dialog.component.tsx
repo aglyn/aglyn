@@ -30,9 +30,6 @@ import {
 } from '@mui/material'
 import {
   browserLocalPersistence,
-  GoogleAuthProvider,
-  OAuthProvider,
-  SAMLAuthProvider,
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -47,6 +44,7 @@ import {
   markInteractiveSignOut,
 } from '../utils/interactive-signin'
 import isMobileBrowser from '../utils/is-mobile-browser'
+import { createAuthProvider } from '../utils/oauth-providers'
 import { signInWithPasskey, usePasskeysSupported } from '../utils/passkeys'
 import {
   clearSessionReauth,
@@ -95,13 +93,10 @@ import {
  * user object that carried `providerData` may already be signed out.
  */
 export function providerForId(providerId: string | null): AuthProvider {
-  if (providerId && providerId.startsWith('saml.')) {
-    return new SAMLAuthProvider(providerId)
-  }
-  if (providerId && providerId.startsWith('oidc.')) {
-    return new OAuthProvider(providerId)
-  }
-  return new GoogleAuthProvider()
+  // Delegated to the shared factory (AGL-1415), which also forces Google's
+  // account chooser — re-authenticating against silently-whichever-account
+  // the device holds is how a person verifies the wrong identity.
+  return createAuthProvider(providerId)
 }
 
 function reasonText(state: SessionReauthState): string {
