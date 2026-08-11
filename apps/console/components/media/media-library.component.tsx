@@ -105,6 +105,13 @@ import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaAssetCard } from './media-asset-card.component'
 import { MediaFolderCard } from './media-folder-card.component'
 import { MediaFolderRail } from './media-folder-rail.component'
+import {
+  coverageOf,
+  deleteConfirmationNote,
+  type MediaScanCoverage,
+  provesUnused,
+  usagePanelEmptyMessage,
+} from './media-usage-copy'
 
 export interface MediaLibraryComponentProps {
   /** Host scope — the site's own library. Mutually exclusive with orgId. */
@@ -167,24 +174,6 @@ const REF_KIND_LABEL: Record<MediaUsageRef['kind'], string> = {
   site: 'Site settings',
 }
 
-/**
- * How much of the corpus the scan read (AGL-1413) — see
- * `utils/server/scan-media-references`.
- *
- * The client's copy of the type exists so the DEFAULT can live here: an
- * absent or unrecognized value reads as `partial`. A response shape that
- * changed, an older deployment, a proxy that dropped the field — every one
- * of those has to degrade to "we could not determine this", because the
- * alternative is a delete confirmation quietly promising an asset is unused
- * on the strength of a field that was not there.
- */
-type MediaScanCoverage = 'full' | 'published' | 'partial'
-
-const coverageOf = (value: unknown): MediaScanCoverage =>
-  value === 'full' || value === 'published' ? value : 'partial'
-
-/** Whether an empty result from this scan may be shown as "nothing uses it". */
-const provesUnused = (coverage: MediaScanCoverage) => coverage !== 'partial'
 
 const formatBytes = (bytes: number) =>
   bytes >= 1024 * 1024
@@ -2102,26 +2091,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // screen distinguished "checked, and nothing uses it" from "did not
       // check the half of the corpus that had it".
       const scan = await scanReferences(media.$id).catch(() => null)
-      let referenceNote = ''
-      if (scan?.items.length) {
-        referenceNote =
-          ` WARNING: it is referenced in ${scan.items.length} ` +
-          `place${scan.items.length === 1 ? '' : 's'} (${scan.items
-            .map((reference) => reference.name)
-            .join(', ')}).`
-      } else if (!scan || !provesUnused(scan.coverage)) {
-        referenceNote =
-          ' We could not check everywhere it might be used, so this is not ' +
-          'a confirmation that nothing uses it.'
-      } else if (scan.coverage === 'published') {
-        referenceNote =
-          ' Nothing published uses it. Older and unpublished versions were ' +
-          'not all checked.'
-      } else {
-        referenceNote =
-          ' Nothing on this site uses it — no page, layout, component, ' +
-          'site setting, or content entry.'
-      }
+      const referenceNote = deleteConfirmationNote(
+        scan && {
+          coverage: scan.coverage,
+          names: scan.items.map((reference) => reference.name),
+        },
+      )
       const confirmed = await confirm({
         title: 'Delete this file?',
         description:
@@ -2939,15 +2914,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     : 'text.secondary'
                 }
               >
-                {refsAudit.coverage === 'partial'
-                  ? 'We could not check everywhere this could be used. That ' +
-                    'is not the same as nothing using it — try again before ' +
-                    'deleting.'
-                  : refsAudit.coverage === 'published'
-                    ? 'Nothing published uses this file. Older and ' +
-                      'unpublished versions were not all checked.'
-                    : 'Not used by any page, layout, component, site ' +
-                      'setting, or content entry.'}
+                {usagePanelEmptyMessage(refsAudit.coverage)}
               </Typography>
             ) : (
               <Stack spacing={0.75}>
