@@ -55,6 +55,16 @@ export const EXPORT_COLLECTION_LIMITS: Record<string, number> = {
   // assets exported fine and restored short — the silent narrowing this file
   // now exists to prevent, one layer above the field lists.
   media: 500,
+  // The folder tree the media manifest points INTO (AGL-1392). It was in
+  // neither this table nor the export's `Promise.all`, while `media.folderId`
+  // was (correctly) restorable — so every restored asset referenced a folder
+  // document the bundle provably did not contain. Same class as the
+  // AGL-1046/AGL-1050 bug that emptied datasets and media out of "whole-site"
+  // backups: a referenced collection nobody added to the manifest.
+  //
+  // Well above `media`'s own realistic fan-out — folders are a handful per
+  // library, and the cap exists to bound the bundle, not to ration them.
+  mediaFolders: 200,
 }
 
 /**
@@ -182,7 +192,23 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'props',
     'rootId',
     'nodes',
-    'versionId',
+    // No `versionId` (AGL-1392), and unlike every other omission here this one
+    // is about a POINTER rather than a payload.
+    //
+    // The export carries version subdocuments for screens and layouts only, so
+    // a restored `components.versionId` named a document the bundle provably
+    // did not contain. It costs nothing at render — the tenant reads
+    // `nodes`/`rootId`/`props` straight off the component DOCUMENT
+    // (`get-components.ts`) and never opens a version — but it strands the
+    // EDITOR permanently: both "mint version 1 if absent" fallbacks are guarded
+    // on `!versionId`, which a dangling id satisfies, so the self-heal that
+    // exists for exactly this case never fires and the besigner renders "Not
+    // found" with no way back.
+    //
+    // Dropping it is therefore the fix rather than a loss: the restored
+    // component renders from its own tree, and the first open mints a fresh
+    // version 1 seeded from it. Exporting component versions instead would ship
+    // a second copy of every component's tree to repair a pointer nothing reads.
     'marketplace',
     'installedFrom',
     'detachedFrom',
@@ -294,4 +320,25 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'customMetadata',
     'private',
   ],
+  /**
+   * The DAM folder tree (AGL-1392). Two fields, and the short list is the
+   * finding rather than an oversight: a folder is a name and a place.
+   *
+   * `parentId` is content, not structure — the hierarchy is the thing a restore
+   * is for, and it is capped at `MEDIA_FOLDER_MAX_DEPTH`. It is also the one
+   * field the import post-processes: a `parentId` naming a folder that will not
+   * exist is dropped to root, because an unreachable folder is INVISIBLE in the
+   * DAM rather than merely misplaced.
+   *
+   * Absent on purpose:
+   *
+   * * `visibleTo` — as for datasets and media, the import assigns a fresh
+   *   `host:` scope; a bundle is portable and an embedded `['org']` would
+   *   publish one org's folders across another agency's client roster.
+   * * `createdAt` — server-stamped.
+   * * `order` — declared on the interface and read by the library's sort, but
+   *   NO write path in the repo ever sets it, so no live document carries one.
+   *   The same "a key nobody can point at a document for" test AGL-1384 applies.
+   */
+  mediaFolders: ['name', 'parentId'],
 }

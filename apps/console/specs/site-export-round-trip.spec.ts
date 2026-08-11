@@ -73,16 +73,52 @@ const seed = (collectionPath: string, id: string, data: Doc) => {
 const storedAt = (path: string) =>
   writes.find((entry) => entry.path === path)?.data
 
-function collectionRef(path: string): any {
+/** A dotted field path, as `where('publishSchedule.publishAt', …)` names it. */
+const fieldPath = (data: Doc, path: string): unknown =>
+  path.split('.').reduce<any>((value, key) => value?.[key], data)
+
+/**
+ * One `where` clause, with FIRESTORE's comparison semantics rather than
+ * JavaScript's — which is the entire point of modelling the query at all
+ * (AGL-1392).
+ *
+ * Firestore orders values by TYPE FIRST and only then by value, and maps sort
+ * strictly after timestamps. So a range bound of `<= <a Timestamp>` can never
+ * be satisfied by a field holding a MAP, however timestamp-shaped that map
+ * looks: `{_seconds, _nanoseconds}` is not a near-miss, it is a different type
+ * and the document is simply not in the result set.
+ *
+ * A model that compared with `<=` in JavaScript would return the degraded
+ * document and this suite would be green against the bug — the same way
+ * `toEqual` is, since a `Timestamp`'s own enumerable keys are EXACTLY
+ * `_seconds` and `_nanoseconds`. Hence the premise guard below.
+ */
+const matchesFilter = (data: Doc, filter: [string, string, unknown]) => {
+  const [path, op, bound] = filter
+  const value = fieldPath(data, path)
+  if (op === '==') return value === bound
+  if (op === '<=') {
+    if (!(value instanceof Timestamp)) return false
+    const boundMs =
+      bound instanceof Timestamp ? bound.toMillis() : (bound as Date).getTime()
+    return value.toMillis() <= boundMs
+  }
+  throw new Error(`unmodelled operator '${op}'`)
+}
+
+function collectionRef(path: string, filters: Array<[string, string, unknown]> = []): any {
   const ref: any = {
     path,
     limit: () => ref,
-    where: () => ref,
+    where: (field: string, op: string, value: unknown) =>
+      collectionRef(path, [...filters, [field, op, value]]),
     select: () => ref,
     get: async () => ({
-      docs: [...(store.get(path) ?? new Map()).entries()].map(([id, data]) =>
-        snapshotOf(path, id, data),
-      ),
+      docs: [...(store.get(path) ?? new Map()).entries()]
+        .filter(([, data]) =>
+          filters.every((filter) => matchesFilter(data ?? {}, filter)),
+        )
+        .map(([id, data]) => snapshotOf(path, id, data)),
     }),
     doc: (id: string) => docRef(path, id),
     add: async () => undefined,
@@ -172,6 +208,10 @@ import { POST as IMPORT_POST } from '../app/api/hosts/import/route'
 import { IMPORTABLE_FIELDS } from '../app/api/_lib/site-export'
 // Through the mocked specifier, which re-exports the REAL implementation above.
 import { compress } from '@aglyn/aglyn/server'
+// The REAL Admin `Timestamp`, not a stand-in: what a document's timestamp
+// fields actually hold when `doc.data()` hands them back, and the class the
+// restored value has to BE for a range query to see it (AGL-1392).
+import { Timestamp } from 'firebase-admin/firestore'
 
 /**
  * A fully-populated document of every shape the bundle carries, keyed by the
@@ -220,10 +260,35 @@ const pooledNodes = () => {
 }
 
 /**
+ * The timestamp values a live document actually holds (AGL-1392).
+ *
+ * `doc.data()` hands back Admin `Timestamp` INSTANCES, and the suite used to
+ * seed `{_seconds, _nanoseconds}` plain maps — which is the shape the bug
+ * PRODUCES, so the round trip looked lossless because the seed was already
+ * broken. Same mistake, and the same fix, as the plain-map `nodes` seed that
+ * hid AGL-1391.
+ *
+ * `PUBLISHED_AT` carries sub-millisecond nanoseconds on purpose: an ISO-8601
+ * wire form would truncate them silently, so this is the seed that makes the
+ * "why not ISO" answer a fact rather than an opinion.
+ *
+ * `PUBLISH_AT` is deliberately in the PAST, so a pending schedule carrying it
+ * is DUE and the scheduled-publish sweep must return the restored document.
+ */
+const PUBLISHED_AT = new Timestamp(1767323045, 123456789)
+const PUBLISH_AT = new Timestamp(1767323045, 0)
+const INSTALLED_AT = new Timestamp(1767300000, 0)
+
+/**
  * `restored` names the value a field is expected to hold AFTER the round trip
  * when it differs from what was seeded. Only the compressed `nodes` needs it:
  * the bundle is meant to carry a readable map, so the restored document holds
  * the decoded tree rather than the bytes it was stored as.
+ *
+ * `dropped` names a field a live document legitimately carries that a restore
+ * must deliberately NOT write — seeded because the export does emit it, and
+ * asserted absent because restoring it would leave a dangling reference
+ * (AGL-1392).
  */
 const SEEDS: Array<{
   collection: string
@@ -231,6 +296,7 @@ const SEEDS: Array<{
   id: string
   doc: Doc
   restored?: Doc
+  dropped?: string[]
 }> = [
   {
     collection: 'screens',
@@ -248,8 +314,15 @@ const SEEDS: Array<{
       parentId: 'screen-0',
       order: 3,
       layoutId: 'layout-1',
-      publishedAt: { _seconds: 1767323045, _nanoseconds: 0 },
-      publishSchedule: { versionId: 'v2', action: 'publish', status: 'pending' },
+      publishedAt: PUBLISHED_AT,
+      // A PENDING schedule whose time has passed — the state the sweep at
+      // `apps/tenant/utils/publish-schedule-job.ts:77` exists to find.
+      publishSchedule: {
+        versionId: 'v2',
+        action: 'publish',
+        status: 'pending',
+        publishAt: PUBLISH_AT,
+      },
       visibility: 'password',
       protection: { passwordHash: 'a'.repeat(64) },
       locale: 'en',
@@ -325,7 +398,12 @@ const SEEDS: Array<{
       description: 'Header and footer',
       versionId: 'layout-version-1',
       layoutId: 'layout-parent',
-      publishSchedule: { versionId: 'lv2', action: 'publish', status: 'pending' },
+      publishSchedule: {
+        versionId: 'lv2',
+        action: 'publish',
+        status: 'pending',
+        publishAt: PUBLISH_AT,
+      },
     },
   },
   {
@@ -365,6 +443,9 @@ const SEEDS: Array<{
       props: [{ name: 'label', type: 'text' }],
       rootId: 'root',
       nodes: { root: { $id: 'root', componentId: 'div', nodes: [] } },
+      // Seeded because a live component genuinely carries it — and DROPPED on
+      // restore, because the bundle carries no component version for it to
+      // name (AGL-1392).
       versionId: 'component-version-1',
       marketplace: { listingId: 'listing-1', profileId: 'profile-1', version: '1.2.0' },
       installedFrom: {
@@ -372,13 +453,21 @@ const SEEDS: Array<{
         version: '1.2.0',
         sha256: 'abc123',
         artifactType: 'component',
-        installedAt: 1767323045,
+        // `serverTimestamp()` at marketplace/server/provenance.ts:64 — a real
+        // Timestamp, NESTED inside a map, which is why the codec walks deep
+        // rather than naming known fields.
+        installedAt: INSTALLED_AT,
         publisherOrgId: 'org-9',
       },
       detachedFrom: { listingId: 'listing-0', version: '1.0.0' },
-      publishSchedule: { versionId: 'cv2', status: 'pending' },
+      publishSchedule: {
+        versionId: 'cv2',
+        status: 'pending',
+        publishAt: PUBLISH_AT,
+      },
       kind: 'component',
     },
+    dropped: ['versionId'],
   },
   {
     collection: 'variables',
@@ -506,8 +595,9 @@ const SEEDS: Array<{
       // `listLiveEntries` queries on this, so an entry restored without one
       // is invisible on the live site.
       status: 'published',
-      publishedAt: { _seconds: 1767323045, _nanoseconds: 0 },
-      publishAt: { _seconds: 1767323045, _nanoseconds: 0 },
+      publishedAt: PUBLISHED_AT,
+      // What `isLive` reads through `.seconds` (get-collection-content.ts:143).
+      publishAt: PUBLISH_AT,
     },
   },
   {
@@ -545,6 +635,28 @@ const SEEDS: Array<{
     // `order` is what sortDatasetRecords sorts by, so dropping it reorders
     // every repeatable on the restored site.
     doc: { values: { roast: 'Dark' }, order: 4 },
+  },
+  {
+    /**
+     * The folder tree the media manifest references (AGL-1392).
+     *
+     * `orgs/{orgId}/mediaFolders` was in neither `EXPORT_COLLECTION_LIMITS` nor
+     * the export's `Promise.all`, while `media.folderId` was (correctly)
+     * restorable — so every restored asset pointed at a folder document the
+     * bundle provably did not contain. Same class as AGL-1046/AGL-1050: a
+     * referenced collection nobody added to the manifest.
+     */
+    collection: 'mediaFolders',
+    path: 'orgs/org-1/mediaFolders',
+    id: 'folder-1',
+    doc: { name: 'Brand', parentId: null },
+  },
+  {
+    // Nested, so the restore has to carry the hierarchy and not just the names.
+    collection: 'mediaFolders',
+    path: 'orgs/org-1/mediaFolders',
+    id: 'folder-2',
+    doc: { name: 'Logos', parentId: 'folder-1' },
   },
   {
     collection: 'media',
@@ -654,7 +766,7 @@ describe('the export/import round trip is lossless (AGL-1382)', () => {
     expect(bundle.media).toHaveLength(1)
   })
 
-  describe.each(SEEDS)('$collection/$id', ({ path, id, doc, restored }) => {
+  describe.each(SEEDS)('$collection/$id', ({ path, id, doc, restored, dropped }) => {
     it('restores every field it was exported with', async () => {
       const bundle = await runExport()
       await runImport(bundle)
@@ -663,7 +775,23 @@ describe('the export/import round trip is lossless (AGL-1382)', () => {
       // Field by field rather than a whole-object match: the failure message
       // then names the key that stopped round-tripping.
       for (const [key, value] of Object.entries({ ...doc, ...restored })) {
-        expect({ [key]: stored[key] }).toEqual({ [key]: value })
+        if (dropped?.includes(key)) continue
+        /**
+         * `toStrictEqual`, not `toEqual` — and this is the whole AGL-1392
+         * trap in one line.
+         *
+         * An Admin `Timestamp`'s own enumerable keys are EXACTLY `_seconds`
+         * and `_nanoseconds`, which is also exactly what `JSON.stringify`
+         * makes of it. `toEqual` ignores prototypes, so it reports the
+         * degraded plain map and a live `Timestamp` as EQUAL — a field-by-
+         * field positive control written with it is green against a round
+         * trip that silently changes the type of every date in the bundle.
+         * `toStrictEqual` compares the class too.
+         */
+        expect({ [key]: stored[key] }).toStrictEqual({ [key]: value })
+      }
+      for (const key of dropped ?? []) {
+        expect({ key, present: key in stored }).toEqual({ key, present: false })
       }
     })
   })
@@ -779,6 +907,313 @@ describe('a besigner-saved version survives the round trip (AGL-1391)', () => {
 })
 
 /**
+ * AGL-1392 gap 1: a restored publish schedule must still FIRE.
+ *
+ * `JSON.stringify` on an Admin `Timestamp` yields `{_seconds, _nanoseconds}`,
+ * so every date in a bundle came back as a plain MAP. The consequence is not
+ * cosmetic and it is not "the field is missing" — the field is right there,
+ * holding the right numbers, in the wrong type:
+ *
+ * * `publishSchedule.publishAt <= now` is a RANGE query
+ *   (`apps/tenant/utils/publish-schedule-job.ts:77-78`). Firestore orders by
+ *   type before value and maps sort after timestamps, so the sweep never
+ *   returns the restored screen and the schedule never fires. A restored site
+ *   looks correct and silently stops publishing.
+ * * Every reader that got the document anyway reads `.seconds`, which a
+ *   `_seconds` map does not have — and the two readers degrade in OPPOSITE
+ *   directions. `applyDuePublishSchedule` (`apply-publish-schedule.ts:39`)
+ *   does `(publishAt?.seconds ?? 0) * 1000`, so `undefined` becomes 0 and
+ *   every restored schedule reads as already due. `isLive`
+ *   (`get-collection-content.ts:143`) does `?? POSITIVE_INFINITY`, so a
+ *   restored scheduled ENTRY is never live.
+ *
+ * The repo already knew about this decay in another door: `get-screen.ts:89`
+ * refuses to ISR-cache a doc with a pending schedule precisely because "the
+ * JSON round trip a cache hit implies decays that to `_seconds`". The export
+ * path had no such guard.
+ */
+describe('a restored publish schedule still fires (AGL-1392)', () => {
+  const SCREEN_PATH = 'hosts/host-1/screens/screen-1'
+  const ENTRY_PATH = 'hosts/host-1/collections/collection-1/entries/entry-1'
+
+  /** Land the restore, so the sweep below reads what an import actually left. */
+  const applyWritesToStore = () => {
+    for (const { path, data } of writes) {
+      const cut = path.lastIndexOf('/')
+      seed(path.slice(0, cut), path.slice(cut + 1), data)
+    }
+  }
+
+  /**
+   * The scheduled-publish sweep, verbatim from
+   * `apps/tenant/utils/publish-schedule-job.ts:77-78`. Modelled rather than
+   * imported because that job lives in `apps/tenant` and registers itself
+   * against `next/cache`; what has to be faithful is the FILTER, and
+   * `matchesFilter` above is where that faithfulness lives.
+   */
+  const runDueSweep = () =>
+    (mockFirestore as any)
+      .collection('hosts/host-1/screens')
+      .where('publishSchedule.status', '==', 'pending')
+      .where('publishSchedule.publishAt', '<=', new Date())
+      .limit(100)
+      .get()
+
+  it('is seeded as a real Timestamp, and the sweep can tell the difference', async () => {
+    // Guard the premise, twice — the AGL-1391 lesson. A seed that quietly
+    // became a `{_seconds}` map, or a query model that compared with plain
+    // JavaScript `<=`, would make every assertion below pass against the bug.
+    expect(
+      store.get('hosts/host-1/screens').get('screen-1')['publishedAt'],
+    ).toBeInstanceOf(Timestamp)
+
+    expect((await runDueSweep()).docs.map((doc: any) => doc.id)).toEqual([
+      'screen-1',
+    ])
+
+    // The degraded shape, in the same query, must NOT come back. This is the
+    // assertion that makes the model worth anything.
+    seed('hosts/host-1/screens', 'screen-1', {
+      publishSchedule: {
+        status: 'pending',
+        publishAt: { _seconds: PUBLISH_AT.seconds, _nanoseconds: 0 },
+      },
+    })
+    expect((await runDueSweep()).docs).toHaveLength(0)
+  })
+
+  it('carries a tagged wire form rather than the SDK private fields', async () => {
+    const bundle = await runExport()
+    const publishedAt = bundle.screens.find((s: any) => s.$id === 'screen-1')
+      .publishedAt
+
+    // The exact broken shape, pinned so it cannot come back green.
+    expect(publishedAt).not.toHaveProperty('_seconds')
+    expect(publishedAt).toEqual({
+      type: 'firestore/timestamp/1.0',
+      seconds: PUBLISHED_AT.seconds,
+      nanoseconds: PUBLISHED_AT.nanoseconds,
+    })
+  })
+
+  it('restores publishAt as a Timestamp the due sweep RETURNS', async () => {
+    const bundle = await runExport()
+    await runImport(bundle)
+    applyWritesToStore()
+
+    // Not "the field round-tripped" — `{_seconds}` round-trips as something
+    // too. The question is whether the scheduled-publish beat can see it.
+    const due = await runDueSweep()
+    expect(due.docs.map((doc: any) => doc.id)).toEqual(['screen-1'])
+
+    const schedule = storedAt(SCREEN_PATH)['publishSchedule'] as any
+    expect(schedule.publishAt).toBeInstanceOf(Timestamp)
+    // And the executor's own arithmetic, verbatim from
+    // `apply-publish-schedule.ts:39`. Against the bug `.seconds` is undefined,
+    // so this collapses to 0 — every restored schedule "already due".
+    expect((schedule.publishAt?.seconds ?? 0) * 1000).toBe(
+      PUBLISH_AT.seconds * 1000,
+    )
+  })
+
+  it('restores a scheduled entry that isLive still counts as live', async () => {
+    const bundle = await runExport()
+    await runImport(bundle)
+    const stored = storedAt(ENTRY_PATH)
+
+    expect(stored['publishAt']).toBeInstanceOf(Timestamp)
+    // `isLive`, verbatim from `get-collection-content.ts:143`. Against the bug
+    // the `?? POSITIVE_INFINITY` fallback fires and the entry is never live —
+    // the opposite direction from the screen executor, from the same cause.
+    const publishAtMs =
+      ((stored['publishAt'] as any)?.seconds ?? Number.POSITIVE_INFINITY) * 1000
+    expect(publishAtMs <= Date.now()).toBe(true)
+  })
+
+  it('keeps nanosecond precision an ISO string would have truncated', async () => {
+    const bundle = await runExport()
+    await runImport(bundle)
+    // 123456789ns is not representable in ISO-8601 milliseconds. Serialising
+    // dates as `.toISOString()` would round this and nobody would notice.
+    expect(storedAt(SCREEN_PATH)['publishedAt']).toStrictEqual(PUBLISHED_AT)
+  })
+
+  it('revives a nested timestamp, not just the fields anyone listed', async () => {
+    const bundle = await runExport()
+    await runImport(bundle)
+    // `installedFrom.installedAt` is a `serverTimestamp()` two levels down in
+    // a map. A codec that named known top-level fields would miss it, which is
+    // how this class of gap gets filed in the first place.
+    const installedFrom = storedAt('hosts/host-1/components/component-1')[
+      'installedFrom'
+    ] as any
+    expect(installedFrom.installedAt).toBeInstanceOf(Timestamp)
+    expect(installedFrom.installedAt).toStrictEqual(INSTALLED_AT)
+  })
+
+  it('restores an already-downloaded bundle carrying the _seconds envelope', async () => {
+    // Belt and braces, exactly as AGL-1391 argued: fixing the export cannot
+    // reach a file already on a customer's disk, and the only day anyone opens
+    // a year-old backup is the day they need it.
+    const bundle = await runExport()
+    const screen = bundle.screens.find((s: any) => s.$id === 'screen-1')
+    screen.publishedAt = { _seconds: PUBLISHED_AT.seconds, _nanoseconds: 7 }
+    screen.publishSchedule.publishAt = {
+      _seconds: PUBLISH_AT.seconds,
+      _nanoseconds: 0,
+    }
+
+    await runImport(bundle)
+    applyWritesToStore()
+    expect((await runDueSweep()).docs.map((doc: any) => doc.id)).toEqual([
+      'screen-1',
+    ])
+    expect(storedAt(SCREEN_PATH)['publishedAt']).toStrictEqual(
+      new Timestamp(PUBLISHED_AT.seconds, 7),
+    )
+  })
+
+  it('does not turn a date-shaped STRING into a Timestamp', async () => {
+    // The reason the wire form is tagged rather than an ISO string. A bare
+    // `2026-01-02T…Z` in a bundle is indistinguishable from a user's text, so
+    // reviving by pattern would silently retype authored content — the same
+    // class of bug in the opposite direction.
+    const bundle = await runExport()
+    bundle.collections[0].entries[0].body = '2026-01-02T04:24:05.000Z'
+    bundle.collections[0].entries[0].title = PUBLISHED_AT.toDate().toISOString()
+    await runImport(bundle)
+
+    const stored = storedAt(ENTRY_PATH)
+    expect(typeof stored['body']).toBe('string')
+    expect(typeof stored['title']).toBe('string')
+  })
+})
+
+/**
+ * AGL-1392 gap 2: `orgs/{orgId}/mediaFolders` was in no list at all.
+ *
+ * Not in `EXPORT_COLLECTION_LIMITS`, not in the export's `Promise.all`, not in
+ * `IMPORTABLE_FIELDS` — while `media.folderId` was (correctly) restorable. So
+ * every restored asset pointed at a folder document the bundle provably did
+ * not contain, and a dangling `folderId` is not merely untidy: the DAM's root
+ * view filters OUT anything with a truthy `folderId`, so the asset is in no
+ * folder and not at root either.
+ */
+describe('the media folder tree survives the round trip (AGL-1392)', () => {
+  it('exports the folders the manifest references', async () => {
+    const bundle = await runExport()
+    expect(bundle.mediaFolders).toHaveLength(2)
+    // The referenced folder is IN the bundle — the whole point.
+    const referenced = bundle.media[0].folderId
+    expect(bundle.mediaFolders.map((f: any) => f.$id)).toContain(referenced)
+  })
+
+  it('restores the hierarchy and assigns a fresh host scope', async () => {
+    const bundle = await runExport()
+    bundle.mediaFolders[0].visibleTo = ['org']
+    await runImport(bundle)
+
+    expect(storedAt('orgs/org-1/mediaFolders/folder-1')).toMatchObject({
+      name: 'Brand',
+      parentId: null,
+      visibleTo: ['host:host-1'],
+    })
+    // Nesting, not just names.
+    expect(storedAt('orgs/org-1/mediaFolders/folder-2')['parentId']).toBe(
+      'folder-1',
+    )
+  })
+
+  it('drops a parentId no folder in the bundle or the org holds', async () => {
+    // A folder whose parent is missing is unreachable in the tree — invisible
+    // rather than misplaced. Root is recoverable by dragging; invisible is not.
+    const bundle = await runExport()
+    bundle.mediaFolders[1].parentId = 'folder-that-was-never-exported'
+    await runImport(bundle)
+    expect(storedAt('orgs/org-1/mediaFolders/folder-2')['parentId']).toBeNull()
+  })
+
+  it('keeps a parentId the TARGET org already holds', async () => {
+    // The other direction, and the reason this is a read rather than a guess:
+    // a folder scoped to a sibling host is not in the bundle but IS in the
+    // org, so nulling it would reparent a folder that was never broken.
+    seed('orgs/org-1/mediaFolders', 'folder-sibling', { name: 'Sibling' })
+    const bundle = await runExport()
+    bundle.mediaFolders = bundle.mediaFolders.filter(
+      (folder: any) => folder.$id !== 'folder-sibling',
+    )
+    bundle.mediaFolders[1].parentId = 'folder-sibling'
+    await runImport(bundle)
+    expect(storedAt('orgs/org-1/mediaFolders/folder-2')['parentId']).toBe(
+      'folder-sibling',
+    )
+  })
+
+  it('drops a media folderId that would dangle', async () => {
+    const bundle = await runExport()
+    bundle.media[0].folderId = 'folder-that-was-never-exported'
+    await runImport(bundle)
+    // Not "left pointing at nothing": at root the asset is filtered out of the
+    // grid entirely, so a dangling pointer HIDES the asset.
+    expect(storedAt('orgs/org-1/media/media-1')['folderId']).toBeNull()
+  })
+})
+
+/**
+ * AGL-1392 gap 3: a restored component's `versionId` dangles, and defeats the
+ * self-heal that would otherwise fix it.
+ *
+ * The export carries version subdocuments for screens and layouts ONLY, but
+ * `components.versionId` was restorable — so a restored component pointed at a
+ * version document the bundle provably did not contain.
+ *
+ * Unlike screens, that pointer is not on the render path at all: the tenant
+ * reads `nodes`/`rootId`/`props` straight off the component DOCUMENT
+ * (`get-components.ts:47-63`) and never opens a version. What a dangling
+ * pointer breaks is EDITING — and permanently, because both "mint version 1"
+ * fallbacks are guarded on `!versionId` (component detail page and
+ * `host-components-card.component.tsx:262`), which a dangling id satisfies.
+ * Dropping it on import is what lets the existing self-heal fire.
+ */
+describe('a restored component can still be edited (AGL-1392)', () => {
+  it('does not restore a versionId the bundle carries no version for', async () => {
+    const bundle = await runExport()
+    // The export really does ship it — this is about the import, not the file.
+    expect(bundle.components[0].versionId).toBe('component-version-1')
+
+    await runImport(bundle)
+    const stored = storedAt('hosts/host-1/components/component-1')
+    expect(stored).not.toHaveProperty('versionId')
+    // The tree still restores: the component document is the renderable one.
+    expect(stored['rootId']).toBe('root')
+    expect(stored['nodes']).toEqual({
+      root: { $id: 'root', componentId: 'div', nodes: [] },
+    })
+  })
+
+  it('leaves no version pointer anywhere without its version document', async () => {
+    // The invariant, rather than a fact about one collection: a restored
+    // pointer is legitimate only when the same import wrote the document it
+    // names. Screens and layouts pass because the export attaches
+    // `item.version`; components pass by not restoring the pointer at all.
+    const bundle = await runExport()
+    await runImport(bundle)
+
+    for (const { path, id, collection } of SEEDS) {
+      if (!['screens', 'layouts', 'components'].includes(collection)) continue
+      const stored = storedAt(`${path}/${id}`)
+      const versionId = stored?.['versionId']
+      if (!versionId) continue
+      expect({
+        path,
+        versionId,
+        written: Boolean(storedAt(`${path}/${id}/versions/${versionId}`)),
+      }).toEqual({ path, versionId, written: true })
+    }
+  })
+})
+
+/**
  * Keys no export produces and no collection should store. `$id` is the one
  * AGL-1374 found leaking into stored documents from a listener spread;
  * `createdAt`/`updatedAt` are stamped server-side; `deletedAt` is what the
@@ -838,9 +1273,10 @@ describe('an unexpected key in a bundle is not stored (AGL-1382)', () => {
       Object.assign(doc, unexpectedFields)
     })
     await runImport(bundle)
-    for (const { path, id, doc } of SEEDS) {
+    for (const { path, id, doc, dropped } of SEEDS) {
       const stored = storedAt(`${path}/${id}`)
       for (const key of Object.keys(doc)) {
+        if (dropped?.includes(key)) continue
         expect({ path, key, present: key in stored }).toEqual({
           path,
           key,
@@ -881,6 +1317,8 @@ describe('an unexpected key in a bundle is not stored (AGL-1382)', () => {
       'datasets',
       'records',
       'media',
+      // The collection that was in neither list at all (AGL-1392).
+      'mediaFolders',
     ]) {
       expect({ name, declared: declared.includes(name) }).toEqual({
         name,
