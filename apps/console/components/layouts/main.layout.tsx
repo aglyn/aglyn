@@ -44,6 +44,7 @@ import { useUrlNamesOrg } from '../../hooks/use-secondary-nav'
 import { TOP_BAR_HEIGHT } from '../../constants/shared'
 import NotificationPrompt from '../notification-prompt.component'
 import NotificationsMenu from '../notifications-menu.component'
+import OfflineIndicator from '../offline-indicator.component'
 import OrgSwitcherNav from '../org-switcher-nav.component'
 import UserMenu from '../user-menu.component'
 
@@ -459,6 +460,13 @@ export function MainLayout(props: MainLayoutProps) {
           // prefix actions.
           <>
             {actionsPrefix}
+            {/* Connection state (AGL-1056). HERE because this bar is the
+                console's one piece of genuinely persistent chrome — mounted
+                by the `(app)` layout, by the besigner and by the screen view
+                page, so a single mount covers every authoring surface, and it
+                survives navigation rather than blinking on each one. Silent
+                on a healthy connection. */}
+            <OfflineIndicator />
             <NotificationsMenu />
             {/* Pre-permission ask (AGL-663): the browser allows exactly one
                 native prompt per origin, so we offer in-app first where a
