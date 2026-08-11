@@ -118,6 +118,29 @@ Not every element can go everywhere. Two kinds of guardrails apply:
 Layout-only components are additionally gated by the **view type** you're editing (a screen vs. a
 shared layout).
 
+## Moving an element without dragging
+
+Dragging isn't the only way to move an element between containers. Every element's **⋮ menu** — on
+the canvas overlay, and on the hierarchy row — carries four move actions that work by clicking:
+
+- **Shift up** / **Shift down** — reorder the element among its siblings, without changing its
+  container.
+- **Move out of container** — lift the element out of the container it's in, landing it directly
+  **after** that container, one level up.
+- **Move into element above** — tuck the element into the sibling directly above it.
+
+Used together, these reach anywhere in the tree: **move out**, **shift** until the element is
+sitting next to the container you want, then **move into**. This is the reliable route in a deeply
+nested tree, on a long page where the source and destination aren't on screen at the same time, or
+any time a drag is fiddly.
+
+Each action is a single undoable step, and each obeys exactly the same rules a drag does — including
+the leaf rule. An element whose content is an attribute (a **Markdown** block, a **Reusable
+Component** instance, a **Layout Slot**, a **List Item Text**) can't hold other elements, so **Move
+into element above** is greyed out over one, and **Move out of container** refuses to drop an
+element into one. When an action is unavailable the Besigner says why rather than moving the element
+somewhere it would never render.
+
 ## Multi-drag
 
 Select several nodes first, then drag any one of them to move the **whole selection** at once. The

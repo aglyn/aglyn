@@ -65,6 +65,8 @@ import {
   mdiFormatHorizontalAlignCenter,
   mdiFormatHorizontalAlignLeft,
   mdiFormatHorizontalAlignRight,
+  mdiFormatIndentDecrease,
+  mdiFormatIndentIncrease,
   mdiFormDropdown,
   mdiGroup,
   mdiHomeVariant,
@@ -151,6 +153,10 @@ export const ICON_VARIANT_MODIFY_EDIT = mdiPencil
 export const ICON_VARIANT_MODIFY_MODE_REARRANGE = mdiCursorMove
 export const ICON_VARIANT_MODIFY_MODE_SELECT = mdiCursorDefault
 export const ICON_VARIANT_MODIFY_MOVE_DOWN = mdiArrowDown
+// Reparenting a node in the hierarchy is an outdent / indent, and reads as
+// one (AGL-1405) — the arrows above are sibling reordering.
+export const ICON_VARIANT_MODIFY_MOVE_IN = mdiFormatIndentIncrease
+export const ICON_VARIANT_MODIFY_MOVE_OUT = mdiFormatIndentDecrease
 export const ICON_VARIANT_MODIFY_MOVE_UP = mdiArrowUp
 export const ICON_VARIANT_MODIFY_PASTE = mdiContentPaste
 export const ICON_VARIANT_MODIFY_REDO = mdiRedo

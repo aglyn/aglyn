@@ -1577,4 +1577,248 @@ describe('Aglyn: Screen Manager', () => {
       expect(Object.keys(saved).filter((id) => !reachable.has(id))).toEqual([])
     })
   })
+
+  /**
+   * `reparentNode` is the one primitive every move goes through — drag and
+   * drop today, the hierarchy's Move in/out actions since AGL-1405. It was
+   * the only editor write that could put a node somewhere it can never
+   * render: `nodeAcceptsChildren` gated the Insert menu, paste and the drop
+   * indicator (AGL-1388), but not the move itself. That is how three /press
+   * screenshots ended up under a `markdown` node with no way back out.
+   */
+  describe('reparentNode guards the move (AGL-1405)', () => {
+    const CONTAINER = 'testContainer1405'
+    const NO_DROP = 'testNoDrop1405'
+    const LEAF_SELF = 'testLeafSelf1405'
+    const LEAF_TEXT = 'testLeafText1405'
+    const schemas: Record<string, any> = {
+      div: {},
+      [CONTAINER]: {},
+      [NO_DROP]: { flags: { dropping: FEATURE_FLAG.DISABLED } },
+      [LEAF_SELF]: { flags: { selfClosing: FEATURE_FLAG.ENABLED } },
+      [LEAF_TEXT]: { flags: { textEditable: FEATURE_FLAG.ENABLED } },
+    }
+    const fakeAglyn = {
+      components: { getSchema: (id: string) => schemas[id] },
+    } as any
+
+    /**
+     * The /press shape, minus the noise: a section holding a `markdown`
+     * block, and a stack of images already trapped inside that block.
+     *
+     *   root
+     *     section
+     *       markdown        <- rejects children
+     *         stack
+     *           img1, img2
+     *       tail
+     */
+    const makeCanvas = () => {
+      const canvas = new CanvasManager(fakeAglyn)
+      canvas.setNodes({
+        [NODE_ROOT_ID]: {
+          $id: NODE_ROOT_ID,
+          type: NodeType.NODE,
+          parentId: NODE_ROOT_ID,
+          componentId: 'div',
+          props: {},
+          sx: {},
+          nodes: ['section'],
+        },
+        section: {
+          $id: 'section',
+          type: NodeType.NODE,
+          parentId: NODE_ROOT_ID,
+          componentId: CONTAINER,
+          props: {},
+          sx: {},
+          nodes: ['markdown', 'tail'],
+        },
+        markdown: {
+          $id: 'markdown',
+          type: NodeType.NODE,
+          parentId: 'section',
+          componentId: NO_DROP,
+          props: {},
+          sx: {},
+          nodes: ['stack'],
+        },
+        stack: {
+          $id: 'stack',
+          type: NodeType.NODE,
+          parentId: 'markdown',
+          componentId: CONTAINER,
+          props: {},
+          sx: {},
+          nodes: ['img1', 'img2'],
+        },
+        img1: {
+          $id: 'img1',
+          type: NodeType.NODE,
+          parentId: 'stack',
+          componentId: LEAF_SELF,
+          props: {},
+          sx: {},
+          nodes: [],
+        },
+        img2: {
+          $id: 'img2',
+          type: NodeType.NODE,
+          parentId: 'stack',
+          componentId: LEAF_SELF,
+          props: {},
+          sx: {},
+          nodes: [],
+        },
+        tail: {
+          $id: 'tail',
+          type: NodeType.NODE,
+          parentId: 'section',
+          componentId: LEAF_TEXT,
+          props: {},
+          sx: {},
+          nodes: [],
+        },
+      })
+      return canvas
+    }
+
+    it('accepts a move into a container that takes children', () => {
+      const canvas = makeCanvas()
+      canvas.reparentNode(canvas.getNode('stack')!, canvas.getNode('section')!, 1)
+
+      expect(canvas.getNode('section')!.nodes).toEqual([
+        'markdown',
+        'stack',
+        'tail',
+      ])
+      expect(canvas.getNode('stack')!.parentId).toBe('section')
+      expect(canvas.getNode('markdown')!.nodes).toEqual([])
+    })
+
+    /**
+     * The whole reason the /press images are stuck. A move that lands
+     * somewhere the renderer will never walk is worse than a refused one:
+     * the author sees the node in the tree and the page never shows it.
+     */
+    it('REFUSES a move into a node that rejects children', () => {
+      const canvas = makeCanvas()
+      expect(() =>
+        canvas.reparentNode(canvas.getNode('tail')!, canvas.getNode('markdown')!),
+      ).toThrow(/cannot hold/i)
+
+      // Nothing moved, and nothing was written to the undo stack for it.
+      expect(canvas.getNode('markdown')!.nodes).toEqual(['stack'])
+      expect(canvas.getNode('section')!.nodes).toEqual(['markdown', 'tail'])
+      expect(canvas.canUndo).toBe(false)
+    })
+
+    it('REFUSES a move into a self-closing or text-editable leaf', () => {
+      const canvas = makeCanvas()
+      // `tail` is text-editable, `img1` is self-closing — neither has a slot
+      // a child could ever render into.
+      expect(() =>
+        canvas.reparentNode(canvas.getNode('stack')!, canvas.getNode('tail')!),
+      ).toThrow(/cannot hold/i)
+      expect(() =>
+        canvas.reparentNode(canvas.getNode('tail')!, canvas.getNode('img1')!),
+      ).toThrow(/cannot hold/i)
+      expect(canvas.canUndo).toBe(false)
+    })
+
+    /**
+     * A reorder inside a parent that rejects children is still allowed —
+     * otherwise the nodes already trapped by AGL-1388 could not even be
+     * shuffled, and `reorderNode` (Shift up / Shift down) would throw on
+     * exactly the nodes that need rescuing.
+     */
+    it('allows a reorder within a parent that rejects children', () => {
+      const canvas = makeCanvas()
+      canvas.setNode(
+        canvas.createNode({ $id: 'stack2', componentId: CONTAINER }),
+        'markdown',
+      )
+      expect(canvas.getNode('markdown')!.nodes).toEqual(['stack', 'stack2'])
+
+      canvas.reorderNode(canvas.getNode('stack2')!, 0)
+      expect(canvas.getNode('markdown')!.nodes).toEqual(['stack2', 'stack'])
+    })
+
+    it('REFUSES a move into the node itself or its own descendant', () => {
+      const canvas = makeCanvas()
+      expect(() =>
+        canvas.reparentNode(canvas.getNode('stack')!, canvas.getNode('stack')!),
+      ).toThrow(/inside itself/i)
+      expect(() =>
+        canvas.reparentNode(canvas.getNode('stack')!, canvas.getNode('img1')!),
+      ).toThrow()
+      expect(canvas.getNode('stack')!.parentId).toBe('markdown')
+      expect(canvas.canUndo).toBe(false)
+    })
+
+    /** A move, not a delete-and-recreate: ids and the subtree survive. */
+    it('moves the subtree intact, keeping every id', () => {
+      const canvas = makeCanvas()
+      canvas.reparentNode(canvas.getNode('stack')!, canvas.getNode('section')!, 1)
+
+      const stack = canvas.getNode('stack')!
+      expect(stack.nodes).toEqual(['img1', 'img2'])
+      expect(canvas.getNode('img1')!.parentId).toBe('stack')
+      expect(canvas.getNode('img2')!.parentId).toBe('stack')
+      // Every id in the document is still the id it was.
+      expect(Object.keys(canvas.toJSON().nodes).sort()).toEqual(
+        [
+          NODE_ROOT_ID,
+          'img1',
+          'img2',
+          'markdown',
+          'section',
+          'stack',
+          'tail',
+        ].sort(),
+      )
+    })
+
+    it('undo puts the moved subtree back where it was', () => {
+      const canvas = makeCanvas()
+      canvas.reparentNode(canvas.getNode('stack')!, canvas.getNode('section')!, 1)
+      expect(canvas.canUndo).toBe(true)
+
+      canvas.undo()
+      expect(canvas.getNode('markdown')!.nodes).toEqual(['stack'])
+      expect(canvas.getNode('stack')!.parentId).toBe('markdown')
+      expect(canvas.getNode('stack')!.nodes).toEqual(['img1', 'img2'])
+      expect(canvas.getNode('section')!.nodes).toEqual(['markdown', 'tail'])
+    })
+
+    /**
+     * AGL-1405's tell: the hierarchy drag "records an undo entry without
+     * moving anything". `saveHistory` ran before the splice pair, so a move
+     * that resolved back to the node's own slot still cost an undo step —
+     * and the next Undo silently threw away the author's PREVIOUS edit.
+     */
+    it('records no undo entry when the move resolves to where the node is', () => {
+      const canvas = makeCanvas()
+      const before = JSON.stringify(canvas.toJSON())
+
+      canvas.reparentNode(canvas.getNode('img2')!, canvas.getNode('stack')!, 1)
+
+      expect(JSON.stringify(canvas.toJSON())).toBe(before)
+      expect(canvas.canUndo).toBe(false)
+    })
+
+    /**
+     * `splice(-1, 0, id)` inserts before the LAST element, so a Shift-up on
+     * the first child used to move it DOWN. The menu hid that by disabling
+     * the item; the primitive should not depend on the menu.
+     */
+    it('clamps an out-of-range index instead of splicing from the end', () => {
+      const canvas = makeCanvas()
+      canvas.reorderNode(canvas.getNode('img1')!, -1)
+      expect(canvas.getNode('stack')!.nodes).toEqual(['img1', 'img2'])
+
+      canvas.reorderNode(canvas.getNode('img1')!, 99)
+      expect(canvas.getNode('stack')!.nodes).toEqual(['img2', 'img1'])
+    })
+  })
 })

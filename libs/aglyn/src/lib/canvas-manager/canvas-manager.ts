@@ -787,6 +787,12 @@ export class CanvasManager {
    * payload, counted against the 1 MiB ceiling — and never drawn. It is why
    * `/product` served 61 unreachable nodes, 26 of them carrying the only
    * copy of two Hero sections' text. Fail loud instead.
+   *
+   * `index` is the node's position in the resulting sibling list — i.e. it is
+   * read AFTER the node has been spliced out of wherever it was. A caller
+   * holding a drop marker ("put it before the sibling currently at 3") is
+   * describing the list BEFORE the removal and has to convert; the dnd
+   * manager does exactly that for same-parent drops.
    */
   public reparentNode(
     node: NodeSchema<any>,
@@ -797,19 +803,53 @@ export class CanvasManager {
     if (this.isRootNode(node)) throw new Error('Cannot move root node')
     if (!newParent) throw new Error('Invalid parent node')
 
-    // Before `saveHistory`: a refused move must not leave an undo step for
-    // something that never happened.
+    // Every refusal below runs before `saveHistory`: a move that never
+    // happened must not leave an undo step behind it.
     const target = node.$id != null ? this.getNode(node.$id) : undefined
     if (!target) throw new Error('Invalid node')
     const parent =
       newParent.$id != null ? this.getNode(newParent.$id) : undefined
     if (!parent) throw new Error('Invalid parent node')
 
-    this.saveHistory()
     const oldParent = this.getNodeParent(target)
     const oldIndex = oldParent?.nodes?.indexOf(target.$id) ?? -1
-    if (oldIndex > -1) oldParent?.nodes?.splice(oldIndex, 1)
-    if (oldParent?.$id !== parent.$id) target.parentId = parent.$id
+    const sameParent = oldParent?.$id === parent.$id
+
+    if (!sameParent) {
+      // A node into its own subtree detaches that subtree from the document
+      // and hands the renderer a cycle. `breadcrumbPath` is the ancestor
+      // chain, so the target appearing in the new parent's is the whole test
+      // — and it covers `parent === target` on its own.
+      if (this.getNodeBreadcrumbPath(parent)?.some((id) => id === target.$id)) {
+        throw new Error('Cannot move an element inside itself')
+      }
+
+      /**
+       * The gate that was missing (AGL-1405). `nodeAcceptsChildren` guarded
+       * every path that CREATES a node — the Insert menu and paste through
+       * `resolveInsertTarget`, drag-and-drop through the dnd manager — but
+       * not the one that MOVES one. So a `markdown` block (or any component
+       * whose content is an attribute: a Reusable Component instance, a
+       * Layout Slot, a List Item Text) could still be handed a child, which
+       * it then renders nowhere. That is not a cosmetic mistake: the node is
+       * saved on every save and shipped in every payload while the page it
+       * belongs to shows nothing, so the work reads as never done rather
+       * than broken. Three /press screenshots are still sitting in exactly
+       * that hole, and the point of the click-path this guard protects is
+       * that it must not be able to dig another one.
+       *
+       * A same-parent reorder is deliberately NOT gated: the nodes already
+       * trapped by AGL-1388 have to stay shufflable, and `reorderNode`
+       * routes Shift up / Shift down straight through here.
+       */
+      // Deliberately label-free: `getNodeLabelShort` reaches into the
+      // component registry, and a refusal path that can itself throw is no
+      // refusal at all. Callers that want "Markdown can't hold elements"
+      // name the node themselves — `moveNodeOut`/`moveNodeIn` do.
+      if (!this.nodeAcceptsChildren(parent)) {
+        throw new Error('That element cannot hold other elements')
+      }
+    }
 
     // Assign then read back, never `(x.nodes ||= []).push()` (AGL-763). A
     // live node is a `makeAutoObservable` proxy: assigning a fresh `[]` stores
@@ -819,8 +859,25 @@ export class CanvasManager {
     // so this never actually fires today, but relying on that invariant from
     // here is how the same defect returned as AGL-759.
     if (!parent.nodes) parent.nodes = []
-    if (isNaN(index)) parent.nodes.push(target.$id)
-    else parent.nodes.splice(index, 0, target.$id)
+
+    // Resolve the landing slot against the list as it will be AFTER the
+    // removal, and clamp it. `splice(-1, 0, id)` inserts before the LAST
+    // element, so an unclamped negative index moved a first child DOWN —
+    // `reorderNode(node, node.index - 1)` on index 0 did precisely that, and
+    // only the menu's `disabled` prop hid it.
+    const settled = parent.nodes.length - (sameParent && oldIndex > -1 ? 1 : 0)
+    const at = isNaN(index) ? settled : Math.min(Math.max(index, 0), settled)
+
+    // A move that resolves to the slot the node already occupies is not a
+    // move. It used to cost an undo step anyway — which is how a hierarchy
+    // drag came to "record an undo entry without moving anything" (AGL-1405),
+    // and worse, made the next Undo discard the author's PREVIOUS edit.
+    if (sameParent && at === oldIndex) return target
+
+    this.saveHistory()
+    if (oldIndex > -1) oldParent?.nodes?.splice(oldIndex, 1)
+    if (!sameParent) target.parentId = parent.$id
+    parent.nodes.splice(at, 0, target.$id)
     return target
   }
   public reorderNode(node: NodeSchema<any>, index = NaN): typeof node {

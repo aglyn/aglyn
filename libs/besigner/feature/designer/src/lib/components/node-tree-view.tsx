@@ -21,6 +21,7 @@ import {
   ICON_VARIANT_COLLAPSIBLE_CLOSE,
   ICON_VARIANT_COLLAPSIBLE_OPEN,
   ICON_VARIANT_MODIFY_DRAG,
+  ICON_VARIANT_SHOW_MORE_VERTICAL,
 } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
@@ -28,6 +29,7 @@ import { noop } from '@aglyn/shared-util-tools'
 import {
   Box,
   BoxProps,
+  ClickAwayListener,
   Collapse,
   Divider,
   IconButton,
@@ -41,6 +43,7 @@ import {
   type ListItemProps as MuiListItemProps,
   ListItemText as MuiListItemText,
   type ListProps as MuiListProps,
+  Popper,
   Stack,
 } from '@mui/material'
 import clsx from 'clsx'
@@ -54,10 +57,12 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useState,
 } from 'react'
 import useLeafDrag from '../hooks/use-leaf-drag'
 import useLeafDrop from '../hooks/use-leaf-drop'
 import ComponentIconComponent from './component-icon.component'
+import NodeContextMenu from './node-context-menu'
 
 const classKey = generateComponentClassKeys('TreeView', [
   'root',
@@ -65,6 +70,7 @@ const classKey = generateComponentClassKeys('TreeView', [
   'treeItem',
   'treeListItem',
   'dragHandle',
+  'moreButton',
   'itemSelected',
   'itemHovered',
   'itemIsDragging',
@@ -104,12 +110,17 @@ const TreeView = styled(MuiList)<MuiListProps>(({ theme }) => ({
     [`> .${classKey.treeListItem}`]: {
       borderTopLeftRadius: 4,
       borderBottomLeftRadius: 4,
-      [`& .${classKey.dragHandle}`]: {
+      [`& .${classKey.dragHandle}, & .${classKey.moreButton}`]: {
         visibility: 'hidden',
+      },
+      // An open menu keeps its own button on screen — the pointer has left
+      // the row to reach the menu, so the hover rule no longer holds it.
+      [`& .${classKey.moreButton}[aria-expanded='true']`]: {
+        visibility: 'visible',
       },
 
       [`&:hover, &.${classKey.itemHovered}`]: {
-        [`& .${classKey.dragHandle}`]: {
+        [`& .${classKey.dragHandle}, & .${classKey.moreButton}`]: {
           visibility: 'visible',
         },
         backgroundColor: `rgba(${(theme as any).vars.palette.primary.darkChannel} / calc(${(theme as any).vars.palette.action.hoverOpacity} + 0.2))`,
@@ -226,6 +237,26 @@ const NodeTreeItem = observer(
       'tree',
     )
 
+    /**
+     * The row's own ⋮ menu (AGL-1405). The canvas overlay carries the same
+     * menu, but it only mounts for a node with a live DOM element
+     * (`node-overlay`: `isOpen = Boolean(elementRef?.current)`) — so a node
+     * its parent never renders, which is precisely the node that needs
+     * moving, has no overlay and no way to reach any action at all. The
+     * hierarchy is the one surface that shows a node the page doesn't.
+     */
+    const [menuButton, setMenuButton] = useState<HTMLButtonElement | null>(null)
+    const menuOpen = Boolean(menuButton)
+    const closeMenu = useCallback(() => setMenuButton(null), [])
+    const toggleMenu = useCallback((e: any) => {
+      // The row is a button and the tree item is a drop target; without this
+      // the click also selects and re-focuses the row underneath the menu.
+      e.stopPropagation()
+      e.preventDefault()
+      const target = e.currentTarget
+      setMenuButton((open) => (open ? null : target))
+    }, [])
+
     if (!node) return <>'Invalid node'</>
     return (
       <TreeItem
@@ -332,6 +363,38 @@ const NodeTreeItem = observer(
               }}
             />
           </MuiListItemButton>
+          <IconButton
+            aria-label={`Actions for ${nodeLabel}`}
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            className={classKey.moreButton}
+            color="default"
+            onClick={toggleMenu}
+            size="small"
+            sx={{ alignSelf: 'center', flexShrink: 0, padding: '2px', mr: 0.25 }}
+          >
+            <MdiIcon
+              fontSize="inherit"
+              path={ICON_VARIANT_SHOW_MORE_VERTICAL.path}
+            />
+          </IconButton>
+          {menuOpen && (
+            <Popper
+              anchorEl={menuButton}
+              open
+              placement="bottom-end"
+              // Above the panel, below dialogs and drawers — the same band
+              // the canvas overlay's copy of this menu sits in.
+              sx={{ zIndex: (theme) => theme.zIndex.modal - 1 }}
+            >
+              {/* NodeContextMenu forwards its ref to the Paper and spreads
+                  the rest, so it is a valid ClickAwayListener child on its
+                  own — no wrapper element to disturb the Popper's layout. */}
+              <ClickAwayListener onClickAway={closeMenu}>
+                <NodeContextMenu node={node} onAction={closeMenu} />
+              </ClickAwayListener>
+            </Popper>
+          )}
         </Stack>
 
         {node?.hasNodes && (
