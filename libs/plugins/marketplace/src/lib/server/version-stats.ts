@@ -47,6 +47,232 @@ export function versionCollectionFor(
   return artifactType === 'plugin' ? 'pluginVersions' : 'versions'
 }
 
+/** One version's pair of counters, as the version doc stores them. */
+export interface VersionInstallTally {
+  version: string
+  installCount: number
+  activeInstalls: number
+}
+
+/** The listing-level pair, which counts the same two things (AGL-1418). */
+export interface ListingInstallTally {
+  installCount?: number | null
+  activeInstalls?: number | null
+}
+
+/**
+ * The same quantity counted from the pins, which are ground truth (AGL-1419).
+ *
+ * Both stored levels are accumulators, and an accumulator cannot come back
+ * down: nothing decrements when a tenant erase sweeps `installs` or the
+ * console deletes a host pin client-side. The pins can, because they ARE the
+ * installs — so when this is present it does not get reconciled against
+ * anything, it simply wins.
+ */
+export interface LivePinTally {
+  /** Live pins for the listing. A verified `0` is a count, not a gap. */
+  activeInstalls: number
+  /** Live pins per version id, when the split was derived too. */
+  byVersion?: Map<string, number> | Record<string, number> | null
+}
+
+export interface ReconciledInstallTallies {
+  /** Per-version counters, reconciled against the listing totals. */
+  versions: VersionInstallTally[]
+  /** The totals the page should print, and that the versions sum to. */
+  installCount: number
+  activeInstalls: number
+  /**
+   * Installs the totals include but no version claims. Non-zero means the
+   * per-version split is INCOMPLETE, and a caller must say so rather than
+   * print a breakdown that does not add up.
+   */
+  untrackedInstallCount: number
+  untrackedActiveInstalls: number
+  /**
+   * Whether `activeInstalls` was counted from the pins rather than inferred
+   * from two accumulators (AGL-1419). Callers that write anything back must
+   * check this: a reconciled number is the best available reading, a verified
+   * one is the truth.
+   */
+  activeVerified: boolean
+}
+
+const asCount = (value: unknown): number => {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
+}
+
+/**
+ * Reconciles one counter across the two levels that both claim to hold it.
+ *
+ * The listing total is not authoritative and neither is the per-version sum —
+ * each has a failure mode the other does not (see `reconcileInstallTallies`).
+ * So the total is the larger of the two, and the shortfall is either
+ * attributed or NAMED, never silently absorbed.
+ */
+function reconcileCounter(
+  tracked: number[],
+  stored: number,
+): { values: number[]; total: number; untracked: number } {
+  const sum = tracked.reduce((running, value) => running + value, 0)
+  const total = Math.max(sum, stored)
+  const values = [...tracked]
+  let untracked = total - sum
+  // The ONE case where attribution is provable rather than guessed: with a
+  // single version there is nowhere else an install could be. Every other
+  // shape keeps the remainder as a remainder — a split that reads as fact and
+  // is actually a guess is the defect this function exists to remove.
+  if (untracked > 0 && values.length === 1) {
+    values[0] += untracked
+    untracked = 0
+  }
+  return { values, total, untracked }
+}
+
+/**
+ * Makes the listing-level and per-version counters agree (AGL-1418).
+ *
+ * The marketplace keeps the same two quantities twice: once on the listing and
+ * once per version. They are written by different code under different trigger
+ * conditions, each swallowing its own failures, and nothing ever checked that
+ * they agree — so the listing page printed `7 installs · 2 active` beside
+ * `3 installs · 1 on this version` for a listing with ONE version and two live
+ * pins. Three numbers, one quantity, and a publisher with no way to tell which
+ * to believe.
+ *
+ * Neither level is trustworthy on its own:
+ *
+ * * The per-version pair only exists from AGL-1036 onwards and was never
+ *   backfilled, so it under-counts every listing older than that.
+ * * The listing-level pair is not incremented at all by the copied-artifact
+ *   install routes, so it under-counts every component, theme, layout, email
+ *   template and dataset schema.
+ *
+ * Both fail in the same direction — downwards — which is why the total is the
+ * larger of the two rather than an average or a preference.
+ *
+ * `activeInstalls` is clamped to `installCount` at both levels. That is not a
+ * guess: every writer increments the pair together, so "more live than ever
+ * landed" is unrepresentable in a healthy database and printing it would
+ * advertise the corruption rather than the count.
+ *
+ * Pure, and deliberately: it decides what to SAY, and the caller decides
+ * whether to repair anything.
+ *
+ * ## When the pins are in hand (AGL-1419)
+ *
+ * Pass `pins` and the reasoning above stops applying to `activeInstalls`,
+ * because it only existed to pick between two unreliable readings. The pin
+ * count is the quantity itself, so it is taken exactly — including DOWNWARDS,
+ * which no amount of reconciling between two accumulators could ever do, and
+ * which is the whole reason `z6glT_UDAQ` advertised three active installs
+ * against two live pins.
+ *
+ * The clamp flips direction with it. Without pins, `activeInstalls` is capped
+ * at `installCount`, because "more live than ever landed" means one of the two
+ * is corrupt and the all-time figure is the more believable. With pins it is
+ * `installCount` that gets raised: a pin that exists now is an install that
+ * landed, so an all-time counter below the live one is simply behind.
+ */
+export function reconcileInstallTallies(
+  versions: VersionInstallTally[],
+  listing: ListingInstallTally,
+  pins?: LivePinTally | null,
+): ReconciledInstallTallies {
+  const trackedInstalls = versions.map((entry) => asCount(entry.installCount))
+  const trackedActive = versions.map((entry) => asCount(entry.activeInstalls))
+
+  const verified = pins ? asCount(pins.activeInstalls) : null
+  const activeTotalRaw = verified ?? 0
+  const active =
+    verified == null
+      ? reconcileCounter(trackedActive, asCount(listing?.activeInstalls))
+      : splitVerifiedActive(versions, trackedActive, activeTotalRaw, pins?.byVersion)
+
+  // All-time stays an accumulator even with pins in hand: an uninstall deletes
+  // its pin and leaves nothing behind, so the pins cannot say how many
+  // installs there have EVER been. They can only say the floor.
+  const installs = reconcileCounter(
+    trackedInstalls,
+    Math.max(asCount(listing?.installCount), verified ?? 0),
+  )
+
+  let installValues = installs.values
+  let installTotal = installs.total
+  let activeValues = active.values
+  let activeTotal = verified ?? active.total
+  if (verified == null) {
+    activeValues = active.values.map((value, index) =>
+      Math.min(value, installs.values[index] ?? 0),
+    )
+    activeTotal = Math.min(active.total, installs.total)
+  } else {
+    installValues = installs.values.map((value, index) =>
+      Math.max(value, activeValues[index] ?? 0),
+    )
+    installTotal = Math.max(
+      installs.total,
+      installValues.reduce((running, value) => running + value, 0),
+    )
+  }
+  const activeSum = activeValues.reduce((running, value) => running + value, 0)
+  const installSum = installValues.reduce((running, value) => running + value, 0)
+  return {
+    versions: versions.map((entry, index) => ({
+      ...entry,
+      installCount: installValues[index] ?? 0,
+      activeInstalls: activeValues[index] ?? 0,
+    })),
+    installCount: installTotal,
+    activeInstalls: activeTotal,
+    untrackedInstallCount: Math.max(0, installTotal - installSum),
+    untrackedActiveInstalls: Math.max(0, activeTotal - activeSum),
+    activeVerified: verified != null,
+  }
+}
+
+/**
+ * Splits a verified pin count across the versions (AGL-1419).
+ *
+ * Three cases, in descending order of how much is known:
+ *
+ * 1. A per-version pin count was taken too — use it, and let the remainder
+ *    stand for pins on versions this history does not show (deleted, or past
+ *    the 20 the route reads).
+ * 2. One version — everything live is on it. Provable, not guessed.
+ * 3. Neither — keep the stored per-version actives but let no prefix of them
+ *    exceed the verified total, and name whatever is left. Trimming rather
+ *    than scaling because a stored count that fits is still evidence, and a
+ *    fabricated fraction of one is not.
+ */
+function splitVerifiedActive(
+  versions: VersionInstallTally[],
+  tracked: number[],
+  total: number,
+  byVersion: LivePinTally['byVersion'],
+): { values: number[]; total: number; untracked: number } {
+  const lookup =
+    byVersion instanceof Map
+      ? byVersion
+      : byVersion
+        ? new Map(Object.entries(byVersion).map(([k, v]) => [k, asCount(v)]))
+        : null
+  if (lookup) {
+    const values = versions.map((entry) => asCount(lookup.get(entry.version)))
+    const sum = values.reduce((running, value) => running + value, 0)
+    return { values, total, untracked: Math.max(0, total - sum) }
+  }
+  if (versions.length === 1) return { values: [total], total, untracked: 0 }
+  let remaining = total
+  const values = tracked.map((value) => {
+    const taken = Math.min(value, remaining)
+    remaining -= taken
+    return taken
+  })
+  return { values, total, untracked: remaining }
+}
+
 export interface VersionMoveInput {
   firestore: FirebaseFirestore.Firestore
   listingRef: FirebaseFirestore.DocumentReference
