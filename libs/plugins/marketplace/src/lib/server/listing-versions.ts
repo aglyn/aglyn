@@ -23,9 +23,45 @@ import {
   newestApprovedVersion,
 } from '../model/marketplace'
 import { compareArtifactVersions } from '@aglyn/aglyn/server'
-import { versionCollectionFor } from './version-stats'
+import {
+  reconcileInstallTallies,
+  versionCollectionFor,
+  type ReconciledInstallTallies,
+} from './version-stats'
 import { canActAsPublisher } from './publisher-profile'
 import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestation'
+
+/**
+ * One reconciled tally per version id, plus the totals (AGL-1418).
+ *
+ * Built from EVERY version document, never from a filtered subset: the buyer
+ * branch shows approved versions only, and reconciling against that subset
+ * would hand a pending version's installs to an approved one.
+ */
+function reconcileFromSnapshot(
+  docs: Array<{ id: string; get: (field: string) => unknown }>,
+  listing: Record<string, unknown> | undefined,
+): { byVersion: Map<string, { installCount: number; activeInstalls: number }> } & ReconciledInstallTallies {
+  const reconciled = reconcileInstallTallies(
+    docs.map((doc) => ({
+      version: String(doc.get('version') ?? doc.id),
+      installCount: Number(doc.get('installCount') ?? 0),
+      activeInstalls: Number(doc.get('activeInstalls') ?? 0),
+    })),
+    {
+      installCount: Number(listing?.['installCount'] ?? 0),
+      activeInstalls: Number(listing?.['activeInstalls'] ?? 0),
+    },
+  )
+  const byVersion = new Map<string, { installCount: number; activeInstalls: number }>()
+  reconciled.versions.forEach((entry) =>
+    byVersion.set(entry.version, {
+      installCount: entry.installCount,
+      activeInstalls: entry.activeInstalls,
+    }),
+  )
+  return { ...reconciled, byVersion }
+}
 
 /**
  * The publisher's own view of their versions (AGL-1079).
@@ -74,8 +110,12 @@ const publisherVersions: PluginApiHandler = async (req, res) => {
     .orderBy('publishedAt', 'desc')
     .limit(20)
     .get()
+  // The counters the page prints, reconciled against the listing totals so
+  // this card cannot contradict the header above it (AGL-1418).
+  const tallies = reconcileFromSnapshot(snapshot.docs as never, listing)
   const versions = snapshot.docs.map((doc) => {
     const sha256 = String(doc.get('sha256') ?? '')
+    const versionId = String(doc.get('version') ?? doc.id)
     return {
       version: String(doc.get('version') ?? doc.id),
       publishedAtMs: doc.get('publishedAt')?.toMillis?.() ?? null,
@@ -90,7 +130,8 @@ const publisherVersions: PluginApiHandler = async (req, res) => {
       // Only reached an email before this (AGL-1079), where it got buried
       // under everything else in an inbox.
       rejectionReason: String(doc.get('reviewRejectionReason') ?? ''),
-      activeInstalls: Number(doc.get('activeInstalls') ?? 0),
+      activeInstalls: tallies.byVersion.get(versionId)?.activeInstalls ?? 0,
+      installCount: tallies.byVersion.get(versionId)?.installCount ?? 0,
       // What they claimed about THESE bytes (AGL-969) — so they can see it
       // before they claim it again on the next version.
       attestation: attestationsForBytes(
@@ -101,6 +142,13 @@ const publisherVersions: PluginApiHandler = async (req, res) => {
   })
   return res.status(200).json({
     versions,
+    // The same reconciled totals the buyer branch returns (AGL-1418), so the
+    // Review status card and the listing header cannot disagree about how
+    // many installs there are.
+    installCount: tallies.installCount,
+    activeInstalls: tallies.activeInstalls,
+    untrackedInstallCount: tallies.untrackedInstallCount,
+    untrackedActiveInstalls: tallies.untrackedActiveInstalls,
     // The version installs actually resolve to (AGL-1016/966). Deliberately
     // NOT `latestVersion`, which names a version installs may refuse.
     latestApprovedVersion: String(listing.latestApprovedVersion ?? ''),
@@ -170,13 +218,25 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
           reviewState: doc.get('reviewState'),
         }))
       : snapshot.docs
+    // Reconciled against the listing totals (AGL-1418) and built from EVERY
+    // version doc rather than `visibleDocs`: the buyer filter above drops
+    // unapproved versions, and reconciling against what survives it would
+    // credit their installs to an approved version.
+    const tallies = reconcileFromSnapshot(
+      snapshot.docs as never,
+      listingSnapshot.data(),
+    )
     const versions = visibleDocs.map((doc) => ({
       version: String(doc.get('version') ?? doc.id),
       // Per-version install counts (AGL-1036). `installCount` is every install
       // that ever landed on this version; `activeInstalls` is how many are on
       // it now — the one that answers "who is still on the old version".
-      installCount: Number(doc.get('installCount') ?? 0),
-      activeInstalls: Number(doc.get('activeInstalls') ?? 0),
+      installCount:
+        tallies.byVersion.get(String(doc.get('version') ?? doc.id))
+          ?.installCount ?? 0,
+      activeInstalls:
+        tallies.byVersion.get(String(doc.get('version') ?? doc.id))
+          ?.activeInstalls ?? 0,
       ...(doc.get('changelog') ? { changelog: String(doc.get('changelog')) } : {}),
       ...(doc.get('trust') ? { trust: String(doc.get('trust')) } : {}),
       ...(Number.isInteger(doc.get('manifest')?.hostAbi)
@@ -229,7 +289,18 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
-    return res.status(200).json({ versions })
+    // The totals the header prints (AGL-1418). The listing document carries
+    // its own copy of this pair and the client used to read it straight off
+    // Firestore, which is how the header came to say `7 installs · 2 active`
+    // over a version history that added up to `3 · 1`. Served from here so
+    // one arithmetic answers the whole page.
+    return res.status(200).json({
+      versions,
+      installCount: tallies.installCount,
+      activeInstalls: tallies.activeInstalls,
+      untrackedInstallCount: tallies.untrackedInstallCount,
+      untrackedActiveInstalls: tallies.untrackedActiveInstalls,
+    })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Version lookup failed' })

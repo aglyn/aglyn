@@ -44,6 +44,11 @@ jest.mock('../model/marketplace', () => ({
 
 jest.mock('./version-stats', () => ({
   versionCollectionFor: () => 'pluginVersions',
+  // The REAL reconciliation (AGL-1418), not a stub: the arithmetic IS what
+  // these tests are about, and faking it would check the route against a
+  // fiction of itself.
+  reconcileInstallTallies: jest.requireActual('./version-stats')
+    .reconcileInstallTallies,
 }))
 
 jest.mock('./publisher-profile', () => ({
@@ -66,6 +71,10 @@ const VERSION_FIELDS: Record<string, unknown> = {
   publisherAttestation: {
     repository: { sha256: 'deadbeef', by: 'uid-1' },
   },
+  // The publisher's own install of their unapproved version — nobody else
+  // can have one (AGL-1418 fixture).
+  installCount: 1,
+  activeInstalls: 1,
 }
 
 /**
@@ -81,6 +90,8 @@ const APPROVED_VERSION_FIELDS: Record<string, unknown> = {
   sha256: 'cafebabe',
   reviewState: 'approved',
   changelog: 'First release',
+  installCount: 3,
+  activeInstalls: 1,
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => {
@@ -123,6 +134,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       latestVersion: '1.0.1',
       latestApprovedVersion: '1.0.0',
       reviewStatus: 'listed',
+      // The listing's own copy of the same two quantities the versions carry
+      // (AGL-1418), and ahead of them — three live installs where the
+      // versions account for two.
+      installCount: 7,
+      activeInstalls: 3,
     } as Record<string, unknown> | undefined,
     firebaseAdmin: {
       app: () => ({
@@ -228,6 +244,64 @@ describe('publisher-scoped listing versions (AGL-1079)', () => {
     expect(result.body.versions.map((v: { version: string }) => v.version)).toEqual([
       '1.0.0',
     ])
+  })
+
+  /**
+   * The listing page showed three different numbers for one version because
+   * nothing ever compared the listing's counters to the versions' (AGL-1418).
+   * The route is where that comparison now happens, so both branches have to
+   * serve the totals — a card cannot agree with a header it never sees.
+   */
+  describe('reconciled install totals (AGL-1418)', () => {
+    it('serves the totals to the buyer branch', async () => {
+      const result = await call({ listingId: 'l1' })
+      expect(result.body.activeInstalls).toBe(3)
+      expect(result.body.installCount).toBe(7)
+    })
+
+    it('serves the same totals to the publisher branch', async () => {
+      const result = await call({ listingId: 'l1', scope: 'publisher' })
+      expect(result.body.activeInstalls).toBe(3)
+      expect(result.body.installCount).toBe(7)
+    })
+
+    it('never credits a hidden version’s installs to a visible one', async () => {
+      // The trap in reconciling on the buyer projection instead of the raw
+      // collection: 1.0.1 is filtered out for buyers (AGL-976), so a naive
+      // reconcile would hand its install — and the listing's untracked one —
+      // to 1.0.0, and the only approved version would claim installs that
+      // are running rejected code.
+      const result = await call({ listingId: 'l1' })
+      expect(result.body.versions).toHaveLength(1)
+      expect(result.body.versions[0]).toMatchObject({
+        version: '1.0.0',
+        activeInstalls: 1,
+        installCount: 3,
+      })
+    })
+
+    it('reports the shortfall rather than hiding it in a version', async () => {
+      // Two versions account for 2 of the listing's 3 live installs. The
+      // remaining one predates per-version tracking and belongs to no version
+      // anyone can name, so it is reported as exactly that.
+      const result = await call({ listingId: 'l1' })
+      expect(result.body.untrackedActiveInstalls).toBe(1)
+      expect(result.body.untrackedInstallCount).toBe(3)
+    })
+
+    it('gives the publisher the reconciled per-version numbers too', async () => {
+      // Review status and Version history print the same string for the same
+      // version; they used to read two different fields off two different
+      // routes and could not be made to agree.
+      const result = await call({ listingId: 'l1', scope: 'publisher' })
+      const byVersion = Object.fromEntries(
+        result.body.versions.map((entry: { version: string; activeInstalls: number }) => [
+          entry.version,
+          entry.activeInstalls,
+        ]),
+      )
+      expect(byVersion).toEqual({ '1.0.0': 1, '1.0.1': 1 })
+    })
   })
 
   it('still shows the publisher their rejected version', async () => {

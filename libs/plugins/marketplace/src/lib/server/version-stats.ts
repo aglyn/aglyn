@@ -47,6 +47,126 @@ export function versionCollectionFor(
   return artifactType === 'plugin' ? 'pluginVersions' : 'versions'
 }
 
+/** One version's pair of counters, as the version doc stores them. */
+export interface VersionInstallTally {
+  version: string
+  installCount: number
+  activeInstalls: number
+}
+
+/** The listing-level pair, which counts the same two things (AGL-1418). */
+export interface ListingInstallTally {
+  installCount?: number | null
+  activeInstalls?: number | null
+}
+
+export interface ReconciledInstallTallies {
+  /** Per-version counters, reconciled against the listing totals. */
+  versions: VersionInstallTally[]
+  /** The totals the page should print, and that the versions sum to. */
+  installCount: number
+  activeInstalls: number
+  /**
+   * Installs the totals include but no version claims. Non-zero means the
+   * per-version split is INCOMPLETE, and a caller must say so rather than
+   * print a breakdown that does not add up.
+   */
+  untrackedInstallCount: number
+  untrackedActiveInstalls: number
+}
+
+const asCount = (value: unknown): number => {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
+}
+
+/**
+ * Reconciles one counter across the two levels that both claim to hold it.
+ *
+ * The listing total is not authoritative and neither is the per-version sum —
+ * each has a failure mode the other does not (see `reconcileInstallTallies`).
+ * So the total is the larger of the two, and the shortfall is either
+ * attributed or NAMED, never silently absorbed.
+ */
+function reconcileCounter(
+  tracked: number[],
+  stored: number,
+): { values: number[]; total: number; untracked: number } {
+  const sum = tracked.reduce((running, value) => running + value, 0)
+  const total = Math.max(sum, stored)
+  const values = [...tracked]
+  let untracked = total - sum
+  // The ONE case where attribution is provable rather than guessed: with a
+  // single version there is nowhere else an install could be. Every other
+  // shape keeps the remainder as a remainder — a split that reads as fact and
+  // is actually a guess is the defect this function exists to remove.
+  if (untracked > 0 && values.length === 1) {
+    values[0] += untracked
+    untracked = 0
+  }
+  return { values, total, untracked }
+}
+
+/**
+ * Makes the listing-level and per-version counters agree (AGL-1418).
+ *
+ * The marketplace keeps the same two quantities twice: once on the listing and
+ * once per version. They are written by different code under different trigger
+ * conditions, each swallowing its own failures, and nothing ever checked that
+ * they agree — so the listing page printed `7 installs · 2 active` beside
+ * `3 installs · 1 on this version` for a listing with ONE version and two live
+ * pins. Three numbers, one quantity, and a publisher with no way to tell which
+ * to believe.
+ *
+ * Neither level is trustworthy on its own:
+ *
+ * * The per-version pair only exists from AGL-1036 onwards and was never
+ *   backfilled, so it under-counts every listing older than that.
+ * * The listing-level pair is not incremented at all by the copied-artifact
+ *   install routes, so it under-counts every component, theme, layout, email
+ *   template and dataset schema.
+ *
+ * Both fail in the same direction — downwards — which is why the total is the
+ * larger of the two rather than an average or a preference.
+ *
+ * `activeInstalls` is clamped to `installCount` at both levels. That is not a
+ * guess: every writer increments the pair together, so "more live than ever
+ * landed" is unrepresentable in a healthy database and printing it would
+ * advertise the corruption rather than the count.
+ *
+ * Pure, and deliberately: it decides what to SAY, and the caller decides
+ * whether to repair anything.
+ */
+export function reconcileInstallTallies(
+  versions: VersionInstallTally[],
+  listing: ListingInstallTally,
+): ReconciledInstallTallies {
+  const installs = reconcileCounter(
+    versions.map((entry) => asCount(entry.installCount)),
+    asCount(listing?.installCount),
+  )
+  const active = reconcileCounter(
+    versions.map((entry) => asCount(entry.activeInstalls)),
+    asCount(listing?.activeInstalls),
+  )
+  const activeValues = active.values.map((value, index) =>
+    Math.min(value, installs.values[index] ?? 0),
+  )
+  const activeTotal = Math.min(active.total, installs.total)
+  const activeSum = activeValues.reduce((running, value) => running + value, 0)
+  return {
+    versions: versions.map((entry, index) => ({
+      ...entry,
+      installCount: installs.values[index] ?? 0,
+      activeInstalls: activeValues[index] ?? 0,
+    })),
+    installCount: installs.total,
+    activeInstalls: activeTotal,
+    untrackedInstallCount: installs.untracked,
+    untrackedActiveInstalls: Math.max(0, activeTotal - activeSum),
+  }
+}
+
 export interface VersionMoveInput {
   firestore: FirebaseFirestore.Firestore
   listingRef: FirebaseFirestore.DocumentReference

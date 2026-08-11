@@ -186,11 +186,15 @@ describe('ListingReviewStatus (AGL-1079)', () => {
     expect(screen.queryByText(/Nothing installs it yet/)).toBeNull()
     expect(screen.queryByText(/so nothing installs/)).toBeNull()
     // And the live unreviewed install is named rather than left implied.
+    // "Installs", not "sites" (AGL-1418): `activeInstalls` counts pins, and an
+    // org-wide pin covers every site in the organization — so calling it a
+    // site count understated the exposure this warning exists to raise.
     expect(
       screen.getByText(
-        /1 of your sites is running this version, which no reviewer has approved/,
+        /1 of your installs is running this version, which no reviewer has approved/,
       ),
     ).toBeTruthy()
+    expect(screen.queryByText(/of your sites/)).toBeNull()
   })
 
   it('does not warn about live installs on an approved version', async () => {

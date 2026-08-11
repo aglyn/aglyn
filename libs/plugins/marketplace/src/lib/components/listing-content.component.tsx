@@ -115,6 +115,22 @@ interface ListingVersionEntry {
   activeInstalls?: number
 }
 
+/**
+ * The listing totals, reconciled server-side (AGL-1418).
+ *
+ * Read from the versions route rather than off the listing document, because
+ * the listing document holds a SECOND copy of these two numbers that drifted
+ * from the per-version ones — which is how the header came to advertise
+ * `7 installs · 2 active` above a version history totalling `3 · 1`. One
+ * arithmetic, one source, for every card on the page.
+ */
+interface ListingInstallTotals {
+  installCount: number
+  activeInstalls: number
+  /** Installs no version claims, so the per-version split is incomplete. */
+  untrackedActiveInstalls: number
+}
+
 const renderInlines = (inlines: MarkdownInline[]) =>
   inlines.map((inline, index) => {
     switch (inline.type) {
@@ -685,6 +701,7 @@ export function MarketplaceListingContent({
   // docs are server-only, so the marketplace API exposes the buyer-safe
   // subset (version/changelog/trust/hostAbi/date).
   const [versions, setVersions] = useState<ListingVersionEntry[]>([])
+  const [totals, setTotals] = useState<ListingInstallTotals | null>(null)
   useEffect(() => {
     // Every artifact type now, not just plugins (AGL-1036): the route serves
     // the per-version install counts for all of them, and a component's
@@ -696,7 +713,19 @@ export function MarketplaceListingContent({
     )
       .then((response) => (response.ok ? response.json() : { versions: [] }))
       .then((payload) => {
-        if (active) setVersions(payload?.versions ?? [])
+        if (!active) return
+        setVersions(payload?.versions ?? [])
+        setTotals(
+          typeof payload?.activeInstalls === 'number'
+            ? {
+                installCount: Number(payload.installCount ?? 0),
+                activeInstalls: Number(payload.activeInstalls ?? 0),
+                untrackedActiveInstalls: Number(
+                  payload.untrackedActiveInstalls ?? 0,
+                ),
+              }
+            : null,
+        )
       })
       .catch(() => undefined)
     return () => {
@@ -710,6 +739,25 @@ export function MarketplaceListingContent({
     // install counts (AGL-1036) are not left showing the tally from before the
     // update the user just pressed.
   }, [listing?.$id, listingId, pinsNonce])
+  /**
+   * The install numbers this page is allowed to print (AGL-1418).
+   *
+   * The route's reconciled totals when they have arrived, and the listing
+   * document's own copy only until then. That fallback cannot reintroduce the
+   * contradiction it replaced: the version history it used to disagree with is
+   * fed by the same response, so before it lands there is nothing on screen to
+   * disagree with.
+   */
+  const installTotals = useMemo<ListingInstallTotals | null>(() => {
+    if (totals) return totals
+    const stored = Number(listing?.activeInstalls ?? Number.NaN)
+    if (!Number.isFinite(stored)) return null
+    return {
+      installCount: Number(listing?.installCount ?? 0),
+      activeInstalls: stored,
+      untrackedActiveInstalls: 0,
+    }
+  }, [totals, listing?.activeInstalls, listing?.installCount])
   const latestEntry = versions[0]
   const realmTrusted = versions.some((entry) => entry.trust === 'realm')
   const abiIncompatible =
@@ -1148,22 +1196,46 @@ export function MarketplaceListingContent({
                             color={priceUsd > 0 ? 'primary' : 'default'}
                             label={priceUsd > 0 ? `$${priceUsd}` : 'Free'}
                           />
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
+                          {/* Two numbers that are NOT the same question
+                              (AGL-1418). They used to read `7 installs · 2
+                              active` — "installs" first and unqualified, so
+                              the big number was the one nobody can reconcile
+                              against anything, and it sat two cards above a
+                              version history saying `3 installs`. Now: the
+                              live count leads, both are named, and both come
+                              from the reconciled totals rather than the
+                              listing document's drifted private copy. */}
+                          <Tooltip
+                            title={
+                              'Counted once per install, whether it covers a ' +
+                              'single site or a whole organization — and ' +
+                              'including the publisher’s own. “All time” ' +
+                              'counts installs that have since been removed, ' +
+                              'so it never falls.'
+                            }
                           >
-                            {`v${listing?.latestVersion ?? '…'}`}
-                            {listing?.installCount
-                              ? ` · ${listing.installCount} install${
-                                  listing.installCount === 1 ? '' : 's'
-                                }`
-                              : ''}
-                            {/* Active pins vs the cumulative total (AGL-880). */}
-                            {typeof listing?.activeInstalls === 'number' &&
-                            listing?.installCount
-                              ? ` · ${listing.activeInstalls} active`
-                              : ''}
-                          </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {`v${listing?.latestVersion ?? '…'}`}
+                              {/* Hidden at zero rather than printed as "0
+                                  active installs", for the same reason the
+                                  version rows are (AGL-1036): on a listing
+                                  nobody has reached yet it reads as a
+                                  failure. */}
+                              {installTotals?.installCount ||
+                              installTotals?.activeInstalls
+                                ? ` · ${installTotals.activeInstalls} active ` +
+                                  `install${
+                                    installTotals.activeInstalls === 1 ? '' : 's'
+                                  }`
+                                : ''}
+                              {installTotals?.installCount
+                                ? ` · ${installTotals.installCount} all time`
+                                : ''}
+                            </Typography>
+                          </Tooltip>
                         </Stack>
                         <Typography variant="body2" color="text.secondary">
                           {listing?.description ?? 'No description provided.'}
@@ -1852,19 +1924,54 @@ export function MarketplaceListingContent({
                                     than printed as "0 installs", which reads
                                     as a failure on a version nobody has
                                     reached yet. */}
+                                {/* Said in the same words as the header, and
+                                    from the same reconciled numbers
+                                    (AGL-1418). It used to lead with a bare
+                                    "3 installs" that was a per-version
+                                    all-time count sitting under a listing
+                                    all-time count of 7 — two numbers, one
+                                    word, one version. */}
                                 {entry.installCount ||
                                 entry.activeInstalls ? (
                                   <Typography
                                     variant="caption"
                                     color="text.secondary"
                                   >
-                                    {`${entry.installCount ?? 0} install${
-                                      entry.installCount === 1 ? '' : 's'
-                                    } · ${entry.activeInstalls ?? 0} on this version`}
+                                    {`${entry.activeInstalls ?? 0} on this version`}
+                                    {entry.installCount
+                                      ? ` · ${entry.installCount} all time`
+                                      : ''}
                                   </Typography>
                                 ) : null}
                               </Stack>
                             ))}
+                            {/* Named rather than absorbed (AGL-1418). Installs
+                                predating per-version tracking belong to no
+                                version here, and quietly dropping them made
+                                the breakdown disagree with the header. Saying
+                                the split is short is honest; inventing a
+                                version to hang them on is not. */}
+                            {installTotals?.untrackedActiveInstalls ? (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {`${installTotals.untrackedActiveInstalls} ` +
+                                  `active install${
+                                    installTotals.untrackedActiveInstalls === 1
+                                      ? ''
+                                      : 's'
+                                  } predate${
+                                    installTotals.untrackedActiveInstalls === 1
+                                      ? 's'
+                                      : ''
+                                  } per-version tracking and ${
+                                    installTotals.untrackedActiveInstalls === 1
+                                      ? 'is'
+                                      : 'are'
+                                  } not counted above.`}
+                              </Typography>
+                            ) : null}
                           </Stack>
                         ) : versionHistory.length === 0 ? (
                           <Typography variant="body2" color="text.secondary">

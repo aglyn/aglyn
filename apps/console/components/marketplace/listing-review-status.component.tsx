@@ -42,7 +42,13 @@ export interface PublisherVersion {
   signed: boolean
   changelog: string
   rejectionReason: string
+  /**
+   * Reconciled against the listing totals server-side (AGL-1418), so this
+   * card and the listing's own Version history print the same number for the
+   * same version instead of two answers to one question.
+   */
   activeInstalls: number
+  installCount?: number
   attestation: string[]
 }
 
@@ -294,12 +300,18 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
                 entry.reviewState !== 'approved' &&
                 !entry.grandfathered ? (
                   <Alert severity="warning" sx={{ mt: 0.5 }}>
-                    {`${entry.activeInstalls} of your sites ${
+                    {/* "Installs", not "sites" (AGL-1418). An org-wide
+                        install counts once and covers every site in that
+                        organization, so this used to report a five-site
+                        exposure as one site — understating the very risk the
+                        alert exists to raise. */}
+                    {`${entry.activeInstalls} of your installs ${
                       entry.activeInstalls === 1 ? 'is' : 'are'
                     } running this version, which no reviewer has approved. ` +
-                      'Only your own organization can install it — but if ' +
-                      'one of those is a live site, unreviewed code is ' +
-                      'serving real visitors.'}
+                      'Only your own organization can install it — but an ' +
+                      'org-wide install covers every site in it, so if any ' +
+                      'of them is live, unreviewed code is serving real ' +
+                      'visitors.'}
                   </Alert>
                 ) : null}
                 {/* In place, on the version it belongs to — it only ever
