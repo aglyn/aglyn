@@ -60,6 +60,22 @@ export interface ListingInstallTally {
   activeInstalls?: number | null
 }
 
+/**
+ * The same quantity counted from the pins, which are ground truth (AGL-1419).
+ *
+ * Both stored levels are accumulators, and an accumulator cannot come back
+ * down: nothing decrements when a tenant erase sweeps `installs` or the
+ * console deletes a host pin client-side. The pins can, because they ARE the
+ * installs — so when this is present it does not get reconciled against
+ * anything, it simply wins.
+ */
+export interface LivePinTally {
+  /** Live pins for the listing. A verified `0` is a count, not a gap. */
+  activeInstalls: number
+  /** Live pins per version id, when the split was derived too. */
+  byVersion?: Map<string, number> | Record<string, number> | null
+}
+
 export interface ReconciledInstallTallies {
   /** Per-version counters, reconciled against the listing totals. */
   versions: VersionInstallTally[]
@@ -73,6 +89,13 @@ export interface ReconciledInstallTallies {
    */
   untrackedInstallCount: number
   untrackedActiveInstalls: number
+  /**
+   * Whether `activeInstalls` was counted from the pins rather than inferred
+   * from two accumulators (AGL-1419). Callers that write anything back must
+   * check this: a reconciled number is the best available reading, a verified
+   * one is the truth.
+   */
+  activeVerified: boolean
 }
 
 const asCount = (value: unknown): number => {
@@ -136,35 +159,118 @@ function reconcileCounter(
  *
  * Pure, and deliberately: it decides what to SAY, and the caller decides
  * whether to repair anything.
+ *
+ * ## When the pins are in hand (AGL-1419)
+ *
+ * Pass `pins` and the reasoning above stops applying to `activeInstalls`,
+ * because it only existed to pick between two unreliable readings. The pin
+ * count is the quantity itself, so it is taken exactly — including DOWNWARDS,
+ * which no amount of reconciling between two accumulators could ever do, and
+ * which is the whole reason `z6glT_UDAQ` advertised three active installs
+ * against two live pins.
+ *
+ * The clamp flips direction with it. Without pins, `activeInstalls` is capped
+ * at `installCount`, because "more live than ever landed" means one of the two
+ * is corrupt and the all-time figure is the more believable. With pins it is
+ * `installCount` that gets raised: a pin that exists now is an install that
+ * landed, so an all-time counter below the live one is simply behind.
  */
 export function reconcileInstallTallies(
   versions: VersionInstallTally[],
   listing: ListingInstallTally,
+  pins?: LivePinTally | null,
 ): ReconciledInstallTallies {
+  const trackedInstalls = versions.map((entry) => asCount(entry.installCount))
+  const trackedActive = versions.map((entry) => asCount(entry.activeInstalls))
+
+  const verified = pins ? asCount(pins.activeInstalls) : null
+  const activeTotalRaw = verified ?? 0
+  const active =
+    verified == null
+      ? reconcileCounter(trackedActive, asCount(listing?.activeInstalls))
+      : splitVerifiedActive(versions, trackedActive, activeTotalRaw, pins?.byVersion)
+
+  // All-time stays an accumulator even with pins in hand: an uninstall deletes
+  // its pin and leaves nothing behind, so the pins cannot say how many
+  // installs there have EVER been. They can only say the floor.
   const installs = reconcileCounter(
-    versions.map((entry) => asCount(entry.installCount)),
-    asCount(listing?.installCount),
+    trackedInstalls,
+    Math.max(asCount(listing?.installCount), verified ?? 0),
   )
-  const active = reconcileCounter(
-    versions.map((entry) => asCount(entry.activeInstalls)),
-    asCount(listing?.activeInstalls),
-  )
-  const activeValues = active.values.map((value, index) =>
-    Math.min(value, installs.values[index] ?? 0),
-  )
-  const activeTotal = Math.min(active.total, installs.total)
+
+  let installValues = installs.values
+  let installTotal = installs.total
+  let activeValues = active.values
+  let activeTotal = verified ?? active.total
+  if (verified == null) {
+    activeValues = active.values.map((value, index) =>
+      Math.min(value, installs.values[index] ?? 0),
+    )
+    activeTotal = Math.min(active.total, installs.total)
+  } else {
+    installValues = installs.values.map((value, index) =>
+      Math.max(value, activeValues[index] ?? 0),
+    )
+    installTotal = Math.max(
+      installs.total,
+      installValues.reduce((running, value) => running + value, 0),
+    )
+  }
   const activeSum = activeValues.reduce((running, value) => running + value, 0)
+  const installSum = installValues.reduce((running, value) => running + value, 0)
   return {
     versions: versions.map((entry, index) => ({
       ...entry,
-      installCount: installs.values[index] ?? 0,
+      installCount: installValues[index] ?? 0,
       activeInstalls: activeValues[index] ?? 0,
     })),
-    installCount: installs.total,
+    installCount: installTotal,
     activeInstalls: activeTotal,
-    untrackedInstallCount: installs.untracked,
+    untrackedInstallCount: Math.max(0, installTotal - installSum),
     untrackedActiveInstalls: Math.max(0, activeTotal - activeSum),
+    activeVerified: verified != null,
   }
+}
+
+/**
+ * Splits a verified pin count across the versions (AGL-1419).
+ *
+ * Three cases, in descending order of how much is known:
+ *
+ * 1. A per-version pin count was taken too — use it, and let the remainder
+ *    stand for pins on versions this history does not show (deleted, or past
+ *    the 20 the route reads).
+ * 2. One version — everything live is on it. Provable, not guessed.
+ * 3. Neither — keep the stored per-version actives but let no prefix of them
+ *    exceed the verified total, and name whatever is left. Trimming rather
+ *    than scaling because a stored count that fits is still evidence, and a
+ *    fabricated fraction of one is not.
+ */
+function splitVerifiedActive(
+  versions: VersionInstallTally[],
+  tracked: number[],
+  total: number,
+  byVersion: LivePinTally['byVersion'],
+): { values: number[]; total: number; untracked: number } {
+  const lookup =
+    byVersion instanceof Map
+      ? byVersion
+      : byVersion
+        ? new Map(Object.entries(byVersion).map(([k, v]) => [k, asCount(v)]))
+        : null
+  if (lookup) {
+    const values = versions.map((entry) => asCount(lookup.get(entry.version)))
+    const sum = values.reduce((running, value) => running + value, 0)
+    return { values, total, untracked: Math.max(0, total - sum) }
+  }
+  if (versions.length === 1) return { values: [total], total, untracked: 0 }
+  let remaining = total
+  const values = tracked.map((value) => {
+    const taken = Math.min(value, remaining)
+    remaining -= taken
+    return taken
+  })
+  return { values, total, untracked: remaining }
 }
 
 export interface VersionMoveInput {

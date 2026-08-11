@@ -26,8 +26,10 @@ import { compareArtifactVersions } from '@aglyn/aglyn/server'
 import {
   reconcileInstallTallies,
   versionCollectionFor,
+  type LivePinTally,
   type ReconciledInstallTallies,
 } from './version-stats'
+import { verifiedLivePins } from './install-pin-counts'
 import { canActAsPublisher } from './publisher-profile'
 import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestation'
 
@@ -41,6 +43,7 @@ import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestati
 function reconcileFromSnapshot(
   docs: Array<{ id: string; get: (field: string) => unknown }>,
   listing: Record<string, unknown> | undefined,
+  pins?: LivePinTally | null,
 ): { byVersion: Map<string, { installCount: number; activeInstalls: number }> } & ReconciledInstallTallies {
   const reconciled = reconcileInstallTallies(
     docs.map((doc) => ({
@@ -52,6 +55,7 @@ function reconcileFromSnapshot(
       installCount: Number(listing?.['installCount'] ?? 0),
       activeInstalls: Number(listing?.['activeInstalls'] ?? 0),
     },
+    pins,
   )
   const byVersion = new Map<string, { installCount: number; activeInstalls: number }>()
   reconciled.versions.forEach((entry) =>
@@ -110,9 +114,19 @@ const publisherVersions: PluginApiHandler = async (req, res) => {
     .orderBy('publishedAt', 'desc')
     .limit(20)
     .get()
-  // The counters the page prints, reconciled against the listing totals so
-  // this card cannot contradict the header above it (AGL-1418).
-  const tallies = reconcileFromSnapshot(snapshot.docs as never, listing)
+  // The counters the page prints, derived from the pins where there are pins
+  // to derive from (AGL-1419) and reconciled against the listing totals
+  // otherwise (AGL-1418), so this card cannot contradict the header above it.
+  const pins = await verifiedLivePins({
+    firestore: firestore as never,
+    listingRef: listingRef as never,
+    listingId,
+    listing,
+    artifactType,
+    versionIds: snapshot.docs.map((doc) => String(doc.get('version') ?? doc.id)),
+    updateTime: listingSnapshot.updateTime,
+  })
+  const tallies = reconcileFromSnapshot(snapshot.docs as never, listing, pins)
   const versions = snapshot.docs.map((doc) => {
     const sha256 = String(doc.get('sha256') ?? '')
     const versionId = String(doc.get('version') ?? doc.id)
@@ -177,11 +191,8 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
     if (String(req.query?.scope ?? '') === 'publisher') {
       return await publisherVersions(req, res)
     }
-    const listingRef = firebaseAdmin
-      .app()
-      .firestore()
-      .collection('marketplaceListings')
-      .doc(listingId)
+    const firestore = firebaseAdmin.app().firestore()
+    const listingRef = firestore.collection('marketplaceListings').doc(listingId)
     // Every artifact type has a version history now (AGL-1036), not just
     // plugins: the per-version install counts are worth the same to whoever
     // publishes a component as to whoever publishes a plugin. The collection
@@ -218,13 +229,31 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
           reviewState: doc.get('reviewState'),
         }))
       : snapshot.docs
-    // Reconciled against the listing totals (AGL-1418) and built from EVERY
-    // version doc rather than `visibleDocs`: the buyer filter above drops
-    // unapproved versions, and reconciling against what survives it would
-    // credit their installs to an approved version.
+    // Derived from the live pins (AGL-1419), which are the only ground truth
+    // and the only thing that can bring a count back DOWN — a tenant erase
+    // sweeps `installs` without decrementing anything. Falls back to the
+    // AGL-1418 reconciliation when there is nothing to derive from: a copied
+    // artifact holds no pin, and a missing index must degrade to the previous
+    // release rather than to zeros.
+    //
+    // Built from EVERY version doc rather than `visibleDocs`: the buyer filter
+    // above drops unapproved versions, and reconciling against what survives
+    // it would credit their installs to an approved version.
+    const pins = await verifiedLivePins({
+      firestore: firestore as never,
+      listingRef: listingRef as never,
+      listingId,
+      listing: listingSnapshot.data(),
+      artifactType,
+      versionIds: snapshot.docs.map((doc) =>
+        String(doc.get('version') ?? doc.id),
+      ),
+      updateTime: listingSnapshot.updateTime,
+    })
     const tallies = reconcileFromSnapshot(
       snapshot.docs as never,
       listingSnapshot.data(),
+      pins,
     )
     const versions = visibleDocs.map((doc) => ({
       version: String(doc.get('version') ?? doc.id),
