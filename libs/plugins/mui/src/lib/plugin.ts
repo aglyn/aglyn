@@ -48,6 +48,7 @@ import * as Collection from './components/collection'
 import * as FormComponents from './components/form'
 import * as Image from './components/image'
 import * as Icon from './components/icon'
+import * as InlineText from './components/inline-text'
 import * as LanguageSwitcher from './components/language-switcher'
 import * as Video from './components/video'
 import * as MarketplacePlugin from './components/plugin'
@@ -83,6 +84,10 @@ export const MUI_BUNDLE: Array<{
     { component: AppBar.default, schema: AppBar.schema, presets: AppBar.presets },
     { component: Toolbar.default, schema: Toolbar.schema, presets: Toolbar.presets },
     { component: Typography.default, schema: Typography.schema, presets: Typography.presets },
+    // The inline text run (AGL-1235): Typography is `textEditable` and so a
+    // leaf, which left no way to emphasise a phrase inside a sentence —
+    // every statement rendered as one flat colour.
+    { component: InlineText.default, schema: InlineText.schema, presets: InlineText.presets },
     { component: Button.default, schema: Button.schema, presets: Button.presets },
     { component: Container.default, schema: Container.schema, presets: Container.presets },
     { component: LayoutSlot.default, schema: LayoutSlot.schema, presets: LayoutSlot.presets },
