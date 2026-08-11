@@ -66,6 +66,44 @@
  *   still reported `totalMs` 3410. So this is query fan-out, not warm-up, and
  *   it will not be fixed by anything that only targets cold starts.
  *
+ * What the THIRD read settled (2026-08-11, AGL-1225, local against production
+ * Firestore — see "measuring this locally" below):
+ *
+ * - **The 1577 ms `composeScreenNodes` number is stale, and so is any plan
+ *   built on it.** `f731c4b7d` collapsed that pipeline's three sequential
+ *   round-trip stages into one, and AGL-1302 then put every read in it behind
+ *   `withRenderCache`. On a cache-MISS render of `/product/besigner` it now
+ *   measures ~480-520 ms. It is still the largest single phase; it is no
+ *   longer the bulk of the budget.
+ * - **`getHost` → `getOrgBilling` cannot be parallelised**, contrary to the
+ *   issue's item 3. `getOrgBilling` takes `hostId`, and `hostId` is a field of
+ *   the document `getHost` returns. The dependency is real, not incidental.
+ * - `ensureAll` stays cleared: 0 ms warm, ~170-1300 ms once per process, and
+ *   that once is module loading rather than I/O.
+ * - What WAS free: `getRealmPluginInstalls` and
+ *   `filterEnabledPluginsByReleaseFlags` were awaited back to back at the very
+ *   end of the loader, and neither reads anything composition produces. Both
+ *   inputs are settled by `getOrgBilling`. Issued before `composeScreenNodes`
+ *   instead, they hide inside it completely — see `load-page-data.ts`.
+ *
+ * Measuring this locally, because the method matters more than the numbers:
+ *
+ * - `withRenderCache` degrades to the uncached read when there is no Next
+ *   incremental cache, so driving `loadPageData` from a node-environment jest
+ *   spec makes EVERY iteration a guaranteed cache miss. That is the case this
+ *   file exists to shrink, and it needs no dev server and no build.
+ * - Check the cache is really defeated rather than assuming it. The control:
+ *   `filterEnabledPluginsByReleaseFlags` drops to 0 ms after its first call
+ *   (a module-level 60 s TTL in `release-flags.ts`) while `getHost` and
+ *   `getRealmPluginInstalls` hold their full cost on every iteration. One
+ *   phase collapsing and the others not is what proves the others are live.
+ * - **Do not compare two runs taken minutes apart.** Round-trip latency to
+ *   Firestore drifts by ±300 ms over that scale — the same code measured 1361
+ *   and 1658 ms, and a naive before/after gave -194 ms and then +265 ms for
+ *   one change. Interleave the arms in ONE process, alternating which leads,
+ *   and read the PAIRED differences. That turned the same change into a
+ *   462 ms median saving that won 15 of 15 pairs.
+ *
  * Timings go through `console.log` as one line of JSON so a Vercel runtime-log
  * query can pull them without a log drain. Overhead is a `Date.now()` per
  * phase, so this can stay on in production — the shape it measures only ever
