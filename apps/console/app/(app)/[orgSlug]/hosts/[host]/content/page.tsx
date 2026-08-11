@@ -488,7 +488,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     [bodyTab, applyMarkdown],
   )
   // AI assist (AGL-130): write or improve the markdown-lite body.
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const [aiInstruction, setAiInstruction] = useState<string | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
   const handleAiConfirm = useCallback(async () => {
@@ -1443,6 +1443,18 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               size="small"
               color="primary"
               onClick={() => {
+                // The handler half of AGL-1380: `org` is undefined both in
+                // flight and on a failed read, and `hasEntitlement` on an
+                // undefined org answers NO — so clicking inside the loading
+                // window told a Pro org the feature it pays for is not on
+                // its plan. Pending declines and says so; only a loaded plan
+                // may make the claim.
+                if (!orgReady) {
+                  return void enqueueSnackbar(
+                    'Checking your plan — try again in a moment',
+                    { variant: 'info', persist: false },
+                  )
+                }
                 if (!hasEntitlement('ai-assist', org)) {
                   return void enqueueSnackbar(
                     'AI assist requires a Pro plan — see Billing to upgrade',

@@ -36,18 +36,29 @@ export function SiteBackupCard(props: { hostId: string }) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
 
   const gate = useCallback(() => {
+    // AGL-1380: an undefined `org` — in flight, or a failed read — checks as
+    // the FREE tier, so both export and restore refused a paying Pro site
+    // with an upgrade prompt during the billing window. Refuse without the
+    // plan claim instead, and say why.
+    if (!orgReady) {
+      enqueueSnackbar('Checking your plan — try again in a moment', {
+        variant: 'info',
+        persist: false,
+      })
+      return false
+    }
     if (hasEntitlement('site-export', org)) return true
     enqueueSnackbar(
       'Site backups require a Pro plan — see Billing to upgrade',
       { variant: 'warning', persist: false },
     )
     return false
-  }, [org, enqueueSnackbar])
+  }, [org, orgReady, enqueueSnackbar])
 
   const handleExport = useCallback(async () => {
     if (!gate() || busy) return

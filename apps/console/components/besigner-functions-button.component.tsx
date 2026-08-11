@@ -19,7 +19,9 @@
 import { mdiFunctionVariant } from '@aglyn/shared-data-mdi'
 import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
+  Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -43,7 +45,7 @@ export interface BesignerFunctionsButtonProps {
 export function BesignerFunctionsButton(props: BesignerFunctionsButtonProps) {
   const { hostId } = props
   const [open, setOpen] = useState(false)
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   return (
     <>
       <Tooltip title="Variables & functions">
@@ -79,11 +81,26 @@ export function BesignerFunctionsButton(props: BesignerFunctionsButtonProps) {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
-          <PluginWidgetSlot
-            slot="besignerFunctions"
-            hostId={hostId}
-            org={org}
-          />
+          {/*
+            The same hold the plugin-page route applies (AGL-1380). The two
+            cards behind this slot run `checkQuota(org, …)` on their Add
+            buttons, and an undefined `org` — in flight, or a failed read —
+            resolves the FREE tier: 3 variables and 1 function. A Business
+            workspace opening this dialog early was told it had hit a limit
+            it is nowhere near. Nothing here may quote a limit until the
+            plan is known.
+          */}
+          {!orgReady ? (
+            <Box sx={{ p: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : (
+            <PluginWidgetSlot
+              slot="besignerFunctions"
+              hostId={hostId}
+              org={org}
+            />
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>{'Close'}</Button>

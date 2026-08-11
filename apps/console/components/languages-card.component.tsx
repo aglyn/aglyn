@@ -42,7 +42,7 @@ export function LanguagesCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const {
     data: host,
     status: hostStatus,
@@ -77,6 +77,16 @@ export function LanguagesCard(props: { hostId: string }) {
   ]
 
   const handleSave = useCallback(async () => {
+    // AGL-1380: `org` is undefined in flight and on a failed read, where
+    // `hasEntitlement` answers NO — so a Business site saving its locale
+    // list inside the billing window was told multilingual is not on its
+    // plan, and the save was dropped. Decline without the claim.
+    if (!orgReady) {
+      return void enqueueSnackbar('Checking your plan — try again in a moment', {
+        variant: 'info',
+        persist: false,
+      })
+    }
     if (!hasEntitlement('multilingual', org)) {
       return void enqueueSnackbar(
         'Multilingual sites require a Business plan — see Billing',
@@ -137,6 +147,7 @@ export function LanguagesCard(props: { hostId: string }) {
     }
   }, [
     org,
+    orgReady,
     firestore,
     hostId,
     parsed,

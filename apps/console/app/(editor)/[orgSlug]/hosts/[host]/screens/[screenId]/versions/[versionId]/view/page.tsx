@@ -171,7 +171,7 @@ function ScreenDetails() {
   const { queueLoading, loading } = useLoading()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const logActivity = useHostActivityLogger(hostId)
 
   const screenRef = doc(firestore, 'hosts', hostId, 'screens', screenId)
@@ -563,6 +563,16 @@ function ScreenDetails() {
   } | null>(null)
   const openScheduler = useCallback(
     (action: 'publish' | 'unpublish', presetVersionId?: string) => () => {
+      // AGL-1380: `hasEntitlement` on an undefined org answers NO, and `org`
+      // is undefined both while the billing doc is in flight and while the
+      // read is failing. Clicking inside that window told a Business org
+      // that scheduled publishing is not on its plan. Pending declines.
+      if (!orgReady) {
+        return enqueueSnackbar('Checking your plan — try again in a moment', {
+          variant: 'info',
+          persist: false,
+        })
+      }
       if (!hasEntitlement('scheduled-publishing', org)) {
         return enqueueSnackbar(
           'Scheduled publishing requires a Business plan — see Billing',
@@ -581,7 +591,7 @@ function ScreenDetails() {
           `${pad(initial.getDate())}T${pad(initial.getHours())}:${pad(initial.getMinutes())}`,
       })
     },
-    [org, enqueueSnackbar, screen, versions],
+    [org, orgReady, enqueueSnackbar, screen, versions],
   )
   const handleScheduleConfirm = useCallback(async () => {
     if (!scheduler?.at) return

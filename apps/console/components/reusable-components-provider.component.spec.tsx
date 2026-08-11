@@ -106,9 +106,20 @@ jest.mock('firebase/firestore', () => ({
   query: jest.fn(() => 'query-ref'),
 }))
 
+/**
+ * `ready` is mutable so the loading window is testable (AGL-1380). `org` goes
+ * undefined with it, which is the whole point: that is what the hook hands
+ * out both in flight and on a failed read, and it is indistinguishable from a
+ * free-tier org to `hasEntitlement`.
+ */
+let mockOrgReady = true
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { plan: 'pro' }, orgId: 'org1', ready: true }),
+  default: () => ({
+    org: mockOrgReady ? { plan: 'pro' } : undefined,
+    orgId: 'org1',
+    ready: mockOrgReady,
+  }),
 }))
 
 let mockComponentDocs: Array<Record<string, unknown>> = []
@@ -194,6 +205,7 @@ describe('ReusableComponentsProvider — promotion swaps the source for an insta
   beforeEach(() => {
     jest.clearAllMocks()
     mockEntitled = true
+    mockOrgReady = true
     mockCreateHostResource.mockResolvedValue({ id: 'cmp-new' })
     mockCanvas.toJSON.mockImplementation(() => ({ nodes: layoutNodes() }))
   })
@@ -268,6 +280,47 @@ describe('ReusableComponentsProvider — promotion swaps the source for an insta
     expect(screen.queryByRole('button', { name: 'Save component' })).toBeNull()
     expect(mockCreateHostResource).not.toHaveBeenCalled()
     expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+      expect.stringContaining('Starter plan'),
+      expect.objectContaining({ variant: 'warning' }),
+    )
+  })
+
+  /**
+   * The middle case AGL-1380 asks for: the two neighbours (entitled, and a
+   * settled "no") already passed against the previous code, so a suite
+   * without this one proves nothing. The provider wraps the besigner, which
+   * mounts long before the billing doc settles — so this window is not
+   * theoretical, it is every cold load of the designer.
+   */
+  it('does not claim the plan lacks the feature while the plan is still loading', () => {
+    mockOrgReady = false
+    // What `hasEntitlement` really answers for the undefined `org` the hook
+    // hands out during the window — a "no" that is a guess, not an answer.
+    mockEntitled = false
+    const { promote } = setup()
+    act(() => promote(navNode()))
+
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalledWith(
+      expect.stringContaining('Starter plan'),
+      expect.anything(),
+    )
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+      expect.stringContaining('Checking your plan'),
+      expect.objectContaining({ variant: 'info' }),
+    )
+    // Declining is still declining — the dialog must not open on a guess in
+    // the other direction either.
+    expect(screen.queryByRole('button', { name: 'Save component' })).toBeNull()
+    expect(mockCreateHostResource).not.toHaveBeenCalled()
+  })
+
+  it('makes the claim once the plan has actually answered', () => {
+    mockOrgReady = true
+    mockEntitled = false
+    const { promote } = setup()
+    act(() => promote(navNode()))
+
     expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
       expect.stringContaining('Starter plan'),
       expect.objectContaining({ variant: 'warning' }),

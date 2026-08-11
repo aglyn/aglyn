@@ -39,6 +39,15 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 export interface AiAssistProviderProps {
   /** Org billing doc for the entitlement gate (mounted by the shell). */
   org?: unknown
+  /**
+   * True once `org` is a trustworthy answer (AGL-1380). The shell mounts
+   * this provider above the whole console route tree, so it cannot hold its
+   * render until the billing doc settles the way the plugin-page route does
+   * — and an undefined `org` is not "unknown" to `checkEntitlement`, it is
+   * the free tier. Without this flag the gates below told a Pro org that AI
+   * assist is not on its plan for as long as the read was in flight.
+   */
+  orgReady?: boolean
   children?: JSX.Children
 }
 
@@ -51,6 +60,7 @@ export interface AiAssistProviderProps {
  */
 export function AiAssistProvider(props: AiAssistProviderProps) {
   const org = props.org
+  const orgReady = props.orgReady
   const { children } = props
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
@@ -87,6 +97,13 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
 
   const handleRewrite = useCallback(
     (target: Aglyn.NodeSchema<any>) => {
+      // AGL-1380: pending asserts nothing. See `orgReady` on the props.
+      if (!orgReady) {
+        return void enqueueSnackbar(
+          'Checking your plan — try again in a moment',
+          { variant: 'info', persist: false },
+        )
+      }
       if (!checkEntitlement(org as never, 'aiAssist')) {
         return void enqueueSnackbar(
           'AI assist requires a Pro plan — see Billing to upgrade',
@@ -97,7 +114,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
       setTargetProp('children')
       setNode(target)
     },
-    [org, enqueueSnackbar],
+    [org, orgReady, enqueueSnackbar],
   )
 
   // Keep the target valid for the selected element.
@@ -162,6 +179,13 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
   }, [node, instruction, busy, user, effectiveTarget, enqueueSnackbar])
 
   const handleGenerateSection = useCallback(() => {
+    // AGL-1380: same gate as `handleRewrite`.
+    if (!orgReady) {
+      return void enqueueSnackbar('Checking your plan — try again in a moment', {
+        variant: 'info',
+        persist: false,
+      })
+    }
     if (!checkEntitlement(org as never, 'aiAssist')) {
       return void enqueueSnackbar(
         'AI assist requires a Pro plan — see Billing to upgrade',
@@ -170,7 +194,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     }
     setSectionPrompt('')
     setSectionOpen(true)
-  }, [org, enqueueSnackbar])
+  }, [org, orgReady, enqueueSnackbar])
 
   const handleSectionConfirm = useCallback(async () => {
     if (!sectionPrompt.trim() || busy) return
