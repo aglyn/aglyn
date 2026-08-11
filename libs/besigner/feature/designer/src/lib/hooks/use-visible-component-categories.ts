@@ -30,8 +30,11 @@ function isEmailComponent(item: { pluginId?: string } | undefined) {
 }
 
 /**
- * Component-drawer categories filtered by the current canvas view type:
+ * Component-drawer categories filtered by the site's plugin set and the
+ * current canvas view type:
  *
+ *  - A plugin disabled for this site (AGL-1014) contributes nothing, in
+ *    either drawer — the palette and the picker read this one hook.
  *  - Editing an EMAIL document → only the email plugin's email-safe blocks;
  *    web/layout components would render inconsistently across mail clients.
  *  - Editing a screen or layout → email blocks are hidden (they belong to
@@ -42,12 +45,21 @@ function isEmailComponent(item: { pluginId?: string } | undefined) {
  */
 export function useVisibleComponentCategories() {
   const [viewType] = useAglynBesignerFlag('viewType')
+  // Per-site plugin enablement (AGL-1014). Enforcement, not decoration: the
+  // preset registry is a module-global union across every plugin loaded this
+  // session, so without this the drawer offers — and inserts — components
+  // from a plugin the site has switched off, which the published site then
+  // refuses to render. Undefined off host surfaces, which filters nothing.
+  const enabled = Aglyn.useEnabledPlugins()
 
   if (viewType === Aglyn.HostViewType.EMAIL) {
     return Aglyn.components.schemasBySortedCategories
       .map((category) => ({
         ...category,
-        items: category.items?.filter((item) => isEmailComponent(item)),
+        items: category.items?.filter(
+          (item) =>
+            isEmailComponent(item) && Aglyn.isFromEnabledPlugin(item, enabled),
+        ),
       }))
       .filter((category) => category.items?.length)
   }
@@ -58,6 +70,8 @@ export function useVisibleComponentCategories() {
       ...category,
       items: category.items?.filter(
         (item) =>
+          // A plugin this site has switched off offers nothing.
+          Aglyn.isFromEnabledPlugin(item, enabled) &&
           // Email blocks never appear outside an email document.
           !isEmailComponent(item) &&
           // The LayoutSlot outlet is layout-only.
