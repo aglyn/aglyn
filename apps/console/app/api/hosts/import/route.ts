@@ -42,6 +42,7 @@ import {
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../../_lib/site-export'
+import { decodeBundleTimestamps } from '../../_lib/bundle-timestamps'
 import {
   billableScreenIds,
   type BillableScreenSource,
@@ -500,7 +501,7 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
   const hostId = String(body?.hostId ?? '')
-  const bundle = body?.bundle
+  let bundle = body?.bundle
   if (!hostId || typeof bundle !== 'object' || bundle === null) {
     return Response.json({ error: 'Missing hostId or bundle' }, { status: 400 })
   }
@@ -541,6 +542,26 @@ async function handler(request: Request): Promise<Response> {
     if (!checkEntitlement(owningOrg?.org as any, 'siteExport')) {
       return Response.json({ error: 'Site restore requires a Pro plan' }, { status: 403 })
     }
+
+    /**
+     * Dates come back as real `Timestamp`s before ANYTHING reads a field out of
+     * the bundle (AGL-1392).
+     *
+     * A bundle carries dates as JSON, and `JSON.stringify` on an Admin
+     * `Timestamp` emits its private `{_seconds, _nanoseconds}` — so a restore
+     * used to write plain MAPS holding the right numbers in the wrong type.
+     * `publishSchedule.publishAt <= now` is a range query and Firestore orders
+     * by type before value, so a restored site kept every pending schedule and
+     * fired none of them.
+     *
+     * Once, on the whole bundle, and here rather than inside `cleanDoc`: the
+     * cap checks below model the post-import state through the same documents,
+     * and a check reading a different shape from the write is how the two drift.
+     * The decoder accepts the tagged form the export now emits AND the legacy
+     * `_seconds` envelope, because fixing the export cannot reach a bundle
+     * already on a customer's disk.
+     */
+    bundle = decodeBundleTimestamps(bundle)
 
     /**
      * The bundle's per-collection caps, applied in ONE place. The screen-cap
@@ -738,16 +759,100 @@ async function handler(request: Request): Promise<Response> {
      * one click on the sharing control; wide is a leak. The export side
      * strips `visibleTo` for the same reason.
      */
-    const orgScopedRef = (name: 'datasets' | 'media', id: string) =>
+    const orgScopedRef = (
+      name: 'datasets' | 'media' | 'mediaFolders',
+      id: string,
+    ) =>
       firestore.collection('orgs').doc(orgId as string).collection(name).doc(id)
     const importedScope = { visibleTo: [hostScopeToken(hostId)] }
 
+    /**
+     * The folder ids a restored `parentId`/`folderId` may legitimately name
+     * (AGL-1392): the ones this bundle brings, plus the ones the target org
+     * already holds.
+     *
+     * Both sides are needed, and each covers a case the other gets wrong:
+     *
+     * * The BUNDLE's own ids are what makes a restore into a fresh org work at
+     *   all — nothing is there yet, so only the bundle can vouch for a folder.
+     * * The TARGET org's existing ids are what stops a restore into the source
+     *   org from breaking something that was fine. Folders are scoped, so a
+     *   folder belonging to a sibling host is not in this host's export while
+     *   being very much present in the org; nulling a parent that points at it
+     *   would reparent a live folder tree to root on a routine restore.
+     *
+     * One id-only read (`.select()` with no fields), and only when the bundle
+     * actually carries something that could dangle.
+     */
+    let resolvableFolders: Set<string> | null = null
+    const resolvableFolderIds = async (): Promise<Set<string>> => {
+      if (resolvableFolders) return resolvableFolders
+      const bundled = bundleDocIds(bundleItems('mediaFolders'))
+      const existing =
+        orgId && (bundled.size || bundleItems('media').length)
+          ? await existingDocIds(
+              firestore.collection('orgs').doc(orgId).collection('mediaFolders'),
+            )
+          : new Set<string>()
+      resolvableFolders = new Set([...bundled, ...existing])
+      return resolvableFolders
+    }
+
+    /**
+     * Null a pointer that names a folder which will not exist.
+     *
+     * Absence stays absence and an explicit `null` stays `null` — only a STRING
+     * naming a missing folder is rewritten, because a dangling pointer is worse
+     * than no pointer in both places it appears. A folder whose parent is
+     * missing is unreachable in the DAM tree, and an ASSET whose folder is
+     * missing is filtered out of the root view (which excludes anything with a
+     * truthy `folderId`) as well as every folder view — so it is hidden, not
+     * misfiled. Root is recoverable by dragging; invisible is not.
+     */
+    const resolvedFolderPointer = (
+      value: unknown,
+      resolvable: Set<string>,
+    ): unknown =>
+      typeof value === 'string' && !resolvable.has(value) ? null : value
+
+    /**
+     * `orgs/{orgId}/mediaFolders` — in NO list before AGL-1392, while
+     * `media.folderId` was restorable. Written before the assets so the tree
+     * exists by the time anything points into it.
+     */
+    const importMediaFolders = async () => {
+      if (!orgId) return
+      const resolvable = await resolvableFolderIds()
+      for (const item of bundleItems('mediaFolders')) {
+        if (!item?.$id) continue
+        const cleaned = cleanDoc('mediaFolders', item)
+        if ('parentId' in cleaned) {
+          cleaned['parentId'] = resolvedFolderPointer(
+            cleaned['parentId'],
+            resolvable,
+          )
+        }
+        await write(orgScopedRef('mediaFolders', String(item.$id)), {
+          ...cleaned,
+          ...importedScope,
+        })
+      }
+    }
+
     const importOrgPlain = async (name: 'media') => {
       if (!orgId) return
+      const resolvable = await resolvableFolderIds()
       for (const item of bundleItems(name)) {
         if (!item?.$id) continue
+        const cleaned = cleanDoc(name, item)
+        if ('folderId' in cleaned) {
+          cleaned['folderId'] = resolvedFolderPointer(
+            cleaned['folderId'],
+            resolvable,
+          )
+        }
         await write(orgScopedRef(name, String(item.$id)), {
-          ...cleanDoc(name, item),
+          ...cleaned,
           ...importedScope,
         })
       }
@@ -789,6 +894,9 @@ async function handler(request: Request): Promise<Response> {
     await importPlain('workflows')
     await importPlain('actions')
     await importPlain('services')
+    // Folders before assets: the tree has to exist before anything points into
+    // it, and both reads resolve against the same id set (AGL-1392).
+    await importMediaFolders()
     await importOrgPlain('media')
     await importCollections()
     await importDatasets()

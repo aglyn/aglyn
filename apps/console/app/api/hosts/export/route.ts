@@ -31,6 +31,7 @@ import {
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../../_lib/site-export'
+import { encodeBundleTimestamps } from '../../_lib/bundle-timestamps'
 
 /**
  * Whole-site export (AGL-163): one JSON bundle of everything designable —
@@ -195,7 +196,7 @@ async function handler(request: Request): Promise<Response> {
       return { $id: doc.id, ...data }
     }
     const exportOrgCollection = async (
-      name: 'datasets' | 'media',
+      name: 'datasets' | 'media' | 'mediaFolders',
       cap: number,
     ) => {
       // A host with no owning org genuinely has no org data — that is a
@@ -246,6 +247,7 @@ async function handler(request: Request): Promise<Response> {
       collections,
       datasets,
       media,
+      mediaFolders,
     ] = await Promise.all([
       withPublishedVersion('screens'),
       withPublishedVersion('layouts'),
@@ -264,6 +266,15 @@ async function handler(request: Request): Promise<Response> {
       // import side fell through to its `?? 100` default, so every manifest
       // over 100 assets restored short and silently (AGL-1382).
       exportOrgCollection('media', EXPORT_COLLECTION_LIMITS['media']),
+      // The tree the manifest points into (AGL-1392). Org-owned and
+      // scope-filtered exactly like the assets: without it every restored
+      // asset's `folderId` named a folder the bundle did not contain, and a
+      // dangling `folderId` HIDES an asset rather than merely misfiling it —
+      // the DAM's root view filters out anything with a truthy `folderId`.
+      exportOrgCollection(
+        'mediaFolders',
+        EXPORT_COLLECTION_LIMITS['mediaFolders'],
+      ),
     ])
 
     const bundle = {
@@ -283,8 +294,23 @@ async function handler(request: Request): Promise<Response> {
       collections,
       datasets,
       media,
+      mediaFolders,
     }
-    return new Response(JSON.stringify(bundle), {
+    /**
+     * Dates leave as a TAGGED wire form, not as the Admin SDK's private
+     * `{_seconds, _nanoseconds}` (AGL-1392).
+     *
+     * `JSON.stringify` on a `Timestamp` emits those private fields, so every
+     * date in every bundle restored as a plain MAP — and
+     * `publishSchedule.publishAt <= now` is a range query, which a map cannot
+     * satisfy at any value because Firestore orders by type first. Restored
+     * sites looked correct and silently stopped publishing.
+     *
+     * One call on the whole bundle rather than a list of date fields: they nest
+     * (`publishSchedule.publishAt`, `installedFrom.installedAt`), and an
+     * enumeration is what the next feature forgets.
+     */
+    return new Response(JSON.stringify(encodeBundleTimestamps(bundle)), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
