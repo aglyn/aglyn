@@ -197,6 +197,12 @@ export class DndManager {
     if (this.dropIsInsideDrag) {
       return "An element can't be moved inside itself"
     }
+    // Says out loud what `onDragEnd` refuses silently: the resolved parent
+    // has no slot a child could render into (AGL-1405).
+    const into = this.computedDrop as Aglyn.NodeSchema<any>
+    if (into && !Aglyn.canvas.nodeAcceptsChildren(into)) {
+      return `${into.labelShort || 'That element'} can't hold other elements`
+    }
     const [valid, reason] = confirmValidLinealRelationship(
       actors.item,
       actors.parent,
@@ -292,6 +298,18 @@ export class DndManager {
       }
     }
 
+    // The redirect above only rescues a drop aimed AT a leaf. An edge drop
+    // resolves to the drop node's existing parent, and that parent may itself
+    // be unable to hold children — a node already trapped under a `markdown`
+    // block (AGL-1388) has exactly that shape, so dropping a sibling next to
+    // it would deepen the same hole. `reparentNode` refuses this outright
+    // now (AGL-1405); catch it here so a drag ends quietly instead of
+    // throwing out of the pointer handler.
+    if (!parent || !Aglyn.canvas.nodeAcceptsChildren(parent)) {
+      this.clearDndStatus()
+      return
+    }
+
     if (dragNode.type === Aglyn.NodeType.PRESET) {
       Aglyn.canvas.addNodeFromPreset(dragNode as Aglyn.PresetSchema<any>, parent, position)
       // Besigner.focus.setSelectedNode(newNode)
@@ -326,7 +344,21 @@ export class DndManager {
           },
         )
         if (!valid) continue
-        Aglyn.canvas.reparentNode(node, parent, position)
+
+        // An edge drop names a GAP in the sibling list as it stands now —
+        // "before whatever is at index 2". `reparentNode` indexes the list it
+        // is left with, after this node has been spliced out of it. Those
+        // agree for a drop into a different parent; among the node's OWN
+        // siblings every slot past it shifts down by one, so without this the
+        // drag lands one place late — and dropping a node just above itself
+        // resolves to the slot it is already in, which is what made the
+        // hierarchy drag look inert (AGL-1405).
+        let at = position
+        if (!Number.isNaN(at) && node.parentId === parent?.$id) {
+          const from = Aglyn.canvas.getNodeIndex(node)
+          if (from > -1 && from < at) at -= 1
+        }
+        Aglyn.canvas.reparentNode(node, parent, at)
         if (!Number.isNaN(position)) position += 1
       }
     }

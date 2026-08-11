@@ -26,6 +26,8 @@ import {
   ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_MODIFY_DUPLICATE,
   ICON_VARIANT_MODIFY_MOVE_DOWN,
+  ICON_VARIANT_MODIFY_MOVE_IN,
+  ICON_VARIANT_MODIFY_MOVE_OUT,
   ICON_VARIANT_MODIFY_MOVE_UP,
   ICON_VARIANT_MODIFY_PASTE,
 } from '@aglyn/shared-data-enums'
@@ -51,6 +53,10 @@ import {
 import useDeleteElementCallback, {
   useDeleteElementsCallback,
 } from '../hooks/use-delete-element-callback'
+import {
+  useMoveNodeInCallback,
+  useMoveNodeOutCallback,
+} from '../hooks/use-move-node-callbacks'
 import SubtreeJsonDialog from './subtree-json-dialog.component'
 
 export interface NodeContextMenuProps extends PaperProps {
@@ -120,6 +126,31 @@ export const NodeContextMenu = observer(
       },
       [node, isRootNode],
     )
+
+    /**
+     * Reparenting by clicking (AGL-1405). Until these two existed, the only
+     * way to move a node into a different container was to drag it — so a
+     * node that ended up somewhere it can never render (AGL-1388) could only
+     * be rescued by hand-editing the document's JSON.
+     *
+     * `canMove*` is read through the observer, so the items enable and
+     * disable as the selection moves, and both refuse anything the renderer
+     * could not draw rather than accepting it and stranding the subtree.
+     */
+    const moveNodeOut = useMoveNodeOutCallback()
+    const moveNodeIn = useMoveNodeInCallback()
+    const canMoveOut = !multi && Besigner.canMoveNodeOut(node)
+    const canMoveIn = !multi && Besigner.canMoveNodeIn(node)
+
+    const handleMoveOut = useCallback(() => {
+      onAction?.()
+      moveNodeOut(node)
+    }, [node, onAction, moveNodeOut])
+
+    const handleMoveIn = useCallback(() => {
+      onAction?.()
+      moveNodeIn(node)
+    }, [node, onAction, moveNodeIn])
 
     const handleParentOnClick = useCallback(
       (e: ChangeEvent<unknown>) => {
@@ -247,6 +278,24 @@ export const NodeContextMenu = observer(
               />
             </ListItemIcon>
             <ListItemText>Shift down</ListItemText>
+          </MenuItem>
+          <MenuItem onClick={handleMoveOut} disabled={!canMoveOut}>
+            <ListItemIcon>
+              <MdiIcon
+                fontSize="inherit"
+                path={ICON_VARIANT_MODIFY_MOVE_OUT.path}
+              />
+            </ListItemIcon>
+            <ListItemText>Move out of container</ListItemText>
+          </MenuItem>
+          <MenuItem onClick={handleMoveIn} disabled={!canMoveIn}>
+            <ListItemIcon>
+              <MdiIcon
+                fontSize="inherit"
+                path={ICON_VARIANT_MODIFY_MOVE_IN.path}
+              />
+            </ListItemIcon>
+            <ListItemText>Move into element above</ListItemText>
           </MenuItem>
           {multi ? null : (
             <MenuItem onClick={() => setJsonOpen(true)}>

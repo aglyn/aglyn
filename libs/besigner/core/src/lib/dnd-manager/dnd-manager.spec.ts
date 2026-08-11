@@ -158,3 +158,74 @@ describe('DndManager leaf drop redirect (AGL-575 parallel)', () => {
     })
   })
 })
+
+/**
+ * An edge drop names a GAP between two siblings — "before the node currently
+ * at index 2". `reparentNode` indexes the list it leaves behind, after the
+ * dragged node has been spliced out. For a drop into a different parent the
+ * two agree; for a drop among the node's OWN siblings every slot past it
+ * shifts down by one, and the drag lands one place late.
+ *
+ * That off-by-one is what made the hierarchy drag look inert (AGL-1405):
+ * dropping a node just above itself resolves to the slot it already occupies,
+ * so nothing appeared to happen — while `saveHistory` had already run, so the
+ * next Undo threw away the edit before it.
+ */
+describe('DndManager same-parent drop indexing (AGL-1405)', () => {
+  /** root -> outer -> [a, b, c], all containers. */
+  function seedSiblings() {
+    Aglyn.canvas.reset()
+    Aglyn.canvas.setNodes({
+      [Aglyn.NODE_ROOT_ID]: {
+        $id: Aglyn.NODE_ROOT_ID,
+        componentId: 'div',
+        nodes: ['outer'],
+      },
+      outer: {
+        $id: 'outer',
+        componentId: CONTAINER,
+        parentId: Aglyn.NODE_ROOT_ID,
+        nodes: ['a', 'b', 'c'],
+      },
+      a: { $id: 'a', componentId: CONTAINER, parentId: 'outer', nodes: [] },
+      b: { $id: 'b', componentId: CONTAINER, parentId: 'outer', nodes: [] },
+      c: { $id: 'c', componentId: CONTAINER, parentId: 'outer', nodes: [] },
+    } as any)
+  }
+
+  beforeEach(() => {
+    registerSchemas()
+    seedSiblings()
+  })
+
+  const drop = (dragId: string, overId: string, region: DropRegion) => {
+    const dnd = new DndManager()
+    dnd.setDragNode(Aglyn.canvas.getNode(dragId))
+    dnd.setDropNode(Aglyn.canvas.getNode(overId))
+    dnd.setDropRegion(region)
+    dnd.onDragEnd()
+  }
+
+  it('lands a forward move immediately before the node it was dropped on', () => {
+    drop('a', 'c', DropRegion.TOP)
+    expect(Aglyn.canvas.getNode('outer')!.nodes).toEqual(['b', 'a', 'c'])
+  })
+
+  it('lands a forward move immediately after the node it was dropped on', () => {
+    drop('a', 'b', DropRegion.BOTTOM)
+    expect(Aglyn.canvas.getNode('outer')!.nodes).toEqual(['b', 'a', 'c'])
+  })
+
+  it('lands a backward move immediately before the node it was dropped on', () => {
+    drop('c', 'a', DropRegion.TOP)
+    expect(Aglyn.canvas.getNode('outer')!.nodes).toEqual(['c', 'a', 'b'])
+  })
+
+  it('leaves no undo entry when a drop resolves to the slot the node is in', () => {
+    // Dropping `b` just below `a` is dropping it exactly where it already is
+    // — the single most natural "nudge it up" gesture in the hierarchy.
+    drop('b', 'a', DropRegion.BOTTOM)
+    expect(Aglyn.canvas.getNode('outer')!.nodes).toEqual(['a', 'b', 'c'])
+    expect(Aglyn.canvas.canUndo).toBe(false)
+  })
+})
