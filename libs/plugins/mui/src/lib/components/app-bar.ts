@@ -17,11 +17,27 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiPageLayoutHeader } from '@aglyn/shared-data-mdi'
-import AppBar, { type AppBarProps } from '@mui/material/AppBar'
+import MuiAppBar, { type AppBarProps } from '@mui/material/AppBar'
+import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_COLOR_ALT1, FIELD_POSITION } from '../constants/field-presets'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { ID as toolbarId } from './toolbar'
+
+/**
+ * MUI's AppBar behind the cleared-prop guard (AGL-1226).
+ *
+ * It was exported raw, which left BOTH of its authorable attributes exposed:
+ * `color` and `position` are each run through MUI's `capitalize`, so clearing
+ * either one persists a null that throws during SSR and 500s the page. A
+ * wrapper is the only place to intercept it, since the schema's props reach
+ * MUI directly. `createElement` rather than JSX keeps this a `.ts` file.
+ */
+const AppBar = forwardRef<HTMLElement, AppBarProps>((props, ref) =>
+  createElement(MuiAppBar, { ...dropClearedProps(props), ref }),
+)
+AppBar.displayName = 'AglynAppBar'
 
 // Component ids are persisted in screen documents; keep the legacy ids.
 export const ID: Aglyn.ComponentId = 'muiAppBar'

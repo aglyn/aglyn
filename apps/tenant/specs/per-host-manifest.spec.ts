@@ -161,3 +161,101 @@ describe('per-host web app manifest (AGL-1252)', () => {
     expect(body.short_name.length).toBeLessThanOrEqual(12)
   })
 })
+
+/**
+ * The icon `src` across the three stored generations of `logoUrl` (AGL-1407).
+ *
+ * This call site is the one that needs an ABSOLUTE URL. Nobody fetches a
+ * manifest icon from the page that linked the manifest — the install prompt,
+ * the OS icon cache and every installability checker fetch it out of band — so
+ * `/api/media/cdn/…` yields a manifest that parses, installs, and shows a blank
+ * tile. Same defect as AGL-1337's `og:image`, one surface over.
+ */
+describe('manifest icon media references (AGL-1407)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  const iconFor = async (host: Record<string, unknown>) => {
+    mockGetHost.mockResolvedValue({ host: { displayName: 'Site', ...host } })
+    const { body } = await manifestFor('a-site')
+    return body.icons?.[0]?.src
+  }
+
+  it('resolves a media reference to an ABSOLUTE CDN URL', async () => {
+    // Pre-fix this emitted the literal string `media:org:…/…`, which is not a
+    // fetchable URL in any installer.
+    expect(
+      await iconFor({
+        $id: 'DXnRbPH4CQ',
+        subdomain: 'northwind-coffee',
+        logoUrl: 'media:org:jWmGooWE3L/4GF1hRJBUp',
+      }),
+    ).toBe(
+      'https://northwind-coffee.aglyn.app' +
+        '/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/4GF1hRJBUp',
+    )
+  })
+
+  it('prefers the custom domain the site actually serves on', async () => {
+    expect(
+      await iconFor({
+        $id: 'DXnRbPH4CQ',
+        cname: 'northwind.coffee',
+        subdomain: 'northwind-coffee',
+        logoUrl: 'media:org:jWmGooWE3L/4GF1hRJBUp',
+      }),
+    ).toBe(
+      'https://northwind.coffee' +
+        '/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/4GF1hRJBUp',
+    )
+  })
+
+  it('absolutizes the AGL-175 relative CDN path too', async () => {
+    // The generation between the raw URL and the reference. Also unfetchable
+    // as stored, for exactly the same reason.
+    expect(
+      await iconFor({
+        subdomain: 'northwind-coffee',
+        logoUrl: '/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp',
+      }),
+    ).toBe(
+      'https://northwind-coffee.aglyn.app' +
+        '/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp',
+    )
+  })
+
+  describe('the legacy absolute forms are untouched', () => {
+    it('a raw firebasestorage download URL, encoding intact', async () => {
+      const raw =
+        'https://firebasestorage.googleapis.com/v0/b/aglyn-main.appspot.com/' +
+        'o/orgs%2FjWmGooWE3L%2Fmedia%2Fbrand%2Flogo?alt=media&token=abc'
+      expect(await iconFor({ subdomain: 'northwind-coffee', logoUrl: raw })).toBe(
+        raw,
+      )
+    })
+
+    it("an external URL the author typed, on a site with NO origin", async () => {
+      // Absolute already, so it never needed the origin — proof the new
+      // origin dependency applies only to the forms that resolve relative.
+      expect(await iconFor({ logoUrl: 'https://cdn.example.com/logo.png' })).toBe(
+        'https://cdn.example.com/logo.png',
+      )
+    })
+  })
+
+  it('omits icons when a reference cannot be made absolute', async () => {
+    // AGL-1022's existing empty-case rule, reached by a new route: with no
+    // cname and no subdomain there is no origin to resolve against, and a
+    // blank installed tile is worse than falling back to a page screenshot.
+    mockGetHost.mockResolvedValue({
+      host: { displayName: 'Origin-less', logoUrl: 'media:org:jWmGooWE3L/4GF' },
+    })
+    const { body } = await manifestFor('no-origin')
+    expect(body).not.toHaveProperty('icons')
+  })
+
+  it('omits icons for a malformed reference rather than emitting it raw', async () => {
+    expect(
+      await iconFor({ subdomain: 'northwind-coffee', logoUrl: 'media:junk' }),
+    ).toBeUndefined()
+  })
+})

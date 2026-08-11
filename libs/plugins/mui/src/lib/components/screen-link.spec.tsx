@@ -166,6 +166,27 @@ describe('ScreenLink renderAs (AGL-1195)', () => {
     expect(screen.queryByRole('link')).toBeNull()
   })
 
+  it('survives a cleared colour against real MUI, not a stand-in', () => {
+    // The SSR-500 itself (AGL-1226), reproduced through the component rather
+    // than asserted: MUI builds `color${capitalize(color)}` and capitalize
+    // throws on a non-string, which is a SERVER-SIDE throw — the page 500s.
+    expect(() =>
+      render(<ScreenLink color={null as any}>{'Go'}</ScreenLink>),
+    ).not.toThrow()
+    expect(() =>
+      render(<ScreenLink size={null as any}>{'Go'}</ScreenLink>),
+    ).not.toThrow()
+  })
+
+  it("falls back to MUI's own default when the colour is cleared", () => {
+    // Clearing means "use the default", so the proof is the default class
+    // being present — not merely the absence of a crash.
+    const { container } = render(
+      <ScreenLink color={null as any}>{'Go'}</ScreenLink>,
+    )
+    expect(container.querySelector('.MuiButton-colorPrimary')).not.toBeNull()
+  })
+
   it('leaves the shared field presets unmutated', () => {
     // The schema spreads FIELD_SIZE/FIELD_FULL_WIDTH rather than editing
     // them; mutating would put a `renderAs` condition on every Button,

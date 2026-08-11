@@ -28,6 +28,7 @@ import {
   FIELD_SIZE,
   FIELD_TEXT_CONTENT,
 } from '../constants/field-presets'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -64,15 +65,14 @@ export interface ScreenLinkProps extends ButtonProps {
  * `"contained"` would silently produce an unstyled element.
  */
 const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
-  const {
-    screenId,
-    href: externalHref,
-    renderAs,
-    variant,
-    size,
-    fullWidth,
-    ...rest
-  } = props
+  const { screenId, href: externalHref, renderAs, ...spread } = props
+  // A CLEARED attribute persists as null, and null is not "use the default"
+  // in React — `color={null}` reaches MUI, which capitalizes it and throws
+  // error #7 during SSR, 500ing the page (AGL-1226). This is the site's
+  // most-used element (70–77 nodes per page), so the guard runs BEFORE
+  // `variant`/`size`/`fullWidth` are split out: they are forwarded as named
+  // attributes, and guarding only the spread would leave those three exposed.
+  const { variant, size, fullWidth, ...rest } = dropClearedProps(spread)
   // Id-vs-URL precedence and the `javascript:`/`data:` guard live in
   // `useLinkTarget` (AGL-1335) — one copy for every linking element, and
   // the only place that knows a `screen:`-prefixed value is a reference.
