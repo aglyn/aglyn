@@ -27,6 +27,21 @@ describe('bookings plugin', () => {
     )
   })
 
+  it('lets nothing become a container by accident (AGL-1389)', () => {
+    // The booking widget is self-closing, so the declared-container list is
+    // empty on purpose: a new component that accepts a drop turns this red
+    // until someone says whether it renders what was dropped in.
+    expect(Aglyn.auditChildContract(BOOKINGS_BUNDLE, [])).toEqual([])
+  })
+
+  it('keeps every container’s children through compose (AGL-1389)', () => {
+    expect(
+      Aglyn.auditComposeChildSurvival(
+        Aglyn.listAcceptingComponentIds(BOOKINGS_BUNDLE),
+      ),
+    ).toEqual([])
+  })
+
   it('registers a mui-dependent bundle + console extension once', () => {
     registerBookingsPlugin()
     const bundle = Aglyn.plugins.getDependency(BUNDLE_ID)

@@ -16,8 +16,18 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { renderEmailHtml } from './model'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { EMAIL_BUNDLE, registerEmailPlugin } from './plugin'
+
+/**
+ * Email blocks that RENDER what is dropped into them (AGL-1389) — see the
+ * mui bundle's list for what this is and why it is an inventory rather than
+ * an exemption list.
+ */
+const EMAIL_DECLARED_CONTAINERS: readonly string[] = ['emailSection']
+
+const SENTINEL = 'child-contract-sentinel'
 
 describe('email plugin', () => {
   it('registers the bundle once with all email blocks', () => {
@@ -42,5 +52,46 @@ describe('email plugin', () => {
     for (const entry of EMAIL_BUNDLE) {
       expect(entry.schema.pluginId).toBe(BUNDLE_ID)
     }
+  })
+
+  it('lets nothing become a container by accident (AGL-1389)', () => {
+    expect(
+      Aglyn.auditChildContract(EMAIL_BUNDLE, EMAIL_DECLARED_CONTAINERS),
+    ).toEqual([])
+  })
+
+  it('keeps every container’s children through compose (AGL-1389)', () => {
+    expect(
+      Aglyn.auditComposeChildSurvival(
+        Aglyn.listAcceptingComponentIds(EMAIL_BUNDLE),
+      ),
+    ).toEqual([])
+  })
+
+  it('renders every container’s children in the EMAIL html too (AGL-1389)', () => {
+    // `email-render.ts` is a SECOND render surface with its own switch
+    // statement, so the same disagreement can appear there and nowhere else:
+    // a block whose case forgets `renderChildren(node.nodes)` swallows an
+    // author's node on send while the canvas shows it happily.
+    //
+    // Unlike the besigner's React tree this one is a pure string function
+    // over a node map — no providers, no context, no canvas singleton — so
+    // it can be probed for real, with a sentinel, and needs no exemptions.
+    // Today only `emailSection` handles children explicitly and the
+    // `default` case renders them; this is what keeps the next `case` from
+    // quietly dropping one.
+    const swallowed: string[] = []
+    for (const componentId of Aglyn.listAcceptingComponentIds(EMAIL_BUNDLE)) {
+      const { html } = renderEmailHtml({
+        rootId: 'root',
+        nodes: {
+          root: { componentId: 'div', nodes: ['subject'] },
+          subject: { componentId, props: {}, nodes: ['sentinel'] },
+          sentinel: { componentId: 'emailText', props: { children: SENTINEL } },
+        },
+      })
+      if (!html.includes(SENTINEL)) swallowed.push(componentId)
+    }
+    expect(swallowed).toEqual([])
   })
 })

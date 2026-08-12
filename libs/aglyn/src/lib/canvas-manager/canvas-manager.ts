@@ -32,9 +32,10 @@ import {
 } from 'mobx'
 import { computedFn } from 'mobx-utils'
 import type { Aglyn } from '../aglyn'
+import { schemaAcceptsChildren } from '../app-utils/child-contract'
 import { REUSABLE_INSTANCE_COMPONENT_ID } from '../app-utils/compose-reusable-components'
 import { stripUndefinedDeep } from '../app-utils/strip-undefined'
-import { createIdUrlSafe, FEATURE_FLAG } from '../foundation'
+import { createIdUrlSafe } from '../foundation'
 import type { PluginId } from '../plugin-manager'
 import {
   type ComponentId,
@@ -52,26 +53,6 @@ import {
 
 export const NODE_ROOT_ID = '_@_'
 export const NODE_ROOT_LABEL = 'Document'
-
-/**
- * True only when a feature flag is explicitly present and carries the
- * ENABLED bit. Unlike {@link isFeatureEnabled}, an absent (undefined) flag
- * reads as false here — components that declare no flags at all (Stack,
- * Section, the document root) must not be mistaken for self-closing leaves.
- */
-function isLeafFlagEnabled(flag?: FEATURE_FLAG): boolean {
-  return typeof flag === 'number' && (flag & FEATURE_FLAG.ENABLED) !== 0
-}
-
-/**
- * True only when a feature flag is explicitly present and carries the
- * DISABLED bit — the mirror of {@link isLeafFlagEnabled}, for the flags whose
- * interesting value is the switched-OFF one. An absent flag reads as false,
- * so a component that declares no flags keeps the permissive default.
- */
-function isFlagDisabled(flag?: FEATURE_FLAG): boolean {
-  return typeof flag === 'number' && (flag & FEATURE_FLAG.DISABLED) !== 0
-}
 
 export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   // public store: CanvasManager
@@ -466,16 +447,18 @@ export class CanvasManager {
    * container that accepts children in the hierarchy and discards them at
    * render is silent data loss: the author sees the nodes in the tree and
    * the published page does not have them.
+   *
+   * The rule itself lives in {@link schemaAcceptsChildren} (AGL-1389) so the
+   * registry audit that enforces it cannot be checking a *copy* of it — a
+   * second implementation would drift, and would then certify the editor's
+   * behaviour against a rule the editor no longer follows.
    */
   public nodeAcceptsChildren = computedFn((node: NodeSchema<any>): boolean => {
     if (!node) return false
     if (this.isRootNode(node)) return true
-    const flags = this.aglyn?.components?.getSchema(node.componentId)?.flags
-    if (isFlagDisabled(flags?.dropping)) return false
-    const isLeaf =
-      isLeafFlagEnabled(flags?.selfClosing) ||
-      isLeafFlagEnabled(flags?.textEditable)
-    return !isLeaf
+    return schemaAcceptsChildren(
+      this.aglyn?.components?.getSchema(node.componentId),
+    )
   })
 
   /**

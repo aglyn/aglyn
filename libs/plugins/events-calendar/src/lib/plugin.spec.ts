@@ -30,6 +30,22 @@ describe('events-calendar plugin', () => {
     ).toContain('eventList')
   })
 
+  it('lets nothing become a container by accident (AGL-1389)', () => {
+    // Every component here is a self-closing widget that renders published
+    // data, so the declared-container list is empty on purpose: a new one
+    // that accepts a drop turns this red until someone says whether it
+    // renders what was dropped in.
+    expect(Aglyn.auditChildContract(EVENTS_CALENDAR_BUNDLE, [])).toEqual([])
+  })
+
+  it('keeps every container’s children through compose (AGL-1389)', () => {
+    expect(
+      Aglyn.auditComposeChildSurvival(
+        Aglyn.listAcceptingComponentIds(EVENTS_CALENDAR_BUNDLE),
+      ),
+    ).toEqual([])
+  })
+
   it('registers a mui-dependent bundle + console extension once', () => {
     registerEventsCalendarPlugin()
     const bundle = Aglyn.plugins.getDependency(BUNDLE_ID)

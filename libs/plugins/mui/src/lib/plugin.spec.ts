@@ -63,6 +63,60 @@ const PERSISTED_COMPONENT_IDS = [
   'videoEmbed',
 ]
 
+/**
+ * Components in this bundle that RENDER what is dropped into them (AGL-1389).
+ *
+ * The drop/render agreement was checked by hand once — all 82 registered
+ * schemas, one at a time — after three /press screenshots turned out to be
+ * parented under a `markdown` node, shipped in the page payload, and never
+ * drawn (AGL-1388). This list is what makes that repeatable.
+ *
+ * Read it as an inventory, not an exemption list. Accepting children is the
+ * DEFAULT, so a component nobody thought about lands here and the test goes
+ * red until someone answers the question: does it render `children`? If yes,
+ * add the id. If no, say so on the schema — `flags.selfClosing`,
+ * `flags.textEditable`, `flags.dropping: DISABLED`, or an empty
+ * `restrictChildren` allowlist — and the editor stops offering the drop.
+ * Nothing arrives here by accident, and nothing leaves quietly either: an id
+ * that stops accepting drops is reported as stale.
+ *
+ * Sorted, one per line, so the diff of a new component is one added line.
+ * Every entry below was checked against its renderer: each one puts the nodes
+ * it is given into its output. Two of them do it CONDITIONALLY —
+ * `muiTabPanel` withholds an unopened panel's children under `lazyPanels`,
+ * and `muiDrawer` renders its slot only while open — which is precisely why
+ * this is a declaration guard and not a render sweep: a sentinel-child render
+ * would read both as swallowers and need an exemption for each.
+ */
+const MUI_DECLARED_CONTAINERS: readonly string[] = [
+  'collectionEntries',
+  'form',
+  'muiAccordion',
+  'muiAccordionDetails',
+  'muiAppBar',
+  'muiBox',
+  'muiBreadcrumbs',
+  'muiCard',
+  'muiCardActions',
+  'muiCardContent',
+  'muiContainer',
+  'muiDrawer',
+  'muiGrid',
+  'muiImageList',
+  'muiImageListItem',
+  'muiLinkBox',
+  'muiList',
+  'muiListItem',
+  'muiMegaMenu',
+  'muiNavMenu',
+  'muiPaper',
+  'muiStack',
+  'muiTabPanel',
+  'muiTabs',
+  'muiToolbar',
+  'section',
+]
+
 describe('plugins-mui', () => {
   it('registers the mui plugin dependency with the legacy runtime', () => {
     registerMuiPlugin()
@@ -145,6 +199,20 @@ describe('plugins-mui', () => {
       }
     }
     expect(offenders).toEqual([])
+  })
+
+  it('lets nothing become a container by accident (AGL-1389)', () => {
+    expect(
+      Aglyn.auditChildContract(MUI_BUNDLE, MUI_DECLARED_CONTAINERS),
+    ).toEqual([])
+  })
+
+  it('keeps every container’s children through compose (AGL-1389)', () => {
+    expect(
+      Aglyn.auditComposeChildSurvival(
+        Aglyn.listAcceptingComponentIds(MUI_BUNDLE),
+      ),
+    ).toEqual([])
   })
 
   it('keeps the persisted legacy component ids in the plugin', () => {
