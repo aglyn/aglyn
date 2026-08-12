@@ -19,7 +19,7 @@
  * ESLint rule: taking a value out of a loading-aware hook without taking its
  * readiness flag too.
  *
- * Three separate incidents, one shape — a hook handing out a resolved-looking
+ * Four separate incidents, one shape — a hook handing out a resolved-looking
  * value before it has resolved:
  *
  *   - AGL-1047 `useScopeTokens`  — reports `orgWide: true` while loading, so a
@@ -35,10 +35,26 @@
  *     `checkQuota(undefined, …)` does not mean "unknown", it resolves the FREE
  *     tier. A paying customer clicking Add inside that window was told their
  *     plan does not include what they bought.
+ *   - AGL-1380 `useCurrentOrg`  — the same defect as `useOrgPlan` on the hook
+ *     the whole console reads. Swept by hand TWICE before it was listed here:
+ *     nine render sites in `854dc2c66`, then nine DIFFERENT handler sites in
+ *     `bc321c2ec`, found only by reading every call site again. A Pro site
+ *     told "AI assist requires a Pro plan"; a languages save silently
+ *     dropped; a backup gate that blocked EXPORT as well as restore. The
+ *     third sweep was the default outcome, which is what AGL-1422 stopped.
  *
  * Each was fixed by adding a readiness flag beside the value. Nothing stops
  * the tenth call site from destructuring the value and ignoring the flag,
  * which is what this rule is for.
+ *
+ * ## It reports at the DECLARATION
+ *
+ * One report per hook CALL, not per use of the value. That matters for the
+ * failure mode a broad rule usually has (AGL-1245): a caller that genuinely
+ * only needs the value for display cannot half-satisfy this and cannot
+ * scatter suppressions through a file — it writes ONE
+ * `eslint-disable-next-line` at the destructuring, next to the reason. The
+ * exemption is therefore as reviewable as the guard.
  *
  * ## Why `useOrgDataScope` is NOT in the list
  *
@@ -59,7 +75,7 @@
  * ## Honest limits
  *
  * It cannot see whether a destructured flag is actually consulted, and it
- * cannot know about a FOURTH hook invented with the same defect — that one
+ * cannot know about a FIFTH hook invented with the same defect — that one
  * needs {@link GUARDED_HOOKS} updated by hand. It catches the copy-paste
  * regression, which is the one that has actually happened.
  */
@@ -81,6 +97,20 @@ const GUARDED_HOOKS = {
   // the alternative blanks the console for every owner on a cold load — so a
   // caller hiding org UI on it without `ready` hides nothing at all.
   useOrgReach: { flag: 'ready', unsafe: ['orgWide'] },
+  // The console's entitlement source (AGL-1422). Same lie as `useOrgPlan`
+  // and by far the widest blast radius: `org: undefined` covers both "in
+  // flight" and "the read is failing", and `plan-entitlements.ts` resolves
+  // an undefined org to the FREE tier rather than to "unknown". So an
+  // unguarded caller answers an entitlement question before it has been
+  // asked, and answers it NO — a paying org told the feature it bought is
+  // not on its plan, a quota'd action refused, a save dropped. The class
+  // was swept by hand TWICE (854dc2c66, then a different nine sites in
+  // bc321c2ec) before it was worth teaching to the rule.
+  //
+  // `orgId` is deliberately NOT unsafe: an undefined `orgId` means "no org
+  // in scope", which every caller already has to handle, and it carries no
+  // tier of its own.
+  useCurrentOrg: { flag: 'ready', unsafe: ['org'] },
 }
 
 /** The static key a destructuring property reads, or null if computed. */
@@ -105,7 +135,9 @@ export default {
       unguarded:
         "`{{hook}}().{{value}}` is not trustworthy until `{{flag}}` is true — " +
         'destructure `{{flag}}` and gate on it. Rendering or writing from ' +
-        '`{{value}}` during the loading window is AGL-1047/1061/1064.',
+        '`{{value}}` during the loading window is AGL-1047/1061/1064/1380. ' +
+        'If this caller only DISPLAYS the value and never gates on it, ' +
+        'disable this line and say why.',
     },
   },
 
