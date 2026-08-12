@@ -40,9 +40,9 @@ import {
   useFirestore,
   useFirestoreDoc,
   useUser,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
-import { getSessionHealth } from '../utils/session-health'
 
 /**
  * Generic per-plugin settings form (AGL-428): renders every field a
@@ -88,58 +88,58 @@ function SchemaForm({
   }
 
   const save = async () => {
-    // Never write settings seeded from a read we know is stale (AGL-1066).
-    //
-    // The form is seeded from `stored`, and `persistentLocalCache` keeps
-    // serving `onSnapshot` from IndexedDB after the session goes stale — so
-    // `stored` can be arbitrarily old while `status` still reads 'success'.
-    // The save below then writes `mergePluginConfig(schema, values)`, which is
-    // the WHOLE config object, not the one field that changed: `merge: true`
-    // does not protect the untouched keys, because they are present in the
-    // payload. Saving one toggle would silently revert every other setting to
-    // whatever the cache last saw, over another admin's newer values.
-    //
-    // Distinct from the AGL-1143 guard on Manage Account, which keys on
-    // `status === 'error'`. That covers a read that FAILED; a cache-served
-    // stale read succeeds, so it sails straight past that check.
-    //
-    // `fromCache` FIRST, because `staleSession` below cannot be reached on
-    // this page (AGL-1066): it needs two distinct LABELLED collections
-    // denied inside 60s, and `/[orgSlug]/plugins/[pluginRef]` issues no
-    // labelled one-shot read at all. The guard under it was inert. This one
-    // is the snapshot's own verdict on the very doc the form was seeded
-    // from — no heuristic, no threshold, and it clears the moment a server
-    // snapshot lands, so a network blip costs at most one refused save with
-    // the reason on screen.
-    if (fromCache) {
-      enqueueSnackbar(
-        'These settings have not been confirmed with the server, so they ' +
-          'may be out of date — saving now could overwrite newer values. ' +
-          'Check your connection and reload.',
-        { variant: 'error' },
-      )
-      return
-    }
-    if (getSessionHealth().staleSession) {
-      enqueueSnackbar(
-        'Your session went stale, so these settings may be out of date — ' +
-          'saving now could overwrite newer values. Sign in again and reload.',
-        { variant: 'error' },
-      )
-      return
-    }
-    const verdict = validatePluginConfigValues(schema, values)
-    if (!verdict.ok) {
-      enqueueSnackbar(verdict.error ?? 'Invalid settings', { variant: 'error' })
+    const valid = validatePluginConfigValues(schema, values)
+    if (!valid.ok) {
+      enqueueSnackbar(valid.error ?? 'Invalid settings', { variant: 'error' })
       return
     }
     setBusy(true)
     try {
-      await setDoc(
-        doc(firestore, 'orgs', orgId, 'pluginSettings', schema.pluginId),
-        { ...mergePluginConfig(schema, values), updatedBy: user?.uid ?? null },
-        { merge: true },
+      /**
+       * Never write settings seeded from a read we cannot trust (AGL-1066,
+       * AGL-1358, AGL-1449).
+       *
+       * The form is seeded from `stored`, and the write below carries
+       * `mergePluginConfig(schema, values)` — the WHOLE config object, not
+       * the one field that changed. `merge: true` protects nothing there,
+       * because every untouched key is present in the payload, so a save
+       * against a bad seed rewrites every other setting to whatever that
+       * seed held.
+       *
+       * This used to be two inline `if`s, and that is exactly why it needed
+       * fixing (AGL-1449): they covered `fromCache` and the session
+       * heuristic and had nothing for `unreadable`, so a listen that went
+       * terminal — where `useFirestoreDoc` clears `data` and this form
+       * re-seeds from `mergePluginConfig(schema, null)`, i.e. every field at
+       * its SCHEMA DEFAULT — sailed straight through and reset the stored
+       * document to defaults while reporting "Settings saved". A hand-rolled
+       * guard only ever holds the conditions whoever wrote it thought of.
+       *
+       * The guard WRAPS the write for the same reason: an early return is a
+       * shape you can keep while losing the protection.
+       */
+      const verdict = await writeGuardedBySeed(
+        {
+          subject: 'plugin settings',
+          unreadable: status === 'error',
+          fromCache,
+        },
+        async () => {
+          await setDoc(
+            doc(firestore, 'orgs', orgId, 'pluginSettings', schema.pluginId),
+            {
+              ...mergePluginConfig(schema, values),
+              updatedBy: user?.uid ?? null,
+            },
+            { merge: true },
+          )
+        },
       )
+      if (!verdict.ok) {
+        // `dirty` stays true and the fields keep what was typed, so the user
+        // can retry rather than discover later that nothing was stored.
+        return void enqueueSnackbar(verdict.message, { variant: 'warning' })
+      }
       setDirty(false)
       enqueueSnackbar('Settings saved', { variant: 'success' })
     } catch {

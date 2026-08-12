@@ -16,7 +16,6 @@
  */
 'use client'
 
-import { getSessionHealth } from '../../../../../../utils/session-health'
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiFileDocumentMultipleOutline } from '@aglyn/shared-data-mdi'
 import {
@@ -58,7 +57,11 @@ import {
 import { Box, Link as MuiLink } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useUser,
+  writeGuardedBySeed,
+} from '@aglyn/tenant-feature-instance'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
@@ -242,7 +245,16 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   const selected =
     collections.find((item) => item.$id === selectedId) ?? collections[0]
 
-  const { data: entryDocs } = useFirestoreCollection<any>(
+  const {
+    data: entryDocs,
+    /**
+     * The seed the entry editor is populated from (AGL-1449). Both are fed
+     * to `writeGuardedBySeed` in `handleSaveEntry` — read and dropped is how
+     * a guard becomes decoration.
+     */
+    status: entriesStatus,
+    fromCache: entriesFromCache,
+  } = useFirestoreCollection<any>(
     () =>
       query(
         collection(
@@ -548,61 +560,81 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   } | null>(null)
 
   const handleSaveEntry = useCallback(async () => {
-    // Never write an entry seeded from a read we know is stale (AGL-1066).
-    // The editor is populated from the entries LISTENER, and
-    // `persistentLocalCache` keeps serving listeners from IndexedDB after a
-    // session goes stale. This write carries every editor field — title, body,
-    // slug, category, tags — so `merge: true` protects none of them, and
-    // saving one edit reverts the rest to whatever the cache last saw.
-    if (getSessionHealth().staleSession) {
-      enqueueSnackbar(
-        'Your session went stale, so this entry may be out of date — saving ' +
-          'now could overwrite newer changes. Sign in again and reload.',
-        { variant: 'error' },
-      )
-      return
-    }
     if (!editor || !selected) return
     const title = editor.title.trim()
     if (!title) return
     const id = editor.id ?? Aglyn.createResourceUid()
     const timestamp = Timestamp.now()
-    await setDoc(
-      doc(
-        firestore,
-        'hosts',
-        hostId,
-        'collections',
-        selected.$id,
-        'entries',
-        id,
-      ),
+    /**
+     * Never write an entry seeded from a read we cannot trust (AGL-1066,
+     * AGL-1358, AGL-1449).
+     *
+     * The editor is populated from the entries LISTENER, and this write
+     * carries every editor field — title, slug, excerpt, body, cover image,
+     * both SEO fields, author, category and tags — so `merge: true` protects
+     * none of them: they are all in the payload. A seed the server never
+     * confirmed therefore does not lose one edit, it reverts the whole post
+     * to whatever IndexedDB last held, over an author who fixed a typo.
+     *
+     * This used to be one inline `if` on the console's own `staleSession`
+     * verdict, which is why AGL-1449 exists. It is the weakest of the three
+     * signals and the wrong one to hand-roll: it needs two DISTINCT
+     * collections denied inside 60s before it says anything, while
+     * `fromCache` — the signal that actually catches a cache-served editor,
+     * and the only one that is per-listener ground truth about the very read
+     * this form was seeded from — was never consulted at all. That is the
+     * AGL-1356 finding, repeated.
+     */
+    const verdict = await writeGuardedBySeed(
       {
-        title,
-        slug: slugify(title),
-        excerpt: editor.excerpt.trim(),
-        body: editor.body,
-        coverImage: editor.coverImage.trim(),
-        // Entry model v2 (AGL-582): SEO overrides + taxonomy.
-        seoTitle: editor.seoTitle.trim(),
-        seoDescription: editor.seoDescription.trim(),
-        authorName: editor.authorName.trim(),
-        // Category lookup (AGL-582): the entry stores the STABLE
-        // categoryId; picking one clears the legacy free-typed field.
-        // "None" only clears the id — the legacy value stays untouched so
-        // simply re-saving an old entry never wipes its category.
-        ...(editor.categoryId
-          ? { categoryId: editor.categoryId, category: deleteField() }
-          : { categoryId: deleteField() }),
-        tags: editor.tags
-          .split(',')
-          .map((tag) => tag.trim())
-          .filter(Boolean),
-        ...(editor.id ? {} : { status: 'draft', createdAt: timestamp }),
-        updatedAt: timestamp,
+        subject: 'entry',
+        unreadable: entriesStatus === 'error',
+        fromCache: entriesFromCache,
       },
-      { merge: true },
+      async () => {
+        await setDoc(
+          doc(
+            firestore,
+            'hosts',
+            hostId,
+            'collections',
+            selected.$id,
+            'entries',
+            id,
+          ),
+          {
+            title,
+            slug: slugify(title),
+            excerpt: editor.excerpt.trim(),
+            body: editor.body,
+            coverImage: editor.coverImage.trim(),
+            // Entry model v2 (AGL-582): SEO overrides + taxonomy.
+            seoTitle: editor.seoTitle.trim(),
+            seoDescription: editor.seoDescription.trim(),
+            authorName: editor.authorName.trim(),
+            // Category lookup (AGL-582): the entry stores the STABLE
+            // categoryId; picking one clears the legacy free-typed field.
+            // "None" only clears the id — the legacy value stays untouched so
+            // simply re-saving an old entry never wipes its category.
+            ...(editor.categoryId
+              ? { categoryId: editor.categoryId, category: deleteField() }
+              : { categoryId: deleteField() }),
+            tags: editor.tags
+              .split(',')
+              .map((tag) => tag.trim())
+              .filter(Boolean),
+            ...(editor.id ? {} : { status: 'draft', createdAt: timestamp }),
+            updatedAt: timestamp,
+          },
+          { merge: true },
+        )
+      },
     )
+    if (!verdict.ok) {
+      // The dialog stays open with what was typed, and nothing is logged as
+      // an edit that did not happen.
+      return void enqueueSnackbar(verdict.message, { variant: 'warning' })
+    }
     setEditor(null)
     enqueueSnackbar(editor.id ? 'Entry saved' : 'Draft created', {
       variant: 'success',
@@ -613,7 +645,16 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
       id,
       name: title,
     })
-  }, [editor, selected, firestore, hostId, enqueueSnackbar, logActivity])
+  }, [
+    editor,
+    selected,
+    firestore,
+    hostId,
+    entriesStatus,
+    entriesFromCache,
+    enqueueSnackbar,
+    logActivity,
+  ])
 
   const handleTogglePublish = useCallback(
     (entry: any) => async () => {
