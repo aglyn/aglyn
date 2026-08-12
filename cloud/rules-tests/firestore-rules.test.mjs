@@ -1481,6 +1481,15 @@ describe('hosts', () => {
       ['ratingAverage', 1],
       ['ratingCount', 99],
       ['ratingSum', 500],
+      // Nor the install counters (AGL-1420). `installCount` is covered by the
+      // plugin-listing block below; these are its live sibling and AGL-1419's
+      // derived cache, which were denied nowhere until this pass — and the
+      // cache matters most, because writing the triple consistently makes
+      // `verifiedLivePins` believe it is fresh and stop re-deriving.
+      ['activeInstalls', 4242],
+      ['pinnedActiveInstalls', 4242],
+      ['pinsVerifiedAtMs', 9999999999999],
+      ['pinnedVersionInstalls', { '1.0.0': 4242 }],
     ]) {
       await assertFails(
         updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-rated'), {

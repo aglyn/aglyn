@@ -352,6 +352,21 @@ describe('every server-owned listing field is denied to client writes (AGL-1361)
       expect(rule.denied).toEqual(
         expect.arrayContaining([
           'installCount',
+          // AGL-1420. The sibling counter, and the reason the pair is worth
+          // naming rather than leaning on the count below: `installCount` was
+          // denied here from the first pass while `activeInstalls` was
+          // declared NOWHERE — not in this list, not on `MarketplaceListing`
+          // — so it was not classified wrongly, it was outside the universe
+          // this guard partitions. A field a coverage guard cannot see is the
+          // one failure mode a coverage guard has.
+          'activeInstalls',
+          // AGL-1419's derived cache for it. `verifiedLivePins` short-circuits
+          // on `pinnedActiveInstalls === activeInstalls` inside the TTL, so a
+          // client that could write the triple could hold the cache open and
+          // stop the derivation that is the only thing able to lower a count.
+          'pinnedActiveInstalls',
+          'pinsVerifiedAtMs',
+          'pinnedVersionInstalls',
           'priceUsd',
           'profileId',
           'reviewStatus',
@@ -365,7 +380,7 @@ describe('every server-owned listing field is denied to client writes (AGL-1361)
           'kind',
         ]),
       )
-      expect(rule.denied.length).toBeGreaterThanOrEqual(28)
+      expect(rule.denied.length).toBeGreaterThanOrEqual(32)
       // isStaff / listingManager.
       expect(rule.branches).toHaveLength(2)
     })
@@ -377,9 +392,12 @@ describe('every server-owned listing field is denied to client writes (AGL-1361)
           'reviewStatus',
           'artifactType',
           'deletedAt',
+          // AGL-1420 — declared so the guard can see them at all.
+          'activeInstalls',
+          'pinnedActiveInstalls',
         ]),
       )
-      expect(declared.length).toBeGreaterThanOrEqual(30)
+      expect(declared.length).toBeGreaterThanOrEqual(34)
     })
 
     it('finds the listing fields the visibility policies read', () => {
