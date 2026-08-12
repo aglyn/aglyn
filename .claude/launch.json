@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "console",
+      "name": "console-live-data",
       "runtimeExecutable": "npx",
       "runtimeArgs": [
         "nx",
@@ -12,7 +12,7 @@
       "port": 4200
     },
     {
-      "name": "tenant",
+      "name": "tenant-live-data",
       "runtimeExecutable": "npx",
       "runtimeArgs": [
         "nx",
@@ -79,7 +79,7 @@
       "port": 4200
     },
     {
-      "name": "console-emulated",
+      "name": "console",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
@@ -88,7 +88,7 @@
       "port": 4200
     },
     {
-      "name": "tenant-emulated",
+      "name": "tenant",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
