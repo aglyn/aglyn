@@ -21,9 +21,11 @@ import {
   checkQuota,
   createResourceUid,
   nameSearchKey,
+  NON_PAGE_SCREEN_MAX_PER_HOST,
   type OrgEntitlements,
   type OrgFeatureFlags,
   SCREEN_KIND_TEMPLATE,
+  screenClaimsToBeAPage,
   WEBHOOK_MAX_PER_HOST,
 } from '@aglyn/aglyn/server'
 import {
@@ -33,7 +35,11 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import { countBillableScreens } from './count-billable-screens'
+import {
+  billableScreenIds,
+  nonPageScreenIds,
+  readScreenSources,
+} from './count-billable-screens'
 
 /**
  * Quota-governed host subcollections (AGL-473): each entry maps a create
@@ -368,6 +374,13 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const collectionRef = hostRef.collection(resource.collection)
+    // ONE scan of the screens collection, two answers (AGL-1440): the plan's
+    // allowance below and the flat non-page cap after it read the same rows.
+    const screenRows =
+      resourceKey === 'screen' ? await readScreenSources(hostRef) : []
+    // The routing map decides which screens count (AGL-1383), and the host
+    // snapshot above already holds it — no second read.
+    const routingMap = hostSnapshot.get('screens')
     if (resource.quotaKey) {
       // Platform-seeded starters (AGL-687) are excluded from the template
       // count: they are content WE put in the library, and charging a free
@@ -383,9 +396,7 @@ async function handler(request: Request): Promise<Response> {
                 .get()
             ).data().count
           : resourceKey === 'screen'
-            ? // The routing map decides which screens count (AGL-1383), and
-              // the host snapshot above already holds it — no second read.
-              await countBillableScreens(hostRef, hostSnapshot.get('screens'))
+            ? billableScreenIds(screenRows, routingMap).size
             : (await collectionRef.count().get()).data().count
       const quota = checkQuota(org, resource.quotaKey as any, used)
       if (!quota.allowed) {
@@ -410,6 +421,33 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({
           error:
             `${resource.label} are capped at ${resource.maxPerHost} per site`,
+        }, { status: 403 })
+      }
+    }
+    // The same flat shape for the screens that no plan cap counts (AGL-1399,
+    // AGL-1439). `kind: 'email'` is on the allow-list above because the email
+    // composer must send it, and `countBillableScreens` subtracts it — so this
+    // create was a document nothing bounded, repeatable in a loop on a free
+    // plan. Unbounded Firestore documents rather than a bypass of anything we
+    // sell, so the answer is a platform cap and NOT a plan dimension: no
+    // `OrgEntitlements` key, no variation by plan, nothing re-priced.
+    //
+    // Keyed off the PREDICATE (`screenClaimsToBeAPage`), never off the two kind
+    // values: AGL-1439 is AGL-1399 one value over, and enumerating them would
+    // leave the next non-page kind unbounded again. `kind: 'template'` cannot be
+    // created here at all (refused above), but it fills the same bucket by
+    // demotion and by import, so it is counted here.
+    if (
+      resourceKey === 'screen' &&
+      !screenClaimsToBeAPage({ kind: requestedKind as string })
+    ) {
+      const existing = nonPageScreenIds(screenRows, routingMap).size
+      if (existing >= NON_PAGE_SCREEN_MAX_PER_HOST) {
+        return Response.json({
+          error:
+            'This site is at its limit of ' +
+            `${NON_PAGE_SCREEN_MAX_PER_HOST} email and template screens — ` +
+            'delete some to make room',
         }, { status: 403 })
       }
     }

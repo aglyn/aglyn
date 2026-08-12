@@ -25,8 +25,10 @@ import {
   hostScopeToken,
   legacyCollectionKind,
   nameSearchKey,
+  NON_PAGE_SCREEN_MAX_PER_HOST,
   resolveOrgEntitlements,
   rewriteBindingTokensDeep,
+  screenClaimsToBeAPage,
   validateDocument,
 } from '@aglyn/aglyn/server'
 import {
@@ -46,6 +48,7 @@ import { decodeBundleTimestamps } from '../../_lib/bundle-timestamps'
 import {
   billableScreenIds,
   type BillableScreenSource,
+  nonPageScreenIds,
 } from '../resources/count-billable-screens'
 
 /**
@@ -156,10 +159,28 @@ function cleanDoc(
  * this refusal, which is why the refusal only has to cover the case where
  * something is being provisioned rather than given back.
  *
+ * ## And the flat cap the plan does not price (AGL-1439)
+ *
+ * A bundle may carry `kind: 'template'` — legitimately, because a site with a
+ * blog has entry templates and dropping the field would restore a site's emails
+ * as live billable pages (AGL-1383). Since AGL-1400 that value also excludes a
+ * screen from `billableScreenIds`, so the check above sees nothing when a
+ * hand-edited bundle declares it on all 200 of its screens. The second leg below
+ * counts those documents against `NON_PAGE_SCREEN_MAX_PER_HOST` — the same flat
+ * platform cap `/api/hosts/resources` applies to the create path (AGL-1399) —
+ * and it is a COUNT, never a refusal of the kind: refusing `kind: 'template'`
+ * would break the restore that matters, which is the failure AGL-1382 exists to
+ * prevent.
+ *
+ * Both legs read the same projected snapshot, and the second is skipped
+ * entirely when the bundle carries no non-page screen, because then it cannot
+ * raise anything.
+ *
  * Nothing is re-priced. `billableScreenIds` decides which screens spend the
  * allowance, exactly as it does at the other two enforcement points — AGL-1173,
  * AGL-1383, AGL-1387 and AGL-1390 each declined to change what counts, and this
- * is not the issue that gets to either.
+ * is not the issue that gets to either. The flat cap has no `OrgEntitlements`
+ * key and appears in no price list.
  */
 async function screenCapRefusal(options: {
   hostRef: FirebaseFirestore.DocumentReference
@@ -172,14 +193,41 @@ async function screenCapRefusal(options: {
 }): Promise<Response | null> {
   const { hostRef, routingMap, bundleRoutingMap, org } = options
   const limit = resolveOrgEntitlements(org as any).screensPerHost
+
+  // The bundle's screens as they would be STORED, modelled through `cleanDoc`
+  // so the check cannot drift from the allow-list that decides what lands.
+  const bundleScreens: Array<BillableScreenSource> = []
+  for (const item of options.bundleScreens) {
+    if (!item?.$id) continue
+    const stored = cleanDoc('screens', item)
+    bundleScreens.push({
+      id: String(item.$id),
+      kind: stored['kind'],
+      deletedAt: stored['deletedAt'],
+    })
+  }
+  // Whether the bundle can raise the FLAT non-page cap at all (AGL-1439). A
+  // bundle carrying only pages cannot: an imported page overwrites a template
+  // rather than adding one, and the routing-map union only ever moves screens
+  // the other way, into the billable set.
+  const bundleCarriesNonPage = bundleScreens.some(
+    (screen) =>
+      !screenClaimsToBeAPage({
+        kind: screen.kind as string,
+        deletedAt: screen.deletedAt,
+      }),
+  )
   // Unlimited plans skip the read outright — most orgs entitled to
   // `siteExport` are on one, and a cap that cannot be exceeded needs no count.
-  if (!Number.isFinite(limit)) return null
+  // The flat cap does not vary by plan, so an unlimited org still pays the read
+  // when the bundle carries something that cap counts.
+  if (!Number.isFinite(limit) && !bundleCarriesNonPage) return null
 
-  // ONE read since AGL-1400: a screen says on its own document whether it is a
-  // page, so the bundle's collections no longer decide anything here either —
-  // an entry template arrives already marked `kind: 'template'`, which is what
-  // the exporter wrote and what the live site reads.
+  // ONE read since AGL-1400, and still one now that two caps read it: a screen
+  // says on its own document whether it is a page, so the bundle's collections
+  // no longer decide anything here either — an entry template arrives already
+  // marked `kind: 'template'`, which is what the exporter wrote and what the
+  // live site reads.
   const screensSnapshot = await hostRef
     .collection('screens')
     .select('kind', 'deletedAt')
@@ -195,40 +243,56 @@ async function screenCapRefusal(options: {
   // The state the import WOULD leave: the bundle's documents keyed by their
   // export ids, so a document the host already has is replaced and not added.
   const nextScreens = new Map(priorScreens)
-  let bundleScreenCount = 0
-  for (const item of options.bundleScreens) {
-    if (!item?.$id) continue
-    const id = String(item.$id)
-    const stored = cleanDoc('screens', item)
-    nextScreens.set(id, {
-      id,
-      kind: stored['kind'],
-      deletedAt: stored['deletedAt'],
-    })
-    bundleScreenCount += 1
+  for (const screen of bundleScreens) nextScreens.set(screen.id, screen)
+
+  // The host patch is written with `merge: true`, which deep-merges a map
+  // field, so the restored routing map is the union rather than the bundle's.
+  const nextRoutingMap = {
+    ...((routingMap as Record<string, unknown>) ?? {}),
+    ...(bundleRoutingMap && typeof bundleRoutingMap === 'object'
+      ? (bundleRoutingMap as Record<string, unknown>)
+      : {}),
   }
 
-  const prior = billableScreenIds([...priorScreens.values()], routingMap as any)
-  const next = billableScreenIds(
-    [...nextScreens.values()],
-    // The host patch is written with `merge: true`, which deep-merges a map
-    // field, so the restored routing map is the union rather than the bundle's.
-    {
-      ...((routingMap as Record<string, unknown>) ?? {}),
-      ...(bundleRoutingMap && typeof bundleRoutingMap === 'object'
-        ? (bundleRoutingMap as Record<string, unknown>)
-        : {}),
-    },
-  )
-  if (next.size <= prior.size || next.size <= limit) return null
+  // The plan's allowance first: when two caps are crossed at once, the one
+  // worth naming is the one with a price on it (the rule `resourceCapRefusal`
+  // follows for datasets).
+  if (Number.isFinite(limit)) {
+    const prior = billableScreenIds([...priorScreens.values()], routingMap as any)
+    const next = billableScreenIds([...nextScreens.values()], nextRoutingMap)
+    if (next.size > prior.size && next.size > limit) {
+      return Response.json({
+        error:
+          `This backup holds ${bundleScreens.length} screens and this site has ` +
+          `${prior.size}, which would put it at ${next.size} of ${limit} ` +
+          'screens. Nothing was imported — upgrade in Billing, or restore into ' +
+          'a site with room.',
+      }, { status: 403 })
+    }
+  }
 
-  return Response.json({
-    error:
-      `This backup holds ${bundleScreenCount} screens and this site has ` +
-      `${prior.size}, which would put it at ${next.size} of ${limit} ` +
-      'screens. Nothing was imported — upgrade in Billing, or restore into a ' +
-      'site with room.',
-  }, { status: 403 })
+  // Then the flat platform cap on the screens no plan counts (AGL-1439). The
+  // bundle's `kind` is deliberately IMPORTABLE — dropping it would restore a
+  // site's emails as live billable pages (AGL-1383) and refusing it would break
+  // restoring any site with a blog, which is the failure AGL-1382 exists to
+  // prevent. So the count is capped and the kind is not: a restore carrying
+  // entry templates lands, and only the bundle that would push a host past
+  // 5,000 non-page documents is refused.
+  if (bundleCarriesNonPage) {
+    const prior = nonPageScreenIds([...priorScreens.values()], routingMap as any)
+    const next = nonPageScreenIds([...nextScreens.values()], nextRoutingMap)
+    if (next.size > prior.size && next.size > NON_PAGE_SCREEN_MAX_PER_HOST) {
+      return Response.json({
+        error:
+          `This backup holds ${bundleScreens.length} screens and this site ` +
+          `has ${prior.size} email and template screens, which would put it ` +
+          `at ${next.size} of ${NON_PAGE_SCREEN_MAX_PER_HOST}. Nothing was ` +
+          'imported — delete some, or restore into a site with room.',
+      }, { status: 403 })
+    }
+  }
+
+  return null
 }
 
 /**

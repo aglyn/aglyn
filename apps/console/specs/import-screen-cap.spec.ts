@@ -171,7 +171,10 @@ import {
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../app/api/_lib/site-export'
-import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/server'
+import {
+  NON_PAGE_SCREEN_MAX_PER_HOST,
+  PLAN_ENTITLEMENTS,
+} from '@aglyn/aglyn/server'
 
 /** The two constants whose disagreement is this bug. */
 const BUNDLE_SCREEN_LIMIT = EXPORT_COLLECTION_LIMITS.screens
@@ -201,6 +204,13 @@ interface SeedOptions {
   screens?: string[]
   /** A subset of `screens` carrying a soft-delete tombstone. */
   softDeleted?: string[]
+  /**
+   * Non-page documents the host already holds — email documents and entry
+   * templates. Seeded UNROUTED, which is what they are on a live site: an email
+   * has no URL, and a routed one would count against the plan instead
+   * (AGL-1383).
+   */
+  nonPage?: Array<{ id: string; kind: string }>
   collections?: Record<string, Doc>
 }
 
@@ -225,6 +235,12 @@ const seedHost = (options: SeedOptions = {}) => {
       ...(options.softDeleted?.includes(id)
         ? { deletedAt: { _seconds: 1, _nanoseconds: 0 } }
         : {}),
+    })
+  }
+  for (const screen of options.nonPage ?? []) {
+    seed('hosts/host-1/screens', screen.id, {
+      displayName: screen.id,
+      kind: screen.kind,
     })
   }
   for (const [id, data] of Object.entries(options.collections ?? {})) {
@@ -550,6 +566,137 @@ describe('the count is the one the rest of the cap uses', () => {
 
     expect(response.status).toBe(200)
     expect(storedScreenIds()).toHaveLength(BUNDLE_SCREEN_LIMIT)
+  })
+})
+
+/**
+ * AGL-1439: the same bundle field, against the cap that has no price.
+ *
+ * `kind` is importable on purpose — dropping it would restore a site's emails
+ * as live billable pages (AGL-1383). Since AGL-1400 `kind: 'template'` also
+ * excludes a screen from `billableScreenIds`, so every assertion in the suite
+ * above sees nothing when a hand-edited bundle declares it: the screens are
+ * created, and no cap counts them. AGL-1399's flat platform cap is the answer,
+ * and this leg is where the import meets it.
+ *
+ * What is NOT done here is refusing the kind. A site with a blog has entry
+ * templates, and a restore that dropped or rejected them is the failure AGL-1382
+ * exists to prevent. The count is capped; the kind is not.
+ */
+describe('the flat cap on documents no plan counts (AGL-1439)', () => {
+  /** `n` non-page documents the host already holds. */
+  const nonPage = (n: number, kind: string, prefix: string) =>
+    Array.from({ length: n }, (_unused, index) => ({
+      id: `${prefix}-${index + 1}`,
+      kind,
+    }))
+
+  /** A bundle of non-page screens, unrouted the way the exporter writes them. */
+  const nonPageBundle = (idList: string[], kind: string) =>
+    bundleOf({
+      screenItems: idList.map((id) => screenItem(id, { kind })),
+      routed: [],
+    })
+
+  it('is the premise: no single bundle can cross the cap on its own', () => {
+    // 200 screens per bundle against 5,000 — so the only way to meet this cap
+    // is to already hold a library nobody plausibly authors, which is the
+    // property the number was sized for.
+    expect(NON_PAGE_SCREEN_MAX_PER_HOST).toBe(5000)
+    expect(BUNDLE_SCREEN_LIMIT).toBeLessThan(NON_PAGE_SCREEN_MAX_PER_HOST)
+  })
+
+  it('restores a blog’s entry templates rather than refusing the kind', async () => {
+    // The thing AGL-1439 says not to do. A bundle whose screens are entry
+    // templates is an ordinary backup of a site with a blog.
+    seedHost()
+    const wanted = ids(BUNDLE_SCREEN_LIMIT, 'tpl')
+    const response = await runImport(nonPageBundle(wanted, 'template'))
+
+    expect(response.status).toBe(200)
+    expect(storedScreenIds()).toEqual(wanted)
+  })
+
+  it('refuses the bundle that would push a host past the cap, and writes NOTHING', async () => {
+    seedHost({ nonPage: nonPage(NON_PAGE_SCREEN_MAX_PER_HOST, 'email', 'mail') })
+    const response = await runImport(nonPageBundle(ids(50, 'more'), 'email'))
+
+    expect(response.status).toBe(403)
+    expect(response.body.error).toContain(
+      `${NON_PAGE_SCREEN_MAX_PER_HOST + 50} of ${NON_PAGE_SCREEN_MAX_PER_HOST}`,
+    )
+    expect(writes).toEqual([])
+  })
+
+  it('counts BOTH kinds against the one cap', async () => {
+    // The reason AGL-1399 and AGL-1439 are one change. Ninety-nine of the
+    // host's documents are entry templates; a cap that only looked at
+    // `kind: 'email'` would put this bundle at 4,902 and let it through.
+    seedHost({
+      nonPage: [
+        ...nonPage(NON_PAGE_SCREEN_MAX_PER_HOST - 100, 'email', 'mail'),
+        ...nonPage(99, 'template', 'tpl'),
+      ],
+    })
+    const response = await runImport(nonPageBundle(ids(2, 'new-tpl'), 'template'))
+
+    expect(response.status).toBe(403)
+    expect(response.body.error).toContain(
+      `${NON_PAGE_SCREEN_MAX_PER_HOST + 1} of ${NON_PAGE_SCREEN_MAX_PER_HOST}`,
+    )
+    expect(writes).toEqual([])
+  })
+
+  it('restores a site into itself over the cap — the RAISE is what is refused', async () => {
+    // AGL-1390's rule, which this leg inherits: a backup is the one file nobody
+    // may be locked out of. The bundle keys by id, so restoring these documents
+    // replaces them and the count does not move.
+    const held = nonPage(NON_PAGE_SCREEN_MAX_PER_HOST + 50, 'email', 'mail')
+    seedHost({ nonPage: held })
+    const response = await runImport(
+      nonPageBundle(held.slice(0, BUNDLE_SCREEN_LIMIT).map((s) => s.id), 'email'),
+    )
+
+    expect(response.status).toBe(200)
+    expect(storedScreenIds()).toHaveLength(BUNDLE_SCREEN_LIMIT)
+  })
+
+  it('applies to an unlimited plan too, because the cap has no plan dimension', async () => {
+    // `screensPerHost` is skipped outright for these orgs. This cap is not a
+    // plan entitlement — it bounds infrastructure, so Enterprise meets it at
+    // exactly the same number.
+    mockOrg = { plan: 'enterprise' }
+    seedHost({ nonPage: nonPage(NON_PAGE_SCREEN_MAX_PER_HOST, 'email', 'mail') })
+    const response = await runImport(nonPageBundle(ids(1, 'more'), 'email'))
+
+    expect(response.status).toBe(403)
+    expect(writes).toEqual([])
+  })
+
+  it('leaves an ordinary page restore alone on a host already over the cap', async () => {
+    // The positive control, and the shape of the failure this cap must not
+    // have: being over is never itself a refusal, and a bundle of pages cannot
+    // raise the non-page count — an imported page OVERWRITES a template rather
+    // than adding one.
+    mockOrg = { plan: 'enterprise' }
+    seedHost({ nonPage: nonPage(NON_PAGE_SCREEN_MAX_PER_HOST + 10, 'email', 'mail') })
+    const wanted = ids(5, 'page')
+    const response = await runImport(bundleOf({ screens: wanted }))
+
+    expect(response.status).toBe(200)
+    expect(storedScreenIds()).toEqual(wanted)
+  })
+
+  it('charges nothing to the plan: a full email library still costs zero screens', async () => {
+    // The re-pricing guard. AGL-1173 removed this charge and AGL-1400 kept the
+    // exclusion; a host with 5,000 email documents is still using none of its
+    // hundred Pro screens, and the bundle's own pages are all it pays for.
+    seedHost({ nonPage: nonPage(NON_PAGE_SCREEN_MAX_PER_HOST - 1, 'email', 'mail') })
+    const wanted = ids(PRO_SCREEN_CAP, 'page')
+    const response = await runImport(bundleOf({ screens: wanted }))
+
+    expect(response.status).toBe(200)
+    expect(storedScreenIds()).toEqual(wanted)
   })
 })
 

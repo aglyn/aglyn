@@ -254,3 +254,47 @@ export function screenClaimsToBeAPage(
     screen.kind !== SCREEN_KIND_TEMPLATE
   )
 }
+
+/**
+ * How many LIVE screen documents a host may hold that are NOT billable pages —
+ * email documents, entry templates, and whatever non-page `kind` comes next
+ * (AGL-1399, AGL-1439).
+ *
+ * ## Why a flat number and not a plan dimension
+ *
+ * Every exclusion `screenClaimsToBeAPage` names is declared by the party being
+ * metered: `kind: 'email'` is on the create allow-list because the email
+ * composer must send it, and AGL-1400 gave `kind: 'template'` the same
+ * billing-excluding meaning. So `POST /api/hosts/resources` with
+ * `kind: 'email'` created a document that no cap counted, without limit, on a
+ * free plan — unbounded Firestore documents rather than a bypass of anything we
+ * sell. AGL-1439 is the same sentence one value over, and a cap enumerating the
+ * two values would leave the hole open for the third.
+ *
+ * The shape is `WEBHOOK_MAX_PER_HOST`'s (AGL-1360): no `OrgEntitlements` key, no
+ * variation by plan, counted from a server read at the create path. An
+ * `emailDocumentsPerHost` would have been a **pricing** decision — a number the
+ * price list has to explain and support has to defend — for a limit whose only
+ * job is to bound infrastructure. This is not the charge AGL-1173 removed and it
+ * does not reinstate it: nothing here is billable, and `screensPerHost` counts
+ * exactly what it counted yesterday.
+ *
+ * ## Why 5,000
+ *
+ * Sized to the heaviest library anybody could plausibly author, not to what
+ * exists: production's busiest host holds FOUR non-page screens (one email,
+ * three entry templates) across five hosts, so any bar sized to today's data
+ * would be meaningless. The real quantity is campaigns, which accumulate and are
+ * never deleted — a DAILY newsletter reaches 5,000 after thirteen years, and a
+ * thrice-weekly one after thirty-two. Entry templates contribute one per
+ * collection, so tens at the outside. Nothing a real customer does approaches
+ * this, which is the property that matters: the failure mode of a too-low flat
+ * cap is blocking legitimate work with an error the price list cannot explain.
+ *
+ * A cheaper bound is not worth much either. What the number defends against is a
+ * script in a loop, and a loop stopped at 5,000 documents is stopped. It also
+ * bounds the cost of the count itself — `countBillableScreens` scans the screens
+ * collection on every create at one billed read per document (AGL-1440), and
+ * before this cap that scan had no ceiling at all.
+ */
+export const NON_PAGE_SCREEN_MAX_PER_HOST = 5000
