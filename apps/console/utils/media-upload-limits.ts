@@ -93,3 +93,43 @@ export const SIGNED_UPLOAD_MAX_BYTES: Record<string, number> = {
 
 export const SIGNED_UPLOAD_TYPES_MESSAGE =
   'Signed uploads support mp4/webm/quicktime video, PDF, and ZIP'
+
+/**
+ * A `contentHash` for an object GCS already hashed for us.
+ *
+ * The signed-upload route wrote no `contentHash` at all, because the bytes
+ * never pass through the server — they go client → bucket, and hashing them
+ * afterwards would mean downloading up to 200 MB back into the function just
+ * to digest it. So the field was simply omitted, and `serveMediaCdn` reads
+ * it in two places: it is the ETag, and it is what the immutable
+ * content-hashed URL must match.
+ *
+ * With no `contentHash` there is **no ETag**, so a conditional request can
+ * never be answered 304 — every edge revalidation re-streams the whole
+ * object out of Cloud Storage and back out to the client. That is the worst
+ * possible place for it to be missing: this route is the one carrying the
+ * 200 MB videos.
+ *
+ * The hash is already in hand and costs nothing: `getMetadata()` — which
+ * finalize calls anyway to check the real size and type — returns GCS's own
+ * `md5Hash`. It is base64, and a CDN path segment is `[A-Za-z0-9_-]{1,64}`,
+ * so it is re-encoded as hex and cut to the same 16 characters the direct
+ * upload route's sha256 produces. Same shape, same length, same field.
+ *
+ * Returns `undefined` rather than a placeholder when GCS gives us nothing
+ * (composite objects have no md5) — an absent hash is the status quo and
+ * degrades to "no ETag", where a WRONG one would pin stale bytes under an
+ * immutable URL for a year.
+ */
+export function storageContentHash(md5Hash: unknown): string | undefined {
+  const raw = typeof md5Hash === 'string' ? md5Hash : ''
+  if (!raw) return undefined
+  try {
+    const hex = Buffer.from(raw, 'base64').toString('hex')
+    // A truncated or non-base64 value decodes to something too short to be
+    // an md5; treat it as absent rather than emitting a weak hash.
+    return hex.length >= 16 ? hex.slice(0, 16) : undefined
+  } catch {
+    return undefined
+  }
+}

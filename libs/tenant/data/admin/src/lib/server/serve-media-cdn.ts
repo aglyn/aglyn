@@ -26,6 +26,35 @@ export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280] as const
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
 
 /**
+ * The stable (non-content-hashed) URL's caching contract.
+ *
+ * This was `public, max-age=3600, stale-while-revalidate=86400`, and that
+ * header contradicted the promise the stable URL exists to make. Measured on
+ * production 2026-08-12: Vercel's edge DOES cache this route on a bare
+ * `max-age` (`x-vercel-cache: MISS` then `HIT`, `age` climbing) — so the
+ * saving was never in question. What a browser `max-age` breaks is
+ * *propagation*. `max-age=3600` reaches the client, so a browser holding a
+ * replaced asset will not send a conditional request for a full hour: the
+ * ETag below never gets a chance to answer, and nothing on our side can bust
+ * a browser cache. Every other cacheable route in the repo already uses
+ * `s-maxage` for exactly this reason — see `seo-origin.spec.ts`, "never a
+ * browser `max-age`, which nothing could bust".
+ *
+ * So: a short browser `max-age` that still collapses the burst of repeat
+ * requests within one page view (an image referenced by four `srcSet`
+ * candidates, a tile rendered in a grid and again in a drawer), and the full
+ * hour moved to `s-maxage` where it belongs. Worst stale read is now 60 s of
+ * replaced bytes in one browser rather than an hour, at the cost of one
+ * conditional request per image per minute — answered by the EDGE from its
+ * own copy, so it adds no Storage read and no Firestore read.
+ *
+ * The immutable content-hashed form is untouched: its URL changes with its
+ * bytes, so it can and should be pinned in the browser for a year.
+ */
+export const MEDIA_CDN_STABLE_CACHE_CONTROL =
+  'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400'
+
+/**
  * The parsed CDN scope segment (AGL-1043). Shapes:
  *
  * - `{hostId}` — that host's own library
@@ -303,7 +332,7 @@ export async function serveMediaCdn(
       ? `"${currentHash}${useVariant ? `-w${width}` : ''}${download ? '-dl' : ''}"`
       : null
     if (!hashed) {
-      setCacheControl('public, max-age=3600, stale-while-revalidate=86400')
+      setCacheControl(MEDIA_CDN_STABLE_CACHE_CONTROL)
       if (etag) res.setHeader('ETag', etag)
       if (etag && req.headers['if-none-match'] === etag) {
         res.status(304).end()
