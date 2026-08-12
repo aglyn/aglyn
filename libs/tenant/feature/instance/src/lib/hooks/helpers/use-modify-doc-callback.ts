@@ -44,11 +44,24 @@ function stampUpdatedAt<D extends object>(data: D): D {
  * silently stripped from the other collection's writes — the spec's drift
  * assertion fires instead, and someone decides.
  */
-const UNPERSISTED_FIELDS: readonly string[] = Object.freeze(
-  Object.keys(HOST_UNPERSISTED_FIELDS).filter(
-    (key) => key in ORG_UNPERSISTED_FIELDS,
-  ),
-)
+/*
+ * Resolved on first use, not at module scope. Computing it eagerly made this
+ * module — and therefore every consumer of the write callbacks — fail to LOAD
+ * in any suite that mocks the `@aglyn/aglyn` barrel without re-exporting both
+ * maps, which two console specs do. A write-boundary guard that cannot be
+ * imported is worse than the leak it prevents.
+ */
+let unpersistedFields: readonly string[] | undefined
+
+function getUnpersistedFields(): readonly string[] {
+  if (unpersistedFields) return unpersistedFields
+  const host = HOST_UNPERSISTED_FIELDS ?? {}
+  const org = ORG_UNPERSISTED_FIELDS ?? {}
+  unpersistedFields = Object.freeze(
+    Object.keys(host).filter((key) => key in org),
+  )
+  return unpersistedFields
+}
 
 /**
  * Drop the reader-injected keys before the payload leaves for Firestore.
@@ -66,9 +79,10 @@ const UNPERSISTED_FIELDS: readonly string[] = Object.freeze(
  * matching those would be the same over-broad scan AGL-1423 warned about.
  */
 function dropUnpersistedFields<D extends object>(data: D): D {
-  if (!UNPERSISTED_FIELDS.some((key) => key in data)) return data
+  const keys = getUnpersistedFields()
+  if (!keys.some((key) => key in data)) return data
   const rest = { ...data } as Record<string, unknown>
-  for (const key of UNPERSISTED_FIELDS) delete rest[key]
+  for (const key of keys) delete rest[key]
   return rest as D
 }
 
