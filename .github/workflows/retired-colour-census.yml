@@ -1,0 +1,73 @@
+name: Retired colour census
+
+# Catches a completed colour migration being silently undone (AGL-1431).
+#
+# `64a945bc5` moved the marketing site off the below-AA brand blue. It held on
+# `/` and `/product/*`. Then `/pricing` was re-authored (AGL-1282, AGL-1296)
+# and `#0090d9` came back 176 times, `#4fc3f7` 172 times, and NOTHING FAILED
+# ANYWHERE. It surfaced only because someone re-measured production by hand,
+# three days later, while verifying something else.
+#
+# Why this is a schedule and not a CI step: the regression landed with no
+# commit. It is authored node data, edited in the besigner and published to
+# Firestore. `nx affected` has nothing to be affected by, and a PR gate is
+# structurally incapable of seeing it. The published site is the only place
+# the defect exists, so the published site is what gets measured — the same
+# argument that puts the uptime probe on GitHub's runners.
+#
+# Why NOT a job inside uptime-probe.yml: that workflow's contract is that a
+# failing run IS an incident marker. A colour regression is a content defect,
+# not an outage; folding it in would make the incident record ambiguous in
+# both directions. Separate workflow, separate history.
+#
+# Daily, not every 15 minutes. The thing being watched changes when a human
+# re-authors a page, and the census costs a full render of each route.
+#
+# Optional:
+#   var MARKETING_BASE_URL — defaults to https://aglyn.com
+#
+# Must be a host that SERVES the marketing site, not one that redirects to it
+# (AGL-786). The check refuses to follow a 3xx and says so.
+
+on:
+  schedule:
+    - cron: '0 7 * * *' # daily 07:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: retired-colour-census
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # No install step, as with the uptime probe: the check uses only
+      # built-in fetch, so it cannot be broken by a dependency, a lockfile or
+      # a registry outage. A monitor that fails for reasons unrelated to what
+      # it monitors trains everyone to ignore it.
+      #
+      # `--refresh` re-reads a STALE route after the read that triggered its
+      # regeneration, which is as close to live as ISR allows from outside —
+      # measured 2026-08-11, neither a cache-busting query nor a
+      # `Cache-Control: no-cache` request header moves `x-vercel-cache`.
+      #
+      # `--require-fresh` is deliberately NOT set. It would turn "every route
+      # was clean, but the reads were cached" into a red run, and a monitor
+      # that goes red for cache timing gets muted. The report says which reads
+      # were provisional; a VIOLATION never is, since a stale read cannot
+      # invent a colour that was never published.
+      - name: Census the marketing routes
+        run: node tools/scripts/check-retired-colours.mjs --refresh
+        env:
+          MARKETING_BASE_URL: ${{ vars.MARKETING_BASE_URL }}
