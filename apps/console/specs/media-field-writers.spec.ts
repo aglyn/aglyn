@@ -41,6 +41,12 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const LOGO_CARD = join(__dirname, '..', 'components', 'logo-card.component.tsx')
+const FAVICON_CARD = join(
+  __dirname,
+  '..',
+  'components',
+  'favicon-card.component.tsx',
+)
 const CONTENT_PAGE = join(
   __dirname,
   '..',
@@ -54,6 +60,7 @@ const CONTENT_PAGE = join(
 )
 
 const logoCard = readFileSync(LOGO_CARD, 'utf8')
+const faviconCard = readFileSync(FAVICON_CARD, 'utf8')
 const contentPage = readFileSync(CONTENT_PAGE, 'utf8')
 
 /** Comments stripped — the rule has to be in the CODE, not the prose. */
@@ -61,6 +68,7 @@ const code = (source: string) =>
   source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
 const logoCode = code(logoCard)
+const faviconCode = code(faviconCard)
 const contentCode = code(contentPage)
 
 describe('site logo card (AGL-1407)', () => {
@@ -76,6 +84,34 @@ describe('site logo card (AGL-1407)', () => {
     // `src={logoUrl}` renders `media:…` as a broken image, which is what the
     // preview did until the data was converted underneath it.
     expect(logoCode).not.toMatch(/src=\{logoUrl\}/)
+  })
+})
+
+/**
+ * The third card, added when the reopened favicon leg landed. Same defect, and
+ * the one with a live customer site behind it: `seo.favicon` on two hosts held
+ * a raw storage URL, and this card would have written another one back the
+ * next time anyone picked an icon.
+ */
+describe('favicon card (AGL-1407)', () => {
+  it('writes the picked asset through mediaNodeSrc, not media.url', () => {
+    expect(faviconCode).toMatch(/mediaNodeSrc\(media\)/)
+    expect(faviconCode).toMatch(/favicon:\s*src/)
+    // The exact regression: `setDoc({ seo: { favicon: media.url } }, …)`.
+    expect(faviconCode).not.toMatch(/favicon:\s*media\.url/)
+  })
+
+  it('resolves the stored value before showing it back', () => {
+    expect(faviconCode).toMatch(/resolveMediaSrc\(favicon/)
+    // `src={favicon}` renders `media:…` as a broken 32px tile.
+    expect(faviconCode).not.toMatch(/src=\{favicon\}/)
+  })
+
+  it('still clears the field with an empty string, not a reference', () => {
+    // The Remove path is deliberately untouched: `host-icon` and this card
+    // both test truthiness, and a deleted field would leave the projection
+    // row's `favicon` behind (AGL-1071).
+    expect(faviconCode).toMatch(/favicon:\s*''/)
   })
 })
 

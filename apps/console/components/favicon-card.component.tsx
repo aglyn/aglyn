@@ -16,6 +16,7 @@
  */
 'use client'
 
+import * as Aglyn from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useHost, useUser } from '@aglyn/tenant-feature-instance'
@@ -45,6 +46,15 @@ export function FaviconCard(props: FaviconCardProps) {
   } = useHost({ hostId })
   const [pickerOpen, setPickerOpen] = useState(false)
   const favicon = data?.seo?.favicon
+  /**
+   * Resolve before showing (AGL-1407). The stored value has three generations
+   * — a raw storage URL, an AGL-175 CDN path, and a `media:` reference — and
+   * only the resolver knows all three. This preview and `host-icon` were the
+   * two readers that would have shown a broken image the moment the field was
+   * converted, which is why `seo.favicon` was held out of the back-fill until
+   * both resolved.
+   */
+  const preview = Aglyn.resolveMediaSrc(favicon, { hostId })
 
   return (
     <CardDisplay
@@ -59,10 +69,10 @@ export function FaviconCard(props: FaviconCardProps) {
       contentGutterY
     >
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-        {favicon ? (
+        {preview ? (
           <Box
             component="img"
-            src={favicon}
+            src={preview}
             alt="Favicon"
             sx={{ width: 32, height: 32, objectFit: 'contain' }}
           />
@@ -109,8 +119,15 @@ export function FaviconCard(props: FaviconCardProps) {
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onPick={(media) => {
-          if (!media.url) return
-          void setDoc({ seo: { favicon: media.url } }, { merge: true })
+          // `mediaNodeSrc`, not `media.url` — the writer the besigner picker,
+          // the logo card and the cover picker all use. It mints a `media:`
+          // reference when the org is entitled to CDN delivery and falls back
+          // to the raw URL when it is not, so the entitlement gate keeps
+          // working and picking a favicon stops undoing the AGL-1407
+          // conversion the next time someone opens this card.
+          const src = Aglyn.mediaNodeSrc(media)
+          if (!src) return
+          void setDoc({ seo: { favicon: src } }, { merge: true })
             .then(() => {
               // A client write to the host doc bypasses the membership
               // funnel, so the switcher's projection needs a nudge (AGL-1071).

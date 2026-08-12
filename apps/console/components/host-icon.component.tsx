@@ -16,6 +16,7 @@
  */
 'use client'
 
+import * as Aglyn from '@aglyn/aglyn'
 import { ICON_VARIANT_HOST } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import Avatar from '@mui/material/Avatar'
@@ -27,6 +28,9 @@ export interface HostIconProps {
    *
    * - host doc: nested, `seo.favicon`, alongside the rest of the SEO block
    * - projection row: flat, `favicon`, like its `displayName` / `subdomain`
+   *
+   * Both carry `$id` — the host doc id either way — which is what qualifies an
+   * org-scoped media reference to the site asking for it (see below).
    *
    * Taken as `unknown` and narrowed below: host docs come through as
    * `DocumentData`, which shares no declared property with a favicon-shaped
@@ -51,10 +55,27 @@ export function HostIcon(props: HostIconProps) {
   // the generic glyph for every site while the sites list — same component,
   // real host docs — showed favicons fine (AGL-1071).
   const source = host as
-    | { seo?: { favicon?: string }; favicon?: string }
+    | { $id?: string; seo?: { favicon?: string }; favicon?: string }
     | null
     | undefined
-  const favicon = source?.seo?.favicon || source?.favicon
+  const stored = source?.seo?.favicon || source?.favicon
+  /**
+   * `seo.favicon` holds the same three generations `logoUrl` does — a raw
+   * storage URL, an AGL-175 CDN path, and a `media:` reference (AGL-1407) —
+   * and only the resolver knows all three. Handing the stored string straight
+   * to `<Avatar src>` worked for exactly as long as no site's favicon held a
+   * reference, which is why this component and the favicon card had to learn
+   * to resolve BEFORE the back-fill converts the field: a reference reaching
+   * an `<img src>` verbatim is a broken tile in the site switcher and the
+   * sites list, on every site at once.
+   *
+   * The host id qualifies an ORG-scoped reference to the site asking for it
+   * (`hostQualifiedScope`), so an asset restricted to particular sites still
+   * resolves. Both shapes carry it as `$id`; a row that somehow lacks one
+   * still resolves the org-wide form, which is what a favicon almost always
+   * is.
+   */
+  const favicon = Aglyn.resolveMediaSrc(stored, { hostId: source?.$id })
   if (favicon) {
     return (
       <Avatar
