@@ -37,6 +37,7 @@ import {
   Typography,
 } from '@mui/material'
 import { type MouseEvent, useState } from 'react'
+import { mediaThumbnailSrc } from '../../utils/media-src'
 
 export interface MediaAssetCardProps {
   media: Aglyn.AglynHostMedia
@@ -193,7 +194,12 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
       ) : (
         <CardMedia
           component="img"
-          image={media.url}
+          // The 320px WebP variant, not the full-size original. The tile is
+          // THUMB_HEIGHT tall; `media.url` was the raw Cloud Storage URL, so
+          // a grid of 24 assets pulled megabytes of originals from Storage
+          // on every view and never touched the edge cache. Video stays on
+          // `media.url` deliberately — `serveMediaCdn` ignores `Range`.
+          image={mediaThumbnailSrc(media, 320)}
           alt={media.alt || fileName || ''}
           onClick={handlePrimary}
           sx={thumbSx}

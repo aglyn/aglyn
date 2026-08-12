@@ -36,6 +36,7 @@ import {
   normalizeUploadContentType,
   SIGNED_UPLOAD_MAX_BYTES,
   SIGNED_UPLOAD_TYPES_MESSAGE,
+  storageContentHash,
 } from '../../../../utils/media-upload-limits'
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000
@@ -212,6 +213,14 @@ async function handler(request: Request): Promise<Response> {
       url,
       storagePath: objectPath,
       folderId,
+      // GCS already hashed these bytes; `getMetadata()` above handed it to
+      // us free. Without it `serveMediaCdn` sets NO ETag, so an edge
+      // revalidation re-streams the whole object instead of taking a 304 —
+      // on the one route that carries 200 MB videos. Spread so a missing
+      // md5 (composite objects) writes no field at all rather than a null.
+      ...(storageContentHash(metadata.md5Hash)
+        ? { contentHash: storageContentHash(metadata.md5Hash) }
+        : {}),
       // Org-wide by default, same as the direct upload route (AGL-1043) —
       // the scoped reads need the field present on every asset.
       ...(scope.collection === 'orgs'

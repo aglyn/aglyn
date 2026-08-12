@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { mediaCdnAllows, parseMediaCdnScope } from './serve-media-cdn'
+import {
+  mediaCdnAllows,
+  MEDIA_CDN_STABLE_CACHE_CONTROL,
+  parseMediaCdnScope,
+} from './serve-media-cdn'
 
 describe('parseMediaCdnScope (AGL-1043)', () => {
   it('reads a host library segment', () => {
@@ -95,5 +99,37 @@ describe('mediaCdnAllows (AGL-1043)', () => {
     >
     expect(mediaCdnAllows(hostScope, undefined)).toBe(true)
     expect(mediaCdnAllows(hostScope, [])).toBe(true)
+  })
+})
+
+describe('MEDIA_CDN_STABLE_CACHE_CONTROL — the stable URL must stay bustable', () => {
+  it('caches at the EDGE for an hour, via s-maxage', () => {
+    // Measured on production 2026-08-12: Vercel's edge caches this route on
+    // a bare `max-age` too, so this is not about whether it caches — it is
+    // about which cache holds the hour.
+    expect(MEDIA_CDN_STABLE_CACHE_CONTROL).toContain('s-maxage=3600')
+  })
+
+  it('does NOT pin a replaced asset in the browser for an hour', () => {
+    // The regression this exists to prevent. A browser `max-age=3600` means
+    // no conditional request for an hour, so the ETag two functions down
+    // never gets asked and a replaced asset stays wrong in every open tab —
+    // the exact failure the stable URL was introduced to avoid (AGL-829).
+    const browserMaxAge = /(?:^|[\s,])max-age=(\d+)/.exec(
+      MEDIA_CDN_STABLE_CACHE_CONTROL,
+    )
+    expect(browserMaxAge).not.toBeNull()
+    expect(Number(browserMaxAge?.[1])).toBeLessThanOrEqual(60)
+  })
+
+  it('carries stale-while-revalidate WITH delta-seconds', () => {
+    // RFC 5861 requires the delta; without it a CDN may serve stale forever.
+    expect(MEDIA_CDN_STABLE_CACHE_CONTROL).toMatch(
+      /stale-while-revalidate=\d+/,
+    )
+  })
+
+  it('stays publicly cacheable — this is the platform-wide image path', () => {
+    expect(MEDIA_CDN_STABLE_CACHE_CONTROL.startsWith('public')).toBe(true)
   })
 })

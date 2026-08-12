@@ -30,6 +30,7 @@
 
 import { Readable, Writable } from 'node:stream'
 import {
+  MEDIA_CDN_STABLE_CACHE_CONTROL,
   mediaContentDisposition,
   mediaDownloadName,
   serveMediaCdn,
@@ -187,9 +188,19 @@ describe('media CDN download cache identity (AGL-1411)', () => {
   })
 
   it('leaves the cache-control contract alone', async () => {
+    // What AGL-1411 actually needs guarded is that `?download=1` does not
+    // get its OWN caching policy — the disposition changes, the freshness
+    // contract does not. Pinned to the shared constant rather than a
+    // literal, so tightening that contract (as AGL-1440's follow-up did,
+    // moving the hour from the browser to `s-maxage`) is a one-line change
+    // in one place instead of a false failure here.
     const download = await serve(['org:acme', 'm1'], { download: '1' })
+    const inline = await serve(['org:acme', 'm1'])
     expect(download.headers['cache-control']).toBe(
-      'public, max-age=3600, stale-while-revalidate=86400',
+      MEDIA_CDN_STABLE_CACHE_CONTROL,
+    )
+    expect(download.headers['cache-control']).toBe(
+      inline.headers['cache-control'],
     )
   })
 })

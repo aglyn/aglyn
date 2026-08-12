@@ -44,4 +44,39 @@ export function mediaSrc(media: {
   return ''
 }
 
+/**
+ * A `src` for a THUMBNAIL — a grid tile, a picker cell, a preview strip.
+ *
+ * Separate from {@link mediaSrc} because the two answer different questions.
+ * `mediaSrc` produces a URL that gets *persisted* (markdown bodies, listing
+ * images), so it must stay width-free. This one produces a URL that is only
+ * ever rendered, so it can ask for the smallest generated WebP variant.
+ *
+ * The DAM grid read `media.url` directly, which is the raw
+ * `firebasestorage.googleapis.com` download URL: every tile fetched the
+ * FULL-SIZE original straight from Cloud Storage, bypassing both the WebP
+ * variants (AGL-175) and the Vercel edge cache. A library page of 24 assets
+ * at ~200 KB each is ~4.8 MB of Storage egress per view, re-fetched by every
+ * viewer, where the 320px variants are ~15 KB each.
+ *
+ * `?w=` degrades safely: `serveMediaCdn` only serves a variant when the
+ * asset's `variants` array actually contains that width, and otherwise
+ * serves the original — so an SVG, a small logo, or an asset uploaded before
+ * variants existed still renders, just without the saving.
+ */
+export function mediaThumbnailSrc(
+  media: { url?: string; cdnPath?: string },
+  width: number,
+): string {
+  const cdnPath = media.cdnPath
+  // No `cdnPath` means a free-tier or private asset, and a width parameter
+  // on a raw storage URL means nothing — appending one would only fork the
+  // browser cache for identical bytes.
+  if (!cdnPath) return mediaSrc(media)
+  // A signed private URL already carries `?exp=&sig=`; a second `?` makes a
+  // path the route rejects outright.
+  if (cdnPath.includes('?')) return mediaSrc(media)
+  return `${mediaSrc(media)}?w=${width}`
+}
+
 export default mediaSrc
