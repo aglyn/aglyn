@@ -86,6 +86,16 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const hostId = props.hostId ?? useHostId()
   const firestore = useFirestore()
   const orgSlug = useOrgSlug()
+  // EXEMPT from `no-unguarded-loading-hook` (AGL-1422). This banner already
+  // holds on the stronger condition: every branch of it is downstream of
+  // `plan = org?.plan`, and each quota effect starts `if (!plan …) return`,
+  // so an undefined `org` produces silence rather than a free-tier warning.
+  // The suspension and dunning banners read fields off the same undefined
+  // object and render nothing for the same reason. Silence is the correct
+  // pending outcome for a component whose entire job is to make claims about
+  // the plan, and `ready` would not change a single branch — but it WOULD
+  // put a second condition beside `plan` for a reader to reconcile.
+  // eslint-disable-next-line aglyn/no-unguarded-loading-hook
   const { org, orgId } = useCurrentOrg()
   // Org-wide totals are not askable by a site collaborator (AGL-1068). An
   // unfiltered `count()` over an org collection is denied on the QUERY

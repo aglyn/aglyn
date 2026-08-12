@@ -130,7 +130,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
@@ -407,6 +407,16 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
       screens: any[]
       virtual?: boolean
     }) => async () => {
+      // AGL-1422: an undefined `org` is the FREE tier to `checkOrgQuota`, so
+      // applying a template inside the loading window was refused with
+      // "your plan allows N" — a number belonging to a plan the workspace
+      // may not be on. Only a loaded plan may name a limit.
+      if (!orgReady) {
+        return void enqueueSnackbar(
+          'Checking your plan — try again in a moment',
+          { variant: 'info', persist: false },
+        )
+      }
       const quota = checkOrgQuota(
         org,
         'screensPerHost',
@@ -468,6 +478,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     },
     [
       org,
+      orgReady,
       screenCount,
       existingSlugs,
       firestore,

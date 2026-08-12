@@ -83,7 +83,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const logActivity = useHostActivityLogger(hostId)
   const { permissions } = useOrgPermissions()
   const canManage = permissions.manageMembers
@@ -327,7 +327,11 @@ export function HostMembersCard(props: HostMembersCardProps) {
             {'Add'}
           </Button>
         </Stack>
-        {Number.isFinite(seatQuota.limit) ? (
+        {/* AGL-1422, the per-site twin of the org roster's seat line:
+            `checkOrgSeatQuota(undefined, …)` resolves the FREE tier, so the
+            loading window told a paying site it was over a limit it is
+            nowhere near. Only a loaded plan may quote a seat count. */}
+        {orgReady && Number.isFinite(seatQuota.limit) ? (
           <Typography variant="caption" color="text.secondary">
             {`${members.length} of ${seatQuota.limit} member seats used`}
             {seatQuota.upgradeRequired ? (

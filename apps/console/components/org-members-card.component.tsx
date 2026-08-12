@@ -117,7 +117,7 @@ export function OrgMembersCard() {
   // collaborators, whose seats meter per host against membersPerHost. Using
   // `members.length` read "8 of 5 manager seats used" to an org with three
   // managers and five collaborators.
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const managerSeatsUsed = useMemo(() => countManagerSeats(members), [members])
   const seatQuota = checkOrgSeatQuota(org, 'managers', managerSeatsUsed)
   // An org admin sees every org host via the memberRoles projection, so
@@ -267,7 +267,12 @@ export function OrgMembersCard() {
           {'Owners and admins manage the whole organization; editors and ' +
             'viewers can be limited to specific sites.'}
         </Typography>
-        {Number.isFinite(seatQuota.limit) ? (
+        {/* AGL-1422: `checkOrgSeatQuota(undefined, …)` is the FREE tier, not
+            "unknown", so before the billing doc lands this line read
+            "4 of 1 manager seats used — upgrade for more" to a workspace that
+            had bought the seats. A seat count is a claim about the plan; the
+            plan has to have answered before it can be made. */}
+        {orgReady && Number.isFinite(seatQuota.limit) ? (
           <Typography variant="caption" color="text.secondary">
             {`${managerSeatsUsed} of ${seatQuota.limit} manager seats used`}
             {members.length > managerSeatsUsed

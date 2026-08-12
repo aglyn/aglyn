@@ -120,7 +120,7 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
   const { confirm } = useConfirmationContext()
   const { queueLoading } = useLoading()
   const { data: user } = useUser()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
   const orgSlug = useOrgSlug()
@@ -385,6 +385,17 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
   const handleUseBundle = useCallback(
     (row: { displayName: string; pages: any[] }) => async () => {
       const pages = row.pages
+      // AGL-1422, before the confirmation rather than after it: the quota
+      // below reads an undefined `org` as the FREE tier, so inside the
+      // loading window this asked the user to confirm adding five pages and
+      // then refused with "your plan allows N". Ask about the plan before
+      // asking them anything.
+      if (!orgReady) {
+        return void enqueueSnackbar(
+          'Checking your plan — try again in a moment',
+          { variant: 'info', persist: false },
+        )
+      }
       const confirmed = await confirm({
         title: `Add ${pages.length} pages from "${row.displayName}"?`,
         description:
@@ -481,6 +492,7 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
       firestore,
       hostId,
       org,
+      orgReady,
       createHostResource,
       createHostVersion,
       enqueueSnackbar,

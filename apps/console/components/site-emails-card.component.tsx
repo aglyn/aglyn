@@ -73,6 +73,15 @@ export function SiteEmailsCard() {
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
+  // EXEMPT from `no-unguarded-loading-hook` (AGL-1422). The only thing read
+  // off `org` here is `enabledPlugins`, and that check fails OPEN — an org
+  // with no explicit list shows every plugin (see below), which is exactly
+  // what an undefined `org` produces. So the loading window shows the card
+  // and the loaded state may only ever REMOVE it; there is no window in
+  // which this tells anyone a feature is off. Catalogued and left alone once
+  // already in 854dc2c66, which called it out by name as "looked like a hit
+  // and is not". A `ready` gate here would only make the card flash.
+  // eslint-disable-next-line aglyn/no-unguarded-loading-hook
   const { org } = useCurrentOrg()
   const [opening, setOpening] = useState<string | null>(null)
   const [resetting, setResetting] = useState<string | null>(null)

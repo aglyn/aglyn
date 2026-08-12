@@ -259,7 +259,7 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
   }
 
   // Org profile fields (AGL-363), prefilled from the org doc.
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   // Name to type in the delete confirmation (AGL-485). The org-scope
   // projection's `orgName` isn't always populated, so fall back to the org
   // doc name, then the slug — always something real to type.
@@ -311,6 +311,19 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
   )
   const handleProfileSave = async () => {
     if (!currentOrg || busy) return
+    // AGL-1422. This form is a PREFILL of the org doc, so before `org`
+    // resolves every field above is the empty string it was initialised to —
+    // and `update-profile` posts the whole object. A save inside the loading
+    // window therefore does not fail, it SUCCEEDS at erasing the logo,
+    // contact email, phone, website and the billing address Stripe Tax
+    // reads. Nothing here is worth saving until there is something to have
+    // loaded.
+    if (!orgReady) {
+      return void enqueueSnackbar(
+        'Still loading this organization’s profile — try again in a moment',
+        { variant: 'info', persist: false },
+      )
+    }
     setBusy(true)
     try {
       await settingsRequest({ action: 'update-profile', ...profile })
@@ -606,7 +619,7 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
               <Stack direction="row">
                 <Button
                   variant="contained"
-                  disabled={busy}
+                  disabled={busy || !orgReady}
                   onClick={() => void handleProfileSave()}
                 >
                   {busy ? 'Saving…' : 'Save profile'}
@@ -847,8 +860,12 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
             ]}
           />
         )}
-        {/* Plugin zone (AGL-433): orgSettings widgets. */}
-        {currentOrg?.$id ? (<PluginWidgetSlot slot="orgSettings" orgId={currentOrg.$id} org={org} />) : null}
+        {/* Plugin zone (AGL-433): orgSettings widgets. The org-settings twin
+            of the Data page's hold (AGL-1380/1422) — these widgets run
+            `checkEntitlement`/`checkQuota` on the `org` handed to them, where
+            undefined is the FREE tier rather than "unknown", so mounting them
+            early has them quote a limit against no plan at all. */}
+        {currentOrg?.$id && orgReady ? (<PluginWidgetSlot slot="orgSettings" orgId={currentOrg.$id} org={org} />) : null}
       </Container>
     </DashboardLayout>
   )

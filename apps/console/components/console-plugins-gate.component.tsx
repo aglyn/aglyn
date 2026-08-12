@@ -41,6 +41,23 @@ import { loadOrgRealmPlugins } from '../utils/realm-plugins.client'
  * flashes in on the registry defaults.
  */
 function useEffectiveEnabledPlugins(): { flagsReady: boolean; enabledKey: string } {
+  // EXEMPT from `no-unguarded-loading-hook` (AGL-1422), and the one place in
+  // this sweep where adding the gate would be the more dangerous change.
+  //
+  // `resolveEnabledPlugins` fails OPEN: an undefined `org` yields the DEFAULT
+  // plugin set, so the loading window can only ever show MORE than the
+  // workspace enabled — never the refusal the rule exists to stop. Folding
+  // `ready` into `flagsReady` would put the entire plugin surface (nav,
+  // pages, providers, and via `useSitePluginsReady` the besigner canvas)
+  // behind the billing doc — and `useConfirmedDoc` leaves `ready` false
+  // indefinitely when a MISSING doc's server confirm cannot complete, which
+  // is a plausible state for a pre-billing workspace. That trades a
+  // cosmetic fail-open for a console with no plugins in it at all.
+  //
+  // The residue is a beat of the default nav on a cold load, which the
+  // BootSplash hold below already covers on a session's first load. Revisit
+  // only if `resolveEnabledPlugins` ever stops defaulting.
+  // eslint-disable-next-line aglyn/no-unguarded-loading-hook
   const { org } = useCurrentOrg()
   const { ready, isStaff, flags } = useReleaseFlags()
   const enabledKey = filterPluginsByReleaseFlags(

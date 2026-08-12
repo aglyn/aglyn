@@ -332,7 +332,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [orgHostList],
   )
 
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   // The org is a path segment in every console route; the "Used on" deep
   // links (AGL-845) build `/[orgSlug]/hosts/[subdomain]/…` from it.
   const orgSlug = useOrgSlug()
@@ -1866,6 +1866,19 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         return 0
       }
       const usedMb = (usedBytes + addedBytes + file.size) / (1024 * 1024)
+      // AGL-1422. `checkOrgQuota(undefined, …)` is the FREE tier's storage
+      // allowance, not "unknown" — and the library is one of the first
+      // things opened on a cold console, so a drop-in during that window was
+      // refused with "Storage limit reached (N MB)" against a limit the
+      // workspace does not have. Pending declines and says only that.
+      if (!orgReady) {
+        enqueueSnackbar('Checking your plan — try again in a moment', {
+          variant: 'info',
+          persist: false,
+          allowDuplicate: true,
+        })
+        return 0
+      }
       const quota = checkOrgQuota(org, 'storagePerHostMb', usedMb - 1)
       if (!quota.allowed) {
         enqueueSnackbar(
@@ -1990,7 +2003,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         return 0
       }
     },
-    [user, scopeId, org, usedBytes, currentFolder, enqueueSnackbar, logActivity],
+    [
+      user,
+      scopeId,
+      org,
+      orgReady,
+      usedBytes,
+      currentFolder,
+      enqueueSnackbar,
+      logActivity,
+    ],
   )
 
   // Batch upload (AGL-820): sequential so quota + counter stay sane; one

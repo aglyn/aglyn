@@ -49,6 +49,15 @@ import useCurrentOrg from '../hooks/use-current-org'
  */
 export default function SitePluginsCard(props: { hostId: string }) {
   const { hostId } = props
+  // EXEMPT from `no-unguarded-loading-hook` (AGL-1422). `org` reaches only
+  // `resolveEnabledPlugins`, which fails OPEN — an absent list means every
+  // first-party plugin — so an unready org lists MORE rows than the loaded
+  // one, never fewer, and no row here is a claim about a plan. The dangerous
+  // half of this card is the write, and it is not seeded from `org` at all:
+  // `disabled` comes from the HOST doc, whose own staleness is already
+  // guarded by `writeGuardedBySeed` below (AGL-1356/1358). Gating the list
+  // on `ready` would only add a flash to a card that cannot lie.
+  // eslint-disable-next-line aglyn/no-unguarded-loading-hook
   const { org } = useCurrentOrg()
   const { enqueueSnackbar } = useSnackbar()
   const {

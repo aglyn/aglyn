@@ -44,6 +44,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   FormControlLabel,
   Link,
   Stack,
@@ -87,7 +88,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const { data: user } = useUser()
   const firestore = useFirestore()
-  const { org: orgDoc, orgId } = useCurrentOrg()
+  const { org: orgDoc, orgId, ready: orgReady } = useCurrentOrg()
   // `stripeCustomerId` and `subscription` moved to `orgs/{orgId}/billing/stripe`
   // behind `canManageOrg()` (AGL-1028). This page is billing.manage-gated, so
   // its reader can see that doc; merging it over the org doc keeps every
@@ -485,6 +486,17 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             {'You do not have permission to view billing for this ' +
               'organization — ask an organization admin for access.'}
           </Alert>
+        ) : !orgReady ? (
+          // AGL-1422. Of every surface in the console this is the one that
+          // must not guess: `plan` below is `org?.plan ?? 'free'` and
+          // `resolveOrgEntitlements(undefined)` is the free tier, so the
+          // loading window renders a paying workspace its own billing page
+          // saying Free, with the upgrade cards emphasized and "no
+          // subscription" under Status. Hold — this page has nothing to show
+          // that is not an answer about the plan.
+          <Box sx={{ p: 2 }}>
+            <CircularProgress size={24} />
+          </Box>
         ) : (
         <GridItems
           spacing={3}
