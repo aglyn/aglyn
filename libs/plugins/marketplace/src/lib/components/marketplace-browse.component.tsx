@@ -19,7 +19,6 @@
 import { mdiCheckDecagram } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
-  Box,
   Chip,
   Tooltip,
   Grid,
@@ -48,6 +47,7 @@ import {
   listingArtifactLabel,
   resolvePluginInstallState,
 } from '../model/marketplace'
+import { ListingImage } from './listing-image.component'
 
 // The console route table is shared (AGL-685), so these go through
 // buildRoute rather than being reassembled from a base string — the shape
@@ -501,19 +501,18 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                     height: '100%',
                   }}
                 >
-                  {listing.previewImageUrl ? (
-                    <Box
-                      component="img"
-                      src={listing.previewImageUrl}
-                      alt={`${listing.displayName} preview`}
-                      sx={{
-                        width: '100%',
-                        height: 120,
-                        objectFit: 'cover',
-                        borderRadius: 1,
-                      }}
-                    />
-                  ) : null}
+                  {/* Resolved, never raw (AGL-1424) — the stored value may be
+                      a `media:` reference. */}
+                  <ListingImage
+                    src={listing.previewImageUrl}
+                    alt={`${listing.displayName} preview`}
+                    sx={{
+                      width: '100%',
+                      height: 120,
+                      objectFit: 'cover',
+                      borderRadius: 1,
+                    }}
+                  />
                   {/* The name gets the whole line (AGL-1002). Sharing a row
                       with the chips meant the title was the only thing that
                       gave way when they did not fit — "Promo Countdown"

@@ -18,6 +18,9 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+// The stored preview may be a `media:` reference (AGL-1424), which is not a
+// URL. Resolved where it is DISPLAYED, never in `values`.
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import {
   Box,
   Button,
@@ -235,10 +238,13 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
         {/* Preview image — the hero shown on cards and at the top of detail. */}
         <Stack spacing={1}>
           <Typography variant="subtitle2">{'Preview image'}</Typography>
-          {values.previewImageUrl ? (
+          {/* Resolved for DISPLAY only (AGL-1424). `values.previewImageUrl`
+              stays the stored form — it is what the save POSTs, and writing
+              the resolved URL back would undo the reference. */}
+          {resolveMediaSrc(values.previewImageUrl) ? (
             <Box
               component="img"
-              src={values.previewImageUrl}
+              src={resolveMediaSrc(values.previewImageUrl)}
               alt="Preview"
               sx={{
                 width: '100%',
