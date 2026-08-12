@@ -19,7 +19,10 @@ import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { resolveOrgEntitlements, UNLIMITED } from '@aglyn/aglyn/server'
 import { bandwidthGbFromPageViews } from '../../../../utils/usage-metering'
-import { measureScreenCaps } from '../../../../utils/screen-cap-reconciliation'
+import {
+  measureScreenCaps,
+  screenCapMaxBillable,
+} from '../../../../utils/screen-cap-reconciliation'
 import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 
 /**
@@ -124,22 +127,6 @@ async function handler(request: Request): Promise<Response> {
       // and the meter is what moved to match it.
       const bandwidthGb = bandwidthGbFromPageViews(pageViews)
 
-      // Screens per site (AGL-1390): the ONLY thing that ever re-asks whether
-      // a live site is inside the plan's screen allowance. Everywhere else the
-      // cap is a gate on a write, and three issues in one night found three
-      // different ways past it — each invisible until somebody read the code,
-      // because nothing counted afterwards. Keyed on the org's worst host,
-      // since the cap is per site and the alert is per org. Detection only:
-      // over-cap sites keep serving every page they serve today.
-      const screenCaps = await measureScreenCaps(
-        hosts.docs.map((host) => ({
-          id: host.id,
-          ref: host.ref,
-          routingMap: host.get('screens'),
-        })),
-        orgData,
-      )
-
       // Org datasets: count + approximate storage from the rollup the
       // monthly report writes (fresh enough for an alert).
       const datasetCount = Number(
@@ -151,8 +138,44 @@ async function handler(request: Request): Promise<Response> {
         .orderBy('computedAt', 'desc')
         .limit(1)
         .get()
-      const dataStorageMb = Number(
-        latestUsage.docs[0]?.get('dataStorageMb') ?? 0,
+      const rollup = latestUsage.docs[0]
+      const dataStorageMb = Number(rollup?.get('dataStorageMb') ?? 0)
+
+      // Screens per site (AGL-1390): the ONLY thing that ever re-asks whether
+      // a live site is inside the plan's screen allowance. Everywhere else the
+      // cap is a gate on a write, and three issues in one night found three
+      // different ways past it — each invisible until somebody read the code,
+      // because nothing counted afterwards. Keyed on the org's worst host,
+      // since the cap is per site and the alert is per org. Detection only:
+      // over-cap sites keep serving every page they serve today.
+      //
+      // Read off the rollup rather than re-measured (AGL-1440). The rollup
+      // writes `maxBillableScreens` daily and this cron already reads that very
+      // document two lines up for `dataStorageMb`, so the figure is free —
+      // where measuring it here meant an UNBOUNDED scan of every host's whole
+      // `screens` collection, one billed read per screen, every single day.
+      // Same staleness this cron already accepts for data storage, and the
+      // helper falls back to measuring when there is no usable figure, so an
+      // org the rollup has not reached is measured rather than reported as 0.
+      const maxBillableScreens = await screenCapMaxBillable(
+        rollup
+          ? {
+              maxBillableScreens: rollup.get('maxBillableScreens'),
+              computedAt: rollup.get('computedAt'),
+            }
+          : null,
+        Date.now(),
+        async () =>
+          (
+            await measureScreenCaps(
+              hosts.docs.map((host) => ({
+                id: host.id,
+                ref: host.ref,
+                routingMap: host.get('screens'),
+              })),
+              orgData,
+            )
+          ).maxBillable,
       )
 
       const checks: Array<{ key: string; label: string; used: number; limit: number }> = [
@@ -171,7 +194,7 @@ async function handler(request: Request): Promise<Response> {
           // the gate never saw, and this is the only place that would notice.
           key: 'screens',
           label: 'screens on a site',
-          used: screenCaps.maxBillable,
+          used: maxBillableScreens,
           limit: entitlements.screensPerHost,
         },
         {

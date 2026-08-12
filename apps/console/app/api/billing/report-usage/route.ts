@@ -29,6 +29,7 @@ import {
   type HostUsageSnapshot,
 } from '../../../../utils/usage-metering'
 import { measureScreenCaps } from '../../../../utils/screen-cap-reconciliation'
+import type { BillableScreenSource } from '../../hosts/resources/count-billable-screens'
 import { orgCounterTotals } from '../../../../utils/org-counter-totals'
 import {
   firebaseAdmin,
@@ -108,11 +109,20 @@ async function orgDatasetBytes(
  * **The cost is real and it is affordable.** The decode + re-encode is O(size)
  * per document where the bytes arm used to be O(1), across a 5,000-document
  * ceiling per collection. At the ceiling that is a couple of seconds of CPU —
- * against a sweep that is already paying ~17 sequential `getAll` round trips
- * per collection for the same documents. Network dominates by an order of
- * magnitude, so the honest number fits inside the 60 s budget; a site large
- * enough for the decode to be the binding constraint would have blown the
- * budget on reads long before.
+ * against a sweep that is already paying up to **34 sequential `getAll` round
+ * trips per HOST** for the same documents.
+ *
+ * That figure was previously written here as "~17 per collection", which was
+ * wrong in the optimistic direction and therefore the worst way to be wrong.
+ * `orgSiteSizeBytes` concatenates the screen refs and the layout refs into ONE
+ * list before chunking it at 300 (see the loop), so the ceiling is
+ * `(5,000 + 5,000) / 300 = 34` awaited round trips for a host at both caps —
+ * 17 was the floor, reached only by a host that has screens and no layouts.
+ * Hosts run in parallel, so 34 is the per-host depth, not the org's.
+ *
+ * Network dominates by an order of magnitude, so the honest number still fits
+ * inside the 60 s budget; a site large enough for the decode to be the binding
+ * constraint would have blown the budget on reads long before.
  *
  * Decoding uniformly — including re-encoding bytes that arrived as msgpack
  * already — is deliberate. Short-circuiting the bytes arm back to `byteLength`
@@ -148,20 +158,34 @@ function nodesBytes(nodes: unknown): number {
 const SITE_SIZE_DOC_CEILING = 5_000
 const SITE_SIZE_PAGE_SIZE = 500
 
-/** Published-version refs for one collection, paged to the ceiling. */
+/**
+ * Published-version refs for one collection, paged to the ceiling — and the
+ * screen-cap fields off the same documents (AGL-1440).
+ *
+ * `kind` and `deletedAt` ride along because this walk ALREADY pays a read for
+ * every screen document, and the screen-cap detector was paying a second one
+ * for the same documents on the same sweep. Adding two projected fields costs
+ * nothing (a `select()` bills per document, not per field) and removes a whole
+ * unbounded scan per host from this cron.
+ */
 async function publishedVersionRefs(
   collectionRef: FirebaseFirestore.CollectionReference,
   ceiling: number,
-): Promise<{ refs: FirebaseFirestore.DocumentReference[]; truncated: boolean }> {
+): Promise<{
+  refs: FirebaseFirestore.DocumentReference[]
+  truncated: boolean
+  rows: BillableScreenSource[]
+}> {
   const refs: FirebaseFirestore.DocumentReference[] = []
+  const rows: BillableScreenSource[] = []
   let scanned = 0
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined
   for (;;) {
-    // `select('versionId')` — the only field read. Projecting keeps a page of
-    // 500 screens from dragging their whole documents across the wire.
+    // Projecting keeps a page of 500 screens from dragging their whole
+    // documents across the wire. It does NOT reduce the read count.
     let query = collectionRef
       .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
-      .select('versionId')
+      .select('versionId', 'kind', 'deletedAt')
       .limit(SITE_SIZE_PAGE_SIZE)
     if (cursor) query = query.startAfter(cursor)
     const page = await query.get()
@@ -170,12 +194,17 @@ async function publishedVersionRefs(
       if (versionId) {
         refs.push(doc.ref.collection('versions').doc(String(versionId)))
       }
+      rows.push({
+        id: doc.id,
+        kind: doc.get('kind'),
+        deletedAt: doc.get('deletedAt'),
+      })
     }
     scanned += page.size
     // A short page is the end of the collection — the only proof the sweep is
     // complete. Anything else and we cannot claim it is.
-    if (page.size < SITE_SIZE_PAGE_SIZE) return { refs, truncated: false }
-    if (scanned >= ceiling) return { refs, truncated: true }
+    if (page.size < SITE_SIZE_PAGE_SIZE) return { refs, truncated: false, rows }
+    if (scanned >= ceiling) return { refs, truncated: true, rows }
     cursor = page.docs[page.size - 1]
   }
 }
@@ -195,7 +224,17 @@ async function publishedVersionRefs(
 async function orgSiteSizeBytes(
   firestore: FirebaseFirestore.Firestore,
   hostRefs: FirebaseFirestore.DocumentReference[],
-): Promise<{ bytes: number; truncated: boolean }> {
+): Promise<{
+  bytes: number
+  truncated: boolean
+  /**
+   * Each host's screen rows, keyed by host id — but ONLY where the walk ran to
+   * the end (AGL-1440). A truncated host is absent, so the screen-cap detector
+   * scans it properly rather than counting a lower bound and calling it a
+   * total. Under-reporting is the one failure mode a cap detector cannot have.
+   */
+  screenRowsByHost: Record<string, BillableScreenSource[]>
+}> {
   // Hosts in parallel (AGL-1141). This is the most expensive thing the
   // rollup does — O(hosts × published docs) — and it ran host after host, so
   // an org's site-size measurement alone took as long as all its hosts put
@@ -214,7 +253,11 @@ async function orgSiteSizeBytes(
       ])
       const versionRefs = [...screens.refs, ...layouts.refs]
       const truncated = screens.truncated || layouts.truncated
-      if (!versionRefs.length) return { bytes: 0, truncated }
+      // Only a COMPLETE screen walk may stand in for the cap detector's scan.
+      const screenRows = screens.truncated ? undefined : screens.rows
+      if (!versionRefs.length) {
+        return { hostId: hostRef.id, bytes: 0, truncated, screenRows }
+      }
       // `getAll` takes the refs as varargs, so a 5,000-document site would
       // spread one call across 5,000 arguments; chunked to keep the call —
       // and the response held in memory — a bounded size.
@@ -228,12 +271,17 @@ async function orgSiteSizeBytes(
           0,
         )
       }
-      return { bytes, truncated }
+      return { hostId: hostRef.id, bytes, truncated, screenRows }
     }),
   )
+  const screenRowsByHost: Record<string, BillableScreenSource[]> = {}
+  for (const host of perHost) {
+    if (host.screenRows) screenRowsByHost[host.hostId] = host.screenRows
+  }
   return {
     bytes: perHost.reduce((sum, host) => sum + host.bytes, 0),
     truncated: perHost.some((host) => host.truncated),
+    screenRowsByHost,
   }
 }
 
@@ -409,11 +457,21 @@ async function handler(request: Request): Promise<Response> {
       // asked at the moment of a write, and three separate ways past that gate
       // were found in one night with nothing anywhere the wiser. Sequenced
       // after the batch above because it needs `orgData` to know the plan.
+      //
+      // It re-reads NOTHING (AGL-1440). The site-size walk above already paid
+      // one read per screen document for these very hosts; those rows are
+      // handed over here, so the second unbounded `screens` scan this cron used
+      // to do is gone. A host whose walk hit `SITE_SIZE_DOC_CEILING` is absent
+      // from the map and falls back to a real scan — a cap detector reporting a
+      // lower bound as a total is worse than one that costs a read.
       const screenCaps = await measureScreenCaps(
         hostRefs.map((hostRef) => ({
           id: hostRef.id,
           ref: hostRef,
           routingMap: routingByHost[hostRef.id],
+          ...(siteSize.screenRowsByHost[hostRef.id] && {
+            screens: siteSize.screenRowsByHost[hostRef.id],
+          }),
         })),
         orgData,
       )

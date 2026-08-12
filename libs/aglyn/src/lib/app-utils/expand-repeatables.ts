@@ -110,6 +110,36 @@ function substituteValue(
   return value
 }
 
+/** A node is a repeatable container iff it names a dataset to repeat over. */
+const repeatDatasetKey = (node: unknown): string => {
+  const key = (node as { props?: { repeatDataset?: unknown } })?.props
+    ?.repeatDataset
+  return typeof key === 'string' ? key.trim() : ''
+}
+
+/**
+ * Does this tree contain anything {@link expandRepeatables} would expand?
+ *
+ * Exported so the tenant compose pipeline can decide whether to PAY for the
+ * datasets read at all (AGL-1440). That read is the single worst amplifier on
+ * the render path — every dataset the host may see, plus up to
+ * {@link REPEAT_MAX_RECORDS} records each, up to ~5,050 Firestore reads — and
+ * it was issued unconditionally, including on the great majority of pages that
+ * repeat over nothing.
+ *
+ * The gate has to ask EXACTLY the question the expansion asks, which is why
+ * `expandRepeatables` is built on this same predicate rather than on a second
+ * copy of it. A gate that is even slightly stricter than the expansion is not a
+ * saving: it is a published page that quietly renders one template row where
+ * the author put a list.
+ */
+export function hasRepeatableNodes(
+  nodes: Record<NodeId, unknown> | null | undefined,
+): boolean {
+  if (!nodes) return false
+  return Object.values(nodes).some((node) => repeatDatasetKey(node) !== '')
+}
+
 /**
  * Repeatable components (AGL-103): a container node carrying
  * `props.repeatDataset` (dataset id or display name) treats its children as
@@ -130,15 +160,14 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
   datasetsByKey: Record<string, RepeatableDataset | undefined> | undefined,
 ): Record<NodeId, N> {
   if (!datasetsByKey) return nodes
-  const repeatIds = Object.entries(nodes).filter(([, node]) => {
-    const key = (node?.props as any)?.repeatDataset
-    return typeof key === 'string' && key.trim() !== ''
-  })
+  const repeatIds = Object.entries(nodes).filter(
+    ([, node]) => repeatDatasetKey(node) !== '',
+  )
   if (!repeatIds.length) return nodes
 
   const next: Record<NodeId, N> = { ...nodes }
   for (const [containerId, container] of repeatIds) {
-    const key = String((container.props as any).repeatDataset).trim()
+    const key = repeatDatasetKey(container)
     const dataset = datasetsByKey[key]
     // Query config (AGL-181): `repeatFilter` ("field op value") and
     // `repeatSort` ("field asc|desc") evaluate in memory over the

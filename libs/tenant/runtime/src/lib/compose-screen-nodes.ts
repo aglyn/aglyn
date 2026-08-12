@@ -234,6 +234,20 @@ export async function composeNodesWithChrome(options: {
    * phase, so the effect of this shows up there directly — no new
    * instrumentation, and a regression would be visible in the same place.
    */
+  /**
+   * Does the SCREEN itself repeat over a dataset (AGL-1440)?
+   *
+   * Asked here, before the fan-out, purely so the overwhelmingly common case
+   * keeps the AGL-1225 one-round-trip shape: a page that repeats almost always
+   * says so on its own document, and this lets its datasets read ride in the
+   * batch below instead of waiting for the layout walk.
+   *
+   * It is deliberately NOT the correctness gate — a repeatable can arrive from
+   * a layout or a grafted reusable component, neither of which exists yet. The
+   * gate is re-asked against the composed tree after grafting, which is the
+   * exact input `expandRepeatables` reads.
+   */
+  const screenRepeats = Aglyn.hasRepeatableNodes(screenNodes)
   const [layoutNodesChain, componentsRes, bulk] = await Promise.all([
     walkLayoutChain(),
     getComponents({ hostId }),
@@ -243,12 +257,13 @@ export async function composeNodesWithChrome(options: {
     Promise.all([
       getVariables({ hostId }),
       getFunctions({ hostId }),
-      getDatasets({ hostId }),
+      screenRepeats ? getDatasets({ hostId }) : undefined,
       getWorkflows({ hostId }),
       getPluginInstalls({ hostId }),
     ]),
   ])
-  const [rawVariables, functions, datasets, workflows, pluginInstalls] = bulk
+  const [rawVariables, functions, screenDatasets, workflows, pluginInstalls] =
+    bulk
 
   const composedNodes = Aglyn.composeLayoutChainAndScreenNodes(
     layoutNodesChain as any,
@@ -268,6 +283,21 @@ export async function composeNodesWithChrome(options: {
   // Repeatables (AGL-103) expand after grafting (so they work inside
   // reusable components) and before bindings (so {{name}} tokens inside
   // cloned items still resolve).
+  //
+  // The datasets themselves are fetched only if this tree actually repeats
+  // (AGL-1440). `expandRepeatables` returns its input untouched when no node
+  // carries `repeatDataset`, so on every other page the up-to-5,050 reads
+  // bought nothing at all. The gate is the composed tree — after grafting —
+  // because that is the map the expansion reads: a repeatable living in a
+  // layout or a reusable component is invisible in `screenNodes`, and gating
+  // on the screen alone would silently render one template row where the
+  // author put a list. When the screen DID declare one, the read is already in
+  // hand from the batch above and this costs no extra round trip.
+  const datasets =
+    screenDatasets ??
+    (Aglyn.hasRepeatableNodes(grafted as any)
+      ? await getDatasets({ hostId })
+      : undefined)
   const repeated = Aglyn.expandRepeatables(grafted as any, datasets)
   // Collection entries blocks (AGL-551) expand alongside repeatables:
   // per-entry {{entry.*}} tokens substitute inside the clones here, while

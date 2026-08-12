@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { expandRepeatables } from './expand-repeatables'
+import { expandRepeatables, hasRepeatableNodes } from './expand-repeatables'
 
 const baseNodes = () =>
   ({
@@ -142,5 +142,66 @@ describe('expandRepeatables', () => {
     expect(expandRepeatables(baseNodes(), undefined)['list']).toEqual(
       baseNodes()['list'],
     )
+  })
+})
+
+/**
+ * AGL-1440: the predicate that decides whether the datasets read is worth
+ * paying for.
+ *
+ * The tenant compose pipeline fetched every dataset and up to 100 records EACH
+ * on every render of every path — up to 5,050 reads — and then handed them to
+ * `expandRepeatables`, which returns its input untouched when no node carries
+ * `repeatDataset`. So the gate has to be the SAME question `expandRepeatables`
+ * asks, or the saving is bought with a page that silently loses its rows.
+ *
+ * It is exported and used by `expandRepeatables` itself for exactly that
+ * reason: two copies of "is this node a repeatable" is how a `.trim()` on one
+ * side and not the other becomes an empty list on a customer's page.
+ */
+describe('hasRepeatableNodes (AGL-1440)', () => {
+  it('is true for the tree expandRepeatables would expand', () => {
+    expect(hasRepeatableNodes(baseNodes())).toBe(true)
+  })
+
+  it('is false for a tree with no repeatDataset anywhere', () => {
+    const nodes = baseNodes()
+    delete nodes.list.props.repeatDataset
+    expect(hasRepeatableNodes(nodes)).toBe(false)
+  })
+
+  it('agrees with expandRepeatables on every shape it refuses', () => {
+    // The property that makes the gate safe: whenever the predicate says no,
+    // expanding with the full dataset map is a no-op. A `repeatDataset` that is
+    // blank, whitespace, or not a string is one of those shapes — and each is a
+    // way for the two sides to drift apart.
+    for (const repeatDataset of ['', '   ', 42, null, undefined, {}]) {
+      const nodes = baseNodes()
+      nodes.list.props.repeatDataset = repeatDataset
+      expect(hasRepeatableNodes(nodes)).toBe(false)
+      expect(expandRepeatables(nodes, { Team: team })).toEqual(nodes)
+    }
+  })
+
+  it('finds a repeatable grafted in from a reusable component or layout', () => {
+    // The gate runs over the COMPOSED tree, not the screen document, because a
+    // repeatable can arrive from a layout or a reusable component. A predicate
+    // that only looked at the screen would drop those pages' rows.
+    const grafted = {
+      root: { $id: 'root', componentId: 'div', nodes: ['graft'] },
+      graft: {
+        $id: 'graft',
+        componentId: 'muiStack',
+        props: { repeatDataset: 'Team' },
+        nodes: [],
+      },
+    } as any
+    expect(hasRepeatableNodes(grafted)).toBe(true)
+  })
+
+  it('tolerates an empty or malformed node map', () => {
+    expect(hasRepeatableNodes({})).toBe(false)
+    expect(hasRepeatableNodes({ a: null } as any)).toBe(false)
+    expect(hasRepeatableNodes(undefined as any)).toBe(false)
   })
 })
