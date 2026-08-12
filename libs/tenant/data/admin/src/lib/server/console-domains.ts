@@ -685,10 +685,187 @@ export async function releasePendingConsoleDomain(options: {
 }
 
 /**
+ * Why a host may — or may not — be served the console (AGL-1099c).
+ *
+ * `reason` is not decoration. `unknown` and `degraded` both mean "serve it,
+ * this gate has no opinion", and they mean it for opposite causes; every other
+ * value means "refuse". Collapsing them into a boolean is how a lookup outage
+ * would come to read the same as a revoked entitlement.
+ */
+export type ConsoleDomainReason =
+  | 'active'
+  | 'unknown'
+  | 'no-org'
+  | 'not-entitled'
+  | 'not-active'
+  | 'degraded'
+
+export interface ConsoleDomainVerdict {
+  /** A claim exists for this exact host. */
+  known: boolean
+  /** The console may be served here, pinned to `orgSlug`. */
+  servable: boolean
+  /**
+   * Workspace slug of the owning org — where a refused visitor is sent, and
+   * the org the path is rewritten under when servable. Never the `orgId`: a
+   * verdict is read by an unauthenticated route.
+   */
+  orgSlug: string | null
+  reason: ConsoleDomainReason
+  /** The lookup could not be completed. Honour it, never cache it. */
+  degraded: boolean
+}
+
+const UNKNOWN_VERDICT: ConsoleDomainVerdict = {
+  known: false,
+  servable: false,
+  orgSlug: null,
+  reason: 'unknown',
+  degraded: false,
+}
+
+const DEGRADED_VERDICT: ConsoleDomainVerdict = {
+  known: false,
+  servable: false,
+  orgSlug: null,
+  reason: 'degraded',
+  degraded: true,
+}
+
+/**
+ * Stop serving a domain whose org no longer holds `whiteLabel`, and make it
+ * stick.
+ *
+ * **This is the fail-closed half of the entitlement, and it is a write on a
+ * read path on purpose.** Nothing in the codebase reacts to a plan change —
+ * the Stripe webhook writes `plan` and says outright that entitlements resolve
+ * at read time, which is sufficient for rendering and insufficient for a
+ * hostname (AGL-1353 D7). Rather than add a fan-out to the webhook or a cron
+ * that has to be believed, the first request to arrive after a downgrade
+ * converts the read-time verdict into stored state: `status: 'suspended'` plus
+ * a `sessionEpoch` bump, across **every** name the claim covers, so the twin
+ * cannot outlive its primary.
+ *
+ * The epoch is what makes this more than cosmetic. A refusal that only lives
+ * in a verdict leaves already-minted cookies valid; bumping the epoch is the
+ * lever that invalidates them at our boundary (AGL-1353 D6).
+ *
+ * Deliberately NOT the inverse: re-upgrading does not re-activate. Activation
+ * attaches names to Vercel and — until AGL-1378 resolves — depends on a manual
+ * App Check allowlist entry, so it stays an explicit act through
+ * `activateConsoleDomain`, never a side effect of a plan read.
+ *
+ * Never throws: a suspension that fails to persist still refuses this request,
+ * and the next one tries again.
+ */
+async function suspendOnDowngrade(
+  domain: string,
+  snapshot: FirebaseFirestore.DocumentSnapshot,
+): Promise<void> {
+  const status = snapshot.get('status')
+  if (status === 'suspended') return
+  const names: string[] = Array.isArray(snapshot.get('names'))
+    ? snapshot.get('names')
+    : [domain]
+  try {
+    const batch = firestore().batch()
+    for (const name of names) {
+      batch.set(
+        firestore().collection(CONSOLE_DOMAINS_COLLECTION).doc(name),
+        {
+          status: 'suspended',
+          suspendedReason: 'entitlement',
+          sessionEpoch: Date.now(),
+          suspendedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+    }
+    await batch.commit()
+  } catch (error) {
+    console.error('[console-domains] suspend on downgrade failed', error)
+  }
+}
+
+/**
+ * Host → org, for the middleware gate and the session-route boundary.
+ *
+ * **One host pins exactly one org.** That is enforced by the document being
+ * keyed on the host and claimed transactionally (see the header), not by
+ * anything here — this function only ever reads the pin, and there is no input
+ * by which a caller can ask for a different org.
+ *
+ * The three "serve it anyway" answers, and why each is right:
+ *
+ * - **`unknown`** — no claim on this host. localhost, preview deployments and
+ *   self-hosted installs all land here, and they must keep working. It is safe
+ *   because of the detach ordering `releaseConsoleDomain` enforces: Vercel
+ *   first, documents second, and the claim is kept if the detach fails. So a
+ *   name the console project still answers for always has a document, and a
+ *   name with no document cannot reach this deployment through the console
+ *   project at all (AGL-1430's correspondence — do not break it).
+ * - **`degraded`** — Firestore could not be reached. Fails OPEN, matching the
+ *   workspace gate and for the reason AGL-1135 recorded: the Vercel domain
+ *   allowlist is the boundary, and a customer's console going dark because a
+ *   lookup timed out is worse than the residual exposure. Never cached.
+ * - a claim that is `active` and entitled.
+ *
+ * Everything else refuses. In particular a `verified` claim is **not**
+ * servable: until AGL-1378 clears, activation includes a manual App Check
+ * allowlist entry, so "ownership proved" must never imply "serve it".
+ */
+export async function resolveConsoleDomain(
+  host: string,
+): Promise<ConsoleDomainVerdict> {
+  const domain = normalizeConsoleDomain(host)
+  if (!domain) return UNKNOWN_VERDICT
+
+  let snapshot: FirebaseFirestore.DocumentSnapshot
+  try {
+    snapshot = await claimRef(domain).get()
+  } catch {
+    return DEGRADED_VERDICT
+  }
+  if (!snapshot.exists) return UNKNOWN_VERDICT
+
+  const orgId = String(snapshot.get('orgId') ?? '')
+  if (!orgId) return { ...UNKNOWN_VERDICT, known: true, reason: 'no-org' }
+
+  let orgSnapshot: FirebaseFirestore.DocumentSnapshot
+  try {
+    orgSnapshot = await firestore().collection('orgs').doc(orgId).get()
+  } catch {
+    return DEGRADED_VERDICT
+  }
+  // A claim pointing at an org that no longer exists refuses, but is NOT
+  // suspended: `checkEntitlement(undefined)` resolves to the free plan, so
+  // writing a suspension off a missing document would be recording an
+  // entitlement verdict that was never actually read (the loading-default
+  // class this repo keeps hitting). Refuse now, decide when there is data.
+  if (!orgSnapshot.exists) {
+    return { ...UNKNOWN_VERDICT, known: true, reason: 'no-org' }
+  }
+
+  const org = orgSnapshot.data() as Partial<AglynOrgBilling> & { slug?: string }
+  const orgSlug = String(org?.slug ?? '') || null
+
+  if (!checkEntitlement(org, 'whiteLabel')) {
+    await suspendOnDowngrade(domain, snapshot)
+    return { known: true, servable: false, orgSlug, reason: 'not-entitled', degraded: false }
+  }
+  if (snapshot.get('status') !== 'active') {
+    return { known: true, servable: false, orgSlug, reason: 'not-active', degraded: false }
+  }
+  return { known: true, servable: true, orgSlug, reason: 'active', degraded: false }
+}
+
+/**
  * The org a console domain belongs to, or null.
  *
  * Read-only, and used today only to refuse a `customConsoleDomain` that another
- * org already holds. Routing on this value is 1099c.
+ * org already holds. Routing reads `resolveConsoleDomain` instead, which asks
+ * the entitlement question this one does not.
  */
 export async function getConsoleDomainClaim(
   domain: string,

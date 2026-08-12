@@ -43,6 +43,37 @@ export const WORKSPACE_DOMAIN =
 export const APEX_LABELS = new Set(['www', 'console', 'app', 'auth'])
 
 /**
+ * The bare hostname of a `Host` header, lowercased and without its port.
+ *
+ * Three files were doing this with their own `.split(':')[0].toLowerCase()`
+ * and a fourth is about to (AGL-1099c's custom-domain gate). A host that is
+ * normalized differently in the code that GRANTS a session than in the code
+ * that decides who may ask for one is the exact shape of the bug this module
+ * was created to close.
+ */
+export function hostnameOf(host: string | null | undefined): string {
+  return String(host ?? '')
+    .split(':')[0]
+    .toLowerCase()
+}
+
+/**
+ * Is this hostname the workspace apex or one of its subdomains?
+ *
+ * The complement — everything this returns false for — is the set a custom
+ * console domain can live in, alongside localhost, preview deployments and
+ * self-hosted installs. Nothing in that set may be assumed to be ours, which
+ * is why the custom-domain gate answers with a Firestore lookup rather than a
+ * pattern (AGL-1099).
+ */
+export function isWorkspaceDomainHost(host: string | null | undefined): boolean {
+  const hostname = hostnameOf(host)
+  return (
+    hostname === WORKSPACE_DOMAIN || hostname.endsWith(`.${WORKSPACE_DOMAIN}`)
+  )
+}
+
+/**
  * The workspace slug a hostname names, or `null` when it names none.
  *
  * `null` means "not a workspace subdomain" — the apex, a reserved label, a
@@ -51,9 +82,7 @@ export const APEX_LABELS = new Set(['www', 'console', 'app', 'auth'])
  * and deliberately not this function's job.
  */
 export function workspaceSlugFromHost(host: string | null): string | null {
-  const hostname = String(host ?? '')
-    .split(':')[0]
-    .toLowerCase()
+  const hostname = hostnameOf(host)
   if (!hostname || !hostname.endsWith(`.${WORKSPACE_DOMAIN}`)) return null
   const slug = hostname.slice(0, -(WORKSPACE_DOMAIN.length + 1))
   if (!slug || slug.includes('.') || APEX_LABELS.has(slug)) return null
@@ -71,13 +100,11 @@ export function isServableWorkspaceHost(
   host: string | null,
   isKnownSlug: (slug: string) => boolean,
 ): boolean {
-  const hostname = String(host ?? '')
-    .split(':')[0]
-    .toLowerCase()
+  const hostname = hostnameOf(host)
   // Non-workspace hosts (localhost, *.vercel.app, self-hosted domains) are
-  // not this gate's business — it only governs the workspace domain.
-  if (hostname !== WORKSPACE_DOMAIN && !hostname.endsWith(`.${WORKSPACE_DOMAIN}`))
-    return true
+  // not this gate's business — it only governs the workspace domain. A custom
+  // console domain lands here too, and is governed by `resolveConsoleDomain`.
+  if (!isWorkspaceDomainHost(hostname)) return true
   const slug = workspaceSlugFromHost(hostname)
   // The apex and the reserved labels serve the console by design.
   if (slug === null) return true

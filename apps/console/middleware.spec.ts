@@ -39,6 +39,21 @@ const KNOWN: Record<string, { known: boolean; movedTo: string | null }> = {
   'zach-gover': { known: true, movedTo: 'zgover' },
 }
 
+/**
+ * Custom console domains (AGL-1099c), keyed exactly as `consoleDomains` is.
+ * Everything absent from this map is an ordinary non-workspace host —
+ * localhost, a preview deployment, a self-hosted install — and must pass
+ * through untouched.
+ */
+const CONSOLE_DOMAINS: Record<
+  string,
+  { known: boolean; servable: boolean; orgSlug: string | null }
+> = {
+  'console.acme-agency.com': { known: true, servable: true, orgSlug: 'acme' },
+  'console.lapsed.com': { known: true, servable: false, orgSlug: 'lapsed' },
+  'console.orphaned.com': { known: true, servable: false, orgSlug: null },
+}
+
 let fetchCalls: string[] = []
 
 beforeEach(() => {
@@ -46,9 +61,17 @@ beforeEach(() => {
   globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input))
     fetchCalls.push(url.toString())
-    const slug = url.searchParams.get('slug') ?? ''
-    const verdict = KNOWN[slug] ?? { known: false, movedTo: null }
-    return new Response(JSON.stringify(verdict), {
+    const body = url.pathname.endsWith('/console-domain-verdict')
+      ? (CONSOLE_DOMAINS[url.searchParams.get('host') ?? ''] ?? {
+          known: false,
+          servable: false,
+          orgSlug: null,
+        })
+      : (KNOWN[url.searchParams.get('slug') ?? ''] ?? {
+          known: false,
+          movedTo: null,
+        })
+    return new Response(JSON.stringify(body), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     })
@@ -103,7 +126,13 @@ describe('workspace host gate', () => {
     async (host) => {
       const response = await middleware(request(host))
       expect(response.headers.get('location')).toBeNull()
-      expect(fetchCalls).toHaveLength(0)
+      // It DOES cost one lookup now (AGL-1099c) — a non-workspace host may be
+      // a custom console domain, and only a Firestore claim can tell. What it
+      // must never cost is a workspace-slug verdict: `aglyn-console` is not a
+      // slug, and treating it as one is how a preview deployment would get
+      // rewritten into somebody's org.
+      expect(fetchCalls.every((call) => call.includes('console-domain-verdict')))
+        .toBe(true)
     },
   )
 
@@ -144,6 +173,155 @@ describe('workspace host gate', () => {
     // Two lookups, not one: caching a degraded answer would pin the slug open
     // for the full TTL after a single blip.
     expect(fetchCalls).toHaveLength(2)
+  })
+})
+
+/**
+ * The custom-console-domain gate (AGL-1099c).
+ *
+ * `middleware.ts` had no tests at all before AGL-1135, which is most of why the
+ * workspace gate shipped disabled and stayed that way for its whole life. The
+ * design memo says outright: do not repeat it here.
+ *
+ * These drive the real `middleware` export against a `fetch` that answers as
+ * `/api/orgs/console-domain-verdict` would, so what is under test is the gate's
+ * behaviour rather than the presence of a helper.
+ */
+describe('custom console domain gate', () => {
+  it('rewrites a live custom domain into its ONE org’s path', async () => {
+    // The pin. The org comes from a document keyed on the host, so no part of
+    // the request can ask for a different one — and the path rewrite is what
+    // makes every downstream `[orgSlug]` route agree.
+    const response = await middleware(
+      request('console.acme-agency.com', '/hosts/site-1'),
+    )
+    expect(response.status).toBe(200)
+    expect(response.headers.get('location')).toBeNull()
+    expect(response.headers.get('x-middleware-rewrite')).toContain(
+      '/acme/hosts/site-1',
+    )
+  })
+
+  it('never rewrites a path that already names the org', async () => {
+    const response = await middleware(
+      request('console.acme-agency.com', '/acme/hosts/site-1'),
+    )
+    expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+    expect(response.headers.get('location')).toBeNull()
+  })
+
+  it('refuses to render SIGN-IN on a custom domain', async () => {
+    // The design's biggest structural bet is that the credential prompt only
+    // ever happens on an origin we control (AGL-1353 D6): no Firebase
+    // authorized-domain entry, no OAuth helper iframe, and nothing durable left
+    // on an origin whose DNS the customer can re-point at themselves. The
+    // client half is enforced by the sealed auth instance (AGL-1379); this is
+    // the route half, and without it the property is only claimed.
+    for (const path of [
+      '/signin',
+      '/signup',
+      '/verify-email',
+      '/account-recovery',
+    ]) {
+      const response = await middleware(request('console.acme-agency.com', path))
+      expect(response.status).toBe(307)
+      const location = new URL(response.headers.get('location') ?? '')
+      expect(location.hostname).toBe('app.aglyn.com')
+      expect(location.pathname).toBe(path)
+    }
+  })
+
+  it('still serves sign-OUT and account routes there', async () => {
+    // Ending a session on the host that holds it can never be the wrong
+    // answer, and a white-label console that cannot reach account settings is
+    // a broken product rather than a closed hole.
+    for (const path of ['/signout', '/manage/user']) {
+      const response = await middleware(request('console.acme-agency.com', path))
+      expect(response.headers.get('location')).toBeNull()
+      expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+    }
+  })
+
+  it('STOPS serving a domain whose org lost the entitlement', async () => {
+    // The billing hole: a console domain that keeps serving after a downgrade.
+    // The visitor lands on a console that works and is told why, rather than
+    // meeting a dead hostname that reads as an outage.
+    const response = await middleware(request('console.lapsed.com', '/hosts'))
+    expect(response.status).toBe(307)
+    const location = new URL(response.headers.get('location') ?? '')
+    expect(location.hostname).toBe('lapsed.aglyn.com')
+    expect(location.searchParams.get('console-domain')).toBe('inactive')
+  })
+
+  it('sends a 307, NOT a 308, when a domain stops serving', async () => {
+    // Suspension is reversible by design — re-upgrade, re-activate — and a 308
+    // is cacheable by default and effectively irreversible in a browser.
+    // Committing every visitor's browser to a permanent redirect off the
+    // customer's own domain because a card declined for a day is a state we
+    // could not get back out of. (Deliberate departure from AGL-1353 D7's
+    // wording; same property AGL-1430 argues from.)
+    const response = await middleware(request('console.lapsed.com', '/'))
+    expect(response.status).not.toBe(308)
+    expect(response.status).toBe(307)
+  })
+
+  it('falls back to the apex when the claim resolves to no workspace', async () => {
+    const response = await middleware(request('console.orphaned.com', '/hosts'))
+    expect(new URL(response.headers.get('location') ?? '').hostname).toBe(
+      'app.aglyn.com',
+    )
+  })
+
+  it('leaves an unclaimed host completely alone', async () => {
+    // Not a refusal. Every self-hosted install and every preview deployment
+    // looks exactly like this, and turning them away would be the AGL-1135
+    // mistake with the sign flipped.
+    const response = await middleware(request('console.nobody-here.com', '/hosts'))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('location')).toBeNull()
+    expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+  })
+
+  it('fails OPEN when the verdict lookup errors', async () => {
+    // The Vercel domain allowlist is the boundary. A Firestore outage must not
+    // take every customer's console offline with it.
+    globalThis.fetch = jest.fn(async () => {
+      throw new Error('network down')
+    }) as unknown as typeof fetch
+    // A host no other test touches: `consoleDomainCache` is module state and
+    // outlives each test, so reusing one would assert against a cache hit.
+    const response = await middleware(request('console.outage-check.com', '/hosts'))
+    expect(response.headers.get('location')).toBeNull()
+    expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+  })
+
+  it('caches a verdict instead of asking twice', async () => {
+    await middleware(request('console.cache-check.com', '/'))
+    await middleware(request('console.cache-check.com', '/'))
+    expect(fetchCalls).toHaveLength(1)
+  })
+
+  it('does NOT cache a degraded verdict', async () => {
+    // One blip must not pin a host's verdict for the full TTL — in either
+    // direction. A cached "degraded" on a suspended domain would keep serving
+    // it for a minute after the suspension.
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      fetchCalls.push(String(input))
+      return new Response(
+        JSON.stringify({ known: false, servable: false, orgSlug: null, degraded: true }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as unknown as typeof fetch
+    await middleware(request('console.degraded-check.com', '/'))
+    await middleware(request('console.degraded-check.com', '/'))
+    expect(fetchCalls).toHaveLength(2)
+  })
+
+  it('asks its OWN origin for the verdict, not a hardcoded apex', async () => {
+    // Same reason as the workspace gate: a preview deployment must not ask
+    // production for a verdict.
+    await middleware(request('console.origin-check.com', '/'))
+    expect(new URL(fetchCalls[0]).origin).toBe('https://console.origin-check.com')
   })
 })
 

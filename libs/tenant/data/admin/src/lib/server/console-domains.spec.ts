@@ -83,6 +83,13 @@ const db = {
   batch() {
     const operations: Array<() => void> = []
     return {
+      set(ref: { path: string }, value: Doc, options?: { merge?: boolean }) {
+        operations.push(() => {
+          const previous = options?.merge ? (store.get(ref.path) ?? {}) : {}
+          store.set(ref.path, { ...previous, ...value })
+          bump(ref.path)
+        })
+      },
       delete(ref: { path: string }) {
         operations.push(() => {
           store.delete(ref.path)
@@ -174,6 +181,7 @@ import {
   registerConsoleDomain,
   releaseConsoleDomain,
   releasePendingConsoleDomain,
+  resolveConsoleDomain,
   validateConsoleDomain,
   verifyConsoleDomain,
 } from './console-domains'
@@ -659,5 +667,196 @@ describe('getConsoleDomainClaim', () => {
       status: 'pending',
     })
     expect(await getConsoleDomainClaim('nobody.example.com')).toBeNull()
+  })
+})
+
+/**
+ * Host → org resolution, and the entitlement that has to survive a downgrade
+ * (AGL-1099c).
+ *
+ * The property under test is not "the helper returns the right shape" — it is
+ * that a domain **stops resolving** the moment its org stops paying for it, and
+ * that the refusal is written down rather than recomputed hopefully on every
+ * request. AGL-1353 D7 is blunt about why: nothing in the codebase reacts to a
+ * plan change, and read-time entitlement is sufficient for rendering and
+ * insufficient for a hostname.
+ *
+ * The other half of these tests is the set of things that must NOT be refused.
+ * A gate that fails closed on an outage takes every customer's console down
+ * with one Firestore blip, and a gate that refuses unknown hosts breaks
+ * localhost, preview deployments and self-hosting.
+ */
+describe('resolveConsoleDomain — one org per host, fail closed on downgrade', () => {
+  /** A claim in the state `activateConsoleDomain` leaves behind. */
+  async function activeClaim(orgId = ORG, domain = 'console.acme.com') {
+    await claimConsoleDomain(orgId, domain)
+    store.set(`consoleDomains/${domain}`, {
+      ...store.get(`consoleDomains/${domain}`),
+      status: 'active',
+      vercelState: 'attached',
+      sessionEpoch: 1000,
+    })
+    return domain
+  }
+
+  beforeEach(() => {
+    store.set('orgs/' + ORG, { name: 'Acme', plan: 'agency', slug: 'acme' })
+    store.set('orgs/org_free', { name: 'Thrifty', plan: 'free', slug: 'thrifty' })
+  })
+
+  it('serves an active claim, pinned to the owning org’s slug', async () => {
+    await activeClaim()
+    expect(await resolveConsoleDomain('CONSOLE.acme.com')).toEqual({
+      known: true,
+      servable: true,
+      orgSlug: 'acme',
+      reason: 'active',
+      degraded: false,
+    })
+  })
+
+  it('STOPS resolving when the org loses whiteLabel, and writes the suspension', async () => {
+    // The billing hole this exists to close: a console domain that keeps
+    // serving after a downgrade. Read-time refusal alone would be recomputed
+    // on every request and would leave already-minted cookies valid, so the
+    // epoch bump is part of the assertion, not decoration.
+    await activeClaim()
+    store.set('orgs/' + ORG, { name: 'Acme', plan: 'free', slug: 'acme' })
+
+    const verdict = await resolveConsoleDomain('console.acme.com')
+    expect(verdict.servable).toBe(false)
+    expect(verdict.reason).toBe('not-entitled')
+    // Still resolves to the org, so the visitor can be sent to a console that
+    // works rather than meeting a dead hostname.
+    expect(verdict.orgSlug).toBe('acme')
+
+    const stored = store.get('consoleDomains/console.acme.com') as Record<string, unknown>
+    expect(stored.status).toBe('suspended')
+    expect(stored.suspendedReason).toBe('entitlement')
+    expect(Number(stored.sessionEpoch)).toBeGreaterThan(1000)
+  })
+
+  it('suspends a dead subscription, not merely a changed plan field', async () => {
+    // `resolveEffectivePlan`: a paid plan whose subscription is canceled or
+    // unpaid is the free plan until the webhook says otherwise. Asserting the
+    // plan field alone would miss the most common way an org stops paying.
+    await activeClaim()
+    store.set('orgs/' + ORG, {
+      name: 'Acme',
+      plan: 'agency',
+      slug: 'acme',
+      billingStatus: 'canceled',
+    })
+    const verdict = await resolveConsoleDomain('console.acme.com')
+    expect(verdict.servable).toBe(false)
+    expect(verdict.reason).toBe('not-entitled')
+  })
+
+  it('suspends the twin in the same breath as its primary', async () => {
+    // A twin left live while its primary is suspended is a name Vercel holds
+    // that still resolves for an org that is no longer entitled to it — the
+    // AGL-743 correspondence, from the other end.
+    await claimConsoleDomain(ORG, 'acme.com')
+    for (const name of ['acme.com', 'www.acme.com']) {
+      store.set(`consoleDomains/${name}`, {
+        ...store.get(`consoleDomains/${name}`),
+        status: 'active',
+      })
+    }
+    store.set('orgs/' + ORG, { name: 'Acme', plan: 'free', slug: 'acme' })
+
+    await resolveConsoleDomain('acme.com')
+    expect(
+      (store.get('consoleDomains/www.acme.com') as Record<string, unknown>).status,
+    ).toBe('suspended')
+    expect(await resolveConsoleDomain('www.acme.com')).toMatchObject({
+      servable: false,
+    })
+  })
+
+  it('does NOT re-activate itself when the org upgrades again', async () => {
+    // Activation attaches names to Vercel and — until AGL-1378 clears — needs
+    // a manual App Check allowlist entry. It stays an explicit act, never a
+    // side effect of a plan read.
+    await activeClaim()
+    store.set('orgs/' + ORG, { name: 'Acme', plan: 'free', slug: 'acme' })
+    await resolveConsoleDomain('console.acme.com')
+    store.set('orgs/' + ORG, { name: 'Acme', plan: 'agency', slug: 'acme' })
+
+    const verdict = await resolveConsoleDomain('console.acme.com')
+    expect(verdict.servable).toBe(false)
+    expect(verdict.reason).toBe('not-active')
+    expect(
+      (store.get('consoleDomains/console.acme.com') as Record<string, unknown>).status,
+    ).toBe('suspended')
+  })
+
+  it('refuses a claim that proved ownership but was never activated', async () => {
+    // `verified` means the TXT record checked out. It does not mean the App
+    // Check allowlist entry exists, and without that entry the domain renders
+    // a console that can never sign anyone in — the "looks finished" failure
+    // AGL-1099 warns about.
+    await claimConsoleDomain(ORG, 'console.acme.com')
+    store.set('consoleDomains/console.acme.com', {
+      ...store.get('consoleDomains/console.acme.com'),
+      status: 'verified',
+    })
+    expect(await resolveConsoleDomain('console.acme.com')).toMatchObject({
+      known: true,
+      servable: false,
+      reason: 'not-active',
+    })
+  })
+
+  it('refuses a claim whose org is gone — WITHOUT recording an entitlement verdict', async () => {
+    // `checkEntitlement(undefined)` resolves to the free plan, so suspending
+    // off a missing document would be writing down an answer to a question
+    // that was never asked. Refuse now; decide when there is data.
+    await activeClaim()
+    store.delete('orgs/' + ORG)
+    const verdict = await resolveConsoleDomain('console.acme.com')
+    expect(verdict).toMatchObject({ known: true, servable: false, reason: 'no-org' })
+    expect(
+      (store.get('consoleDomains/console.acme.com') as Record<string, unknown>).status,
+    ).toBe('active')
+  })
+
+  it('leaves an unclaimed host alone, so localhost and previews keep working', async () => {
+    // Not a refusal. `known: false` is what the middleware passes through
+    // untouched, and every self-hosted install looks exactly like this.
+    for (const host of [
+      'localhost',
+      'aglyn-console-aglyn.vercel.app',
+      'console.nobody-here.com',
+    ]) {
+      expect(await resolveConsoleDomain(host)).toMatchObject({
+        known: false,
+        servable: false,
+        reason: 'unknown',
+      })
+    }
+  })
+
+  it('fails OPEN on a Firestore outage, and writes nothing', async () => {
+    // The stated posture, inherited from AGL-1135: the Vercel domain allowlist
+    // is the boundary, and a customer's console going dark because a lookup
+    // timed out is worse than the residual exposure. `degraded` is a distinct
+    // answer from `unknown` precisely so this can never be cached.
+    await activeClaim()
+    const before = { ...(store.get('consoleDomains/console.acme.com') as object) }
+    jest.spyOn(store, 'get').mockImplementation(() => {
+      throw new Error('firestore unavailable')
+    })
+    const verdict = await resolveConsoleDomain('console.acme.com')
+    jest.restoreAllMocks()
+
+    expect(verdict).toEqual({
+      known: false,
+      servable: false,
+      orgSlug: null,
+      reason: 'degraded',
+      degraded: true,
+    })
+    expect(store.get('consoleDomains/console.acme.com')).toEqual(before)
   })
 })

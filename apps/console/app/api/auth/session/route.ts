@@ -24,6 +24,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  resolveConsoleDomain,
   seedUserProfile,
 } from '@aglyn/tenant-data-admin'
 import { after } from 'next/server'
@@ -34,6 +35,8 @@ import {
   SESSION_TOMBSTONE_TTL_MS,
 } from './session-tombstone'
 import {
+  hostnameOf,
+  isWorkspaceDomainHost,
   WORKSPACE_DOMAIN,
   workspaceSlugFromHost,
 } from '../../../../constants/workspace-domain'
@@ -63,18 +66,45 @@ const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000
  * Revocation-aware: the exchange rejects cookies minted before the
  * user's tokens were revoked.
  */
+/**
+ * Is this request actually on HTTPS?
+ *
+ * Behind Vercel's proxy the runtime sees the forwarded header; the URL is the
+ * fallback for a direct connection and for local dev. A comma-joined list is
+ * possible through more than one proxy — the first entry is the client's leg,
+ * which is the one `Secure` is about.
+ */
+function requestIsHttps(request: Request): boolean {
+  const forwarded = request.headers.get('x-forwarded-proto')
+  if (forwarded) return forwarded.split(',')[0].trim().toLowerCase() === 'https'
+  try {
+    return new URL(request.url).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 function cookieAttributes(request: Request, maxAgeSeconds: number) {
-  const host = String(request.headers.get('host') ?? '').split(':')[0]
-  const onWorkspaceDomain =
-    host === WORKSPACE_DOMAIN || host.endsWith(`.${WORKSPACE_DOMAIN}`)
+  const onWorkspaceDomain = isWorkspaceDomainHost(request.headers.get('host'))
   return [
     `Path=/`,
     `Max-Age=${maxAgeSeconds}`,
     'HttpOnly',
     'SameSite=Lax',
-    // Domain only on the real deployment so localhost dev still works;
-    // Secure likewise (localhost is http).
-    ...(onWorkspaceDomain ? [`Domain=.${WORKSPACE_DOMAIN}`, 'Secure'] : []),
+    // Domain only on the workspace domain: nowhere else shares a parent with
+    // it, and a `Domain` a browser will not accept is a cookie that silently
+    // does not get set.
+    ...(onWorkspaceDomain ? [`Domain=.${WORKSPACE_DOMAIN}`] : []),
+    // `Secure` is a separate question from `Domain` and used to be answered by
+    // the same ternary. Two questions — "should this cookie be parent-scoped?"
+    // and "is this connection HTTPS?" — and they already disagreed in
+    // production (AGL-1353 D6, measured 2026-08-09): a `DELETE` on
+    // `aglyn-console-aglyn.vercel.app` set a session tombstone over HTTPS with
+    // no `Secure` flag at all. Harmless there only because `vercel.app` is HSTS
+    // preloaded and on the Public Suffix List — neither of which transfers to
+    // `console.acme-agency.com`. So it keys on the connection, and localhost
+    // (http) still works.
+    ...(requestIsHttps(request) ? ['Secure'] : []),
   ].join('; ')
 }
 
@@ -171,12 +201,58 @@ async function rejectUnknownWorkspaceHost(
   )
 }
 
+/**
+ * The custom-console-domain sibling of the guard above (AGL-1099c).
+ *
+ * `rejectUnknownWorkspaceHost` returns `null` for every host that is not
+ * `*.aglyn.com`, so a custom console domain sails straight past it — the guard
+ * has no opinion at all about non-workspace hosts, which was correct only while
+ * nothing routed on one. Once a domain resolves to an org, this route is the
+ * one worth guarding directly: `/api/*` sits outside the middleware matcher, so
+ * a host the middleware would refuse to render a console for can still call it.
+ *
+ * **Fails closed on a downgrade and open on an outage**, and the two are
+ * genuinely different answers rather than one policy. `resolveConsoleDomain`
+ * refuses only on an authoritative read — the org exists and does not hold
+ * `whiteLabel`, or the claim is suspended or was never activated. A Firestore
+ * failure comes back `degraded`, and a host with no claim at all comes back
+ * `known: false`; both pass through, the first matching the workspace guard's
+ * stated posture and the second because localhost, preview deployments and
+ * self-hosted installs all look exactly like that.
+ *
+ * DELETE is exempt for the same reason as above: signing out from an unexpected
+ * host must always work — and on a suspended domain it is the single most
+ * useful thing left to do.
+ */
+async function rejectUnknownConsoleHost(
+  request: Request,
+): Promise<Response | null> {
+  const host = hostnameOf(request.headers.get('host'))
+  // The workspace domain is the other guard's business, apex and reserved
+  // labels included.
+  if (!host || isWorkspaceDomainHost(host)) return null
+  try {
+    const verdict = await resolveConsoleDomain(host)
+    if (verdict.degraded || !verdict.known || verdict.servable) return null
+    return Response.json(
+      { error: 'console-domain-inactive', reason: verdict.reason },
+      { status: 421 },
+    )
+  } catch {
+    // Fail open, matching the guard above. This is defence in depth behind the
+    // Vercel domain allowlist, not the boundary itself.
+    return null
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   try {
     const auth = firebaseAdmin.app().auth()
 
     if (request.method !== 'DELETE') {
-      const rejected = await rejectUnknownWorkspaceHost(request)
+      const rejected =
+        (await rejectUnknownWorkspaceHost(request)) ??
+        (await rejectUnknownConsoleHost(request))
       if (rejected) return rejected
     }
 
