@@ -94,6 +94,7 @@ import ScreenSocialImageField, {
 import revalidateLivePages from '../../../../../../../../../../utils/revalidate-live-pages'
 import HostDisplayNameComponent from '../../../../../../../../../../components/host-display-name.component'
 import { hasEntitlement } from '../../../../../../../../../../constants/entitlements'
+import { buildScreenSeoUpdate } from '../../../../../../../../../../constants/screen-seo'
 import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
@@ -725,7 +726,8 @@ function ScreenDetails() {
   const handleSeoSave = useCallback(async () => {
     if (!seoDraft && !seoImage) return
     /**
-     * Carry forward everything this panel does not edit (AGL-1337).
+     * Carry forward everything this panel does not edit (AGL-1337), now
+     * shared with the besigner's SEO panel (AGL-1437).
      *
      * This used to build a fresh `seo` map from its own three fields and
      * write it whole — so saving a title here silently deleted `breadcrumb`,
@@ -733,31 +735,17 @@ function ScreenDetails() {
      * image picker stores beside the reference, leaving a card that names an
      * image but cannot say how big it is. A panel that edits two fields must
      * write two fields.
+     *
+     * The rules moved into `buildScreenSeoUpdate` because the besigner's copy
+     * of this handler did NOT follow them: it defaulted the social-image
+     * triple to `''`/`0`/`0` and invented three keys on every description
+     * save. One function is what keeps the two from drifting again.
      */
-    const existing = (screen?.seo ?? {}) as Record<string, unknown>
-    const seo: Record<string, unknown> = { ...existing }
-    if (seoDraft) {
-      if (seoDraft.title.trim()) seo.title = seoDraft.title.trim()
-      else delete seo.title
-      if (seoDraft.description.trim())
-        seo.description = seoDraft.description.trim()
-      else delete seo.description
-    }
-    // The image and its dimensions are written as ONE group (AGL-1337) —
-    // an image beside the previous image's size describes a card that does
-    // not exist. A cleared image drops all three, which the head reads the
-    // same as absent: inherit the site default.
-    if (seoImage) {
-      if (seoImage.image) {
-        seo.image = seoImage.image
-        seo.imageWidth = seoImage.imageWidth
-        seo.imageHeight = seoImage.imageHeight
-      } else {
-        delete seo.image
-        delete seo.imageWidth
-        delete seo.imageHeight
-      }
-    }
+    const seo = buildScreenSeoUpdate(screen?.seo as Record<string, unknown>, {
+      title: seoDraft?.title,
+      description: seoDraft?.description,
+      image: seoImage,
+    })
     /**
      * Refuse a save whose seed the server never confirmed (AGL-1358).
      *
@@ -781,7 +769,7 @@ function ScreenDetails() {
       async () => {
         await updateDoc(
           screenRef,
-          Object.keys(seo).length
+          seo
             ? { seo, updatedAt: Timestamp.now() }
             : { seo: deleteField(), updatedAt: Timestamp.now() },
         )
