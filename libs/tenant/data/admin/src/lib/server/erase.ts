@@ -19,6 +19,10 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { deleteHostProjectionForAllMembers } from './host-memberships'
 import { detachWorkspaceDomain } from './workspace-domains'
+import {
+  CONSOLE_DOMAINS_COLLECTION,
+  releaseConsoleDomain,
+} from './console-domains'
 import { authForPool, findUserByUidAcrossPools } from './auth-pools'
 import { removeOrgMember } from './organizations'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
@@ -162,19 +166,111 @@ async function deleteStripeCustomer(customerId?: string): Promise<void> {
  * understates what it removed is the one record that has to be right.
  */
 async function eraseOrgApiKeys(orgId: string): Promise<number> {
+  return deleteDocsByOrgId('apiKeys', orgId)
+}
+
+/**
+ * Delete every document in a TOP-LEVEL collection that names this org in its
+ * `orgId` FIELD (AGL-1444/AGL-1448).
+ *
+ * The shared mechanism behind every collection a path-scoped cascade cannot
+ * see. Two properties are the whole point, and neither is optional:
+ *
+ *   - **Bounded by the field, never a collection sweep.** Every one of these
+ *     collections holds other customers' credentials, routing and billing
+ *     correlations. A `collection(name).get()` here would erase the estate.
+ *   - **Chunked**, because a batch caps at 500 writes and nothing bounds an
+ *     org's row count below that.
+ *
+ * Returns the number destroyed, for the audit row — an erasure trail that
+ * understates what it removed is the one record that has to be right.
+ */
+async function deleteDocsByOrgId(
+  collection: string,
+  orgId: string,
+): Promise<number> {
+  if (!orgId) return 0
   const firestore = firebaseAdmin.app().firestore()
-  const keys = await firestore
-    .collection('apiKeys')
+  const rows = await firestore
+    .collection(collection)
     .where('orgId', '==', orgId)
     .get()
-  // Chunked, because a batch caps at 500 writes and an org's key count is
-  // not bounded by anything that would keep it under that.
-  for (let index = 0; index < keys.docs.length; index += 400) {
+  for (let index = 0; index < rows.docs.length; index += 400) {
     const batch = firestore.batch()
-    for (const doc of keys.docs.slice(index, index + 400)) batch.delete(doc.ref)
+    for (const doc of rows.docs.slice(index, index + 400)) batch.delete(doc.ref)
     await batch.commit()
   }
-  return keys.size
+  return rows.size
+}
+
+/**
+ * Drop the org's public SSO routing documents (AGL-1448).
+ *
+ * `ssoDomains/{domain}` is keyed by the DOMAIN and carries `orgId` as a field,
+ * so `recursiveDelete(orgRef)` never reaches it. The org's own claims under
+ * `orgs/{orgId}/ssoDomains/{domain}` do die with the tree; the public routing
+ * doc — the one that decides where a sign-in goes — does not.
+ *
+ * **`unpublishSsoDomains` is not the fix, though it looks like it.** That
+ * function is the reversible half of the console's SSO toggle: it sets
+ * `active: false` and leaves the document standing precisely so re-enabling
+ * restores the same pool and the same uids. Applied to an erasure it would
+ * leave behind a record naming the deleted org, its GCIP tenant and provider
+ * ids, its IdP display name and the customer's email domain — and, worse, a
+ * live reservation: `issueDomainClaim` refuses a domain whose `ssoDomains` doc
+ * belongs to another org REGARDLESS of `active`, so a ghost would hold a real
+ * customer's domain against them with no way to appeal. Absence is the only
+ * state that both stops the routing and releases the name.
+ *
+ * Deleting is safe on the read side: `/api/auth/sso-lookup` already treats a
+ * missing doc and an inactive one identically (`{ ssoEnabled: false }`).
+ */
+async function eraseOrgSsoDomains(orgId: string): Promise<number> {
+  return deleteDocsByOrgId('ssoDomains', orgId)
+}
+
+/**
+ * Release every custom console domain the org holds (AGL-1448).
+ *
+ * `releaseConsoleDomain` already does exactly the right thing and was called
+ * from nothing but its own spec. It is wired rather than reimplemented, and
+ * the ordering it enforces is the reason: Vercel detach FIRST, documents
+ * second, and the claim KEPT if a detach fails. `resolveConsoleDomain`'s
+ * `unknown` verdict — the one that lets localhost, previews and self-hosted
+ * installs work — is only safe while every name the console project still
+ * answers for has a document (AGL-1430). Deleting the claim here directly
+ * would break that correspondence and hand the name to the next org that
+ * claims it, with Vercel's `already-exists` reading as health.
+ *
+ * It takes one domain, so the org-bounded query is the part that was missing.
+ * Every name in a claim set — the primary and its `www` twin — carries the
+ * same `orgId` and the same `primaryHost`, so releasing once per distinct
+ * primary covers the set exactly, without a second pass over the twins.
+ *
+ * Best-effort, like every other external cleanup here: an erasure must not
+ * fail because Vercel did. A name that could not be detached keeps its claim
+ * and is reported in the audit row as un-released.
+ */
+async function releaseOrgConsoleDomains(orgId: string): Promise<number> {
+  const firestore = firebaseAdmin.app().firestore()
+  const claims = await firestore
+    .collection(CONSOLE_DOMAINS_COLLECTION)
+    .where('orgId', '==', orgId)
+    .get()
+  const primaries = new Set(
+    claims.docs.map((doc) => (doc.get('primaryHost') as string) || doc.id),
+  )
+  let released = 0
+  for (const domain of primaries) {
+    const result = await releaseConsoleDomain({ orgId, domain }).catch(
+      (error) => {
+        console.error(`eraseOrg: console domain ${domain} release failed`, error)
+        return { released: false }
+      },
+    )
+    if (result.released) released += 1
+  }
+  return released
 }
 
 export interface EraseOrgResult {
@@ -186,6 +282,10 @@ export interface EraseOrgResult {
   hosts?: number
   /** API credentials destroyed (AGL-1444) — outside the org path. */
   apiKeys?: number
+  /** Public SSO routing docs destroyed (AGL-1448) — outside the org path. */
+  ssoDomains?: number
+  /** Custom console domains released (AGL-1448) — outside the org path. */
+  consoleDomains?: number
 }
 
 /**
@@ -196,9 +296,12 @@ export interface EraseOrgResult {
  *      delete on a stale/cancelled request.
  *   2. Write a final JSON export (org + host trees) to Storage FIRST — if
  *      the export can't be written, abort without deleting anything.
- *   3. Revoke the org's API credentials (AGL-1444) — `apiKeys` is keyed by
- *      the token hash, so the org-tree delete cannot reach it, and doing it
- *      before the content delete also closes the mid-erasure window.
+ *   3. Revoke the org's API credentials (AGL-1444) and its public routing —
+ *      SSO domains and custom console domains (AGL-1448). All three are
+ *      top-level collections keyed by something other than the org id, so the
+ *      org-tree delete cannot reach them; doing them before the content
+ *      delete also closes the mid-erasure window, in which a credential or a
+ *      domain still resolves to a half-deleted workspace.
  *   4. Delete each host (eraseHost), org-level Storage, the Stripe
  *      customer, member back-references, then the org tree + slug.
  *   5. Audit.
@@ -246,11 +349,14 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
     return { ok: false, skippedReason: 'export-failed' }
   }
 
-  // Credentials BEFORE content (AGL-1444). The org doc survives until the
-  // recursiveDelete at the end, so a key presented mid-erasure would still
-  // pass the API's org gate and read a half-deleted workspace. Revoking
-  // first closes that window as well as the permanent one.
+  // Credentials and routing BEFORE content (AGL-1444/AGL-1448). The org doc
+  // survives until the recursiveDelete at the end, so a key presented — or a
+  // sign-in routed, or a console domain resolved — mid-erasure would still
+  // pass the org gate and reach a half-deleted workspace. Revoking first
+  // closes that window as well as the permanent one.
   const apiKeys = await eraseOrgApiKeys(orgId)
+  const ssoDomains = await eraseOrgSsoDomains(orgId)
+  const consoleDomains = await releaseOrgConsoleDomains(orgId)
 
   // Hosts (Storage + routing + Firestore trees).
   for (const host of hosts.docs) {
@@ -293,12 +399,19 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
       action: 'org.erased',
       target: `orgs/${orgId}`,
       before: { hosts: hosts.size, members: members.size },
-      after: { exportPath, apiKeys },
+      after: { exportPath, apiKeys, ssoDomains, consoleDomains },
       at: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
 
-  return { ok: true, exportPath, hosts: hosts.size, apiKeys }
+  return {
+    ok: true,
+    exportPath,
+    hosts: hosts.size,
+    apiKeys,
+    ssoDomains,
+    consoleDomains,
+  }
 }
 
 /** An org that stops a person's account from being erased. */
