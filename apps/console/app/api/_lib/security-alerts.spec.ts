@@ -23,6 +23,13 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: (options: unknown) =>
     mockSendEmail(options as Record<string, unknown>),
 }))
+// The cost meter (AGL-1438). Mocked rather than reached: importing the real
+// barrel pulls `next/cache` into a plain node test env. What matters here is
+// that a DELIVERED alert counts and a skipped one does not.
+const mockMeterPlatformEmail = jest.fn(async () => undefined)
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  meterPlatformEmail: () => mockMeterPlatformEmail(),
+}))
 // No designed template published — every send exercises the fallback copy.
 jest.mock('./render-system-email', () => ({
   renderSystemEmail: async () => null,
@@ -92,6 +99,7 @@ function params(
 
 beforeEach(() => {
   mockSendEmail.mockClear()
+  mockMeterPlatformEmail.mockClear()
 })
 
 describe('recordDeviceAndMaybeAlert (AGL-665)', () => {
@@ -108,6 +116,9 @@ describe('recordDeviceAndMaybeAlert (AGL-665)', () => {
       lastSeenAt: NOW,
     })
     expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    // Cost meter (AGL-1438): a delivered alert is a real Resend send, and
+    // once — a second call here would double-count it.
+    expect(mockMeterPlatformEmail).toHaveBeenCalledTimes(1)
     const options = mockSendEmail.mock.calls[0][0] as Record<string, unknown>
     expect(options.to).toBe('person@example.com')
     expect(options.subject).toBe('New sign-in to your Aglyn account')
@@ -181,6 +192,8 @@ describe('recordDeviceAndMaybeAlert (AGL-665)', () => {
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
     const outcome = await recordDeviceAndMaybeAlert(params(firestore))
     expect(outcome).toEqual({ newDevice: true, alerted: false })
+    // An email Resend refused is not a cost (AGL-1438).
+    expect(mockMeterPlatformEmail).not.toHaveBeenCalled()
     errorSpy.mockRestore()
   })
 })

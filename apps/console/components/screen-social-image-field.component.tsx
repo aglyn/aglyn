@@ -20,22 +20,15 @@ import * as Aglyn from '@aglyn/aglyn'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import MediaPickerDialog from './media/media-picker-dialog.component'
+import type { ScreenSocialImageDraft } from '../constants/screen-seo'
 
 /**
- * A staged social image (AGL-1337).
- *
- * The dimensions travel WITH the reference — a screen's image beside the
- * previous image's size would describe a card that does not exist — so this
- * is one draft value rather than three independent fields.
- *
- * An empty `image` is a real, saveable value meaning "cleared", which the
- * head reads as "inherit the site default".
+ * Re-exported for the surfaces that already import the draft type from here.
+ * It is DECLARED beside `buildScreenSeoUpdate` (AGL-1437) because the staging
+ * contract and the rules for turning a draft into stored keys are one
+ * decision, and splitting them is how the two SEO panels drifted.
  */
-export interface ScreenSocialImageDraft {
-  image: string
-  imageWidth: number
-  imageHeight: number
-}
+export type { ScreenSocialImageDraft }
 
 export interface ScreenSocialImageFieldProps {
   /** Media-library scope, and the scope the preview src resolves against. */

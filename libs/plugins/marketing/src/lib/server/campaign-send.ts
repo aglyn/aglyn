@@ -28,10 +28,12 @@ import { assignExperimentVariant, type HostExperiment } from '../model'
 import { productPriceRange } from '@aglyn/plugins-commerce/model'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import {
+  campaignEmailSendsForMonth,
   orgDataCollectionForHost,
   orgDataQueryForHost,
   firebaseAdmin,
   getOrgForHost,
+  meterHostEmail,
 } from '@aglyn/tenant-data-admin'
 import { createHash, createHmac } from 'crypto'
 import {
@@ -310,13 +312,20 @@ export async function performCampaignSend(
   }
 
   // Monthly cap by the owning org's plan (dark-launch rule, AGL-238).
+  //
+  // A campaign is the ONLY send a quota may refuse (AGL-1438). It is
+  // discretionary — the customer sees a clear message, and upgrades or waits —
+  // where refusing a receipt or a password reset would convert a billing event
+  // into an outage on their business. So this is measured against
+  // `campaignEmailSends` and NOT against `emailSends`, which since AGL-1438
+  // also carries every order confirmation, booking reminder and workflow
+  // notification the site sent. Enforcing the campaign cap against that total
+  // would refuse a campaign because the store had a busy week of orders.
   const monthKey = new Date().toISOString().slice(0, 7)
-  const counterRef = hostRef.collection('counters').doc('emailSends')
   {
     // Plan-less orgs resolve as free (AGL-247) — the cap always runs.
     const org = (await getOrgForHost(hostId))?.org
-    const counterSnapshot = await counterRef.get()
-    const used = Number(counterSnapshot.get(monthKey) ?? 0)
+    const used = await campaignEmailSendsForMonth(hostRef, monthKey)
     const quota = checkQuota(
       org as any,
       'emailSendsPerMonth',
@@ -324,8 +333,9 @@ export async function performCampaignSend(
     )
     if (!quota.allowed) {
       throw new CampaignSendError(
-        `Monthly email limit reached (${quota.limit}) — upgrade in ` +
-          'Billing or shrink the audience',
+        `Monthly campaign email limit reached (${quota.limit}) — upgrade ` +
+          'in Billing or shrink the audience. Transactional mail — receipts, ' +
+          'booking reminders, password resets — keeps sending.',
         403,
       )
     }
@@ -465,6 +475,15 @@ export async function performCampaignSend(
       }
     }
   }
+  // Both meters, from one call, on the DELIVERED count (AGL-1438). Ahead of
+  // the `recordCampaign` early return below, because a test send is a real
+  // email with a real cost even though it writes no campaign record — and
+  // ahead of nothing else that writes `emailSends`, so a campaign reaches the
+  // cost meter exactly once. This sender used to increment that counter
+  // itself, which is how a counter named for all email came to hold campaign
+  // sends alone.
+  await meterHostEmail(hostId, sent, 'campaign')
+
   // Sends are the email variant's exposures (AGL-255).
   if (experiment && experiment.status === 'running') {
     for (const [variantId, count] of Object.entries(variantSends)) {
@@ -505,10 +524,6 @@ export async function performCampaignSend(
       sentAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       sentBy: options.senderUid,
     },
-    { merge: true },
-  )
-  await counterRef.set(
-    { [monthKey]: firebaseAdmin.firestore.FieldValue.increment(sent) },
     { merge: true },
   )
   return { campaignId, recipients: sendable.length, sent }

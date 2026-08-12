@@ -25,6 +25,7 @@ import {
   findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
+  meterOrgEmail,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -111,6 +112,10 @@ async function handler(request: Request): Promise<Response> {
       fromName: branding.fromName,
       context: 'erasure-requested',
     })
+    // Cost meter (AGL-1438). Org-scoped: the org still exists at this point —
+    // this is the acknowledgement, and the 7-day hold has not run. Its sibling
+    // in run-erasures is platform-scoped for exactly that difference.
+    if (result.sent) await meterOrgEmail(orgId)
     return Response.json({ ok: true, emailed: result.sent }, { status: 200 })
   } catch (error) {
     console.error(error)

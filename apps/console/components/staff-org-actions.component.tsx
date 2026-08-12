@@ -76,7 +76,8 @@ export const QUOTA_FIELDS: Array<{ key: string; label: string }> = [
   { key: 'servicesPerHost', label: 'Booking services' },
   { key: 'redirectsPerHost', label: 'Redirects' },
   { key: 'contactsPerHost', label: 'Contacts' },
-  { key: 'emailSendsPerMonth', label: 'Email sends / mo' },
+  // Campaign sends only (AGL-1438); transactional mail is uncapped.
+  { key: 'emailSendsPerMonth', label: 'Campaign email sends / mo' },
   { key: 'actionRunsPerMonth', label: 'Action runs / mo' },
   { key: 'datasetsPerOrg', label: 'Datasets (org)' },
   { key: 'maxDatasetsPerOrg', label: 'Max datasets (org)' },

@@ -23,6 +23,7 @@ import {
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
+  meterHostEmail,
   passwordResetThrottleMessage,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -165,6 +166,9 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
           error: 'The reset email could not be delivered',
         })
       }
+      // Cost meter (AGL-1438). Transactional: a reset a quota refused leaves
+      // the member locked out of a site they pay for.
+      await meterHostEmail(hostId)
       return res.status(200).json({ ok: true })
     }
 
@@ -197,6 +201,8 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
         context: 'membership admin password change',
       })
       notified = result.sent
+      // Cost meter (AGL-1438). Transactional: a security notice.
+      if (result.sent) await meterHostEmail(hostId)
     }
     return res.status(200).json({ ok: true, notified })
   } catch (error) {

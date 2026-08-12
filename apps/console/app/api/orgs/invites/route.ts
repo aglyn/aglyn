@@ -40,6 +40,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   logOrgActivity,
+  meterOrgEmail,
   notifyOrgAdmins,
   resolveOrgMembership,
   upsertOrgMember,
@@ -175,6 +176,10 @@ async function handler(request: Request): Promise<Response> {
         fromName: branding.fromName,
         context: 'invite',
       })
+      // Cost meter (AGL-1438). Org-scoped and transactional: an invite the
+      // cap refused would leave a new teammate unable to reach the workspace
+      // they were just added to, with nothing to tell them why.
+      if (result.sent) await meterOrgEmail(orgId)
       return result.sent
     }
 

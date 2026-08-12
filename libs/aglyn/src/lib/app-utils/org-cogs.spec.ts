@@ -18,6 +18,7 @@
 import {
   INFRA_COGS_PER_SITE_USD,
   ORG_COGS_UNIT_RATES_USD,
+  orgCogsInputFrom,
   orgMonthlyCogsUsd,
 } from './plan-entitlements'
 
@@ -126,5 +127,71 @@ describe('orgMonthlyCogsUsd', () => {
   it('handles an org with no sites', () => {
     expect(orgMonthlyCogsUsd({}, 0).cogsUsd).toBe(0)
     expect(orgMonthlyCogsUsd({}, -1).floorUsd).toBe(0)
+  })
+
+  /**
+   * Email is RECORDED, NOT PRICED (AGL-1134, and still true after AGL-1438
+   * made the counter complete).
+   *
+   * AGL-1438 multiplied the recorded email figure by however much
+   * transactional volume an org sends — every receipt, invite, booking
+   * reminder and password reset now lands on the same rollup document. If any
+   * of that reached the cost model, a change whose whole point was to write a
+   * number down would silently re-rate every discount in the staff console on
+   * the day it shipped. There is no per-email rate to price it with, and
+   * inventing one is a decision with an invoice month behind it.
+   *
+   * So: a rollup carrying enormous email figures must produce the SAME verdict
+   * as one carrying none, to the cent.
+   */
+  it('prices no email field, however large (AGL-1438)', () => {
+    const priced = {
+      storageGb: 3,
+      pageViews: 12_000,
+      formSubmissions: 40,
+      dataStorageMb: 512,
+      apiRequests: 90_000,
+      contactsCount: 1_200,
+    }
+    const withoutEmail = orgMonthlyCogsUsd(priced, 2)
+    const withEmail = orgMonthlyCogsUsd(
+      {
+        ...priced,
+        emailSends: 5_000_000,
+        emailSendsOverage: 4_995_000,
+        campaignEmailSends: 5_000,
+        workflowRuns: 900_000,
+        actionRuns: 900_000,
+      } as never,
+      2,
+    )
+    expect(withEmail.measuredUsd).toBe(withoutEmail.measuredUsd)
+    expect(withEmail.cogsUsd).toBe(withoutEmail.cogsUsd)
+    expect(withEmail.basis).toBe(withoutEmail.basis)
+    expect(withEmail.breakdown).toEqual(withoutEmail.breakdown)
+    // And the rate table has nothing to price them WITH. Asserted separately
+    // because adding a rate is what would make the equality above start
+    // failing — this names the cause rather than leaving it to be diagnosed.
+    expect(
+      Object.keys(ORG_COGS_UNIT_RATES_USD).filter((rate) =>
+        /email|campaign|workflow|action/i.test(rate),
+      ),
+    ).toEqual([])
+  })
+
+  /**
+   * The projection is the other half: `orgCogsInputFrom` decides which fields
+   * ever reach the model, and it must not start forwarding email because the
+   * rollup grew a field with a plausible-looking name.
+   */
+  it('does not project any email field into the cost model (AGL-1438)', () => {
+    const input = orgCogsInputFrom({
+      storageGb: 3,
+      emailSends: 5_000_000,
+      emailSendsOverage: 4_995_000,
+      campaignEmailSends: 5_000,
+    })
+    expect(Object.keys(input).some((key) => /email/i.test(key))).toBe(false)
+    expect(input.storageGb).toBe(3)
   })
 })

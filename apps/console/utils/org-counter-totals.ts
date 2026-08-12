@@ -35,6 +35,18 @@
  * independent, so summing months is a legitimate year-to-date and reading
  * one is that month alone.
  *
+ * `emailSends` also picks up ORG-SCOPED mail when `orgRef` is supplied
+ * (AGL-1438): invites, member-added, the welcome email and usage summaries
+ * belong to the org and to no site, so they live at
+ * `orgs/{orgId}/counters/emailSends` in the same `YYYY-MM` shape. Same unit —
+ * one invite is one email is one receipt — so the two add. Omitting them
+ * would leave this total with exactly the defect it was written to fix.
+ *
+ * Account and staff mail (password resets, verification, security alerts,
+ * staff alerts) is counted at `meters/platform/counters/emailSends` and
+ * deliberately NOT summed here: it is Aglyn's own cost, belongs to no
+ * customer, and must not reach any org's rollup or COGS.
+ *
  * NOT double-counted and not missed: the counter is keyed by month ON THE
  * DOCUMENT, so re-running this cron for a closed month reads the same field
  * and re-derives the same sum rather than accumulating. `reportedAt` guards
@@ -54,16 +66,29 @@ export async function orgCounterTotals(
   firestore: FirebaseFirestore.Firestore,
   hostRefs: FirebaseFirestore.DocumentReference[],
   month: string,
+  orgRef?: FirebaseFirestore.DocumentReference,
 ): Promise<{ emailSends: number; workflowRuns: number; actionRuns: number }> {
   const names = ['emailSends', 'workflowRuns', 'actionRuns'] as const
   const totals = { emailSends: 0, workflowRuns: 0, actionRuns: 0 }
-  if (hostRefs.length === 0) return totals
+  if (hostRefs.length === 0 && !orgRef) return totals
   const refs = hostRefs.flatMap((hostRef) =>
     names.map((name) => hostRef.collection('counters').doc(name)),
   )
+  // One extra ref for the whole org, not one per host — org-scoped mail has
+  // no site, so it cannot fan out and this stays inside the same round trip
+  // the chunked sweep already pays for (AGL-1141).
+  const orgCounterRef = orgRef
+    ? orgRef.collection('counters').doc('emailSends')
+    : null
+  if (orgCounterRef) refs.push(orgCounterRef)
   const snapshots = await firestore.getAll(...refs)
+  const hostSnapshotCount = hostRefs.length * names.length
   snapshots.forEach((snapshot, index) => {
-    const name = names[index % names.length]
+    // The org counter is appended AFTER the host block, so the modulo pairing
+    // must not run past the end of it — otherwise the org's email total would
+    // land on whichever counter name the index happened to fall on.
+    const name =
+      index >= hostSnapshotCount ? 'emailSends' : names[index % names.length]
     const value = Number(snapshot.get(month) ?? 0)
     // A counter that has never been written is absent, and a corrupt one
     // must not become a negative meter — same posture as the cost model,

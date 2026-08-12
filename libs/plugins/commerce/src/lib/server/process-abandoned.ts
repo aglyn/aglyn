@@ -16,7 +16,11 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  meterHostEmail,
+} from '@aglyn/tenant-data-admin'
 import {
   isEmailConfigured,
   loadHostEmail,
@@ -112,6 +116,10 @@ export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
         fromName: brandingByHost.get(hostId)?.fromName,
         context: 'abandoned cart',
       })
+      // Cost meter (AGL-1438). One reminder per abandoned checkout, triggered
+      // by that shopper's own action rather than composed as a broadcast, so
+      // it counts toward cost without entering the campaign cap.
+      await meterHostEmail(hostId)
       await docSnapshot.ref
         .set({ remindedAtMs: now }, { merge: true })
         .catch(() => undefined)

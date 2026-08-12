@@ -17,7 +17,12 @@
 
 import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
 import { resolveBrandingProfile } from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgForHost, renderHostEmailWithTokens } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  meterHostEmail,
+  renderHostEmailWithTokens,
+} from '@aglyn/tenant-data-admin'
 import { sendEmail } from '@aglyn/shared-util-email'
 
 /**
@@ -96,6 +101,9 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             fromName: branding.fromName,
             context: 'paid booking confirmation',
           })
+          // Cost meter (AGL-1438), matching the free-booking path.
+          // Transactional: the guest has already paid.
+          await meterHostEmail(String(hostId))
         }
       }
     }

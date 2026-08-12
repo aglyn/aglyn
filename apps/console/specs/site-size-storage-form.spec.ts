@@ -188,6 +188,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     },
   },
   readOrgBilling: async () => ({}),
+  // The real arithmetic (AGL-1438) — it is pure, and a stub returning 0 would
+  // let a rollup that miscounts the overage pass this suite.
+  emailSendsOverage: jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/email-metering',
+  ).emailSendsOverage,
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({

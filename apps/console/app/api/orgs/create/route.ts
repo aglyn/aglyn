@@ -28,6 +28,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  meterOrgEmail,
   OrgSlugTakenError,
 } from '@aglyn/tenant-data-admin'
 
@@ -117,6 +118,9 @@ async function handler(request: Request): Promise<Response> {
             ...(designed?.html ? { html: designed.html } : {}),
             context: 'welcome',
           })
+          // Cost meter (AGL-1438). Org-scoped: the org exists by now — this
+          // runs after `createOrganization` returned its id.
+          await meterOrgEmail(orgId)
         }
       }
     } catch (welcomeError) {

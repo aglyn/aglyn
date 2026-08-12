@@ -60,7 +60,11 @@ import {
   publisherAgreementState,
 } from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { FieldValue } from 'firebase-admin/firestore'
-import { listOrgMembers, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
+import {
+  listOrgMembers,
+  meterPlatformEmail,
+  notifyOrgAdmins,
+} from '@aglyn/tenant-data-admin'
 import { sendEmail } from '@aglyn/shared-util-email'
 
 /**
@@ -89,11 +93,14 @@ async function emailPublisher(
     const recipients = users.users
       .map((user) => user.email)
       .filter((email): email is string => Boolean(email))
-    await Promise.all(
+    const results = await Promise.all(
       recipients.map((to) =>
         sendEmail({ to, subject, text, context: 'plugin review update' }),
       ),
     )
+    // Cost meter (AGL-1438). Platform-scoped: marketplace review is Aglyn's
+    // own workflow talking to a publisher, not mail the publisher's org sent.
+    await meterPlatformEmail(results.filter((result) => result.sent).length)
   } catch (error) {
     console.error('publisher review email failed', error)
   }

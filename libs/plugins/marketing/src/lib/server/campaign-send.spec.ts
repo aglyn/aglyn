@@ -32,7 +32,8 @@
 const mockState: {
   store: Record<string, Record<string, unknown>>
   sent: Array<Record<string, any>>
-} = { store: {}, sent: [] }
+  metered: Array<[string, number, string]>
+} = { store: {}, sent: [], metered: [] }
 
 // The module graph behind `@aglyn/tenant-data-admin` reaches the admin SDK,
 // which does not load under the jest environment. Nothing real is needed:
@@ -52,6 +53,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
   orgDataCollectionForHost: jest.fn(),
   orgDataQueryForHost: jest.fn(),
+  // The meter (AGL-1438). Recorded rather than executed: `email-metering.spec`
+  // owns what a write does to the two counters; what matters HERE is that this
+  // sender calls it exactly once, with the delivered count, as a campaign.
+  meterHostEmail: async (hostId: string, count: number, sendClass: string) => {
+    mockState.metered.push([hostId, count, sendClass])
+  },
+  campaignEmailSendsForMonth: async (hostRef: any, month: string) => {
+    const snapshot = await hostRef
+      .collection('counters')
+      .doc('campaignEmailSends')
+      .get()
+    const used = Number(snapshot.get(month) ?? 0)
+    return Number.isFinite(used) && used > 0 ? used : 0
+  },
 }))
 
 // Only the two I/O functions are stubbed — `renderEmailHtml` and the merge
@@ -190,6 +205,7 @@ function seed(nodes: unknown) {
     },
   }
   mockState.sent = []
+  mockState.metered = []
 }
 
 const send = () =>
@@ -329,6 +345,73 @@ describe('a designed campaign whose version is stored compressed (AGL-1394)', ()
   it('still refuses a template with no nodes at all', async () => {
     seed(undefined)
     await expect(send()).rejects.toThrow('The email template is empty')
+    expect(mockState.sent).toHaveLength(0)
+  })
+})
+
+/**
+ * The two meters (AGL-1438).
+ *
+ * This sender is the only one a quota may refuse, and it is also the one that
+ * used to be the ONLY writer of `counters/emailSends` — which is how a counter
+ * named for all email came to hold campaign sends alone. Both halves are
+ * asserted here: it still enforces, and it now counts through the shared meter
+ * instead of writing the counter itself.
+ */
+describe('the campaign cap and the cost meter (AGL-1438)', () => {
+  const recorded = () =>
+    performCampaignSend({
+      hostId: 'host-1',
+      subject: 'Spring sale',
+      body: 'plain-text fallback',
+      audience: 'leads',
+      templateScreenId: 'screen-1',
+      senderUid: 'uid-1',
+    })
+
+  it('meters the delivered count once, as a campaign', async () => {
+    seed(NODES)
+    await expect(recorded()).resolves.toMatchObject({ sent: 1 })
+
+    // Exactly one call: a send that both incremented inline AND went through
+    // the shared helper would bill this org twice for one email.
+    expect(mockState.metered).toEqual([['host-1', 1, 'campaign']])
+  })
+
+  it('no longer writes the cost counter itself', async () => {
+    seed(NODES)
+    await recorded()
+
+    // The inline increment this sender used to do. Its absence is what makes
+    // the single `meterHostEmail` call above the whole of the accounting.
+    expect(mockState.store['hosts/host-1/counters/emailSends']).toBeUndefined()
+  })
+
+  /**
+   * The regression that would recreate AGL-1438 pointing the other way. Once
+   * `emailSends` holds every receipt, booking reminder and password reset a
+   * site sends, enforcing the campaign cap against it would refuse a campaign
+   * because the store had a busy week of orders.
+   */
+  it('ignores transactional volume when deciding the cap', async () => {
+    seed(NODES)
+    const month = new Date().toISOString().slice(0, 7)
+    // Starter includes 500/mo. Nine thousand transactional sends is far past
+    // it, and must not matter at all.
+    mockState.store['hosts/host-1/counters/emailSends'] = { [month]: 9_000 }
+
+    await expect(recorded()).resolves.toMatchObject({ sent: 1 })
+    expect(mockState.sent).toHaveLength(1)
+  })
+
+  it('still refuses a campaign once the campaign meter is at the cap', async () => {
+    seed(NODES)
+    const month = new Date().toISOString().slice(0, 7)
+    mockState.store['hosts/host-1/counters/campaignEmailSends'] = {
+      [month]: 500,
+    }
+
+    await expect(recorded()).rejects.toThrow(/campaign email limit/i)
     expect(mockState.sent).toHaveLength(0)
   })
 })

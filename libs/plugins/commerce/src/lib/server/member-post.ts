@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  meterHostEmail,
+} from '@aglyn/tenant-data-admin'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { type PluginApiHandler, resolveBrandingProfile } from '@aglyn/aglyn/server'
 
@@ -97,6 +101,11 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
         })
         emailed += 1
       }
+      // Cost meter (AGL-1438), once for the batch rather than per recipient —
+      // same number, one write. Transactional: a member post is content the
+      // subscriber is paying for, not a discretionary campaign, so it counts
+      // toward cost and is never refused by the campaign cap.
+      await meterHostEmail(hostId, emailed)
     }
     return res.status(200).json({ postId: postRef.id, emailed })
   } catch (error) {

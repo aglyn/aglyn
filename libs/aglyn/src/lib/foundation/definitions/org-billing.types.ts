@@ -343,7 +343,21 @@ export interface OrgEntitlements {
   redirectsPerHost?: number
   /** Contacts CRM cap (AGL-197): unified people records per host. */
   contactsPerHost?: number
-  /** Campaign emails sendable per calendar month (AGL-161). */
+  /**
+   * CAMPAIGN emails sendable per calendar month (AGL-161), and campaign
+   * emails only (AGL-1438).
+   *
+   * Transactional mail — password resets, invites, order confirmations,
+   * booking reminders, workflow notifications — is never refused by this cap
+   * at any tier. It still COUNTS toward the org's email cost meter; it simply
+   * cannot be blocked, because a quota that can drop a password reset locks
+   * somebody out of their own account and a dropped order confirmation reads
+   * to the buyer as a failed order.
+   *
+   * The name is the narrow thing on purpose. A cap that means something
+   * narrower than it says is how AGL-1438 came to exist, so every surface
+   * that shows this number says "campaign".
+   */
   emailSendsPerMonth?: number
   /** Action runs per calendar month (AGL-148). */
   actionRunsPerMonth?: number

@@ -26,6 +26,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  meterPlatformEmail,
 } from '@aglyn/tenant-data-admin'
 import { renderEffectiveSystemEmail } from '../../../_lib/render-system-email'
 
@@ -123,6 +124,9 @@ async function handler(request: Request): Promise<Response> {
       text: rendered.text,
       context: 'system-email-test',
     })
+    // Cost meter (AGL-1438). A staff test send is a real Resend send with a
+    // real cost; platform-scoped because it is Aglyn's, not a customer's.
+    if (result.sent) await meterPlatformEmail()
 
     await firebaseAdmin
       .app()

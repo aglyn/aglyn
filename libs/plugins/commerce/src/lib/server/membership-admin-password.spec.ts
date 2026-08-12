@@ -60,6 +60,7 @@ const mockMemberUpdates: Array<Record<string, unknown>> = []
 let mockDecodedToken: Record<string, unknown> = {}
 
 let mockThrottleAllows = true
+const mockMetered: Array<[string, number, string]> = []
 jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: () => false,
   // White-Label Phase 3: the handler resolves the owning org's brand for the
@@ -75,6 +76,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
           degraded: false,
         },
   passwordResetThrottleMessage: () => 'Too many reset emails',
+  // The cost meter (AGL-1438). Recorded so the assertions below can show that
+  // a reset counts toward cost and is still never refused by a quota.
+  meterHostEmail: async (hostId: string, count = 1, sendClass = 'transactional') => {
+    mockMetered.push([hostId, count, sendClass])
+  },
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -159,6 +165,7 @@ function makeResponse() {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockMetered.length = 0
   mockMemberUpdates.length = 0
   mockMemberExists = true
   mockDecodedToken = { uid: ADMIN_UID, email_verified: true }
@@ -293,6 +300,11 @@ describe('membershipAdminPasswordHandler', () => {
     expect(mockMemberUpdates).toHaveLength(0)
     const sent = (sendEmailMock.mock.calls[0] as any[])[0]
     expect(sent.text).toContain('https://demo.aglyn.app/recover?token=')
+    // Cost meter (AGL-1438). Counted once, as TRANSACTIONAL — so it lands on
+    // the cost meter and never on the meter `emailSendsPerMonth` refuses.
+    // This send is how the member gets back into their account; a quota that
+    // could drop it would lock them out with no way to be told why.
+    expect(mockMetered).toEqual([[HOST_ID, 1, 'transactional']])
   })
 
   it('429s without sending once the reset throttle is exhausted (AGL-920)', async () => {

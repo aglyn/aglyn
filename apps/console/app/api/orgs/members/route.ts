@@ -36,6 +36,7 @@ import {
   listOrgMembers,
   logOrgActivity,
   memberHasOrgPermission,
+  meterOrgEmail,
   notifyUsers,
   removeOrgMember,
   resolveOrgMembership,
@@ -321,6 +322,9 @@ async function handler(request: Request): Promise<Response> {
             fromName: branding.fromName,
             context: 'member-added',
           })
+          // Cost meter (AGL-1438). Org-scoped and transactional, like the
+          // invite beside it.
+          await meterOrgEmail(orgId)
         } catch (memberEmailError) {
           console.error('member-added email skipped', memberEmailError)
         }

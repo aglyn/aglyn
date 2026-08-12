@@ -21,6 +21,7 @@ import {
   findUserByUidAcrossPools,
   firebaseAdmin,
   getOrgForHost,
+  meterHostEmail,
   notifyHostManagers,
   upsertHostContact,
   renderHostEmailWithTokens,
@@ -268,6 +269,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               fromName: (await brandFor(hostId)).fromName,
               context: 'reservation confirmation',
             })
+            // Cost meter (AGL-1438). Transactional: the guest has paid, and a
+            // confirmation a quota refused reads as a failed reservation.
+            await meterHostEmail(String(hostId))
           }
         }
       }
@@ -493,6 +497,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             fromName: (await brandFor(hostId)).fromName,
             context: 'cart receipt',
           })
+          // Cost meter (AGL-1438). Transactional: a dropped receipt looks to
+          // the buyer like an order that did not go through.
+          await meterHostEmail(String(hostId))
         }
         // Inventory per line (AGL-281 semantics).
         for (const line of cart.lines) {
@@ -636,6 +643,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 fromName: (await brandFor(hostId)).fromName,
                 context: 'gift card',
               })
+              // Cost meter (AGL-1438). Transactional: this email IS the
+              // purchased goods.
+              await meterHostEmail(String(hostId))
             }
           }
         }
@@ -898,6 +908,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 fromName: (await brandFor(hostId)).fromName,
                 context: 'dropship supplier notice',
               })
+              // Cost meter (AGL-1438). Transactional: without it the order is
+              // never fulfilled.
+              await meterHostEmail(String(hostId))
             }
           } catch (routingError) {
             console.error('Dropship routing failed', routingError)
@@ -1021,6 +1034,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               fromName: (await brandFor(hostId)).fromName,
               context: 'receipt',
             })
+            // Cost meter (AGL-1438). Transactional, as the cart receipt above.
+            await meterHostEmail(String(hostId))
           }
           const hostSnapshot = await hostRef.get()
           const sellerUid = (await getOrgForHost(String(hostId)))?.org
@@ -1070,6 +1085,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 fromName: (await brandFor(hostId)).fromName,
                 context: 'seller order notice',
               })
+              // Cost meter (AGL-1438). Transactional: the seller learns about
+              // the order here.
+              await meterHostEmail(String(hostId))
             }
           }
         }

@@ -57,6 +57,7 @@ import {
   useScreen,
   useScreenVersion,
   useScreenVersionRef,
+  writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -103,6 +104,10 @@ import {
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
+import {
+  buildScreenSeoUpdate,
+  type ScreenSocialImageDraft,
+} from '../../../../../../../../../../constants/screen-seo'
 import { resolveScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
 import {
   collectionTemplatePublishMessage,
@@ -179,19 +184,10 @@ function BesignerPage(props) {
   const [seoTitle, setSeoTitle] = useState<string | null>(null)
   const [seoDescription, setSeoDescription] = useState<string | null>(null)
   /**
-   * Staged social image (AGL-1337); null = untouched. The dimensions travel
-   * WITH the reference — a screen's image beside the previous image's size
-   * would describe a card that does not exist — so this is one draft value
-   * rather than three independent fields.
-   *
-   * An empty `image` is a real, saveable value meaning "cleared", which the
-   * head reads as "inherit the site default".
+   * Staged social image (AGL-1337); null = untouched. The staging contract
+   * travels with the type — see `ScreenSocialImageDraft`.
    */
-  const [seoImage, setSeoImage] = useState<{
-    image: string
-    imageWidth: number
-    imageHeight: number
-  } | null>(null)
+  const [seoImage, setSeoImage] = useState<ScreenSocialImageDraft | null>(null)
   // Screen password protection (AGL-87); null = untouched.
   const [protectPassword, setProtectPassword] = useState<string | null>(null)
   const handleAddElementClick = useAddElementDrawerCallback()
@@ -403,35 +399,65 @@ function BesignerPage(props) {
   }, [protectPassword, updateScreenDoc, enqueueSnackbar])
 
   const handleSeoSave = useCallback(async () => {
-    const existing = (screenResult?.data as any)?.seo ?? {}
-    await updateScreenDoc({
-      seo: {
-        ...existing,
-        title: (seoTitle ?? existing.title ?? '').trim(),
-        description: (seoDescription ?? existing.description ?? '').trim(),
-        // The social image and its dimensions are written as ONE group
-        // (AGL-1337). Untouched keeps whatever the doc already had; cleared
-        // writes `''` — an actually-sent value, since the screen doc is
-        // patched and an absent key would leave the old image in place.
-        image: seoImage ? seoImage.image : (existing.image ?? ''),
-        imageWidth: seoImage ? seoImage.imageWidth : (existing.imageWidth ?? 0),
-        imageHeight: seoImage
-          ? seoImage.imageHeight
-          : (existing.imageHeight ?? 0),
+    /**
+     * Shared with the screen detail page's SEO card (AGL-1437).
+     *
+     * This panel used to build the map itself and DEFAULT the social-image
+     * triple — `image: existing.image ?? ''` with `0`/`0` dimensions — so
+     * saving a description on a screen with no social image added three keys
+     * the document never had. `/careers` stored exactly `{ description,
+     * title }`; a save here made it five, and an `image: ''` beside `0`×`0`
+     * makes a screen look like it has an authored social card to every reader
+     * that checks presence rather than truthiness.
+     */
+    const seo = buildScreenSeoUpdate((screenResult?.data as any)?.seo, {
+      title: seoTitle,
+      description: seoDescription,
+      image: seoImage,
+    })
+    /**
+     * Refuse a save whose seed the server never confirmed (AGL-1358).
+     *
+     * This handler was the twin AGL-1358's sweep of ~126 call sites missed.
+     * Carrying `existing` forward is what makes it that shape: it is
+     * `screenResult.data.seo` off the screen LISTENER, and `updateDoc`
+     * REPLACES a nested map, so a cached seed reinstates that snapshot's
+     * title, description and social image while the author believes they
+     * edited one field — including writing a stale `image` over a newer one
+     * this tab never displayed.
+     *
+     * The guard WRAPS the write; an early return is a shape you can keep
+     * while losing the protection.
+     */
+    const verdict = await writeGuardedBySeed(
+      {
+        subject: 'SEO settings',
+        unreadable: screenResult?.status === 'error',
+        fromCache: screenResult?.fromCache,
       },
-    } as any)
-      .then(() => {
-        enqueueSnackbar('SEO saved', { variant: 'success', persist: false })
-        setSeoTitle(null)
-        setSeoDescription(null)
-        setSeoImage(null)
-      })
-      .catch((e) => {
-        enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
-          variant: 'error',
-          allowDuplicate: true,
-        })
-      })
+      async () => {
+        // An emptied map is removed rather than stored blank — an empty `seo`
+        // reads back as an authored-but-blank record.
+        await updateScreenDoc({ seo: seo ?? (deleteField() as any) } as any)
+          .then(() => {
+            enqueueSnackbar('SEO saved', { variant: 'success', persist: false })
+            setSeoTitle(null)
+            setSeoDescription(null)
+            setSeoImage(null)
+          })
+          .catch((e) => {
+            enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
+              variant: 'error',
+              allowDuplicate: true,
+            })
+          })
+      },
+    )
+    // A refusal leaves the staged title, description and image where they
+    // are, with Save SEO still live.
+    if (!verdict.ok) {
+      enqueueSnackbar(verdict.message, { variant: 'warning', persist: false })
+    }
   }, [
     updateScreenDoc,
     screenResult,

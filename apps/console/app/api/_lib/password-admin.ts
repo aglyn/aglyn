@@ -16,6 +16,7 @@
  */
 
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
 import { generateAuthActionLink } from './auth-action-link'
 import { resolveAuthActionOrigin } from './auth-action-url'
 import { renderSystemEmail } from './render-system-email'
@@ -168,6 +169,10 @@ export async function sendAuthPasswordResetEmail(
       ...(designed?.html ? { html: designed.html } : {}),
       context: 'admin-password-reset',
     })
+    // Cost meter (AGL-1438). Platform-scoped: an Aglyn account reset belongs
+    // to no one org, and a quota may never refuse one — the message telling
+    // somebody why they are locked out would itself be the blocked email.
+    if (result.sent) await meterPlatformEmail()
     return result.sent
   } catch (error) {
     console.error('admin password reset email failed', error)
@@ -206,6 +211,8 @@ export async function sendPasswordChangedNotice(
       ...(designed?.html ? { html: designed.html } : {}),
       context: 'password-changed-by-admin',
     })
+    // Cost meter (AGL-1438). Platform-scoped security notice.
+    if (result.sent) await meterPlatformEmail()
     return result.sent
   } catch (error) {
     console.error('password changed notice failed', error)

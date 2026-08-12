@@ -19,6 +19,10 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { deleteHostProjectionForAllMembers } from './host-memberships'
 import { detachWorkspaceDomain } from './workspace-domains'
+import {
+  CONSOLE_DOMAINS_COLLECTION,
+  releaseConsoleDomain,
+} from './console-domains'
 import { authForPool, findUserByUidAcrossPools } from './auth-pools'
 import { removeOrgMember } from './organizations'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
@@ -141,6 +145,223 @@ async function deleteStripeCustomer(customerId?: string): Promise<void> {
   }
 }
 
+/**
+ * Delete every API credential the org owns (AGL-1444).
+ *
+ * `apiKeys` is a TOP-LEVEL collection keyed by the SHA-256 of the token and
+ * carrying `orgId` as a FIELD, so `recursiveDelete(orgRef)` cannot see it —
+ * a path-scoped cascade is structurally blind to anything not under the path.
+ * The credential therefore outlived the workspace: `verifyApiKey` kept
+ * resolving the token to a live principal naming an org that no longer
+ * existed. `authenticateApiV1` happens to refuse it (it reads the org doc and
+ * 401s), but that is a gate one layer above the credential, and a key whose
+ * revocation depends on every future caller repeating a lookup is not
+ * revoked. The document is also a small record of the erased workspace in its
+ * own right — a human-authored label, the creating uid, the granted scopes.
+ *
+ * Bounded by the `orgId` field, never a collection sweep: this collection
+ * holds every other customer's integration credentials too.
+ *
+ * Returns the number destroyed, for the audit row — an erasure trail that
+ * understates what it removed is the one record that has to be right.
+ */
+async function eraseOrgApiKeys(orgId: string): Promise<number> {
+  return deleteDocsByOrgId('apiKeys', orgId)
+}
+
+/**
+ * Delete every document in a TOP-LEVEL collection that names this org in its
+ * `orgId` FIELD (AGL-1444/AGL-1448).
+ *
+ * The shared mechanism behind every collection a path-scoped cascade cannot
+ * see. Two properties are the whole point, and neither is optional:
+ *
+ *   - **Bounded by the field, never a collection sweep.** Every one of these
+ *     collections holds other customers' credentials, routing and billing
+ *     correlations. A `collection(name).get()` here would erase the estate.
+ *   - **Chunked**, because a batch caps at 500 writes and nothing bounds an
+ *     org's row count below that.
+ *
+ * Returns the number destroyed, for the audit row — an erasure trail that
+ * understates what it removed is the one record that has to be right.
+ */
+async function deleteDocsByOrgId(
+  collection: string,
+  orgId: string,
+): Promise<number> {
+  if (!orgId) return 0
+  const firestore = firebaseAdmin.app().firestore()
+  const rows = await firestore
+    .collection(collection)
+    .where('orgId', '==', orgId)
+    .get()
+  for (let index = 0; index < rows.docs.length; index += 400) {
+    const batch = firestore.batch()
+    for (const doc of rows.docs.slice(index, index + 400)) batch.delete(doc.ref)
+    await batch.commit()
+  }
+  return rows.size
+}
+
+/**
+ * Drop the org's public SSO routing documents (AGL-1448).
+ *
+ * `ssoDomains/{domain}` is keyed by the DOMAIN and carries `orgId` as a field,
+ * so `recursiveDelete(orgRef)` never reaches it. The org's own claims under
+ * `orgs/{orgId}/ssoDomains/{domain}` do die with the tree; the public routing
+ * doc — the one that decides where a sign-in goes — does not.
+ *
+ * **`unpublishSsoDomains` is not the fix, though it looks like it.** That
+ * function is the reversible half of the console's SSO toggle: it sets
+ * `active: false` and leaves the document standing precisely so re-enabling
+ * restores the same pool and the same uids. Applied to an erasure it would
+ * leave behind a record naming the deleted org, its GCIP tenant and provider
+ * ids, its IdP display name and the customer's email domain — and, worse, a
+ * live reservation: `issueDomainClaim` refuses a domain whose `ssoDomains` doc
+ * belongs to another org REGARDLESS of `active`, so a ghost would hold a real
+ * customer's domain against them with no way to appeal. Absence is the only
+ * state that both stops the routing and releases the name.
+ *
+ * Deleting is safe on the read side: `/api/auth/sso-lookup` already treats a
+ * missing doc and an inactive one identically (`{ ssoEnabled: false }`).
+ */
+async function eraseOrgSsoDomains(orgId: string): Promise<number> {
+  return deleteDocsByOrgId('ssoDomains', orgId)
+}
+
+/**
+ * Release every custom console domain the org holds (AGL-1448).
+ *
+ * `releaseConsoleDomain` already does exactly the right thing and was called
+ * from nothing but its own spec. It is wired rather than reimplemented, and
+ * the ordering it enforces is the reason: Vercel detach FIRST, documents
+ * second, and the claim KEPT if a detach fails. `resolveConsoleDomain`'s
+ * `unknown` verdict — the one that lets localhost, previews and self-hosted
+ * installs work — is only safe while every name the console project still
+ * answers for has a document (AGL-1430). Deleting the claim here directly
+ * would break that correspondence and hand the name to the next org that
+ * claims it, with Vercel's `already-exists` reading as health.
+ *
+ * It takes one domain, so the org-bounded query is the part that was missing.
+ * Every name in a claim set — the primary and its `www` twin — carries the
+ * same `orgId` and the same `primaryHost`, so releasing once per distinct
+ * primary covers the set exactly, without a second pass over the twins.
+ *
+ * Best-effort, like every other external cleanup here: an erasure must not
+ * fail because Vercel did. A name that could not be detached keeps its claim
+ * and is reported in the audit row as un-released.
+ */
+async function releaseOrgConsoleDomains(orgId: string): Promise<number> {
+  const firestore = firebaseAdmin.app().firestore()
+  const claims = await firestore
+    .collection(CONSOLE_DOMAINS_COLLECTION)
+    .where('orgId', '==', orgId)
+    .get()
+  const primaries = new Set(
+    claims.docs.map((doc) => (doc.get('primaryHost') as string) || doc.id),
+  )
+  let released = 0
+  for (const domain of primaries) {
+    const result = await releaseConsoleDomain({ orgId, domain }).catch(
+      (error) => {
+        console.error(`eraseOrg: console domain ${domain} release failed`, error)
+        return { released: false }
+      },
+    )
+    if (result.released) released += 1
+  }
+  return released
+}
+
+/**
+ * Drop the local Stripe reverse index (AGL-1448, AGL-1028).
+ *
+ * `stripeCustomers/{stripeCustomerId} -> { orgId }` exists because AGL-1028
+ * moved `stripeCustomerId` off the org doc into a manager-gated subcollection,
+ * which broke the webhook's `where('stripeCustomerId', '==', …)` lookup. It is
+ * denied to every client for one reason, stated in the rules: readable, it
+ * maps a billing identity back to a workspace.
+ *
+ * The erasure had this exactly inverted. It deleted the customer AT STRIPE and
+ * kept the local index — so the artefact that survived was the correlation the
+ * whole issue existed to prevent, now pointing at an org that no longer exists
+ * to be gated on. This deletes the local rows. The Stripe-side delete is
+ * unchanged and still runs: PII lives at the processor too, and one is not a
+ * substitute for the other.
+ *
+ * Bounded by the `orgId` field rather than by the org's CURRENT customer id,
+ * because nothing cleans up the index when a customer id changes — an org that
+ * was re-created in Stripe has more than one row pointing at it.
+ */
+async function eraseOrgStripeIndex(orgId: string): Promise<number> {
+  return deleteDocsByOrgId('stripeCustomers', orgId)
+}
+
+/**
+ * Drop the org's REST API replay keys (AGL-1448).
+ *
+ * `apiIdempotency/{sha256(orgId:key)}` dedupes `POST`s by `Idempotency-Key`
+ * (AGL-618). Low severity — a replay key names an org and a record id and
+ * authorises nothing — but it does NOT age out on its own, which is the part
+ * worth writing down because the assumption runs the other way: the only TTL
+ * policy on the database is `rateLimits.expiresAt`
+ * (`docs/FIRESTORE_MANUAL_CONFIG.md`), and these documents carry no expiry
+ * field for a policy to key on. Left alone they accumulate against a dead org
+ * indefinitely.
+ *
+ * Taken with the credentials rather than at the end: the record ids they carry
+ * point into the org tree that step 4 destroys.
+ */
+async function eraseOrgIdempotencyKeys(orgId: string): Promise<number> {
+  return deleteDocsByOrgId('apiIdempotency', orgId)
+}
+
+/**
+ * Release every slug the org has EVER held (AGL-1448).
+ *
+ * The erasure deleted `orgSlugs/{org.slug}` — the current name only. But
+ * `changeOrgSlug` leaves a tombstone at the previous slug (`{ orgId, movedTo,
+ * renamedAt }`) so old workspace URLs keep redirecting (AGL-585/AGL-236), and
+ * nothing ever collected them. Every historical name an org held therefore
+ * survived its erasure, in the one collection the rules make
+ * `allow read: if true` — public because it doubles as the pre-auth health
+ * probe. An erased workspace's naming history stayed world-readable, each
+ * tombstone still naming the dead org id.
+ *
+ * Bounded by the `orgId` field, which is exactly the right boundary here and
+ * not merely the safe one: claiming a tombstoned slug FULL-REPLACES the
+ * document with the new owner's `{ orgId }`, so a name this org renamed away
+ * from and somebody else has since taken does not match — and must not be
+ * swept, because it is now a live tenant's reservation.
+ *
+ * The current slug is unioned in rather than assumed present: an org whose
+ * reservation was lost to a legacy write would otherwise keep its workspace
+ * subdomain attached to the project.
+ *
+ * Each name's `{slug}.aglyn.com` is detached too. `changeOrgSlug` deliberately
+ * KEEPS the old subdomain attached so the tombstone's 308 has a hostname to
+ * run on; once the tombstone goes, the attachment is a name resolving to a
+ * console for an org that does not exist. Best-effort, like every other
+ * external cleanup here: an erasure must not fail because a DNS API did.
+ */
+async function eraseOrgSlugs(
+  orgId: string,
+  currentSlug?: string,
+): Promise<number> {
+  const firestore = firebaseAdmin.app().firestore()
+  const held = await firestore
+    .collection('orgSlugs')
+    .where('orgId', '==', orgId)
+    .get()
+  const slugs = new Set(held.docs.map((doc) => doc.id))
+  if (currentSlug) slugs.add(currentSlug)
+  for (const slug of slugs) {
+    await firestore.collection('orgSlugs').doc(slug).delete().catch(() => undefined)
+    await detachWorkspaceDomain(slug).catch(() => undefined)
+  }
+  return slugs.size
+}
+
 export interface EraseOrgResult {
   ok: boolean
   /** Set when the org was NOT erased (flag missing, hold not elapsed, gone). */
@@ -148,6 +369,18 @@ export interface EraseOrgResult {
   /** Storage path of the final export bundle when erased. */
   exportPath?: string
   hosts?: number
+  /** API credentials destroyed (AGL-1444) — outside the org path. */
+  apiKeys?: number
+  /** Public SSO routing docs destroyed (AGL-1448) — outside the org path. */
+  ssoDomains?: number
+  /** Custom console domains released (AGL-1448) — outside the org path. */
+  consoleDomains?: number
+  /** REST API replay keys destroyed (AGL-1448) — no TTL reaps these. */
+  apiIdempotency?: number
+  /** Local Stripe reverse-index rows destroyed (AGL-1448/AGL-1028). */
+  stripeIndex?: number
+  /** Slugs released — the current one AND every tombstone (AGL-1448). */
+  slugs?: number
 }
 
 /**
@@ -158,9 +391,16 @@ export interface EraseOrgResult {
  *      delete on a stale/cancelled request.
  *   2. Write a final JSON export (org + host trees) to Storage FIRST — if
  *      the export can't be written, abort without deleting anything.
- *   3. Delete each host (eraseHost), org-level Storage, the Stripe
- *      customer, member back-references, then the org tree + slug.
- *   4. Audit.
+ *   3. Revoke the org's API credentials (AGL-1444) and its public routing —
+ *      SSO domains and custom console domains (AGL-1448). All three are
+ *      top-level collections keyed by something other than the org id, so the
+ *      org-tree delete cannot reach them; doing them before the content
+ *      delete also closes the mid-erasure window, in which a credential or a
+ *      domain still resolves to a half-deleted workspace.
+ *   4. Delete each host (eraseHost), org-level Storage, the Stripe customer
+ *      AND its local reverse index, member back-references, then the org tree
+ *      and every slug the org ever held — tombstones included (AGL-1448).
+ *   5. Audit.
  */
 export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
   const firestore = firebaseAdmin.app().firestore()
@@ -205,6 +445,16 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
     return { ok: false, skippedReason: 'export-failed' }
   }
 
+  // Credentials and routing BEFORE content (AGL-1444/AGL-1448). The org doc
+  // survives until the recursiveDelete at the end, so a key presented — or a
+  // sign-in routed, or a console domain resolved — mid-erasure would still
+  // pass the org gate and reach a half-deleted workspace. Revoking first
+  // closes that window as well as the permanent one.
+  const apiKeys = await eraseOrgApiKeys(orgId)
+  const ssoDomains = await eraseOrgSsoDomains(orgId)
+  const consoleDomains = await releaseOrgConsoleDomains(orgId)
+  const apiIdempotency = await eraseOrgIdempotencyKeys(orgId)
+
   // Hosts (Storage + routing + Firestore trees).
   for (const host of hosts.docs) {
     await eraseHost(host.id)
@@ -215,8 +465,11 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
   } catch (error) {
     console.error(`eraseOrg: org storage cleanup failed for ${orgId}`, error)
   }
-  // Stripe customer.
+  // Stripe: the customer at the processor, AND the local reverse index that
+  // correlates that identity back to this workspace (AGL-1448). Deleting only
+  // the first left exactly the record AGL-1028 denied to every client.
   await deleteStripeCustomer(stripeCustomerId)
+  const stripeIndex = await eraseOrgStripeIndex(orgId)
   // Members' reverse index into this org.
   for (const member of members.docs) {
     await firestore
@@ -227,17 +480,11 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
       .delete()
       .catch(() => undefined)
   }
-  // The org subtree + slug reservation.
+  // The org subtree, then every slug reservation it has ever held — the
+  // current one and each rename tombstone (AGL-1448), with the matching
+  // `{slug}.aglyn.com` detached (AGL-1136).
   await firestore.recursiveDelete(orgRef)
-  if (slug) {
-    await firestore.collection('orgSlugs').doc(slug).delete().catch(() => undefined)
-    // Release the workspace subdomain too (AGL-1136), or the name stays
-    // attached to the project and keeps resolving to a console for an org
-    // that no longer exists — and blocks the slug from being claimed again.
-    // Best-effort like every other cleanup here: an erasure must not fail
-    // because a DNS API did.
-    await detachWorkspaceDomain(slug).catch(() => undefined)
-  }
+  const slugs = await eraseOrgSlugs(orgId, slug)
 
   await firestore
     .collection('adminAudit')
@@ -246,12 +493,30 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
       action: 'org.erased',
       target: `orgs/${orgId}`,
       before: { hosts: hosts.size, members: members.size },
-      after: { exportPath },
+      after: {
+        exportPath,
+        apiKeys,
+        ssoDomains,
+        consoleDomains,
+        apiIdempotency,
+        stripeIndex,
+        slugs,
+      },
       at: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
 
-  return { ok: true, exportPath, hosts: hosts.size }
+  return {
+    ok: true,
+    exportPath,
+    hosts: hosts.size,
+    apiKeys,
+    ssoDomains,
+    consoleDomains,
+    apiIdempotency,
+    stripeIndex,
+    slugs,
+  }
 }
 
 /** An org that stops a person's account from being erased. */

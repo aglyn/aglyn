@@ -16,6 +16,7 @@
  */
 
 import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
+import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
 import { renderSystemEmail } from './render-system-email'
 
 /**
@@ -39,6 +40,23 @@ import { renderSystemEmail } from './render-system-email'
  * Resend outage can never break sign-in. Deliberately NOT gated on
  * `email_verified` — an unverified account is exactly when the alert matters.
  */
+
+/**
+ * Counts a delivered alert against the cost meter (AGL-1438) and passes the
+ * result through untouched.
+ *
+ * Wrapping rather than awaiting inline because both senders below `return
+ * sendEmail(...)` directly, and their callers read `sent` to decide whether to
+ * record the device. A send that never happened is not a cost, so an
+ * unconfigured environment meters nothing.
+ */
+async function meterSent(
+  pending: Promise<SendEmailResult>,
+): Promise<SendEmailResult> {
+  const result = await pending
+  if (result.sent) await meterPlatformEmail()
+  return result
+}
 
 /** Long-lived HttpOnly device-identity cookie, minted by the session route. */
 export const DEVICE_COOKIE = 'aglyn_device'
@@ -175,13 +193,17 @@ export async function sendNewDeviceAlert(
     'If this was you, no action is needed. If it was not, change your ' +
     'password from Manage account right away.'
   const designed = await renderSystemEmail('security-new-device', merge)
-  return sendEmail({
+  // Cost meter (AGL-1438). Platform-scoped: an account alert, sent before any
+  // org context is in hand and never subject to a quota.
+  return meterSent(
+    sendEmail({
     to: details.to,
     subject: designed?.subject ?? 'New sign-in to your Aglyn account',
     text: designed?.text || fallbackText,
     ...(designed?.html ? { html: designed.html } : {}),
     context: 'security-new-device',
-  })
+    }),
+  )
 }
 
 export interface PasskeyAddedAlertDetails {
@@ -217,13 +239,16 @@ export async function sendPasskeyAddedAlert(
     'If you did not add this passkey, change your password from Manage ' +
     'account right away.'
   const designed = await renderSystemEmail('security-passkey-added', merge)
-  return sendEmail({
+  // Cost meter (AGL-1438), as above.
+  return meterSent(
+    sendEmail({
     to: details.to,
     subject: designed?.subject ?? 'A passkey was added to your Aglyn account',
     text: designed?.text || fallbackText,
     ...(designed?.html ? { html: designed.html } : {}),
     context: 'security-passkey-added',
-  })
+    }),
+  )
 }
 
 export interface RecordDeviceParams {

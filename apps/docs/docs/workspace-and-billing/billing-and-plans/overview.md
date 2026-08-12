@@ -89,6 +89,10 @@ Nothing here guarantees that a price or feature set will remain the same.
 - Org admins also get an in-app **notification** when email sends, dataset count, or data
   storage crosses 80% or 100% — once per threshold per month, so nobody has to be watching
   the console to find out.
+- The monthly email allowance caps **campaign sends**. Transactional mail — password
+  resets, invites, order confirmations, booking reminders and workflow notifications — is
+  counted toward your usage but is never blocked by the cap, at any plan. Going over shows
+  up as an overage on the usage rollup rather than as mail your customers never receive.
 - Usage is rolled up with a **cost-plus estimate** for metered features.
 
 ## Seats
