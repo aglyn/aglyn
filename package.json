@@ -58,7 +58,7 @@
     "build:console:prod": "nx build console --prod",
     "serve:console:prod": "nx serve console --prod",
     "cz": "cz",
-    "firebase:emulate": "firebase emulators:start --import=./.firebase --export-on-exit",
+    "firebase:emulate": "firebase emulators:start --config cloud/firebase.json --only auth,firestore,database --import=./.firebase --export-on-exit",
     "prepare": "husky",
     "readme:table-of-contents": "markdown-toc -i ./README.md",
     "vercel:env-pull": "vercel env pull",
