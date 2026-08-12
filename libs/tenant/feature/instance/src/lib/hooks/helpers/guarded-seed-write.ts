@@ -40,14 +40,15 @@
  *
  * ## The three signals, in the order they are worth trusting
  *
- * 1. `unreadable` — the read FAILED (AGL-1143). Saving would write blanks
- *    over a populated document.
- * 2. `fromCache` — the read SUCCEEDED but the server never confirmed it
- *    (AGL-1066). This is the one that catches the dangerous case, because a
- *    cache-served read looks completely healthy: populated form, plausible
- *    values, `status: 'success'`. It is per-listener ground truth from the
- *    SDK, so it needs no threshold and no window, and it clears itself the
- *    instant a server snapshot lands.
+ * 1. `fromCache` — the server never confirmed what is on screen (AGL-1066).
+ *    This is the one that catches the dangerous case, because a cache-served
+ *    read looks completely healthy: populated form, plausible values. It is
+ *    per-listener ground truth from the SDK, so it needs no threshold and no
+ *    window, and it clears itself the instant a server snapshot lands. It
+ *    leads because it is also the more ACCURATE explanation whenever it is
+ *    true — see the ordering note on `checkSeedFreshness`.
+ * 2. `unreadable` — the read FAILED and there is nothing cached behind it
+ *    (AGL-1143). Saving would write blanks over a populated document.
  * 3. `staleSession` — the console's own heuristic. Kept because it means
  *    something the other two do not (the SESSION is dead, not merely
  *    unconfirmed), but it must never be the ONLY guard: it needs two
@@ -157,12 +158,26 @@ export function checkSeedFreshness(
   options: GuardedSeedWriteOptions,
 ): GuardedSeedWriteResult {
   const { subject, unreadable, fromCache, checkSession = true } = options
-  // Most specific first: a failed read is a better explanation than an
-  // unconfirmed one, and both beat the heuristic.
-  const reason: StaleSeedReason | undefined = unreadable
-    ? 'unreadable'
-    : fromCache
-      ? 'unconfirmed'
+  /**
+   * `fromCache` OUTRANKS `unreadable` (AGL-1066).
+   *
+   * It did not, and the ordering was harmless only while a refused listen
+   * could never reach `status: 'error'`. Now that it can, the common case is
+   * BOTH flags true at once — the cache is serving the document and the
+   * server has stopped answering for it — and taking `unreadable` there
+   * tells the user their settings "could not be loaded" and that saving
+   * "would overwrite it with blanks", while a populated, plausible form sits
+   * in front of them. The refusal is right; that explanation is not, and a
+   * refusal whose reason is visibly false is one the user works around.
+   *
+   * What is left to `unreadable` is the read that failed with nothing to
+   * show for it, which is the AGL-1143 case it was written for and where the
+   * blanks are real. The heuristic still comes last.
+   */
+  const reason: StaleSeedReason | undefined = fromCache
+    ? 'unconfirmed'
+    : unreadable
+      ? 'unreadable'
       : checkSession && isSessionStale()
         ? 'stale-session'
         : undefined

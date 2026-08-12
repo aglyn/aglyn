@@ -785,8 +785,11 @@ export function MarketplaceListingContent({
     [purchaseDocs, listingId],
   )
 
+  // `!== 'loading'` and not `=== 'success'` (AGL-1066): a refused read now
+  // reaches 'error', and a listing page rendered over `undefined` is worse
+  // than the zero state this flag exists to show.
   const missing =
-    status === 'success' && (!listing?.profileId || listing?.deletedAt)
+    status !== 'loading' && (!listing?.profileId || listing?.deletedAt)
   // Somewhere to go from the zero state (AGL-998). Same surface split as
   // every other link here: org route at org scope, host route otherwise,
   // and undefined rather than a link to nowhere when the slug is unresolved.

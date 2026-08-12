@@ -291,9 +291,11 @@ function ScreenDetails() {
   }, [loadStalled, enqueueSnackbar])
 
   // "Not Found" is only true once the read has SETTLED. While it is still in
-  // flight the honest answer is that we do not know yet (AGL-1261).
+  // flight the honest answer is that we do not know yet (AGL-1261) — and a
+  // read the server REFUSED has not settled either, it has been declined, so
+  // it must not be reported as an absent screen (AGL-1066).
   const displayName =
-    screen?.displayName || (status === 'loading' ? 'Loading…' : 'Not Found')
+    screen?.displayName || (status === 'success' ? 'Not Found' : 'Loading…')
   const schedule =
     screen?.publishSchedule?.status === 'pending'
       ? screen.publishSchedule
@@ -941,7 +943,7 @@ function ScreenDetails() {
                 versionId,
               })}
               title={'Open with besigner'}
-              disabled={status !== 'success' || !screen}
+              disabled={!screen}
               startIcon={
                 <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
               }

@@ -193,8 +193,31 @@ export interface UseBesignerDocumentResult {
   openJsonEditor: () => void
   closeJsonEditor: () => void
   handleJsonSave: (event: unknown, value: unknown) => void
+  /**
+   * The document could not be read AND there is nothing to show for it
+   * (AGL-1066).
+   *
+   * Deliberately NOT "the read errored". Under `persistentLocalCache` a
+   * refused listen still serves the document from IndexedDB, and a refused
+   * listen can now reach `status: 'error'` — so an editor with a canvas full
+   * of the author's work would otherwise be replaced by "Not found" about two
+   * seconds into a stale session, mid-edit. Whether the console should keep
+   * SERVING that cached document is the question AGL-1066 settled as "keep
+   * serving, but stop presenting it as live"; the presentation half is the
+   * shell's re-auth banner and the refusal on save, not blanking the canvas.
+   *
+   * When the read failed and nothing ever arrived there is genuinely nothing
+   * to render, and this is true — which is the state the "Not found" branch
+   * was written for.
+   */
   hasError: boolean
   notFound: boolean
+  /**
+   * The document is on screen but the server has stopped answering for it
+   * (AGL-1066) — cached content, no refresh coming. Saving is already refused
+   * by the seed guards; this is what an editor would surface to say why.
+   */
+  staleContent: boolean
 }
 
 const noopQueueLoading: BesignerQueueLoading = () => () => undefined
@@ -254,8 +277,21 @@ export function useBesignerDocument<TData = unknown>(
   } = options
 
   const saveAvailable = !Aglyn.canvas.isInitialSame
-  const hasError = Boolean(error) || status === 'error'
-  const notFound = status === 'success' && !nodes
+  const errored = Boolean(error) || status === 'error'
+  // See `UseBesignerDocumentResult.hasError` — an errored read that still has
+  // a document to show is stale, not missing (AGL-1066).
+  const hasError = errored && !nodes
+  const staleContent = errored && Boolean(nodes)
+  /**
+   * `!== 'loading'` rather than `=== 'success'` (AGL-1066).
+   *
+   * A refused read with nothing cached used to sit on `'loading'` forever and
+   * now reaches `'error'`, so gating on `'success'` would have quietly stopped
+   * recognising a missing document at the moment it started being reachable.
+   * `hasError` covers the errored half either way; this keeps the two verdicts
+   * from both going false and rendering an editor over nothing.
+   */
+  const notFound = status !== 'loading' && !nodes
 
   // The canvas is a singleton shared by every editing session; without a
   // reset on leave, client-side navigation to another document keeps (and
@@ -507,6 +543,7 @@ export function useBesignerDocument<TData = unknown>(
     handleJsonSave,
     hasError,
     notFound,
+    staleContent,
   }
 }
 

@@ -86,6 +86,33 @@ describe('writeGuardedBySeed (AGL-1356)', () => {
   })
 
   /**
+   * The ordering, and why it is this way round (AGL-1066).
+   *
+   * Once a refused listen can reach `status: 'error'`, BOTH flags are true at
+   * once on the common path — the cache is serving the document and the
+   * server has stopped answering for it. Taking `unreadable` there tells the
+   * user their settings "could not be loaded" and that saving "would
+   * overwrite it with blanks", while a populated, plausible form sits in
+   * front of them. The refusal is right either way; a refusal whose stated
+   * reason is visibly false is one the user works around.
+   */
+  it('explains a cache-served read as unconfirmed even when it ALSO errored', async () => {
+    const write = jest.fn().mockResolvedValue(undefined)
+
+    const verdict = await writeGuardedBySeed(
+      { subject: 'settings', unreadable: true, fromCache: true },
+      write,
+    )
+
+    expect(write).not.toHaveBeenCalled()
+    expect(verdict.reason).toBe('unconfirmed')
+    // Specifically NOT the blanks explanation, which is the one that is false
+    // when there is cached content on screen.
+    expect(verdict.message).not.toEqual(expect.stringMatching(/blanks/i))
+    expect(verdict.message).toEqual(expect.stringMatching(/out of date/i))
+  })
+
+  /**
    * A refusal the user cannot see is the bug this replaces wearing a
    * different hat: they retype the form and it is refused again, silently.
    */

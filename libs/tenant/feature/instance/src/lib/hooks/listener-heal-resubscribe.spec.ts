@@ -270,7 +270,50 @@ describe.each(subjects)('%s heals on re-auth (AGL-1066)', (_name, subject) => {
     // Reopened, and nothing has answered yet — the cached content is still
     // rendered, exactly as it was a moment ago.
     expect(result.current.name).toBe('stale')
+    /**
+     * And `status` still says `'error'` (AGL-1066). That is the whole
+     * bargain: keep serving, stop claiming it is live. A reopened listen
+     * emits from the cache before it learns it is still refused, and letting
+     * that emission restore `'success'` would make every surface oscillate at
+     * the retry cadence — so only a snapshot the SERVER answered may clear
+     * it. `data` is untouched throughout, which is what the consumers who
+     * blank rely on.
+     */
+    expect(result.current.status).toBe('error')
+  })
+
+  /**
+   * The stickiness itself, which is the prerequisite the flip could not ship
+   * without (AGL-1066).
+   *
+   * Every reopened listen emits from the CACHE before it learns the server is
+   * still refusing it. An unconditional `setStatus('success')` in the success
+   * handler would hand the page back to `'success'` on that emission and take
+   * it away again on the refusal that follows, so a surface would flicker
+   * between its live and its error rendering at the retry cadence — worse to
+   * look at, and worse to reason about, than either state on its own.
+   *
+   * Only a snapshot the SERVER answered may clear it. Asserted at BOTH ends:
+   * the cached emission does not, and the server one does.
+   */
+  it('does not let a cached emission undo the error once terminal', () => {
+    const { result } = renderHook(subject.use)
+
+    denyCycles(MAX_RETRIES * 2)
+    expect(result.current.status).toBe('error')
+
+    // The reopened listen answers from cache, as it always does first.
+    act(() => reportFirestoreSessionHeal())
+    act(() => latest().onNext(subject.snapshot(true)))
+
+    expect(result.current.status).toBe('error')
+    // …and the content is still there. This is not a blanking mechanism.
+    expect(result.current.name).toBe('stale')
+
+    // The server answering is the one thing that ends it.
+    act(() => latest().onNext(subject.snapshot(false)))
     expect(result.current.status).toBe('success')
+    expect(result.current.name).toBe('live')
   })
 
   /**
@@ -292,15 +335,23 @@ describe.each(subjects)('%s heals on re-auth (AGL-1066)', (_name, subject) => {
 
   /**
    * The state the flip creates, and the reason this exists at all: a
-   * listener that spent its budget and went TERMINAL. No timer, no pending
-   * reopen — today only a remount brings it back, and a re-auth is
-   * specifically the case where nothing remounts.
+   * listener that spent its budget and went TERMINAL.
+   *
+   * Terminal no longer means abandoned (AGL-1066). Before the flip a refused
+   * listen reopened forever, and that loop was also the only thing that
+   * HEALED it — a token that attached late, an App Check hiccup, one of the
+   * AGL-1143 transient token-layer denials. None of those broadcast a heal,
+   * because none involves a re-auth the console asked for, so stopping dead
+   * here would have left the whole console terminal until the user reloaded.
+   * So a REFUSAL streak keeps a slow road back, and the heal broadcast is the
+   * fast one: it reopens immediately instead of up to two seconds later,
+   * which is exactly the window the AGL-1358 write guards stay refused in.
    */
-  it('resurrects a listener that already went terminal', () => {
+  it('keeps a slow road back after going terminal, and the heal is the fast one', () => {
     const { result } = renderHook(subject.use)
 
     // No cached emission to refund the budget: the no-cache path, which
-    // reaches `status: 'error'` today and is what the flip generalises.
+    // reached `status: 'error'` even before the flip.
     act(() => {
       for (let i = 0; i <= MAX_RETRIES; i += 1) {
         latest().onError(denied)
@@ -310,17 +361,43 @@ describe.each(subjects)('%s heals on re-auth (AGL-1066)', (_name, subject) => {
     expect(result.current.status).toBe('error')
 
     const opened = mockHandlers.length
-    act(() => jest.advanceTimersByTime(REFUSED_RETRY_DELAY_MS * 10))
-    // Terminal really means terminal — nothing was ever going to reopen it.
+    // The slow road: NOT at the fast cadence...
+    act(() => jest.advanceTimersByTime(RETRY_DELAY_MS))
     expect(mockHandlers).toHaveLength(opened)
-
-    act(() => reportFirestoreSessionHeal())
+    // ...but the refused cadence still comes round.
+    act(() => jest.advanceTimersByTime(REFUSED_RETRY_DELAY_MS))
     expect(mockHandlers).toHaveLength(opened + 1)
+
+    // The fast road: a heal reopens NOW rather than at the next tick.
+    const reopened = mockHandlers.length
+    act(() => reportFirestoreSessionHeal())
+    expect(mockHandlers).toHaveLength(reopened + 1)
 
     act(() => latest().onNext(subject.snapshot(false)))
     expect(result.current.status).toBe('success')
     expect(result.current.fromCache).toBe(false)
     expect(result.current.name).toBe('live')
+  })
+
+  /**
+   * The other half of that: a terminal error which is NOT a refusal still
+   * stops for good, exactly as it always did. The slow road is keyed on the
+   * denial streak, not on the budget, so nothing else starts polling.
+   */
+  it('does NOT keep retrying after a terminal error that was not a refusal', () => {
+    const { result } = renderHook(subject.use)
+
+    act(() => {
+      for (let i = 0; i <= MAX_RETRIES; i += 1) {
+        latest().onError({ code: 'unavailable' })
+        jest.advanceTimersByTime(RETRY_DELAY_MS)
+      }
+    })
+    expect(result.current.status).toBe('error')
+
+    const opened = mockHandlers.length
+    act(() => jest.advanceTimersByTime(REFUSED_RETRY_DELAY_MS * 10))
+    expect(mockHandlers).toHaveLength(opened)
   })
 
   /**

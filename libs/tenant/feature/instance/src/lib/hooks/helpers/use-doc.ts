@@ -78,31 +78,50 @@ export function useDocData<T>(
     /**
      * Refusals since the last SERVER snapshot (AGL-1066).
      *
-     * Deliberately not `attempt`: that one is reset by ANY snapshot,
-     * including a cached one, so under `persistentLocalCache` it never
-     * reaches its budget and this hook can never report anything. Counted
-     * here only to publish `serverDenied` — the `session-health` reporting
-     * that the other two listener hooks do is a separate decision, and this
-     * hook's callers (the besigner document family) are exactly the ones a
-     * false verdict would hurt most.
+     * Still distinct from `attempt` after the flip: `attempt` is a BUDGET
+     * that the heal broadcast may refund, whereas this is EVIDENCE about the
+     * server that only a server snapshot may clear. Counted here to publish
+     * `serverDenied` and to decide the slow cadence — the `session-health`
+     * reporting the other two listener hooks do is a separate decision, and
+     * this hook's callers (the besigner document family) are exactly the ones
+     * a false verdict would hurt most.
      */
     let deniedStreak = 0
+    /**
+     * The retry budget is spent and the server's last word was a refusal —
+     * what keeps `status: 'error'` from being undone by the cached emission
+     * that precedes every reopened refusal (AGL-1066). See the longer note
+     * on the same variable in `use-firestore-collection`.
+     */
+    let terminal = false
 
     const subscribe = () => {
       unsubscribe = onSnapshot(
         ref,
         (snapshot) => {
           if (cancelled) return
-          // Ungated on purpose — see the long note on the same line in
-          // `use-firestore-collection` for why the correction is staged
-          // behind `serverDenied` rather than applied here (AGL-1066).
-          attempt = 0
+          // Only the SERVER answering refunds the retry budget, and only a
+          // server snapshot ends a refusal (AGL-1066).
           if (!snapshot.metadata.fromCache) {
+            attempt = 0
+            terminal = false
             deniedStreak = 0
             setServerDenied(false)
+          } else if (deniedStreak === 0) {
+            // Cached, but nothing has been refused since the server last
+            // answered — not the AGL-1066 fault, so the budget is refunded
+            // exactly as it always was. This is what keeps offline inert:
+            // `unavailable` never enters `deniedStreak`.
+            attempt = 0
           }
-          setStatus('success')
-          setError(undefined)
+          if (!terminal) {
+            setStatus('success')
+            setError(undefined)
+          }
+          // Always true after ANY emission, cached included: this is what
+          // tells a consumer "I have data, the server refused" apart from "I
+          // never had data" — the distinction the besigner editors and the
+          // host setup Theme tab blank on (AGL-1066).
           setHasEmitted(true)
           // Kept, not dropped: a snapshot that still carries this client's
           // own queued write is not evidence of what the store holds
@@ -138,9 +157,15 @@ export function useDocData<T>(
                 : RETRY_DELAY_MS,
             )
           } else {
+            terminal = true
             setStatus('error')
             setError(err)
             resolveFirstValueRef.current?.()
+            // A refusal streak keeps a slow road back for a recovery nobody
+            // announced — see the same branch in `use-firestore-collection`.
+            if (deniedStreak > MAX_RETRIES) {
+              timer = setTimeout(subscribe, REFUSED_RETRY_DELAY_MS)
+            }
           }
         },
       )

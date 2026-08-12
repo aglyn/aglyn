@@ -60,8 +60,8 @@ export interface UseFirestoreDocResult<T> {
   fromCache: boolean
   /**
    * The server has REFUSED this listen for longer than the retry budget and
-   * no server snapshot has arrived since — what `status` would say if the
-   * budget were spendable (AGL-1066). See
+   * no server snapshot has arrived since (AGL-1066) — the reason behind an
+   * `error`, not a duplicate of it. See
    * `UseFirestoreCollectionResult.serverDenied`.
    */
   serverDenied: boolean
@@ -118,6 +118,13 @@ export function useFirestoreDoc<T = DocumentData>(
     // `DENIAL_STREAK_TO_REPORT` for why this is not `attempt`.
     let deniedStreak = 0
     let denialReported = false
+    /**
+     * The retry budget is spent and the server's last word was a refusal —
+     * what keeps `status: 'error'` from being undone by the cached emission
+     * that precedes every reopened refusal (AGL-1066). See the longer note
+     * on the same variable in `use-firestore-collection`.
+     */
+    let terminal = false
     const denialLabel = denialLabelForQuery(ref)
 
     const subscribe = () => {
@@ -125,16 +132,20 @@ export function useFirestoreDoc<T = DocumentData>(
         ref,
         (snapshot) => {
           if (cancelled) return
-          // Ungated on purpose — see the long note on the same line in
-          // `use-firestore-collection` for why the correction is staged
-          // behind `serverDenied` rather than applied here (AGL-1066).
-          attempt = 0
-          setStatus('success')
-          setError(undefined)
+          if (!terminal) {
+            setStatus('success')
+            setError(undefined)
+          }
           setHasPendingWrites(snapshot.metadata.hasPendingWrites)
           setFromCache(snapshot.metadata.fromCache)
-          // Only the SERVER answering is evidence the session can read.
+          // Only the SERVER answering is evidence the session can read — and
+          // the only thing that refunds the retry budget (AGL-1066). See the
+          // long note on the same gate in `use-firestore-collection`.
           if (!snapshot.metadata.fromCache) {
+            attempt = 0
+            terminal = false
+            setStatus('success')
+            setError(undefined)
             deniedStreak = 0
             denialReported = false
             setServerDenied(false)
@@ -142,6 +153,12 @@ export function useFirestoreDoc<T = DocumentData>(
             // denial, and what stops a scoped collaborator's by-design
             // denials from ever adding up to a re-auth prompt.
             reportFirestoreServerRead()
+          } else if (deniedStreak === 0) {
+            // Cached, but nothing has been refused since the server last
+            // answered — not the AGL-1066 fault, so the budget is refunded
+            // exactly as it always was. This is what keeps offline inert:
+            // `unavailable` never enters `deniedStreak`.
+            attempt = 0
           }
           if (!snapshot.exists()) {
             setData(undefined)
@@ -175,8 +192,14 @@ export function useFirestoreDoc<T = DocumentData>(
                 : RETRY_DELAY_MS,
             )
           } else {
+            terminal = true
             setStatus('error')
             setError(err)
+            // A refusal streak keeps a slow road back for a recovery nobody
+            // announced — see the same branch in `use-firestore-collection`.
+            if (deniedStreak > MAX_RETRIES) {
+              timer = setTimeout(subscribe, REFUSED_RETRY_DELAY_MS)
+            }
           }
         },
       )

@@ -574,7 +574,9 @@ function ComponentBesignerPage(props) {
           },
         ]}
       >
-        {error || notFound ? (
+        {/* `hasError`, not the raw `error` — see the screens besigner
+            (AGL-1066). */}
+        {hasError || notFound ? (
           <Stack
             sx={{
               alignItems: 'center',
