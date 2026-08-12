@@ -126,3 +126,89 @@ describe('Image List schema and presets', () => {
     expect(masonry.props.rowHeight).toBeUndefined()
   })
 })
+
+/** AGL-1451 — cleared values must reach MUI as absences, not as `''`. */
+const listRoot = (ui: React.ReactElement): HTMLElement => {
+  const { container } = render(ui)
+  return container.querySelector('.MuiImageList-root') as HTMLElement
+}
+
+describe('Image List drops cleared props before MUI sees them (AGL-1451)', () => {
+  it('a cleared variant renders exactly as an absent one', () => {
+    const absent = listRoot(<ImageListElement>{tile()}</ImageListElement>)
+    for (const cleared of [null, '']) {
+      const root = listRoot(
+        <ImageListElement variant={cleared as any}>{tile()}</ImageListElement>,
+      )
+      expect(root.className).toBe(absent.className)
+      expect(root.getAttribute('style')).toBe(absent.getAttribute('style'))
+    }
+  })
+
+  it('and that render is the standard grid, MUI’s own default', () => {
+    const root = listRoot(
+      <ImageListElement variant={null as any}>{tile()}</ImageListElement>,
+    )
+    expect(root.className).toMatch(/MuiImageList-standard/)
+    expect(root.className).not.toMatch(/MuiImageList-masonry/)
+  })
+
+  it('a cleared caption position renders as an absent one', () => {
+    const { container: absent } = render(tile({ title: 'A' }))
+    const { container: cleared } = render(
+      tile({ title: 'A', barPosition: null }),
+    )
+    expect(cleared.innerHTML).toBe(absent.innerHTML)
+    expect(
+      absent.querySelector('.MuiImageListItemBar-root')?.className,
+    ).toMatch(/positionBottom/)
+  })
+
+  // ---- positive controls ----
+
+  it('keeps `gap={0}` — a deliberately gapless grid', () => {
+    // The falsy value an author can mean: 0 is a real gap, and MUI's own
+    // default is 4, so a guard that ate it would visibly change the page.
+    const root = listRoot(
+      <ImageListElement gap={0}>{tile()}</ImageListElement>,
+    )
+    expect(root.getAttribute('style')).toContain('gap: 0;')
+    // and not the 4px MUI would have applied had the 0 been eaten
+    expect(root.getAttribute('style')).not.toContain('gap: 4px')
+  })
+
+  it('keeps an explicit variant', () => {
+    const root = listRoot(
+      <ImageListElement variant="masonry">{tile()}</ImageListElement>,
+    )
+    expect(root.className).toMatch(/MuiImageList-masonry/)
+  })
+})
+
+describe('Image List option values (AGL-1451)', () => {
+  const every = [
+    ...(imageListSchema.attributes ?? []),
+    ...(imageListItemSchema.attributes ?? []),
+  ]
+
+  it('never offers a value the attributes form cannot persist', () => {
+    for (const attribute of every) {
+      for (const option of (attribute as any).options ?? []) {
+        expect(option.value).not.toBe('')
+        expect(option.value).not.toBeNull()
+        expect(option.value).not.toBeUndefined()
+      }
+    }
+  })
+
+  it('names MUI’s own defaults rather than dropping the options', () => {
+    const variant = (imageListSchema.attributes ?? []).find(
+      (a: any) => a.name === 'variant',
+    ) as any
+    const bar = (imageListItemSchema.attributes ?? []).find(
+      (a: any) => a.name === 'barPosition',
+    ) as any
+    expect(variant.options[0].value).toBe('standard')
+    expect(bar.options[0].value).toBe('bottom')
+  })
+})

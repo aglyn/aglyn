@@ -282,9 +282,11 @@ describe('Drawer anchors (AGL-1201)', () => {
     const field = (drawerSchema.attributes ?? []).find(
       (attr) => attr.name === 'anchor',
     ) as any
-    // '' is the Left default, so the four edges are '' plus three.
+    // Four real, persistable edges since AGL-1451: Left used to be spelled
+    // `''`, which the attributes form strips on change (AGL-1191), so a
+    // drawer moved to another edge could never be moved back.
     expect(field.options.map((option: any) => option.value)).toEqual([
-      '',
+      'left',
       'right',
       'top',
       'bottom',

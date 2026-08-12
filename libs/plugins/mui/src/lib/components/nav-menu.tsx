@@ -434,8 +434,12 @@ export const megaMenuSchema: Aglyn.ComponentSchema<MegaMenuProps> = {
       description: 'How wide the opened panel is.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Panel width',
+      // `auto` is the `MegaMenuPanelWidth` member `megaMenuPanelSx` already
+      // switches on, so the sentinel names the case that existed in code
+      // but not in the option list (AGL-1451); `''` could not persist
+      // (AGL-1191), so a wide panel could not be narrowed again.
       options: [
-        { value: '', label: 'Fit content' },
+        { value: 'auto', label: 'Fit content' },
         { value: 'wide', label: 'Wide (720px)' },
         { value: 'full', label: 'Full width' },
       ],

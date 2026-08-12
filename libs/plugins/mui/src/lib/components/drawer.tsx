@@ -371,8 +371,12 @@ export const drawerSchema: Aglyn.ComponentSchema<DrawerElementProps> = {
       description: 'Which edge of the page the drawer slides in from.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Slides in from',
+      // `left` is one of MUI's four anchors and the value `resolvedAnchor`
+      // already falls back to, so the sentinel is real (AGL-1451). Spelled
+      // `''` it could not persist (AGL-1191), which meant a drawer moved to
+      // the right could never be moved back.
       options: [
-        { value: '', label: 'Left (default)' },
+        { value: 'left', label: 'Left (default)' },
         { value: 'right', label: 'Right' },
         { value: 'top', label: 'Top' },
         { value: 'bottom', label: 'Bottom' },

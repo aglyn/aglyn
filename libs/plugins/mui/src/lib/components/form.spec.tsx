@@ -509,8 +509,10 @@ describe('form survey fields (AGL-544)', () => {
           attribute,
         ]),
       )
+      // `message`, not `''`, since AGL-1451 — the first member of the
+      // declared FormAfterSubmit union, so the outcome can be set back.
       expect((byName['afterSubmit']?.options ?? []).map((o: any) => o.value))
-        .toEqual(['', 'redirect', 'reveal'])
+        .toEqual(['message', 'redirect', 'reveal'])
       expect(byName['redirectScreenId']?.component).toBe(
         Aglyn.FieldComponentType.SCREEN_SELECT,
       )

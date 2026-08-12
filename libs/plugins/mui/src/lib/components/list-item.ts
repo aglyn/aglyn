@@ -19,13 +19,29 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   mdiFormatListText,
 } from '@aglyn/shared-data-mdi'
-import ListItem, { type ListItemProps } from '@mui/material/ListItem'
+import MuiListItem, { type ListItemProps } from '@mui/material/ListItem'
+import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 import {
   presets as listItemTextPresets,
   schema as listItemTextSchema,
 } from './list-item-text'
+
+/**
+ * MUI's ListItem behind the cleared-prop guard (AGL-1451).
+ *
+ * Exported raw, so every one of its five authorable attributes reached MUI
+ * as authored — including `alignItems`, whose `''` option is not `undefined`
+ * (so the `alignItems = 'center'` destructuring default never fires) and is
+ * falsy (so the `alignItems === 'flex-start'` branch is skipped), leaving a
+ * row that carries neither utility class.
+ */
+const ListItem = forwardRef<HTMLLIElement, ListItemProps>((props, ref) =>
+  createElement(MuiListItem, { ...dropClearedProps(props), ref }),
+)
+ListItem.displayName = 'AglynListItem'
 
 // Component ids are persisted in screen documents; keep the legacy ids.
 export const ID: Aglyn.ComponentId = 'muiListItem'
@@ -60,8 +76,12 @@ export const schema: Aglyn.ComponentSchema<ListItemProps> = {
         'Vertical alignment of the row content. Use flex-start when the ' +
         'secondary text wraps to several lines.',
       component: Aglyn.FieldComponentType.SELECT,
+      // `center` is MUI's own value and the one an author needs to move a
+      // row BACK off Top, so it stays in the list as a real sentinel
+      // rather than being deleted (AGL-1451). As `''` that move could not
+      // persist (AGL-1191).
       options: [
-        { value: '', label: 'Center (default)' },
+        { value: 'center', label: 'Center (default)' },
         { value: 'flex-start', label: 'Top' },
       ],
     },

@@ -23,6 +23,7 @@ import MuiCardContent from '@mui/material/CardContent'
 import MuiCardHeader from '@mui/material/CardHeader'
 import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { toElevation } from './paper'
 
@@ -58,7 +59,10 @@ export interface CardActionsElementProps {
  * canvas like everything else.
  */
 const CardElement = forwardRef<HTMLDivElement, CardElementProps>(
-  (props, ref) => {
+  (rawProps, ref) => {
+    // See PaperElement: cleared props are dropped before anything reads
+    // them, so `rest` cannot carry a `null` into MUI (AGL-1451).
+    const props = dropClearedProps(rawProps)
     const { variant, elevation, children, ...rest } = props
     const outlined = variant === 'outlined'
     return (
@@ -134,8 +138,12 @@ export const cardSchema: Aglyn.ComponentSchema<CardElementProps> = {
         'Elevation raises the card with a shadow; outlined draws a border ' +
         'instead and has no shadow.',
       component: Aglyn.FieldComponentType.SELECT,
+      // Same call as Paper (AGL-1451): a real sentinel, because `elevation`
+      // is MUI's own value for the other half of this two-way choice and is
+      // what the Elevation control is conditioned on. `''` could not
+      // persist (AGL-1191).
       options: [
-        { value: '', label: 'Elevation (default)' },
+        { value: 'elevation', label: 'Elevation (default)' },
         { value: 'outlined', label: 'Outlined' },
       ],
     },
