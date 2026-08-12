@@ -30,6 +30,10 @@ import {
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  readAnalyticsDays,
+  recentDayIds,
+} from '../../utils/analytics-day-cache'
 import { docsHelp } from '../../constants/docs-links'
 
 interface DayStat {
@@ -58,37 +62,37 @@ export function HostAnalyticsCard(props: {
 
   useEffect(() => {
     let active = true
-    const ids = Array.from({ length: range }, (_, index) => {
-      const date = new Date()
-      date.setDate(date.getDate() - (range - 1 - index))
-      return date.toISOString().slice(0, 10)
-    })
-    void Promise.all(
-      ids.map((id) =>
-        getDoc(doc(firestore, 'hosts', hostId, 'analytics', id))
-          .then((snapshot) => ({
-            day: id,
-            total: Number(snapshot.get('total') ?? 0),
-            paths: (snapshot.get('paths') ?? {}) as Record<string, number>,
-            referrers: (snapshot.get('referrers') ?? {}) as Record<
-              string,
-              number
-            >,
-            devices: (snapshot.get('devices') ?? {}) as Record<
-              string,
-              number
-            >,
-          }))
-          .catch(() => ({
-            day: id,
-            total: 0,
-            paths: {},
-            referrers: {},
-            devices: {},
-          })),
-      ),
-    ).then((stats) => {
-      if (active) setDays(stats)
+    // Oldest first — the chart reads left to right. `recentDayIds` counts back
+    // from today, so reverse it; index 0 of that list is the live UTC day.
+    const newestFirst = recentDayIds(Date.now(), range)
+    const ids = [...newestFirst].reverse()
+    // Every day but today is a closed counter, so this panel pays for a day
+    // once rather than on every dashboard visit and every range switch
+    // (AGL-1440) — widening 14 → 30 now reads the 16 days it does not have,
+    // not all 30. See `analytics-day-cache` for the invalidation argument.
+    void readAnalyticsDays<DayStat>({
+      scopeKey: `hosts/${hostId}`,
+      field: 'traffic',
+      dayIds: ids,
+      liveDay: newestFirst[0],
+      now: Date.now(),
+      fallback: { day: '', total: 0, paths: {}, referrers: {}, devices: {} },
+      read: async (id) => {
+        const snapshot = await getDoc(
+          doc(firestore, 'hosts', hostId, 'analytics', id),
+        )
+        return {
+          day: id,
+          total: Number(snapshot.get('total') ?? 0),
+          paths: (snapshot.get('paths') ?? {}) as Record<string, number>,
+          referrers: (snapshot.get('referrers') ?? {}) as Record<string, number>,
+          devices: (snapshot.get('devices') ?? {}) as Record<string, number>,
+        }
+      },
+    }).then((stats) => {
+      // A failed day carries no id, so restore the one it stands for rather
+      // than letting an empty label reach the chart.
+      if (active) setDays(stats.map((stat, index) => ({ ...stat, day: ids[index] })))
     })
     return () => {
       active = false
