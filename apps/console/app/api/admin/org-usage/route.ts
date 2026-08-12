@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  orgCogsInputFrom,
+  orgMonthlyCogsUsd,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -64,7 +68,44 @@ async function handler(request: Request): Promise<Response> {
       pageViews: Number(doc.get('pageViews') ?? 0),
       formSubmissions: Number(doc.get('formSubmissions') ?? 0),
       costUsd: Number(doc.get('costUsd') ?? 0),
+      // The three meters this projection used to drop (AGL-1134). The
+      // rollup records them and `orgMonthlyCogsUsd` prices them, so a client
+      // pricing these rows without them got a SMALLER cost than the server
+      // did for the same org — and a smaller cost is the direction that
+      // approves a discount. Nothing errors when a projection starves a
+      // model; it just quietly answers differently.
+      dataStorageMb: Number(doc.get('dataStorageMb') ?? 0),
+      apiRequests: Number(doc.get('apiRequests') ?? 0),
+      contactsCount: Number(doc.get('contactsCount') ?? 0),
     }))
+    /**
+     * The newest rollup, priced by the shared cost model (AGL-1134) — the
+     * same document and the same function `/api/admin/org-discount` uses to
+     * decide whether to refuse a discount, so the staff org page's preview
+     * and the route that applies it cannot answer differently.
+     *
+     * It has to be served rather than read from the browser. The page used
+     * to read `orgs/{id}/usage/{CURRENT month}` directly, and the metering
+     * cron writes `previousMonth()` — the CLOSED month. Checked against
+     * production on 2026-08-12: every org's newest rollup was `2026-07` and
+     * no org had a `2026-08` document, so that read missed for every org on
+     * the platform, every day of the month.
+     *
+     * `measuredUsd` only — the flat per-site floor is the CALLER's to apply
+     * (`checkDiscountMargin` applies it itself), so returning the floored
+     * figure here would charge it twice.
+     */
+    const latestDoc = snapshot.docs[0]
+    const latest = latestDoc
+      ? {
+          month: String(latestDoc.get('month') ?? latestDoc.id),
+          measuredCogsUsd: orgMonthlyCogsUsd(
+            orgCogsInputFrom(latestDoc.data()),
+            0,
+          ).measuredUsd,
+          rollup: orgCogsInputFrom(latestDoc.data()),
+        }
+      : null
     // Month-over-month delta vs the next-older row (list is desc).
     const withDeltas = months.map((row, index) => {
       const previous = months[index + 1]
@@ -80,7 +121,7 @@ async function handler(request: Request): Promise<Response> {
           : null,
       }
     })
-    return Response.json({ months: withDeltas }, { status: 200 })
+    return Response.json({ months: withDeltas, latest }, { status: 200 })
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Usage lookup failed' }, { status: 500 })

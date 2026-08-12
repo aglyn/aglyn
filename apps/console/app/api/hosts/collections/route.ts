@@ -19,7 +19,8 @@ import {
   createResourceUid,
   hostCollectionKind,
   pluginRequestFromWeb,
-  resolveOrgEntitlements,
+  SCREEN_KIND_EMAIL,
+  SCREEN_KIND_TEMPLATE,
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -27,14 +28,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import {
-  billableScreenIds,
-  type BillableScreenSource,
-} from '../resources/count-billable-screens'
-import {
-  COLLECTION_TEMPLATE_SCREEN_FIELDS,
-  type CollectionTemplateSource,
-} from '../../../../constants/collection-templates'
+import { COLLECTION_TEMPLATE_SCREEN_FIELDS } from '../../../../constants/collection-templates'
 
 /** Roles allowed to write host content — mirrors canWriteHostContent(). */
 const HOST_WRITER_ROLES = new Set(['admin', 'editor'])
@@ -73,130 +67,104 @@ function readPointerWrite(data: Record<string, unknown>): PointerWrite {
   return write
 }
 
-/** The pointers a collection document holds after `write` is applied. */
-function applyPointerWrite(
-  existing: CollectionTemplateSource,
-  write: PointerWrite,
-): CollectionTemplateSource {
-  const next: CollectionTemplateSource = { ...existing }
-  for (const [field, value] of Object.entries(write)) {
-    ;(next as Record<string, unknown>)[field] = value ?? undefined
-  }
-  return next
-}
+/**
+ * The pointers that designate an ENTRY template — the screens that are not
+ * pages of the site (AGL-1400).
+ *
+ * `listScreenId` is deliberately absent. `/{collectionSlug}` renders a list
+ * template as an ordinary designed page (AGL-1387), so it stays `kind: 'page'`,
+ * stays billable, and stays served. That also closes by ARITHMETIC the door
+ * AGL-1390 had to close by refusal: a `listScreenId` on a catalog-kind or
+ * slugless collection — where AGL-1387's condition stopped — now excuses
+ * nothing at all, because it converts nothing.
+ */
+const ENTRY_TEMPLATE_FIELDS = ['entryScreenId', 'templateScreenId'] as const
 
 /**
- * Assigning, moving or clearing a collection's template screens — and the
- * second place `screensPerHost` is enforced (AGL-1390).
+ * Assigning, moving or clearing a collection's template screens — and where a
+ * page becomes a template (AGL-1400).
  *
- * The console wrote these three fields with a client `updateDoc`, and they are
- * the last exclusion `countBillableScreens` makes that the metered party can
- * both apply and REVERSE. Pointing `entryScreenId` at a live screen drops it
- * from the count; creating a screen then passes the create-time gate; clearing
- * the pointer leaves the screen counted and the host permanently one over. The
- * loop is unbounded, and collections cost nothing to create.
+ * Until AGL-1400 this route was the second enforcement point for
+ * `screensPerHost`: the pointer was what excused a screen from the count, so
+ * pointing it lowered the count and clearing it raised one, and AGL-1390 had to
+ * evaluate every write against the state it would leave and REFUSE the raise.
+ * The refusal was correct and it was also the wrong shape — it could tell
+ * somebody they were not allowed to stop using a template until they deleted a
+ * page.
  *
- * Freezing the field — AGL-1383's answer for `kind` and `deletedAt` — is not
- * available, because re-pointing a collection at a different template screen is
- * something the product legitimately offers. Freezing it against a DIRECT write
- * is: `slug` and `kind` on this same document have been frozen since AGL-978
- * and AGL-954 while this route renames collections every day. So the console
- * keeps its select, and the write changes transport.
+ * The pointer is a pointer again. What the write now does is stamp the SCREEN:
+ * designating an entry template demotes it to `kind: 'template'`, which is a
+ * property of its own document, and from then on nothing about the collection
+ * decides what the site pays. Consequences worth stating:
  *
- * The test is on the POST state, not on the verb. "Clear" is not a special
- * case: a lateral move from one screen to another is correctly neutral (the
- * screen let go of starts counting, the screen taken up stops), and a move onto
- * a screen that was already billable correctly costs one.
- *
- * A write that does not RAISE the count is always allowed, even when the host
- * is already over its cap. That matters: an org can end up over by legitimate
- * means — a plan downgrade, or a site import — and refusing every template edit
- * until they are back under would punish them for the wrong thing. What is
- * refused is only the raise itself, and the refusal names the screen and the
- * arithmetic, because "this screen becomes a page again" is the fact the person
- * clicking needs and the one the old silent write hid.
+ *  - **No cap check here, in either direction.** Demotion lowers the count;
+ *    clearing or moving a pointer changes nothing, because the screen let go of
+ *    stays a template. Promotion — the one write that raises the count — is the
+ *    deliberate act on /api/hosts/screens, checked exactly like a create.
+ *  - **A cleared pointer leaves an orphan template**, not a page. That is the
+ *    asymmetry on purpose: nobody is refused a pointer edit, and getting the
+ *    page back is one explicit click that meets the same gate a create does.
+ *  - **An email document is never converted.** Overwriting `kind` there would
+ *    move it off the Emails page — a destructive edit dressed as a quota one.
  */
 async function writeTemplatePointers(options: {
+  firestore: FirebaseFirestore.Firestore
   hostRef: FirebaseFirestore.DocumentReference
-  routingMap: unknown
-  orgData: Record<string, unknown> | null
   collectionId: string
   write: PointerWrite
-  /** Staff bypass the cap: they already bypass the rules on this document,
-   * and the gate exists against the party being metered, not against us. */
-  isStaff: boolean
 }): Promise<Response> {
-  const { hostRef, routingMap, orgData, collectionId, write, isStaff } = options
+  const { firestore, hostRef, collectionId, write } = options
   const collectionRef = hostRef.collection('collections').doc(collectionId)
-  const [screensSnapshot, collectionsSnapshot, target] = await Promise.all([
+  const [screensSnapshot, target] = await Promise.all([
     hostRef.collection('screens').select('kind', 'deletedAt', 'displayName').get(),
-    hostRef
-      .collection('collections')
-      .select('slug', 'kind', ...COLLECTION_TEMPLATE_SCREEN_FIELDS)
-      .get(),
     collectionRef.get(),
   ])
   if (!target.exists) {
     return Response.json({ error: 'Unknown collection' }, { status: 404 })
   }
 
-  const screens: BillableScreenSource[] = screensSnapshot.docs.map((screen) => ({
-    id: screen.id,
-    kind: screen.get('kind'),
-    deletedAt: screen.get('deletedAt'),
-  }))
-  const screenNames = new Map(
-    screensSnapshot.docs.map((screen) => [
-      screen.id,
-      String(screen.get('displayName') ?? screen.id),
-    ]),
+  const screenKinds = new Map(
+    screensSnapshot.docs.map((screen) => [screen.id, screen.get('kind')]),
   )
   // A pointer at a screen this host does not have designates nothing, so it
-  // would silently excuse no screen and leave a dangling reference the tenant
-  // runtime resolves to a 404. Rejected rather than stored.
+  // would leave a dangling reference the tenant runtime resolves to a 404.
+  // Rejected rather than stored.
   for (const [field, value] of Object.entries(write)) {
-    if (value && !screenNames.has(value)) {
+    if (value && !screenKinds.has(value)) {
       return Response.json({
         error: `No screen ${value} on this site (${field})`,
       }, { status: 400 })
     }
   }
 
-  const priorRows: Array<CollectionTemplateSource & { id: string }> =
-    collectionsSnapshot.docs.map((row) => ({
-      id: row.id,
-      slug: row.get('slug'),
-      kind: row.get('kind'),
-      listScreenId: row.get('listScreenId'),
-      entryScreenId: row.get('entryScreenId'),
-      templateScreenId: row.get('templateScreenId'),
-    }))
-  const nextRows = priorRows.map((row) =>
-    row.id === collectionId ? applyPointerWrite(row, write) : row,
-  )
-
-  const prior = billableScreenIds(screens, priorRows, routingMap as any)
-  const next = billableScreenIds(screens, nextRows, routingMap as any)
-  const limit = resolveOrgEntitlements(orgData as any).screensPerHost
-  if (!isStaff && next.size > prior.size && next.size > limit) {
-    const becamePages = [...next].filter((id) => !prior.has(id))
-    const named = becamePages
-      .map((id) => `“${screenNames.get(id) ?? id}”`)
-      .join(', ')
-    return Response.json({
-      error:
-        `${named || 'That screen'} becomes a page again, which puts this ` +
-        `site at ${next.size} of ${limit} screens. Delete it instead, or ` +
-        'upgrade in Billing.',
-    }, { status: 403 })
-  }
-
   const update: Record<string, unknown> = { updatedAt: Timestamp.now() }
   for (const [field, value] of Object.entries(write)) {
     update[field] = value ?? FieldValue.delete()
   }
-  await collectionRef.update(update)
-  return Response.json({ ok: true, id: collectionId }, { status: 200 })
+
+  const demote = new Set<string>()
+  for (const field of ENTRY_TEMPLATE_FIELDS) {
+    const screenId = write[field]
+    if (!screenId) continue
+    const kind = screenKinds.get(screenId)
+    if (kind === SCREEN_KIND_EMAIL || kind === SCREEN_KIND_TEMPLATE) continue
+    demote.add(screenId)
+  }
+
+  const batch = firestore.batch()
+  batch.update(collectionRef, update)
+  for (const screenId of demote) {
+    batch.update(hostRef.collection('screens').doc(screenId), {
+      kind: SCREEN_KIND_TEMPLATE,
+      updatedAt: Timestamp.now(),
+    })
+  }
+  await batch.commit()
+  return Response.json({
+    ok: true,
+    id: collectionId,
+    ...(demote.size ? { converted: [...demote] } : {}),
+  }, { status: 200 })
 }
 
 /**
@@ -215,10 +183,11 @@ async function writeTemplatePointers(options: {
  * cannot slip between them.
  *
  * A third action, `templates`, owns the collection's three template-screen
- * pointers (AGL-1390) — see {@link writeTemplatePointers}. Same reason the
- * other two live here: the field decides something the client must not decide
- * for itself. There it was the collection's public address; here it is how
- * much of the plan's screen allowance the site has spent.
+ * pointers — see {@link writeTemplatePointers}. It arrived as an enforcement
+ * point (AGL-1390: the pointer was an input to `screensPerHost`) and AGL-1400
+ * took that job away from it; what it still owns is the CONVERSION that goes
+ * with designating an entry template, which is a fact about the screen and so
+ * must be stamped server-side.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -273,11 +242,7 @@ async function handler(request: Request): Promise<Response> {
     const hostRef = firestore.collection('hosts').doc(hostId)
 
     const isStaff = decoded['staff'] === true
-    // Read once and share: the `templates` action needs the host's routing map
-    // and the owning org's entitlements, which are the same two documents the
-    // role and suspension gates already look at.
     const hostSnapshot = await hostRef.get()
-    let orgData: Record<string, unknown> | null = null
     if (!isStaff) {
       if (!hostSnapshot.exists) {
         return Response.json({ error: 'Unknown site' }, { status: 404 })
@@ -296,7 +261,6 @@ async function handler(request: Request): Promise<Response> {
             error: 'This workspace is suspended',
           }, { status: 403 })
         }
-        orgData = (orgSnapshot.data() ?? null) as Record<string, unknown> | null
       }
     }
 
@@ -306,12 +270,10 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Missing id' }, { status: 400 })
       }
       return await writeTemplatePointers({
+        firestore,
         hostRef,
-        routingMap: hostSnapshot.get('screens'),
-        orgData,
         collectionId,
         write: pointerWrite,
-        isStaff,
       })
     }
 

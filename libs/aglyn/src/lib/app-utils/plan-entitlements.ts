@@ -1231,6 +1231,82 @@ export function orgMonthlyCogsUsd(
 }
 
 /**
+ * Pluck the fields `orgMonthlyCogsUsd` prices out of a raw usage rollup
+ * (AGL-1134) — a Firestore `snapshot.data()`, or the JSON a staff endpoint
+ * served from one. ONE list of field names, in one place.
+ *
+ * The hazard this closes is silent. Every caller previously hand-listed the
+ * six fields at its own call site — the discount route, the anomaly detector,
+ * the staff org page — and `/api/admin/org-usage` projected only three of
+ * them. A projection that drops a priced field does not error; the model just
+ * returns a smaller number, and a smaller COGS is the direction that APPROVES
+ * a discount. Same shape as the API projection that starved a predicate in
+ * AGL-1355, and the two-units usage figure that read 20-45% wrong for years
+ * in AGL-1402.
+ *
+ * UNITS, because the field names do not all say: `storageGb` and
+ * `dataStorageMb` are gigabytes and MEGABYTES respectively (the conversion
+ * lives in `orgMonthlyCogsUsd`, with its own test); `pageViews`,
+ * `formSubmissions` and `apiRequests` are counts FOR THE MONTH;
+ * `contactsCount` is a point-in-time headcount, not a monthly flow.
+ */
+export function orgCogsInputFrom(
+  source: Record<string, unknown> | null | undefined,
+): OrgUsageRollupInput {
+  const read = (field: string) => {
+    const value = source?.[field]
+    return value == null ? undefined : (value as number)
+  }
+  return {
+    hostCount: read('hostCount'),
+    storageGb: read('storageGb'),
+    pageViews: read('pageViews'),
+    formSubmissions: read('formSubmissions'),
+    dataStorageMb: read('dataStorageMb'),
+    apiRequests: read('apiRequests'),
+    contactsCount: read('contactsCount'),
+  }
+}
+
+/**
+ * A cost figure, or the explicit admission that the rollup has not loaded
+ * (AGL-1134).
+ *
+ * `pending` is not "no usage" and not "$0" — it is "do not answer yet".
+ */
+export type OrgCogsPreview =
+  | { status: 'pending' }
+  | { status: 'ready'; cogs: OrgCogsResult }
+
+/**
+ * `orgMonthlyCogsUsd` behind an explicit readiness flag (AGL-1134).
+ *
+ * The staff org page loads its rollup asynchronously, and an unfinished read
+ * and an absent document are the same `undefined`. Priced directly, both
+ * yield `basis: 'floor'` — so the enterprise pricing card printed "per-site
+ * floor — no usage recorded yet" during the loading window, a
+ * measurement-shaped sentence about an org whose measurements had simply not
+ * arrived. That is the AGL-1380 / AGL-1422 defect exactly: a question
+ * answered before its data is ready, and answered in the cheap direction.
+ *
+ * Returning a discriminated union rather than a nullable number is what makes
+ * the window unrepresentable — a caller cannot reach a cost without first
+ * handling `pending`, so the next call site cannot re-introduce this by
+ * forgetting a flag it was handed.
+ */
+export function orgCogsPreview(
+  ready: boolean,
+  rollup: OrgUsageRollupInput | null | undefined,
+  siteCount: number,
+): OrgCogsPreview {
+  // Gated on the caller's flag alone. Deriving readiness from `rollup` being
+  // truthy would re-create the bug: the org with no rollup yet is precisely
+  // the one whose value stays falsy after the read completes.
+  if (!ready) return { status: 'pending' }
+  return { status: 'ready', cogs: orgMonthlyCogsUsd(rollup, siteCount) }
+}
+
+/**
  * Percent-off at or above which creating a coupon needs explicit staff
  * sign-off (AGL-1105). A ≥40%-off coupon is a real revenue commitment, so the
  * creation route rejects it unless the caller passes a confirm flag; the UI

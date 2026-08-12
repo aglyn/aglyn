@@ -424,11 +424,44 @@ describe('a backup is not a thing to be locked out of', () => {
 })
 
 describe('the count is the one the rest of the cap uses', () => {
-  it('excludes a screen the bundle’s own collection makes an entry template', async () => {
+  it('excludes a bundle screen that IS an entry template', async () => {
     // Nothing is re-priced here (AGL-1173/1383/1387/1390 each refused to):
     // `billableScreenIds` decides, so a bundle carrying its blog's entry
     // template gets that screen for free exactly as the live site does. A
     // check written as `bundle.screens.length` would refuse this.
+    //
+    // Since AGL-1400 the bundle says so on the SCREEN. The collection beside it
+    // is carried too, exactly as a real export does, and asserts the other half:
+    // a pointer excuses nothing now, so the exclusion survives only because the
+    // screen itself is a template.
+    const wanted = ids(PRO_SCREEN_CAP + 1, 'page')
+    const response = await runImport(
+      bundleOf({
+        screenItems: wanted.map((id) =>
+          id === 'page-1' ? screenItem(id, { kind: 'template' }) : screenItem(id),
+        ),
+        routed: wanted,
+        collections: [
+          {
+            $id: 'blog',
+            slug: 'blog',
+            kind: 'content',
+            displayName: 'Blog',
+            entryScreenId: 'page-1',
+          },
+        ],
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(storedScreenIds()).toHaveLength(wanted.length)
+  })
+
+  // The other side of the same change, and the reason the test above is not
+  // just a rename: the pointer no longer buys anything. A bundle whose
+  // collection designates an ordinary page screen as its entry template is a
+  // bundle of 101 pages, and it is refused.
+  it('counts a bundle screen a bundle collection merely points at', async () => {
     const wanted = ids(PRO_SCREEN_CAP + 1, 'page')
     const response = await runImport(
       bundleOf({
@@ -445,8 +478,8 @@ describe('the count is the one the rest of the cap uses', () => {
       }),
     )
 
-    expect(response.status).toBe(200)
-    expect(storedScreenIds()).toHaveLength(wanted.length)
+    expect(response.status).toBe(403)
+    expect(response.body.error).toContain(`101 of ${PRO_SCREEN_CAP}`)
   })
 
   it('counts a screen the bundle brings back from a soft delete', async () => {

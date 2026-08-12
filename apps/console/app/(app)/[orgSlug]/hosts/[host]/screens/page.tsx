@@ -24,6 +24,7 @@ import {
   decodeStoredNodes,
   findScreenIdByRoutePath,
   normalizeScreenSlug,
+  SCREEN_KIND_TEMPLATE,
   screenClaimsToBeAPage,
   screenRoutePathToUrl,
   wouldCreateScreenCycle,
@@ -174,7 +175,6 @@ function Screens(props) {
   // countBillableScreens, because a client that warns on a different number
   // than the API enforces is worse than no precheck at all.
   const collectionTemplates = useCollectionTemplates(hostId)
-  const { templateScreenIds, listTemplateScreenIds } = collectionTemplates
   const { data: hostData } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
@@ -185,23 +185,20 @@ function Screens(props) {
   // (AGL-1383): a published screen counts whatever its own document says about
   // itself, so that flipping `kind` or `deletedAt` cannot buy a free page. The
   // `screens` list above drops those two for the hierarchy table, which is the
-  // right filter for a table and the wrong one for a quota. Same order as the
-  // server's `countBillableScreens` — a precheck that warns on a different
-  // number than the API enforces is worse than no precheck at all.
+  // right filter for a table and the wrong one for a quota. Same rule as the
+  // server's `billableScreenIds`, restated on the row shape this page holds —
+  // a precheck that warns on a different number than the API enforces is worse
+  // than no precheck at all, and since AGL-1400 it needs no collection read to
+  // stay in step: `kind: 'template'` is the exclusion, on the screen itself.
   const billableScreenCount = useMemo(
     () =>
       (data ?? []).filter((screen: any) => {
-        const claimsToBeAPage = screenClaimsToBeAPage(screen)
-        // A LIST template is a page — `/{collectionSlug}` renders this exact
-        // screen (AGL-1387) — so the template exclusion does not reach it.
-        const servesACollectionList =
-          listTemplateScreenIds.has(screen.$id) && claimsToBeAPage
-        if (templateScreenIds.has(screen.$id) && !servesACollectionList) {
-          return false
-        }
-        return routingMap?.[screen.$id] !== undefined || claimsToBeAPage
+        if (screen.kind === SCREEN_KIND_TEMPLATE) return false
+        return (
+          routingMap?.[screen.$id] !== undefined || screenClaimsToBeAPage(screen)
+        )
       }).length,
-    [data, templateScreenIds, listTemplateScreenIds, routingMap],
+    [data, routingMap],
   )
   const screensById = useMemo(() => {
     const map: Record<ScreenUid, ScreenRouteNode> = {}

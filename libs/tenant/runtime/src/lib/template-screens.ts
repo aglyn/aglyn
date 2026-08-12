@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { SCREEN_KIND_TEMPLATE } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   tenantDataTag,
@@ -72,22 +73,44 @@ interface QuerySnapshotLike {
   docs: Array<FieldSnapshotLike>
 }
 
+/** Screen documents that say what they are — only the id is read. */
+interface IdSnapshotLike {
+  id: string
+}
+
 /**
- * Every screen id this host designates as a template — a content collection's
- * list/entry screens plus commerce's PDP and catalog-collection screens. Pure,
- * so the routing rule can be tested without Firestore.
+ * Every screen id this host treats as a template — the screens that SAY so
+ * (`kind: 'template'`), plus a content collection's list/entry screens and
+ * commerce's PDP and catalog-collection screens. Pure, so the routing rule can
+ * be tested without Firestore.
  *
- * Either source may be absent (`null`/`undefined`): a host with no store
- * settings doc, or a read that failed on its own while the other succeeded.
+ * A UNION, and each half covers what the other cannot (AGL-1400):
+ *
+ *  - The `kind` half reaches a template no pointer names any more. Clearing a
+ *    collection's `entryScreenId` deliberately does NOT promote the screen back
+ *    to a page — promotion is a gated act — so without this an orphaned
+ *    template would become reachable at its own slug again, rendering raw
+ *    `{{entry.*}}` tokens: AGL-1267, back.
+ *  - The pointer half reaches the templates that are NOT `kind: 'template'`,
+ *    and there are two kinds of those on purpose. A collection's LIST template
+ *    is a page (AGL-1387) — billable, and served at `/{collectionSlug}` — but
+ *    it must still 404 at the slug it was published under. Commerce's PDP and
+ *    catalog templates are billable today too, and re-pricing them is a
+ *    separate decision from this one.
+ *
+ * Any source may be absent (`null`/`undefined`): a host with no store settings
+ * doc, or a read that failed on its own while the others succeeded.
  */
 export function collectTemplateScreenIds(sources: {
   collections?: QuerySnapshotLike | null
   storeSettings?: FieldSnapshotLike | null
+  templateScreens?: { docs: Array<IdSnapshotLike> } | null
 }): Set<string> {
   const ids = new Set<string>()
   const add = (screenId: unknown) => {
     if (typeof screenId === 'string' && screenId) ids.add(screenId)
   }
+  for (const screen of sources.templateScreens?.docs ?? []) add(screen.id)
   for (const contentCollection of sources.collections?.docs ?? []) {
     for (const field of COLLECTION_TEMPLATE_SCREEN_FIELDS) {
       add(contentCollection.get(field))
@@ -115,20 +138,23 @@ export function collectTemplateScreenIds(sources: {
  * the site rendering seven raw `{{entry.*}}` tokens as body text, and publishing
  * a PDP template does the same with `{{product.*}}`.
  *
- * Computed by subtraction rather than a stored marker, exactly like
- * `countBillableScreens`: hosts whose templates predate this need no backfill,
- * and re-pointing a collection (or the store) at a different screen takes effect
- * on the next revalidate.
+ * A stored marker AND the pointers (AGL-1400): `kind: 'template'` is the fact
+ * for an entry template, and the pointers still answer for the two template
+ * kinds that stay pages — a collection's LIST template (AGL-1387) and
+ * commerce's PDP/catalog templates. See {@link collectTemplateScreenIds} for
+ * why neither half subsumes the other. Re-pointing a collection (or the store)
+ * at a different screen still takes effect on the next revalidate.
  *
- * TWO reads, not one — and one read cannot cover both. The collection templates
- * come from a QUERY over `hosts/{h}/collections`; the store templates from a
- * single document at `hosts/{h}/settings/store`. Firestore has no read that
- * spans a query and a document in a different subcollection (`getAll` batches
- * document refs only, and cannot take the query). So they are issued
- * CONCURRENTLY: two RPCs, one round trip of latency, which is what the
- * cold-start budget cares about (AGL-1152). The collections read keeps its field
- * mask; the store doc is a single small doc read whole, since `select` is a
- * Query method and there is nothing to project on a document get.
+ * THREE reads, not one — and one read cannot cover them. The template screens
+ * and the collection templates are QUERIES over different subcollections; the
+ * store templates are a single document at `hosts/{h}/settings/store`. Firestore
+ * has no read that spans a query and a document in a different subcollection
+ * (`getAll` batches document refs only, and cannot take the query). So they are
+ * issued CONCURRENTLY: three RPCs, one round trip of latency, which is what the
+ * cold-start budget cares about (AGL-1152). Both queries carry a field mask —
+ * the screens one projects to ids alone — and the store doc is a single small
+ * doc read whole, since `select` is a Query method and there is nothing to
+ * project on a document get.
  *
  * Fails OPEN — an empty set on error, and PER SOURCE. This sits on the critical
  * path of every tenant page render, and a transient Firestore error must degrade
@@ -165,7 +191,21 @@ async function readTemplateScreenIds(options: {
       .collection('hosts')
       .doc(options.hostId)
 
-    const [collections, storeSettings] = await Promise.all([
+    const [templateScreens, collections, storeSettings] = await Promise.all([
+      // The screens that say so (AGL-1400). `select()` with no fields returns
+      // ids only, and the equality filter rides Firestore's automatic
+      // single-field index — no composite index, and no read of the 100+ screen
+      // documents a large site has.
+      hostRef
+        .collection('screens')
+        .where('kind', '==', SCREEN_KIND_TEMPLATE)
+        .select()
+        .limit(200)
+        .get()
+        .catch((error: unknown) => {
+          console.error('template screen kind lookup failed:', error)
+          return null
+        }),
       hostRef
         .collection('collections')
         .select(...COLLECTION_TEMPLATE_SCREEN_FIELDS)
@@ -189,7 +229,7 @@ async function readTemplateScreenIds(options: {
         }),
     ])
 
-    return collectTemplateScreenIds({ collections, storeSettings })
+    return collectTemplateScreenIds({ templateScreens, collections, storeSettings })
   } catch (error) {
     // The ref construction itself threw (no initialised admin app, say).
     console.error('template screen lookup failed:', error)

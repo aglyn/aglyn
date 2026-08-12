@@ -21,13 +21,18 @@
  * `resolveCollectionTemplateScreenId` still falls back to, so hosts predating
  * the list/entry split are covered.
  *
- * Kept in step with `app/api/hosts/resources/count-billable-screens.ts`, which
- * subtracts the same set from the plan's screen allowance, and with the tenant
- * runtime's `COLLECTION_TEMPLATE_SCREEN_FIELDS` (AGL-1267), which subtracts it
- * from the host routing map. Deliberately re-declared rather than imported
- * from `@aglyn/tenant-runtime`: that module's first statement is
- * `import { firebaseAdmin } from '@aglyn/tenant-data-admin'`, and every reader
- * here is a `'use client'` page.
+ * Kept in step with the tenant runtime's `COLLECTION_TEMPLATE_SCREEN_FIELDS`
+ * (AGL-1267), which subtracts this set from the host routing map. Deliberately
+ * re-declared rather than imported from `@aglyn/tenant-runtime`: that module's
+ * first statement is `import { firebaseAdmin } from '@aglyn/tenant-data-admin'`,
+ * and every reader here is a `'use client'` page.
+ *
+ * NO LONGER the screen cap's business (AGL-1400). `countBillableScreens` used
+ * to subtract the same set, which made "is this screen a page?" a join whose
+ * other side was editable — four issues in one arc. An entry template says so
+ * on its own document now, and what these fields still answer is what a
+ * template RENDERS: the routes to name in the publish message, and the live URL
+ * a template screen has (which is its collection's, not its own).
  */
 export const COLLECTION_TEMPLATE_SCREEN_FIELDS = [
   'listScreenId',

@@ -17,36 +17,44 @@
 
 import { countBillableScreens } from '../app/api/hosts/resources/count-billable-screens'
 
-/** Minimal stand-in for the admin SDK's snapshot/ref surface. */
-function hostRef(
-  screens: Array<Record<string, unknown> & { id: string }>,
-  collections: Array<Record<string, unknown>> = [],
-) {
-  const snapshot = (rows: Array<Record<string, unknown>>) => ({
-    docs: rows.map((row) => ({
-      id: String(row['id'] ?? ''),
-      get: (field: string) => row[field],
-    })),
-  })
+/**
+ * Minimal stand-in for the admin SDK's snapshot/ref surface.
+ *
+ * ONE collection, since AGL-1400: the count reads `screens` and nothing else.
+ * A second bucket used to be needed here because the exclusion for a
+ * collection's entry template was a JOIN against the `collections` collection —
+ * which is the shape that produced four issues, and the reason this fake
+ * throws now if anything reaches for another collection.
+ */
+function hostRef(screens: Array<Record<string, unknown> & { id: string }>) {
   return {
-    collection: (name: string) => ({
-      select: () => ({
-        get: async () =>
-          snapshot(name === 'screens' ? screens : collections),
-      }),
-    }),
+    collection: (name: string) => {
+      if (name !== 'screens') {
+        throw new Error(`countBillableScreens must read only screens, not ${name}`)
+      }
+      return {
+        select: () => ({
+          get: async () => ({
+            docs: screens.map((row) => ({
+              id: String(row['id'] ?? ''),
+              get: (field: string) => row[field],
+            })),
+          }),
+        }),
+      }
+    },
   }
 }
 
 /**
  * The bypass AGL-1383 closed, stated as its invariant.
  *
- * `deletedAt` and `kind` are ordinary fields on the screen's own document and
- * the rules let an editor write them. Counting by subtracting on those fields
- * alone meant one `updateDoc` took a page off the plan while the host's routing
- * map still pointed at it and the runtime still served it — the client
- * controlling the PREDICATE, where AGL-1173 and AGL-1360 had already closed the
- * client controlling the NUMBER.
+ * `deletedAt` and `kind: 'email'` are ordinary fields on the screen's own
+ * document and the rules let an editor write them. Counting by subtracting on
+ * those fields alone meant one `updateDoc` took a page off the plan while the
+ * host's routing map still pointed at it and the runtime still served it — the
+ * client controlling the PREDICATE, where AGL-1173 and AGL-1360 had already
+ * closed the client controlling the NUMBER.
  *
  * So these assert the same sentence from both sides: what the site routes is
  * what the plan pays for, and a document does not get to excuse itself.
@@ -84,20 +92,6 @@ describe('a routed screen counts, whatever its document claims (AGL-1383)', () =
     const count = await countBillableScreens(
       hostRef([{ id: 'home' }, { id: 'gone', deletedAt: { seconds: 1 } }]),
       { home: '/' },
-    )
-    expect(count).toBe(1)
-  })
-
-  // An ENTRY template's map entry is what makes the compose pipeline pick it
-  // up (AGL-1267 drops it from routing at request time), so the reachability
-  // test has to keep answering "not a page" for one.
-  it('still excludes a collection ENTRY template screen while it is routed', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'blogEntry' }],
-        [{ id: 'blog', slug: 'blog', entryScreenId: 'blogEntry' }],
-      ),
-      { home: '/', blogEntry: 'blog-entry-template' },
     )
     expect(count).toBe(1)
   })
@@ -166,239 +160,90 @@ describe('countBillableScreens (AGL-1173)', () => {
     expect(count).toBe(1)
   })
 
-  it('does not count a collection entry template screen', async () => {
+  // AGL-1173's charge, unchanged and now stated on the screen itself: one
+  // screen serving every entry at no URL of its own is not a page, and adding a
+  // blog must not cost two of the free plan's five before the first page.
+  it('does not count a collection entry template', async () => {
     const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'blogEntry' }],
-        [{ id: 'blog', slug: 'blog', entryScreenId: 'blogEntry' }],
-      ),
-    )
-    expect(count).toBe(1)
-  })
-
-  it('honours the legacy templateScreenId field', async () => {
-    // Legacy or not, it resolves the ENTRY route
-    // (`resolveCollectionTemplateScreenId`), so it stays excluded even though
-    // the collection has a slug and therefore has a list page.
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'legacyTmpl' }],
-        [{ id: 'blog', slug: 'blog', templateScreenId: 'legacyTmpl' }],
-      ),
-    )
-    expect(count).toBe(1)
-  })
-
-  // A collection can point at a screen that was since deleted, and two
-  // collections can share one template — neither may discount a real screen
-  // twice or discount a screen that no longer exists.
-  it('ignores dangling and duplicated template references', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'shared' }],
-        [
-          { id: 'blog', slug: 'blog', entryScreenId: 'shared' },
-          { id: 'news', slug: 'news', entryScreenId: 'shared' },
-          { id: 'gone', slug: 'gone', entryScreenId: 'deletedScreen' },
-        ],
-      ),
-    )
-    expect(count).toBe(1)
-  })
-
-  it('ignores empty and non-string template references', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }],
-        [{ id: 'blog', slug: 'blog', listScreenId: '', entryScreenId: 42 }],
-      ),
+      hostRef([{ id: 'home' }, { id: 'blogEntry', kind: 'template' }]),
     )
     expect(count).toBe(1)
   })
 })
 
 /**
- * The exclusion AGL-1383 left standing (AGL-1387).
+ * The exclusion is a property of the SCREEN (AGL-1400).
  *
- * A collection's LIST template is subtracted from the allowance as a template,
- * and `/{collectionSlug}` renders that exact screen through
- * `composeCollectionTemplatePage` — entries, `{{collection.*}}` tokens, theme
- * and shared layout. So it is a designed, reachable page that no plan paid
- * for, and creating a collection and pointing `listScreenId` at any screen
- * turned that screen free. AGL-1383's sentence, applied to the third
- * exclusion: an exclusion is only sound if an excluded screen genuinely is not
- * a page.
+ * It used to be a join: this function read the `collections` collection and
+ * subtracted whatever screen ids the template pointers named. Every issue in
+ * that arc was the same sentence — the other side of the join is editable, so
+ * "is this screen a page?" had an answer the metered party could rewrite
+ * (AGL-1383 froze two fields, AGL-1387 found a third exclusion was reachable,
+ * AGL-1390 found the pointer could be toggled in a loop).
  *
- * What makes it a page is the ROUTE, not the publish — which is why the second
- * test matters as much as the first. The collection branch resolves the screen
- * through `listScreenId`, never through the routing map, so a list template
- * routed at some other slug (or at nothing) still serves `/{slug}`. That is
- * not hypothetical: it is how aglyn.com's own blog is configured.
+ * The tests below are the ones that used to be phrased in pointers. Same
+ * product facts, asked of one document.
  */
-describe('a collection LIST template is a page (AGL-1387)', () => {
-  it('counts a list template published at its collection root', async () => {
+describe('a template is a template because it says so (AGL-1400)', () => {
+  // The one place `kind` outranks the routing map, and the reason it can: an
+  // entry template is routed ON PURPOSE (publishing is how the compose pipeline
+  // picks it up; AGL-1267 drops it from routing at request time), and no client
+  // writes this value — demotion lowers the count, promotion is gated.
+  it('does not count a template even while it is routed', async () => {
     const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'blogList' }],
-        [{ id: 'blog', slug: 'blog', listScreenId: 'blogList' }],
-      ),
-      { home: '/', blogList: 'blog' },
-    )
-    expect(count).toBe(2)
-  })
-
-  // The live shape on aglyn.com: the list template is routed at
-  // `blog-list-template` — a path AGL-1267 makes 404 — and serves `/blog`.
-  it('counts a list template routed anywhere else', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'blogList' }],
-        [{ id: 'blog', slug: 'blog', listScreenId: 'blogList' }],
-      ),
-      { home: '/', blogList: 'blog-list-template' },
-    )
-    expect(count).toBe(2)
-  })
-
-  it('counts a list template that was never published at all', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'blogList' }],
-        [{ id: 'blog', slug: 'blog', listScreenId: 'blogList' }],
-      ),
-      { home: '/' },
-    )
-    expect(count).toBe(2)
-  })
-
-  // Two collections, one screen: it is one page, so it costs one screen.
-  it('counts a shared list template once', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'shared' }],
-        [
-          { id: 'blog', slug: 'blog', listScreenId: 'shared' },
-          { id: 'news', slug: 'news', listScreenId: 'shared' },
-        ],
-      ),
-      { home: '/' },
-    )
-    expect(count).toBe(2)
-  })
-
-  // --- and the cases that are NOT pages, which is what keeps this a bug fix
-  // rather than a re-pricing ---
-
-  it('does not count an entry template, published or not', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'blogEntry' }],
-        [{ id: 'blog', slug: 'blog', entryScreenId: 'blogEntry' }],
-      ),
+      hostRef([{ id: 'home' }, { id: 'blogEntry', kind: 'template' }]),
       { home: '/', blogEntry: 'blog-entry-template' },
     )
     expect(count).toBe(1)
   })
 
-  // No slug, no `/{slug}` — nothing renders it, so nothing is being sold.
-  it('does not count a list template on a collection with no slug', async () => {
+  // AGL-1387, restated: `/{collectionSlug}` renders a LIST template as an
+  // ordinary designed page, so it is never stamped and it counts like any other
+  // screen — whether it is published at its collection's root, routed somewhere
+  // else entirely (the live shape on aglyn.com), or never published at all.
+  it('counts a list template, which is an ordinary page', async () => {
+    const rows = [{ id: 'home' }, { id: 'blogList' }]
+    expect(
+      await countBillableScreens(hostRef(rows), { home: '/', blogList: 'blog' }),
+    ).toBe(2)
+    expect(
+      await countBillableScreens(hostRef(rows), {
+        home: '/',
+        blogList: 'blog-list-template',
+      }),
+    ).toBe(2)
+    expect(await countBillableScreens(hostRef(rows), { home: '/' })).toBe(2)
+  })
+
+  // Two collections can share one entry template, and a collection can point at
+  // a screen that no longer exists. Neither is a fact about the count any more:
+  // the screen documents are the whole population, so a template is subtracted
+  // exactly once and a dangling pointer subtracts nothing.
+  it('subtracts one screen per template document, never per pointer', async () => {
     const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'orphanList' }],
-        [{ id: 'blog', listScreenId: 'orphanList' }],
-      ),
-      { home: '/' },
+      hostRef([
+        { id: 'home' },
+        { id: 'shared', kind: 'template' },
+        { id: 'alsoShared', kind: 'template' },
+      ]),
     )
     expect(count).toBe(1)
   })
 
-  // A catalog collection's slug names `/collections/{slug}`, which commerce
-  // composes from `settings/store` — `findContentCollection` skips it, so a
-  // `listScreenId` sitting on one renders nowhere.
-  it('does not count a list template on a catalog collection', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'plpTmpl' }],
-        [
-          {
-            id: 'shoes',
-            slug: 'shoes',
-            kind: 'catalog',
-            listScreenId: 'plpTmpl',
-          },
-        ],
+  // A screen the plan sold and nothing serves still counts, whether it is an
+  // unpublished draft or a template a collection stopped pointing at. What ends
+  // the charge is `kind`, and only the gated promotion brings it back.
+  it('leaves an orphaned template excluded until it is promoted', async () => {
+    expect(
+      await countBillableScreens(
+        hostRef([{ id: 'home' }, { id: 'orphan', kind: 'template' }]),
       ),
-      { home: '/' },
-    )
-    expect(count).toBe(1)
-  })
-
-  // A doc with no `kind` is content (AGL-954), so it must NOT get the catalog
-  // exemption — otherwise every pre-AGL-954 blog keeps the free page.
-  it('counts a list template on a collection with no kind field', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'blogList' }],
-        [{ id: 'blog', slug: 'blog', listScreenId: 'blogList' }],
+    ).toBe(1)
+    expect(
+      await countBillableScreens(
+        hostRef([{ id: 'home' }, { id: 'orphan', kind: 'page' }]),
       ),
-      { home: '/' },
-    )
-    expect(count).toBe(2)
-  })
-
-  // The AGL-1383 trade, unchanged: `getScreen` refuses a soft-deleted or
-  // `kind: 'email'` screen, so `/blog` falls back to the built-in themed list
-  // and the template really is not a page. The field costs the page, not the
-  // slot — and it cannot buy one back either, because a ROUTED screen still
-  // counts whatever it claims.
-  it('does not count a soft-deleted list template', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'blogList', deletedAt: { seconds: 1 } }],
-        [{ id: 'blog', slug: 'blog', listScreenId: 'blogList' }],
-      ),
-      { home: '/' },
-    )
-    expect(count).toBe(1)
-  })
-
-  it('does not count a list template that calls itself an email', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'blogList', kind: 'email' }],
-        [{ id: 'blog', slug: 'blog', listScreenId: 'blogList' }],
-      ),
-      { home: '/' },
-    )
-    expect(count).toBe(1)
-  })
-
-  // The same two, ROUTED — which is where the claim actually decides
-  // something. "A routed screen counts whatever it claims" (AGL-1383) is a
-  // statement about screens the map SERVES, and AGL-1267 makes a template's
-  // own path 404. So a routed list template that has excused itself is
-  // reachable at neither address: not at its own path, and not at `/blog`,
-  // where `getScreen` refuses it and the built-in list renders instead.
-  it('does not count a soft-deleted list template that is still routed', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'blogList', deletedAt: { seconds: 1 } }],
-        [{ id: 'blog', slug: 'blog', listScreenId: 'blogList' }],
-      ),
-      { home: '/', blogList: 'blog-list-template' },
-    )
-    expect(count).toBe(1)
-  })
-
-  it('does not count a routed list template that calls itself an email', async () => {
-    const count = await countBillableScreens(
-      hostRef(
-        [{ id: 'home' }, { id: 'blogList', kind: 'email' }],
-        [{ id: 'blog', slug: 'blog', listScreenId: 'blogList' }],
-      ),
-      { home: '/', blogList: 'blog' },
-    )
-    expect(count).toBe(1)
+    ).toBe(2)
   })
 
   // The positive control that matters most: `/blog` is served this way on
@@ -406,10 +251,9 @@ describe('a collection LIST template is a page (AGL-1387)', () => {
   // (AGL-551) composes from the collection itself, with no screen document
   // anywhere. Charging for it would bill every blog for a page nobody authored.
   it('costs nothing for a collection with no template screens', async () => {
-    const count = await countBillableScreens(
-      hostRef([{ id: 'home' }], [{ id: 'blog', slug: 'blog' }]),
-      { home: '/' },
-    )
+    const count = await countBillableScreens(hostRef([{ id: 'home' }]), {
+      home: '/',
+    })
     expect(count).toBe(1)
   })
 })

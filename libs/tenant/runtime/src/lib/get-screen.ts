@@ -33,6 +33,8 @@ const SCREEN_DOC_TTL_SECONDS = 60
 async function readScreenDoc(
   hostId: string,
   screenId: string,
+  /** Compose-time reads that WANT the template document — see {@link getScreen}. */
+  allowTemplate = false,
 ): Promise<Aglyn.AglynScreen | null> {
   const snapshot = await firebaseAdmin
     .app()
@@ -62,6 +64,16 @@ async function readScreenDoc(
   // The Emails page is untouched: campaign sends read the email screen and
   // its version straight off Firestore in `loadEmailTemplate`, never through
   // the tenant runtime — email documents are not, and never were, URLs.
+  //
+  // `kind: 'template'` joins them (AGL-1400) and needs the escape hatch they do
+  // not, because a template IS rendered by this runtime — just never at an
+  // address of its own. `composeCollectionTemplatePage` and commerce's
+  // site-page resolver ask for it deliberately, against a routed entry or
+  // product; every other caller is resolving a REQUEST PATH, and for those a
+  // template is a 404 exactly as an email document is.
+  if (allowTemplate && screen?.kind === Aglyn.SCREEN_KIND_TEMPLATE) {
+    return screen.deletedAt == null ? screen : null
+  }
   return Aglyn.screenClaimsToBeAPage(screen as Aglyn.ScreenPageClaim)
     ? screen
     : null
@@ -70,8 +82,21 @@ async function readScreenDoc(
 export async function getScreen(options: {
   screenId: Aglyn.ScreenUid
   hostId: Aglyn.HostUid
+  /**
+   * Serve a `kind: 'template'` document too (AGL-1400).
+   *
+   * Set ONLY by the two composers that render a template against a routed
+   * subject — the collection entry page and commerce's PDP/catalog pages. A
+   * caller resolving a request path must leave it off: that is what makes the
+   * exclusion honest (an excluded screen genuinely is not a page) and it is the
+   * same trade AGL-1383 made for `kind: 'email'`.
+   *
+   * It also keys the render cache, so a template fetched for composition can
+   * never be handed back to a path-resolving caller out of the same slot.
+   */
+  allowTemplate?: boolean
 }) {
-  const { screenId, hostId } = options
+  const { screenId, hostId, allowTemplate = false } = options
   const data = {
     screen: undefined as Aglyn.AglynScreen,
     nextPageToken: '',
@@ -80,10 +105,15 @@ export async function getScreen(options: {
 
   try {
     const screen = await withRenderCache({
-      key: ['tenant-screen-doc', hostId as string, screenId as string],
+      key: [
+        allowTemplate ? 'tenant-screen-doc-template' : 'tenant-screen-doc',
+        hostId as string,
+        screenId as string,
+      ],
       revalidate: SCREEN_DOC_TTL_SECONDS,
       tags: [tenantDataTag(hostId as string)],
-      read: () => readScreenDoc(hostId as string, screenId as string),
+      read: () =>
+        readScreenDoc(hostId as string, screenId as string, allowTemplate),
       // Never store a missing screen, and never store a doc carrying a
       // PENDING publish schedule: `applyDuePublishSchedule` reads
       // `publishSchedule.publishAt.seconds` off a live Timestamp, and the

@@ -20,7 +20,7 @@ import {
   checkDiscountMargin,
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
-  orgMonthlyCogsUsd,
+  orgCogsPreview,
   netOfProcessorFee,
   orgSiteCount,
   PLAN_ENTITLEMENTS,
@@ -53,7 +53,6 @@ import {
 import { signInWithCustomToken } from 'firebase/auth'
 import {
   collection,
-  doc,
   getCountFromServer,
   limit,
   query,
@@ -80,7 +79,6 @@ import StaffOrgSummaryCard, {
 } from '../../../../../components/staff-org-summary-card.component'
 import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
-import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 
 /**
  * Organization detail for staff (AGL-207/238): the org's sites, member
@@ -198,15 +196,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     () => (orgDoc ? { ...orgDoc, ...(orgBilling ?? {}) } : orgDoc),
     [orgDoc, orgBilling],
   )
-  // This month's usage rollup, for the real cost model (AGL-1134). The
-  // enterprise pricing preview below used the flat per-site estimate, which
-  // is the drift AGL-1134 exists to stop — and it drifts on the one screen
-  // where staff decide what to charge an enterprise customer.
-  const usageMonth = useMemo(() => new Date().toISOString().slice(0, 7), [])
-  const { data: usageRollup } = useFirestoreDoc<any>(
-    () => doc(firestore, 'orgs', orgId || 'missing', 'usage', usageMonth),
-    [firestore, orgId, usageMonth],
-  )
   // Off the client (AGL-929). This was a LIST over `hosts`, whose rule is
   // evaluated PER DOCUMENT (`isStaff() || memberRoles[uid] != null`). When a
   // document drops out of a query target — a rule re-evaluating, or an App
@@ -321,6 +310,24 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     null,
   )
   const [usageReady, setUsageReady] = useState(false)
+  /**
+   * The newest rollup and its measured cost, from the same response
+   * (AGL-1134) — the cost model's inputs, for the two pricing previews below.
+   *
+   * Served rather than read from the browser, because the page used to read
+   * `orgs/{id}/usage/{CURRENT month}` itself and the metering cron writes
+   * `previousMonth()`, the CLOSED month. Checked against production on
+   * 2026-08-12: every org's newest rollup was `2026-07` and no org had a
+   * `2026-08` document, so that read missed for every org on the platform.
+   * This endpoint takes the newest rollup through the same
+   * `orgCogsInputFrom` + `orgMonthlyCogsUsd` pair `/api/admin/org-discount`
+   * uses, so the previews and the route that applies cannot disagree.
+   */
+  const [usageLatest, setUsageLatest] = useState<{
+    month: string
+    measuredCogsUsd: number
+    rollup: Record<string, number | null | undefined>
+  } | null>(null)
   useEffect(() => {
     if (!isStaff || !orgId || !user) return undefined
     let active = true
@@ -334,9 +341,15 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         )
         if (!response.ok) throw new Error(String(response.status))
         const payload = await response.json()
-        if (active) setUsageMonths(payload.months ?? [])
+        if (active) {
+          setUsageMonths(payload.months ?? [])
+          setUsageLatest(payload.latest ?? null)
+        }
       } catch {
-        if (active) setUsageMonths(null)
+        if (active) {
+          setUsageMonths(null)
+          setUsageLatest(null)
+        }
       } finally {
         if (active) setUsageReady(true)
       }
@@ -345,6 +358,17 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       active = false
     }
   }, [isStaff, orgId, user])
+  /**
+   * Whether the cost previews may answer at all (AGL-1134).
+   *
+   * `usageReady` alone is not enough: this effect sets it in a `finally`, so
+   * it is true after a FAILED read too, and `usageMonths === null` is this
+   * page's existing "the read failed" signal. A failed read does not know
+   * that an org has no usage — it knows nothing — and pricing on it would
+   * present the per-site floor as a measurement, which is the AGL-1380 /
+   * AGL-1422 defect with money attached.
+   */
+  const cogsReady = usageReady && usageMonths !== null
 
   // Staff notes (wave v5): support context that never reaches workspaces.
   const [notes, setNotes] = useState<
@@ -622,13 +646,31 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     () => coupons.find((coupon) => coupon.id === selectedCoupon) ?? null,
     [coupons, selectedCoupon],
   )
+  /**
+   * What the Apply button will be told, computed here (AGL-1134).
+   *
+   * This used to call `checkDiscountMargin` with no `measuredCogsUsd` at all,
+   * so it rated against the flat $2/site floor while `/api/admin/org-discount`
+   * rated the same coupon against the org's measured cost. The badge could
+   * read OK next to a button that gets refused — and the refusal is the
+   * correct answer, which is what made the disagreement so easy to leave
+   * alone. Now both sides price the same rollup with the same function.
+   *
+   * `null` while the usage read is outstanding: rating a discount on a cost
+   * we have not fetched is exactly the "answers a question it has not asked"
+   * defect, and here it answers in the direction that approves.
+   */
   const discountRating = useMemo(() => {
-    if (!org || !selectedCouponObj) return null
-    return checkDiscountMargin(org, {
-      percentOff: selectedCouponObj.percentOff ?? undefined,
-      amountOffUsd: selectedCouponObj.amountOffUsd ?? undefined,
-    })
-  }, [org, selectedCouponObj])
+    if (!org || !selectedCouponObj || !cogsReady) return null
+    return checkDiscountMargin(
+      org,
+      {
+        percentOff: selectedCouponObj.percentOff ?? undefined,
+        amountOffUsd: selectedCouponObj.amountOffUsd ?? undefined,
+      },
+      { measuredCogsUsd: usageLatest?.measuredCogsUsd ?? null },
+    )
+  }, [org, selectedCouponObj, cogsReady, usageLatest])
 
   const handleApplyDiscount = async () => {
     if (!selectedCoupon || discountBusy) return
@@ -738,14 +780,30 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     // and contacts dominate — so the margin shown here could be comfortably
     // green on a deal that loses money.
     //
-    // Falls back to the per-site floor on its own when there is no rollup
-    // yet, which is what a brand-new org looks like, so this never renders
-    // a margin of 100% for want of data.
-    const cogs = orgMonthlyCogsUsd(usageRollup, orgSiteCount(org))
-    const infra = cogs.cogsUsd
+    // Gated behind `cogsReady` rather than on the rollup being truthy: a
+    // read still in flight and an org with no rollup are the same falsy
+    // value, and only the second is "no usage recorded yet". Reporting the
+    // first as the second put a measurement-shaped sentence under a number
+    // that measured nothing.
+    const preview = orgCogsPreview(
+      cogsReady,
+      usageLatest?.rollup,
+      orgSiteCount(org),
+    )
+    if (preview.status === 'pending') {
+      return { amount, net, infra: null, marginPct: null, basis: null } as const
+    }
+    const infra = preview.cogs.cogsUsd
     const marginPct = net > 0 ? (net - infra) / net : -1
-    return { amount, net, infra, marginPct, basis: cogs.basis }
-  }, [entAmount, entInterval, org, usageRollup])
+    return {
+      amount,
+      net,
+      infra,
+      marginPct,
+      basis: preview.cogs.basis,
+      month: usageLatest?.month ?? null,
+    } as const
+  }, [entAmount, entInterval, org, cogsReady, usageLatest])
 
   const handleProvisionEnterprise = async () => {
     const amount = Number(entAmount)
@@ -1479,6 +1537,15 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             setDiscountReason(event.target.value)
                           }
                         />
+                        {selectedCouponObj && !discountRating ? (
+                          // The usage read has not landed (AGL-1134). Rating
+                          // the coupon now would rate it against the flat
+                          // floor, which is the disagreement with the apply
+                          // route this change exists to remove.
+                          <Alert severity="info">
+                            {'Checking this org’s measured cost…'}
+                          </Alert>
+                        ) : null}
                         {discountRating ? (
                           <Alert
                             severity={
@@ -1492,9 +1559,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             {/* Lead with the test that bound (AGL-1120) —
                                 a deep discount used to be reported purely as
                                 a healthy net margin, which is true and beside
-                                the point. The apply route re-rates this
-                                against the org's MEASURED cost, so it can
-                                still refuse a discount this preview liked. */}
+                                the point. The apply route re-rates this from
+                                the same rollup through the same function
+                                (AGL-1134), so this badge and that route now
+                                reach the same verdict rather than this one
+                                approving what the route refuses. */}
                             {`Rating ${discountRating.rating.toUpperCase()} — ` +
                               (discountRating.reason === 'depth'
                                 ? `${(discountRating.depthPct * 100).toFixed(0)}% off list price. `
@@ -1527,7 +1596,13 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           disabled={
                             discountBusy ||
                             !selectedCoupon ||
-                            (discountRating?.rating === 'block' &&
+                            // Unrated is not approved (AGL-1134). While the
+                            // usage read is outstanding there is no verdict,
+                            // and an enabled button with no badge beside it
+                            // is the same "act before the answer arrives"
+                            // failure one layer up.
+                            !discountRating ||
+                            (discountRating.rating === 'block' &&
                               !confirmBelowFloor)
                           }
                           onClick={() => void handleApplyDiscount()}
@@ -1624,7 +1699,15 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             {'Send a Checkout link'}
                           </MenuItem>
                         </TextField>
-                        {entMargin ? (
+                        {entMargin && entMargin.marginPct == null ? (
+                          // No margin until the cost is known (AGL-1134).
+                          // Showing one built on the floor, then silently
+                          // replacing it a moment later, is how a staff
+                          // member reads a number that was never true.
+                          <Alert severity="info">
+                            {'Checking this org’s measured cost…'}
+                          </Alert>
+                        ) : entMargin && entMargin.marginPct != null ? (
                           <Alert
                             severity={
                               entMargin.marginPct >= 0.75
@@ -1646,10 +1729,14 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                               // across storage, requests and contacts" are
                               // very different grounds for signing a deal,
                               // and they can print the same number.
-                              `less $${entMargin.infra.toFixed(2)} cost ` +
+                              `less $${(entMargin.infra ?? 0).toFixed(2)} cost ` +
                               `(${
                                 entMargin.basis === 'measured'
-                                  ? 'measured from this month’s usage'
+                                  ? // Name the MONTH. The rollup is the
+                                    // closed month, not "this month" — the
+                                    // old copy said this month about a
+                                    // figure that is never from it.
+                                    `measured from ${entMargin.month ?? 'the latest'} usage`
                                   : 'per-site floor — no usage recorded yet'
                               }).`}
                           </Alert>

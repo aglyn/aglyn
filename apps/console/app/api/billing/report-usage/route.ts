@@ -29,6 +29,7 @@ import {
   type HostUsageSnapshot,
 } from '../../../../utils/usage-metering'
 import { measureScreenCaps } from '../../../../utils/screen-cap-reconciliation'
+import { orgCounterTotals } from '../../../../utils/org-counter-totals'
 import {
   firebaseAdmin,
   readOrgBilling,
@@ -348,9 +349,9 @@ async function handler(request: Request): Promise<Response> {
       const hostRefs = byOrg[orgId] ?? []
       try {
       const orgRef = firestore.collection('orgs').doc(orgId)
-      // Six INDEPENDENT round trips, previously awaited one after another
+      // Seven INDEPENDENT round trips, previously awaited one after another
       // (AGL-1141). None consumes another's result — the quota checks below
-      // combine them, but only once all six are in hand — so the sequencing
+      // combine them, but only once all seven are in hand — so the sequencing
       // was incidental, and it made an org cost the SUM of its reads rather
       // than the slowest of them. That is most of why four orgs took ~10s.
       const [
@@ -360,6 +361,7 @@ async function handler(request: Request): Promise<Response> {
         siteSize,
         apiUsageSnap,
         contactsSnap,
+        counterTotals,
       ] = await Promise.all([
         Promise.all(hostRefs.map(usageFor)),
         orgRef.get(),
@@ -378,6 +380,10 @@ async function handler(request: Request): Promise<Response> {
         // Contacts audience-band overage (AGL-890): one aggregate count per
         // org — contacts are org-scoped (AGL-237).
         orgRef.collection('contacts').count().get(),
+        // Email sends and workflow/action runs (AGL-1134) — counted per host
+        // all along, enforced per org by `usage-alerts`, and never once
+        // written down. RECORDED, NOT PRICED: see the rollup write below.
+        orgCounterTotals(firestore, hostRefs, month),
       ])
       // One read of the org doc for every quota decision below — the four
       // meters must agree about which plan they are pricing against.
@@ -472,6 +478,23 @@ async function handler(request: Request): Promise<Response> {
           apiOverageUsd: apiQuota.overageMonthlyUsd,
           contactsCount,
           contactsOverageUsd: contactQuota.overageMonthlyUsd,
+          // Email sends and workflow/action runs (AGL-1134), summed across
+          // the org's hosts. COUNTS for this month — see `orgCounterTotals`
+          // for the unit and the double-count argument.
+          //
+          // RECORDED, NOT PRICED, and deliberately so. There is no per-email
+          // or per-run rate anywhere in the platform, and inventing one here
+          // would put a made-up number into `billedCents` and into the
+          // discount guardrail's COGS on the same day it first had data to
+          // check it against. So these fields do NOT enter `billedCents`,
+          // `costUsd`, or `ORG_COGS_UNIT_RATES_USD` — the guardrail's verdicts
+          // are byte-for-byte unchanged by this commit. What changes is that
+          // the inputs now exist and accumulate a history, which is what a
+          // rate has to be derived FROM. Pricing them is a decision with an
+          // invoice behind it, not a default.
+          emailSends: counterTotals.emailSends,
+          workflowRuns: counterTotals.workflowRuns,
+          actionRuns: counterTotals.actionRuns,
           // AGL-1390: the org's worst host, and every host past its cap. An
           // empty array is the answer we expect every month; a non-empty one
           // means a screen was created through something the create-time gate

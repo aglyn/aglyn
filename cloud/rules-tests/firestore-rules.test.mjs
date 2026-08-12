@@ -639,26 +639,27 @@ describe('hosts', () => {
         kind: 'catalog',
       }),
     )
-    // ...and not the three template pointers (AGL-1390). `listScreenId` was
-    // the positive control here until this issue: it is an INPUT TO A PAID
-    // LIMIT, and the one the metered party could both set and unset. Pointing
-    // it at a live screen takes that screen off `screensPerHost`, a create
-    // spends the freed slot, and clearing it hands the screen back — a
-    // create-time gate cannot see the loop, so the write moved to
-    // /api/hosts/collections' `templates` action, which evaluates the cap
-    // against the state the write would leave. All three, because
-    // `templateScreenId` is the legacy pointer and always excludes, and
-    // `listScreenId` still excludes on a catalog or slugless collection.
+    // The three template pointers are a POSITIVE control again (AGL-1400).
+    //
+    // They were denied between AGL-1390 and AGL-1400, because they were then an
+    // INPUT TO A PAID LIMIT: pointing `entryScreenId` at a live screen took it
+    // off `screensPerHost`, a create spent the freed slot, and clearing it
+    // handed the screen back — a loop a create-time gate cannot see. AGL-1400
+    // moved the fact onto the screen (`kind: 'template'`, denied to the client
+    // in the screens block above), so setting or clearing a pointer changes no
+    // count at all and there is nothing left to launder. A rule kept after its
+    // reason has gone is a rule nobody can reason about, so it went with it.
+    //
+    // The entitlement half is asserted where it now lives: `kind` on
+    // `screens/{screenId}` is denied in 'the fields the screen cap counts on
+    // are not the client's to write' (AGL-1383).
     for (const field of ['listScreenId', 'entryScreenId', 'templateScreenId']) {
-      await mustDeny(
-        `collections/blog { ${field}: 'screen-1' }`,
+      await assertSucceeds(
         updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog'), {
           [field]: 'screen-1',
         }),
       )
-      // Clearing is the direction that mints the slot, and is denied too.
-      await mustDeny(
-        `collections/blog { ${field}: deleteField() }`,
+      await assertSucceeds(
         updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog'), {
           [field]: deleteField(),
         }),

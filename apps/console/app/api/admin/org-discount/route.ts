@@ -16,7 +16,11 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { checkDiscountMargin, orgMonthlyCogsUsd } from '@aglyn/aglyn/server'
+import {
+  checkDiscountMargin,
+  orgCogsInputFrom,
+  orgMonthlyCogsUsd,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -75,14 +79,12 @@ async function latestMeasuredCogsUsd(orgId: string): Promise<number | null> {
     const rollup = snapshot.docs[0]
     if (!rollup) return null
     const { measuredUsd } = orgMonthlyCogsUsd(
-      {
-        storageGb: rollup.get('storageGb'),
-        pageViews: rollup.get('pageViews'),
-        formSubmissions: rollup.get('formSubmissions'),
-        dataStorageMb: rollup.get('dataStorageMb'),
-        apiRequests: rollup.get('apiRequests'),
-        contactsCount: rollup.get('contactsCount'),
-      },
+      // One shared list of priced fields (AGL-1134) rather than a copy per
+      // call site. This route, the staff overview's anomaly detector and
+      // `/api/admin/org-usage` each hand-listed them, and the last of the
+      // three was missing half — so the browser preview and this route
+      // priced the same org differently.
+      orgCogsInputFrom(rollup.data()),
       // Site count comes from `checkDiscountMargin`, which applies the flat
       // floor itself — passing 0 here keeps this the MEASURED half only, so
       // the floor is not applied twice.

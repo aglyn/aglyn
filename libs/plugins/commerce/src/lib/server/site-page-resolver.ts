@@ -67,6 +67,9 @@ export const commerceSitePageResolver: SitePageResolver = async ({
       const templateRes = await getScreen({
         hostId,
         screenId: pdpScreenId,
+        // A PDP template renders against a routed PRODUCT, never at an address
+        // of its own, so it is served here and 404s everywhere else (AGL-1400).
+        allowTemplate: true,
       })
       if (templateRes.screen) {
         const [minPrice, maxPrice] = CommerceModel.productPriceRange(product)
@@ -180,6 +183,7 @@ export const commerceSitePageResolver: SitePageResolver = async ({
       const templateRes = await getScreen({
         hostId,
         screenId: collectionScreenId,
+        allowTemplate: true,
       })
       if (templateRes.screen) {
         const templateNodes = await composeScreenNodes({

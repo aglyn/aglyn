@@ -117,7 +117,11 @@ export async function composeCollectionTemplatePage(options: {
   const screenId = resolveCollectionTemplateScreenId(collection, kind)
   if (!screenId) return null
 
-  const templateRes = await getScreen({ hostId, screenId })
+  // The one read that WANTS a template document (AGL-1400): this is the
+  // composition it exists for, with `{{entry.*}}` substituted against the
+  // routed entry. Every path-resolving caller leaves the flag off and gets the
+  // 404 a template deserves at an address of its own.
+  const templateRes = await getScreen({ hostId, screenId, allowTemplate: true })
   if (!templateRes.screen) return null
 
   const entry = content.entry
