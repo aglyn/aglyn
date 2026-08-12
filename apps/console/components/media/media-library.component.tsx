@@ -407,8 +407,20 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // Public origin for absolute Copy-URL (AGL-831): a host's own site domain
   // (custom cname or `{subdomain}.aglyn.app`), else the current console
   // origin — which also serves the /api/media/cdn route.
+  // `null` rather than a `hosts/-none-` sentinel (AGL-1380 shape). `hostId` is
+  // optional BY DESIGN — the org library mounts with no host at all — so this
+  // was not a loading-window race that resolves: it was a read of a document
+  // that never exists, refused by `rules:545` (`resource.data.get('memberRoles',
+  // {})` on a missing doc), on 100% of org-library mounts and for as long as the
+  // page stayed open. The three listener hooks retry a refused listen forever at
+  // a 2s cadence (AGL-1066), so a permanently-denied ref is not one denial —
+  // it is 1,800 an hour until the tab closes.
+  //
+  // Nothing is lost by holding: `assetOrigin` below already discards this
+  // document unless `hostId` is truthy, so the read could only ever have been
+  // waste even had it been allowed.
   const { data: hostDoc } = useFirestoreDoc<any>(
-    () => doc(firestore, 'hosts', hostId ?? '-none-'),
+    () => (hostId ? doc(firestore, 'hosts', hostId) : null),
     [firestore, hostId],
   )
   const assetOrigin = useMemo(() => {

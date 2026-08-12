@@ -1738,6 +1738,11 @@ describe('site collaborators are scoped out of the org (AGL-1026)', () => {
       await setDoc(doc(db, 'orgs', ORG, 'lists', 'l1', 'members', 'm1'), { email: 'x@y.z' })
       await setDoc(doc(db, 'orgs', ORG, 'usage', '2026-07'), { pageviews: 1 })
       await setDoc(doc(db, 'orgs', ORG, 'apiUsage', '2026-07'), { requests: 1 })
+      // Exactly what `serve-media-cdn.ts` writes on an origin serve of an
+      // ORG-library asset: a day-doc whose `media` map is keyed by asset id.
+      await setDoc(doc(db, 'orgs', ORG, 'analytics', '2026-07-02'), {
+        media: { 'm1': { serves: 12, bytes: 3400 } },
+      })
       await setDoc(doc(db, 'orgs', ORG, 'activity', 'a1'), { action: 'x' })
       await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1'), { name: 'Team', visibleTo: ['org'] })
       await setDoc(doc(db, 'orgs', ORG, 'media', 'm1'), { url: 'u', visibleTo: ['org'] })
@@ -1777,6 +1782,60 @@ describe('site collaborators are scoped out of the org (AGL-1026)', () => {
     await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'apiUsage', '2026-07')))
     await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'activity', 'a1')))
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'usage', '2026-07')))
+  })
+
+  /**
+   * AGL-1143. `orgs/{orgId}/analytics/{day}` reached NO match block at all, so
+   * it was denied by default — for every role, staff included, because a path
+   * that matches nothing never gets as far as evaluating `isStaff()`.
+   *
+   * It is not a dead path. `serve-media-cdn.ts` writes it on every origin
+   * serve of an org-library asset (`orgs` when `isOrg`, `hosts` otherwise),
+   * and `media-library.component.tsx` reads THIRTY day-docs each time the
+   * asset drawer opens. The HOST twin has always worked, because
+   * `hosts/{hostId}/{subcollection}/{document=**}` grants its read and the
+   * AGL-1367 positive control above asserts it; the org block has no
+   * catch-all, so only the org half was refused — which is why the common
+   * path (a host's DAM) never showed it.
+   *
+   * Measured in production 2026-08-12 from a live console's Firestore
+   * multi-tab state: 75 rejected listen targets on this path and ZERO
+   * successful ones, against a `staff: true` account whose every other read
+   * in the same minute succeeded. Every other denied shape in that capture
+   * had successes too; this one alone never succeeded.
+   *
+   * Scoped like `usage/{month}` rather than like `counters`: ONE day-doc
+   * carries a `media` map keyed by every asset id in the org, so a
+   * collaborator entitled to three assets would otherwise read the delivery
+   * figures — and the existence — of all of them. Same reasoning as AGL-1026.
+   */
+  it('org-wide members read the media delivery day-doc; collaborators do not (AGL-1143)', async () => {
+    await mustAllow(
+      'an org-wide viewer reads analytics/{day}',
+      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'analytics', '2026-07-02')),
+    )
+    await mustAllow(
+      'the owner reads analytics/{day}',
+      getDoc(doc(authed(OWNER), 'orgs', ORG, 'analytics', '2026-07-02')),
+    )
+    await mustAllow(
+      'staff read analytics/{day}',
+      getDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'analytics', '2026-07-02')),
+    )
+    // The scoped collaborator and the outsider stay out — this is a grant,
+    // not a blanket, and without these two the test above would pass against
+    // `allow read: if true`.
+    await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'analytics', '2026-07-02')))
+    await assertFails(getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'analytics', '2026-07-02')))
+    // The day-doc is a metered-billing input on the org side exactly as it is
+    // on the host side (AGL-1367): every writer is an Admin-SDK route, so no
+    // client writes it, owner included.
+    await mustDeny(
+      'the owner writing analytics/{day}',
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'analytics', '2026-07-02'), {
+        media: { m1: { serves: 0, bytes: 0 } },
+      }),
+    )
   })
 
   it('KEEPS what building a site needs: the org doc and ORG-WIDE data', async () => {

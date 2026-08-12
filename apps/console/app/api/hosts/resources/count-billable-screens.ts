@@ -112,6 +112,15 @@ interface HostRefLike {
  * like a create (it raises it), so there is no toggle to run a loop through.
  *
  * `routingMap` costs no read: every caller holds the host snapshot already.
+ *
+ * ## What the scan costs (AGL-1440)
+ *
+ * ONE BILLED READ PER SCREEN DOCUMENT, unbounded. The `select()` below is a
+ * projection: it keeps whole documents off the wire, and it does not reduce the
+ * read count by one. Callers that already hold the rows must use
+ * `billableScreenIds` directly rather than calling this — see
+ * `measureScreenCaps`, which was scanning the same collection a second time on
+ * the same sweep.
  */
 export async function countBillableScreens(
   hostRef: HostRefLike,

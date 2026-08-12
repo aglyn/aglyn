@@ -89,7 +89,54 @@ jest.mock('./get-screen-version', () => ({
 
 import { composeNodesWithChrome } from './compose-screen-nodes'
 
-const SCREEN_NODES = { root: { id: 'root', type: 'box' } }
+/**
+ * A screen that repeats over a dataset.
+ *
+ * Since AGL-1440 the datasets read is gated on the composed tree containing a
+ * repeatable, so the AGL-1225 concurrency assertions below have to run against
+ * a screen that actually wants datasets — otherwise they would be asserting
+ * that a read nobody issues starts early, which is vacuously true.
+ */
+const ROOT = '_@_'
+
+const SCREEN_NODES = {
+  [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['list'] },
+  list: {
+    $id: 'list',
+    componentId: 'muiStack',
+    parentId: ROOT,
+    props: { repeatDataset: 'Team' },
+    nodes: [],
+  },
+}
+
+/** The same screen with nothing to repeat over — the common page. */
+const PLAIN_SCREEN_NODES = {
+  [ROOT]: { $id: ROOT, componentId: 'div', nodes: [] },
+}
+
+/**
+ * A layout that repeats: a real one, with the root and the `layoutSlot` the
+ * graft needs. Without both, `composeLayoutChainAndScreenNodes` returns the
+ * screen unchanged — so a sloppier fixture would have "passed" by never
+ * putting the layout's repeatable into the composed tree at all.
+ */
+const layoutWithRepeat = (dataset = 'Team') => ({
+  [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['lRepeat', 'lSlot'] },
+  lRepeat: {
+    $id: 'lRepeat',
+    componentId: 'muiStack',
+    parentId: ROOT,
+    props: { repeatDataset: dataset },
+    nodes: [],
+  },
+  lSlot: {
+    $id: 'lSlot',
+    componentId: 'layoutSlot',
+    parentId: ROOT,
+    nodes: [],
+  },
+})
 
 const setup = () => {
   order.length = 0
@@ -188,6 +235,124 @@ describe('composeNodesWithChrome read fan-out (AGL-1225)', () => {
     expect(mockGetPluginInstalls).toHaveBeenCalledTimes(1)
     // One read per layout in the chain, and no more.
     expect(mockGetPublishedLayoutVersion).toHaveBeenCalledTimes(2)
+  })
+})
+
+/**
+ * AGL-1440: the datasets read is paid for only by pages that repeat.
+ *
+ * `getDatasets` is the largest single term in a cold tenant render — every
+ * dataset the host may see plus up to 100 records each, up to ~5,050 Firestore
+ * reads — and it was issued on EVERY render of EVERY path, then handed to
+ * `expandRepeatables`, which returns its input untouched when nothing on the
+ * page carries `repeatDataset`.
+ *
+ * Two properties have to hold together, and only one of them is about cost:
+ *
+ *  - a page with no repeatable must issue NO datasets read, and
+ *  - a page with one must still get its rows — including when the repeatable
+ *    arrives from a LAYOUT or a reusable component, which the screen document
+ *    alone cannot tell you.
+ *
+ * The second is why the gate is evaluated after grafting rather than on
+ * `screenNodes`, and why the screen-level fast path below exists at all: it
+ * keeps the AGL-1225 single-round-trip shape for the common case without
+ * making the screen document the arbiter of correctness.
+ */
+describe('composeNodesWithChrome gates the datasets read (AGL-1440)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    setup()
+  })
+
+  it('issues NO datasets read for a page with no repeatable', async () => {
+    await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: 'L1',
+      screenNodes: PLAIN_SCREEN_NODES,
+    })
+    expect(mockGetDatasets).not.toHaveBeenCalled()
+  })
+
+  it('CONTROL — the same compose with a repeatable does read datasets', async () => {
+    // Without this the test above passes against a compose that never reads
+    // datasets at all, which would be the bug and not the fix.
+    await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: 'L1',
+      screenNodes: SCREEN_NODES,
+    })
+    expect(mockGetDatasets).toHaveBeenCalledTimes(1)
+    expect(mockGetDatasets).toHaveBeenCalledWith({ hostId: 'h1' })
+  })
+
+  it('still reads datasets when the repeatable comes from the LAYOUT', async () => {
+    // The screen is plain; the layout carries the repeat. A gate that only read
+    // `screenNodes` would drop every row on this page.
+    mockGetPublishedLayoutVersion.mockReset()
+    mockGetPublishedLayoutVersion.mockImplementationOnce(
+      tracked('layout1', { version: { nodes: layoutWithRepeat() }, layout: {} }),
+    )
+    await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: 'L1',
+      screenNodes: PLAIN_SCREEN_NODES,
+    })
+    expect(mockGetDatasets).toHaveBeenCalledTimes(1)
+  })
+
+  it('still reads datasets when the repeatable is grafted in from a component', async () => {
+    // A reusable component instance is an empty node until `getComponents`
+    // grafts its definition in, so this repeatable does not exist anywhere in
+    // the inputs — only in the composed tree the gate is evaluated against.
+    mockGetComponents.mockImplementation(
+      tracked('components', {
+        definitions: {
+          cmp1: {
+            rootId: 'cRoot',
+            nodes: {
+              cRoot: {
+                $id: 'cRoot',
+                componentId: 'muiStack',
+                props: { repeatDataset: 'Team' },
+                nodes: [],
+              },
+            },
+          },
+        },
+      }),
+    )
+    await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: null,
+      screenNodes: {
+        [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['inst'] },
+        inst: {
+          $id: 'inst',
+          componentId: 'reusableInstance',
+          parentId: ROOT,
+          props: { refId: 'cmp1' },
+          nodes: [],
+        },
+      },
+    })
+    expect(mockGetDatasets).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads datasets at most once even when screen AND layout repeat', async () => {
+    mockGetPublishedLayoutVersion.mockReset()
+    mockGetPublishedLayoutVersion.mockImplementationOnce(
+      tracked('layout1', {
+        version: { nodes: layoutWithRepeat('Other') },
+        layout: {},
+      }),
+    )
+    await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: 'L1',
+      screenNodes: SCREEN_NODES,
+    })
+    expect(mockGetDatasets).toHaveBeenCalledTimes(1)
   })
 })
 

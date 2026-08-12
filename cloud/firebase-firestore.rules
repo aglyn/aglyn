@@ -185,6 +185,36 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Per-asset media delivery counters for the ORG library (AGL-176),
+      // added here because they were never granted at all (AGL-1143).
+      //
+      // This block is a MISSING rule, not a widened one. `serve-media-cdn.ts`
+      // writes `{orgs|hosts}/{scopeId}/analytics/{day}` on every origin serve,
+      // and `media-library.component.tsx` reads thirty day-docs each time the
+      // asset drawer opens — but only the HOST half ever resolved to a rule,
+      // through `hosts/{hostId}/{subcollection}/{document=**}`. The org block
+      // has no catch-all, so the org half reached no `match` and was denied by
+      // default, for EVERY role including staff: a path that matches nothing
+      // never gets as far as evaluating `isStaff()`. Measured on production
+      // 2026-08-12 — 75 rejected listen targets on this path and not one
+      // successful read, from a `staff: true` session whose other reads in the
+      // same minute all succeeded.
+      //
+      // Org-wide only, like `usage` above and unlike `counters` below. One
+      // day-doc holds a `media` map keyed by every asset id in the org, and
+      // AGL-1041/1042 exist precisely so a site collaborator sees only the
+      // assets in their scope — granting `isOrgMember()` here would hand them
+      // the delivery figures, and the existence, of all of it in a single
+      // document rules cannot filter by field.
+      //
+      // Server-written only, for the AGL-1367 reason its host twin is on all
+      // three exclusion lists: `analytics/{day}` is a metered-invoice input,
+      // so a client that could write it could lower a bill.
+      match /analytics/{day} {
+        allow read: if isStaff() || isOrgWideMember();
+        allow write: if false;
+      }
+
       // Per-plugin settings (AGL-428): overrides for a plugin's declared
       // config schema. Readers defensively coerce types (the doc is
       // manager-writable), so junk here can misconfigure only that
