@@ -52,6 +52,15 @@ const SIGNED_URL_TTL_MS = 15 * 60 * 1000
  * client gains nothing), attaches the download token, and writes the
  * Firestore doc + byte counter. Zips are stored as plain objects, never
  * extracted.
+ *
+ * **This route working is not the same as the upload working.** The leg that
+ * carries the bytes runs in the browser, cross-origin, and is gated by a
+ * thing no code in this repo executes: the bucket's CORS configuration. With
+ * none, the mint below still returns a perfectly good 200 and the `PUT` never
+ * happens — which is how AGL-1317 was closed while every large upload was
+ * broken (AGL-1408). The policy is `cloud/storage-cors.json`; how it is
+ * applied, and which origins it does and does not cover, is
+ * `docs/STORAGE_MANUAL_CONFIG.md`.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
