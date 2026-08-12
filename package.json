@@ -68,6 +68,7 @@
     "test:eslint-rules": "node tools/lint-rules/no-plan-gated-entitlement.test.mjs && node tools/lint-rules/no-sx-after-spread.test.mjs && node tools/lint-rules/no-cross-graph-import.test.mjs && node tools/lint-rules/no-link-element-switch.test.mjs && node tools/lint-rules/no-listener-row-spread-into-write.test.mjs && node tools/lint-rules/no-unguarded-loading-hook.test.mjs",
     "test:plugin-loader": "node tools/plugin-loader/origin/api/load.csp.test.mjs",
     "test:retired-colours": "node --test tools/scripts/lib/retired-colours.test.mjs",
+    "test:disk-space": "node --test tools/scripts/lib/disk-space.test.mjs",
     "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",
     "sync:next-tsconfigs": "node tools/scripts/sync-next-tsconfigs.mjs",

@@ -37,11 +37,30 @@
 // directory, not by port, so it still holds for a server started on a custom
 // --port. A second checkout (git worktree) has its own `.next`, so it is
 // unaffected either way.
+//
+// THE DISK PREFLIGHT (AGL-1425): pruning alone was not enough, and the reason
+// is the guard above. On 2026-08-11 the console cache reached 110 GB WITH a
+// concurrent session's dev server attached to it, so every prune correctly
+// refused, the cache kept growing, and the machine hit 1.8 GiB free of 460.
+// The refusal was even printed — as a tidy one-line note, at the one moment
+// someone could have acted. So this script now also checks FREE SPACE, which
+// is the number that actually predicts the failure, and it checks it whether
+// or not the prune ran. Under the floor it exits non-zero and takes the serve
+// target down with it. That is a deliberate exception to the "never fail the
+// serve target" rule at the bottom of this file: an unprunable cache is an
+// annoyance, whereas starting Turbopack at 8 GiB free reliably produces the
+// ENOSPC-from-unrelated-tools cascade that costs a session to diagnose.
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import {
+  describeFreeSpace,
+  evaluateFreeSpace,
+  readFreeBytes,
+} from './lib/disk-space.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -220,3 +239,43 @@ if (!prune) {
 // is a disk-space annoyance; a serve target that refuses to start because of
 // one is a broken dev loop.
 if (blocked > 0 && !prune) process.exitCode = 0
+
+// ---------------------------------------------------------------------------
+// The free-disk preflight (AGL-1425).
+//
+// Runs LAST, on purpose. Anything reclaimed above is already reflected, so a
+// prune that fixed the problem does not then fail the serve target it just
+// rescued. The flip side is the case that actually bit us: when the prune was
+// refused because a server holds the cache, there is nothing left to try, and
+// that is precisely when the loud message has to appear.
+//
+// Measured on the repo root because that is the volume `.next` is written to.
+// ---------------------------------------------------------------------------
+
+const verdict = evaluateFreeSpace({
+  freeBytes: readFreeBytes(repoRoot),
+  disabled: /^(off|0|false)$/i.test(process.env.DEV_DISK_CHECK ?? ''),
+  thresholds: {
+    criticalGib: process.env.DEV_DISK_MIN_FREE_GB,
+    warnGib: process.env.DEV_DISK_WARN_FREE_GB,
+  },
+})
+
+const banner = describeFreeSpace(verdict)
+if (verdict.level === 'ok' || verdict.level === 'disabled') {
+  console.log(banner.join('\n'))
+} else {
+  // Loud levels go to stderr so they survive a caller that swallows stdout,
+  // and so nx renders them as output rather than folding them away.
+  console.error(`\n${'='.repeat(72)}`)
+  console.error(banner.join('\n'))
+  if (blocked > 0) {
+    console.error(
+      '\nNote: a running dev server blocked the prune above, so this will not',
+      '\nclear on its own — stop that server first.',
+    )
+  }
+  console.error(`${'='.repeat(72)}\n`)
+}
+
+if (verdict.blocking) process.exitCode = 1

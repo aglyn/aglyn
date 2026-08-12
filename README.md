@@ -206,6 +206,12 @@ Vercel-only) — lives in [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md).
 | Type-check | `npm run typecheck` |
 | Format | `npm run format` |
 | Dependency graph | `nx graph` |
+| Check/reclaim dev-cache disk | `npm run clean:next` · delete: `npm run clean:next:prune` |
+
+> **Tools suddenly failing with `ENOSPC`, hanging, or killing your shell?** Check the disk before
+> anything else — `apps/*/.next/dev/cache/turbopack` grows across a long dev session and has twice
+> filled a 460 GB volume. Nothing in the error will mention the disk. See
+> [Build performance](docs/BUILD_PERFORMANCE.md#if-your-tools-start-failing-for-no-reason-check-the-disk-first-agl-1425).
 
 Scaffolding new projects:
 
