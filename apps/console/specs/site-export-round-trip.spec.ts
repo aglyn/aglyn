@@ -184,6 +184,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/binding-tokens'),
+  // And the REAL page-claim rule, which both of the import route's cap legs
+  // read (AGL-1383, AGL-1399) — including the one that decides whether a
+  // bundle can raise the flat non-page cap at all.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
   // The REAL decode too (AGL-1391). Stubbing it would let the export ship an
   // opaque Buffer envelope and this suite would still be green — which is
   // exactly how the feature shipped broken.
