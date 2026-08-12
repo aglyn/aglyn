@@ -192,8 +192,9 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
       description: 'The variant to use.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Variant',
+      // "Default" deleted (AGL-1453): it could not persist, and `text` — the
+      // value it resolved to, MUI's own default — is already on the list.
       options: [
-        { value: '', label: 'Default' },
         { value: 'text', label: 'Text' },
         { value: 'outlined', label: 'Outlined' },
         { value: 'contained', label: 'Contained' },
@@ -222,13 +223,19 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
         'Ignored when there is no screen or URL to point at.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Render as',
-      // `''` is the DEFAULT here, which is what makes it safe (unlike the
-      // Container "Default" width, AGL-1435): the attributes form strips it
-      // before save (AGL-1191) and `dropClearedProps` strips whatever
-      // survives, and an absent `renderAs` already means Button. The other
-      // mode carries a real sentinel because it has to persist.
+      // `'button'` is a REAL SENTINEL, not a deletion (AGL-1453). Unlike the
+      // "Default" options on this component, `''` here spelled an author's
+      // actual choice, and one they could not make: the attributes form
+      // strips `''` before save (AGL-1191), so a button switched to Link
+      // (button styling) had no route in this dropdown back to Button — the
+      // pick reverted and the stored `linkButton` stayed.
+      //
+      // Safe because `renderAs` never reaches MUI: it is destructured out
+      // above and read only as `renderAs === 'linkButton'`. So `'button'` and
+      // an absent value take the identical branch, which is also what keeps
+      // every button authored before this existed rendering unchanged.
       options: [
-        { value: '', label: 'Button' },
+        { value: 'button', label: 'Button' },
         { value: 'linkButton', label: 'Link (button styling)' },
       ],
     },

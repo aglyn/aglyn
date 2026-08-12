@@ -80,15 +80,24 @@ export const schema: Aglyn.ComponentSchema = {
       description: 'The variant to use.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Variant',
-      options: [{ value: '', label: 'Default' }, ...typographyVariants],
+      // "Default" deleted (AGL-1453): unpersistable, and a second name for
+      // `body1`, MUI's own default, already in `typographyVariants`.
+      options: [...typographyVariants],
     },
     {
       name: 'component',
       description: 'The html element to use.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Component',
+      // "Default" deleted rather than given a sentinel (AGL-1453), and this
+      // is the prop that shows why a sentinel is not always available: MUI
+      // derives the element from `variantMapping[variant]`, so "Default"
+      // resolves to a DIFFERENT tag per variant — `h2` for a Heading 2, `p`
+      // for Body 1. No single value on this list expresses that, and picking
+      // one would pin the tag and change the document outline. Unset is the
+      // only thing that means "let the variant decide", and the field's ✕ is
+      // how an author says it.
       options: [
-        { value: '', label: 'Default' },
         { value: 'h1', label: 'Heading 1' },
         { value: 'h2', label: 'Heading 2' },
         { value: 'h3', label: 'Heading 3' },
@@ -105,8 +114,9 @@ export const schema: Aglyn.ComponentSchema = {
       description: 'The text alignment',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Alignment',
+      // "Default" deleted (AGL-1453): unpersistable, and a second name for
+      // `inherit`, MUI Typography's own default, already on the list.
       options: [
-        { value: '', label: 'Default' },
         { value: 'inherit', label: 'Inherit' },
         { value: 'left', label: 'Left' },
         { value: 'center', label: 'Center' },

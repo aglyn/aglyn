@@ -76,20 +76,64 @@ describe('ScreenLink renderAs (AGL-1195)', () => {
     expect(screen.getByText('Careers').className).toMatch(/MuiLink/)
   })
 
-  it('offers the choice in the attributes panel, defaulting to Button', () => {
+  it('offers all three modes as real, persistable values', () => {
     const field = schema.attributes.find((a: any) => a.name === 'renderAs')
     expect(field).toBeTruthy()
-    // Empty value = Button, so every link authored before this existed
-    // keeps rendering exactly as it did.
+    // `'button'`, not `''` (AGL-1453). Button is a real choice, and it was
+    // the one an author could not make: `''` is stripped before the write
+    // (AGL-1191), so a link switched to Text link reverted on save and
+    // stayed a text link. 213 of the 326 Screen Links in the corpus are in
+    // that mode, and the dropdown offered them no way back.
     expect((field as any).options?.[0]).toMatchObject({
-      value: '',
+      value: 'button',
       label: 'Button',
     })
     expect((field as any).options?.map((o: any) => o.value)).toEqual([
-      '',
+      'button',
       'link',
       'linkButton',
     ])
+  })
+
+  it('renders the `button` sentinel exactly as an unset value does', () => {
+    // The positive control for the swap. `renderAs` never reaches MUI — it
+    // is destructured out and read only as `=== 'link'` / `=== 'linkButton'`
+    // — so a node that now STORES `'button'` must paint what a node storing
+    // nothing painted. `''` and `null` stay covered because both remain
+    // reachable by paste and by the field's ✕.
+    const markup = (ui: React.ReactElement) => {
+      const { container, unmount } = render(ui)
+      const html = container.innerHTML
+      unmount()
+      return html
+    }
+    const unset = markup(<ScreenLink href="/pricing">{'Pricing'}</ScreenLink>)
+    for (const value of ['button', '', null]) {
+      expect(
+        markup(
+          <ScreenLink renderAs={value as any} href="/pricing">
+            {'Pricing'}
+          </ScreenLink>,
+        ),
+      ).toBe(unset)
+    }
+  })
+
+  it('keeps the button-styling controls visible for the stored sentinel', () => {
+    // `BUTTON_STYLED` inverts `is: 'link'`, so a stored `'button'` has to
+    // satisfy it the same way an absent value does — otherwise persisting
+    // the pick would hide Size, Full width and Variant on every link that
+    // took it.
+    const condition = (schema.attributes as any[]).find(
+      (a) => a.name === 'variant',
+    ).condition
+    const matches = (renderAs: unknown) =>
+      condition.notMatch
+        ? renderAs !== condition.is
+        : renderAs === condition.is
+    expect(matches('button')).toBe(true)
+    expect(matches(undefined)).toBe(true)
+    expect(matches('link')).toBe(false)
   })
 
   it('hides the controls it drops in link mode, and only those', () => {

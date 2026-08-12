@@ -62,10 +62,50 @@ describe('Pagination schema', () => {
     // Pagination does not accept — it would render nothing different.
     const field = schema.attributes.find((a: any) => a.name === 'size') as any
     expect(field.options.map((option: any) => option.value)).toEqual([
-      '',
+      'medium',
       'small',
       'large',
     ])
+  })
+
+  describe('the "(default)" options carry MUI\'s own value (AGL-1453)', () => {
+    // These four lists offered ONLY the non-default alternative, with `''`
+    // as the way back — and `''` cannot survive a save (AGL-1191), so every
+    // one of them was a one-way door. The sentinels are MUI Pagination's own
+    // destructuring defaults, so the option now persists AND renders what it
+    // always claimed to.
+    const valueOf = (name: string, label: RegExp) => {
+      const field = schema.attributes.find((a: any) => a.name === name) as any
+      return field.options.find((option: any) => label.test(option.label)).value
+    }
+
+    it.each([
+      ['variant', /^Text/, 'text'],
+      ['shape', /^Circular/, 'circular'],
+      ['color', /^Standard/, 'standard'],
+      ['size', /^Medium/, 'medium'],
+    ])('%s → %s', (name, label, expected) => {
+      expect(valueOf(name as string, label as RegExp)).toBe(expected)
+    })
+
+    it('renders identically to leaving the prop unset', () => {
+      // The whole safety claim in one assertion: a node that now STORES the
+      // sentinel must paint what a node storing nothing painted, or this
+      // change moves live pages.
+      const sentinel = render(
+        <PaginationElement
+          count={3}
+          variant="text"
+          shape="circular"
+          color="standard"
+          size="medium"
+        />,
+      )
+      const unset = render(<PaginationElement count={3} />)
+      const classesOf = (result: { container: HTMLElement }) =>
+        result.container.querySelector('.MuiPagination-root')?.className
+      expect(classesOf(sentinel)).toBe(classesOf(unset))
+    })
   })
 
   it('leaves the shared size preset unmutated', () => {

@@ -113,26 +113,26 @@ describe('Button leaves every already-authored node alone (AGL-1426)', () => {
     )
   })
 
-  it('renders `""` and a CLEARED null byte-identically to unset', () => {
-    // An `''` option value never persists — the attributes form strips it
-    // (AGL-1191) and `dropClearedProps` strips whatever survives (AGL-1226).
-    // Both must therefore land on the same markup as an absent key, which is
-    // why Button is the option's value and `linkButton` is the real sentinel.
+  it('renders the `button` sentinel, `""` and a CLEARED null byte-identically to unset', () => {
+    // `''` never persists — the attributes form strips it (AGL-1191) and
+    // `dropClearedProps` strips whatever survives (AGL-1226) — so the option
+    // now carries the real `'button'` sentinel instead (AGL-1453).
+    //
+    // This is the positive control for that swap: the sentinel must land on
+    // the same markup as an absent key, or giving the option a persistable
+    // value would repaint buttons on pages nobody edited. `''` and `null` are
+    // kept alongside it because both are still reachable by paste and by the
+    // field's ✕, and both must keep meaning Button.
     const unset = markup(<Button href="/pricing">{'Start free'}</Button>)
-    expect(
-      markup(
-        <Button renderAs={'' as any} href="/pricing">
-          {'Start free'}
-        </Button>,
-      ),
-    ).toBe(unset)
-    expect(
-      markup(
-        <Button renderAs={null as any} href="/pricing">
-          {'Start free'}
-        </Button>,
-      ),
-    ).toBe(unset)
+    for (const value of ['button', '', null]) {
+      expect(
+        markup(
+          <Button renderAs={value as any} href="/pricing">
+            {'Start free'}
+          </Button>,
+        ),
+      ).toBe(unset)
+    }
   })
 
   it('leaves a genuine button — no link target — a real <button>', () => {
@@ -172,14 +172,23 @@ describe('Button attributes panel offers the choice (AGL-1426)', () => {
   const by = (name: string) =>
     schema.attributes.find((a: any) => a.name === name) as any
 
-  it('defaults to Button and offers the styled link as a real sentinel', () => {
+  it('offers BOTH modes as real, persistable sentinels', () => {
     const field = by('renderAs')
     expect(field).toBeTruthy()
-    expect(field.options?.[0]).toMatchObject({ value: '', label: 'Button' })
+    // `'button'`, not `''` (AGL-1453). Button was a real choice spelled with
+    // a value that could not be saved, so a button switched to Link (button
+    // styling) had no route back through this dropdown.
+    expect(field.options?.[0]).toMatchObject({
+      value: 'button',
+      label: 'Button',
+    })
     // No third value: a plain Text link is `muiScreenLink`'s job, and adding
     // it here would drop the button-only props on a component whose entire
     // purpose is button styling.
-    expect(field.options?.map((o: any) => o.value)).toEqual(['', 'linkButton'])
+    expect(field.options?.map((o: any) => o.value)).toEqual([
+      'button',
+      'linkButton',
+    ])
   })
 
   it('keeps the styling controls live in BOTH modes', () => {

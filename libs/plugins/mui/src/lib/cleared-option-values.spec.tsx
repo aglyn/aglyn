@@ -132,6 +132,137 @@ describe('the detector itself (AGL-1451)', () => {
   })
 })
 
+/**
+ * The stronger invariant — AGL-1453.
+ *
+ * AGL-1451's rule above asks only that a `''` option be GUARDED. That closes
+ * the render half of the defect and nothing else: the guard strips the value
+ * so MUI's own default fires, but the pick still cannot be SAVED, because the
+ * attributes form maps an emptied field to its cleared value and final-form's
+ * default parse turns `''` into `undefined` before the write (AGL-1191). So a
+ * guarded `''` option is a control that silently reverts — invisible when it
+ * is labelled "Default" and reverting renders the same thing, and a one-way
+ * door when it is not: every Screen Link switched to "Text link" (213 of them
+ * in the corpus) had no route in the dropdown back to "Button".
+ *
+ * An option value must therefore be PERSISTABLE. `''` never is.
+ *
+ * Two shapes resolve it, and which one is right is a per-prop question that
+ * this check deliberately does not answer:
+ *
+ *  - DELETE, when the option list already names MUI's own default (`primary`,
+ *    `medium`, `fixed`, `text`, `body1`, `inherit`, `column`, `flex-start`),
+ *    so "Default" was a second name for a choice already on the list. Real
+ *    "unset" stays expressible through the field's ✕, and that matters: a
+ *    host theme may set `components.MuiButton.defaultProps.color`, which
+ *    `useDefaultProps` applies to `undefined` ONLY. A sentinel would pin the
+ *    value and bypass the host's own default — the opposite of what the
+ *    author asked for by choosing "Default".
+ *  - A REAL SENTINEL, when the list does NOT name the default, so `''` was
+ *    the only route back to it (Pagination's four) or spells a genuine choice
+ *    rather than "unset" (`renderAs`'s "Button").
+ *
+ * Note what this does to the AGL-1451 loop below: once no component offers a
+ * `''` option, that loop has nothing to iterate and is vacuous BY DESIGN.
+ * That is the goal, not a gap — this check is what keeps it vacuous, and the
+ * moment someone reintroduces a `''` option it reds here first. If they also
+ * drop the guard, AGL-1451 reds alongside it. The detector itself stays
+ * exercised by the unit tests above regardless.
+ */
+describe('every option value is persistable (AGL-1453)', () => {
+  /**
+   * A bundle that failed to load, or a schema shape that drifted, would make
+   * every assertion here pass by having nothing to look at. Measured over the
+   * bundle so the number tracks reality rather than a hand-written list.
+   */
+  const optionBearing = MUI_BUNDLE.flatMap((entry) =>
+    (((entry.schema as any)?.attributes ?? []) as any[]).filter((attribute) =>
+      Array.isArray(attribute?.options),
+    ),
+  )
+
+  it('is measured over a bundle that actually carries option lists', () => {
+    expect(MUI_BUNDLE.length).toBeGreaterThan(20)
+    expect(optionBearing.length).toBeGreaterThan(20)
+  })
+
+  it('no option value is `""` — an option that cannot survive a save', () => {
+    const violations: string[] = []
+
+    for (const entry of MUI_BUNDLE) {
+      const id = entry.schema?.$id ?? '(no id)'
+      const attributes: any[] = (entry.schema as any)?.attributes ?? []
+      for (const attribute of attributes) {
+        if (!Array.isArray(attribute?.options)) continue
+        const unpersistable = attribute.options
+          .filter((option: any) => option?.value === '' || option?.value == null)
+          .map((option: any) => JSON.stringify(option?.label ?? option))
+        if (unpersistable.length)
+          violations.push(
+            `${id} [${attribute.name}] offers ${unpersistable.join(', ')} ` +
+              'with an unpersistable value',
+          )
+      }
+    }
+
+    expect(violations).toEqual([])
+  })
+
+  /**
+   * The other end of the same pipe. Closing the option lists is not enough if
+   * our own PRESETS keep minting the value — `card.tsx` shipped a Screen Link
+   * with `renderAs: ''`, so every card dropped on a canvas planted a value
+   * that matched no option and could not be saved. A preset is the one
+   * authoring path that writes props without anyone picking them.
+   *
+   * Scoped to props the target component gives an option list for. An empty
+   * string is a perfectly good value elsewhere — `card.tsx` also ships
+   * `alt: ''`, which is the correct, deliberate markup for a decorative
+   * image, and a blanket rule would have to be weakened until it caught
+   * nothing.
+   */
+  it('no shipped preset plants a value that no option offers', () => {
+    const optionsFor = new Map<string, Map<string, Set<unknown>>>()
+    for (const entry of MUI_BUNDLE) {
+      const byProp = new Map<string, Set<unknown>>()
+      for (const attribute of ((entry.schema as any)?.attributes ??
+        []) as any[]) {
+        if (!Array.isArray(attribute?.options)) continue
+        byProp.set(
+          attribute.name,
+          new Set(attribute.options.map((option: any) => option?.value)),
+        )
+      }
+      if (byProp.size) optionsFor.set(entry.schema?.$id as string, byProp)
+    }
+
+    const violations: string[] = []
+    const walk = (node: any, presetId: string) => {
+      if (!node || typeof node !== 'object') return
+      if (Array.isArray(node)) {
+        for (const child of node) walk(child, presetId)
+        return
+      }
+      const byProp = optionsFor.get(node.componentId)
+      for (const [prop, value] of Object.entries(node.props ?? {})) {
+        const allowed = byProp?.get(prop)
+        if (!allowed || allowed.has(value)) continue
+        violations.push(
+          `${presetId} plants ${node.componentId}.${prop} = ` +
+            `${JSON.stringify(value)}, which is not an offered option`,
+        )
+      }
+      for (const child of Object.values(node)) walk(child, presetId)
+    }
+
+    for (const entry of MUI_BUNDLE)
+      for (const preset of entry.presets ?? [])
+        walk(preset.data, preset.$id as string)
+
+    expect(violations).toEqual([])
+  })
+})
+
 describe('no registered component offers an unguarded `""` option (AGL-1451)', () => {
   it('every `""` option value sits behind a dropClearedProps boundary', () => {
     const violations: string[] = []

@@ -20,6 +20,23 @@ import {
   FieldComponentType,
 } from '@aglyn/aglyn'
 
+/**
+ * Theme colour for Button and Screen Link.
+ *
+ * The `{ value: '', label: 'Default' }` option was DELETED (AGL-1453). It could
+ * not persist — the attributes form strips `''` on change (AGL-1191) — so the
+ * pick silently reverted, and it was a second name for a choice already on the
+ * list: MUI's own default for both components is `primary`, offered below.
+ *
+ * Deliberately NOT replaced with a `'primary'` sentinel, which is where this
+ * differs from the props that got one. "Default" means *unset*, and unset is
+ * load-bearing: MUI reads a component's props through `useDefaultProps`, which
+ * applies a host theme's `components.MuiButton.defaultProps.color` to
+ * `undefined` ONLY. A sentinel would pin `primary` and bypass the host's own
+ * default — the opposite of what an author asking for "Default" wants. Unset
+ * stays expressible through the field's ✕, which persists `null`, and
+ * `dropClearedProps` turns that back into `undefined` at the boundary.
+ */
 export const FIELD_COLOR: AglynAttributeSchema = {
   name: 'color',
   description:
@@ -27,7 +44,6 @@ export const FIELD_COLOR: AglynAttributeSchema = {
   component: FieldComponentType.SELECT,
   label: 'Theme color',
   options: [
-    { value: '', label: 'Default' },
     { value: 'inherit', label: 'Inherit' },
     { value: 'primary', label: 'Primary' },
     { value: 'secondary', label: 'Secondary' },
@@ -78,6 +94,13 @@ export const FIELD_DISABLE_GUTTERS: AglynAttributeSchema = {
   component: FieldComponentType.SWITCH,
   label: 'Disable gutters?',
 }
+/**
+ * Size for Button and Screen Link. Pagination replaces the option list.
+ *
+ * `{ value: '', label: 'Default' }` deleted for the same reason as
+ * FIELD_COLOR's (AGL-1453): unpersistable, and a second name for `medium`,
+ * which is MUI's own default and is already on the list.
+ */
 export const FIELD_SIZE: AglynAttributeSchema = {
   name: 'size',
   description:
@@ -85,13 +108,18 @@ export const FIELD_SIZE: AglynAttributeSchema = {
   component: FieldComponentType.SELECT,
   label: 'Size',
   options: [
-    { value: '', label: 'Default' },
     { value: 'inherit', label: 'Inherit' },
     { value: 'small', label: 'Small' },
     { value: 'medium', label: 'Medium' },
     { value: 'large', label: 'Large' },
   ],
 }
+/**
+ * App Bar positioning.
+ *
+ * `{ value: '', label: 'Default' }` deleted (AGL-1453): unpersistable, and a
+ * second name for `fixed`, MUI AppBar's own default, already on the list.
+ */
 export const FIELD_POSITION: AglynAttributeSchema = {
   name: 'position',
   description:
@@ -99,7 +127,6 @@ export const FIELD_POSITION: AglynAttributeSchema = {
   component: FieldComponentType.SELECT,
   label: 'Position',
   options: [
-    { value: '', label: 'Default' },
     { value: 'absolute', label: 'Absolute' },
     { value: 'fixed', label: 'Fixed' },
     { value: 'relative', label: 'Relative' },

@@ -267,7 +267,15 @@ export const cardPresets: Aglyn.PresetSchema[] = [
               $id: null,
               componentId: 'muiScreenLink',
               pluginId: BUNDLE_ID,
-              props: { children: 'Learn more', renderAs: '', size: 'small' },
+              // `'button'`, not `''` (AGL-1453). This preset was MINTING the
+              // unpersistable value: every card dropped on a canvas planted a
+              // `renderAs: ''` that no longer matches any option. Renders
+              // identically — both take the non-link branch.
+              props: {
+                children: 'Learn more',
+                renderAs: 'button',
+                size: 'small',
+              },
             },
           ],
         },
