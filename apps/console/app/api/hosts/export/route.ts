@@ -213,6 +213,32 @@ async function handler(request: Request): Promise<Response> {
       return snapshot.docs.filter((doc) => !doc.get('deletedAt')).map(scopeless)
     }
 
+    /**
+     * The SITE's own media library — `hosts/{hostId}/media` and
+     * `hosts/{hostId}/mediaFolders` (AGL-1392, second pass).
+     *
+     * A separate reader from `exportOrgCollection` for the one reason that
+     * matters: no scope filter. `scopedToHost` deliberately no-ops on a host
+     * ref precisely because these documents carry no `visibleTo` — a host
+     * library is private by construction and the member check on this route is
+     * the whole gate — so running the org query here would match NOTHING and
+     * ship an empty library that reads as an honest empty one.
+     *
+     * It is not a hypothetical path: `resolveMediaScope` serves the site
+     * library as a first-class scope, the console's media library addresses it
+     * (`scopeCollection = orgId ? 'orgs' : 'hosts'`), and production carries 63
+     * assets and 5 folders across three sites there — none of which any bundle
+     * has ever contained. `visibleTo` is stripped like everywhere else, so a
+     * document that acquired one cannot smuggle a foreign token into a restore.
+     */
+    const exportHostLibrary = async (
+      name: 'media' | 'mediaFolders',
+      cap: number,
+    ) => {
+      const snapshot = await hostRef.collection(name).limit(cap).get()
+      return snapshot.docs.filter((doc) => !doc.get('deletedAt')).map(scopeless)
+    }
+
     const withRecords = async () => {
       const datasets = await exportOrgCollection(
         'datasets',
@@ -248,6 +274,8 @@ async function handler(request: Request): Promise<Response> {
       datasets,
       media,
       mediaFolders,
+      hostMedia,
+      hostMediaFolders,
     ] = await Promise.all([
       withPublishedVersion('screens'),
       withPublishedVersion('layouts'),
@@ -275,6 +303,16 @@ async function handler(request: Request): Promise<Response> {
         'mediaFolders',
         EXPORT_COLLECTION_LIMITS['mediaFolders'],
       ),
+      // And the same pair from the SITE's own library, which no version of
+      // this route has ever read (AGL-1392, second pass). The org folders
+      // above closed one scope of "a referenced collection nobody added to the
+      // manifest"; this is the other, and it is the larger half — 58 of the
+      // 246 foldered assets in production are filed in a host library.
+      exportHostLibrary('media', EXPORT_COLLECTION_LIMITS['hostMedia']),
+      exportHostLibrary(
+        'mediaFolders',
+        EXPORT_COLLECTION_LIMITS['hostMediaFolders'],
+      ),
     ])
 
     const bundle = {
@@ -295,6 +333,11 @@ async function handler(request: Request): Promise<Response> {
       datasets,
       media,
       mediaFolders,
+      // Two libraries, two arrays: the scope is where the document LIVES, not
+      // a property of it, and merging them would restore a site's private
+      // files into the shared org DAM (AGL-1392).
+      hostMedia,
+      hostMediaFolders,
     }
     /**
      * Dates leave as a TAGGED wire form, not as the Admin SDK's private

@@ -473,7 +473,9 @@ function SystemEmailBesignerPage() {
         ]}
       >
         {blocked ??
-          (isStaff === null ? null : error || notFound ? (
+          /* `hasError`, not the raw `error` — see the screens besigner
+             (AGL-1066). */
+          (isStaff === null ? null : hasError || notFound ? (
             <Stack sx={{ alignItems: 'center', justifyContent: 'center' }}>
               <Typography>{'Not found'}</Typography>
             </Stack>

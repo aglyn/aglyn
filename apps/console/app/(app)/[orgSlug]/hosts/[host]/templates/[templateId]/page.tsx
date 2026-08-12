@@ -116,7 +116,9 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
   // Three states, not two (AGL-706): a document that is still loading and one
   // that does not exist both arrive as `undefined`, and rendering an empty
   // editable form for the second made a mistyped id look like data loss.
-  const notFound = status === 'success' && !template
+  // `!== 'loading'` and not `=== 'success'` — see the component detail page
+  // (AGL-1066).
+  const notFound = status !== 'loading' && !template
   const { data: templateDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'templates'), limit(100)),
     [firestore, hostId],

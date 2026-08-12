@@ -56,6 +56,13 @@ const hostDoc = {
   } as Record<string, unknown>,
   status: 'success' as 'success' | 'error',
   fromCache: false,
+  /**
+   * A snapshot has arrived at least once, from cache or from the server
+   * (AGL-1066). What the Theme tab renders on, so that a refused listen the
+   * persistent cache is still answering keeps its editor instead of
+   * collapsing the tab to nothing.
+   */
+  hasEmitted: true,
 }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -227,6 +234,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   hostDoc.fromCache = false
   hostDoc.status = 'success'
+  hostDoc.hasEmitted = true
   ;(global as unknown as { fetch: unknown }).fetch = fetchMock
 })
 
@@ -263,18 +271,42 @@ describe('Host Setup theme save (AGL-1358)', () => {
   })
 
   /**
-   * The theme tab renders its editor only on `status === 'success'`, so a
-   * failed read never reaches this save through the UI. The guard is still
-   * given `unreadable` — it costs nothing, and a rendering condition three
-   * hundred lines away is not something a write should depend on for its
-   * safety. The signal that actually fires here is `fromCache`, which is
-   * asserted above.
+   * The tab is gated on a snapshot having ARRIVED, not on the read being
+   * healthy (AGL-1066). With nothing ever emitted there is no theme to edit,
+   * so the tab stays empty — the case the `null` was written for.
+   *
+   * The guard is still given `unreadable` regardless: it costs nothing, and a
+   * rendering condition three hundred lines away is not something a write
+   * should depend on for its safety.
    */
-  it('does not render the theme editor at all when the read failed', () => {
+  it('does not render the theme editor when nothing ever arrived', () => {
     hostDoc.status = 'error'
+    hostDoc.hasEmitted = false
     render(<HostSetup />)
 
     expect(screen.queryByRole('button', { name: 'Save theme' })).toBeNull()
+  })
+
+  /**
+   * The AGL-1066 decision, at the surface it was argued over. A refused
+   * listen reaches `status: 'error'` now, and `persistentLocalCache` is still
+   * serving the host doc — so the editor stays on screen with the theme in
+   * it. Collapsing the whole tab to `null` around a working editor was the
+   * "stop serving" outcome, and it is not what shipped.
+   */
+  it('KEEPS the theme editor when the read failed but the cache is serving it', async () => {
+    hostDoc.status = 'error'
+    hostDoc.fromCache = true
+    render(<HostSetup />)
+
+    expect(screen.getAllByRole('button', { name: 'Save theme' }).length)
+      .toBeGreaterThan(0)
+
+    // Visible, and still refused — the two halves of "keep serving, stop
+    // presenting it as live".
+    click('Save theme')
+    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    expect(mockSetDoc).not.toHaveBeenCalled()
   })
 })
 

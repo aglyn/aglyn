@@ -38,6 +38,19 @@ jobs:
       # The sandbox CSP the plugin origin actually serves (AGL-1092). Its
       # deployment is not an nx project, so nx affected never covers it.
       - run: npm run test:plugin-loader
+      # The retired-colour detector (AGL-1431). Only the PURE half runs here —
+      # the census itself measures production and lives in its own scheduled
+      # workflow, because the regression it hunts arrives as authored content
+      # with no commit and CI has nothing to be affected by. What CI can do is
+      # keep the detector honest: it must still report all 176 occurrences on
+      # a page that has them, rather than the 6 distinct rules emotion leaves.
+      - run: npm run test:retired-colours
+      # The dev-loop disk preflight (AGL-1425). This one can FAIL a serve
+      # target, so a bug in its threshold parsing breaks every dev server in
+      # the repo at once — and the fs call it guards cannot be exercised in
+      # CI, where free space is whatever the runner happens to have. Only the
+      # pure decision half is tested, and that is the half that decides.
+      - run: npm run test:disk-space
 
       # apps/*/tsconfig.next.json are GENERATED from tsconfig.base.json, and
       # the typecheck above skips them by name — correctly, since they exist

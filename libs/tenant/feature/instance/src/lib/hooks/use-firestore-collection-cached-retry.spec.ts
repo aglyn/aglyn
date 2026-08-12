@@ -34,22 +34,25 @@
  * listeners never exhaust anything and keep reporting `success` over data of
  * unbounded age.
  *
- * ## Why `status` is still `'success'` below
+ * ## The correction, and the four things it needed first
  *
- * The correction — gating `attempt = 0` on `!snapshot.metadata.fromCache` —
- * is one line, and it is NOT landed. Making a denied listen reach
- * `status: 'error'` also makes it reach every consumer's error branch, and
- * two of those blank a working screen (the besigner editors swap the canvas
- * for "Not found"; the host setup Theme tab renders nothing). Worse, the
- * budget is two seconds and the error branch stops retrying for good, while
- * the heal — an AGL-664 in-place re-auth — takes as long as a human takes to
- * type a password. Nothing re-subscribes, so every listener would have given
- * up before the session came back.
+ * `attempt = 0` is gated on `!snapshot.metadata.fromCache` now, so a denied
+ * listen reaches `status: 'error'` as designed. That one line was staged
+ * behind four others, and the assertions below are what hold each of them:
  *
- * So the verdict is carried on `serverDenied` first, consumers migrate onto
- * it, and `status` moves last. These tests pin BOTH halves: the corrected
- * verdict fires, and `status` does not move yet. When the flip lands, the
- * `status` assertions here are the ones that change — deliberately.
+ *  - the error had to be STICKY, or the cached emission preceding each
+ *    refusal would restore `'success'` at the retry cadence;
+ *  - the listen must not be abandoned. A refusal streak keeps reopening at
+ *    the slow cadence, and a resolved re-auth reopens it immediately
+ *    (`listener-heal-resubscribe.spec.ts`);
+ *  - offline had to stay inert. The budget is only withheld once something
+ *    has been REFUSED, and `unavailable` never counts, so a lost network
+ *    behaves exactly as it did — the cache exists for offline;
+ *  - the consumers that blank on `error` had to learn "have data, server
+ *    refused" from "never had data".
+ *
+ * `data` keeps flowing throughout, which is the answer AGL-1066 settled on:
+ * keep serving, stop presenting it as live.
  */
 
 import { act, renderHook } from '@testing-library/react'
@@ -112,7 +115,7 @@ describe('useFirestoreCollection under persistentLocalCache (AGL-1066)', () => {
    * the server refuses. Ten times the retry budget goes by without the hook
    * ever reaching the error state the budget exists to produce.
    */
-  it('never spends its retry budget while the cache can answer', () => {
+  it('spends its budget and errors, while STILL serving the cached rows', () => {
     const { result } = renderHook(() =>
       useFirestoreCollection(buildQuery, [], { idField: '$id' }),
     )
@@ -129,19 +132,29 @@ describe('useFirestoreCollection under persistentLocalCache (AGL-1066)', () => {
       }
     })
 
-    // A fresh listener was opened for every single cycle. `attempt` bounded
-    // nothing — this is the defect, and it is still here.
+    // Still reopening — the flip corrects the STATUS, it does not abandon the
+    // listen. A recovery nobody announced still has a road back.
     expect(mockHandlers).toHaveLength(CYCLES + 1)
-    // STILL the broken half, on purpose: see the file header. Fifty refusals
-    // in and the page's own status says it is looking at live data.
-    expect(result.current.status).toBe('success')
-    expect(result.current.error).toBeUndefined()
+    /**
+     * The flip, and the sticky half of it. Every one of those fifty cycles
+     * emitted from cache before the refusal landed, and each such emission
+     * used to hand the budget back AND reassert `'success'`. Now neither: the
+     * status is `'error'` and it stays there until the server answers.
+     */
+    expect(result.current.status).toBe('error')
+    expect(result.current.error).toBeDefined()
+    /**
+     * And this is the answer to the question the issue asked. "Stop serving"
+     * was never implementable at the data layer — `ListenSource` is
+     * `'default' | 'cache'`, with no `'server'` — and it is not wanted
+     * either: the rows stay on screen and the consumers that used to blank on
+     * `error` now distinguish "have data, server refused" from "never had
+     * data".
+     */
     expect(result.current.data).toHaveLength(1)
-    // The two fields that tell the truth. `fromCache` says "unconfirmed",
-    // which is also true offline and true of a healthy first snapshot;
-    // `serverDenied` says "refused", which is what `status` would say if the
-    // budget were spendable. Write guards key on the former; anything asking
-    // "will this ever refresh?" wants the latter.
+    // `fromCache` says "unconfirmed", which is also true offline and true of
+    // a healthy first snapshot; `serverDenied` says "refused specifically",
+    // which `status: 'error'` does not distinguish from any other failure.
     expect(result.current.fromCache).toBe(true)
     expect(result.current.serverDenied).toBe(true)
   })

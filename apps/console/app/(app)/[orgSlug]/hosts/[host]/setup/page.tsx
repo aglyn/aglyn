@@ -357,6 +357,17 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
       data,
       status,
       /**
+       * A snapshot has arrived at least once, from cache or from the server
+       * (AGL-1066). The Theme tab gates on this rather than on
+       * `status === 'success'`, because a refused listen can now reach
+       * `'error'` while `persistentLocalCache` is still serving the host doc
+       * — and collapsing the whole tab to `null` mid-session, with the theme
+       * right there in memory, is the outcome AGL-1066 decided against. When
+       * nothing ever arrived there is genuinely nothing to render and this
+       * is false, which is the case the `null` was written for.
+       */
+      hasEmitted: hostHasEmitted,
+      /**
        * The host doc every form on this page is seeded from is unconfirmed
        * by the server (AGL-1358). All three writers below replace whole maps
        * rather than patching fields — the theme, the override patch, and the
@@ -834,7 +845,7 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                       </TabPanel>
                     ))}
                     <TabPanel value={THEME_TAB_ID} sx={{ padding: 'unset' }}>
-                      {status === 'success' ? (
+                      {hostHasEmitted ? (
                         <>
                           {/* Where the theme came from, and the ways back
                               (AGL-1020). Above the editor because "am I

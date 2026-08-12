@@ -1038,7 +1038,10 @@ function BesignerPage(props) {
           },
         ]}
       >
-        {error || notFound ? (
+        {/* `hasError`, not the raw `error` (AGL-1066): a refused read that
+            still has the screen cached must keep rendering the canvas rather
+            than replace an author's open document with "Not found". */}
+        {hasError || notFound ? (
           <Stack
             sx={{
               alignItems: "center",

@@ -187,6 +187,36 @@ export interface MarketplaceListing {
   sourceHostId?: string
   /** Incremented by the install API; frozen from client writes. */
   installCount?: number
+  /**
+   * How many installs are LIVE right now — `installCount`'s sibling, and
+   * undeclared here until AGL-1420 went looking for it.
+   *
+   * That omission was the whole bug. AGL-1361's coverage guard builds the
+   * listing's field universe from this interface, the rules deny-list and the
+   * resolvers, so a server-owned field in none of the three is not classified
+   * as exposed — it is INVISIBLE to the guard, which is a worse failure than
+   * being classified wrongly. `installCount` was denied and this was not, so
+   * the sibling counter a publisher-org owner/admin could write was the one
+   * the browse grid and the listing header print to buyers.
+   *
+   * Written by the install/uninstall routes and by AGL-1419's derivation.
+   */
+  activeInstalls?: number
+  /**
+   * AGL-1419's derived-count cache: the pin count as last verified, the wall
+   * clock it was verified at, and the per-version split.
+   *
+   * Server-owned for a stronger reason than the counters themselves. They are
+   * not merely a number that could be wrong — `verifiedLivePins` treats the
+   * triple as FRESH when `pinnedActiveInstalls === activeInstalls` and the
+   * timestamp is inside the TTL, and then returns `pinnedVersionInstalls`
+   * without querying anything. A client that could write all four could pin
+   * the cache open on numbers it chose and suppress the re-derivation that
+   * exists to bring a count back down.
+   */
+  pinnedActiveInstalls?: number
+  pinsVerifiedAtMs?: number
+  pinnedVersionInstalls?: Record<string, number>
   previewImageUrl?: string
   screenCount?: number
   versionHistory?: Array<{ version: number | string; publishedAt?: unknown }>

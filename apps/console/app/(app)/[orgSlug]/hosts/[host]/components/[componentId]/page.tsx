@@ -90,7 +90,11 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
   // Three states, not two (AGL-706): a document that is still loading and one
   // that does not exist both arrive as `undefined`, and rendering an empty
   // editable form for the second made a mistyped id look like data loss.
-  const notFound = status === 'success' && !definition
+  // `!== 'loading'` and not `=== 'success'` (AGL-1066): a refused read used
+  // to sit on 'loading' and now reaches 'error', so gating on 'success' would
+  // stop recognising the third state at the moment it became reachable — and
+  // an empty editable form over a denied read is the AGL-706 fault again.
+  const notFound = status !== 'loading' && !definition
   // No orderBy: the oldest version docs predate `createdAt`, and Firestore
   // drops documents missing the ordered field. Sort client-side, same as
   // BesignerVersionsComponent.

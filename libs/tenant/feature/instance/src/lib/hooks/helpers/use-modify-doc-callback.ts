@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { HOST_UNPERSISTED_FIELDS, ORG_UNPERSISTED_FIELDS } from '@aglyn/aglyn'
 import {
   type DocumentReference,
   serverTimestamp,
@@ -32,6 +33,57 @@ import { useCallback } from 'react'
  */
 function stampUpdatedAt<D extends object>(data: D): D {
   return { updatedAt: serverTimestamp(), ...data }
+}
+
+/**
+ * Keys that are never document fields, taken from where that is written down
+ * (AGL-1429). `HOST_UNPERSISTED_FIELDS` and `ORG_UNPERSISTED_FIELDS` each
+ * declare the synthetic `$id` the readers attach; the INTERSECTION is used
+ * deliberately, so this generic boundary only ever strips a key that every
+ * declaration agrees is unpersisted. A key added to one map alone is not
+ * silently stripped from the other collection's writes — the spec's drift
+ * assertion fires instead, and someone decides.
+ */
+/*
+ * Resolved on first use, not at module scope. Computing it eagerly made this
+ * module — and therefore every consumer of the write callbacks — fail to LOAD
+ * in any suite that mocks the `@aglyn/aglyn` barrel without re-exporting both
+ * maps, which two console specs do. A write-boundary guard that cannot be
+ * imported is worse than the leak it prevents.
+ */
+let unpersistedFields: readonly string[] | undefined
+
+function getUnpersistedFields(): readonly string[] {
+  if (unpersistedFields) return unpersistedFields
+  const host = HOST_UNPERSISTED_FIELDS ?? {}
+  const org = ORG_UNPERSISTED_FIELDS ?? {}
+  unpersistedFields = Object.freeze(
+    Object.keys(host).filter((key) => key in org),
+  )
+  return unpersistedFields
+}
+
+/**
+ * Drop the reader-injected keys before the payload leaves for Firestore.
+ *
+ * This has to happen here rather than in the refs' converters, which is where
+ * it used to live alone (`503f197ca` added the `$id` strip to `useHostRef`'s
+ * `toFirestore`). `updateDoc` never applies a converter — `setDoc` calls
+ * `applyFirestoreDataConverter` and `updateDoc` does not — so a converter
+ * strip is a guarantee about ONE of the two SDK calls, and which one a write
+ * gets is decided by whether its caller happened to pass `merge`. That is how
+ * `hosts/-MtN17_cpfPPLwWjE6z4` came to hold a persisted `$id` (AGL-1423).
+ *
+ * Only exact top-level keys are removed. Dotted `updateDoc` paths address
+ * nested maps, and besigner node maps legitimately store a `$id` per node —
+ * matching those would be the same over-broad scan AGL-1423 warned about.
+ */
+function dropUnpersistedFields<D extends object>(data: D): D {
+  const keys = getUnpersistedFields()
+  if (!keys.some((key) => key in data)) return data
+  const rest = { ...data } as Record<string, unknown>
+  for (const key of keys) delete rest[key]
+  return rest as D
 }
 
 
@@ -61,7 +113,10 @@ export function useUpdateDocCallback<T>(
 ): UpdateDocCallback<T> {
   return useCallback(
     (data: UpdateData<T>) =>
-      typedUpdateDoc(ref, stampUpdatedAt(data as object) as UpdateData<T>),
+      typedUpdateDoc(
+        ref,
+        stampUpdatedAt(dropUnpersistedFields(data as object)) as UpdateData<T>,
+      ),
     [ref],
   )
 }
@@ -71,7 +126,11 @@ export function useSetDocCallback<T>(
 ): SetDocCallback<T> {
   return useCallback(
     (data: Partial<T>, options?: SetOptions) =>
-      setDoc(ref, stampUpdatedAt(data as object) as Partial<T>, options ?? {}),
+      setDoc(
+        ref,
+        stampUpdatedAt(dropUnpersistedFields(data as object)) as Partial<T>,
+        options ?? {},
+      ),
     [ref],
   )
 }
@@ -85,7 +144,12 @@ export function useModifyDocCallback<T>(
     (data: UpdateData<T> | Partial<T>, options?: ModifyDocOptions) => {
       // SetOptions semantics (merge/mergeFields) require setDoc: updateDoc
       // ignores them and, critically, bypasses the ref's withConverter
-      // serialization (e.g. screen-version node compression).
+      // serialization (e.g. screen-version node compression) — and with it
+      // EVERY strip the converter performs, including `$id` (AGL-1429).
+      //
+      // Nothing downstream of this line may therefore be relied on to clean
+      // a payload. Anything that must hold for both branches belongs above
+      // it, which is where `dropUnpersistedFields` now runs.
       const shouldSet =
         options?.shouldSet ||
         (options && 'merge' in options) ||

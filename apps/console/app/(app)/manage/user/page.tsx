@@ -199,13 +199,26 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
      * The seeding snapshot is unconfirmed by the server (AGL-1356). The
      * guard below cannot rely on `profileStatus` alone: under
      * `persistentLocalCache` a refused listen still emits cached snapshots,
-     * and each one resets the hook's retry budget, so `status` never reaches
-     * `'error'` and the AGL-1143 guard never fires on this page.
+     * so a cache-served seed reads as a healthy `'success'` no matter what
+     * the retry budget does.
      */
     fromCache: profileFromCache,
   } = useFirestoreDoc(() => userRef, [firestore, user.uid])
   /** The read failed — as opposed to succeeding and finding nothing. */
   const profileUnreadable = profileStatus === 'error'
+  /**
+   * The read failed AND there is nothing to put in the form (AGL-1066).
+   *
+   * The AGL-1143 replacement below hides the form so a blank cannot be saved
+   * over a real value — which is right when the read produced nothing, and
+   * wrong once a refused listen can reach `'error'` while
+   * `persistentLocalCache` is still serving the profile. In that state the
+   * form is populated with the user's real (if unconfirmed) values, and
+   * ripping it out tells them their profile is gone when it is not. The SAVE
+   * is still refused either way: `profileUnreadable` and `profileFromCache`
+   * both feed the seed guard.
+   */
+  const profileUnreadableAndEmpty = profileUnreadable && !data
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const firebaseAuth = useAuth()
@@ -706,7 +719,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     // Show the failure instead of an empty form (AGL-1143). Rendering the form
     // would invite the user to retype fields we simply could not read, and
     // saving merges — so a blank field deletes the real value.
-    if (schema.id === 'basic' && profileUnreadable) {
+    if (schema.id === 'basic' && profileUnreadableAndEmpty) {
       return (
         <CardDisplay header="Basic info" contentGutterX contentGutterY>
           <Alert severity="error" sx={{ maxWidth: 560 }}>

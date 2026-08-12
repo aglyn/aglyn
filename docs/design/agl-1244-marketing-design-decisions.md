@@ -528,3 +528,108 @@ Measured, it does not follow the same call — it splits:
 
 Only rows 1 and 5 need naming; rows 2–4 are repoints onto tokens that already
 exist. Worth a separate decision rather than folding into `tint`.
+
+---
+
+## Addendum 2 — state as of 2026-08-11
+
+Written after re-measuring against production and Figma. Two items closed since
+the memo, one measured to a firm number, three still waiting on a decision.
+
+| # | State on 2026-08-11 | Who |
+| - | ------------------- | --- |
+| 1(a) `#E0E0E0` | **Closed** — bucket empty, `grey.300` in use | — |
+| 1(b) `rgba(0,0,0,0.12)` | **Closed** — bucket is the empty set | — |
+| 1(c) tile tints | **Decided + code shipped**, canvas repoint NOT done | execution |
+| 1(d) on-dark cluster | **Open** — rows 1 and 5 need a name | Zach |
+| 2 landmark | **Analysed, not decided, not built** | Zach, then canvas |
+| 3 dead nodes | **Done** — 61 pruned, verified live | — |
+| 4 Figma layer names | 18 renames done; residual gap **measured: 4** | engineer |
+| 5 mobile gutter | **Open** — one line either way | Zach |
+| 6 mockups | **Struck** — AGL-1234, In Review | — |
+
+### Item 3 is done
+
+The prune landed 2026-08-10 on `hosts/DXnRbPH4CQ/screens/V0B8e81t1-/versions/f7X7DXr4In`:
+371 → 310 nodes, reachable unchanged at 310, unreachable 0, dangling 0. Snapshot
+taken and verified *before* the write.
+
+Re-verified on the live page 2026-08-11 (`x-vercel-cache: MISS`, `age: 0`, so a
+fresh render rather than a cached one): `/product` is 471,349 B, carries exactly
+one `<h1>`, and the orphaned copy is gone — `Design your whole site on a living
+canvas` 0, `Watch the tour` 0, `BESIGNER · VISUAL BUILDER` 0, while the real
+headline `Design it live` is still present 3×.
+
+This also retires the addendum's "the host is a moving target" warning above: the
+six-node drift between two reads was this prune landing underneath. The tint dry
+run must still be re-run before any apply, but for the ordinary reason, not
+because a second edit is in flight.
+
+### Item 1(c): the token shipped, the canvas did not
+
+`palette.tint` exists and is wired end to end (commit `c97965532`);
+`shared-ui-theme` and `shared-ui-jsx-forms` suites pass (71 and 132 tests,
+`nx run-many -t test` exit 0 on 2026-08-11). The colour picker offers
+`Tint primary` / `Tint secondary` / `Tint tertiary`, so an author has a
+**clickable** path to the token.
+
+What has not happened is the repoint of the 131 nodes. **`tools/scripts/tokenize-tile-tints.mjs`
+must not be the way it happens.** The marketing-site charter permits scripts for
+reading and auditing but forbids them for authoring the site, and repointing tile
+fills is authoring. The script stays useful as the dry-run *census*; the edit
+itself belongs in the besigner, and each node must drop its single-key
+`@scheme dark` slice in the same edit.
+
+### Item 4: the residual gap is 4 renames, not "likely nine"
+
+The memo guessed the `Link Plugins` drift was "likely repeated nine times,
+confirmed in one frame only". Swept all 10 page frames on 2026-08-11 with the
+pattern widened past `Card *`. It is **4 mismatches across 3 frames**, and the
+`Link` drift is *not* cloned — six of the nine detail pages are clean:
+
+| Page | Node | Named | Actually holds | Should be |
+| - | - | - | - | - |
+| Marketing | `637:1390` | `Link Plugins` | "Analytics" | `Link Analytics` |
+| Console | `112:123` | `Card Unified analytics` | "Built-in analytics" | `Card Built-in analytics` |
+| Media | `121:2143` | `Card Drag-and-drop upload` | "Private & per-site sharing" | `Card Private & per-site sharing` |
+| Overview | `17:32` | `Besigner showcase` | "Run every site from one console." | `Console showcase` |
+
+Clean: besigner `93:31`, commerce `114:763`, forms `120:1516`, workflows
+`122:2294`, plugins `123:2683`, analytics `124:3072`. Every detail page's Explore
+grid holds exactly 7 `Link` frames and 6 `Card` frames; the overview holds 9 and 9.
+
+Two borderline names on the overview only, left alone as judgement calls:
+`19:32` `Social proof` holds the early-access block (named `Early access` on all
+eight detail pages), and `16:32` `Logo strip` holds eight text chips and no logos.
+
+**Repo-side residue, now fixed.** Three extraction files carried builder warnings
+about layer names the 2026-08-09 renames had made false —
+`tools/marketing/product-copy/copy-forms.json` (five), `copy-plugins.json` (four)
+and `copy-workflows.json` (one). A builder following them would have hunted
+Figma for frames that no longer exist. Rewritten to record the correction and
+keep the standing "build from the text, never the layer name" rule.
+
+### A live content defect found while measuring item 4
+
+`637:1390` is not only misnamed. Because the Marketing frame's `Link Plugins`
+slot was overwritten with Analytics content, **the Marketing page has no Plugins
+entry at all** — and the built page inherited it. The live
+`/product/marketing` "Explore the platform" section links to seven products:
+
+```
+besigner · commerce · forms · media · workflows · analytics · console
+```
+
+Plugins is missing. One of the nine products is unreachable from that page's
+cross-sell grid. That is a content defect, not a naming one, and the fix is a
+decision — rename the Figma layer to match the Analytics content it holds, or
+re-point the slot back to Plugins and rebuild the tile on the canvas. Tracked
+separately; it is outside the six items.
+
+### What is still owed
+
+- **Zach:** item 1(d) (name the inverted surface and its on-dark ink, or leave
+  them literal), item 2 (label sections by heading, yes or no), item 5 (Figma
+  moves to 16, or the site moves to 20/24).
+- **Execution, already decided:** the 131-node tint repoint, by clicking.
+- **Engineer, Figma-side:** the 4 renames above.

@@ -81,7 +81,16 @@ export function useOrgPlan(hostId: string | undefined): OrgPlanState {
       // org doc coming, and holding forever would leave the card
       // permanently disabled. `status` only moves off 'loading' once a
       // ref exists, so it cannot answer that case.
-      ready: loaded && (!orgId || status !== 'loading'),
+      //
+      // `'success'` and not `!== 'loading'` (AGL-1066). A refused listen can
+      // now reach `'error'`, and `'error'` satisfies `!== 'loading'` while
+      // leaving `org` undefined — so this hook would have handed out
+      // `ready: true` with no org, and `checkQuota(undefined, …)` does not
+      // mean "unknown", it resolves the FREE tier. That is the exact fault
+      // this hook was written to close, arriving through a different door:
+      // a paying org rendered as Free for as long as its session stayed
+      // stale. Pending is the right answer to a question we cannot read.
+      ready: loaded && (!orgId || status === 'success'),
     }),
     [org, loaded, orgId, status],
   )

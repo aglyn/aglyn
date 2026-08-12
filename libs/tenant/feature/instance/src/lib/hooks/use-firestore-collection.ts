@@ -94,15 +94,13 @@ export interface UseFirestoreCollectionResult<T> {
    * The server has REFUSED this listen for longer than the retry budget, and
    * no server snapshot has arrived since (AGL-1066).
    *
-   * This is what `status` would say if the budget were spendable — see the
-   * note on the retry loop below for why it is not, and why correcting
-   * `status` in place is a staged change rather than a one-liner. Until that
-   * flip lands, this is the honest verdict: any `data` alongside it is
-   * cache-only and will not refresh on its own.
-   *
-   * Only `permission-denied` counts, so it cannot fire offline, and a single
-   * server snapshot clears it — the same two properties that make the
-   * `session-health` reporting safe.
+   * Kept after the flip rather than folded into `status`, because it says
+   * something `status` does not: WHY the listen is failing. `status:
+   * 'error'` covers every terminal error; this one counts `permission-denied`
+   * alone, so it cannot fire offline, and a single server snapshot clears it.
+   * A consumer asking "is what I am rendering cache-only because the session
+   * is refused" wants this; one asking "did the read fail at all" wants
+   * `status`.
    */
   serverDenied: boolean
 }
@@ -168,6 +166,20 @@ export function useFirestoreCollection<T = DocumentData>(
      */
     let deniedStreak = 0
     let denialReported = false
+    /**
+     * The retry budget is spent and the last thing the server did was refuse
+     * (AGL-1066).
+     *
+     * This is what makes `status: 'error'` STICK. Every reopened listen emits
+     * from the cache before it learns it is still refused, and an
+     * unconditional `setStatus('success')` in the success handler would hand
+     * the page back to `success` on that emission — so the surface would
+     * oscillate error → success → error at the retry cadence, which is worse
+     * to look at than either state. Only a snapshot the SERVER answered
+     * clears this, for the same reason it is the only thing that clears
+     * `deniedStreak`: a cached emission is not evidence about the server.
+     */
+    let terminal = false
     const denialLabel = denialLabelForQuery(q)
     // Disappearance tracking (AGL-1196); inert unless opted in.
     const seen = new Set<string>()
@@ -177,8 +189,13 @@ export function useFirestoreCollection<T = DocumentData>(
       docs: QueryDocumentSnapshot<DocumentData>[],
       cached: boolean,
     ) => {
-      setStatus('success')
-      setError(undefined)
+      // A server-answered emission is the one thing that ends the refusal,
+      // including the `getDocsFromServer` confirmation path below.
+      if (!cached) terminal = false
+      if (!terminal) {
+        setStatus('success')
+        setError(undefined)
+      }
       setFromCache(cached)
       setData(
         docs.map((docSnap) => {
@@ -195,30 +212,47 @@ export function useFirestoreCollection<T = DocumentData>(
         (snapshot) => {
           if (cancelled) return
           /**
-           * Ungated ON PURPOSE, and this is the open half of AGL-1066.
+           * Only a SERVER-answered snapshot refunds the retry budget — the
+           * AGL-1066 flip, and the reason it took four commits to become
+           * safe.
            *
-           * Under `persistentLocalCache` the cached emission that precedes a
-           * refusal lands here and hands the budget back, so `attempt` never
-           * reaches `MAX_RETRIES` and `status` can never become `'error'`.
-           * Gating this on `!snapshot.metadata.fromCache` is the correction —
-           * one line — but it is NOT safe to make in isolation:
+           * Under `persistentLocalCache` a reopened listen emits from the
+           * cache BEFORE it learns the server refused it. Refunding on that
+           * emission handed the budget back every cycle, so `attempt` never
+           * reached `MAX_RETRIES`, `status` could never become `'error'`, and
+           * a dead session looked exactly like a healthy one on every
+           * listener-backed page for as long as it stayed dead.
            *
-           *  - the budget is 5 x 400ms = two seconds, after which the error
-           *    branch stops retrying for good, while an AGL-664 in-place
-           *    re-auth takes as long as a human takes to type a password.
-           *    That was the hard blocker and it is now CLEARED: a resolved
-           *    re-auth broadcasts a heal and this listener reopens on it,
-           *    terminal or not (`subscribeFirestoreSessionHeal` below);
-           *  - `error` blanks surfaces that today render cached data — the
-           *    besigner editors swap the canvas for "Not found", and the host
-           *    setup Theme tab renders nothing.
+           * Landing this alone would have been a regression, and the three
+           * things that made it one are now in place:
            *
-           * `serverDenied` below carries the corrected verdict in the
-           * meantime, so consumers can migrate before `status` moves.
+           *  - the budget is 5 x 400ms, and the error branch used to stop
+           *    retrying for good, while the heal is an AGL-664 in-place
+           *    re-auth that takes as long as a human takes to type a
+           *    password. A resolved re-auth now broadcasts and this listener
+           *    reopens on it (`subscribeFirestoreSessionHeal` below), and a
+           *    refusal streak keeps a slow road back for a recovery nobody
+           *    announced (see the error branch);
+           *  - `status: 'error'` had to become STICKY, or the cached emission
+           *    that precedes each refusal would flip it straight back — see
+           *    `terminal` above;
+           *  - the surfaces that BLANK on `error` had to learn the
+           *    difference between "never had data" and "have data, the server
+           *    refused". They read `hasEmitted` now, so the besigner canvas
+           *    and the host setup Theme tab keep rendering across a refusal
+           *    instead of collapsing to "Not found".
+           *
+           * The withholding is keyed on a REFUSAL having happened, not on the
+           * emission being cached, and that is load-bearing: offline stays
+           * exactly as inert as it was. A lost network yields `unavailable`
+           * (when it yields an error callback at all), which never enters
+           * `deniedStreak`, so a cached emission still refunds the budget and
+           * an offline listener still never goes terminal. The cache exists
+           * for offline; this must not change what happens there.
            */
-          attempt = 0
           // Only the SERVER answering is evidence the session can read.
           if (!snapshot.metadata.fromCache) {
+            attempt = 0
             deniedStreak = 0
             denialReported = false
             setServerDenied(false)
@@ -226,6 +260,11 @@ export function useFirestoreCollection<T = DocumentData>(
             // denial, and what stops a scoped collaborator's by-design
             // denials from ever adding up to a re-auth prompt.
             reportFirestoreServerRead()
+          } else if (deniedStreak === 0) {
+            // Cached, but nothing has been refused since the server last
+            // answered — so this is not the AGL-1066 fault and the budget is
+            // refunded exactly as it always was.
+            attempt = 0
           }
 
           if (confirmDisappearances) {
@@ -286,8 +325,26 @@ export function useFirestoreCollection<T = DocumentData>(
                 : RETRY_DELAY_MS,
             )
           } else {
+            terminal = true
             setStatus('error')
             setError(err)
+            /**
+             * A refusal streak keeps a slow road back (AGL-1066).
+             *
+             * Before the flip this listener reopened forever, which is also
+             * what HEALED it — a token that attached late, an App Check
+             * hiccup, one of the AGL-1143 transient token-layer denials.
+             * None of those broadcast a heal, because none of them involved
+             * a re-auth the console asked for, so stopping here would leave
+             * every listen in the console terminal until the user reloaded.
+             * The status is corrected; the recovery is not taken away.
+             *
+             * Any OTHER terminal error still stops exactly as before — this
+             * is deliberately keyed on the refusal streak, not on `attempt`.
+             */
+            if (deniedStreak > MAX_RETRIES) {
+              timer = setTimeout(subscribe, REFUSED_RETRY_DELAY_MS)
+            }
           }
         },
       )

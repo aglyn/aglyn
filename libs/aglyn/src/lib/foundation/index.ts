@@ -29,7 +29,12 @@ export * from './definitions/components.types'
 export * from './definitions/contact.types'
 export * from './definitions/organization.types'
 export * from './definitions/shared'
+// `HOST_UNPERSISTED_FIELDS` is a VALUE for the same reason its org twin below
+// is: it states which `hosts/{hostId}` keys are never fields. It is exported
+// here so the write boundary can enforce that declaration at runtime
+// (AGL-1429), not only so the rules coverage guard can read it.
 export {
+  HOST_UNPERSISTED_FIELDS,
   HostEntityType,
   HostRedirectParams,
   HostScreenStatus,

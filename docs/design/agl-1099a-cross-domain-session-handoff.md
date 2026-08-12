@@ -1151,3 +1151,85 @@ the wrong one.
 `recaptchaenterprise.googleapis.com` from a project we own — provable by
 `gcloud recaptcha keys list` returning the key. Until that command works, 1099d
 has nothing to build, and it still blocks 1099c.
+
+### 1099c, as built (AGL-1099)
+
+Host → org resolution and entitlement enforcement. Lands **dark for the same
+reason 1099b did**, and the reason is structural rather than a promise: routing
+fires only for a claim in `status: 'active'`, and the only thing that sets that
+status is `activateConsoleDomain`, which still has no caller. Until 1099d
+clears, no domain can reach the state this code serves.
+
+- `resolveConsoleDomain(host)` in `console-domains.ts` — the single reader.
+  Returns `{ known, servable, orgSlug, reason, degraded }`, never the `orgId`.
+- `GET /api/orgs/console-domain-verdict` — the Admin-SDK verdict route, sibling
+  of `slug-verdict` and unauthenticated for the same reason: the middleware runs
+  on the edge, where an App Check-enforced Firestore read returns `403` for
+  everything, and AGL-1135 proved a gate that scores `403` as "known" is worse
+  than no gate.
+- `apps/console/middleware.ts` — the custom-domain branch, 60 s cache, degraded
+  verdicts honoured and never cached, and `orgScopedPath` now shared with the
+  workspace branch so the two gates cannot drift in how they rewrite.
+- `rejectUnknownConsoleHost` in `/api/auth/session` — the D6 item 3 sibling.
+  `/api/*` is outside the middleware matcher, so a host the middleware refuses
+  to render a console for can still call the route that mints sessions.
+- D6 item 2 is fixed: `cookieAttributes` no longer answers "parent-scoped?" and
+  "HTTPS?" with one ternary.
+
+**Three answers where a boolean would have been wrong.** `unknown` (no claim)
+and `degraded` (Firestore unreachable) both pass the request through, for
+opposite causes; every other reason refuses. `unknown` must pass because
+localhost, preview deployments and self-hosted installs are indistinguishable
+from an unclaimed host — and it is *safe* to pass only because of the
+correspondence `releaseConsoleDomain` maintains: Vercel first, documents second,
+claim kept if the detach fails. A name the console project answers for always
+has a document. **AGL-1430 must not break that**, and neither must a twin.
+
+**Fail closed on downgrade is a write, not a verdict.** Nothing in the codebase
+reacts to a plan change — the Stripe webhook writes `plan` and says outright
+that entitlements resolve at read time, which is sufficient for rendering and
+insufficient for a hostname (D7). So the first request after a downgrade
+converts the read-time answer into stored state: `status: 'suspended'` and a
+`sessionEpoch` bump across every name the claim covers, so the twin cannot
+outlive its primary. A read-time refusal alone would leave already-minted
+cookies valid; the epoch is the lever that reaches them. Deliberately not the
+inverse — re-upgrading does **not** re-activate, because activation attaches
+names to Vercel and, until AGL-1378 clears, includes a manual App Check
+allowlist entry.
+
+Two guards against the loading-default class this repo keeps hitting:
+`checkEntitlement(undefined)` resolves to the free plan, so a claim whose org
+document is *missing* refuses but is **not** suspended — that would be recording
+an answer to a question never asked — and a Firestore failure is `degraded`
+rather than "not entitled".
+
+**Departure from D7, deliberate: a suspended domain gets a 307, not a 308.**
+Suspension is reversible by design and a 308 is cacheable by default and
+effectively irreversible in a browser. Committing every visitor's browser to a
+permanent redirect off a customer's own domain because a card declined for a day
+is a state we could not get back out of — the same property AGL-1430 argues from
+in the other direction.
+
+**The route half of "sign-in never happens on the custom domain" is now
+enforced**, which §7 item 11 flagged as owed to 1099c: `signin`, `signup`,
+`verify-email` and `account-recovery` are 307'd to `app.aglyn.com` on a custom
+domain. `signout`, `manage` and `admin` still serve — ending a session on the
+host that holds it can never be the wrong answer. When 1099e lands, that
+redirect becomes the handoff start rather than a new mechanism.
+
+**Left for a decision, not guessed:**
+
+- **The 7-day Vercel grace and its expiry job.** D7 states the window and then
+  invites the challenge — "a billing hole that stays open for a week" versus "a
+  console that vanishes the moment a card declines" — which is a commercial
+  call, not an engineering one. Suspension (the fail-closed half) is built and
+  is what actually stops the domain serving; the reaper that detaches from
+  Vercel and deletes the documents is not, because its schedule *is* the
+  decision.
+- **The org switcher's suppression on a custom domain.** The path rewrite pins
+  the org for every route; suppressing the switcher UI is unreachable until a
+  session can exist there at all (1099e).
+- **The `sessionEpoch` check on the session cookie.** It has nothing to check
+  yet: `__console_session` is 1099e's, and no cookie can reach a custom domain
+  before the handoff exists. The epoch is written on suspension so it is correct
+  the day that check is added.

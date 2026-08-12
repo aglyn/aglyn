@@ -21,6 +21,8 @@ import {
   checkApiRequestQuota,
   checkContactQuota,
   checkDataStorageQuota,
+  decodeStoredNodes,
+  nodeMapBytes,
 } from '@aglyn/aglyn/server'
 import {
   estimateMonthlyUsageCost,
@@ -76,15 +78,54 @@ async function orgDatasetBytes(
   return perDataset.reduce((sum, bytes) => sum + bytes, 0)
 }
 
-/** Approximate persisted size of one version doc's node payload. */
+/**
+ * Size of one version doc's node payload, in **msgpack bytes of the DECODED
+ * node map** (AGL-1402).
+ *
+ * That is the answer to "which of the two", and it is the decoded one: the
+ * document is decoded, then re-measured with the encoder used at rest. The
+ * number therefore describes the TREE, not the storage form the tree happens
+ * to be sitting in.
+ *
+ * It has to. `nodes` has three live storage forms — a plain Firestore map, a
+ * msgpack `Bytes`/`Buffer`, and the `{type:'Buffer',data:[…]}` envelope that
+ * pre-AGL-1391 export bundles carry — and which one a document is in is a
+ * function of HOW IT WAS LAST SAVED, nothing more. This function used to
+ * measure the first in `JSON.stringify(...).length` and the second in
+ * `byteLength`, so the same page read ~20-45% smaller once the besigner had
+ * compressed it. Two smaller errors rode along on the JSON arm and did not
+ * cancel: `String.length` counts UTF-16 code units rather than bytes, so
+ * non-ASCII copy undercounted, while JSON punctuation the document does not
+ * store pushed the same arm the other way.
+ *
+ * The alternative was cheaper — `byteLength` for the bytes arm,
+ * `Buffer.byteLength(JSON.stringify(nodes), 'utf8')` for the plain one — and
+ * was rejected because it is still two units (msgpack vs JSON), just two units
+ * that are both honestly named bytes. A compressed site would still read
+ * smaller than the identical plain one.
+ *
+ * **The cost is real and it is affordable.** The decode + re-encode is O(size)
+ * per document where the bytes arm used to be O(1), across a 5,000-document
+ * ceiling per collection. At the ceiling that is a couple of seconds of CPU —
+ * against a sweep that is already paying ~17 sequential `getAll` round trips
+ * per collection for the same documents. Network dominates by an order of
+ * magnitude, so the honest number fits inside the 60 s budget; a site large
+ * enough for the decode to be the binding constraint would have blown the
+ * budget on reads long before.
+ *
+ * Decoding uniformly — including re-encoding bytes that arrived as msgpack
+ * already — is deliberate. Short-circuiting the bytes arm back to `byteLength`
+ * would reintroduce exactly the two-paths problem this fixes, for a saving on
+ * the one arm that is already cheapest.
+ *
+ * Same unit as `NODE_MAP_MAX_BYTES`, the per-document save ceiling, so the
+ * total and the cap can finally be reasoned about together.
+ */
 function nodesBytes(nodes: unknown): number {
-  if (nodes == null) return 0
-  if (ArrayBuffer.isView(nodes)) return (nodes as Uint8Array).byteLength
-  try {
-    return JSON.stringify(nodes).length
-  } catch {
-    return 0
-  }
+  // `decodeStoredNodes` is the only reader that knows all three forms, and it
+  // returns null for undecodable as well as absent — which must stay 0 rather
+  // than becoming some incidental measurement of the encoded blob.
+  return nodeMapBytes(decodeStoredNodes<Record<string, unknown>>(nodes))
 }
 
 /**
@@ -347,6 +388,9 @@ async function handler(request: Request): Promise<Response> {
       const estimate = estimateMonthlyUsageCost(usage, orgData)
       const dataStorageMb =
         Math.round((datasetBytes / (1024 * 1024)) * 10) / 10
+      // Msgpack bytes of the decoded node maps — see `nodesBytes`. One unit
+      // for all three storage forms, so this figure is comparable BETWEEN
+      // sites rather than only with itself.
       const siteSizeMb = Math.round((siteSize.bytes / (1024 * 1024)) * 10) / 10
       const dataQuota = checkDataStorageQuota(orgData, dataStorageMb)
       const apiRequests = Number(apiUsageSnap.get('count') ?? 0)

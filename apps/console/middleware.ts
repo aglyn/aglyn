@@ -16,7 +16,12 @@
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
-import { APEX_LABELS, WORKSPACE_DOMAIN } from './constants/workspace-domain'
+import {
+  APEX_LABELS,
+  hostnameOf,
+  isWorkspaceDomainHost,
+  WORKSPACE_DOMAIN,
+} from './constants/workspace-domain'
 // One source of truth for the frame-ancestors allowlist, shared with
 // `with-aglyn.nextjs.config.js` so the two cannot drift (AGL-523).
 //
@@ -70,9 +75,47 @@ const APEX_PATH_SEGMENTS = new Set([
   'verify-email',
   'account-recovery',
 ])
+/**
+ * The auth family, which a **custom console domain may never render**
+ * (AGL-1099, AGL-1353 D6).
+ *
+ * The design's biggest structural bet is that the credential prompt only ever
+ * happens on an origin we control: no Firebase authorized-domain entry is
+ * needed for a custom domain, no OAuth helper iframe is ever framed there, and
+ * nothing durable is left on an origin whose DNS the customer can re-point at
+ * themselves. The client half of that is `createAuthInstance(app, 'ephemeral')`
+ * sealing `setPersistence` shut (AGL-1379); this is the route half, and the
+ * memo names it as owed a test here rather than assumed.
+ *
+ * A subset of `APEX_PATH_SEGMENTS` — the rest (`manage`, `admin`, `signout`)
+ * are legitimate on a white-label console and stay served. `signout` in
+ * particular must work locally: ending a session on the host that holds it can
+ * never be the wrong answer.
+ */
+const AUTH_PATH_SEGMENTS = new Set([
+  'signin',
+  'signup',
+  'verify-email',
+  'account-recovery',
+])
 const CACHE_TTL_MS = 60_000
 type SlugVerdict = { known: boolean; movedTo: string | null; at: number }
 const slugCache = new Map<string, SlugVerdict>()
+
+type ConsoleDomainVerdict = {
+  known: boolean
+  servable: boolean
+  orgSlug: string | null
+  at: number
+}
+const consoleDomainCache = new Map<string, ConsoleDomainVerdict>()
+
+/** No claim on this host — localhost, a preview, a self-hosted install. */
+const UNKNOWN_CONSOLE_DOMAIN = {
+  known: false,
+  servable: false,
+  orgSlug: null,
+}
 
 /**
  * Ask our own Admin-SDK route whether a workspace slug exists.
@@ -125,6 +168,75 @@ async function resolveOrgSlug(
   } catch {
     return { known: true, movedTo: null }
   }
+}
+
+/**
+ * Ask our own Admin-SDK route whether this hostname is a live custom console
+ * domain, and for which org (AGL-1099c).
+ *
+ * Same shape, same origin discipline and same failure posture as
+ * `resolveOrgSlug` above, for the same reasons — an edge Firestore read returns
+ * `403` for everything under App Check, and a hardcoded apex would make a
+ * preview deployment ask production.
+ *
+ * The one difference that matters: an unresolvable host here fails open as
+ * `known: false`, which means *pass the request through untouched*, not *serve
+ * it as somebody's console*. There is no org to pin it to, so failing open
+ * cannot accidentally scope a request into an org — it can only leave the host
+ * exactly as unhandled as it is today.
+ */
+async function resolveConsoleDomainHost(
+  host: string,
+  origin: string,
+): Promise<Omit<ConsoleDomainVerdict, 'at'>> {
+  const cached = consoleDomainCache.get(host)
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached
+  try {
+    const response = await fetch(
+      `${origin}/api/orgs/console-domain-verdict?host=${encodeURIComponent(host)}`,
+      { headers: { accept: 'application/json' } },
+    )
+    if (!response.ok) return UNKNOWN_CONSOLE_DOMAIN
+    const payload = await response.json().catch(() => null)
+    if (payload == null || typeof payload.known !== 'boolean') {
+      return UNKNOWN_CONSOLE_DOMAIN
+    }
+    // Honoured for this request, never cached — one Firestore blip must not
+    // pin a host's verdict for the full TTL in either direction.
+    if (payload.degraded) return UNKNOWN_CONSOLE_DOMAIN
+    const verdict = {
+      known: payload.known as boolean,
+      servable: payload.servable === true,
+      orgSlug: (payload.orgSlug as string | null) ?? null,
+      at: Date.now(),
+    }
+    consoleDomainCache.set(host, verdict)
+    return verdict
+  } catch {
+    return UNKNOWN_CONSOLE_DOMAIN
+  }
+}
+
+/**
+ * The org-scoped path rewrite, shared by both host gates.
+ *
+ * Routes are canonically `/[orgSlug]/…`, but on a host that already names the
+ * org the path must not repeat it (AGL-627): `acme.aglyn.com/hosts/x`, never
+ * `acme.aglyn.com/acme/hosts/x`. Account, staff and auth routes live at the
+ * apex path on every host and must not be rewritten, and an already-prefixed
+ * path passes through so canonical links keep working.
+ *
+ * Returns `null` when the path needs no rewrite.
+ */
+function orgScopedPath(request: NextRequest, slug: string): URL | null {
+  const segments = request.nextUrl.pathname.split('/').filter(Boolean)
+  const first = segments[0]
+  if (first === slug || APEX_PATH_SEGMENTS.has(first ?? '')) return null
+  const rewritten = request.nextUrl.clone()
+  rewritten.pathname = `/${slug}${
+    request.nextUrl.pathname === '/' ? '' : request.nextUrl.pathname
+  }`
+  return rewritten
 }
 
 export async function middleware(request: NextRequest) {
@@ -215,10 +327,18 @@ export async function middleware(request: NextRequest) {
       NextResponse.rewrite(url, { request: { headers: requestHeaders } }),
     )
 
-  const hostname = (request.headers.get('host') ?? '').split(':')[0].toLowerCase()
-  if (hostname === WORKSPACE_DOMAIN || !hostname.endsWith(`.${WORKSPACE_DOMAIN}`)) {
-    return pass()
+  const hostname = hostnameOf(request.headers.get('host'))
+  if (!hostname) return pass()
+  // Anything off the workspace domain may be a custom console domain — and may
+  // equally be localhost, a preview deployment or a self-hosted install. Only a
+  // Firestore claim can tell them apart, so ask (AGL-1099c).
+  if (!isWorkspaceDomainHost(hostname)) {
+    return await serveConsoleDomain(request, hostname, {
+      pass,
+      rewriteTo,
+    })
   }
+  if (hostname === WORKSPACE_DOMAIN) return pass()
   const slug = hostname.slice(0, -(WORKSPACE_DOMAIN.length + 1))
   if (slug.includes('.') || APEX_LABELS.has(slug)) {
     return pass()
@@ -230,30 +350,78 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(moved, 308)
   }
   if (verdict.known) {
-    // On a workspace subdomain the org IS the hostname, so the path should
-    // not repeat it (AGL-627): `acme.aglyn.com/hosts/x`, never
-    // `acme.aglyn.com/acme/hosts/x`. Routes are still the canonical
-    // `/[orgSlug]/…` underneath, so rewrite the org segment back in.
-    //
-    // Account, staff and auth routes are NOT org-scoped and must not be
-    // rewritten — they exist at the apex path on every host. An already
-    // prefixed path passes through so canonical links keep working.
-    const segments = request.nextUrl.pathname.split('/').filter(Boolean)
-    const first = segments[0]
-    if (first !== slug && !APEX_PATH_SEGMENTS.has(first ?? '')) {
-      const rewritten = request.nextUrl.clone()
-      rewritten.pathname = `/${slug}${
-        request.nextUrl.pathname === '/' ? '' : request.nextUrl.pathname
-      }`
-      return rewriteTo(rewritten)
-    }
-    return pass()
+    const rewritten = orgScopedPath(request, slug)
+    return rewritten ? rewriteTo(rewritten) : pass()
   }
   const apex = request.nextUrl.clone()
   apex.hostname = `app.${WORKSPACE_DOMAIN}`
   apex.pathname = '/'
   apex.search = `?unknown-workspace=${encodeURIComponent(slug)}`
   return NextResponse.redirect(apex)
+}
+
+/**
+ * The custom-console-domain gate (AGL-1099c).
+ *
+ * Three outcomes, and the reasoning for each is in
+ * `resolveConsoleDomain`/`resolveConsoleDomainHost` above:
+ *
+ * 1. **No claim** → pass. localhost, previews and self-hosted installs must
+ *    keep working, and a lookup outage lands here too.
+ * 2. **Claimed, live and entitled** → rewrite into `/{orgSlug}/…`. The path is
+ *    the pin: one host serves exactly one org, and the org cannot be changed by
+ *    anything in the request, because it came from a document keyed on the
+ *    host. The auth family is refused first — see `AUTH_PATH_SEGMENTS`.
+ * 3. **Claimed but not servable** — the org lost `whiteLabel`, the claim was
+ *    suspended, or it was never activated → send the visitor to a console that
+ *    works, rather than leaving them on a dead hostname that reads as an
+ *    outage.
+ *
+ * Outcome 3 is a **307, not a 308**, and that is a deliberate departure from
+ * AGL-1353 D7's wording. Suspension is reversible by design — re-upgrade and
+ * re-activate — while a 308 is cacheable by default and effectively
+ * irreversible in a browser. Committing every visitor's browser to a permanent
+ * redirect off a customer's own domain, because a card declined for a day, is
+ * not a state we could get back out of. (AGL-1430 makes the same argument
+ * about `www`↔apex redirects, from the same property.)
+ */
+async function serveConsoleDomain(
+  request: NextRequest,
+  hostname: string,
+  respond: {
+    pass: () => NextResponse
+    rewriteTo: (url: URL) => NextResponse
+  },
+): Promise<NextResponse> {
+  const verdict = await resolveConsoleDomainHost(
+    hostname,
+    new URL(request.url).origin,
+  )
+  if (!verdict.known) return respond.pass()
+
+  const fallback = request.nextUrl.clone()
+  fallback.hostname = verdict.orgSlug
+    ? `${verdict.orgSlug}.${WORKSPACE_DOMAIN}`
+    : `app.${WORKSPACE_DOMAIN}`
+
+  if (!verdict.servable || !verdict.orgSlug) {
+    fallback.pathname = '/'
+    fallback.search = '?console-domain=inactive'
+    return NextResponse.redirect(fallback, 307)
+  }
+
+  // Sign-in never happens on the custom domain. Until the AGL-1099e handoff
+  // exists this is where the user is sent; afterwards this is where the handoff
+  // starts. Either way the credential prompt stays on an origin we control.
+  const first = request.nextUrl.pathname.split('/').filter(Boolean)[0] ?? ''
+  if (AUTH_PATH_SEGMENTS.has(first)) {
+    const authHost = request.nextUrl.clone()
+    authHost.hostname = `app.${WORKSPACE_DOMAIN}`
+    return NextResponse.redirect(authHost, 307)
+  }
+
+  const rewritten = orgScopedPath(request, verdict.orgSlug)
+  return rewritten ? respond.rewriteTo(rewritten) : respond.pass()
 }
 
 export const config = {

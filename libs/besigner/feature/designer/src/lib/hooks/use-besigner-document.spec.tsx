@@ -493,20 +493,54 @@ describe('useBesignerDocument', () => {
   })
 
   describe('document state', () => {
-    it('reports notFound only once loading has succeeded with no nodes', () => {
+    it('reports notFound only once loading has settled with no nodes', () => {
       const { result: loading } = setup({ nodes: undefined, status: 'loading' })
       expect(loading.current.notFound).toBe(false)
 
       const { result: missing } = setup({ nodes: undefined, status: 'success' })
       expect(missing.current.notFound).toBe(true)
+
+      /**
+       * A refused read reaches `'error'` now (AGL-1066), and with nothing
+       * cached behind it there is still no document to edit. Gating this on
+       * `'success'` would have quietly stopped recognising the third state at
+       * the moment it became reachable, leaving an editor open over nothing.
+       */
+      const { result: denied } = setup({ nodes: undefined, status: 'error' })
+      expect(denied.current.notFound).toBe(true)
     })
 
-    it('reports an error from either the flag or the status', () => {
-      const { result: byError } = setup({ error: { message: 'boom' } })
+    /**
+     * The AGL-1066 constraint, at the hook that six editors read through.
+     *
+     * `hasError` is what each page swaps the canvas for "Not found" on, so it
+     * must mean "could not read it AND have nothing to show" — not merely
+     * "errored". Under `persistentLocalCache` a refused listen keeps serving
+     * the document from IndexedDB, so an author mid-edit would otherwise
+     * watch their canvas become "Not found" about two seconds into a stale
+     * session.
+     */
+    it('reports hasError only when the failed read left nothing to show', () => {
+      const { result: byError } = setup({
+        nodes: undefined,
+        error: { message: 'boom' },
+      })
       expect(byError.current.hasError).toBe(true)
 
-      const { result: byStatus } = setup({ status: 'error' })
+      const { result: byStatus } = setup({ nodes: undefined, status: 'error' })
       expect(byStatus.current.hasError).toBe(true)
+
+      // The case the flip creates: errored, but the cache is still serving
+      // the document. Keep rendering it, and say so through `staleContent`.
+      const { result: cached } = setup({ status: 'error' })
+      expect(cached.current.hasError).toBe(false)
+      expect(cached.current.staleContent).toBe(true)
+      expect(cached.current.notFound).toBe(false)
+
+      // …and a healthy document is neither.
+      const { result: healthy } = setup()
+      expect(healthy.current.hasError).toBe(false)
+      expect(healthy.current.staleContent).toBe(false)
     })
   })
 

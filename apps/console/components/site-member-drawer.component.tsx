@@ -108,6 +108,18 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
     () => computeLifetimePurchaseCents(orders),
     [orders],
   )
+  /**
+   * The order query failed AND nothing came back with it (AGL-1066).
+   *
+   * The copy this gates blames the reader's ROLE, which is the right
+   * explanation for the denial this was written for — orders are
+   * admin/editor-only in rules. It is the wrong explanation once a stale
+   * SESSION can push a listen to `'error'` too, and flatly wrong when
+   * `persistentLocalCache` is still serving the rows: telling someone their
+   * role is insufficient while their orders sit right there is a support
+   * ticket about permissions that was never about permissions.
+   */
+  const ordersUnreadable = ordersStatus === 'error' && orders.length === 0
 
   const { data: subscriptionDocs } = useFirestoreCollection<any>(
     () =>
@@ -275,7 +287,7 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
 
           <Divider textAlign="left">{'Lifetime purchases'}</Divider>
           <Typography variant="h6">
-            {ordersStatus === 'error' ? '—' : usd(lifetimeCents)}
+            {ordersUnreadable ? '—' : usd(lifetimeCents)}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {'Charged order totals minus refunds; pending and cancelled ' +
@@ -283,7 +295,7 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
           </Typography>
 
           <Divider textAlign="left">{'Orders'}</Divider>
-          {ordersStatus === 'error' ? (
+          {ordersUnreadable ? (
             <Typography variant="body2" color="text.secondary">
               {'Order history needs the editor or admin role on this site.'}
             </Typography>

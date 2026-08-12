@@ -50,7 +50,10 @@ export function usePluginConfig(
     if (!schema) return (data as Record<string, unknown>) ?? {}
     return mergePluginConfig(schema, data ?? null)
   }, [pluginId, data])
-  return { config, ready: status !== 'loading' }
+  // `'success'` rather than `!== 'loading'` (AGL-1066): a refused listen can
+  // now reach `'error'`, and answering "ready" with an empty config would let
+  // a caller act on schema defaults as though they were the stored settings.
+  return { config, ready: status === 'success' }
 }
 
 export default usePluginConfig

@@ -29,14 +29,47 @@
  *   content hash is DROPPED on purpose — a reference names the asset, so a
  *   replace propagates instead of 404ing that exact URL by design.
  * - A raw storage URL → a reference only when the media doc it names can be
- *   found AND that doc has a `cdnPath`. No `cdnPath` means the org is not
- *   entitled to `mediaCdn` (or the asset is private), and since the CDN
- *   handler checks the entitlement nowhere, minting a reference would hand
- *   the org paid delivery this script has no business granting. Those are
- *   REPORTED AND LEFT ALONE — they keep rendering exactly as they do today.
+ *   found AND the org is entitled to `mediaCdn`. The CDN handler checks the
+ *   entitlement nowhere (AGL-1409 — the gate is at write time), so minting a
+ *   reference for an unentitled org would hand it paid delivery this script
+ *   has no business granting.
  * - A URL that matches no media doc is REPORTED AND SKIPPED. It is an
  *   external hotlink, or an asset deleted out from under the page; guessing
  *   would replace a working image with a 404.
+ *
+ * ## `cdnPath` is EVIDENCE of the entitlement, not the entitlement (AGL-1407)
+ *
+ * The first version of that rule read `cdnPath` on the media doc and treated
+ * its absence as "not entitled". That is wrong for the oldest assets, and the
+ * way it is wrong is the shape worth remembering: a conversion that gates on
+ * a field its targets LACK declines exactly the documents it was written for,
+ * changes nothing, and reports success.
+ *
+ * It is what happened here. `seo.favicon` on two hosts — one of them a
+ * customer site leaking its own bucket path — names assets uploaded before
+ * `mediaCdnPathUpdate` existed, so neither carries a `cdnPath`. Both orgs are
+ * entitled (`starter` and `enterprise` both include `mediaCdn`; only `free`
+ * does not), and both objects are served by `/api/media/cdn/…` today, because
+ * `serveMediaCdn` reads `storagePath` and never looks at `cdnPath` at all.
+ *
+ * So the entitlement is established from the org rather than from the one
+ * asset: a live media doc anywhere in the scope this host can see — its own
+ * library or its org's — that carries a `cdnPath` is `mediaCdnPathUpdate`'s
+ * own output, and proves the gate ran and said yes for that ORG, which is the
+ * unit `checkEntitlement` decides on. With the entitlement proven, the path
+ * for an asset lacking one is DERIVED (`/api/media/cdn/{scope}/{mediaId}` —
+ * the same string `mediaCdnPathUpdate` would have minted).
+ *
+ * This never grants delivery the real gate withheld: an org with no `cdnPath`
+ * anywhere is declined, and so is a `private` asset, whose missing path is the
+ * mechanism keeping it out of pickers and pages rather than a plan decision.
+ *
+ * ## Every decline is NAMED
+ *
+ * A value this script leaves alone is reported with the DOCUMENT and FIELD it
+ * sits in and the reason, not merely rolled up by URL. Silence is what let the
+ * favicon leg look done; a run that declines something must be unable to be
+ * read as a run that had nothing to do.
  * - A prop already holding a `media:` reference is skipped, so re-runs are
  *   no-ops and documents are only written when a node actually changed.
  * - `emailImage` nodes are STILL SKIPPED, but no longer because they must be.
@@ -108,19 +141,25 @@ const MEDIA_PROPS = ['src', 'poster', 'imageUrl']
 const ENTRY_MEDIA_FIELDS = ['coverImage']
 
 /**
- * `hosts/{host}` (AGL-1407). Three surfaces read `logoUrl` and all three now
+ * `hosts/{host}` (AGL-1407). Three surfaces read `logoUrl` and all three
  * resolve a reference: the tenant layout's navigation loader, the client
  * brand block, and the PWA manifest icon.
  *
- * `seo.favicon` is DELIBERATELY ABSENT, and not by oversight. Nothing on a
- * tenant site renders it — the app emits no `<link rel="icon">` at all — so
- * converting it buys a live site nothing. Its only readers are two console
- * components (`favicon-card`, `host-icon`) that hand the stored string
- * straight to an `<img src>`, so a reference there is a broken thumbnail in
- * the admin UI and nothing else. It goes in the same run as the code that
- * teaches those two to resolve, not before.
+ * `seo.favicon` joined them once its two readers learned to resolve —
+ * `favicon-card.component.tsx` and `host-icon.component.tsx`, which handed the
+ * stored string straight to an `<img src>` / `<Avatar src>` and would have
+ * shown a broken tile in the site switcher and the sites list the moment the
+ * data changed underneath them. It is written as a DOTTED path because that is
+ * what `snapshot.get` reads and what `update` treats as a nested field; a
+ * `set(…, {merge:true})` with the same key would create a literal field called
+ * `seo.favicon` beside the real one.
+ *
+ * No tenant surface renders the favicon — the app emits no `<link rel="icon">`
+ * — but the host document is serialized into the page payload, so the raw URL
+ * is on every rendered HTML route regardless, which is the bucket-path
+ * exposure this converts away.
  */
-const HOST_MEDIA_FIELDS = ['logoUrl']
+const HOST_MEDIA_FIELDS = ['logoUrl', 'seo.favicon']
 
 /** Components whose `src` must stay an absolute URL — see the header. */
 const SKIP_COMPONENT_IDS = new Set(['emailImage'])
@@ -238,9 +277,10 @@ async function buildMediaIndex(hostId) {
     for (const doc of media.docs) {
       const data = doc.data()
       if (data['deletedAt']) continue
-      // No `cdnPath` = no `mediaCdn` entitlement, or private (AGL-1051).
-      // Either way there is no reference to be minted; recorded so the
-      // report can say WHY a URL was left alone.
+      // A `cdnPath` is `mediaCdnPathUpdate`'s output, so one anywhere in this
+      // host's reachable scope PROVES the org holds `mediaCdn` — see the
+      // header. Its absence on a single asset proves nothing on its own:
+      // assets predating AGL-1051 never had one minted.
       const hasCdnPath = typeof data['cdnPath'] === 'string' && data['cdnPath']
       if (hasCdnPath) withCdnPath += 1
       else withoutCdnPath += 1
@@ -249,6 +289,9 @@ async function buildMediaIndex(hostId) {
         cdnScope,
         visibleTo: data['visibleTo'],
         hasCdnPath: Boolean(hasCdnPath),
+        // A private asset's missing `cdnPath` IS the mechanism keeping it out
+        // of pickers and pages, not a plan decision — never derive one.
+        private: data['private'] === true,
       }
       const storagePath =
         typeof data['storagePath'] === 'string' && data['storagePath']
@@ -272,7 +315,12 @@ async function buildMediaIndex(hostId) {
   if (typeof orgId === 'string' && orgId) {
     await addScope(firestore.collection('orgs').doc(orgId), `org:${orgId}`)
   }
-  return { index, withCdnPath, withoutCdnPath }
+  // The entitlement, established from the org rather than from one asset.
+  // Deliberately counted across BOTH libraries: `mediaCdnPathUpdate` gates on
+  // the ORG billing doc, so evidence in the org library settles the question
+  // for a host whose own library happens to hold only legacy uploads — which
+  // is exactly the customer site this reopened on.
+  return { index, withCdnPath, withoutCdnPath, cdnEntitled: withCdnPath > 0 }
 }
 
 let docsScanned = 0
@@ -282,8 +330,21 @@ let entriesScanned = 0
 let entryDocsChanged = 0
 let hostDocsChanged = 0
 let skippedEmail = 0
-const unresolvedUrls = new Map()
-const noCdnPathUrls = new Map()
+
+/**
+ * Every value this script refuses to convert, each with the DOCUMENT and
+ * FIELD it sits in and the reason (AGL-1407).
+ *
+ * Previously a URL→count rollup, which cannot answer the only question that
+ * matters after a run that changed nothing: *which document did you decline,
+ * and why*. The favicon leg survived a run reported as successful because a
+ * decline was a number in a list of URLs rather than a named document.
+ */
+const declined = []
+const decline = (where, value, reason) => {
+  declined.push({ where, value, reason })
+  return undefined
+}
 
 /**
  * Counted separately per surface so "0 changes" stays readable. A node pass
@@ -298,6 +359,13 @@ const newStats = () => ({
   external: 0,
   /** Of `fromStorageUrl`, the ones matched by `movedKey` — a dead URL made live. */
   movedAssets: 0,
+  /**
+   * Of `fromStorageUrl`, the ones whose media doc carries NO `cdnPath` and
+   * whose path was DERIVED from the org's proven entitlement. Counted apart
+   * because it is the one branch that mints a path nothing wrote down, and a
+   * supervised run has to see how many of those it is about to create.
+   */
+  derivedCdnPath: 0,
 })
 const nodeStats = newStats()
 const fieldStats = newStats()
@@ -307,14 +375,16 @@ const written = (stats) => stats.fromCdnPath + stats.fromStorageUrl
  * The ONE conversion rule, for a single stored value.
  *
  * Node props and document fields reach it by different walks and must not
- * reach it by different rules. The `cdnPath` gate below is the whole reason
+ * reach it by different rules. The entitlement gate below is the whole reason
  * this script is safe to point at production — a raw URL means free-tier, or
- * private, or pre-AGL-1215 legacy, and only the media doc separates them — so
- * a second copy of that decision is a second place for it to be wrong.
+ * private, or pre-AGL-1215 legacy, and only the media doc and its org separate
+ * them — so a second copy of that decision is a second place for it to be
+ * wrong.
  *
  * Returns the reference to store, or undefined to leave the value alone.
- * Every "leave it alone" branch records WHY, so the report can tell an
- * external hotlink from an asset the org is not entitled to have served.
+ * EVERY "leave it alone" branch calls `decline` with the document, the field
+ * and the reason. A branch that returns undefined without one is the bug this
+ * function was reopened for.
  */
 function convertValue(value, stats, media, hostId, where) {
   stats.seen += 1
@@ -325,9 +395,8 @@ function convertValue(value, stats, media, hostId, where) {
   if (value.includes(`${MEDIA_CDN_ROUTE}/`)) {
     const ref = refFromCdnPath(value)
     if (!ref) {
-      unresolvedUrls.set(value, (unresolvedUrls.get(value) ?? 0) + 1)
       console.warn(`  ! unparseable cdn path at ${where}`)
-      return undefined
+      return decline(where, value, 'unparseable /api/media/cdn path')
     }
     stats.fromCdnPath += 1
     return ref
@@ -353,18 +422,48 @@ function convertValue(value, stats, media, hostId, where) {
     }
   }
   if (!entry) {
-    unresolvedUrls.set(value, (unresolvedUrls.get(value) ?? 0) + 1)
-    return undefined
+    return decline(
+      where,
+      value,
+      'matched no media doc (deleted asset, or a library this host cannot see)',
+    )
   }
   if (!entry.hasCdnPath) {
-    noCdnPathUrls.set(value, (noCdnPathUrls.get(value) ?? 0) + 1)
-    return undefined
+    // The asset carries no `cdnPath`. That is a REFUSAL only when the org has
+    // no `mediaCdn`, or the asset is private — see the header. Otherwise it is
+    // an asset older than `mediaCdnPathUpdate`, and the path it would have
+    // been given is derivable, which is what `serveMediaCdn` serves it from
+    // today anyway (it reads `storagePath` and never consults `cdnPath`).
+    if (entry.private) {
+      return decline(
+        where,
+        value,
+        `\`${entry.mediaId}\` is PRIVATE — a reference would publish it`,
+      )
+    }
+    if (!media.cdnEntitled) {
+      return decline(
+        where,
+        value,
+        `no cdnPath on \`${entry.mediaId}\` and NONE anywhere in this org — ` +
+          'no mediaCdn entitlement to derive one from',
+      )
+    }
+    stats.derivedCdnPath += 1
+    console.warn(
+      `  ~ ${where}: \`${entry.mediaId}\` predates cdnPath minting; DERIVED ` +
+        'one (the org is entitled — it has cdnPaths on other assets)',
+    )
   }
   const scope = qualifyScope(entry.cdnScope, entry.visibleTo, hostId)
   const ref = formatMediaRef(scope, entry.mediaId)
   if (!ref) {
-    unresolvedUrls.set(value, (unresolvedUrls.get(value) ?? 0) + 1)
-    return undefined
+    return decline(
+      where,
+      value,
+      `\`${entry.mediaId}\` in scope \`${scope}\` does not form a reference ` +
+        'the CDN would accept',
+    )
   }
   stats.fromStorageUrl += 1
   return ref
@@ -539,6 +638,10 @@ const breakdown = (stats) =>
   (stats.movedAssets
     ? ` (${stats.movedAssets} of them DEAD — the asset had moved folders)\n`
     : '\n') +
+  (stats.derivedCdnPath
+    ? `    of which ${stats.derivedCdnPath} had NO cdnPath — DERIVED from ` +
+      'the org entitlement\n'
+    : '') +
   `  ${stats.external} external URL(s) left alone\n`
 
 console.log(
@@ -559,22 +662,36 @@ console.log(
     `${written(nodeStats) + written(fieldStats)} value(s) ` +
     `${apply ? 'written' : 'pending'}.`,
 )
-if (noCdnPathUrls.size) {
-  console.log(
-    `\n${noCdnPathUrls.size} URL(s) name a media doc with NO cdnPath ` +
-      '(free-tier org, or a private asset) — left as raw URLs by design:',
-  )
-  for (const [url, count] of [...noCdnPathUrls].sort((a, b) => b[1] - a[1]).slice(0, 20)) {
-    console.log(`  ${String(count).padStart(4)}×  ${url.slice(0, 120)}`)
+/**
+ * Declines, grouped by reason and NAMING EVERY DOCUMENT (AGL-1407).
+ *
+ * The old report rolled these up by URL, which reads as a footnote about the
+ * media library rather than a list of documents this run refused to fix. Say
+ * so explicitly when there are none, too — the absence of a section is not a
+ * statement, and this run's whole failure mode was being read as one.
+ */
+if (declined.length) {
+  const byReason = new Map()
+  for (const item of declined) {
+    const list = byReason.get(item.reason) ?? []
+    list.push(item)
+    byReason.set(item.reason, list)
   }
-}
-if (unresolvedUrls.size) {
   console.log(
-    `\n${unresolvedUrls.size} storage URL(s) matched no media doc — SKIPPED ` +
-      '(deleted asset, or a library this host cannot see):',
+    `\n${declined.length} value(s) DECLINED across ` +
+      `${byReason.size} reason(s) — each left exactly as it is today:`,
   )
-  for (const [url, count] of [...unresolvedUrls].sort((a, b) => b[1] - a[1]).slice(0, 20)) {
-    console.log(`  ${String(count).padStart(4)}×  ${url.slice(0, 120)}`)
+  for (const [reason, items] of [...byReason].sort(
+    (a, b) => b[1].length - a[1].length,
+  )) {
+    console.log(`\n  ${items.length}×  ${reason}`)
+    for (const item of items.slice(0, 20)) {
+      console.log(`      ${item.where}`)
+      console.log(`        ${item.value.slice(0, 120)}`)
+    }
+    if (items.length > 20) console.log(`      … and ${items.length - 20} more`)
   }
+} else {
+  console.log('\n0 value(s) declined — nothing was left behind.')
 }
 if (!apply) console.log('\nRe-run with --apply to write.')

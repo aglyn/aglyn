@@ -183,3 +183,78 @@ than the free space you actually get back — a 58 GB prune returned closer to 7
 immediately observable `df`, partly because the replacement cache starts rebuilding at once and
 partly because APFS reclaim lags. The threshold is a `du` number and so prunes somewhat earlier
 than its face value suggests, which is the conservative direction.
+
+## If your tools start failing for no reason, check the disk first (AGL-1425)
+
+**The symptom.** Bash commands fail with `ENOSPC`, or hang for minutes, or a shell dies
+outright and cannot be recovered. Unrelated commands break at the same time. Nothing says "the
+disk is full", so the obvious readings are "the tool is broken" or "the machine is wedged" —
+which is why this costs a session to diagnose every time.
+
+**The path.** `apps/console/.next/dev/cache/turbopack`. On 2026-08-11 it reached **110 GB** on
+one checkout and took the volume to 1.8 GiB free of 460 GiB, with `apps/tenant/.next/dev`
+likewise full. Check it first:
+
+```
+du -sh apps/*/.next/dev/cache/turbopack     # sizes
+df -h .                                     # what is actually left
+npm run clean:next                          # both, plus a verdict
+```
+
+**The fix**, with the dev server for that app stopped:
+
+```
+rm -rf apps/console/.next/dev/cache/turbopack     # or: npm run clean:next:prune
+```
+
+Stopping the server first is not optional. Deleting the cache underneath a running dev server
+corrupts that session, and on a shared machine the server may belong to someone else — this is
+exactly why the prune in the section above refuses to touch a cache in use.
+
+### Why the prune alone was not enough
+
+The serve-time prune landed first, and the runaway happened anyway. The reason is the guard:
+the 110 GB cache had a concurrent session's dev server attached to it, so every prune correctly
+refused, and the cache went on growing. The refusal was even reported — as a tidy one-line note,
+at the exact moment someone could have acted on it.
+
+So `clean-next.mjs` now also runs a **free-disk preflight**, and it runs whether or not the
+prune did anything. It is the last thing the script does, so a prune that just fixed the problem
+does not then fail the target it rescued:
+
+| Free space      | Result                                                     |
+| --------------- | ---------------------------------------------------------- |
+| under 10 GiB    | **exit 1** — the serve target fails and no server starts     |
+| under 30 GiB    | loud warning on stderr, server starts normally               |
+| unreadable      | one line, never blocks                                       |
+
+Blocking is a deliberate exception to this script's standing rule of never failing the serve
+target. An unprunable cache is an annoyance; starting Turbopack with 8 GiB of headroom reliably
+produces the cascade described at the top of this section, and one clear message is cheaper than
+finding it again. Overrides: `DEV_DISK_MIN_FREE_GB`, `DEV_DISK_WARN_FREE_GB`, or
+`DEV_DISK_CHECK=off` to skip entirely.
+
+Because it lives in `clean-next-cache`, it covers every route people actually use — `nx serve
+console`, `nx serve tenant`, `nx serve www`, any `--configuration=production` or `--port`
+variant, the `.claude/launch.json` entries (which all shell out to `nx serve`), and the
+`serve:*:emulated` npm scripts. It does **not** cover `apps/docs`, which is Docusaurus rather
+than Next and has no `clean-next-cache` target; that app has never been the one that fills the
+disk. The threshold logic is pure and tested — `npm run test:disk-space`, and in CI.
+
+### What is actually growing
+
+Worth knowing before reaching for a config fix. The cache is a persistent SST store —
+`.next/dev/cache/turbopack/v<turbopack-version>/NNNNNNNN.sst` plus a `.meta` sibling per file,
+individual tables running 150–230 MB. Two things follow:
+
+- **It is version-keyed.** A Turbopack upgrade starts a fresh `v<version>` directory and leaves
+  the old tree behind; nothing reaps it. Deleting `.next` wholesale, as the prune does, is the
+  only thing that collects those.
+- **Growth is ordinary write volume, not a misconfiguration.** A live console server was
+  measured adding ~900 MB in ten minutes of normal editing. Extrapolated across a multi-day
+  session, 110 GB needs no pathology to explain — the store accumulates faster than it compacts.
+
+Specifically, browser sourcemap generation is **not** the cause, and is worth ruling out because
+it looks like a plausible lead: there is no `productionBrowserSourceMaps` or `serverSourceMaps`
+setting anywhere in the repo, and Turbopack ignores that config regardless. There is no knob
+here to turn down. Treat the cache as regenerable and let the prune do its job.

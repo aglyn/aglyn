@@ -38,6 +38,23 @@ describe('commerce plugin', () => {
     }
   })
 
+  it('lets nothing become a container by accident (AGL-1389)', () => {
+    // Same guard the mui bundle is held to. Every id below was checked
+    // against its renderer; everything else in this bundle is a self-closing
+    // widget, and a new one that is not says so on its schema or turns this
+    // red. See `auditChildContract` for why this is an inventory rather than
+    // an exemption list.
+    expect(Aglyn.auditChildContract(COMMERCE_BUNDLE, ['gate'])).toEqual([])
+  })
+
+  it('keeps every container’s children through compose (AGL-1389)', () => {
+    expect(
+      Aglyn.auditComposeChildSurvival(
+        Aglyn.listAcceptingComponentIds(COMMERCE_BUNDLE),
+      ),
+    ).toEqual([])
+  })
+
   it('authors preset styling on `sx`, never inside props (AGL-1346)', () => {
     // Same rule the mui bundle is held to: `props.sx` renders but the
     // Styles panel edits `node.sx`, so styling authored into props is

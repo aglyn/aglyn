@@ -1075,6 +1075,22 @@ service cloud.firestore {
                      // them could invent a five-star average.
                      'ratingSum', 'ratingCount', 'ratingAverage',
                      'commentCount',
+                     // `installCount`'s live sibling and AGL-1419's derived
+                     // cache for it (AGL-1420). `installCount` was denied on
+                     // the first pass and `activeInstalls` was not, though
+                     // the listing header and the browse grid print both —
+                     // it was invisible to the AGL-1361 guard because it was
+                     // in neither this list nor `MarketplaceListing`, which
+                     // is the guard's whole field universe. The cache triple
+                     // is worse than a wrong number: `verifiedLivePins`
+                     // treats it as FRESH when `pinnedActiveInstalls` equals
+                     // `activeInstalls` inside the TTL and then serves
+                     // `pinnedVersionInstalls` without querying, so writing
+                     // all four pins the cache open on chosen numbers and
+                     // suppresses the re-derivation that exists to bring a
+                     // count back DOWN.
+                     'activeInstalls', 'pinnedActiveInstalls',
+                     'pinsVerifiedAtMs', 'pinnedVersionInstalls',
                      // Staff takedown (AGL-658). An owner who could clear
                      // `hiddenAt` could un-hide their own listing, which
                      // makes moderation a suggestion.

@@ -205,7 +205,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 import { GET as EXPORT_GET } from '../app/api/hosts/export/route'
 import { POST as IMPORT_POST } from '../app/api/hosts/import/route'
-import { IMPORTABLE_FIELDS } from '../app/api/_lib/site-export'
+import {
+  EXPORT_COLLECTION_LIMITS,
+  IMPORTABLE_FIELDS,
+} from '../app/api/_lib/site-export'
 // Through the mocked specifier, which re-exports the REAL implementation above.
 import { compress } from '@aglyn/aglyn/server'
 // The REAL Admin `Timestamp`, not a stand-in: what a document's timestamp
@@ -682,6 +685,52 @@ const SEEDS: Array<{
       private: false,
     },
   },
+  /**
+   * The SITE's own library (AGL-1392, second pass) — the scope the first pass
+   * missed entirely.
+   *
+   * `hosts/{hostId}/mediaFolders` is what `platform.types.ts` documents as the
+   * canonical folder path (AGL-171), `resolveMediaScope` serves it as a
+   * first-class scope, and the console's media library addresses it whenever
+   * it is opened for a SITE rather than for the workspace. Production: 58 of
+   * 246 foldered assets are filed there, and no bundle has ever carried one.
+   *
+   * Seeded as a real second library rather than as more org documents, because
+   * seeding the degraded shape is how this issue hid twice already. The ids are
+   * deliberately disjoint from the org library's: a pointer that resolves in
+   * one library must NOT resolve against the other, and only distinct ids can
+   * tell those two behaviours apart.
+   */
+  {
+    collection: 'mediaFolders',
+    path: 'hosts/host-1/mediaFolders',
+    id: 'host-folder-1',
+    doc: { name: 'Campaigns', parentId: null },
+  },
+  {
+    // Nested inside the one above — the hierarchy is the thing a restore is for.
+    collection: 'mediaFolders',
+    path: 'hosts/host-1/mediaFolders',
+    id: 'host-folder-2',
+    doc: { name: 'Q4 Launch', parentId: 'host-folder-1' },
+  },
+  {
+    collection: 'media',
+    path: 'hosts/host-1/media',
+    id: 'host-media-1',
+    doc: {
+      fileName: 'launch-banner.png',
+      contentType: 'image/png',
+      sizeBytes: 40960,
+      url: 'https://firebasestorage.example/launch-banner.png?alt=media&token=t',
+      storagePath: 'hosts/host-1/media/campaigns/q4-launch/launch-banner.png',
+      // Two levels down, so a restore that flattens is visible as a null here.
+      folderId: 'host-folder-2',
+      alt: 'Launch banner',
+      width: 1200,
+      height: 630,
+    },
+  },
 ]
 
 const HOST_DOC = {
@@ -1156,6 +1205,162 @@ describe('the media folder tree survives the round trip (AGL-1392)', () => {
     // Not "left pointing at nothing": at root the asset is filtered out of the
     // grid entirely, so a dangling pointer HIDES the asset.
     expect(storedAt('orgs/org-1/media/media-1')['folderId']).toBeNull()
+  })
+})
+
+/**
+ * AGL-1392 gap 2, REOPENED: the first pass added `mediaFolders` at ORG scope
+ * only, and the site's own library is the larger half.
+ *
+ * `exportOrgCollection('mediaFolders')` reads `orgs/{orgId}/mediaFolders`.
+ * Production holds 246 foldered assets, and 58 of them (24%) are filed in
+ * `hosts/{hostId}/mediaFolders` — the path AGL-171 defined as canonical, which
+ * `resolveMediaScope` still serves and the console's media library still
+ * addresses. Neither that collection NOR `hosts/{hostId}/media` was read by the
+ * export at all, so the site library reached no bundle in either part: not the
+ * tree, and not the assets hanging off it.
+ *
+ * Which makes the guard the first pass added the reason this looked survivable
+ * rather than the reason it was: a restore cannot re-parent what the bundle
+ * never carried, and "the assets drop to root" understates it — for a restore
+ * into a fresh site there were no assets to drop.
+ */
+describe("the SITE's own media library survives the round trip (AGL-1392)", () => {
+  it('is seeded as two libraries with disjoint folder ids', () => {
+    // Guard the premise, the AGL-1391 lesson. Overlapping ids would make the
+    // cross-library assertions below pass against an import that resolves
+    // every pointer against one merged set — the bug they exist to catch.
+    const orgFolders = new Set(store.get('orgs/org-1/mediaFolders').keys())
+    const hostFolders = new Set(store.get('hosts/host-1/mediaFolders').keys())
+    expect(orgFolders.size).toBeGreaterThan(0)
+    expect(hostFolders.size).toBeGreaterThan(0)
+    for (const id of hostFolders) {
+      expect({ id, alsoInOrg: orgFolders.has(id) }).toEqual({ id, alsoInOrg: false })
+    }
+    // And the seeded asset really is filed two levels down, so a flattening
+    // restore is visible as a null rather than as an unchanged root asset.
+    const seeded = store.get('hosts/host-1/media').get('host-media-1')
+    expect(seeded['folderId']).toBe('host-folder-2')
+    expect(
+      store.get('hosts/host-1/mediaFolders').get('host-folder-2')['parentId'],
+    ).toBe('host-folder-1')
+  })
+
+  it('exports the site library, folders and assets alike', async () => {
+    const bundle = await runExport()
+    expect(bundle.hostMediaFolders).toHaveLength(2)
+    expect(bundle.hostMedia).toHaveLength(1)
+    // The referenced folder is IN the bundle — the whole point, and what the
+    // org-scope-only manifest could never say about a host-filed asset.
+    const referenced = bundle.hostMedia[0].folderId
+    expect(bundle.hostMediaFolders.map((f: any) => f.$id)).toContain(referenced)
+    // The two libraries stay separate arrays: merging them would restore a
+    // site's private files into the shared org DAM.
+    expect(bundle.media.map((m: any) => m.$id)).not.toContain('host-media-1')
+    expect(bundle.mediaFolders.map((f: any) => f.$id)).not.toContain(
+      'host-folder-1',
+    )
+  })
+
+  it('declares a cap for every array the manifest carries', async () => {
+    // Generic on purpose, so the NEXT array is covered without anyone
+    // remembering this file. An undeclared one falls through `bundleItems`'
+    // `?? 100` and restores short and silently — AGL-1382's media bug exactly,
+    // and a site library can hold more than 100 assets.
+    const bundle = await runExport()
+    for (const [key, value] of Object.entries(bundle)) {
+      if (!Array.isArray(value)) continue
+      expect({ key, capped: key in EXPORT_COLLECTION_LIMITS }).toEqual({
+        key,
+        capped: true,
+      })
+    }
+  })
+
+  it('re-parents rather than flattens', async () => {
+    // The assertion this reopening turns on. The dangling guard must NOT fire
+    // for folders the bundle genuinely carries: the asset keeps its folder,
+    // the folder keeps its parent, and the chain still reaches root.
+    const bundle = await runExport()
+    await runImport(bundle)
+
+    expect(storedAt('hosts/host-1/media/host-media-1')['folderId']).toBe(
+      'host-folder-2',
+    )
+    expect(storedAt('hosts/host-1/mediaFolders/host-folder-2')['parentId']).toBe(
+      'host-folder-1',
+    )
+    expect(
+      storedAt('hosts/host-1/mediaFolders/host-folder-1')['parentId'],
+    ).toBeNull()
+  })
+
+  it('restores the site library into the SITE, never into the org', async () => {
+    const bundle = await runExport()
+    await runImport(bundle)
+
+    expect(storedAt('hosts/host-1/media/host-media-1')).toBeDefined()
+    expect(storedAt('hosts/host-1/mediaFolders/host-folder-1')).toBeDefined()
+    // A site library is private. Promoting it to the shared org DAM on a
+    // restore would expose one client's files to every member of every other
+    // client site — a wider scope than the customer ever chose.
+    expect(storedAt('orgs/org-1/media/host-media-1')).toBeUndefined()
+    expect(storedAt('orgs/org-1/mediaFolders/host-folder-1')).toBeUndefined()
+  })
+
+  it('writes no visibleTo into a library whose documents carry none', async () => {
+    const bundle = await runExport()
+    // Even when the file claims one: a bundle is portable and hand-editable.
+    bundle.hostMedia[0].visibleTo = ['org']
+    bundle.hostMediaFolders[0].visibleTo = ['org']
+    await runImport(bundle)
+
+    // `scopedToHost` refuses to filter a host ref precisely BECAUSE these
+    // documents have no `visibleTo`; stamping one would invent a field no live
+    // write path produces, and `merge: false` makes the restored document
+    // differ from every one beside it.
+    expect(storedAt('hosts/host-1/media/host-media-1')).not.toHaveProperty(
+      'visibleTo',
+    )
+    expect(
+      storedAt('hosts/host-1/mediaFolders/host-folder-1'),
+    ).not.toHaveProperty('visibleTo')
+  })
+
+  it('drops a folderId only the OTHER library holds', async () => {
+    // `folder-1` is a real folder in the bundle — in the ORG's library. The
+    // site's library is a separate id space, so filing a site asset under it
+    // hides the asset exactly as an invented id would: the DAM's root view
+    // filters out anything with a truthy `folderId`.
+    const bundle = await runExport()
+    bundle.hostMedia[0].folderId = 'folder-1'
+    await runImport(bundle)
+    expect(storedAt('hosts/host-1/media/host-media-1')['folderId']).toBeNull()
+  })
+
+  it('drops a parentId no folder in the bundle or the site holds', async () => {
+    const bundle = await runExport()
+    bundle.hostMediaFolders[1].parentId = 'folder-that-was-never-exported'
+    await runImport(bundle)
+    expect(
+      storedAt('hosts/host-1/mediaFolders/host-folder-2')['parentId'],
+    ).toBeNull()
+  })
+
+  it('keeps a parentId the TARGET site already holds', async () => {
+    // The other half of the resolvable set, at host scope: a folder the site
+    // holds but this bundle does not carry is still a real folder, and nulling
+    // a parent that points at it would reparent a tree that was never broken.
+    seed('hosts/host-1/mediaFolders', 'host-folder-sibling', { name: 'Evergreen' })
+    const bundle = await runExport()
+    bundle.hostMediaFolders = bundle.hostMediaFolders.filter(
+      (folder: any) => folder.$id !== 'host-folder-sibling',
+    )
+    bundle.hostMediaFolders[1].parentId = 'host-folder-sibling'
+    await runImport(bundle)
+    expect(storedAt('hosts/host-1/mediaFolders/host-folder-2')['parentId']).toBe(
+      'host-folder-sibling',
+    )
   })
 })
 
