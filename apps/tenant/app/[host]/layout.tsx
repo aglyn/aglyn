@@ -54,6 +54,32 @@ export default async function HostLayout({
   const brandLogoUrl = resolveMediaSrc(hostRes.host?.logoUrl, {
     hostId: hostRes.host?.$id,
   })
+  /**
+   * The site's own favicon (AGL-1421).
+   *
+   * `seo.favicon` has had a console card and a stored value for as long as the
+   * SEO toolkit has existed, and NOTHING rendered it — the app emitted no
+   * `<link rel="icon">` at all, so every browser fell back to the origin's
+   * `/favicon.ico`, which is `apps/tenant/public/favicon.ico`: **Aglyn's**
+   * mark, in the tab of every customer's site. That is the same failure
+   * AGL-1252 fixed for the install manifest, one surface over — a white-label
+   * site is not white-label while our icon is in the tab.
+   *
+   * Emitted only when the site set one. A site with nothing configured keeps
+   * today's fallback rather than getting an empty `href`, which browsers
+   * resolve against the page and would request the page as an icon.
+   *
+   * Site-RELATIVE like the manifest link and the brand logo: this is fetched
+   * by the document that declared it, so it has a base URL to resolve against.
+   * (The manifest ICON is the exception — the OS fetches it with no page.)
+   *
+   * No `type`: the two favicons in production are an `.ico` and a `.png`, the
+   * stored value carries no MIME, and a WRONG `type` is worse than none —
+   * browsers use it to pick between candidates and will skip the only one.
+   */
+  const faviconHref = resolveMediaSrc(hostRes.host?.seo?.favicon, {
+    hostId: hostRes.host?.$id,
+  })
   return (
     <HostThemeProviders
       hostTheme={hostTheme}
@@ -65,6 +91,7 @@ export default async function HostLayout({
           serves every customer domain and every aglyn.app subdomain without
           the layout needing to know which it is on. */}
       <link rel="manifest" href="/manifest.webmanifest" />
+      {faviconHref ? <link rel="icon" href={faviconHref} /> : null}
       {fontsHref ? (
         <>
           <link
