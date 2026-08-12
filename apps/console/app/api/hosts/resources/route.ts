@@ -23,6 +23,7 @@ import {
   nameSearchKey,
   type OrgEntitlements,
   type OrgFeatureFlags,
+  SCREEN_KIND_TEMPLATE,
   WEBHOOK_MAX_PER_HOST,
 } from '@aglyn/aglyn/server'
 import {
@@ -343,6 +344,26 @@ async function handler(request: Request): Promise<Response> {
     if (resource.entitlement && !checkEntitlement(org, resource.entitlement)) {
       return Response.json({
         error: `This feature is not included in your plan — see Billing`,
+      }, { status: 403 })
+    }
+
+    // `kind` is on the screen allow-list because the email composer must send
+    // `kind: 'email'` on the create it owns. Since AGL-1400 that list carries a
+    // second value the count subtracts on, and a client able to send it would
+    // mint a screen the cap never saw — the exact create-time hole AGL-1383
+    // described, one field over. A template is made by demoting a page
+    // (/api/hosts/screens), which is free precisely because the page was paid
+    // for; promoting it back meets this same gate.
+    const requestedKind = (data as Record<string, unknown>)['kind']
+    if (
+      resourceKey === 'screen' &&
+      typeof requestedKind === 'string' &&
+      requestedKind === SCREEN_KIND_TEMPLATE
+    ) {
+      return Response.json({
+        error:
+          'Create the screen, then convert it to a template — a screen ' +
+          'cannot be created as one',
       }, { status: 403 })
     }
 

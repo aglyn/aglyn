@@ -47,10 +47,6 @@ import {
   billableScreenIds,
   type BillableScreenSource,
 } from '../resources/count-billable-screens'
-import {
-  COLLECTION_TEMPLATE_SCREEN_FIELDS,
-  type CollectionTemplateSource,
-} from '../../../../constants/collection-templates'
 
 /**
  * The document to store, built from a bundle item by ALLOW-list (AGL-1382).
@@ -173,38 +169,26 @@ async function screenCapRefusal(options: {
   bundleRoutingMap: unknown
   org: unknown
   bundleScreens: Array<Record<string, any>>
-  bundleCollections: Array<Record<string, any>>
 }): Promise<Response | null> {
   const { hostRef, routingMap, bundleRoutingMap, org } = options
   const limit = resolveOrgEntitlements(org as any).screensPerHost
-  // Unlimited plans skip the two reads outright — most orgs entitled to
+  // Unlimited plans skip the read outright — most orgs entitled to
   // `siteExport` are on one, and a cap that cannot be exceeded needs no count.
   if (!Number.isFinite(limit)) return null
 
-  const [screensSnapshot, collectionsSnapshot] = await Promise.all([
-    hostRef.collection('screens').select('kind', 'deletedAt').get(),
-    hostRef
-      .collection('collections')
-      .select('slug', 'kind', ...COLLECTION_TEMPLATE_SCREEN_FIELDS)
-      .get(),
-  ])
+  // ONE read since AGL-1400: a screen says on its own document whether it is a
+  // page, so the bundle's collections no longer decide anything here either —
+  // an entry template arrives already marked `kind: 'template'`, which is what
+  // the exporter wrote and what the live site reads.
+  const screensSnapshot = await hostRef
+    .collection('screens')
+    .select('kind', 'deletedAt')
+    .get()
 
   const priorScreens = new Map<string, BillableScreenSource>(
     screensSnapshot.docs.map((screen) => [
       screen.id,
       { id: screen.id, kind: screen.get('kind'), deletedAt: screen.get('deletedAt') },
-    ]),
-  )
-  const priorCollections = new Map<string, CollectionTemplateSource>(
-    collectionsSnapshot.docs.map((row) => [
-      row.id,
-      {
-        slug: row.get('slug'),
-        kind: row.get('kind'),
-        listScreenId: row.get('listScreenId'),
-        entryScreenId: row.get('entryScreenId'),
-        templateScreenId: row.get('templateScreenId'),
-      },
     ]),
   )
 
@@ -223,29 +207,10 @@ async function screenCapRefusal(options: {
     })
     bundleScreenCount += 1
   }
-  const nextCollections = new Map(priorCollections)
-  for (const item of options.bundleCollections) {
-    if (!item?.$id) continue
-    const stored = cleanDoc('collections', item)
-    nextCollections.set(String(item.$id), {
-      slug: stored['slug'],
-      // What `importCollections` stores, inferred for bundles that predate the
-      // discriminator (AGL-979) — a catalog collection excuses no list template.
-      kind: legacyCollectionKind(stored),
-      listScreenId: stored['listScreenId'],
-      entryScreenId: stored['entryScreenId'],
-      templateScreenId: stored['templateScreenId'],
-    })
-  }
 
-  const prior = billableScreenIds(
-    [...priorScreens.values()],
-    [...priorCollections.values()],
-    routingMap as any,
-  )
+  const prior = billableScreenIds([...priorScreens.values()], routingMap as any)
   const next = billableScreenIds(
     [...nextScreens.values()],
-    [...nextCollections.values()],
     // The host patch is written with `merge: true`, which deep-merges a map
     // field, so the restored routing map is the union rather than the bundle's.
     {
@@ -583,7 +548,6 @@ async function handler(request: Request): Promise<Response> {
       bundleRoutingMap: bundle.host?.screens,
       org: owningOrg?.org,
       bundleScreens: bundleItems('screens'),
-      bundleCollections: bundleItems('collections'),
     })
     if (overCap) return overCap
 

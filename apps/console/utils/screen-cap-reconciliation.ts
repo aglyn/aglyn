@@ -48,10 +48,9 @@ export interface ScreenCapHostInput {
 /**
  * `screensPerHost` measured after the fact, across an org's hosts (AGL-1390).
  *
- * The cap is enforced where the count can CHANGE — at create, and since
- * AGL-1390 on the collection template pointers that were the last reversible
- * way to lower it. This is the companion that assumes those are not the last
- * word. Three issues in one night found three different ways past the same
+ * The cap is enforced where the count can CHANGE — at create, at import, and
+ * (since AGL-1400) where a template is promoted back to a page. This is the
+ * companion that assumes those are not the last word. Three issues in one night found three different ways past the same
  * gate (AGL-1383's two client-flippable fields, AGL-1387's list template,
  * AGL-1390's pointer loop), and each was invisible until somebody read the
  * code: nothing anywhere ever re-asked whether a live site was inside the plan

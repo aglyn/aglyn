@@ -125,6 +125,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-kind'),
+  // The REAL screen kinds too (AGL-1400): both routes now read them, and a
+  // stubbed `SCREEN_KIND_TEMPLATE` is `undefined` — which a screen create
+  // sending no `kind` at all would match.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
   createResourceUid: () => 'generated-id',
   nameSearchKey: (value: string) => value.toLowerCase(),
   pluginRequestFromWeb: async (request: Request) => ({

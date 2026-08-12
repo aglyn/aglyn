@@ -129,9 +129,13 @@ describe('composeCollectionTemplatePage (AGL-551)', () => {
       hostId: 'host-1',
       content: data,
     })
+    // `allowTemplate` is the flag that makes this composition legal against a
+    // `kind: 'template'` document (AGL-1400) — every path-resolving caller
+    // leaves it off, which is what 404s a template at an address of its own.
     expect(getScreenMock).toHaveBeenCalledWith({
       hostId: 'host-1',
       screenId: 'entry-screen',
+      allowTemplate: true,
     })
     const composeArgs = composeScreenNodesMock.mock.calls[0][0]
     expect(composeArgs.tokens['entry.title']).toBe('Hello world')

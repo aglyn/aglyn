@@ -189,6 +189,24 @@ export function screenRoutePathToUrl(path: string): string {
  */
 export const SCREEN_KIND_EMAIL = 'email'
 
+/**
+ * `kind` of a collection ENTRY template (AGL-1400): a screen that composes
+ * `/{collection}/{entry}` for every entry and has no address of its own.
+ *
+ * The value exists so that "is this screen a page?" stops being a JOIN.
+ * Four issues (AGL-1173, AGL-1383, AGL-1387, AGL-1390) were the same sentence
+ * at different depths because the answer was derived from a mutable field on a
+ * DIFFERENT document — a collection's `entryScreenId` — and every new way to
+ * edit that pointer was a new bypass of `screensPerHost`. Here the fact is a
+ * property of the screen, server-stamped by /api/hosts/screens and frozen in
+ * the rules exactly as `kind: 'email'` has been since AGL-1383.
+ *
+ * NOT a collection's LIST template. `/{collectionSlug}` renders that exact
+ * screen with its entries, so it is a designed reachable page and AGL-1387
+ * made it count; converting one would take the page off the site.
+ */
+export const SCREEN_KIND_TEMPLATE = 'template'
+
 /** The two self-describing fields {@link screenClaimsToBeAPage} reads. */
 export interface ScreenPageClaim {
   kind?: string
@@ -198,11 +216,14 @@ export interface ScreenPageClaim {
 /**
  * Whether a screen document claims to be a page of the site at all (AGL-1383).
  *
- * Two fields say it is not: `deletedAt` (soft-deleted — delete stamps the field
- * rather than removing the doc) and `kind: 'email'` (an Emails-page document,
- * which has no URL and is rendered only by the campaign sender, straight off
- * the doc). Both are also the two exclusions `countBillableScreens` subtracts
- * before enforcing `screensPerHost`.
+ * Three things say it is not: `deletedAt` (soft-deleted — delete stamps the
+ * field rather than removing the doc), `kind: 'email'` (an Emails-page
+ * document, which has no URL and is rendered only by the campaign sender,
+ * straight off the doc) and `kind: 'template'` (a collection entry template,
+ * which composes `/{collection}/{entry}` and has no address of its own —
+ * AGL-1400). All three are also the exclusions `countBillableScreens`
+ * subtracts before enforcing `screensPerHost`, and since AGL-1400 they are the
+ * WHOLE of that subtraction: the count reads no other collection.
  *
  * That is exactly why this is ONE function with TWO callers rather than two
  * matching filters. Both fields are ordinary client-writable fields on
@@ -214,13 +235,22 @@ export interface ScreenPageClaim {
  * serve path asks this question too, and flipping either field now costs the
  * page instead of the plan.
  *
- * A CLAIM, not the answer: the routing map decides reachability, and this only
- * says what the document says about itself. `countBillableScreens` trusts it
- * only for screens the map does not route.
+ * A CLAIM, not the answer, for the two fields a client can still reach: the
+ * routing map decides reachability, and `countBillableScreens` trusts
+ * `deletedAt` / `kind: 'email'` only for screens the map does not route.
+ * `kind: 'template'` is the exception, and the reason it can be one is that no
+ * client writes it — /api/hosts/screens stamps it, demotion lowers the count
+ * and promotion is checked exactly like a create, so there is no toggle to
+ * launder. A template is ROUTED on purpose (publishing is how the compose
+ * pipeline picks it up), which is why the map cannot be the arbiter for it.
  */
 export function screenClaimsToBeAPage(
   screen: ScreenPageClaim | null | undefined,
 ): boolean {
   if (!screen) return false
-  return screen.deletedAt == null && screen.kind !== SCREEN_KIND_EMAIL
+  return (
+    screen.deletedAt == null &&
+    screen.kind !== SCREEN_KIND_EMAIL &&
+    screen.kind !== SCREEN_KIND_TEMPLATE
+  )
 }

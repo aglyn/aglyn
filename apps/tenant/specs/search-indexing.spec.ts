@@ -68,7 +68,12 @@ const requestFor = (path: string) =>
 function given(options: {
   discouraged?: boolean
   screens?: Record<string, string>
-  screenDocs?: Array<{ id: string; visibility?: HostScreenVisibility }>
+  screenDocs?: Array<{
+    id: string
+    visibility?: HostScreenVisibility
+    /** `'template'` marks a screen that is not a page (AGL-1400). */
+    kind?: string
+  }>
   /** `hosts/{id}/collections` docs, read for both the template-screen
    * exclusion (AGL-1267) and the content-collection URLs. */
   collectionDocs?: Array<Record<string, unknown>>
@@ -97,6 +102,9 @@ function given(options: {
   const screenSnapshot = {
     docs: (options.screenDocs ?? []).map((screen) => ({
       id: screen.id,
+      // `get` as well as `data`: the template-screen read projects to ids and
+      // filters on `kind`, and only reads fields through `get` (AGL-1400).
+      get: (field: string) => (screen as Record<string, unknown>)[field],
       data: () => ({ visibility: screen.visibility }),
     })),
   }
@@ -120,21 +128,35 @@ function given(options: {
     exists: options.storeSettings != null,
     get: (field: string) => options.storeSettings?.[field],
   }
-  const collectionRef = (name: string): any => ({
-    select: () => collectionRef(name),
-    limit: () => collectionRef(name),
-    where: () => collectionRef(name),
+  // `where` is honoured rather than swallowed: `getTemplateScreenIds` asks the
+  // screens collection for `kind == 'template'` (AGL-1400), and a fake that
+  // returned every screen for that query would call the whole site a template.
+  const collectionRef = (name: string, filter?: [string, unknown]): any => ({
+    select: () => collectionRef(name, filter),
+    limit: () => collectionRef(name, filter),
+    where: (field: string, _op: string, value: unknown) =>
+      collectionRef(name, [field, value]),
     doc: () => ({
       get: async () => (name === 'settings' ? storeDoc : emptySnapshot),
     }),
-    get: async () =>
-      name === 'screens'
-        ? screenSnapshot
-        : name === 'collections'
-          ? collectionSnapshot
-          : name === 'products'
-            ? productSnapshot
-            : emptySnapshot,
+    get: async () => {
+      const snapshot =
+        name === 'screens'
+          ? screenSnapshot
+          : name === 'collections'
+            ? collectionSnapshot
+            : name === 'products'
+              ? productSnapshot
+              : emptySnapshot
+      if (!filter) return snapshot
+      const [field, value] = filter
+      return {
+        ...snapshot,
+        docs: snapshot.docs.filter(
+          (row: any) => row.get?.(field) === value,
+        ),
+      }
+    },
   })
   const hostRef = { collection: (name: string) => collectionRef(name) }
   ;(firebaseAdmin.app as jest.Mock).mockReturnValue({
@@ -239,6 +261,29 @@ describe('sitemap.xml (AGL-1263)', () => {
     const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
 
     expect(locs).toEqual(['https://acme.aglyn.app/'])
+  })
+
+  it('drops a screen that says it is a template (AGL-1400)', async () => {
+    // The state AGL-1400 creates and no pointer describes: clearing a
+    // collection's `entryScreenId` leaves the screen a template on purpose
+    // (promotion is a gated act), so nothing points at it and the sitemap would
+    // have submitted its slug — AGL-1267's dead URL, from the other direction.
+    given({
+      screens: { home: '/', orphanTmpl: 'blog-entry-template' },
+      screenDocs: [
+        { id: 'home', visibility: HostScreenVisibility.PUBLIC },
+        {
+          id: 'orphanTmpl',
+          kind: 'template',
+          visibility: HostScreenVisibility.PUBLIC,
+        },
+      ],
+      collectionDocs: [{ slug: 'blog' }],
+    })
+
+    const locs = locsIn(await (await sitemapGet(requestFor('/sitemap.xml'))).text())
+
+    expect(locs).toEqual(['https://acme.aglyn.app/', 'https://acme.aglyn.app/blog'])
   })
 
   it('drops a collection list/entry template screen (AGL-1267)', async () => {

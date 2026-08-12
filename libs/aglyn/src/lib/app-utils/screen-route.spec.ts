@@ -187,12 +187,20 @@ describe('screenClaimsToBeAPage', () => {
   it('accepts an ordinary screen', () => {
     expect(screenClaimsToBeAPage({})).toBe(true)
     expect(screenClaimsToBeAPage({ kind: 'page' })).toBe(true)
+    // Neighbouring values that must NOT be caught by the template exclusion —
+    // `templates` is a different collection entirely (AGL-666).
+    expect(screenClaimsToBeAPage({ kind: 'templates' })).toBe(true)
+    expect(screenClaimsToBeAPage({ kind: 'Template' })).toBe(true)
     // Explicit nulls are what importers and a restore leave behind.
     expect(screenClaimsToBeAPage({ deletedAt: null, kind: undefined })).toBe(true)
   })
 
-  it('rejects the two claims the screen cap subtracts on', () => {
+  it('rejects the claims the screen cap subtracts on', () => {
     expect(screenClaimsToBeAPage({ kind: 'email' })).toBe(false)
+    // AGL-1400: an entry template composes `/{collection}/{entry}` and has no
+    // address of its own. It is the third exclusion, and the first one that is
+    // a fact about the screen rather than about some other document.
+    expect(screenClaimsToBeAPage({ kind: 'template' })).toBe(false)
     expect(screenClaimsToBeAPage({ deletedAt: { seconds: 1 } })).toBe(false)
     // A Firestore Timestamp is an object; so is the `_seconds` shape a JSON
     // round trip leaves. Any non-null value means deleted.

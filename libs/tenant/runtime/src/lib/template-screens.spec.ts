@@ -95,15 +95,21 @@ describe('collectTemplateScreenIds (AGL-1267, AGL-1270)', () => {
   })
 })
 
-describe('getTemplateScreenIds (AGL-1267, AGL-1270)', () => {
+describe('getTemplateScreenIds (AGL-1267, AGL-1270, AGL-1400)', () => {
   const collectionsQuery = {
     select: jest.fn(() => collectionsQuery),
     limit: jest.fn(() => collectionsQuery),
     get: jest.fn(),
   }
+  const screensQuery = {
+    where: jest.fn(() => screensQuery),
+    select: jest.fn(() => screensQuery),
+    limit: jest.fn(() => screensQuery),
+    get: jest.fn(),
+  }
   const storeDoc = { get: jest.fn() }
 
-  /** `hosts/{id}` with its two subcollections wired to the mocks above. */
+  /** `hosts/{id}` with its three sources wired to the mocks above. */
   const wireHost = () => {
     ;(firebaseAdmin.app as jest.Mock).mockReturnValue({
       firestore: () => ({
@@ -112,7 +118,9 @@ describe('getTemplateScreenIds (AGL-1267, AGL-1270)', () => {
             collection: (name: string) =>
               name === 'settings'
                 ? { doc: () => storeDoc }
-                : collectionsQuery,
+                : name === 'screens'
+                  ? screensQuery
+                  : collectionsQuery,
           }),
         }),
       }),
@@ -122,8 +130,26 @@ describe('getTemplateScreenIds (AGL-1267, AGL-1270)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     collectionsQuery.get.mockResolvedValue(snapshotOf([]))
+    screensQuery.get.mockResolvedValue({ docs: [] })
     storeDoc.get.mockResolvedValue(docOf({}))
     wireHost()
+  })
+
+  // AGL-1400: the half that reaches a template no pointer names. Clearing a
+  // collection's `entryScreenId` leaves the screen a template on purpose, and
+  // without this it would be reachable at its own slug again — AGL-1267, back.
+  it('unions the screens that say they are templates', async () => {
+    screensQuery.get.mockResolvedValue({ docs: [{ id: 'orphan-1' }] })
+    collectionsQuery.get.mockResolvedValue(
+      snapshotOf([{ entryScreenId: 'entry-1' }]),
+    )
+
+    const ids = await getTemplateScreenIds({ hostId: 'host-1' })
+
+    expect([...ids].sort()).toEqual(['entry-1', 'orphan-1'])
+    expect(screensQuery.where).toHaveBeenCalledWith('kind', '==', 'template')
+    // Ids only: a large site's screen documents must not ride the render path.
+    expect(screensQuery.select).toHaveBeenCalledWith()
   })
 
   it('projects the collections read onto exactly the three template fields', async () => {
@@ -158,6 +184,10 @@ describe('getTemplateScreenIds (AGL-1267, AGL-1270)', () => {
     // the collections read has resolved.
     const order: string[] = []
     let releaseCollections = () => undefined as void
+    screensQuery.get.mockImplementation(async () => {
+      order.push('screens:start')
+      return { docs: [] }
+    })
     collectionsQuery.get.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -173,13 +203,14 @@ describe('getTemplateScreenIds (AGL-1267, AGL-1270)', () => {
 
     await getTemplateScreenIds({ hostId: 'host-1' })
 
-    expect(order).toEqual(['collections:start', 'store:start'])
+    expect(order).toEqual(['screens:start', 'collections:start', 'store:start'])
   })
 
   it('fails OPEN with an empty set when both reads fail', async () => {
     // This read sits on the critical path of every tenant page render. A
     // transient Firestore error must degrade to "the template is briefly
     // reachable again", never to a site-wide 404.
+    screensQuery.get.mockRejectedValue(new Error('deadline exceeded'))
     collectionsQuery.get.mockRejectedValue(new Error('deadline exceeded'))
     storeDoc.get.mockRejectedValue(new Error('deadline exceeded'))
     const consoleError = jest
@@ -203,14 +234,17 @@ describe('getTemplateScreenIds (AGL-1267, AGL-1270)', () => {
     collectionsQuery.get.mockResolvedValue(
       snapshotOf([{ entryScreenId: 'entry-1' }]),
     )
+    screensQuery.get.mockRejectedValue(new Error('unavailable'))
     storeDoc.get.mockRejectedValue(new Error('unavailable'))
     expect([...(await getTemplateScreenIds({ hostId: 'host-1' }))]).toEqual([
       'entry-1',
     ])
 
     collectionsQuery.get.mockRejectedValue(new Error('unavailable'))
+    screensQuery.get.mockResolvedValue({ docs: [{ id: 'orphan-1' }] })
     storeDoc.get.mockResolvedValue(docOf({ pdpScreenId: 'pdp-1' }))
-    expect([...(await getTemplateScreenIds({ hostId: 'host-1' }))]).toEqual([
+    expect([...(await getTemplateScreenIds({ hostId: 'host-1' }))].sort()).toEqual([
+      'orphan-1',
       'pdp-1',
     ])
 
