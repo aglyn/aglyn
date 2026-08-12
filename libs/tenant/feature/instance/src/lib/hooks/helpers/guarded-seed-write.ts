@@ -131,23 +131,78 @@ export interface GuardedSeedWriteResult {
   message?: string
 }
 
-/** Why we refused, in words that say what to DO about it. */
+/**
+ * Why we refused, in words that say what to DO about it.
+ *
+ * ## The subject is INTERPOLATED, so nothing here may agree with it (AGL-1446)
+ *
+ * Call sites pass "profile", "SEO settings", "theme overrides", "categories".
+ * The copy used to read "Your SEO settings **has** not been confirmed", "so
+ * **it** cannot be saved", "so **this** SEO settings may be out of date" —
+ * fine for the singular subjects it was written against and wrong for half the
+ * ~126 call sites. Every sentence below is number-neutral instead, and
+ * `guarded-seed-write.spec.ts` pins all three verbatim against a plural
+ * subject so it stays that way.
+ *
+ * ## Why `unconfirmed` names a SECOND remedy (AGL-1446)
+ *
+ * "Reload" was the only instruction, and it is the one that fails in the case
+ * where an author is most stuck. A long-lived console tab can go permanently
+ * cache-only: no Firestore `Listen` channel is ever established, every
+ * listener is served from IndexedDB, `fromCache` never clears, and this guard
+ * correctly refuses every save — forever. Observed on 2026-08-12 (AGL-1066):
+ * refused three times ACROSS A FULL RELOAD with the session entirely healthy
+ * (`securetoken` 200, `runAggregationQuery` 200). A brand-new tab fixed it on
+ * the first try.
+ *
+ * ## Why this is copy rather than a branch
+ *
+ * Three different states reach this message with byte-identical evidence:
+ *
+ * 1. the server has not confirmed the read YET (reload, or just wait);
+ * 2. the client is OFFLINE (reconnect — the case `persistentLocalCache` was
+ *    added for in the first place);
+ * 3. the tab is permanently cache-only (only a new tab helps).
+ *
+ * In all three, `fromCache` is true, `unreadable` is false, and
+ * `session-health` reports nothing: a listen that is never issued and a listen
+ * that has not been answered yet both produce no error callback, so no
+ * `permission-denied` is ever counted and `staleSession` cannot fire. The one
+ * signal that separates (3) from (1) — whether {@link
+ * reportFirestoreServerRead} has EVER fired in this tab — is dispatched
+ * straight into `session-health.reportSuccessfulRead`, which returns early
+ * when there is no denial evidence and retains nothing; `getSessionHealth()`
+ * exposes only the denial verdict. So the bit is produced and discarded, and
+ * latching it would still not be enough: a freshly-opened tab and an offline
+ * tab have not had a listen answered either, so a detector would need a time
+ * threshold AND an online check (which lives in the app, behind another seam)
+ * before it could say "stuck" without mislabelling both. That is a new tuned
+ * heuristic in the path of every save, to choose between two remedies that
+ * cost the reader one sentence to be told both of.
+ *
+ * So the message names all three: connection, reload, and the new tab — with
+ * the reason the new tab is not just "reload harder", because an instruction
+ * that reads as a superstition is one people skip.
+ */
 function refusalMessage(subject: string, reason: StaleSeedReason): string {
   switch (reason) {
     case 'unreadable':
       return (
-        `Your ${subject} could not be loaded, so it cannot be saved — that ` +
-        'would overwrite it with blanks. Reload and try again.'
+        `Your ${subject} could not be loaded, so there is nothing safe to ` +
+        'save — saving now would overwrite the stored copy with blanks. ' +
+        'Reload and try again.'
       )
     case 'unconfirmed':
       return (
-        `Your ${subject} has not been confirmed with the server, so what is ` +
+        `We could not confirm your ${subject} with the server, so what is ` +
         'on screen may be out of date — saving now could overwrite newer ' +
-        'values. Check your connection and reload before trying again.'
+        'values. Check your connection and reload; if it is refused again, ' +
+        'open this page in a new browser tab — reloading cannot restore a ' +
+        'connection this tab never opened.'
       )
     case 'stale-session':
       return (
-        `Your session went stale, so this ${subject} may be out of date — ` +
+        `Your session went stale, so your ${subject} may be out of date — ` +
         'saving now could overwrite newer values. Sign in again and reload.'
       )
   }
