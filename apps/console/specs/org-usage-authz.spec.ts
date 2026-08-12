@@ -61,6 +61,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The cost model is the REAL one (AGL-1134), deliberately. Stubbing it
+  // would let this file assert a number the guardrail does not actually
+  // compute, which is the whole thing being guarded against — the preview
+  // and the apply route reaching different answers.
+  orgCogsInputFrom: jest.requireActual('@aglyn/aglyn/server').orgCogsInputFrom,
+  orgMonthlyCogsUsd: jest.requireActual('@aglyn/aglyn/server')
+    .orgMonthlyCogsUsd,
   pluginRequestFromWeb: async (request: Request) => {
     const url = new URL(request.url)
     return {
@@ -110,18 +117,27 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
       email_verified: true,
       staff: true,
     })
+    // Shaped like a real `QueryDocumentSnapshot`: both `get(field)` and
+    // `data()`. The double carried only `get` until AGL-1134, which reads the
+    // whole document through `orgCogsInputFrom` rather than naming fields at
+    // the call site — a double thinner than the thing it stands in for hides
+    // exactly that kind of change.
+    const fields = {
+      month: '2026-08',
+      storageGb: 1.5,
+      pageViews: 100,
+      formSubmissions: 3,
+      costUsd: 2.5,
+      dataStorageMb: 2048,
+      apiRequests: 50_000,
+      contactsCount: 400,
+    }
     mockUsageGet.mockResolvedValueOnce({
       docs: [
         {
           id: '2026-08',
-          get: (key: string) =>
-            ({
-              month: '2026-08',
-              storageGb: 1.5,
-              pageViews: 100,
-              formSubmissions: 3,
-              costUsd: 2.5,
-            })[key],
+          get: (key: string) => fields[key as keyof typeof fields],
+          data: () => fields,
         },
       ],
     })
@@ -135,8 +151,77 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
         pageViews: 100,
         formSubmissions: 3,
         costUsd: 2.5,
-        deltas: null,
+        // The three meters the projection used to drop (AGL-1134). The rollup
+        // records them and the cost model prices them, so serving rows
+        // without them made a client price this org lower than the server did.
+        dataStorageMb: 2048,
+        apiRequests: 50_000,
+        contactsCount: 400,
+      deltas: null,
       },
     ])
+  })
+
+  it('serves the newest rollup priced by the shared cost model (AGL-1134)', async () => {
+    // The number the staff org page rates a coupon against. It has to be the
+    // same one `/api/admin/org-discount` computes before it refuses, or the
+    // badge and the button disagree — so this pins the value, not just its
+    // presence.
+    mockVerifyIdToken.mockResolvedValueOnce({
+      uid: 'staff-1',
+      email_verified: true,
+      staff: true,
+    })
+    const fields = {
+      month: '2026-07',
+      storageGb: 10,
+      pageViews: 200_000,
+      formSubmissions: 1_000,
+      dataStorageMb: 10_240,
+      apiRequests: 1_000_000,
+      contactsCount: 5_000,
+      costUsd: 0.9,
+    }
+    mockUsageGet.mockResolvedValueOnce({
+      docs: [
+        {
+          id: '2026-07',
+          get: (key: string) => fields[key as keyof typeof fields],
+          data: () => fields,
+        },
+      ],
+    })
+    const payload = await (await get({ token: 'tok' })).json()
+    // Hand-computed, NOT snapshotted — a snapshot would happily record a
+    // wrong number. All USD/month:
+    //   storage           10 GB      × $0.026    = $0.26
+    //   page views        200,000    × $0.0001   = $20.00
+    //   form submissions  1,000      × $0.00005  = $0.05
+    //   dataset storage   10,240 MB  = 10 GB × $0.18 = $1.80   ← MB, per-GB rate
+    //   API requests      1,000,000  × $0.000002 = $2.00
+    //   contacts          5,000      × $0.0002   = $1.00
+    //                                              -------
+    //                                              $25.11
+    expect(payload.latest.month).toBe('2026-07')
+    expect(payload.latest.measuredCogsUsd).toBeCloseTo(25.11, 6)
+    // The MEASURED half only — the per-site floor belongs to the caller, and
+    // `checkDiscountMargin` applies it itself. Returning a floored figure
+    // here would charge the floor twice.
+    expect(payload.latest.measuredCogsUsd).not.toBeCloseTo(25.11 + 2, 6)
+  })
+
+  it('reports no rollup as null rather than a zero cost', async () => {
+    // A brand-new org. `measuredCogsUsd: 0` would read as "this org is free
+    // to serve", which is the direction that approves a discount; `null` is
+    // "not measured", which the guardrail answers with its floor.
+    mockVerifyIdToken.mockResolvedValueOnce({
+      uid: 'staff-1',
+      email_verified: true,
+      staff: true,
+    })
+    mockUsageGet.mockResolvedValueOnce({ docs: [] })
+    const payload = await (await get({ token: 'tok' })).json()
+    expect(payload.latest).toBeNull()
+    expect(payload.months).toEqual([])
   })
 })
