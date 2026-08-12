@@ -210,7 +210,7 @@
         { "title": "1-click", "body": "to publish", "meta": "stat" }
       ],
       "image": null,
-      "notes": "Identical to the Media and Plugins pages. Eyebrow is a rounded pill badge with a dot (#f5f5f5 fill, #e0e0e0 border), not the magenta eyebrow. 4-up stat row with 1px vertical dividers; figures 44px ExtraBold in #0090d9. Background #f8f9fa."
+      "notes": "Identical to the Media and Plugins pages. Eyebrow is a rounded pill badge with a dot (#f5f5f5 fill, #e0e0e0 border), not the magenta eyebrow. 4-up stat row with 1px vertical dividers; figures 44px ExtraBold in the primary.dark token (the Figma frame pins the old brand blue; AGL-1293 RETIRED that hex for failing AA at 3.51:1 — never author the literal, and do not copy it back out of Figma). Background #f8f9fa."
     },
     {
       "kind": "cta",

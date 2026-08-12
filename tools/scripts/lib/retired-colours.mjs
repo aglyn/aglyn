@@ -86,7 +86,7 @@ export const RETIRED_COLOURS = [
  * pinning a colour onto a node. Channel variants are MUI's CSS-var form of
  * the same slots.
  */
-const PALETTE_SLOTS = new Set([
+export const PALETTE_SLOTS = new Set([
   'main',
   'light',
   'dark',
