@@ -91,6 +91,32 @@ export function measureNodeMap(
   }
 }
 
+/**
+ * Encoded size of a node map, and nothing else (AGL-1402).
+ *
+ * Same unit as {@link measureNodeMap} — msgpack bytes, the form the map is
+ * actually stored in — so a total built out of this is directly comparable to
+ * the per-document {@link NODE_MAP_MAX_BYTES} ceiling.
+ *
+ * Split out because the monthly usage rollup measures thousands of documents
+ * and wants one number per document. `measureNodeMap` re-encodes every node
+ * individually to build `largest`, which roughly doubles the work for a
+ * diagnostic that only the save path reads.
+ *
+ * Returns 0 for absent AND for unencodable, matching `measureNodeMap`: a
+ * measurement we could not take must not become a number somebody trusts.
+ */
+export function nodeMapBytes(
+  nodes: Record<string, unknown> | undefined | null,
+): number {
+  if (!nodes) return 0
+  try {
+    return encode(nodes).length
+  } catch {
+    return 0
+  }
+}
+
 /** Human-readable size, for messages that a person has to act on. */
 export function formatBytes(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_048_576).toFixed(1)} MB`
