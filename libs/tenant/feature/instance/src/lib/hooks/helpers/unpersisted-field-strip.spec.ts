@@ -50,7 +50,7 @@ jest.mock('firebase/firestore', () => ({
    * Models `applyFirestoreDataConverter` at index.node.cjs.js:2456 — the
    * converter runs, so the ref's `toFirestore` strip applies.
    */
-  setDoc: (ref: FakeRef, data: unknown, options: unknown) =>
+  setDoc: (ref: FakeRef, data: Record<string, unknown>, options: unknown) =>
     mockSetDoc(ref.converter.toFirestore(data), options),
   /** Models :2462 — no converter call, the payload goes out verbatim. */
   updateDoc: (ref: FakeRef, data: unknown) => mockUpdateDoc(data),
