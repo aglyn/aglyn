@@ -3,7 +3,7 @@
   "figmaNodeId": "120:1516",
   "frameName": "Product — Forms & Inbox",
   "frameSize": { "width": 1440, "height": 5308 },
-  "notes": "8 content sections between a shared NavBar (120:1517) and Footer (120:1742), both shared instances not captured here. Same 8-section skeleton as Console and Commerce, with Deep-dive and Canvas/visual combined into one section (Figma frame named 'Deep-dive · canvas'). WARNING for the builder: several Capabilities card FRAMES on this page carry stale layer names that contradict their own text — 'Card Contacts & CRM' actually contains 'After-submit actions', 'Card Notifications & routing' contains 'Write to a dataset', 'Card Shared inbox' contains 'One Inbox', 'Card Email replies' contains 'Automate what’s next', and 'Card Drag-and-drop forms' contains 'Forms on the canvas'. Build from the text below, never from the layer names.",
+  "notes": "8 content sections between a shared NavBar (120:1517) and Footer (120:1742), both shared instances not captured here. Same 8-section skeleton as Console and Commerce, with Deep-dive and Canvas/visual combined into one section (Figma frame named 'Deep-dive · canvas'). RESOLVED 2026-08-09 (AGL-1244), kept for provenance: five Capabilities card FRAMES on this page used to carry stale layer names that contradicted their own text — 'Card Contacts & CRM' held 'After-submit actions', 'Card Notifications & routing' held 'Write to a dataset', 'Card Shared inbox' held 'One Inbox', 'Card Email replies' held 'Automate what’s next', 'Card Drag-and-drop forms' held 'Forms on the canvas'. All five were renamed in Figma to match their headings. Re-verified 2026-08-11: the grid now reads 'Card Forms on the canvas', 'Card One Inbox', 'Card After-submit actions', 'Card Write to a dataset', 'Card Spam protection', 'Card Automate what’s next' — all six match. Do not hunt for the old names; they no longer exist. Standing rule regardless: build from the text below, never from the layer names.",
   "sections": [
     {
       "kind": "hero",
@@ -78,7 +78,7 @@
         }
       ],
       "image": null,
-      "notes": "Centred eyebrow + centred heading. 3-column card grid, 2 rows, 410px cards with a 44px icon tile top-left. This grid is taller than Console's and Commerce's (504px vs 452px) because the card bodies run longer — card heights are uneven, so top-align the cards. Reading order is left-to-right by row. White background. See the page-level note about stale layer names on these cards."
+      "notes": "Centred eyebrow + centred heading. 3-column card grid, 2 rows, 410px cards with a 44px icon tile top-left. This grid is taller than Console's and Commerce's (504px vs 452px) because the card bodies run longer — card heights are uneven, so top-align the cards. Reading order is left-to-right by row. White background. See the page-level note: the stale card layer names were corrected in Figma on 2026-08-09 (AGL-1244) and re-verified 2026-08-11."
     },
     {
       "kind": "deep-dive",

@@ -2,7 +2,7 @@
   "page": "Workflows",
   "figmaNodeId": "122:2294",
   "frameSize": { "width": 1440, "height": 5190 },
-  "notes": "Same 8-section skeleton as /product/besigner (93:31), with Deep-dive and Canvas/visual combined into ONE section (frame named 'Deep-dive · canvas'). NavBar (122:2295) and Footer (122:2520) are shared chrome, not recorded as sections. Eyebrow style: 13px SemiBold uppercase, tracking 1.04px, magenta #e040fb. Headings 44px ExtraBold; final CTA heading 56px Black. Deep-dive, Explore and Early access sit on #f8f9fa; the rest are white; CTA is a gradient. IMPORTANT for the builder: the Capabilities frame at 122:2544 is NAMED 'Card Scheduled runs' but its text says 'Test runs' — the scheduled/cron concept was removed from the copy. Do not resurrect it from the layer name.",
+  "notes": "Same 8-section skeleton as /product/besigner (93:31), with Deep-dive and Canvas/visual combined into ONE section (frame named 'Deep-dive · canvas'). NavBar (122:2295) and Footer (122:2520) are shared chrome, not recorded as sections. Eyebrow style: 13px SemiBold uppercase, tracking 1.04px, magenta #e040fb. Headings 44px ExtraBold; final CTA heading 56px Black. Deep-dive, Explore and Early access sit on #f8f9fa; the rest are white; CTA is a gradient. RESOLVED 2026-08-09 (AGL-1244), kept for provenance: the Capabilities frame at 122:2544 used to be NAMED 'Card Scheduled runs' while its text said 'Test runs'; it was renamed to 'Card Test runs' in Figma, and a 2026-08-11 re-sweep of 122:2294 found all six Card frames matching. The scheduled/cron concept is still absent from the copy — do not resurrect it.",
   "sections": [
     {
       "kind": "hero",
