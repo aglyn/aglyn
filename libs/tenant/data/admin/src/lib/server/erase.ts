@@ -141,6 +141,42 @@ async function deleteStripeCustomer(customerId?: string): Promise<void> {
   }
 }
 
+/**
+ * Delete every API credential the org owns (AGL-1444).
+ *
+ * `apiKeys` is a TOP-LEVEL collection keyed by the SHA-256 of the token and
+ * carrying `orgId` as a FIELD, so `recursiveDelete(orgRef)` cannot see it —
+ * a path-scoped cascade is structurally blind to anything not under the path.
+ * The credential therefore outlived the workspace: `verifyApiKey` kept
+ * resolving the token to a live principal naming an org that no longer
+ * existed. `authenticateApiV1` happens to refuse it (it reads the org doc and
+ * 401s), but that is a gate one layer above the credential, and a key whose
+ * revocation depends on every future caller repeating a lookup is not
+ * revoked. The document is also a small record of the erased workspace in its
+ * own right — a human-authored label, the creating uid, the granted scopes.
+ *
+ * Bounded by the `orgId` field, never a collection sweep: this collection
+ * holds every other customer's integration credentials too.
+ *
+ * Returns the number destroyed, for the audit row — an erasure trail that
+ * understates what it removed is the one record that has to be right.
+ */
+async function eraseOrgApiKeys(orgId: string): Promise<number> {
+  const firestore = firebaseAdmin.app().firestore()
+  const keys = await firestore
+    .collection('apiKeys')
+    .where('orgId', '==', orgId)
+    .get()
+  // Chunked, because a batch caps at 500 writes and an org's key count is
+  // not bounded by anything that would keep it under that.
+  for (let index = 0; index < keys.docs.length; index += 400) {
+    const batch = firestore.batch()
+    for (const doc of keys.docs.slice(index, index + 400)) batch.delete(doc.ref)
+    await batch.commit()
+  }
+  return keys.size
+}
+
 export interface EraseOrgResult {
   ok: boolean
   /** Set when the org was NOT erased (flag missing, hold not elapsed, gone). */
@@ -148,6 +184,8 @@ export interface EraseOrgResult {
   /** Storage path of the final export bundle when erased. */
   exportPath?: string
   hosts?: number
+  /** API credentials destroyed (AGL-1444) — outside the org path. */
+  apiKeys?: number
 }
 
 /**
@@ -158,9 +196,12 @@ export interface EraseOrgResult {
  *      delete on a stale/cancelled request.
  *   2. Write a final JSON export (org + host trees) to Storage FIRST — if
  *      the export can't be written, abort without deleting anything.
- *   3. Delete each host (eraseHost), org-level Storage, the Stripe
+ *   3. Revoke the org's API credentials (AGL-1444) — `apiKeys` is keyed by
+ *      the token hash, so the org-tree delete cannot reach it, and doing it
+ *      before the content delete also closes the mid-erasure window.
+ *   4. Delete each host (eraseHost), org-level Storage, the Stripe
  *      customer, member back-references, then the org tree + slug.
- *   4. Audit.
+ *   5. Audit.
  */
 export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
   const firestore = firebaseAdmin.app().firestore()
@@ -205,6 +246,12 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
     return { ok: false, skippedReason: 'export-failed' }
   }
 
+  // Credentials BEFORE content (AGL-1444). The org doc survives until the
+  // recursiveDelete at the end, so a key presented mid-erasure would still
+  // pass the API's org gate and read a half-deleted workspace. Revoking
+  // first closes that window as well as the permanent one.
+  const apiKeys = await eraseOrgApiKeys(orgId)
+
   // Hosts (Storage + routing + Firestore trees).
   for (const host of hosts.docs) {
     await eraseHost(host.id)
@@ -246,12 +293,12 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
       action: 'org.erased',
       target: `orgs/${orgId}`,
       before: { hosts: hosts.size, members: members.size },
-      after: { exportPath },
+      after: { exportPath, apiKeys },
       at: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
 
-  return { ok: true, exportPath, hosts: hosts.size }
+  return { ok: true, exportPath, hosts: hosts.size, apiKeys }
 }
 
 /** An org that stops a person's account from being erased. */
