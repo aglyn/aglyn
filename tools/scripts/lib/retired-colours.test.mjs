@@ -16,21 +16,37 @@
  */
 
 /**
- * Pins the AGL-1431 detector.
+ * Pins the AGL-1431 detectors — all three halves of them.
  *
  *   node --test tools/scripts/lib/retired-colours.test.mjs
  *
  * A detector for a defect that shows up 176 times has one dangerous failure
  * mode: reporting a small number, or zero, and being believed. Every case
- * here is built from bytes actually observed in the live `/pricing` payload
- * on 2026-08-11, and the counting cases assert the FULL multiplicity — a
- * detector that deduped to distinct rules would report 6 where the page has
- * 170, which is exactly how this regression stayed invisible.
+ * here is built from bytes actually observed live — the `/pricing` payload on
+ * 2026-08-11 and the marketing node corpus on 2026-08-12 — and the counting
+ * cases assert the FULL multiplicity, because a detector that deduped to
+ * distinct rules would report 6 where the page has 170, which is exactly how
+ * this regression stayed invisible.
+ *
+ * This file is everything about AGL-1431 that CI can actually run. The two
+ * measuring halves cannot: the rendered census needs the published site (its
+ * own scheduled workflow) and the data audit needs ADC on `aglyn-main`. What
+ * runs here is the pure decision-making of both, plus the source sweep — the
+ * one part where the failure is committable and therefore gateable.
  */
 
 import { strict as assert } from 'node:assert'
+import { readdirSync, readFileSync } from 'node:fs'
+import { dirname, join, relative, sep } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
+import { encode } from '@msgpack/msgpack'
+
+import {
+  decodeNodesField,
+  findRetiredColoursInNodes,
+} from './retired-colours-nodes.mjs'
 import {
   RETIRED_COLOURS,
   auditRenderedPage,
@@ -127,4 +143,273 @@ test('the AA replacement is never itself reported', () => {
   // #0073ae is the migration target — 22 occurrences on live /pricing.
   const { clean } = auditRenderedPage(`\\"color\\":\\"#0073ae\\"`.repeat(22))
   assert.equal(clean, true)
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The DATA half. `findRetiredColoursInNodes` reads stored besigner nodes and
+// names the one to open; `decodeNodesField` is the step that decides whether
+// the whole corpus reads as clean.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The live shape. `hosts/DXnRbPH4CQ/screens/AGSSMcO-Xc/versions/iwP-3G8PTb`
+ * node `JOPekm0oyE` on 2026-08-12 — a 120×32 rounded rect in the Bento
+ * section, carrying the retired blue as a fill.
+ */
+const liveNode = {
+  $id: 'JOPekm0oyE',
+  type: 'node',
+  parentId: 'AuYlx2g2GQ',
+  pluginId: 'mui',
+  componentId: 'muiStack',
+  props: { direction: 'row' },
+  sx: {
+    position: 'absolute',
+    left: 189,
+    top: 99,
+    width: 120,
+    height: 32,
+    borderRadius: '4px',
+    bgcolor: '#0090d9',
+  },
+}
+
+test('a msgpack `nodes` blob is decoded, never read as an empty document', () => {
+  // EVERY marketing screen version measured on 2026-08-12 was msgpack, and the
+  // parent screen documents carry no `nodes` at all. A scan that treats bytes
+  // as "not a node map" reports a clean zero across the entire corpus — which
+  // is the single most dangerous way this check could fail.
+  const blob = encode({ JOPekm0oyE: liveNode })
+  const decoded = decodeNodesField(blob)
+
+  assert.equal(decoded.form, 'msgpack')
+  const { findings, nodesWalked } = findRetiredColoursInNodes(decoded.nodes)
+  assert.equal(nodesWalked, 1)
+  assert.equal(findings.length, 1)
+  assert.equal(findings[0].nodeId, 'JOPekm0oyE')
+  assert.equal(findings[0].path, 'sx.bgcolor')
+  assert.equal(findings[0].hex, '#0090d9')
+  assert.equal(findings[0].scope, 'base')
+  assert.equal(findings[0].retiredBy, 'AGL-1293')
+})
+
+test('bytes that will not decode THROW rather than reporting clean', () => {
+  // 0xc1 is msgpack's never-used byte. The caller reports an ERROR for the
+  // document; a `catch` returning `{}` here would report it as clean.
+  assert.throws(() => decodeNodesField(new Uint8Array([0xc1])))
+})
+
+test('a decoded value that is not a node collection THROWS', () => {
+  assert.throws(() => decodeNodesField(encode('not nodes')))
+  assert.throws(() => decodeNodesField(42))
+})
+
+test('a document with no `nodes` field is absent, not an error', () => {
+  // The 62 marketing parent screens. They hold a `versionId` and nothing else,
+  // so this must be an ordinary outcome — and the caller must keep walking to
+  // the versions, which is where the nodes are.
+  assert.deepEqual(decodeNodesField(undefined), { form: 'absent', nodes: {} })
+  assert.deepEqual(decodeNodesField(null), { form: 'absent', nodes: {} })
+})
+
+test('both storage forms produce the same finding', () => {
+  // The form is a property of the DOCUMENT, not of the host, so the two paths
+  // have to agree or the verdict depends on how a page happened to be saved.
+  const nodes = { JOPekm0oyE: liveNode }
+  const fromMap = findRetiredColoursInNodes(decodeNodesField(nodes).nodes)
+  const fromBytes = findRetiredColoursInNodes(decodeNodesField(encode(nodes)).nodes)
+
+  assert.equal(decodeNodesField(nodes).form, 'map')
+  assert.deepEqual(fromMap.findings, fromBytes.findings)
+})
+
+test('locates a dark-slice pin separately from a base value', () => {
+  // Removing the `@scheme dark` slices that pinned the dark blue was HALF of
+  // 64a945bc5. A finding that could not tell the two apart would report the
+  // repair as one edit when it is two.
+  const { findings } = findRetiredColoursInNodes({
+    n1: { sx: { color: '#0073ae', '@scheme dark': { color: '#4fc3f7' } } },
+  })
+
+  assert.equal(findings.length, 1)
+  assert.equal(findings[0].path, 'sx.@scheme dark.color')
+  assert.equal(findings[0].scope, 'dark-slice')
+  assert.equal(findings[0].hex, '#4fc3f7')
+})
+
+test('finds the hex inside a compound value, not only as the whole value', () => {
+  // `linear-gradient(...)` and `1px solid #…` are both authored shapes and
+  // both put the retired colour in front of a visitor. An equality check on
+  // the value misses every one of them.
+  const { findings } = findRetiredColoursInNodes({
+    n1: {
+      sx: {
+        background: 'linear-gradient(90deg,#0090d9 0%,#0090d9 100%)',
+        border: '1px solid #0090d9',
+      },
+    },
+  })
+
+  const total = findings.reduce((sum, f) => sum + f.occurrences, 0)
+  assert.equal(total, 3, 'two in the gradient, one in the border shorthand')
+})
+
+test('walks props, not only sx', () => {
+  // The AGL-1293 population lived in `sx`. A walker that only looks where the
+  // last regression sat is a hand-listed set of files wearing a different hat.
+  const { findings } = findRetiredColoursInNodes({
+    n1: { props: { htmlColor: '#0090d9' }, sx: {} },
+  })
+
+  assert.equal(findings.length, 1)
+  assert.equal(findings[0].path, 'props.htmlColor')
+})
+
+test('exempts a palette slot in node data, as the rendered census does', () => {
+  // Same exemption, same reason, one definition — so the two halves cannot
+  // drift into disagreeing about what counts as authored.
+  const { findings, exempt } = findRetiredColoursInNodes({
+    n1: { theme: { primary: { main: '#00b0ff', dark: '#4fc3f7' } } },
+  })
+
+  assert.equal(exempt, 1)
+  assert.deepEqual(findings, [])
+})
+
+test('does not match a longer hex token in node data', () => {
+  const { findings } = findRetiredColoursInNodes({
+    n1: { sx: { color: '#0090d9ff' } },
+  })
+  assert.deepEqual(findings, [])
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The SOURCE half — the only part of AGL-1431 a PR gate can see.
+//
+// The regression itself arrived as data, but one of its two halves had a
+// generator sitting in source: `backfill-scheme-dark.mjs` carried a curated
+// map from the old brand blue to the dark pin, in a script the repo keeps
+// specifically to be RE-RUN after data changes. A single re-run would have
+// re-minted the `@scheme dark` slices that 64a945bc5 deleted — silently, on
+// pages nobody edited, with no authoring pass involved at all.
+//
+// Six authoring notes under `tools/marketing/product-copy` were the other
+// shape of the same thing: prose instructing whoever builds the stat row to
+// use the retired hex, read by a human or an agent immediately before they
+// author it.
+//
+// So the rule is stated over the CORPUS rather than over a list of files:
+// nothing under `apps/`, `libs/` or `tools/` may write a retired colour down,
+// except where we can say why. A hand-listed set has the blind spot the next
+// generator is by definition in.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+
+/**
+ * Ships, or writes data. `.github` is deliberately outside: a workflow comment
+ * cannot mint a colour, and the census workflow explains itself in hexes.
+ */
+const SWEEP_ROOTS = ['apps', 'libs', 'tools']
+
+const SKIP_DIRS = new Set([
+  'node_modules',
+  'dist',
+  '.next',
+  'coverage',
+  '.nx',
+  'tmp',
+  '.turbo',
+])
+
+/** Code, config, content and instructions. The last one is not optional. */
+const SWEPT = /\.(?:tsx?|jsx?|mjs|cjs|json|css|scss|html|md)$/
+
+function sweptFiles(dir) {
+  const found = []
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return found
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue
+      found.push(...sweptFiles(full))
+      continue
+    }
+    if (SWEPT.test(entry.name)) found.push(full)
+  }
+  return found
+}
+
+const sourceCorpus = SWEEP_ROOTS.flatMap((root) =>
+  sweptFiles(join(REPO_ROOT, root)),
+).map((file) => ({
+  path: relative(REPO_ROOT, file).split(sep).join('/'),
+  text: readFileSync(file, 'utf8'),
+}))
+
+/**
+ * Files allowed to write a retired hex, and why. A reason is mandatory and is
+ * asserted to still apply — an exemption for a file that no longer contains
+ * one is an exemption nobody has read since it was added.
+ */
+const EXEMPT = {
+  'tools/scripts/lib/retired-colours.mjs':
+    'Defines the retired set. Something has to name the colours, and this is the one file whose job that is; every other detector imports RETIRED_COLOURS from here.',
+  'tools/scripts/lib/retired-colours-nodes.mjs':
+    'The node-data walker. Names the hexes only in its header, illustrating the authored shapes it has to match — a gradient, a border shorthand, a dark slice.',
+  'tools/scripts/lib/retired-colours.test.mjs':
+    'This file. Pinning a detector means writing down the thing it detects, including the live node and payload bytes the cases were built from.',
+  'tools/scripts/audit-retired-colours-data.mjs':
+    'The data audit CLI. Its header explains why the sweep defaults to the marketing host, which needs the hex to make the point that the same colour is unremarkable on a customer site.',
+  'libs/shared/ui/theme/src/lib/util/create-responsive-theme.spec.ts':
+    'Pins the THEME palette, where the lighter blue is the generated dark-scheme primary.dark and is correct. That is the palette-slot exemption both detectors carry, asserted at its source rather than assumed.',
+}
+
+test('the source sweep reads the corpus, not a hand-listed set of files', () => {
+  // Guards the premise. A sweep that read nothing would pass in silence, and
+  // "no violations" is the answer this whole issue exists because of.
+  assert.ok(
+    sourceCorpus.length > 3000,
+    `swept only ${sourceCorpus.length} files — the walk is not reaching the corpus`,
+  )
+  const paths = new Set(sourceCorpus.map((file) => file.path))
+  for (const path of Object.keys(EXEMPT))
+    assert.ok(paths.has(path), `sweep missed an exempt file: ${path}`)
+})
+
+test('no source file writes a retired colour down', () => {
+  const offenders = []
+  for (const { path, text } of sourceCorpus) {
+    if (path in EXEMPT) continue
+    for (const colour of RETIRED_COLOURS) {
+      const found = findColourOccurrences(text, colour.hex)
+      if (found.total)
+        offenders.push(`${path} — ${colour.hex} ×${found.total}`)
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `a retired colour is written into source:\n  ${offenders.join('\n  ')}\n` +
+      'A hex here becomes node data the moment the file is a mapping a ' +
+      'back-fill applies, or an instruction an author follows. Use the token, ' +
+      'or add a path to EXEMPT with a reason.',
+  )
+})
+
+test('every exemption still applies', () => {
+  for (const [path, reason] of Object.entries(EXEMPT)) {
+    assert.ok(reason.length > 80, `${path}: an exemption owes a real reason`)
+    const text = readFileSync(join(REPO_ROOT, path), 'utf8')
+    const mentions = RETIRED_COLOURS.some(
+      (colour) => findColourOccurrences(text, colour.hex).total > 0,
+    )
+    assert.ok(mentions, `${path} no longer names a retired colour — drop it`)
+  }
 })

@@ -267,8 +267,13 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
       description: 'How the image fills its box.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Fit',
+      // Both selects on this element take real sentinels (AGL-1451):
+      // `cover` and `lazy` are members of their own declared prop unions
+      // and the values the render already falls back to. As `''` neither
+      // could persist (AGL-1191) — an image switched to Contain or Eager
+      // could not be switched back.
       options: [
-        { value: '', label: 'Cover (default)' },
+        { value: 'cover', label: 'Cover (default)' },
         { value: 'contain', label: 'Contain' },
         { value: 'fill', label: 'Fill' },
         { value: 'none', label: 'None' },
@@ -297,7 +302,7 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Loading',
       options: [
-        { value: '', label: 'Lazy (default)' },
+        { value: 'lazy', label: 'Lazy (default)' },
         { value: 'eager', label: 'Eager' },
       ],
     },

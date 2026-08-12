@@ -104,3 +104,60 @@ describe('Card presets', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 })
+
+/** AGL-1451 — see the matching block in `paper.spec.tsx`. */
+const cardRoot = (ui: React.ReactElement): HTMLElement => {
+  const { container } = render(ui)
+  return container.querySelector('.MuiPaper-root') as HTMLElement
+}
+
+describe('Card drops cleared props before MUI sees them (AGL-1451)', () => {
+  it('a cleared variant renders exactly as an absent one', () => {
+    const absent = cardRoot(<CardElement />).className
+    expect(cardRoot(<CardElement variant={null as any} />).className).toBe(
+      absent,
+    )
+    expect(cardRoot(<CardElement variant={'' as any} />).className).toBe(absent)
+  })
+
+  it('and that render is MUI’s own default: an elevated, rounded card', () => {
+    const root = cardRoot(<CardElement variant={null as any} />)
+    expect(root.className).toMatch(/MuiPaper-elevation/)
+    expect(root.className).not.toMatch(/MuiPaper-outlined/)
+  })
+
+  // ---- positive control ----
+
+  it('keeps `elevation={0}` — a deliberately flat card', () => {
+    expect(cardRoot(<CardElement elevation={0} />).className).toMatch(
+      /MuiPaper-elevation0/,
+    )
+  })
+
+  it('keeps an explicit outlined variant', () => {
+    expect(cardRoot(<CardElement variant="outlined" />).className).toMatch(
+      /MuiPaper-outlined/,
+    )
+  })
+})
+
+describe('Card "Variant" options (AGL-1451)', () => {
+  const field = (cardSchema.attributes ?? []).find(
+    (a: any) => a.name === 'variant',
+  ) as any
+
+  it('never offers a value the attributes form cannot persist', () => {
+    for (const option of field.options) {
+      expect(option.value).not.toBe('')
+      expect(option.value).not.toBeNull()
+      expect(option.value).not.toBeUndefined()
+    }
+  })
+
+  it('spells the default as MUI’s own value', () => {
+    expect(field.options.map((o: any) => o.value)).toEqual([
+      'elevation',
+      'outlined',
+    ])
+  })
+})

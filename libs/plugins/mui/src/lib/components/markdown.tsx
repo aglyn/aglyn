@@ -25,6 +25,7 @@ import { observer } from 'mobx-react-lite'
 import type { MouseEvent, ReactNode } from 'react'
 import { forwardRef, useContext, useMemo } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -465,7 +466,22 @@ export function scrollToHeading(anchor: Element, slug: string): boolean {
  */
 const TableOfContents = observer(
   forwardRef<HTMLElement, TableOfContentsProps>((props, ref) => {
-    const { forNodeId, heading, depth, sx, ...rest } = props
+    const { forNodeId, heading, depth, sx, ...rawRest } = props
+    /**
+     * The cleared-prop guard, applied to the props that LEAVE this
+     * component rather than to all of them (AGL-1451).
+     *
+     * A props-wide `dropClearedProps` would be wrong here, and this is the
+     * component that shows why the wrapper is not a reflex: `heading` reads
+     * an EMPTY value as a real author choice — "clear it to render no
+     * label", which is what its help text promises and what the `heading
+     * === undefined ? 'On this page' : heading` line below implements. A
+     * guard over the whole props object would strip the cleared heading and
+     * put the default label back, i.e. eat the choice the author made. So
+     * `heading` and `depth` are read as authored, and the guard covers only
+     * what is spread onto the Box.
+     */
+    const rest = dropClearedProps(rawRest)
     const source = resolveMarkdownSource(Aglyn.canvas.rootNode, forNodeId)
     const entries = useMemo(() => {
       const headings = Aglyn.collectMarkdownHeadings(
@@ -623,8 +639,16 @@ export const tableOfContentsSchema: Aglyn.ComponentSchema<TableOfContentsProps> 
         label: 'Levels',
         description: 'How deep the list goes.',
         component: Aglyn.FieldComponentType.SELECT,
+        // `depth` never reaches MUI — it is read here, as `depth === '2'`.
+        // So the `''` was not a rendering defect; it was an option that
+        // could not survive a save (AGL-1191), which meant an author who
+        // set "## headings only" and then changed their mind could not put
+        // it back. `'3'` states the same thing as a real, persistable
+        // value — and is what `TableOfContentsProps.depth` has declared
+        // all along, so the option list was the half that had drifted.
+        // Both levels remain what an unset field means (AGL-1451).
         options: [
-          { value: '', label: '## and ### headings' },
+          { value: '3', label: '## and ### headings' },
           { value: '2', label: '## headings only' },
         ],
       },

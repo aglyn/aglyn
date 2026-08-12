@@ -20,6 +20,7 @@ import { mdiFileDocumentOutline } from '@aglyn/shared-data-mdi'
 import MuiPaper from '@mui/material/Paper'
 import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -58,7 +59,11 @@ export function toElevation(value: unknown): number | undefined {
  * built on, exposed on its own for panels and callouts.
  */
 const PaperElement = forwardRef<HTMLDivElement, PaperElementProps>(
-  (props, ref) => {
+  (rawProps, ref) => {
+    // Cleared props dropped before anything reads them (AGL-1451): `square`
+    // and everything else in `rest` spread straight into MUI, where a `null`
+    // from the field's ✕ (AGL-1226) is a value rather than an absence.
+    const props = dropClearedProps(rawProps)
     const { elevation, variant, children, ...rest } = props
     const resolved = toElevation(elevation)
     return (
@@ -95,8 +100,14 @@ export const schema: Aglyn.ComponentSchema<PaperElementProps> = {
         'Elevation raises the surface with a shadow; outlined draws a ' +
         '1px border instead and has no shadow.',
       component: Aglyn.FieldComponentType.SELECT,
+      // A real sentinel rather than a deletion (AGL-1451): unlike Container,
+      // "elevation" is not a second name for something else in the list —
+      // it is MUI's own variant value, the other half of a two-way choice,
+      // and the one the Elevation control below is conditioned on. It was
+      // spelled `''`, which the attributes form strips on change (AGL-1191),
+      // so picking it reverted the field on save.
       options: [
-        { value: '', label: 'Elevation (default)' },
+        { value: 'elevation', label: 'Elevation (default)' },
         { value: 'outlined', label: 'Outlined' },
       ],
     },

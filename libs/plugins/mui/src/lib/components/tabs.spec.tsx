@@ -638,3 +638,83 @@ describe('link authoring surface (AGL-1312)', () => {
     expect(names).not.toContain('renderAs')
   })
 })
+
+/** AGL-1451 — cleared values must reach MUI as absences, not as `''`. */
+const stripRoot = (ui: React.ReactElement): HTMLElement => {
+  const { container } = renderEditor(ui)
+  return container.querySelector('.MuiTabs-root') as HTMLElement
+}
+
+describe('Tabs drops cleared props before MUI sees them (AGL-1451)', () => {
+  const labels = 'One\nTwo'
+
+  it.each(['orientation', 'variant', 'textColor', 'indicatorColor'])(
+    'a cleared %s renders exactly as an absent one',
+    (name) => {
+      const absent = stripRoot(<TabsElement labels={labels} />)
+      for (const cleared of [null, '']) {
+        const root = stripRoot(
+          <TabsElement labels={labels} {...{ [name]: cleared }} />,
+        )
+        expect(root.className).toBe(absent.className)
+      }
+    },
+  )
+
+  it('and that render is MUI’s own default: horizontal, standard, primary', () => {
+    const { container } = renderEditor(
+      <TabsElement
+        labels={labels}
+        orientation={null as any}
+        variant={null as any}
+        textColor={null as any}
+        indicatorColor={null as any}
+      />,
+    )
+    const root = container.querySelector('.MuiTabs-root') as HTMLElement
+    expect(root.className).not.toMatch(/MuiTabs-vertical/)
+    expect(
+      (container.querySelector('.MuiTab-root') as HTMLElement).className,
+    ).toMatch(/MuiTab-textColorPrimary/)
+  })
+
+  // ---- positive controls ----
+
+  it('keeps an explicit vertical orientation', () => {
+    expect(
+      stripRoot(<TabsElement labels={labels} orientation="vertical" />)
+        .className,
+    ).toMatch(/MuiTabs-vertical/)
+  })
+
+  it('keeps an explicit inherit text colour', () => {
+    const { container } = renderEditor(
+      <TabsElement labels={labels} textColor="inherit" />,
+    )
+    expect(
+      (container.querySelector('.MuiTab-root') as HTMLElement).className,
+    ).toMatch(/MuiTab-textColorInherit/)
+  })
+})
+
+describe('Tabs option values (AGL-1451)', () => {
+  it('never offers a value the attributes form cannot persist', () => {
+    for (const attribute of tabsSchema.attributes ?? []) {
+      for (const option of (attribute as any).options ?? []) {
+        expect(option.value).not.toBe('')
+        expect(option.value).not.toBeNull()
+        expect(option.value).not.toBeUndefined()
+      }
+    }
+  })
+
+  it('names MUI’s own default for each of the four selects', () => {
+    const byName = Object.fromEntries(
+      (tabsSchema.attributes ?? []).map((a: any) => [a.name, a]),
+    )
+    expect(byName['orientation'].options[0].value).toBe('horizontal')
+    expect(byName['variant'].options[0].value).toBe('standard')
+    expect(byName['textColor'].options[0].value).toBe('primary')
+    expect(byName['indicatorColor'].options[0].value).toBe('primary')
+  })
+})

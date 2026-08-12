@@ -396,3 +396,69 @@ describe('markdown schemas (AGL-1162)', () => {
     expect(forNodeId?.component).toBe(Aglyn.FieldComponentType.NODE_SELECT)
   })
 })
+
+/**
+ * AGL-1451 on the Table of Contents — the component that shows why the
+ * `dropClearedProps` wrapper is a decision and not a reflex.
+ */
+describe('Table of Contents cleared values (AGL-1451)', () => {
+  const withDoc = (ui: React.ReactElement) => {
+    fillCanvas([{ $id: 'doc1', props: { content: DOC } }])
+    return render(ui)
+  }
+
+  it('never offers a depth the attributes form cannot persist', () => {
+    const field = (tableOfContentsSchema.attributes ?? []).find(
+      (a: any) => a.name === 'depth',
+    ) as any
+    for (const option of field.options) {
+      expect(option.value).not.toBe('')
+      expect(option.value).not.toBeNull()
+      expect(option.value).not.toBeUndefined()
+    }
+    // `'3'` is what TableOfContentsProps has declared all along; the
+    // option list was the half that had drifted to `''`.
+    expect(field.options.map((o: any) => o.value)).toEqual(['3', '2'])
+  })
+
+  it('a cleared depth lists both levels, exactly as an absent one', () => {
+    const { container: absent } = withDoc(<TableOfContents />)
+    const { container: cleared } = withDoc(
+      <TableOfContents depth={null as any} />,
+    )
+    expect(cleared.innerHTML).toBe(absent.innerHTML)
+    expect(absent.querySelectorAll('li').length).toBeGreaterThan(2)
+  })
+
+  it('the sentinel means the same thing the empty value used to', () => {
+    const { container: sentinel } = withDoc(<TableOfContents depth="3" />)
+    const { container: absent } = withDoc(<TableOfContents />)
+    expect(sentinel.innerHTML).toBe(absent.innerHTML)
+  })
+
+  it('a cleared DOM prop never reaches the element', () => {
+    // The half of the guard this component does take: props spread onto
+    // the Box are stripped, so a cleared attribute cannot land as `""`.
+    const { container } = withDoc(
+      <TableOfContents {...({ 'data-x': null } as any)} />,
+    )
+    expect(container.querySelector('[data-x]')).toBeNull()
+  })
+
+  // ---- positive control: the choice a blanket wrapper would have eaten ----
+
+  it('an EMPTY heading still renders no label — a real author choice', () => {
+    // This is why TableOfContents is not wrapped props-wide: `heading` reads
+    // an empty value as "render no label" (its help text says so), and a
+    // guard over the whole props object would strip it and put the default
+    // "On this page" back.
+    const { container } = withDoc(<TableOfContents heading="" />)
+    expect(container.textContent).not.toContain('On this page')
+    expect(container.querySelectorAll('li').length).toBeGreaterThan(0)
+  })
+
+  it('and an explicit heading still wins over the default', () => {
+    const { container } = withDoc(<TableOfContents heading="Contents" />)
+    expect(container.textContent).toContain('Contents')
+  })
+})

@@ -116,8 +116,10 @@ describe('List Item', () => {
     const field = listItemSchema.attributes.find(
       (a: any) => a.name === 'alignItems',
     ) as any
+    // `center` rather than `''` since AGL-1451: both are real MUI values
+    // and both persist, so the row can be moved back off Top.
     expect(field.options.map((option: any) => option.value)).toEqual([
-      '',
+      'center',
       'flex-start',
     ])
   })
@@ -177,5 +179,67 @@ describe('List Item Text', () => {
     )
     expect(screen.queryByTestId('dropped')).toBeNull()
     expect(screen.getByText('One')).toBeTruthy()
+  })
+})
+
+/** AGL-1451 — cleared values must reach MUI as absences, not as `''`. */
+const itemRoot = (ui: React.ReactElement): HTMLElement => {
+  const { container } = render(ui)
+  return container.querySelector('.MuiListItem-root') as HTMLElement
+}
+
+describe('List Item drops cleared props before MUI sees them (AGL-1451)', () => {
+  it('a cleared alignment renders exactly as an absent one', () => {
+    const absent = itemRoot(<ListItem>{'One'}</ListItem>).className
+    for (const cleared of [null, '']) {
+      expect(
+        itemRoot(
+          <ListItem alignItems={cleared as any}>{'One'}</ListItem>,
+        ).className,
+      ).toBe(absent)
+    }
+  })
+
+  it('and that render is MUI’s own default: centred, not flex-start', () => {
+    expect(
+      itemRoot(<ListItem alignItems={null as any}>{'One'}</ListItem>)
+        .className,
+    ).not.toMatch(/alignItemsFlexStart/)
+  })
+
+  it('a cleared switch attribute does not reach MUI as a value', () => {
+    expect(
+      itemRoot(<ListItem divider={null as any}>{'One'}</ListItem>).className,
+    ).toBe(itemRoot(<ListItem>{'One'}</ListItem>).className)
+  })
+
+  // ---- positive controls ----
+
+  it('keeps an explicit flex-start alignment', () => {
+    expect(
+      itemRoot(<ListItem alignItems="flex-start">{'One'}</ListItem>)
+        .className,
+    ).toMatch(/alignItemsFlexStart/)
+  })
+
+  it('keeps `disablePadding` when it is really set', () => {
+    // MUI emits `MuiListItem-padding` only when padding is NOT disabled,
+    // so the class disappearing is the prop having arrived.
+    expect(itemRoot(<ListItem>{'One'}</ListItem>).className).toMatch(
+      /MuiListItem-padding/,
+    )
+    expect(
+      itemRoot(<ListItem disablePadding>{'One'}</ListItem>).className,
+    ).not.toMatch(/MuiListItem-padding/)
+  })
+
+  it('never offers a value the attributes form cannot persist', () => {
+    for (const attribute of listItemSchema.attributes ?? []) {
+      for (const option of (attribute as any).options ?? []) {
+        expect(option.value).not.toBe('')
+        expect(option.value).not.toBeNull()
+        expect(option.value).not.toBeUndefined()
+      }
+    }
   })
 })

@@ -143,8 +143,11 @@ export const schema: Aglyn.ComponentSchema<LanguageSwitcherProps> = {
       description: 'How the language links render.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Style',
+      // `text` is half of the declared `'text' | 'buttons'` union and the
+      // value the render already falls back to; as `''` the option was
+      // unpersistable (AGL-1191) and outside its own prop type (AGL-1451).
       options: [
-        { value: '', label: 'Text (default)' },
+        { value: 'text', label: 'Text (default)' },
         { value: 'buttons', label: 'Outlined buttons' },
       ],
     },

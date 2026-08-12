@@ -612,8 +612,13 @@ export const formSchema: Aglyn.ComponentSchema<FormProps> = {
         'the visitor to another page, or reveal a hidden element.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'After submit',
+      // `message` is the first member of the declared `FormAfterSubmit`
+      // union, so the sentinel already existed in the type and only the
+      // option list was spelling it `''` (AGL-1451) — a value the
+      // attributes form strips on change (AGL-1191), which meant a form
+      // switched to Redirect could not be switched back to its message.
       options: [
-        { value: '', label: 'Show the success message' },
+        { value: 'message', label: 'Show the success message' },
         { value: 'redirect', label: 'Redirect the visitor' },
         { value: 'reveal', label: 'Reveal a hidden element' },
       ],
@@ -695,8 +700,13 @@ export const formFieldSchema: Aglyn.ComponentSchema<FormFieldProps> = {
       description: 'Input type.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Type',
+      // `text` is the first member of this prop's own union, and the value
+      // the render falls back to. As `''` it was the one field type an
+      // author could not choose and keep (AGL-1191/AGL-1451): a field
+      // switched to Email or Multiline could never be made plain text
+      // again without deleting it.
       options: [
-        { value: '', label: 'Text' },
+        { value: 'text', label: 'Text' },
         { value: 'email', label: 'Email' },
         { value: 'textarea', label: 'Multiline' },
         { value: 'select', label: 'Dropdown' },

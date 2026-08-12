@@ -52,6 +52,8 @@ import { initializeApp, applicationDefault } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { decode, encode } from '@msgpack/msgpack'
 
+import { RETIRED_COLOURS } from './lib/retired-colours.mjs'
+
 const apply = process.argv.includes('--apply')
 const openGate = process.argv.includes('--open-gate')
 const closeGate = process.argv.includes('--close-gate')
@@ -121,11 +123,17 @@ const BG_MAP = {
 /** Curated foreground map. Near-black text goes near-white, never to a surface. */
 const FG_MAP = {
   '#161c21': '#e6e9ec',
-  // DORMANT since AGL-1293: no node carries either of these as a foreground
-  // any more — all 614 moved to the `primary.dark` token, which flips by
-  // itself and needs no slice. Kept only as a safety net if the literal is
-  // ever re-authored; the right answer then is the token, not this mapping.
-  '#0090d9': '#4fc3f7',
+  // A mapping from the old brand blue to its dark pin USED TO LIVE HERE,
+  // described as a dormant safety net for a re-authored literal. It was
+  // neither dormant nor a safety net: both hexes are RETIRED (AGL-1293), and
+  // the 454 `@scheme dark` slices pinning the dark one were deleted BY that
+  // migration. This map is living configuration that gets re-run after data
+  // changes, so the next run would have re-minted exactly the half of the
+  // migration AGL-1431 found undone — from source, silently, on a page nobody
+  // edited. `derive` now refuses a retired colour outright and reports it; the
+  // answer to a re-authored literal is the token, which needs no slice at all.
+  // Enforced by `lib/retired-colours.test.mjs`, which is also why neither hex
+  // is written out here.
   '#0079b8': '#29b6f6',
 
   // Promoted from the fallback, same reasoning and same values as above.
@@ -212,6 +220,16 @@ function luminance(hex) {
 const unmapped = new Map()
 
 /**
+ * A colour AGL-1293 retired. This back-fill must never emit one and must never
+ * derive a slice FOR one — a retired literal in the base is a data defect, and
+ * giving it a well-formed dark counterpart makes it look handled.
+ */
+const RETIRED = new Set(RETIRED_COLOURS.map((colour) => colour.hex.toLowerCase()))
+
+/** `${prop} ${hex}` -> count. Reported, never silently skipped. */
+const retiredSeen = new Map()
+
+/**
  * The dark counterpart of one colour value, or null to leave it alone.
  *
  * The hex guard is the FIRST thing here on purpose. Every colour-valued sx
@@ -220,6 +238,16 @@ const unmapped = new Map()
 function derive(prop, value) {
   if (typeof value !== 'string' || !HEX.test(value)) return null
   const k = value.toLowerCase()
+
+  // Refuse before the maps get a say. The right repair for a re-authored
+  // retired literal is the `primary.dark` token, which flips by itself and
+  // needs no slice; minting one here would re-create the pins `64a945bc5`
+  // deleted. `audit-retired-colours-data.mjs` names the node to open.
+  if (RETIRED.has(k)) {
+    retiredSeen.set(`${prop} ${k}`, (retiredSeen.get(`${prop} ${k}`) ?? 0) + 1)
+    return null
+  }
+
   const isBg = BG_PROP.test(prop)
   if (isBg && BG_MAP[k]) return BG_MAP[k]
   if (!isBg && FG_MAP[k]) return FG_MAP[k]
@@ -514,6 +542,17 @@ console.log(
 if (palette.size) {
   console.log(`\nPalette — every light → dark mapping this run produces:`)
   for (const [key, count] of [...palette].sort((a, b) => b[1] - a[1]))
+    console.log(`  ${String(count).padStart(5)}×  ${key}`)
+}
+
+if (retiredSeen.size) {
+  console.log(
+    `\n${retiredSeen.size} RETIRED colour(s) still authored into node data ` +
+      `(AGL-1293). No dark slice was derived for these — a slice would make a ` +
+      `data defect look handled. Repair the node, then re-run:\n` +
+      `  node tools/scripts/audit-retired-colours-data.mjs`,
+  )
+  for (const [key, count] of [...retiredSeen].sort((a, b) => b[1] - a[1]))
     console.log(`  ${String(count).padStart(5)}×  ${key}`)
 }
 

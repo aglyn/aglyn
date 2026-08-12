@@ -22,6 +22,7 @@ import MuiImageListItem from '@mui/material/ImageListItem'
 import MuiImageListItemBar from '@mui/material/ImageListItemBar'
 import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -64,7 +65,10 @@ export function toCount(value: unknown, fallback?: number): number | undefined {
  * or quilted grid of images, denser than a Grid of cards.
  */
 const ImageListElement = forwardRef<HTMLUListElement, ImageListElementProps>(
-  (props, ref) => {
+  (rawProps, ref) => {
+    // Cleared props dropped before the resolvers below read them
+    // (AGL-1451); `rest` also spreads straight into MUI.
+    const props = dropClearedProps(rawProps)
     const { cols, gap, rowHeight, variant, children, ...rest } = props
     const resolvedVariant: ImageListVariant = (
       ['standard', 'quilted', 'masonry', 'woven'] as const
@@ -100,7 +104,8 @@ ImageListElement.displayName = 'AglynImageList'
 export const ImageListItemElement = forwardRef<
   HTMLLIElement,
   ImageListItemElementProps
->((props, ref) => {
+>((rawProps, ref) => {
+  const props = dropClearedProps(rawProps)
   const { cols, rows, title, subtitle, barPosition, children, ...rest } = props
   return (
     <MuiImageListItem
@@ -145,8 +150,14 @@ export const imageListSchema: Aglyn.ComponentSchema<ImageListElementProps> = {
         'rows; masonry keeps each image’s own aspect ratio; woven ' +
         'alternates tile sizes.',
       component: Aglyn.FieldComponentType.SELECT,
+      // A real sentinel, not a deletion (AGL-1451): `standard` is one of
+      // MUI's four named variants and the resolver above already accepts
+      // it by name, so the option is a genuine choice — and the one an
+      // author needs in order to move a list BACK off quilted or masonry.
+      // Spelled `''` it could not persist (AGL-1191), so that move
+      // silently reverted.
       options: [
-        { value: '', label: 'Standard (default)' },
+        { value: 'standard', label: 'Standard (default)' },
         { value: 'quilted', label: 'Quilted' },
         { value: 'masonry', label: 'Masonry' },
         { value: 'woven', label: 'Woven' },
@@ -205,8 +216,11 @@ export const imageListItemSchema: Aglyn.ComponentSchema<ImageListItemElementProp
         label: 'Caption position',
         description: 'Where the caption bar sits relative to the image.',
         component: Aglyn.FieldComponentType.SELECT,
+        // `bottom` is MUI's own position value and the `|| 'bottom'`
+        // fallback below already resolves to it, so the sentinel is the
+        // value the code was reaching for anyway (AGL-1451).
         options: [
-          { value: '', label: 'Bottom (default)' },
+          { value: 'bottom', label: 'Bottom (default)' },
           { value: 'top', label: 'Top' },
           { value: 'below', label: 'Below the image' },
         ],

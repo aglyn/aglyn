@@ -77,3 +77,85 @@ describe('Paper element', () => {
     }
   })
 })
+
+/**
+ * AGL-1451: the Variant select offered `{ value: '', label: 'Elevation
+ * (default)' }` and this element passed everything else straight into MUI
+ * with no cleared-prop guard. `''`/`null` satisfies neither branch — not
+ * `undefined`, so a destructuring default never fires, and falsy, so an
+ * explicit branch is skipped — and the option could not survive a save at
+ * all (AGL-1191).
+ */
+const paperRoot = (ui: React.ReactElement): HTMLElement => {
+  const { container } = render(ui)
+  return container.querySelector('.MuiPaper-root') as HTMLElement
+}
+
+describe('Paper drops cleared props before MUI sees them (AGL-1451)', () => {
+  it('a cleared variant renders exactly as an absent one', () => {
+    const absent = paperRoot(<PaperElement />).className
+    expect(paperRoot(<PaperElement variant={null as any} />).className).toBe(
+      absent,
+    )
+    expect(paperRoot(<PaperElement variant={'' as any} />).className).toBe(
+      absent,
+    )
+  })
+
+  it('and that render is MUI’s own default: an elevated, rounded surface', () => {
+    const root = paperRoot(<PaperElement variant={null as any} />)
+    expect(root.className).toMatch(/MuiPaper-elevation/)
+    expect(root.className).toMatch(/MuiPaper-rounded/)
+    expect(root.className).not.toMatch(/MuiPaper-outlined/)
+  })
+
+  it('a cleared boolean does not reach MUI as a value', () => {
+    // `square={null}` is the AGL-1226 shape on a switch attribute.
+    expect(paperRoot(<PaperElement square={null as any} />).className).toBe(
+      paperRoot(<PaperElement />).className,
+    )
+  })
+
+  // ---- positive controls: the guard must not shred real values ----
+
+  it('keeps `elevation={0}` — a deliberately flat surface', () => {
+    // The falsy value an author can mean, and the one a careless guard
+    // would eat: 0 is a real shadow depth, not a cleared field.
+    expect(paperRoot(<PaperElement elevation={0} />).className).toMatch(
+      /MuiPaper-elevation0/,
+    )
+  })
+
+  it('keeps `square` when it is really set', () => {
+    expect(paperRoot(<PaperElement square />).className).not.toMatch(
+      /MuiPaper-rounded/,
+    )
+  })
+
+  it('keeps an explicit outlined variant', () => {
+    expect(paperRoot(<PaperElement variant="outlined" />).className).toMatch(
+      /MuiPaper-outlined/,
+    )
+  })
+})
+
+describe('Paper "Variant" options (AGL-1451)', () => {
+  const field = schema.attributes.find((a: any) => a.name === 'variant') as any
+
+  it('never offers a value the attributes form cannot persist', () => {
+    for (const option of field.options) {
+      expect(option.value).not.toBe('')
+      expect(option.value).not.toBeNull()
+      expect(option.value).not.toBeUndefined()
+    }
+  })
+
+  it('spells the default as MUI’s own value rather than deleting it', () => {
+    // Unlike Container's "Default", `elevation` is a real MUI variant and
+    // the other half of a two-way choice, so it stays — as a sentinel.
+    expect(field.options.map((o: any) => o.value)).toEqual([
+      'elevation',
+      'outlined',
+    ])
+  })
+})

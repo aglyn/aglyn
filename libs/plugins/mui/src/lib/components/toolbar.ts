@@ -19,10 +19,31 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   mdiBorderInside,
 } from '@aglyn/shared-data-mdi'
-import Toolbar, { type ToolbarProps } from '@mui/material/Toolbar'
+import MuiToolbar, { type ToolbarProps } from '@mui/material/Toolbar'
+import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_DISABLE_GUTTERS } from '../constants/field-presets'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
+
+/**
+ * MUI's Toolbar behind the cleared-prop guard (AGL-1451).
+ *
+ * This was the one component in the AGL-1451 set where `''` reached MUI
+ * untouched, so it carried the AGL-1435 defect exactly: MUI's Toolbar
+ * destructures `variant = 'regular'` and then applies its height from
+ * `ownerState.variant === 'regular' && theme.mixins.toolbar`. `''` is not
+ * `undefined`, so the default never fires, and it is falsy, so neither the
+ * `regular` nor the `dense` branch matches — the toolbar renders with NO
+ * min-height at all and the app bar collapses to its content. Nothing
+ * throws and the editor looks fine.
+ *
+ * `createElement` rather than JSX keeps this a `.ts` file.
+ */
+const Toolbar = forwardRef<HTMLDivElement, ToolbarProps>((props, ref) =>
+  createElement(MuiToolbar, { ...dropClearedProps(props), ref }),
+)
+Toolbar.displayName = 'AglynToolbar'
 
 // Component ids are persisted in screen documents; keep the legacy ids.
 export const ID: Aglyn.ComponentId = 'muiToolbar'
@@ -44,13 +65,20 @@ export const schema: Aglyn.ComponentSchema<ToolbarProps> = {
     FIELD_DISABLE_GUTTERS,
     {
       name: 'variant',
-      description: 'The variant to use.',
+      description:
+        'Regular is the standard bar height; dense compacts it. Clearing ' +
+        'the field falls back to Regular, which is MUI’s own default.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Variant',
+      // No "Default" option: MUI has exactly two toolbar heights and
+      // `regular` IS the default, so "Default" was a second name for a
+      // choice already in the list — carrying the `''` value that rendered
+      // a toolbar with no min-height at all (AGL-1451). Deleted rather
+      // than given a sentinel for that reason; every value here is real
+      // and persistable.
       options: [
-        { value: '', label: 'Default' },
         { value: 'dense', label: 'Dense' },
-        { value: 'regular', label: 'Regular' },
+        { value: 'regular', label: 'Regular (default)' },
       ],
     },
   ],

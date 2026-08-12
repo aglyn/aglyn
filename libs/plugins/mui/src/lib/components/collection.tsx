@@ -598,6 +598,8 @@ const SHARE_TARGETS = [
 const CollectionShare = forwardRef<HTMLDivElement, CollectionShareProps>(
   (props, ref) => {
     const { heading, ...rest } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
     const [copied, setCopied] = useState(false)
     const title = heading ?? 'Share'
@@ -625,7 +627,8 @@ const CollectionShare = forwardRef<HTMLDivElement, CollectionShareProps>(
         direction="row"
         spacing={0.5}
         {...rest}
-        sx={{ alignItems: 'center', ...(rest.sx as object) }}
+        // MERGE, never replace (AGL-1450) — see Entry Meta below.
+        sx={[{ alignItems: 'center' }, ...nodeSx]}
       >
         {title ? (
           <Typography variant="subtitle2" sx={{ mr: 1 }}>
@@ -767,7 +770,14 @@ const CollectionEntryMeta = forwardRef<
       direction="row"
       spacing={1}
       {...rest}
-      sx={{ alignItems: 'center', flexWrap: 'wrap', ...(rest.sx as object) }}
+      // MERGE, never replace (AGL-1450, same class as AGL-1284). `rest.sx`
+      // is the ARRAY `mergeSxProps` builds in leaf.tsx, so spreading it into
+      // an object produced `{0: …, 1: …, 2: …}` — numeric keys emotion emits
+      // as invalid selectors — and discarded EVERY authored property while
+      // these two defaults still applied. The block looked deliberately
+      // styled, so nothing suggested the value had been dropped. Defaults
+      // go first; the node's slice comes after and can override them.
+      sx={[{ alignItems: 'center', flexWrap: 'wrap' }, ...nodeSx]}
     >
       {line ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -922,7 +932,8 @@ const CollectionCategories = forwardRef<
       direction="row"
       spacing={1}
       {...rest}
-      sx={{ flexWrap: 'wrap', rowGap: 1, ...(rest.sx as object) }}
+      // MERGE, never replace (AGL-1450) — see Entry Meta above.
+      sx={[{ flexWrap: 'wrap', rowGap: 1 }, ...nodeSx]}
     >
       {items.map((item) =>
         // Editing surfaces render the pill look without an href, so a click

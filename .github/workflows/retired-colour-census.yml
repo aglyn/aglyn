@@ -67,6 +67,19 @@ jobs:
       # that goes red for cache timing gets muted. The report says which reads
       # were provisional; a VIOLATION never is, since a stale read cannot
       # invent a colour that was never published.
+      #
+      # WHEN THIS GOES RED: it names the route, not the node. Run
+      #
+      #   npm run audit:retired-colours-data
+      #
+      # from a checkout with ADC on `aglyn-main`. That reads the node corpus
+      # and names the document, the node id and the sx path to open in the
+      # besigner. It also covers what this cannot: a colour inside a
+      # `lazyPanels` panel never reaches the delivered bytes, a draft version
+      # serves nobody until someone clicks Publish, and this censuses three
+      # named routes rather than all 62 screens — sweeping every route costs
+      # ~40 Firestore reads per render, which is why the corpus half reads the
+      # data directly instead.
       - name: Census the marketing routes
         run: node tools/scripts/check-retired-colours.mjs --refresh
         env:

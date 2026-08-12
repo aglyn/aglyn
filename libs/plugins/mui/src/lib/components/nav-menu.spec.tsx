@@ -423,8 +423,10 @@ describe('nav menu schemas & presets (AGL-562)', () => {
     const megaByName = Object.fromEntries(
       (megaMenuSchema.attributes ?? []).map((attr) => [attr.name, attr]),
     )
+    // `auto`, not `''`, since AGL-1451 — it is the MegaMenuPanelWidth
+    // member `megaMenuPanelSx` already switches on, and it persists.
     expect((megaByName['panelWidth']?.options ?? []).map((o: any) => o.value))
-      .toEqual(['', 'wide', 'full'])
+      .toEqual(['auto', 'wide', 'full'])
   })
 
   it('presets compose links from persisted component ids only', () => {

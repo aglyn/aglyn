@@ -31,6 +31,7 @@ import {
   useState,
 } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -237,7 +238,12 @@ export const TabsContext = createContext<TabsContextValue | undefined>(
  * with no tablist above them — is what this deliberately avoids.
  */
 const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
-  (props, ref) => {
+  (rawProps, ref) => {
+    // Cleared props dropped up front (AGL-1451). The four selects below
+    // already coalesce their own value, but `rest` is spread onto the root
+    // and the per-tab link props are read out of it, so a `null` from the
+    // field's ✕ (AGL-1226) must not survive this far.
+    const props = dropClearedProps(rawProps)
     const {
       labels,
       ariaLabel,
@@ -628,8 +634,14 @@ export const tabsSchema: Aglyn.ComponentSchema<TabsElementProps> = {
       description:
         'Vertical puts the strip beside the panels instead of above them.',
       component: Aglyn.FieldComponentType.SELECT,
+      // Real sentinels throughout this schema rather than deletions
+      // (AGL-1451): each "(default)" here names MUI's OWN value for that
+      // prop — horizontal, standard, primary — so the option is a real
+      // choice an author may want to pin, not a synonym for "unset".
+      // Spelled `''` they could not persist at all (AGL-1191): picking
+      // Horizontal on a vertical strip silently reverted to vertical.
       options: [
-        { value: '', label: 'Horizontal (default)' },
+        { value: 'horizontal', label: 'Horizontal (default)' },
         { value: 'vertical', label: 'Vertical' },
       ],
     },
@@ -641,7 +653,7 @@ export const tabsSchema: Aglyn.ComponentSchema<TabsElementProps> = {
         'divides the available space evenly.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
-        { value: '', label: 'Standard (default)' },
+        { value: 'standard', label: 'Standard (default)' },
         { value: 'scrollable', label: 'Scrollable' },
         { value: 'fullWidth', label: 'Full width' },
       ],
@@ -671,7 +683,7 @@ export const tabsSchema: Aglyn.ComponentSchema<TabsElementProps> = {
       description: 'Theme color of the tab labels.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
-        { value: '', label: 'Primary (default)' },
+        { value: 'primary', label: 'Primary (default)' },
         { value: 'secondary', label: 'Secondary' },
         { value: 'inherit', label: 'Inherit' },
       ],
@@ -682,7 +694,7 @@ export const tabsSchema: Aglyn.ComponentSchema<TabsElementProps> = {
       description: 'Theme color of the underline marking the active tab.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
-        { value: '', label: 'Primary (default)' },
+        { value: 'primary', label: 'Primary (default)' },
         { value: 'secondary', label: 'Secondary' },
       ],
     },

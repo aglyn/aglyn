@@ -360,3 +360,70 @@ describe('Entry meta block (AGL-582)', () => {
     expect(container.textContent).toBe('')
   })
 })
+
+/**
+ * The node's authored styles reach a block as the ARRAY `mergeSxProps`
+ * builds in `leaf.tsx` — `[callerSx, props.sx, node.sx]` — never as a plain
+ * object. A block that folds that value in with `{...(rest.sx as object)}`
+ * spreads an array: the result is `{0: …, 1: …, 2: …}`, numeric keys that
+ * emotion emits as invalid selectors, so EVERY authored property is
+ * discarded while the block's own defaults still apply. The panel reads the
+ * value back from the node and the save reports success, so nothing in the
+ * authoring loop signals the loss (AGL-1450).
+ */
+describe('Blocks that render their own Stack keep the node style slice (AGL-1450)', () => {
+  /** Exactly what `mergeSxProps(sx, props.sx, node.sx)` yields for a node. */
+  const nodeSlice = (sx: Record<string, unknown>) => [undefined, undefined, sx]
+
+  const authored = { justifyContent: 'center', textAlign: 'center' } as const
+
+  it.each([
+    [
+      'Entry Meta',
+      <CollectionEntryMeta
+        key="meta"
+        date="1/1/2026"
+        category="Guides"
+        sx={nodeSlice(authored) as never}
+      />,
+    ],
+    [
+      'Share Bar',
+      <CollectionShare key="share" sx={nodeSlice(authored) as never} />,
+    ],
+    [
+      'Category pills',
+      <CollectionCategories
+        key="cats"
+        items={[{ label: 'All', href: '/blog', active: true }]}
+        sx={nodeSlice(authored) as never}
+      />,
+    ],
+  ])('%s applies the authored justify-content and text-align', (_name, el) => {
+    const { container } = render(el)
+    const root = container.firstElementChild as HTMLElement
+    const style = window.getComputedStyle(root)
+    expect(style.justifyContent).toBe('center')
+    expect(style.textAlign).toBe('center')
+  })
+
+  it('still applies the block default when the node authors nothing', () => {
+    const { container } = render(
+      <CollectionEntryMeta date="1/1/2026" category="Guides" />,
+    )
+    const root = container.firstElementChild as HTMLElement
+    expect(window.getComputedStyle(root).alignItems).toBe('center')
+  })
+
+  it('lets the node override the block default rather than losing to it', () => {
+    const { container } = render(
+      <CollectionEntryMeta
+        date="1/1/2026"
+        category="Guides"
+        sx={nodeSlice({ alignItems: 'flex-start' }) as never}
+      />,
+    )
+    const root = container.firstElementChild as HTMLElement
+    expect(window.getComputedStyle(root).alignItems).toBe('flex-start')
+  })
+})
