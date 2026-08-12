@@ -18,6 +18,10 @@
 
 import { MdiIcon, useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+// A listing's preview may be a `media:` reference (AGL-1424), which is not a
+// URL. The marketplace lib's own `ListingImage` cannot be imported here —
+// `scope:app` may not depend on `aglyn:addons` — so this resolves directly.
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import {
   Box,
   Button,
@@ -130,7 +134,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
@@ -407,6 +411,16 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
       screens: any[]
       virtual?: boolean
     }) => async () => {
+      // AGL-1422: an undefined `org` is the FREE tier to `checkOrgQuota`, so
+      // applying a template inside the loading window was refused with
+      // "your plan allows N" — a number belonging to a plan the workspace
+      // may not be on. Only a loaded plan may name a limit.
+      if (!orgReady) {
+        return void enqueueSnackbar(
+          'Checking your plan — try again in a moment',
+          { variant: 'info', persist: false },
+        )
+      }
       const quota = checkOrgQuota(
         org,
         'screensPerHost',
@@ -468,6 +482,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     },
     [
       org,
+      orgReady,
       screenCount,
       existingSlugs,
       firestore,
@@ -700,10 +715,10 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
               {marketplaceTemplates.map((listing: any) => (
                 <Grid key={listing.$id} size={{ xs: 12, sm: 6, md: 4 }}>
                   <Card variant="outlined" sx={{ height: '100%' }}>
-                    {listing.previewImageUrl ? (
+                    {resolveMediaSrc(listing.previewImageUrl) ? (
                       <Box
                         component="img"
-                        src={listing.previewImageUrl}
+                        src={resolveMediaSrc(listing.previewImageUrl)}
                         alt={`${listing.displayName} preview`}
                         sx={{
                           width: '100%',

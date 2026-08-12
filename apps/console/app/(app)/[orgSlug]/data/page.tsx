@@ -19,7 +19,7 @@
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { Alert } from '@mui/material'
+import { Alert, Box, CircularProgress } from '@mui/material'
 import FeatureGate from '../../../../components/feature-gate.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
@@ -38,7 +38,7 @@ import useCurrentOrg from '../../../../hooks/use-current-org'
 const OrgData: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const { currentOrg, loading } = useOrgScope()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   return (
     <DashboardLayout
       breadcrumbItems={[
@@ -58,11 +58,27 @@ const OrgData: NextPageWithLayout<Record<string, never>> = () => {
           </Alert>
         ) : currentOrg?.$id ? (
           <FeatureGate flag="release_data_store">
-            <PluginWidgetSlot
-              slot="orgData"
-              orgId={currentOrg.$id}
-              org={org}
-            />
+            {/*
+              The org-scope twin of the plugin-page route gate (AGL-1380).
+              `org` is undefined both while the billing doc is in flight and
+              while the read is failing, and the datasets editor's Add
+              buttons run `checkEntitlement`/`checkDatasetQuota` on it —
+              where undefined is not "unknown" but the FREE tier, whose
+              dataset and record limits are both zero. A paying org clicking
+              Add inside that window was told datasets need a Starter plan.
+              Hold until there is a plan to check against.
+            */}
+            {!orgReady ? (
+              <Box sx={{ p: 2 }}>
+                <CircularProgress size={24} />
+              </Box>
+            ) : (
+              <PluginWidgetSlot
+                slot="orgData"
+                orgId={currentOrg.$id}
+                org={org}
+              />
+            )}
           </FeatureGate>
         ) : null}
       </Container>

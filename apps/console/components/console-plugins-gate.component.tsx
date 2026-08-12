@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  EnabledPluginsContext,
   filterPluginsByReleaseFlags,
   listConsoleProviders,
   resolveEnabledPlugins,
@@ -40,6 +41,23 @@ import { loadOrgRealmPlugins } from '../utils/realm-plugins.client'
  * flashes in on the registry defaults.
  */
 function useEffectiveEnabledPlugins(): { flagsReady: boolean; enabledKey: string } {
+  // EXEMPT from `no-unguarded-loading-hook` (AGL-1422), and the one place in
+  // this sweep where adding the gate would be the more dangerous change.
+  //
+  // `resolveEnabledPlugins` fails OPEN: an undefined `org` yields the DEFAULT
+  // plugin set, so the loading window can only ever show MORE than the
+  // workspace enabled — never the refusal the rule exists to stop. Folding
+  // `ready` into `flagsReady` would put the entire plugin surface (nav,
+  // pages, providers, and via `useSitePluginsReady` the besigner canvas)
+  // behind the billing doc — and `useConfirmedDoc` leaves `ready` false
+  // indefinitely when a MISSING doc's server confirm cannot complete, which
+  // is a plausible state for a pre-billing workspace. That trades a
+  // cosmetic fail-open for a console with no plugins in it at all.
+  //
+  // The residue is a beat of the default nav on a cold load, which the
+  // BootSplash hold below already covers on a session's first load. Revisit
+  // only if `resolveEnabledPlugins` ever stops defaulting.
+  // eslint-disable-next-line aglyn/no-unguarded-loading-hook
   const { org } = useCurrentOrg()
   const { ready, isStaff, flags } = useReleaseFlags()
   const enabledKey = filterPluginsByReleaseFlags(
@@ -86,7 +104,7 @@ export default function ConsolePluginsGate({
 }: {
   children?: ReactNode
 }) {
-  const { org, orgId } = useCurrentOrg()
+  const { org, orgId, ready: orgReady } = useCurrentOrg()
   const { data: user } = useUser()
   const [readyForOrg, setReadyForOrg] = useState<string | null>(null)
   const { flagsReady, enabledKey } = useEffectiveEnabledPlugins()
@@ -142,9 +160,16 @@ export default function ConsolePluginsGate({
   // Plugin-registered app providers (AGL-419) wrap every console page —
   // e.g. the marketplace plugin's AI-assist provider. Scoped to this org, so
   // a provider from a previously visited workspace does not linger.
+  //
+  // `orgReady` rides along with `org` (AGL-1380). This gate sits above the
+  // whole route tree, so unlike the plugin-page route it CANNOT hold its
+  // render until the billing doc settles — that would blank the console on
+  // every load. A provider's entitlement gate therefore has to be told the
+  // difference between "not on your plan" and "no answer yet", because an
+  // undefined `org` checks as the free tier either way.
   return listConsoleProviders(enabledPluginIds).reduce<ReactNode>(
     (inner, Provider, index) => (
-      <Provider key={index} org={org}>
+      <Provider key={index} org={org} orgReady={orgReady}>
         {inner}
       </Provider>
     ),
@@ -163,14 +188,27 @@ export default function ConsolePluginsGate({
  * plugins' site components are registered, then mounts the wrapped page.
  * Used on the besigner/preview pages so their hook-heavy bodies never run
  * against an empty component registry.
+ *
+ * It is also where the editor learns the site's plugin set (AGL-1014).
+ * `consolePluginLoader` never unloads a bundle and the preset registry is a
+ * module-global union, so a plugin loaded while editing one site keeps
+ * registering palette entries on the next — narrowing what gets LOADED
+ * cannot take back what is already registered. The component drawer
+ * therefore FILTERS on this set, and it is published here rather than per
+ * route so no editor page can be added that forgets.
  */
 export function withSitePlugins<P extends object>(
   Component: React.ComponentType<P>,
 ): React.ComponentType<P> {
   function WithSitePlugins(props: P) {
     const ready = useSitePluginsReady()
+    const enabledPluginIds = useEnabledPluginIds()
     if (!ready) return null
-    return <Component {...props} />
+    return (
+      <EnabledPluginsContext.Provider value={enabledPluginIds}>
+        <Component {...props} />
+      </EnabledPluginsContext.Provider>
+    )
   }
   WithSitePlugins.displayName = `WithSitePlugins(${Component.displayName ?? Component.name ?? 'Page'})`
   return WithSitePlugins

@@ -193,7 +193,7 @@ export const BesignerVersionsComponent = observer(
     const router = useRouter()
     const { enqueueSnackbar } = useSnackbar()
     const { queueLoading } = useLoading()
-    const { org } = useCurrentOrg()
+    const { org, ready: orgReady } = useCurrentOrg()
     const createHostVersion = useHostVersionApi()
     const { confirm } = useConfirmationContext()
     const [open, setOpen] = useState(false)
@@ -380,6 +380,16 @@ export const BesignerVersionsComponent = observer(
       // UX only. /api/hosts/versions re-checks `versioning` server-side and is
       // the actual gate (AGL-1369) — this just names the wall before the user
       // types a version name for a create that would be refused.
+      //
+      // Naming a wall that may not be there is the AGL-1380 shape: `org` is
+      // undefined in flight and on a failed read, where `hasEntitlement`
+      // answers NO. Say nothing about the plan until the plan is known.
+      if (!orgReady) {
+        return enqueueSnackbar('Checking your plan — try again in a moment', {
+          variant: 'info',
+          persist: false,
+        })
+      }
       if (!hasEntitlement('versioning', org)) {
         return enqueueSnackbar(
           'Versioning requires a Pro plan — see Billing to upgrade',
@@ -399,7 +409,7 @@ export const BesignerVersionsComponent = observer(
           ?.displayName ?? versionId
       setNameValue(`Copy of ${currentName}`)
       setNameDialog({ mode: 'create' })
-    }, [org, enqueueSnackbar, versionDocs, versionId])
+    }, [org, orgReady, enqueueSnackbar, versionDocs, versionId])
 
     // The File menu's "New version" runs this exact handler (AGL-1218) —
     // gate, unsaved-canvas refusal, name dialog and all.
@@ -523,6 +533,13 @@ export const BesignerVersionsComponent = observer(
 
     const handleScheduleOpen = useCallback(
       (targetId: string) => () => {
+        // Same as `handleCreateVersion` above (AGL-1380).
+        if (!orgReady) {
+          return void enqueueSnackbar(
+            'Checking your plan — try again in a moment',
+            { variant: 'info', persist: false },
+          )
+        }
         if (!hasEntitlement('scheduled-publishing', org)) {
           return void enqueueSnackbar(
             'Scheduled publishing requires a Business plan — see Billing',
@@ -540,7 +557,7 @@ export const BesignerVersionsComponent = observer(
         )
         setScheduleFor(targetId)
       },
-      [org, enqueueSnackbar],
+      [org, orgReady, enqueueSnackbar],
     )
 
     const handleScheduleConfirm = useCallback(async () => {

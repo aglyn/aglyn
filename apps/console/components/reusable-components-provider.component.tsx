@@ -78,7 +78,7 @@ export function ReusableComponentsProvider(
   const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const orgSlug = useOrgSlug()
   const hostSubdomain = useHostSubdomain()
   const [promoteNode, setPromoteNode] = useState<Aglyn.NodeSchema<any> | null>(
@@ -130,6 +130,16 @@ export function ReusableComponentsProvider(
 
   const handlePromote = useCallback(
     (node: Aglyn.NodeSchema<any>) => {
+      // AGL-1380: this provider wraps the besigner, which mounts well before
+      // the org billing doc settles. `hasEntitlement` on an undefined `org`
+      // answers NO, so promoting a node in that window told a Starter+ org
+      // the feature it pays for is not on its plan.
+      if (!orgReady) {
+        return void enqueueSnackbar(
+          'Checking your plan — try again in a moment',
+          { variant: 'info', persist: false },
+        )
+      }
       if (!hasEntitlement('reusable-components', org)) {
         return void enqueueSnackbar(
           'Reusable components require a Starter plan — see Billing to upgrade',
@@ -140,7 +150,7 @@ export function ReusableComponentsProvider(
       setDescription('')
       setPromoteNode(node)
     },
-    [org, enqueueSnackbar],
+    [org, orgReady, enqueueSnackbar],
   )
 
   const handlePromoteConfirm = useCallback(async () => {

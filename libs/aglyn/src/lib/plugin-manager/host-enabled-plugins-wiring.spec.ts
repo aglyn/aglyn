@@ -74,6 +74,24 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
       file: 'apps/console/components/console-plugins-gate.component.tsx',
       mustContain: ['subtractDisabledPlugins', 'useHostDisabledPlugins'],
     },
+    {
+      // The EDITOR (AGL-1014): `withSitePlugins` wraps every besigner and
+      // preview route, so publishing the set there is what stops a new
+      // editor route being added that forgets.
+      name: 'console editor-surface gate',
+      file: 'apps/console/components/console-plugins-gate.component.tsx',
+      mustContain: ['EnabledPluginsContext.Provider', 'useEnabledPluginIds()'],
+    },
+    {
+      // The editor's component drawer — the palette AND the picker read this
+      // one hook, and it must filter entries by the site's plugin set. The
+      // preset registry is a module-global union that only ever grows, so
+      // this read-time filter is the enforcement; loading fewer bundles
+      // cannot un-register what an earlier site already registered.
+      name: 'besigner component drawer',
+      file: 'libs/besigner/feature/designer/src/lib/hooks/use-visible-component-categories.ts',
+      mustContain: ['useEnabledPlugins()', 'isFromEnabledPlugin('],
+    },
   ]
 
   it.each(CONSUMERS)('$name consults the per-host flag', (consumer) => {

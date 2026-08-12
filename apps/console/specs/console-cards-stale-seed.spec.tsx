@@ -118,9 +118,13 @@ jest.mock('../hooks/use-firestore-collection', () => ({
     fromCache: mockListener.fromCache,
   }),
 }))
+// `ready` matters here (AGL-1380): the cards under test refuse to make a
+// plan claim until the billing doc has answered, and a mock that omits the
+// flag is an org that never resolves — every save would stop at "checking
+// your plan" before reaching the stale-seed guard these cases are about.
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { plan: 'business' } }),
+  default: () => ({ org: { plan: 'business' }, orgId: 'org1', ready: true }),
 }))
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgSlug: () => 'acme',

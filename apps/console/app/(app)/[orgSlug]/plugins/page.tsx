@@ -56,7 +56,7 @@ import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const { currentOrg } = useOrgScope()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const { data: user } = useUser()
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
@@ -226,6 +226,19 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   }
 
   const toggle = (pluginId: string, on: boolean) => {
+    // AGL-1422, and the worst shape in this sweep: not a refusal but a
+    // read-modify-WRITE off a value that has not loaded. `enabled` is
+    // `resolveEnabledPlugins(org)`, and an undefined `org` resolves to the
+    // DEFAULT set — so a toggle inside the loading window saves the defaults
+    // plus this one id, silently switching every plugin the workspace had
+    // turned off back ON for every site in it. `set-enabled-plugins`
+    // replaces the array, so there is no merge to soften it.
+    if (!orgReady) {
+      return void enqueueSnackbar(
+        'Still loading this workspace’s plugins — try again in a moment',
+        { variant: 'info', persist: false },
+      )
+    }
     const next = new Set(enabled)
     if (on) next.add(pluginId)
     else next.delete(pluginId)
@@ -382,7 +395,10 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
                   <Switch
                     size="small"
                     checked={plugin.alwaysOn || enabled.has(plugin.id)}
-                    disabled={plugin.alwaysOn || !canManage}
+                    // Unready means these switch positions are the defaults,
+                    // not this workspace's (AGL-1422) — so they are not
+                    // something to act on yet.
+                    disabled={plugin.alwaysOn || !canManage || !orgReady}
                     // The row is a link, so the switch has to stop the
                     // click reaching it — otherwise toggling a plugin also
                     // navigates away from the list you were toggling in.

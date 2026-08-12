@@ -211,7 +211,7 @@ function Screens(props) {
     return map
   }, [screens])
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const logActivity = useHostActivityLogger(hostId)
 
   const [error, setError] = useState(null)
@@ -229,6 +229,17 @@ function Screens(props) {
     async (values) => {
       if (loading) return
       if (error) setError(null)
+      // AGL-1422: "once the org has an explicit plan" is exactly what an
+      // undefined `org` does NOT mean — `checkOrgQuota` reads it as the FREE
+      // tier, so a submit inside the loading window quoted the free screen
+      // limit to a paying site and DROPPED the screen it was creating.
+      // Pending declines and says only that it is still checking.
+      if (!orgReady) {
+        return enqueueSnackbar('Checking your plan — try again in a moment', {
+          variant: 'info',
+          persist: false,
+        })
+      }
       // Plan quota (AGL-39): enforced once the org has an explicit plan.
       const quota = checkOrgQuota(org, 'screensPerHost', billableScreenCount)
       if (!quota.allowed) {
@@ -333,6 +344,7 @@ function Screens(props) {
       handleFormClose,
       enqueueSnackbar,
       org,
+      orgReady,
       billableScreenCount,
       createHostResource,
       createHostVersion,

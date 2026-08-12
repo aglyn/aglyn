@@ -695,6 +695,51 @@ const loadPageDataCached = cache(
       }
     }
 
+    /**
+     * The two plugin lookups, STARTED here and collected after composition
+     * (AGL-1225).
+     *
+     * Both were awaited at the very end of the loader, one after the other,
+     * and neither ever looked at anything composition produces:
+     * `getRealmPluginInstalls` takes `hostId` and nothing else, and the
+     * release gate takes the org and host documents. Every input has been in
+     * hand since `getOrgBilling`, so the awaits were pure tail latency —
+     * measured at 539 ms and 0–611 ms respectively on a cache-MISS render of
+     * `/product/besigner`, against a 2210 ms total.
+     *
+     * Issued here rather than at the top of the loader on purpose. Every exit
+     * above this line — 404, redirect, maintenance, the auth screens, a
+     * protected or members-only screen — returns without either value, and
+     * starting these earlier would spend Firestore reads on paths that throw
+     * them away. This is the first point where the render is committed to
+     * producing a full page, so it is the earliest launch that costs nothing
+     * extra (AGL-1302 is exactly the read-amplification lesson).
+     *
+     * `composeScreenNodes` + `runSitePageEnrichers` measured ~1158 ms between
+     * here and the collection point, so the slower of the two lookups hides
+     * inside that window completely.
+     */
+    const realmPluginsPromise = getRealmPluginInstalls({ hostId }).catch(
+      (error) => {
+        console.error('realm plugin lookup failed:', error)
+        return []
+      },
+    )
+    const enabledPluginsPromise = filterEnabledPluginsByReleaseFlags(
+      // Per-site enablement (AGL-1014): org set minus this host's deny-list.
+      Aglyn.resolveHostEnabledPlugins(
+        orgRes.org as never,
+        hostRes.host as never,
+      ),
+      { subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId },
+    )
+    // The release gate keeps its original failure semantics — a throw still
+    // reaches the outer catch and 404s — but it is no longer awaited on the
+    // next line, so a rejection would sit unhandled across several macrotasks
+    // of composition and could surface as an `unhandledRejection` before the
+    // `await` below ever sees it. This marks it handled without consuming it.
+    enabledPluginsPromise.catch(() => undefined)
+
     const denormalized = await composeScreenNodes({
       host: hostRes.host as any,
       hostId,
@@ -755,27 +800,16 @@ const loadPageDataCached = cache(
     // Trusted-realm marketplace plugins (AGL-420): the workspace's install
     // pins joined server-side with the staff-only trust grants; the client
     // loads them post-hydration. Fail-open to none — a lookup error can't
-    // take the page down.
-    const realmPlugins = await getRealmPluginInstalls({ hostId }).catch(
-      (error) => {
-        console.error('realm plugin lookup failed:', error)
-        return []
-      },
-    )
+    // take the page down. Issued before composition (AGL-1225); by here it
+    // has almost always already resolved, so this phase now reads ~0.
+    const realmPlugins = await realmPluginsPromise
     timer.mark('getRealmPluginInstalls')
 
     // Plugin release gate (AGL-422): flagged-off plugins vanish from the
     // published site too — the platform kill switch. Subject = the org, so
     // rollout verdicts match the console's. Site visitors get no staff
     // bypass; fail-open inside falls back to registry defaults.
-    const enabledPlugins = await filterEnabledPluginsByReleaseFlags(
-      // Per-site enablement (AGL-1014): org set minus this host's deny-list.
-              Aglyn.resolveHostEnabledPlugins(
-                orgRes.org as never,
-                hostRes.host as never,
-              ),
-      { subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId },
-    )
+    const enabledPlugins = await enabledPluginsPromise
     timer.mark('filterEnabledPluginsByReleaseFlags')
 
     const props = {

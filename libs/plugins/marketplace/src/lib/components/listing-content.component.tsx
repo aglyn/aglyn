@@ -32,6 +32,7 @@ import {
   type UninstallTarget,
 } from '../model/marketplace'
 import UninstallImpactDialog from './uninstall-impact-dialog.component'
+import { ListingImage } from './listing-image.component'
 import {
   buildRoute,
   parseMarkdownLite,
@@ -1073,21 +1074,20 @@ export function MarketplaceListingContent({
                   children: (
                     <CardDisplay contentGutterX contentGutterY>
                       <Stack spacing={2}>
-                        {listing?.previewImageUrl ? (
-                          <Box
-                            component="img"
-                            src={listing.previewImageUrl}
-                            alt={`${listing?.displayName} preview`}
-                            sx={{
-                              width: '100%',
-                              maxHeight: 360,
-                              objectFit: 'cover',
-                              borderRadius: 1,
-                              border: 1,
-                              borderColor: 'divider',
-                            }}
-                          />
-                        ) : null}
+                        {/* Resolved, never raw (AGL-1424) — the stored value
+                            may be a `media:` reference. */}
+                        <ListingImage
+                          src={listing?.previewImageUrl}
+                          alt={`${listing?.displayName} preview`}
+                          sx={{
+                            width: '100%',
+                            maxHeight: 360,
+                            objectFit: 'cover',
+                            borderRadius: 1,
+                            border: 1,
+                            borderColor: 'divider',
+                          }}
+                        />
                         <Stack
                           direction="row"
                           spacing={1}
