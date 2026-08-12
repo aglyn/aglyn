@@ -48,6 +48,11 @@ queried through the Vercel API:
 | `demo.aglyn.app` | *(none — serves)* | — | `200` |
 | `demo.aglyn.com` | *(none)* | — | `404` (no host doc named `demo`) |
 
+Re-measured 2026-08-11 (six `HEAD` requests, no route sweep): `aglyn.com` `200`
+with `x-matched-path: /[host]/[[...slug]]`; `www.aglyn.com`, `aglyn.app`,
+`www.aglyn.app` and `aglyn.io` each `308` with `location: https://aglyn.com/`.
+The table above still holds exactly.
+
 The `www` redirect **preserves path and query**: `https://www.aglyn.com/pricing?utm_source=x&a=1`
 → `Location: https://aglyn.com/pricing?utm_source=x&a=1`. Plain HTTP on either
 name upgrades to HTTPS on the *same* name first, then redirects — so `http://www`
@@ -501,9 +506,11 @@ confirmations of things already true or already built.
 
 - AGL-1272 (Done) — canonical redirect from `{sub}.aglyn.app`; the `307` reasoning
   in `load-page-data.ts` is the reference for §4.1's status-code table.
-- AGL-1273 (In Review) — edge redirect; backfill applied and verified by AGL-1365 (§6).
-- AGL-1365 (In Review) — the malformed `redirect` field that made AGL-1273 a
-  no-op; the correction this memo's §6.3 and §8.3 now reflect.
+- AGL-1273 (Done) — edge redirect; backfill applied and verified by AGL-1365 (§6).
+- AGL-1365 (Done) — the malformed `redirect` field that made AGL-1273 a
+  no-op; the correction this memo's §6.3 and §8.3 now reflect. Re-measured
+  2026-08-11: `aglyn-marketing.aglyn.app/pricing?q=1&utm_source=nl` →
+  `307 → https://aglyn.com/pricing?q=1&utm_source=nl`.
 - AGL-1275 (In Review) — apex docs and wizard; single DNS source of truth.
 - AGL-1327 (In Review) — ALIAS-first apex instructions; precondition of §3.
 - AGL-743 / AGL-642 — the uniqueness transaction and the Admin-SDK-only `cname`
