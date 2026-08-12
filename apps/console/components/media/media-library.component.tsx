@@ -95,6 +95,12 @@ import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import {
+  readAnalyticsDays,
+  recentDayIds,
+  sumAssetUsage,
+  type MediaDayMedia,
+} from '../../utils/analytics-day-cache'
+import {
   normalizeUploadContentType,
   SIGNED_UPLOAD_MAX_BYTES,
   SIGNED_UPLOAD_THRESHOLD_BYTES,
@@ -1737,8 +1743,15 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   // Per-asset delivery stats (AGL-176), loaded when the drawer opens: 30 days
   // of origin-serve counters from the analytics day-docs (edge cache hits
-  // aren't counted — labeled as such). Cheap (30 doc reads), so it auto-loads;
-  // the reference scan is the expensive part and stays on-demand below.
+  // aren't counted — labeled as such). The reference scan is the expensive part
+  // and stays on-demand below.
+  //
+  // The day-docs are NOT per-asset — each holds a `media` map keyed by asset id
+  // — so this used to re-read the same thirty documents for every asset the
+  // author clicked (AGL-1440). `readAnalyticsDays` reads each day once per
+  // window: the twenty-nine closed days can never change again, and the live
+  // day carries a 60 s TTL. See that module for what invalidates a day and what
+  // the worst stale read costs.
   const [usage, setUsage] = useState<{
     serves: number
     bytes: number
@@ -1751,31 +1764,29 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
     let active = true
     void (async () => {
-      const dayIds = Array.from({ length: 30 }, (_, index) => {
-        const date = new Date()
-        date.setDate(date.getDate() - index)
-        return date.toISOString().slice(0, 10)
+      const now = Date.now()
+      const dayIds = recentDayIds(now, 30)
+      const days = await readAnalyticsDays<MediaDayMedia>({
+        scopeKey: `${scopeCollection}/${scopeId}`,
+        field: 'media',
+        dayIds,
+        liveDay: dayIds[0],
+        now,
+        fallback: {},
+        read: async (day) =>
+          (
+            await getDoc(
+              doc(firestore, scopeCollection, scopeId, 'analytics', day),
+            )
+          ).get('media') ?? {},
       })
-      const stats = await Promise.all(
-        dayIds.map((day) =>
-          getDoc(doc(firestore, scopeCollection, scopeId, 'analytics', day))
-            .then((snapshot) => {
-              const media = snapshot.get('media') ?? {}
-              return media[editorId] ?? { serves: 0, bytes: 0 }
-            })
-            .catch(() => ({ serves: 0, bytes: 0 })),
-        ),
-      )
       if (!active) return
-      setUsage({
-        serves: stats.reduce((sum, stat) => sum + Number(stat.serves ?? 0), 0),
-        bytes: stats.reduce((sum, stat) => sum + Number(stat.bytes ?? 0), 0),
-      })
+      setUsage(sumAssetUsage(days, editorId))
     })()
     return () => {
       active = false
     }
-  }, [editorId, scopeId, firestore])
+  }, [editorId, scopeId, scopeCollection, firestore])
 
   // "Used on" reference audit (AGL-845): scanning every published screen,
   // layout, and content entry for this asset's URLs is expensive, so it runs

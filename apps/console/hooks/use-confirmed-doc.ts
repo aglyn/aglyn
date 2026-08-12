@@ -20,6 +20,9 @@ import {
   doc,
   getDocFromServer,
   onSnapshot,
+  type DocumentData,
+  type DocumentReference,
+  type DocumentSnapshot,
   type Firestore,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
@@ -78,6 +81,52 @@ export interface UseConfirmedDocOptions {
  * only when the server genuinely did not answer.
  */
 const CONFIRM_CACHED_HIT_DELAY_MS = 1_500
+
+/**
+ * Confirms in flight, keyed by document path (AGL-1440).
+ *
+ * `useCurrentOrg` is a plain hook, not a context, and the console chrome mounts
+ * it seven-plus times per page — user menu, org switcher, branding, and three
+ * separate paths through `ConsolePluginsGate`. The `onSnapshot`s are nearly
+ * free, because the SDK serves identical listens off ONE target; the confirms
+ * are not. Each instance scheduled its own `getDocFromServer`, so a console
+ * page load billed seven server reads of `orgs/{orgId}` to answer one question.
+ *
+ * Sharing the PROMISE, rather than suppressing the duplicates, is what keeps
+ * this behaviour-preserving: every instance still resolves from a real server
+ * snapshot and still calls `deliver(..., fromCache: false)`, so none of them is
+ * left displaying a value flagged unconfirmed. Suppressing instead would leave
+ * the six quiet instances on `fromCache: true` forever, which is a state
+ * consumers are told means "do not let this decide anything irreversible".
+ *
+ * The entry is dropped as soon as it settles, so this is a burst collapser and
+ * nothing more: a mount two seconds later asks the server again, exactly as it
+ * does today. NOTHING about the entitlement is cached — this shares one READ
+ * of the org document; every consumer evaluates the plan off it as before.
+ */
+const confirmsInFlight = new Map<
+  string,
+  Promise<DocumentSnapshot<DocumentData>>
+>()
+
+/** The server's copy of `ref`, shared with any confirm already in flight. */
+function sharedConfirm(
+  pathKey: string,
+  ref: DocumentReference,
+): Promise<DocumentSnapshot<DocumentData>> {
+  const existing = confirmsInFlight.get(pathKey)
+  if (existing) return existing
+  const pending = getDocFromServer(ref).finally(() => {
+    confirmsInFlight.delete(pathKey)
+  })
+  confirmsInFlight.set(pathKey, pending)
+  return pending
+}
+
+/** Test seam — the in-flight map is module scope by design. */
+export function resetConfirmedDocSharing(): void {
+  confirmsInFlight.clear()
+}
 
 /**
  * A doc listen that never presents an unconfirmed miss (AGL-928).
@@ -166,7 +215,7 @@ export function useConfirmedDoc<T extends Record<string, unknown>>(
             // Unconfirmed miss: ask the server before believing it. On
             // failure stay un-ready — the listener remains subscribed and
             // the next (server) snapshot resolves it.
-            void getDocFromServer(ref)
+            void sharedConfirm(pathKey, ref)
               .then((server) => {
                 if (cancelled) return
                 deliver(server.exists(), server.id, server.data(), false)
@@ -195,7 +244,7 @@ export function useConfirmedDoc<T extends Record<string, unknown>>(
             confirmTimer = setTimeout(() => {
               confirmTimer = null
               confirmRequested = true
-              void getDocFromServer(ref)
+              void sharedConfirm(pathKey, ref)
                 .then((server) => {
                   if (cancelled) return
                   deliver(server.exists(), server.id, server.data(), false)

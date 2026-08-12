@@ -27,6 +27,10 @@ import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 // plugin manifest to load them, so the runner route is where they enter the
 // registry — `ensureAll` below only reaches plugin `/server` entries.
 import '../../../../utils/publish-schedule-job'
+import {
+  readPluginJobLastRuns,
+  recordPluginJobRuns,
+} from '../../../../utils/plugin-job-state'
 
 // Constant-time secret check (AGL-512) so auth doesn't leak via timing.
 function safeEqual(a: string, b: string): boolean {
@@ -63,11 +67,17 @@ export async function POST(request: Request): Promise<Response> {
     .firestore()
     .collection('platform')
     .doc('pluginJobs')
-  const lastRuns = ((await stateRef.get()).data() ?? {}) as Record<
-    string,
-    number
-  >
   const now = Date.now()
+  // The beat fires every minute, and this read used to happen before anything
+  // could be found due — 43,200 reads a month to be told nothing had changed
+  // (AGL-1440). `readPluginJobLastRuns` serves a warm instance from memory and
+  // re-reads on a bounded age; see that module for why a stale copy can only
+  // make a job run early, never late.
+  const lastRuns = await readPluginJobLastRuns({
+    now,
+    read: async () =>
+      ((await stateRef.get()).data() ?? {}) as Record<string, number>,
+  })
 
   const results = await runPluginJobs((job) => {
     const last = Number(lastRuns[pluginJobKey(job)] ?? 0)
@@ -75,10 +85,15 @@ export async function POST(request: Request): Promise<Response> {
   })
 
   if (results.length) {
+    const keys = results.map((result) => result.key)
+    // Firestore stays the source of truth across cold starts; the in-memory
+    // copy is folded forward in the same breath so the next beat does not have
+    // to go and read back what this one just wrote.
     await stateRef.set(
-      Object.fromEntries(results.map((result) => [result.key, now])),
+      Object.fromEntries(keys.map((key) => [key, now])),
       { merge: true },
     )
+    recordPluginJobRuns(keys, now)
   }
 
   return Response.json(
