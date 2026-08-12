@@ -17,7 +17,11 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  meterHostEmail,
+} from '@aglyn/tenant-data-admin'
 import {
   isEmailConfigured,
   loadHostEmail,
@@ -112,6 +116,9 @@ export const processRestockHandler: PluginApiHandler = async (req, res) => {
         fromName: brandingByHost.get(hostRef.id)?.fromName,
         context: 'restock alert',
       })
+      // Cost meter (AGL-1438). One alert per shopper who asked to be told,
+      // like the abandoned-checkout reminder beside it.
+      await meterHostEmail(hostRef.id)
       await docSnapshot.ref
         .set({ notifiedAtMs: Date.now() }, { merge: true })
         .catch(() => undefined)

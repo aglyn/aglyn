@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-jest.mock('@aglyn/tenant-data-admin', () => ({ firebaseAdmin: {} }))
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  firebaseAdmin: {},
+  // The cost meter (AGL-1438); these tests never reach a send.
+  meterPlatformEmail: async () => undefined,
+}))
 jest.mock('@aglyn/shared-util-email', () => ({
   isEmailConfigured: () => false,
   sendEmail: async () => ({ sent: false, reason: 'unconfigured' }),

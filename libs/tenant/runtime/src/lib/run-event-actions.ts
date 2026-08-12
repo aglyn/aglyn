@@ -37,6 +37,7 @@ import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
   firebaseAdmin,
   getOrgForHost,
+  meterHostEmail,
   notifyHostManagers,
   orgDataCollectionForHost,
   orgDataQueryForHost,
@@ -318,6 +319,11 @@ async function executeAction(
           context: 'event action',
         })
         if (!result.sent) stepErrors.push('email delivery failed')
+        // Cost meter (AGL-1438). A workflow notification is transactional:
+        // counted, never capped. `sent` is false when Resend refused or the
+        // environment is unconfigured, and an email that never left is not a
+        // cost.
+        if (result.sent) await meterHostEmail(hostId)
       } else if (step.type === 'enrollList') {
         const orgId = await resolveOrgIdForHost(hostId)
         const email = String((payload as any).email ?? '')

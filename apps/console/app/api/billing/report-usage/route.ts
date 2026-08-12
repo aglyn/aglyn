@@ -23,6 +23,7 @@ import {
   checkDataStorageQuota,
   decodeStoredNodes,
   nodeMapBytes,
+  resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import {
   estimateMonthlyUsageCost,
@@ -32,6 +33,7 @@ import { measureScreenCaps } from '../../../../utils/screen-cap-reconciliation'
 import type { BillableScreenSource } from '../../hosts/resources/count-billable-screens'
 import { orgCounterTotals } from '../../../../utils/org-counter-totals'
 import {
+  emailSendsOverage,
   firebaseAdmin,
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
@@ -431,7 +433,12 @@ async function handler(request: Request): Promise<Response> {
         // Email sends and workflow/action runs (AGL-1134) — counted per host
         // all along, enforced per org by `usage-alerts`, and never once
         // written down. RECORDED, NOT PRICED: see the rollup write below.
-        orgCounterTotals(firestore, hostRefs, month),
+        //
+        // `orgRef` since AGL-1438: invites, member-added mail, the welcome
+        // email and these very usage summaries belong to the org and to no
+        // site, so they are counted at `orgs/{id}/counters` and were invisible
+        // to a sum taken over hosts alone.
+        orgCounterTotals(firestore, hostRefs, month, orgRef),
       ])
       // One read of the org doc for every quota decision below — the four
       // meters must agree about which plan they are pricing against.
@@ -474,6 +481,19 @@ async function handler(request: Request): Promise<Response> {
           }),
         })),
         orgData,
+      )
+      // Email overage (AGL-1438). Transactional mail is never refused, so an
+      // org CAN and does finish a month above the band its plan included —
+      // that is the overage the cap deliberately did not enforce, and writing
+      // it down is what keeps it from being a surprise at invoicing.
+      //
+      // RECORDED, NOT PRICED, exactly like the counts it derives from: it is
+      // deliberately absent from `billedCents` below and from `costUsd`, and
+      // `ORG_COGS_UNIT_RATES_USD` still has no per-email rate to price it
+      // with. No guardrail verdict moves by a cent because of this field.
+      const emailOverage = emailSendsOverage(
+        counterTotals.emailSends,
+        resolveOrgEntitlements(orgData).emailSendsPerMonth,
       )
       const billedCents =
         estimate.billedCents +
@@ -551,6 +571,10 @@ async function handler(request: Request): Promise<Response> {
           // rate has to be derived FROM. Pricing them is a decision with an
           // invoice behind it, not a default.
           emailSends: counterTotals.emailSends,
+          // Volume above the plan's included band, in emails (AGL-1438). Not
+          // a failed send and not a charge — see the note where it is
+          // computed.
+          emailSendsOverage: emailOverage,
           workflowRuns: counterTotals.workflowRuns,
           actionRuns: counterTotals.actionRuns,
           // AGL-1390: the org's worst host, and every host past its cap. An

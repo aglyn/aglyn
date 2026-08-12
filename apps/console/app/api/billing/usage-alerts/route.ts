@@ -64,13 +64,20 @@ async function handler(request: Request): Promise<Response> {
       if (!orgData['plan']) continue
       const entitlements = resolveOrgEntitlements(orgData as any)
 
-      // Monthly email sends: summed over the org's hosts' counters.
+      // Monthly email (AGL-1438). TWO figures, because the plan's cap and
+      // the org's cost are no longer the same number. `campaignEmailSends` is
+      // the discretionary volume `emailSendsPerMonth` may refuse;
+      // `emailSends` is everything the org sent, including transactional mail
+      // that is counted and never blocked. Alerting on the first tells an
+      // owner why a campaign was refused; alerting on the second tells them
+      // about an overage before the invoice does.
       const hosts = await firestore
         .collection('hosts')
         .where('orgId', '==', org.id)
         .limit(100)
         .get()
       let emailSends = 0
+      let campaignEmailSends = 0
       // Run caps (AGL-477): the runtime silently stops workflow/action
       // automation at the monthly cap; surface it here so the owner learns
       // why automations went quiet, once per threshold per month.
@@ -87,12 +94,14 @@ async function handler(request: Request): Promise<Response> {
       for (const host of hosts.docs) {
         const [
           emailCounter,
+          campaignEmailCounter,
           workflowCounter,
           actionCounter,
           mediaCounter,
           analytics,
         ] = await Promise.all([
           host.ref.collection('counters').doc('emailSends').get(),
+          host.ref.collection('counters').doc('campaignEmailSends').get(),
           host.ref.collection('counters').doc('workflowRuns').get(),
           host.ref.collection('counters').doc('actionRuns').get(),
           host.ref.collection('counters').doc('media').get(),
@@ -111,6 +120,7 @@ async function handler(request: Request): Promise<Response> {
             .get(),
         ])
         emailSends += Number(emailCounter.get(month) ?? 0)
+        campaignEmailSends += Number(campaignEmailCounter.get(month) ?? 0)
         workflowRuns += Number(workflowCounter.get(month) ?? 0)
         actionRuns += Number(actionCounter.get(month) ?? 0)
         mediaBytes += Number(mediaCounter.get('bytes') ?? 0)
@@ -205,8 +215,21 @@ async function handler(request: Request): Promise<Response> {
           limit: entitlements.hostLimit * entitlements.storagePerHostMb,
         },
         {
+          // The only email figure a quota can refuse (AGL-1438). Reading the
+          // all-mail counter here would tell an owner they were at their
+          // campaign limit because their store had a busy week of orders.
           key: 'emailSends',
-          label: 'monthly email sends',
+          label: 'monthly campaign email sends',
+          used: campaignEmailSends,
+          limit: entitlements.emailSendsPerMonth,
+        },
+        {
+          // Total volume, including the transactional mail the cap never
+          // refuses (AGL-1438). Crossing the band is not an error and nothing
+          // is blocked — this exists so the overage is not first seen on an
+          // invoice. Distinct key, so it thresholds and dedupes on its own.
+          key: 'emailSendsTotal',
+          label: 'monthly email sends including transactional (not capped)',
           used: emailSends,
           limit: entitlements.emailSendsPerMonth,
         },

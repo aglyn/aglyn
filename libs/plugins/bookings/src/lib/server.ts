@@ -65,6 +65,7 @@ registerPluginJob({
 import {
   firebaseAdmin,
   getOrgForHost,
+  meterHostEmail,
   notifyHostManagers,
   upsertHostContact,
   getPluginConfig,
@@ -440,6 +441,10 @@ const bookHandler: PluginApiHandler = async (req, res) => {
         fromName: branding.fromName,
         context: 'booking confirmation',
       })
+      // Cost meter (AGL-1438). Transactional: counted, never capped — a
+      // confirmation the customer never receives reads to them as a booking
+      // that did not happen.
+      await meterHostEmail(hostId)
     }
 
     return res.status(200).json({ bookingId, startsAtMs, endsAtMs, alerts })
@@ -557,6 +562,9 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
         context: 'booking reminder',
       })
       if (result.sent) {
+        // Cost meter (AGL-1438). Transactional: a reminder a quota refused is
+        // a missed appointment for the site's own customer.
+        await meterHostEmail(hostId)
         sent += 1
         await doc.ref
           .set(

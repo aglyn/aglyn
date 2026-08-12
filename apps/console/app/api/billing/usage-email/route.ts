@@ -26,6 +26,7 @@ import {
 import {
   findUserByUidAcrossPools,
   firebaseAdmin,
+  meterOrgEmail,
 } from '@aglyn/tenant-data-admin'
 
 /** Previous calendar month as YYYY-MM (the default summary target). */
@@ -176,6 +177,9 @@ async function handler(request: Request): Promise<Response> {
         fromName: branding.fromName,
         context: `usage summary (${orgId})`,
       })
+      // Cost meter (AGL-1438). Org-scoped and transactional: the org's own
+      // billing summary, sent to no site.
+      if (result.sent) await meterOrgEmail(orgId)
       if (!result.sent) {
         results[orgId] = { sent: false }
         continue

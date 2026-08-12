@@ -17,7 +17,11 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
-import { consumeRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  consumeRateLimit,
+  firebaseAdmin,
+  meterPlatformEmail,
+} from '@aglyn/tenant-data-admin'
 import { generateAuthActionLink } from '../../_lib/auth-action-link'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 
@@ -107,6 +111,9 @@ async function handler(request: Request): Promise<Response> {
     if (!result.sent) {
       return Response.json({ error: 'Sending the email failed' }, { status: 502 })
     }
+    // Cost meter (AGL-1438). Platform-scoped: verification happens before the
+    // account belongs to any org.
+    await meterPlatformEmail()
     return Response.json({ ok: true }, { status: 200 })
   } catch (error) {
     console.error('[auth/send-verification] failed', error)

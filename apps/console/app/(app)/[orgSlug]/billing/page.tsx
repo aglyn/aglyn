@@ -565,7 +565,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     {[
                       `${fmtLimit(resolved.hostLimit)} sites`,
                       `${fmtLimit(resolved.managersPerOrg)} team seats`,
-                      `${fmtLimit(resolved.emailSendsPerMonth)} emails/mo`,
+                      // Campaign sends, and only those (AGL-1438) — the cap
+                      // does not apply to transactional mail, so the chip must
+                      // not read as though it does.
+                      `${fmtLimit(resolved.emailSendsPerMonth)} campaign emails/mo`,
                     ].map((label) => (
                       <Chip
                         key={label}
@@ -661,7 +664,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     anchor: '#usage-meters',
                     excerpt:
                       'Live meters for sites, storage, bandwidth, and ' +
-                      'email sends against your plan\'s quotas.',
+                      'campaign email sends against your plan\'s quotas. ' +
+                      'Transactional mail is counted but never capped.',
                   })}
                   contentGutterX
                   contentGutterY

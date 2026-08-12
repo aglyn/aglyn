@@ -26,6 +26,7 @@ import {
   eraseOrg,
   findUserByUidAcrossPools,
   firebaseAdmin,
+  meterPlatformEmail,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -114,6 +115,11 @@ async function handler(request: Request): Promise<Response> {
             fromName: branding.fromName,
             context: 'erasure-confirmation',
           })
+          // Cost meter (AGL-1438). Platform-scoped DELIBERATELY, even though
+          // an org id is right here: the org has just been hard-erased, and a
+          // counter written under `orgs/{id}` would resurrect a document
+          // inside the thing this route exists to delete.
+          await meterPlatformEmail()
         } catch (confirmError) {
           console.error('erasure-confirmation email skipped', confirmError)
         }

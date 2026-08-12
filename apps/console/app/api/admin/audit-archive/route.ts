@@ -19,7 +19,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, meterPlatformEmail } from '@aglyn/tenant-data-admin'
 
 const RETENTION_DAYS = 90
 const BATCH_SIZE = 500
@@ -150,6 +150,10 @@ async function handler(request: Request): Promise<Response> {
         ...(designed?.html ? { html: designed.html } : {}),
         context: 'erasure-hold staff alert',
       })
+      // Cost meter (AGL-1438). Platform-scoped: Aglyn's own staff alert, not
+      // any customer's mail, so it stays out of every org rollup while still
+      // being counted.
+      await meterPlatformEmail()
     }
 
     return Response.json({

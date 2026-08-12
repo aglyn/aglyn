@@ -17,7 +17,11 @@
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveBrandingProfile } from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  meterHostEmail,
+} from '@aglyn/tenant-data-admin'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { mintPasswordResetToken } from './membership'
 
@@ -122,6 +126,10 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
       fromName: branding.fromName,
       context: 'membership recovery',
     })
+    // Cost meter (AGL-1438). Transactional, and the clearest case for why a
+    // quota may not refuse one: this email is how the member gets back into
+    // their account.
+    await meterHostEmail(hostId)
     return res.status(200).json({ ok: true })
   } catch (error) {
     console.error(error)

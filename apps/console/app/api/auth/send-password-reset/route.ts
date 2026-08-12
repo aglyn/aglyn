@@ -17,7 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
-import { consumeRateLimit } from '@aglyn/tenant-data-admin'
+import { consumeRateLimit, meterPlatformEmail } from '@aglyn/tenant-data-admin'
 import { generateAuthActionLink } from '../../_lib/auth-action-link'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 
@@ -104,6 +104,10 @@ async function handler(request: Request): Promise<Response> {
       ...(designed?.html ? { html: designed.html } : {}),
       context: 'password-reset',
     })
+    // Cost meter (AGL-1438). Platform-scoped: this endpoint knows an email
+    // address and nothing else — no org, by design, because saying which org
+    // an address belongs to would be an enumeration oracle. Never capped.
+    await meterPlatformEmail()
   } catch (error) {
     // Includes `auth/user-not-found`, which is the ordinary case for a typo
     // and the one this endpoint most needs to stay quiet about. Logged, never

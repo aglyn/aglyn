@@ -44,7 +44,8 @@ const fakeFirestore = (fixture: Fixture) =>
   ({
     getAll: async (...refs: any[]) =>
       refs.map((ref) => ({
-        get: (field: string) => fixture[ref.hostId]?.[ref.counter]?.[field],
+        get: (field: string) =>
+          fixture[ref.hostId ?? `org:${ref.orgId}`]?.[ref.counter]?.[field],
       })),
   }) as any
 
@@ -52,6 +53,13 @@ const hostRef = (hostId: string) =>
   ({
     id: hostId,
     collection: () => ({ doc: (counter: string) => ({ hostId, counter }) }),
+  }) as any
+
+/** `orgs/{id}/counters/*` — invites, welcome mail, usage summaries. */
+const orgRef = (orgId: string) =>
+  ({
+    id: orgId,
+    collection: () => ({ doc: (counter: string) => ({ orgId, counter }) }),
   }) as any
 
 describe('orgCounterTotals', () => {
@@ -147,6 +155,58 @@ describe('orgCounterTotals', () => {
     )
     expect(totals.emailSends).toBe(10)
     expect(totals.actionRuns).toBe(0)
+  })
+
+  /**
+   * Org-scoped mail (AGL-1438): invites, member-added, the welcome email and
+   * usage summaries belong to the ORG and to no site, so they live under
+   * `orgs/{id}/counters/emailSends`. Omitting them is the same shape of bug
+   * this counter already had — a total that looks authoritative while missing
+   * a whole class of its inputs.
+   */
+  it('includes org-scoped sends that belong to no site', async () => {
+    const totals = await orgCounterTotals(
+      fakeFirestore({
+        siteA: { emailSends: { '2026-07': 120 } },
+        'org:org-1': { emailSends: { '2026-07': 30 } },
+      }),
+      [hostRef('siteA')],
+      '2026-07',
+      orgRef('org-1'),
+    )
+    expect(totals.emailSends).toBe(150)
+  })
+
+  /**
+   * One unit, whatever sent it. An org that sends 40 invites and one that runs
+   * a 40-recipient campaign cost the same, and the meter must say so — this is
+   * the AGL-1402 lesson applied to the new inputs rather than the old ones.
+   */
+  it('counts an invite and a campaign send as the same unit', async () => {
+    const allFromASite = await orgCounterTotals(
+      fakeFirestore({ solo: { emailSends: { '2026-07': 40 } } }),
+      [hostRef('solo')],
+      '2026-07',
+      orgRef('org-1'),
+    )
+    const allFromTheOrg = await orgCounterTotals(
+      fakeFirestore({ 'org:org-1': { emailSends: { '2026-07': 40 } } }),
+      [hostRef('solo')],
+      '2026-07',
+      orgRef('org-1'),
+    )
+    expect(allFromTheOrg.emailSends).toBe(allFromASite.emailSends)
+    expect(allFromTheOrg.emailSends).toBe(40)
+  })
+
+  it('reads an org with no org-scoped mail as unchanged', async () => {
+    const totals = await orgCounterTotals(
+      fakeFirestore({ siteA: { emailSends: { '2026-07': 12 } } }),
+      [hostRef('siteA')],
+      '2026-07',
+      orgRef('org-1'),
+    )
+    expect(totals.emailSends).toBe(12)
   })
 
   it('reads nothing at all for an org with no hosts', async () => {
