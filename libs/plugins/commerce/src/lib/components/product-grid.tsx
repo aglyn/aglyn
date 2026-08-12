@@ -378,7 +378,10 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
 
     if (hostId && items === null) {
       return (
-        <Box ref={ref} {...rest} sx={gridSx}>
+        // MERGE, never replace (AGL-1450). The skeleton branch replaced the
+        // node's sx outright, so an authored grid flashed unstyled for as
+        // long as the first fetch took and then snapped into place.
+        <Box ref={ref} {...rest} sx={[gridSx, ...nodeSx]}>
           {Array.from({ length: desktopColumns }, (_item, index) => (
             <Card key={index} variant="outlined">
               <Skeleton variant="rectangular" height={160} />
