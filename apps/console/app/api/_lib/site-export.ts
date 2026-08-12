@@ -65,6 +65,33 @@ export const EXPORT_COLLECTION_LIMITS: Record<string, number> = {
   // Well above `media`'s own realistic fan-out — folders are a handful per
   // library, and the cap exists to bound the bundle, not to ration them.
   mediaFolders: 200,
+  /**
+   * The SITE's own library — `hosts/{hostId}/media` and
+   * `hosts/{hostId}/mediaFolders` (AGL-1392, second pass).
+   *
+   * The first pass added `mediaFolders` at ORG scope only, and production says
+   * that is three quarters of the problem: of 246 foldered assets, 58 (24%)
+   * live in a host library, whose folders `platform.types.ts` documents as the
+   * canonical path (AGL-171) and which `resolveMediaScope` still serves as a
+   * first-class scope. Neither collection was read by the export at ALL, so a
+   * "whole-site backup" of a site with its own library carried none of it —
+   * the assets no more than the folders.
+   *
+   * TWO manifest arrays rather than one merged list, because the scope is the
+   * document's home and not a detail of it: a host library is private by
+   * construction (`scopedToHost` refuses to filter it, its docs carry no
+   * `visibleTo`), so folding those assets into the org arrays would restore a
+   * site's private files into the shared org DAM — visible to every member of
+   * every other client site. The ids are separate spaces too, and a pointer
+   * that resolves in one library must not resolve against the other.
+   *
+   * Same caps as their org counterparts: the number bounds a bundle, and the
+   * two libraries hold the same kind of thing. Declared here rather than
+   * defaulted, because `bundleItems` falls through to `?? 100` — which is
+   * exactly how AGL-1382's media manifest restored short and silently.
+   */
+  hostMedia: 500,
+  hostMediaFolders: 200,
 }
 
 /**
@@ -108,6 +135,12 @@ export const EXPORT_COLLECTION_LIMITS: Record<string, number> = {
  * * `visibleTo` — the import assigns a fresh `host:` scope. A bundle is
  *   portable, and honouring an embedded `['org']` would publish one org's
  *   data across another agency's whole client roster on a restore.
+ *
+ * Keyed by COLLECTION, not by manifest array. `media` and `hostMedia` are the
+ * same document in two libraries — one org-shared, one site-private — so the
+ * import cleans both through the `media` list and the two cannot drift into
+ * different permitted sets. Only the CAPS above are per-array, because a cap
+ * bounds a bundle rather than describing a document.
  */
 export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
   screens: [

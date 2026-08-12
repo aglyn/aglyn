@@ -799,6 +799,31 @@ async function handler(request: Request): Promise<Response> {
     }
 
     /**
+     * The same question for the SITE's own library (AGL-1392, second pass):
+     * the host folder ids a restored `parentId`/`folderId` may name — this
+     * bundle's `hostMediaFolders`, plus the ones the target site already
+     * holds.
+     *
+     * A SECOND set rather than a union with the org one, and the separation is
+     * the assertion: the two libraries are distinct id spaces, and an asset in
+     * the site library filed under an org folder id is exactly as invisible as
+     * one filed under an id nobody holds. Resolving against a merged set would
+     * accept that pointer and hide the asset, which is the failure this guard
+     * exists to prevent — one library over.
+     */
+    let resolvableHostFolders: Set<string> | null = null
+    const resolvableHostFolderIds = async (): Promise<Set<string>> => {
+      if (resolvableHostFolders) return resolvableHostFolders
+      const bundled = bundleDocIds(bundleItems('hostMediaFolders'))
+      const existing =
+        bundled.size || bundleItems('hostMedia').length
+          ? await existingDocIds(hostRef.collection('mediaFolders'))
+          : new Set<string>()
+      resolvableHostFolders = new Set([...bundled, ...existing])
+      return resolvableHostFolders
+    }
+
+    /**
      * Null a pointer that names a folder which will not exist.
      *
      * Absence stays absence and an explicit `null` stays `null` — only a STRING
@@ -858,6 +883,45 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    /**
+     * The SITE's own library, restored into the SITE (AGL-1392, second pass).
+     *
+     * `hosts/{hostId}/media` and `hosts/{hostId}/mediaFolders` — the scope the
+     * console's media library addresses whenever it is opened for a site
+     * rather than for the workspace, and the canonical folder path AGL-171
+     * defined. Neither reached a bundle before this pass, so a restore could
+     * not re-parent what it never carried.
+     *
+     * Two things are deliberately NOT shared with the org pair:
+     *
+     * * The DESTINATION. These documents go back to the host, never to
+     *   `orgs/{orgId}/…`. A site library is private; promoting it into the
+     *   shared org DAM on a restore would expose one client's files to every
+     *   member of every other client site — a wider scope than the customer
+     *   ever chose, and the leak `importedScope` exists to prevent.
+     * * The SCOPE FIELD. No `visibleTo` is written at all. A host library's
+     *   documents carry none — `scopedToHost` refuses to filter a host ref for
+     *   exactly that reason — so stamping one would invent a field the live
+     *   write paths never produce, and `merge: false` would make the restored
+     *   document differ from every one beside it.
+     *
+     * Cleaned through the `media`/`mediaFolders` allow-lists: the same document
+     * in a different library, so it cannot acquire a second permitted set.
+     */
+    const importHostLibrary = async (name: 'media' | 'mediaFolders') => {
+      const bundleKey = name === 'media' ? 'hostMedia' : 'hostMediaFolders'
+      const pointer = name === 'media' ? 'folderId' : 'parentId'
+      const resolvable = await resolvableHostFolderIds()
+      for (const item of bundleItems(bundleKey)) {
+        if (!item?.$id) continue
+        const cleaned = cleanDoc(name, item)
+        if (pointer in cleaned) {
+          cleaned[pointer] = resolvedFolderPointer(cleaned[pointer], resolvable)
+        }
+        await write(hostRef.collection(name).doc(String(item.$id)), cleaned)
+      }
+    }
+
     const importDatasets = async () => {
       if (!orgId) return
       for (const item of bundleItems('datasets')) {
@@ -898,6 +962,9 @@ async function handler(request: Request): Promise<Response> {
     // it, and both reads resolve against the same id set (AGL-1392).
     await importMediaFolders()
     await importOrgPlain('media')
+    // The site's own library, same rule one scope over (AGL-1392).
+    await importHostLibrary('mediaFolders')
+    await importHostLibrary('media')
     await importCollections()
     await importDatasets()
     await commit()
