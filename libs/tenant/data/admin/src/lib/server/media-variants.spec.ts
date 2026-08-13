@@ -34,6 +34,8 @@
 import {
   classifyLoadFailure,
   generateMediaVariants,
+  generateStoredMediaVariants,
+  MEDIA_VARIANT_SOURCE_MAX_BYTES,
   mediaVariantWidthsFor,
   probeMediaVariantSupport,
 } from './media-variants'
@@ -172,6 +174,123 @@ describe('a total failure is reported, not swallowed (AGL-1468)', () => {
     })
     // The 320 file is really there; the document must keep claiming it.
     expect(outcome.variants).toEqual([320])
+    expect(outcome.error).toContain('storage said no')
+  })
+})
+
+/**
+ * AGL-1476: the same guarantee for an asset whose bytes are in STORAGE.
+ *
+ * Real `sharp` again, and in bytes again, for the reason the issue states: the
+ * broken signed path answers `?w=320` with a 200 and 6,606,921 B of the
+ * original PNG. Nothing short of counting bytes tells that apart from a
+ * working one.
+ */
+describe('generateStoredMediaVariants fetches the bytes and generates (AGL-1476)', () => {
+  it('downloads the object and writes variants that are genuinely SMALLER', async () => {
+    const buffer = await sourcePng()
+    const written = new Map<string, Buffer>()
+    let downloads = 0
+    const outcome = await generateStoredMediaVariants({
+      contentType: 'image/png',
+      sizeBytes: buffer.length,
+      sourceWidth: 1200,
+      objectPath: 'orgs/org-1/media/asset',
+      readSource: async () => {
+        downloads += 1
+        return buffer
+      },
+      saveVariant: async (path, webp) => {
+        written.set(path, webp)
+      },
+    })
+
+    expect(downloads).toBe(1)
+    expect(outcome.error).toBeUndefined()
+    expect(outcome.variants).toEqual([320, 640])
+    const w320 = written.get('orgs/org-1/media/asset__w320.webp') as Buffer
+    const w640 = written.get('orgs/org-1/media/asset__w640.webp') as Buffer
+    expect(w320.toString('ascii', 8, 12)).toBe('WEBP')
+    expect(w320.length).toBeLessThan(buffer.length)
+    expect(w320.length).toBeLessThan(w640.length)
+  })
+
+  it('never touches storage when there is nothing to generate', async () => {
+    // The ordering guarantee. This route also carries 200 MB videos, and
+    // discovering they have no variants must not cost a download.
+    for (const contentType of ['video/mp4', 'application/pdf', 'image/svg+xml']) {
+      const outcome = await generateStoredMediaVariants({
+        contentType,
+        sizeBytes: 200 * 1024 * 1024,
+        objectPath: 'orgs/org-1/media/asset',
+        readSource: async () => {
+          throw new Error('must not download')
+        },
+        saveVariant: async () => {
+          throw new Error('must not save')
+        },
+      })
+      expect(outcome).toEqual({ variants: [] })
+    }
+  })
+
+  it('does not download a source already narrower than every target width', async () => {
+    const outcome = await generateStoredMediaVariants({
+      contentType: 'image/png',
+      sizeBytes: 4096,
+      sourceWidth: 256,
+      objectPath: 'orgs/org-1/media/icon',
+      readSource: async () => {
+        throw new Error('must not download')
+      },
+      saveVariant: async () => {
+        throw new Error('must not save')
+      },
+    })
+    expect(outcome).toEqual({ variants: [] })
+  })
+
+  it('refuses a source past the ceiling, and SAYS SO rather than reporting []', async () => {
+    // `variants: []` with no error means "nothing was eligible" (AGL-1468).
+    // A 40 MB image the platform accepted is eligible work that did not
+    // happen, so it has to be countable.
+    const outcome = await generateStoredMediaVariants({
+      contentType: 'image/png',
+      sizeBytes: 40 * 1024 * 1024,
+      sourceWidth: 6000,
+      objectPath: 'orgs/org-1/media/huge',
+      readSource: async () => {
+        throw new Error('must not download')
+      },
+      saveVariant: async () => {
+        throw new Error('must not save')
+      },
+    })
+    expect(outcome.variants).toEqual([])
+    expect(outcome.error).toContain('too large')
+  })
+
+  it('admits every image the DAM accepts — the two ceilings agree', () => {
+    // `IMAGE_MAX_BYTES` in apps/console/utils/media-upload-limits.ts. If that
+    // is raised without raising this, large images silently stop getting
+    // variants, which is exactly the bug this issue is about.
+    expect(MEDIA_VARIANT_SOURCE_MAX_BYTES).toBe(15 * 1024 * 1024)
+  })
+
+  it('reports a failed download instead of an empty success', async () => {
+    const outcome = await generateStoredMediaVariants({
+      contentType: 'image/png',
+      sizeBytes: 4 * 1024 * 1024,
+      sourceWidth: 1200,
+      objectPath: 'orgs/org-1/media/asset',
+      readSource: async () => {
+        throw new Error('storage said no')
+      },
+      saveVariant: async () => {
+        throw new Error('must not save')
+      },
+    })
+    expect(outcome.variants).toEqual([])
     expect(outcome.error).toContain('storage said no')
   })
 })

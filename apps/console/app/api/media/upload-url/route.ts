@@ -19,10 +19,16 @@ import {
   defaultScopeForNewResource,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
-import { checkEntitlement, checkQuota, createResourceUid } from '@aglyn/aglyn/server'
+import {
+  checkEntitlement,
+  checkQuota,
+  createResourceUid,
+  readImageDimensions,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  generateStoredMediaVariants,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import {
@@ -33,6 +39,7 @@ import {
 import { randomUUID } from 'crypto'
 
 import {
+  isImageUploadType,
   normalizeUploadContentType,
   requiresFileUploadEntitlement,
   signedUploadMaxBytes,
@@ -45,6 +52,22 @@ import {
 } from '../../../../utils/sanitize-svg'
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000
+
+/**
+ * How much of the object is enough to read pixel dimensions from (AGL-1476).
+ *
+ * `readImageDimensions` parses a PNG's IHDR, a GIF's screen descriptor and a
+ * JPEG's SOF segment — all header structures. 256 KB is generous for the last
+ * of those (a JPEG carrying a large ICC profile or EXIF thumbnail pushes SOF
+ * back) and still nothing next to the 15 MB the object may be. A truncated
+ * read returns `null`, which the caller already treats as "unknown width" —
+ * it degrades to generating every width, never to skipping the asset.
+ *
+ * The range exists so a FREE org and an already-narrow image never pay for a
+ * full download: neither of them is going to produce a variant, and reading
+ * three numbers should not cost 15 MB of egress.
+ */
+const IMAGE_HEADER_PROBE_BYTES = 256 * 1024
 
 /**
  * Large uploads via signed URLs (AGL-167, extended by AGL-1317): the
@@ -249,6 +272,90 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    /**
+     * The four fields the bytes were carrying, and nobody collected (AGL-1476).
+     *
+     * `variants`, `width`, `height` and `uploadedBy` are all written by
+     * `/api/media/upload` and were all ABSENT here — not empty, absent — for
+     * one reason: on this route the bytes go browser→GCS and the function only
+     * ever saw a path. That was harmless while everything reaching finalize was
+     * video, PDF or ZIP, none of which has variants or readable dimensions.
+     * AGL-1465 gave images a signed-path ceiling, so since 2026-08-13 every
+     * image between 3 MB and 15 MB lands here — which inverted the feature:
+     * the assets that most need a 320px WebP became the only ones that got
+     * none. Measured that day, same library, image against image so the ROUTE
+     * is the only variable: a 6,606,921 B PNG through here answered `?w=320`
+     * with 6,606,921 B of `image/png`; a 2,168,376 B PNG through the base64
+     * route answered it with 31,566 B of `image/webp`.
+     *
+     * ## Why the bytes are fetched here rather than by a job
+     *
+     * The three options are AGL-1476's. Raising the threshold loses on
+     * arithmetic — Vercel caps the body at 4.5 MB and base64 inflates by 4/3,
+     * so ~3.3 MB is the ceiling and the threshold is already 3 MB. A deferred
+     * job loses on something less obvious: **it does not avoid the download.**
+     * The bytes are in storage either way, so a job must fetch exactly the same
+     * object into exactly the same kind of function; all it moves is WHEN. And
+     * the beat that exists is `pluginJobsBeat`, which POSTs the TENANT app
+     * (`cloud/functions/src/index.ts`) — a different deployment, whose
+     * `next.config.js` names `sharp` nowhere, so it would mean re-solving
+     * AGL-1471 in a second runtime that no probe has ever answered `ok` for.
+     * It would also need a `variantsPending` marker and a collectionGroup
+     * index, because Firestore cannot query for a missing field. That is a
+     * production index, a second document write and an unproven encoder, to
+     * relocate a download that stays the same size.
+     *
+     * So: fetched here, and bounded. Not a new property of this handler —
+     * finalize has downloaded the whole object on this path since AGL-1474,
+     * unbounded, for every SVG. What is new is that the fetch is the LAST
+     * thing attempted rather than the first: widths are decided from the
+     * header, so a video is never pulled back and a free org never pays for
+     * bytes its plan cannot serve.
+     */
+    const isImage = isImageUploadType(contentType)
+    // The header only — see `IMAGE_HEADER_PROBE_BYTES`. Never for an SVG: it
+    // has no raster header, and its bytes are already in hand above.
+    let dimensions: { width: number; height: number } | null = null
+    if (isImage && !isSvgUploadType(contentType)) {
+      const [header] = await file.download({
+        start: 0,
+        end: IMAGE_HEADER_PROBE_BYTES - 1,
+      })
+      dimensions = readImageDimensions(new Uint8Array(header))
+    }
+    // The SAME boolean that decides `cdnPath` below, which is what AGL-1468
+    // relied on to rule the entitlement out as a cause. A free workspace serves
+    // raw storage URLs, so WebP it can never reference would be bytes nobody
+    // reads — but dimensions and the uploader are not CDN features and land
+    // regardless.
+    const cdnAllowed = checkEntitlement(org as never, 'mediaCdn')
+    // Variants remain an optimization and still never fail the upload
+    // (AGL-1468) — and a failure is still WRITTEN DOWN, on the document and on
+    // the counter, because three weeks of silent breakage cost 174 assets.
+    //
+    // No eligibility pre-check here on purpose: `generateStoredMediaVariants`
+    // decides the widths BEFORE it calls `readSource`, so a video, an SVG or a
+    // source already narrower than 320px returns `{ variants: [] }` having
+    // touched storage exactly zero times. Restating that rule at the call site
+    // is how the two copies AGL-1468 collapsed came to disagree in the first
+    // place.
+    const { variants, error: variantsError } = cdnAllowed
+      ? await generateStoredMediaVariants({
+          contentType,
+          sizeBytes: actualBytes,
+          sourceWidth: dimensions?.width,
+          objectPath,
+          readSource: async () => (await file.download())[0],
+          saveVariant: (path, webp) =>
+            bucket.file(path).save(webp, {
+              contentType: 'image/webp',
+              metadata: {
+                cacheControl: 'public, max-age=31536000, immutable',
+              },
+            }),
+        })
+      : { variants: [] as number[], error: undefined }
+
     const token = randomUUID()
     await file.setMetadata({
       metadata: { firebaseStorageDownloadTokens: token },
@@ -264,6 +371,21 @@ async function handler(request: Request): Promise<Response> {
       url,
       storagePath: objectPath,
       folderId,
+      // AGL-1476 — the four fields that only `/api/media/upload` used to
+      // write. `dimensions` spreads to nothing when the header was
+      // unreadable, exactly as on that route: best-effort metadata, never a
+      // gate. `variants` is written unconditionally, so a document or a video
+      // finalizes with `[]` — the same shape it gets through the base64 route,
+      // and the reason `[]` on a `.pptx` is a design statement rather than a
+      // symptom.
+      ...(dimensions ?? {}),
+      uploadedBy: decoded.uid,
+      variants,
+      // Only when something actually went wrong (AGL-1468). An asset with
+      // nothing to generate — an SVG, a video, a source already narrower than
+      // 320px — is the common case and must not carry a fault marker, or the
+      // marker stops meaning anything.
+      ...(variantsError ? { variantsError } : {}),
       // GCS already hashed these bytes; `getMetadata()` above handed it to
       // us free. Without it `serveMediaCdn` sets NO ETag, so an edge
       // revalidation re-streams the whole object instead of taking a 304 —
@@ -300,6 +422,16 @@ async function handler(request: Request): Promise<Response> {
       {
         bytes: firebaseAdmin.firestore.FieldValue.increment(actualBytes),
         count: firebaseAdmin.firestore.FieldValue.increment(1),
+        // Rides the write that was already happening, so the visibility costs
+        // zero extra Firestore operations (AGL-1468). Variant BYTES stay out
+        // of `bytes` by standing policy — derived artifacts the platform can
+        // regenerate are not billed to the host.
+        ...(variantsError
+          ? {
+              variantFailures:
+                firebaseAdmin.firestore.FieldValue.increment(1),
+            }
+          : {}),
       },
       { merge: true },
     )
@@ -311,4 +443,24 @@ async function handler(request: Request): Promise<Response> {
 }
 
 export const dynamic = 'force-dynamic'
+/**
+ * Finalize now fetches up to 15 MB back and runs three `sharp` encodes over it
+ * (AGL-1476), on a handler that previously did metadata work and one SVG
+ * download.
+ *
+ * Declared rather than left at the account default because of what that
+ * default just cost elsewhere: `move-assets` declared none, was cut off
+ * mid-loop by the platform, and returned a gateway timeout the client could
+ * only render as a bare "Move failed" — see `utils/server/media-move.ts`. The
+ * same shape here would abandon a finalize between the object landing in the
+ * bucket and the Firestore document existing, which is an orphaned upload
+ * rather than a slow one.
+ *
+ * Headroom, not a licence for unbounded work: the generation itself is bounded
+ * by `MEDIA_VARIANT_SOURCE_MAX_BYTES`, and a pathological source (a
+ * decompression bomb that is small on disk and enormous in pixels) is refused
+ * by `sharp`'s own `limitInputPixels` and lands in the `variantsError` path
+ * like any other failure.
+ */
+export const maxDuration = 60
 export { handler as POST, handler as PATCH }
