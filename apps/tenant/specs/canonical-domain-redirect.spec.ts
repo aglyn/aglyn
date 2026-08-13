@@ -42,6 +42,9 @@
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: jest.fn() },
+  // Lockdown (AGL-1501): nothing is locked in these scenarios; the verdict
+  // logic is unit-tested in libs/tenant/data/admin lockdown.spec.ts.
+  getPlatformLockdown: jest.fn(async () => null),
   filterEnabledPluginsByReleaseFlags: jest.fn(async () => []),
   getRealmPluginInstalls: jest.fn(async () => []),
 }))
@@ -53,6 +56,10 @@ jest.mock('@aglyn/aglyn/server', () => {
   )
   return {
     __esModule: true,
+    // The REAL lockdown resolver (AGL-1501): with no suspension fields in
+    // these fixtures it answers null; faking it would re-implement the
+    // precedence table here.
+    ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/lockdown'),
     SCREEN_ROOT_PATH: '/',
     COLLECTION_LIST_PAGE_SIZE: 10,
     HostScreenVisibility: { AUTHENTICATED: 'authenticated' },

@@ -25,7 +25,9 @@ import {
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getLockdownVerdict,
   isImpersonationSession,
+  lockdownJsonResponse,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { COLLECTION_TEMPLATE_SCREEN_FIELDS } from '../../../../constants/collection-templates'
@@ -254,14 +256,18 @@ async function handler(request: Request): Promise<Response> {
         }, { status: 403 })
       }
       const orgId = hostSnapshot.get('orgId') as string | undefined
-      if (orgId) {
-        const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
-        if (orgSnapshot.get('suspendedAt')) {
-          return Response.json({
-            error: 'This workspace is suspended',
-          }, { status: 403 })
-        }
-      }
+      const orgData = orgId
+        ? (await firestore.collection('orgs').doc(orgId).get()).data()
+        : undefined
+      // Lockdown verdict (AGL-1501): subsumes the old bare `suspendedAt`
+      // check — same reads, plus platform/host/user scopes and the distinct
+      // 423 body. This branch is non-staff only, so no bypass flag needed.
+      const lockdown = await getLockdownVerdict({
+        uid: decoded.uid,
+        org: orgData,
+        host: hostSnapshot.data(),
+      })
+      if (lockdown) return lockdownJsonResponse(lockdown)
     }
 
     if (action === 'templates') {

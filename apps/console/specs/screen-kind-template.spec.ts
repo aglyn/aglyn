@@ -172,6 +172,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
+  // Lockdown (AGL-1501): the verdict's own logic is unit-tested in
+  // libs/tenant/data/admin lockdown.spec.ts; this mirror keeps its contract
+  // observable here — staff bypass, suspended org/host => locked (423).
+  getLockdownVerdict: async (options: Record<string, any>) =>
+    options?.staff === true
+      ? null
+      : options?.org?.suspendedAt != null
+        ? { scope: 'org', reason: 'manual' }
+        : options?.host?.suspendedAt != null
+          ? { scope: 'host', reason: 'manual' }
+          : null,
+  lockdownJsonResponse: (state: Record<string, unknown>) =>
+    Response.json({ error: 'locked', ...state }, { status: 423 }),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -460,9 +473,9 @@ describe('the pointer route itself', () => {
     expect((await setTemplate({ entryScreenId: 's1' })).status).toBe(403)
   })
 
-  it('refuses while the owning workspace is suspended', async () => {
+  it('refuses while the owning workspace is suspended — 423 (AGL-1501)', async () => {
     mockStore.org = { plan: 'free', suspendedAt: { seconds: 1 } }
-    expect((await setTemplate({ entryScreenId: 's1' })).status).toBe(403)
+    expect((await setTemplate({ entryScreenId: 's1' })).status).toBe(423)
   })
 
   // The AGL-1390 refusal, gone on purpose: a pointer edit is never refused for
@@ -502,9 +515,9 @@ describe('the convert route itself', () => {
     expect((await convert('s1', 'template')).status).toBe(403)
   })
 
-  it('refuses while the owning workspace is suspended', async () => {
+  it('refuses while the owning workspace is suspended — 423 (AGL-1501)', async () => {
     mockStore.org = { plan: 'free', suspendedAt: { seconds: 1 } }
-    expect((await convert('s1', 'template')).status).toBe(403)
+    expect((await convert('s1', 'template')).status).toBe(423)
   })
 
   it('is idempotent', async () => {

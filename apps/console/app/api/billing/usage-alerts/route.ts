@@ -23,7 +23,17 @@ import {
   measureScreenCaps,
   screenCapMaxBillable,
 } from '../../../../utils/screen-cap-reconciliation'
+import {
+  ORG_BILLING_DOC_ID,
+  ORG_BILLING_SUBCOLLECTION,
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
+import { FieldValue } from 'firebase-admin/firestore'
+import {
+  billingAutoLockEnabled,
+  shouldAutoLockOrgForBilling,
+} from '../../../../utils/billing-auto-lock'
+import { applyOrgLockdown } from '../../../../utils/server/org-lockdown'
 
 /**
  * Usage-threshold notifications (AGL-276, wave v5): the in-console
@@ -335,6 +345,66 @@ async function handler(request: Request): Promise<Response> {
           { usageAlerts: { ...guards, ...guardUpdates } },
           { merge: true },
         )
+      }
+
+      /*==========================================
+       * BILLING AUTO-LOCK (AGL-1501) — DISABLED BY DEFAULT.
+       *
+       * Locks orgs whose subscription has been unpaid for 30+ days past
+       * the end of their paid period, through the SAME `applyOrgLockdown`
+       * core the staff panic button uses (org doc + member projection +
+       * tenant cache eviction; no token revocation — billing locks keep
+       * sessions so people can reach Billing and fix it).
+       *
+       * THE SWITCH: `AUTO_LOCK_BILLING_FROM=YYYY-MM` (utils/
+       * billing-auto-lock.ts). Unset/malformed = this whole block is
+       * inert — auto-suspending paying-ish customers is a policy Zach
+       * flips deliberately, never a default. The manual button is
+       * /admin/lockdown, reason `billing`.
+       *=========================================*/
+      if (
+        billingAutoLockEnabled(month, process.env.AUTO_LOCK_BILLING_FROM) &&
+        orgData['suspendedAt'] == null
+      ) {
+        try {
+          const billingDoc = await org.ref
+            .collection(ORG_BILLING_SUBCOLLECTION)
+            .doc(ORG_BILLING_DOC_ID)
+            .get()
+          const billingSubscription =
+            (billingDoc.get('subscription') as {
+              status?: string
+              currentPeriodEnd?: { seconds?: number } | null
+            } | null) ?? null
+          if (
+            shouldAutoLockOrgForBilling(
+              orgData as never,
+              billingSubscription,
+              Date.now(),
+            )
+          ) {
+            await applyOrgLockdown({
+              firestore,
+              orgId: org.id,
+              action: 'lock',
+              lock: { reason: 'billing' },
+              revokeMemberTokens: false,
+            })
+            await firestore.collection('adminAudit').add({
+              actorUid: 'system:billing-auto-lock',
+              actorEmail: null,
+              action: 'lockdown.lock',
+              target: `orgs/${org.id}`,
+              before: { locked: false },
+              after: { locked: true, reason: 'billing', automated: true },
+              at: FieldValue.serverTimestamp(),
+            })
+            alerted.push({ orgId: org.id, quota: 'billing-auto-lock', threshold: 100 })
+          }
+        } catch (error) {
+          // One org's failure must not stop the sweep.
+          console.error('[usage-alerts] billing auto-lock failed', org.id, error)
+        }
       }
     }
     return Response.json({ alerted: alerted.length, details: alerted }, { status: 200 })

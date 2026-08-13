@@ -318,6 +318,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Live co-editing & unsaved work',
     excerpt: 'See who else is editing, work on the same document together, survive save conflicts, and recover unsaved changes after a crash.',
   },
+  lockdown: {
+    path: '/staff-console/lockdown',
+    title: 'Lockdown',
+    excerpt: 'The staff panic button — disable access platform-wide or for one workspace, site, or account, with a real logout and a visitor notice.',
+  },
   longFormMarkdown: {
     path: '/building-sites/besigner/long-form-markdown',
     title: 'Long documents in markdown',
@@ -625,6 +630,7 @@ export const DOCS_HELP_ANCHORS = {
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#tips', '#related'],
   languageSwitcher: ['#steps', '#tips', '#related'],
   liveCoEditing: ['#whos-here', '#editing-together', '#when-saves-collide', '#local-draft-recovery', '#the-save-button-always-answers', '#related'],
+  lockdown: ['#what-a-lockdown-does', '#reasons-and-the-notice', '#maintenance-windows-and-expiry', '#who-keeps-access-the-un-panic-invariant', '#operating-it'],
   longFormMarkdown: ['#the-markdown-element', '#what-the-markdown-supports', '#the-table-of-contents-element', '#how-it-finds-the-markdown', '#heading-links', '#related'],
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
   manageAccount: ['#account', '#sign-in-methods', '#profile-image', '#basic-info', '#contact-details', '#security', '#related'],

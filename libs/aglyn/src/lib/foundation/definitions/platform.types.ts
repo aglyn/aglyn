@@ -234,6 +234,22 @@ export interface AglynHost extends AglynDocument {
   /** Maintenance mode (AGL-131): every path renders the 503 screen. */
   maintenance?: boolean
   /**
+   * STAFF host takedown (AGL-1501) — the host scope of the panic button,
+   * for an infected or abusive site. The same field family as the org's
+   * AGL-202 suspension: while `suspendedAt` is set (and `suspendedUntilMs`
+   * has not passed) the site serves the lockdown notice instead of content.
+   * Deliberately separate from `maintenance` above, which is the CUSTOMER'S
+   * own switch — a takedown the site's editors could clear from the client
+   * SDK would not be a takedown, so all four keys are client-denied in the
+   * rules and written only by /api/admin/lockdown. `suspendedMessage` is
+   * visitor-facing; timestamps are plain epoch ms (converter-safe).
+   * Normalized by `app-utils/lockdown.ts`.
+   */
+  suspendedAt?: number
+  suspendedReasonCode?: string
+  suspendedMessage?: string
+  suspendedUntilMs?: number
+  /**
    * Per-site plugin deny-list (AGL-1014): plugin ids the org has enabled
    * but this site switches OFF. Subtracted from the org's resolved set by
    * `resolveHostEnabledPlugins` — the host can only ever narrow, never

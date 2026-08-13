@@ -19,8 +19,10 @@ import { checkEntitlement, createResourceUid, pluginRequestFromWeb } from '@agly
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getLockdownVerdict,
   getOrgForHost,
   isImpersonationSession,
+  lockdownJsonResponse,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 
@@ -161,12 +163,17 @@ async function handler(request: Request): Promise<Response> {
 
     const ownerOrg = await getOrgForHost(hostId)
     const org = (ownerOrg?.org ?? {}) as any
-    if (org.suspendedAt != null) {
-      return Response.json(
-        { error: 'This workspace is suspended' },
-        { status: 403 },
-      )
-    }
+    // Lockdown verdict (AGL-1501): subsumes the old bare `suspendedAt` check
+    // — same org read, plus the platform/host/user scopes and the distinct
+    // 423 body an API consumer can tell apart from a role 403. Staff bypass
+    // is the un-panic invariant.
+    const lockdown = await getLockdownVerdict({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org,
+      host: hostSnapshot.data(),
+    })
+    if (lockdown) return lockdownJsonResponse(lockdown)
 
     const parentRef = hostRef.collection(parentCollection).doc(parentId)
     const parentSnapshot = await parentRef.get()

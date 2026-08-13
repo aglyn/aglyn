@@ -31,8 +31,10 @@ import {
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getLockdownVerdict,
   getOrgForHost,
   isImpersonationSession,
+  lockdownJsonResponse,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import {
@@ -342,11 +344,18 @@ async function handler(request: Request): Promise<Response> {
 
     // Quota/entitlements ride the owning org's doc (AGL-238); suspension
     // mirrors the rules' hostOrgSuspended (fail-open for pre-org hosts).
+    // Lockdown verdict (AGL-1501): subsumes the old bare `suspendedAt` check
+    // — same org read, plus platform/host/user scopes and the distinct 423
+    // body. Staff bypass is the un-panic invariant.
     const ownerOrg = await getOrgForHost(hostId)
     const org = (ownerOrg?.org ?? {}) as any
-    if (org.suspendedAt != null) {
-      return Response.json({ error: 'This workspace is suspended' }, { status: 403 })
-    }
+    const lockdown = await getLockdownVerdict({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org,
+      host: hostSnapshot.data(),
+    })
+    if (lockdown) return lockdownJsonResponse(lockdown)
     if (resource.entitlement && !checkEntitlement(org, resource.entitlement)) {
       return Response.json({
         error: `This feature is not included in your plan — see Billing`,

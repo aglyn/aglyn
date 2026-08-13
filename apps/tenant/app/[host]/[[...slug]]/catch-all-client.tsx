@@ -349,14 +349,24 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     )
   }
 
-  // Maintenance mode without an assigned 503 screen (AGL-131).
+  // Maintenance mode without an assigned 503 screen (AGL-131), and the
+  // lockdown notice (AGL-1501) when the loader says the outage is a staff
+  // lockdown — per-reason title/copy, optional support contact and window.
   if (props.maintenanceFallback && !nodes) {
+    const lockdown = props.lockdown
     return (
       <div style={{ maxWidth: 420, margin: '15vh auto', padding: 24 }}>
-        <h1 style={{ fontSize: 22 }}>{'Back soon'}</h1>
+        <h1 style={{ fontSize: 22 }}>{lockdown?.title ?? 'Back soon'}</h1>
         <p style={{ opacity: 0.8 }}>
-          {'This site is undergoing maintenance. Please check back shortly.'}
+          {lockdown?.message ??
+            'This site is undergoing maintenance. Please check back shortly.'}
         </p>
+        {lockdown?.contact ? (
+          <p style={{ opacity: 0.8 }}>
+            {'Questions? '}
+            <a href={`mailto:${lockdown.contact}`}>{lockdown.contact}</a>
+          </p>
+        ) : null}
       </div>
     )
   }

@@ -90,6 +90,19 @@ export interface Props {
   notFoundFallback?: boolean
   /** Maintenance mode (AGL-131): 503 screen or the built-in notice. */
   maintenanceFallback?: boolean
+  /**
+   * Lockdown notice (AGL-1501), set alongside `maintenanceFallback` when
+   * the outage is a staff lockdown rather than the customer's own
+   * maintenance switch. Sanitized at the loader — reason code, per-reason
+   * copy, optional contact/window; never an actor or internal rationale.
+   */
+  lockdown?: {
+    reason: string
+    title: string
+    message: string
+    contact?: string
+    untilMs?: number
+  }
   /** Composed 401 screen nodes for members-only denials (AGL-131). */
   unauthorizedNodes?: Record<string, any> | null
   /**

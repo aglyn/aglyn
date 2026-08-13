@@ -92,7 +92,22 @@ export interface AglynOrganization extends AglynDocument {
   stripeCustomerId?: string
   subscription?: OrgSubscription
   suspendedAt?: ITimestamp | null
+  /** Staff-internal rationale (AGL-202). NEVER shown to the customer. */
   suspendedReason?: string
+  /**
+   * Lockdown extensions (AGL-1501) on the shipped AGL-202 carrier — the org
+   * scope of the panic button. `suspendedReasonCode` is the enum the notice
+   * copy switches on (`security`/`billing`/`maintenance`/`manual`; absent =
+   * `manual`), `suspendedMessage` is the CUSTOMER-FACING notice body (unlike
+   * `suspendedReason`), and `suspendedUntilMs` is an optional expiry — once
+   * it passes, the suspension is inactive with no write needed (maintenance
+   * windows end on their own). Plain epoch ms, not a Timestamp, so every
+   * cache serialization reads it back unchanged. All written only by
+   * /api/admin/lockdown; normalized by `app-utils/lockdown.ts`.
+   */
+  suspendedReasonCode?: string
+  suspendedMessage?: string
+  suspendedUntilMs?: number
   erasureRequestedAt?: ITimestamp | null
   /**
    * Scope applied to newly created datasets and media when nobody chooses
