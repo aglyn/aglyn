@@ -33,6 +33,10 @@ import {
   scopeAllows,
   mediaCdnPathUpdate,
 } from '../../../../utils/server/media-scope'
+import {
+  isSvgUploadType,
+  sanitizeSvgBuffer,
+} from '../../../../utils/sanitize-svg'
 import { createHash, randomUUID } from 'crypto'
 
 // Base64 JSON payloads encode ~34MB for a 25MB source.
@@ -115,8 +119,16 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    const buffer = Buffer.from(data, 'base64')
-    if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) {
+    const uploaded = Buffer.from(data, 'base64')
+    // SVG sanitization (AGL-1474). Replace is the same `image/*` gate as
+    // upload, which makes it the LATER door onto the same vector: an asset
+    // approved as a PNG can have its bytes swapped for a scripted SVG
+    // afterwards, under a `cdnPath` that is already embedded in published
+    // pages and that replace deliberately does not change. Same treatment,
+    // same place in the flow — before anything is written.
+    const svg = isSvgUploadType(contentType) ? sanitizeSvgBuffer(uploaded) : null
+    const buffer = svg ? svg.buffer : uploaded
+    if (!uploaded.length || uploaded.length > MAX_IMAGE_BYTES) {
       return Response.json({
         error: `Image is empty or too large (${MAX_IMAGE_BYTES / 1024 / 1024}MB max)`,
       }, { status: 413 })
@@ -225,6 +237,12 @@ async function handler(request: Request): Promise<Response> {
         // fine, and the population query would over-report forever.
         variantsError:
           variantsError ?? firebaseAdmin.firestore.FieldValue.delete(),
+        // AGL-1474, and a merge write, so it must CLEAR on a clean replace —
+        // otherwise the marker outlives the bytes that earned it and the
+        // "which assets arrived carrying script" query over-reports forever.
+        svgSanitized: svg?.changed
+          ? svg.removed
+          : firebaseAdmin.firestore.FieldValue.delete(),
         // Stable, mediaId-keyed CDN URL (AGL-829): unchanged by replace, so
         // the entry keeps resolving to the new bytes automatically — unless
         // the plan or the private flag says there should be no path at all,

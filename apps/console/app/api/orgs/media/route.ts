@@ -27,6 +27,15 @@ import {
   isImpersonationSession,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import {
+  isAllowedUploadType,
+  normalizeUploadContentType,
+  UPLOAD_TYPES_MESSAGE,
+} from '../../../../utils/media-upload-limits'
+import {
+  isSvgUploadType,
+  sanitizeSvgBuffer,
+} from '../../../../utils/sanitize-svg'
 import { randomUUID } from 'crypto'
 
 const MAX_BYTES = 10 * 1024 * 1024
@@ -37,6 +46,20 @@ const MAX_BYTES = 10 * 1024 * 1024
  * Upload/delete are API-only so the Storage object and the Firestore doc
  * never drift; editors and up may write, and the client reads the org
  * media collection directly through rules.
+ *
+ * **This is a THIRD byte-write path onto the org media library.** AGL-1474
+ * reasoned about `/api/media/upload` and `/api/media/upload-url` as the two
+ * chokepoints; this route predates both for org assets, has no client caller
+ * left in the repo, and is still live. It writes `orgs/{orgId}/media/{id}` —
+ * the exact object path and Firestore collection `serveMediaCdn` resolves for
+ * the `org:{orgId}` scope — so anything landed here is served, inline, from
+ * the console's own origin like any other asset.
+ *
+ * It also had **no type allowlist at all**: any non-empty `contentType` was
+ * accepted, `text/html` included, which is a strictly wider version of
+ * AGL-1474's SVG hole. It now shares `UPLOAD_TYPES` with the other routes and
+ * the same SVG sanitization, so the coverage claim ("a fix at the chokepoints
+ * is complete") is actually true.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -75,17 +98,30 @@ async function handler(request: Request): Promise<Response> {
 
     if (action === 'upload') {
       const fileName = String(body?.fileName ?? 'file').slice(0, 200)
-      const contentType = String(body?.contentType ?? '')
+      const contentType = normalizeUploadContentType(
+        String(body?.contentType ?? ''),
+        String(body?.fileName ?? ''),
+      )
       const dataBase64 = String(body?.dataBase64 ?? '')
       if (!contentType || !dataBase64) {
         return Response.json({ error: 'Missing file payload' }, { status: 400 })
       }
-      const buffer = Buffer.from(dataBase64, 'base64')
-      if (buffer.byteLength === 0 || buffer.byteLength > MAX_BYTES) {
+      // The shared allowlist (AGL-1465's single source), which this route
+      // never had — see the note above.
+      if (!isAllowedUploadType(contentType)) {
+        return Response.json({ error: UPLOAD_TYPES_MESSAGE }, { status: 415 })
+      }
+      const uploaded = Buffer.from(dataBase64, 'base64')
+      if (uploaded.byteLength === 0 || uploaded.byteLength > MAX_BYTES) {
         return Response.json({
           error: `Org media uploads are capped at ${MAX_BYTES / 1024 / 1024}MB`,
         }, { status: 413 })
       }
+      // AGL-1474, same treatment as the other write paths.
+      const svg = isSvgUploadType(contentType)
+        ? sanitizeSvgBuffer(uploaded)
+        : null
+      const buffer = svg ? svg.buffer : uploaded
       const mediaId = createResourceUid()
       const objectPath = `orgs/${orgId}/media/${mediaId}`
       const token = randomUUID()
@@ -107,6 +143,8 @@ async function handler(request: Request): Promise<Response> {
         // on a doc without it, so an unstamped asset is invisible to every
         // scoped read rather than merely unrestricted.
         visibleTo: [ORG_SCOPE_TOKEN],
+        // AGL-1474 — absent on every clean asset.
+        ...(svg?.changed ? { svgSanitized: svg.removed } : {}),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
       return Response.json({ mediaId, url }, { status: 200 })
