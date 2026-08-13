@@ -63,10 +63,11 @@ TTL is best-effort within ~72h, which is 43% of the window it is bounding.
 real message, and deletes it on sight. The policy is what stops them
 accumulating; the code is what makes the boundary exact.
 
-### 2. Scheduled backups (AGL-871)
+### 2. Scheduled backups (AGL-871) — APPLIED 2026-07-26
 
-Point-in-time recovery is ENABLED (7-day window) but there is no longer-horizon
-scheduled backup.
+Point-in-time recovery is ENABLED (7-day window) AND a weekly scheduled backup
+exists (Sunday, 14-week retention). The command below is what created it, kept
+for reference / self-hosters:
 
 ```bash
 gcloud firestore backups schedules create \
@@ -76,9 +77,19 @@ gcloud firestore backups schedules create \
 gcloud firestore backups schedules list --database='(default)' --project=aglyn-main
 ```
 
-### 3. Delete protection (AGL-872)
+A backup existing is not a recovery capability: check backup **state** (a
+backup can silently sit at `NOT_AVAILABLE` — the 2026-08-02 one did, AGL-1490)
+and see `docs/DISASTER_RECOVERY.md` for the rehearsed restore procedure.
 
-The prod database currently has `DELETE_PROTECTION_DISABLED`.
+```bash
+gcloud firestore backups list --project=aglyn-main --location='-' \
+  --format="table(snapshotTime, state, expireTime)"
+```
+
+### 3. Delete protection (AGL-872) — APPLIED 2026-07-26
+
+The prod database has `DELETE_PROTECTION_ENABLED`. The command below is what
+enabled it, kept for reference / self-hosters:
 
 ```bash
 gcloud firestore databases update --database='(default)' \
