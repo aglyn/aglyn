@@ -18,7 +18,8 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   createResourceUid,
-  ORG_SCOPE_TOKEN,
+  defaultScopeForNewResource,
+  newResourceScopeFields,
   orgRoleAtLeast,
 } from '@aglyn/aglyn/server'
 import {
@@ -94,9 +95,15 @@ async function handler(request: Request): Promise<Response> {
       .app()
       .storage()
       .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
-    const mediaRef = firestore.collection('orgs').doc(orgId).collection('media')
+    const orgRef = firestore.collection('orgs').doc(orgId)
+    const mediaRef = orgRef.collection('media')
 
     if (action === 'upload') {
+      // The org's AGL-1048 sharing default, read for the same reason the
+      // other two upload routes read it — see the `visibleTo` note below.
+      const orgSettings = (await orgRef.get()).data() as
+        | { defaultResourceScope?: 'org' | 'host' }
+        | undefined
       const fileName = String(body?.fileName ?? 'file').slice(0, 200)
       const contentType = normalizeUploadContentType(
         String(body?.contentType ?? ''),
@@ -138,11 +145,23 @@ async function handler(request: Request): Promise<Response> {
         sizeBytes: buffer.byteLength,
         url,
         uploadedBy: decoded.uid,
-        // Org-wide by default (AGL-1043/1044). Every writer of a scoped
-        // collection must stamp this: `array-contains-any` matches nothing
-        // on a doc without it, so an unstamped asset is invisible to every
-        // scoped read rather than merely unrestricted.
-        visibleTo: [ORG_SCOPE_TOKEN],
+        // Every writer of a scoped collection must stamp this:
+        // `array-contains-any` matches nothing on a doc without it, so an
+        // unstamped asset is invisible to every scoped read rather than
+        // merely unrestricted (AGL-1043/1044).
+        //
+        // It hardcoded `['org']` while `/api/media/upload` and
+        // `/api/media/upload-url` — the other two writers of this same
+        // collection — honoured the org's AGL-1048 `defaultResourceScope`
+        // (AGL-1478). An org that set its default to site-private got it on
+        // two doors out of three, and which door an upload came through is
+        // not something anyone can see afterwards. One rule now.
+        ...newResourceScopeFields(
+          defaultScopeForNewResource({
+            defaultResourceScope: orgSettings?.defaultResourceScope,
+            hostId: String(body?.forHostId ?? '') || null,
+          }),
+        ),
         // AGL-1474 — absent on every clean asset.
         ...(svg?.changed ? { svgSanitized: svg.removed } : {}),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),

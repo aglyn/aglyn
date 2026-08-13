@@ -294,6 +294,17 @@ const hostSnap2 = await hostRef.get()
 const orgId = hostSnap2.get('orgId')
 const orgRef = orgId ? firestore.collection('orgs').doc(orgId) : null
 const dataRef = orgRef ?? hostRef
+/**
+ * The AGL-1037 scope for anything written to `dataRef` (AGL-1478).
+ *
+ * Only when it resolved to an ORG: a `hosts/{hostId}` subcollection is
+ * private by construction and stores no scope, which is the same `null`
+ * branch `newMediaFolderDoc` takes. Spread, so the field is either
+ * correct or absent-by-decision rather than absent-by-omission — the
+ * seeds were writing org documents no scoped read could find, so the
+ * fixtures could not reproduce a correctly-scoped read at all.
+ */
+const dataScope = orgRef ? { visibleTo: ['org'] } : {}
 
 // ── Commerce catalog (AGL-276/279): physical w/ variants, digital,
 //    subscription — flat legacy fields included so lifts are unnecessary.
@@ -548,12 +559,14 @@ await put(dataRef.collection('contacts').doc('seed-contact-1'), {
   tags: ['customer', 'vip'],
   sources: { order: true, newsletter: true },
   purchaseCents: 17030,
+  ...dataScope,
   createdAt: now,
 })
 await put(dataRef.collection('contactSegments').doc('seed-seg-vip'), {
   name: 'VIP customers',
   tags: ['vip'],
   sources: [],
+  ...dataScope,
   createdAt: now,
 })
 await put(dataRef.collection('lists').doc('seed-list-news'), {
@@ -568,6 +581,7 @@ await put(dataRef.collection('datasets').doc('seed-inventory-log'), {
       { key: 'delta', label: 'Delta', type: 'number' },
     ],
   },
+  ...dataScope,
   createdAt: now,
 })
 

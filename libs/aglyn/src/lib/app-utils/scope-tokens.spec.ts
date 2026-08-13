@@ -26,8 +26,10 @@ import {
   isScopeToken,
   MAX_SCOPE_HOSTS,
   narrowsScope,
+  newResourceScopeFields,
   normalizeVisibleTo,
   ORG_SCOPE_TOKEN,
+  type ScopeToken,
   parseScopeToken,
   scopeForHosts,
   scopeTokensForHost,
@@ -290,5 +292,29 @@ describe('defaultScopeForNewResource (AGL-1048)', () => {
     expect(
       defaultScopeForNewResource({ defaultResourceScope: 'host', hostId: null }),
     ).toEqual(['org'])
+  })
+})
+
+describe('newResourceScopeFields (AGL-1478)', () => {
+  it('stamps the tokens it was given, copied not aliased', () => {
+    const chosen: ScopeToken[] = ['host:h1']
+    const fields = newResourceScopeFields(chosen)
+    expect(fields).toEqual({ visibleTo: ['host:h1'] })
+    chosen.push('host:h2')
+    expect(fields.visibleTo).toEqual(['host:h1'])
+  })
+
+  it('stores nothing for a collection that is not scoped', () => {
+    // `hosts/{hostId}` subcollections are private by construction; the
+    // point of spelling it `null` is that it is a DECISION, distinguishable
+    // from a creator who never thought about it.
+    expect(newResourceScopeFields(null)).toEqual({})
+  })
+
+  it('throws rather than storing "visible to nobody"', () => {
+    // An empty array is written, not absent: the backfill leaves it alone
+    // by design and no read path treats it as legacy, so it is permanent
+    // where a missing field is repairable.
+    expect(() => newResourceScopeFields([])).toThrow(/empty scope/)
   })
 })

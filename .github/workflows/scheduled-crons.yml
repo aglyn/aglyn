@@ -40,6 +40,23 @@ on:
     # PLUGIN_VERIFIER_VERSION bump re-checks everything. It reports and
     # notifies staff about regressions on live versions — it never revokes.
     - cron: '0 6 * * 1' # reverify-plugin-versions — Mondays 06:00 UTC
+    # Scope-drift detection (AGL-1478). The backfill this calls has been
+    # correct and idempotent since AGL-1040 and NOTHING EVER CALLED IT — no
+    # page, no cron, no runbook — so when AGL-1466 left 19 media folders
+    # unscoped, the job whose whole purpose is listing exactly those
+    # documents sat there while a person worked it out from a file count
+    # that looked wrong.
+    #
+    # A cron-authenticated call is a DRY RUN and cannot be anything else:
+    # the route refuses `dryRun: false` to this caller. It REPORTS. A job
+    # that silently stamped every unscoped document each week would hide
+    # this same class of bug in a new way — the creation paths would stay
+    # broken and the sweep would paper over them forever. The repair is a
+    # human act; docs/SCOPE_DRIFT.md is how.
+    #
+    # A non-zero plan returns 207, which fails this workflow below. That is
+    # the alert (a staff notification is the other half).
+    - cron: '30 6 * * 1' # backfill-scope (detect only) — Mondays 06:30 UTC
   workflow_dispatch:
     inputs:
       path:
@@ -54,6 +71,7 @@ on:
           - /api/billing/usage-email
           - /api/admin/reap-plugin-artifacts
           - /api/admin/reverify-plugin-versions
+          - /api/admin/backfill-scope
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
@@ -89,6 +107,7 @@ jobs:
             '0 6 1 * *') path=/api/billing/usage-email ;;
             '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;
+            '30 6 * * 1') path=/api/admin/backfill-scope ;;
             *) path="$DISPATCH_PATH" ;;
           esac
           if [ -z "$path" ]; then
@@ -180,7 +199,9 @@ jobs:
           # reason the original timeout went unnoticed for a day is that a
           # partial month looked like no month at all — silence is the bug.
           if [ "$partial" = "1" ]; then
-            echo "Sweep completed with per-subject failures (HTTP 207) —" >&2
-            echo "see the 'failures' map in the responses above." >&2
+            echo "Sweep finished, and something in it needs a person (HTTP 207)." >&2
+            echo "report-usage and friends: see the 'failures' map above." >&2
+            echo "backfill-scope: see 'drift' — documents with no visibleTo," >&2
+            echo "invisible to every site-scoped read. docs/SCOPE_DRIFT.md." >&2
             exit 1
           fi

@@ -531,6 +531,14 @@ for (const [id, email, name, tags] of contacts) {
     name,
     tags,
     sources: { form: true },
+    // Same requirement as the datasets above, and with teeth of its own
+    // (AGL-1478): `upsert-contact` dedupes an inbound form submission
+    // through `scopedToHost`, so an unstamped contact is invisible to its
+    // OWN dedupe query — a second submission from the same address creates
+    // a duplicate instead of merging. Seeded unstamped, the fixture could
+    // not reproduce a correctly-scoped read at all, which is a large part
+    // of why the creation-side holes went uncaught.
+    visibleTo: ['org'],
     createdAt: now,
   })
 }

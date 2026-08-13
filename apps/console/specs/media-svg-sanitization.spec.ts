@@ -77,6 +77,10 @@ const mediaDoc = (): Record<string, unknown> => ({
   get: async () => ({
     exists: true,
     get: (field: string) => state.existing[field],
+    // `/api/orgs/media` reads the ORG doc for its AGL-1048
+    // `defaultResourceScope` before stamping an upload (AGL-1478), the same
+    // setting the other two upload routes honour.
+    data: () => state.org,
   }),
   set: (...args: unknown[]) => {
     mockMediaSet(...args)
@@ -157,6 +161,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   createResourceUid: () => 'media-1',
   readImageDimensions: () => undefined,
   defaultScopeForNewResource: () => ['org'],
+  newResourceScopeFields: (visibleTo: string[] | null) =>
+    visibleTo ? { visibleTo } : {},
   orgRoleAtLeast: () => true,
   ORG_SCOPE_TOKEN: 'org',
   pluginRequestFromWeb: async (request: Request) => ({

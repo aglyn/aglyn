@@ -17,10 +17,12 @@
 
 import {
   addPlan,
+  describeScopeDrift,
   emptyTotals,
   needsScopeStamp,
   planMemberScopeTokens,
   planScopeStamp,
+  scopeDrift,
 } from './backfill-scope'
 
 describe('needsScopeStamp', () => {
@@ -137,5 +139,89 @@ describe('totals', () => {
     addPlan(totals, 'datasets', { writes: [], skipped: 3 })
     expect(totals.datasets).toEqual({ written: 1, skipped: 5 })
     expect(totals.media).toEqual({ written: 0, skipped: 0 })
+  })
+})
+
+/**
+ * The DETECTOR half (AGL-1478).
+ *
+ * The backfill has been correct and idempotent since AGL-1040 and nothing
+ * ever invoked it: no page, no cron, no runbook, no reference in the repo
+ * outside its own specs. So AGL-1466 — 19 folders unscoped across two
+ * scopes — was found by a person noticing the file counts looked wrong,
+ * by a job that exists to find exactly that.
+ *
+ * These are the functions that turn its plan into an alert. The plan is
+ * already the answer; what was missing was somebody reading it.
+ */
+describe('scopeDrift (AGL-1478)', () => {
+  it('is zero on a healthy run', () => {
+    expect(scopeDrift(emptyTotals())).toEqual({
+      byCollection: {},
+      members: 0,
+      total: 0,
+    })
+  })
+
+  it('counts a planned stamp as drift, per collection', () => {
+    const totals = emptyTotals()
+    // A dry run's `written` is what it WOULD have written — i.e. the
+    // documents a scoped read cannot see today.
+    addPlan(totals, 'mediaFolders', {
+      writes: [
+        { id: 'a', data: { visibleTo: ['org'] } },
+        { id: 'b', data: { visibleTo: ['org'] } },
+      ],
+      skipped: 7,
+    })
+    addPlan(totals, 'datasets', {
+      writes: [{ id: 'c', data: { visibleTo: ['org'] } }],
+      skipped: 5,
+    })
+    const drift = scopeDrift(totals)
+    expect(drift.byCollection).toEqual({ mediaFolders: 2, datasets: 1 })
+    expect(drift.members).toBe(0)
+    expect(drift.total).toBe(3)
+  })
+
+  it('counts a stale member projection separately', () => {
+    // A member whose `scopeTokens` are stale is the other side of the same
+    // match: the resource carries the right tokens and the reader does not.
+    // It is drift, but it is not an unstamped document, and an alert that
+    // conflates them sends the reader to the wrong collection.
+    const totals = emptyTotals()
+    addPlan(totals, 'members', {
+      writes: [{ id: 'm', data: { scopeTokens: ['org'] } }],
+      skipped: 4,
+    })
+    const drift = scopeDrift(totals)
+    expect(drift.byCollection).toEqual({})
+    expect(drift.members).toBe(1)
+    expect(drift.total).toBe(1)
+  })
+
+  it('names the collections in the alert, worst first', () => {
+    const totals = emptyTotals()
+    addPlan(totals, 'datasets', {
+      writes: [{ id: 'a', data: { visibleTo: ['org'] } }],
+      skipped: 0,
+    })
+    addPlan(totals, 'media', {
+      writes: [
+        { id: 'b', data: { visibleTo: ['org'] } },
+        { id: 'c', data: { visibleTo: ['org'] } },
+        { id: 'd', data: { visibleTo: ['org'] } },
+      ],
+      skipped: 0,
+    })
+    // "8 of 9 folders unscoped" would have been the whole of AGL-1466 in
+    // one line, so the sentence leads with the count and the collection.
+    const said = describeScopeDrift(scopeDrift(totals))
+    expect(said).toMatch(/^3 media/)
+    expect(said).toContain('1 datasets')
+  })
+
+  it('says nothing when there is nothing to say', () => {
+    expect(describeScopeDrift(scopeDrift(emptyTotals()))).toBe('')
   })
 })

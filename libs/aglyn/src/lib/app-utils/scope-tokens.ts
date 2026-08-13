@@ -209,6 +209,39 @@ export function defaultScopeForNewResource(options: {
 }
 
 /**
+ * The scope fields a document being CREATED in a scoped collection carries
+ * (AGL-1478), as a spreadable object.
+ *
+ * The argument is REQUIRED and has no default, which is the whole point.
+ * AGL-1466 was two call sites that each built a `mediaFolders` document
+ * inline and each forgot `visibleTo`; `newMediaFolderDoc` fixed that one
+ * collection by making the input mandatory, and this is the same guarantee
+ * for the collections that have no document constructor of their own —
+ * `datasets`, `media`, `contacts`, `contactSegments`. A creator that has
+ * not decided cannot compile.
+ *
+ * Three inputs, three meanings:
+ *
+ * - **tokens** — stamp them.
+ * - **`null`** — this collection is NOT scoped (a `hosts/{hostId}`
+ *   subcollection is private by construction), so store nothing. Saying it
+ *   out loud is what distinguishes "not applicable" from "forgotten".
+ * - **`[]`** — throws. Unlike a missing field, a stored empty array is a
+ *   written "visible to nobody": the backfill leaves it alone by design and
+ *   no read path treats it as legacy, so it is permanent where absent is
+ *   repairable. Getting here means a caller computed a scope and came back
+ *   with nothing, which is worth a stack trace.
+ */
+export function newResourceScopeFields(
+  visibleTo: readonly ScopeToken[] | null
+): { visibleTo?: ScopeToken[] } {
+  if (visibleTo && !visibleTo.length) {
+    throw new Error('A scoped resource cannot be created with an empty scope')
+  }
+  return visibleTo ? { visibleTo: [...visibleTo] } : {}
+}
+
+/**
  * Whether `target` is visible everywhere `source` is — the condition a
  * cross-dataset REFERENCE has to satisfy (AGL-1044).
  *
