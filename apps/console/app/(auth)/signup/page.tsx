@@ -46,7 +46,7 @@ import {
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
-import { Button, CircularProgress, Divider, Link, Stack, Typography } from '@mui/material'
+import { Alert, Button, CircularProgress, Divider, Link, Stack, Typography } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import {
   browserLocalPersistence,
@@ -73,7 +73,14 @@ import { AuthConsentCheckbox } from '../../../components/auth-legal-consent.comp
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
 import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-signin'
 import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
+import { LEGAL_DOCUMENT_VERSION } from '../../../constants/legal-documents'
 import { authSignInHost } from '../../../utils/auth-delegation'
+import {
+  clearLegalConsent,
+  consumeLegalConsent,
+  markLegalConsent,
+  postLegalAcceptance,
+} from '../../../utils/legal-consent'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
@@ -231,7 +238,36 @@ function SignUp() {
   const delegation = useDelegateWorkspaceSignIn('signup')
   // Mobile browsers sign in via redirect (AGL-462); this completes the
   // round-trip when Google sends the user back here.
-  useGoogleRedirectResult('sign_up', setError, delegation === 'off')
+  //
+  // The account is created DURING that round-trip, so this is where a mobile
+  // sign-up's acceptance has to be recorded — the click that consented
+  // happened on a page that no longer exists (AGL-1497). The marker is what
+  // carries the tick across; consuming it here is also what stops a stale one
+  // from consenting on behalf of some later attempt.
+  const handleRedirectCredential = useCallback(
+    async (credential: UserCredential) => {
+      if (!consumeLegalConsent()) {
+        // Reached only if the redirect completed without this tab having
+        // consented — the gate below makes that unreachable through the UI,
+        // so it is worth saying out loud rather than recording an acceptance
+        // nobody gave.
+        console.error('sign-up redirect completed without recorded consent')
+        return
+      }
+      await postLegalAcceptance(
+        credential.user,
+        LEGAL_DOCUMENT_VERSION,
+        'signup-google-redirect',
+      )
+    },
+    [],
+  )
+  useGoogleRedirectResult(
+    'sign_up',
+    setError,
+    delegation === 'off',
+    handleRedirectCredential,
+  )
   // Hold the loading splash during the post-auth redirect window instead of
   // flashing the form back at the user (AGL-476).
   const { data: signInCheckResult } = useSigninCheck()
@@ -256,6 +292,10 @@ function SignUp() {
       // mobile redirect round-trip; the session hook mints the shared
       // cookie on return instead of validating a stale one (AGL-463).
       markInteractiveSignIn()
+      // Carry the tick across the mobile redirect, which unmounts this page
+      // before the account exists (AGL-1497). Set here, after the gate above,
+      // so the marker can only ever mean "this person consented".
+      markLegalConsent()
       await setPersistence(firebaseAuth, browserLocalPersistence)
         .then(() => {
           if (values) {
@@ -276,6 +316,20 @@ function SignUp() {
           logEvent(analytics, 'sign_up', {
             method: credential.providerId,
           })
+          // Record the acceptance FIRST (AGL-1497). Both branches below can
+          // end in `window.location.assign`, which tears this page down — a
+          // record started after that navigation is a record that sometimes
+          // does not happen, and "sometimes" is not a thing you want to say
+          // about the evidence a contract rests on.
+          //
+          // The marker is consumed rather than left behind: on desktop the
+          // popup never unmounts the page, so nothing else would clear it.
+          consumeLegalConsent()
+          await postLegalAcceptance(
+            credential.user,
+            LEGAL_DOCUMENT_VERSION,
+            values ? 'signup-password' : 'signup-google',
+          )
           // A Google sign-up has no form, so it never had a workspace name
           // and used to land on the picker with the plan intent discarded
           // (AGL-1117). Someone who clicked "Get Pro" and then "Sign up with
@@ -331,6 +385,9 @@ function SignUp() {
         })
         .catch((error) => {
           console.error(error)
+          // A failed attempt must not leave a tick lying in sessionStorage
+          // for the next one to pick up (AGL-1497).
+          clearLegalConsent()
           setError({
             ...error,
             credential: GoogleAuthProvider.credentialFromError(error),
@@ -455,6 +512,15 @@ function SignUp() {
         subscription={{ values: true }}
         clearOnUnmount
       />
+      {searchParams?.get('consent') === 'required' ? (
+        // Bounced from /signin, where Google had just created this account
+        // without ever showing the Terms (AGL-1497). Say so, or the redirect
+        // looks like the sign-in simply failed.
+        <Alert severity="info" sx={{ mt: 2, mb: 1 }}>
+          {'Looks like you’re new here — please accept the Terms of Service ' +
+            'and Privacy Policy to finish setting up your account.'}
+        </Alert>
+      ) : null}
       <AuthErrorAlertComponent error={error} sx={{ mt: 2, mb: 1 }} />
       <AuthConsentCheckbox
         checked={consented}

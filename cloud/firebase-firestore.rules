@@ -973,6 +973,19 @@ service cloud.firestore {
           (isSignedIn() && request.auth.uid == userId);
         allow write: if false;
       }
+
+      // Clickwrap acceptance records (AGL-1497): SERVER-WRITE ONLY, for the
+      // same reason as passkeys above — this is evidence ABOUT the person who
+      // would be writing it. A client-writable acceptance could be forged
+      // ("I never agreed to that version"), back-dated, or deleted outright,
+      // which is precisely the dispute the record exists to settle. One
+      // document per accepted version, written by the Admin SDK with a server
+      // timestamp; the owner may read their own history, and nobody amends it.
+      match /legalAcceptances/{version} {
+        allow read: if isStaff() ||
+          (isSignedIn() && request.auth.uid == userId);
+        allow write: if false;
+      }
     }
 
     // WebAuthn machinery (AGL-662): server-only, both of them. Challenges

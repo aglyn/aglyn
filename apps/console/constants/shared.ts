@@ -40,6 +40,9 @@ export const LEGAL_URLS = {
   PRIVACY: 'https://aglyn.com/legal/privacy',
 }
 
+// The version and content hashes of those documents live in
+// `./legal-documents`, which imports LEGAL_URLS from here (AGL-1497).
+
 /**
  * Where an Enterprise enquiry goes (AGL-1118). Enterprise is the one tier with
  * no list price and no self-serve checkout — its card links here instead of an
