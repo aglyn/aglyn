@@ -65,14 +65,34 @@ describe('AGL-1478 · every creator of a scoped collection stamps the scope', ()
   const CREATORS: Array<{ file: string; mustContain: string[]; why: string }> = [
     {
       // The reference implementation: honours the org's AGL-1048 default.
+      //
+      // `newResourceScopeFields` since AGL-1484. This row asked only for
+      // `defaultScopeForNewResource`, which decides WHAT the scope is and
+      // says nothing about whether it reaches the document — the field was
+      // still written by hand into an object literal. AGL-1478 built the
+      // required-argument gate for precisely the collections with no
+      // document constructor of their own and named `datasets` first, and
+      // then three of the four dataset creators bypassed it.
       file: 'apps/console/app/api/orgs/datasets/route.ts',
-      mustContain: ['defaultScopeForNewResource'],
+      mustContain: ['defaultScopeForNewResource', 'newResourceScopeFields'],
       why: 'org Data page → new dataset',
     },
     {
       file: 'libs/plugins/marketplace/src/lib/server/install-dataset-schema.ts',
-      mustContain: ['defaultScopeForNewResource'],
+      mustContain: ['defaultScopeForNewResource', 'newResourceScopeFields'],
       why: 'installing a dataset schema from the marketplace',
+    },
+    {
+      // The creator this list did not have (AGL-1484). A restore writes new
+      // documents into THREE scoped collections — `datasets`, `media`,
+      // `mediaFolders` — straight past `/api/orgs/datasets`, and it was
+      // missing here because it is spelled as a restore rather than as a
+      // create. It stamps the importing site rather than the org default,
+      // deliberately: a bundle restored into an agency's org must not
+      // publish one client's data to the whole roster.
+      file: 'apps/console/app/api/hosts/import/route.ts',
+      mustContain: ['newResourceScopeFields', 'hostScopeToken'],
+      why: 'restoring a site backup into an org',
     },
     {
       // AGL-1478's live-ish hole. The forked copy lands in whatever
