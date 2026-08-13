@@ -207,7 +207,7 @@ async function main() {
   }
 
   initAdmin()
-  const firestore = getFirestore()
+  const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
   let totals = { scanned: 0, changed: 0 }
   if (all) {
     const hosts = await firestore.collection('hosts').select().get()

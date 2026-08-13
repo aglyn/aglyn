@@ -58,7 +58,7 @@ if (!getApps().length) {
   initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
 }
 
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 /** Every live pin, keyed by listing. One pin is one install, org-wide or not. */
 async function livePinsByListing() {

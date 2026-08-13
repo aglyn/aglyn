@@ -53,7 +53,7 @@ if (!projectId || !clientEmail || !privateKey) {
 if (!getApps().length) {
   initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
 }
-const db = getFirestore()
+const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 // Kept in sync with `libs/aglyn/src/lib/app-utils/org-billing-doc.ts`. A .mjs
 // script cannot import the TS module, so these are duplicated deliberately —

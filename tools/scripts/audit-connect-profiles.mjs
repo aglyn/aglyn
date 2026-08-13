@@ -66,7 +66,7 @@ if (!getApps().length) {
 }
 
 const auth = getAuth()
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 const SOURCES = [
   // kind, collection, whether a missing handle is an anomaly

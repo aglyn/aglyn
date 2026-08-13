@@ -118,7 +118,7 @@ if (!getApps().length) {
   }
   initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
 }
-const db = getFirestore()
+const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 const orgs = ONLY_ORG
   ? [await db.collection('orgs').doc(ONLY_ORG).get()]

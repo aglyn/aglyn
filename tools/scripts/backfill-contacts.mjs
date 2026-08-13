@@ -182,7 +182,7 @@ async function main() {
     process.exit(1)
   }
   initAdmin()
-  const firestore = getFirestore()
+  const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
   if (all) {
     const hosts = await firestore.collection('hosts').select().get()
     for (const host of hosts.docs) {

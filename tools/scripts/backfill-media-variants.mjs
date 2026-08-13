@@ -83,7 +83,7 @@ initializeApp({
   projectId,
   storageBucket: process.env.STORAGE_BUCKET ?? `${projectId}.appspot.com`,
 })
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 const bucket = getStorage().bucket()
 
 const log = (...args) => {

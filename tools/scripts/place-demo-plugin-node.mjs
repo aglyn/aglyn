@@ -39,7 +39,7 @@ const PLUGIN_NODE_ID = 'b_plugin_fixture_node'
 
 const REVERT = process.argv.includes('--revert')
 
-const db = getFirestore()
+const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 const screenRef = db.collection('hosts').doc(HOST).collection('screens').doc(SCREEN)
 const screen = await screenRef.get()
 const liveVersionId = screen.get('versionId')

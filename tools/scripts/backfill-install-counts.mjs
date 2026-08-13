@@ -64,7 +64,7 @@ if (!getApps().length) {
   initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
 }
 
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 const count = (value) => {
   const parsed = Number(value ?? 0)
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0

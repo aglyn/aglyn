@@ -135,7 +135,7 @@ async function main() {
       projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'aglyn-main',
     })
   }
-  const firestore = getFirestore()
+  const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
   const slugDocs = await firestore.collection('orgSlugs').get()
   const slugs = slugDocs.docs.map((doc) => ({

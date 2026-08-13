@@ -43,7 +43,7 @@ initializeApp({
   credential: applicationDefault(),
   projectId: process.env.GCLOUD_PROJECT ?? 'aglyn-main',
 })
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 /** Same alphabet/length as the console's createIdUrlSafe. */
 const ALPHABET =

@@ -104,7 +104,7 @@ if (!getApps().length) {
   }
   initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
 }
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 console.log(
   `\nBackfill nameLower — project=${projectId} ` +

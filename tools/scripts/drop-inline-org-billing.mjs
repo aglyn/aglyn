@@ -57,7 +57,7 @@ if (!projectId || !clientEmail || !privateKey) {
 if (!getApps().length) {
   initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
 }
-const db = getFirestore()
+const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 const ORG_BILLING_SUBCOLLECTION = 'billing'
 const ORG_BILLING_DOC_ID = 'stripe'

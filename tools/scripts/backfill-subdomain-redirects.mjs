@@ -35,7 +35,7 @@ initializeApp({
   credential: applicationDefault(),
   projectId: process.env.GCLOUD_PROJECT ?? 'aglyn-main',
 })
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''
 const headers = {

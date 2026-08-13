@@ -95,7 +95,7 @@ async function main() {
     }
     initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
   }
-  const db = getFirestore()
+  const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
   const orgs = await db.collection('orgs').get()
   let considered = 0

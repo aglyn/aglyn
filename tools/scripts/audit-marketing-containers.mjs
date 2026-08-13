@@ -116,7 +116,7 @@ initializeApp({
   credential: applicationDefault(),
   projectId: process.env.GCLOUD_PROJECT ?? 'aglyn-main',
 })
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 const forms = { map: 0, msgpack: 0, absent: 0 }
 const errors = []

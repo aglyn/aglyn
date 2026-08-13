@@ -20,7 +20,7 @@ const env = Object.fromEntries(
     .filter((l) => l.includes('=') && !l.trim().startsWith('#'))
     .map((l) => { const i = l.indexOf('='); return [l.slice(0,i).trim(), l.slice(i+1).trim().replace(/^["']|["']$/g,'')] }))
 initializeApp({ credential: cert({ projectId: env.FIREBASE_PROJECT_ID, clientEmail: env.FIREBASE_CLIENT_EMAIL, privateKey: env.FIREBASE_PRIVATE_KEY.replace(/\\n/g,'\n') }) })
-const db = getFirestore()
+const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 const OLD = ['communityListings', 'communityPurchases', 'communityReports', 'communityArtifactBases']
 const NEW = (c) => c.replace('community', 'marketplace')

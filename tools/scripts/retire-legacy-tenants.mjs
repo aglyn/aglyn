@@ -46,7 +46,7 @@ if (!projectId || !clientEmail || !privateKey) {
   process.exit(1)
 }
 initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 async function deleteSubcollections(docRef) {
   const subcollections = await docRef.listCollections()

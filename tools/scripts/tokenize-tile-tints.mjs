@@ -64,7 +64,7 @@ initializeApp({
   credential: applicationDefault(),
   projectId: process.env.GCLOUD_PROJECT ?? 'aglyn-main',
 })
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 /**
  * `nodes` is stored in TWO forms and both are live: a plain Firestore map and

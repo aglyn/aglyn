@@ -64,7 +64,7 @@ const projectId = argValue(
 )
 
 if (!getApps().length) initializeApp({ projectId })
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 const auth = getAuth()
 
 // ── Auth user (owner, staff) ────────────────────────────────────────────────
