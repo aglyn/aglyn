@@ -43,8 +43,6 @@ import {
   connectFirestoreEmulator,
   getFirestore,
   initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
 } from 'firebase/firestore'
 import {
   type RemoteConfig,
@@ -69,6 +67,7 @@ import {
   type AuthPersistenceClass,
   createAuthInstance,
 } from './auth-persistence'
+import { localCacheFor } from './firestore-cache'
 
 /**
  * Drop-in replacement for reactfire's `ObservableStatus<T>` — reactfire is
@@ -164,7 +163,13 @@ const FirebaseServicesContext = createContext<FirebaseServices | undefined>(unde
 // Module-scope guards so HMR / remounts don't re-run emulator connection
 // (which throws if called twice) or double-initialize Firestore's
 // persistent cache.
-let connectedFirestore = false
+//
+// Firestore's is keyed by app NAME, not a bare boolean (AGL-1456): Firestore
+// initialization is once-per-app, so a module-global flag made the FIRST app
+// to mount decide for every later one — a second app would silently skip
+// `initializeFirestore` and take SDK defaults. That mattered the moment the
+// cache stopped being the same on every host.
+const firestoreInitialized = new Set<string>()
 let connectedDatabase = false
 let connectedAuth = false
 
@@ -172,7 +177,7 @@ export interface FirebaseServicesProviderProps {
   firebaseConfig: FirebaseOptions
   appName: string
   /**
-   * How much of a session this origin may keep (AGL-1379). Defaults to
+   * How much of *anything* this origin may keep on disk. Defaults to
    * `durable`, which is what every host serving this provider today is:
    * `*.aglyn.com` and `*.aglyn.app`, whose DNS we own and whose 14-day
    * session is the product.
@@ -181,6 +186,12 @@ export interface FirebaseServicesProviderProps {
    * the whole reason this is a prop rather than a constant: the class differs
    * per origin, not per build, and the decision belongs to whoever knows
    * which origin is being served.
+   *
+   * **It governs two things, and the name only names one.** It selects the
+   * `Auth` persistence class (AGL-1379) *and* the Firestore `localCache`
+   * (AGL-1456) — because both answer the same question about the same origin,
+   * and splitting them into two props is precisely how the cache came to be
+   * unconditional while the credential was hardened. See `firestore-cache.ts`.
    */
   authPersistence?: AuthPersistenceClass
   children?: ReactNode
@@ -198,7 +209,7 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     const auth = createAuthInstance(app, authPersistence)
     const database = getDatabaseInstance(app)
 
-    if (!connectedFirestore) {
+    if (!firestoreInitialized.has(appName)) {
       try {
         // Under the emulator (dev/e2e only): force long-polling and skip
         // the persistent multi-tab cache. The emulator's WebChannel
@@ -225,11 +236,12 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
           app,
           FIREBASE_FIRESTORE_EMULATOR_ENABLED
             ? { experimentalForceLongPolling: true }
-            : {
-                localCache: persistentLocalCache({
-                  tabManager: persistentMultipleTabManager(),
-                }),
-              },
+            : // NOT unconditional (AGL-1456). `persistentLocalCache` writes
+              // document bodies to this origin's IndexedDB, so on a custom
+              // console domain it is the same exposure D6 removed from the
+              // refresh token — see `firestore-cache.ts` for why one
+              // declaration governs both.
+              { localCache: localCacheFor(authPersistence) },
         )
         if (FIREBASE_FIRESTORE_EMULATOR_ENABLED) {
           connectFirestoreEmulator(getFirestore(app), 'localhost', 8082)
@@ -237,7 +249,7 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
       } catch {
         // already initialized (e.g. HMR reset the module flag) — getFirestore() returns the existing instance
       } finally {
-        connectedFirestore = true
+        firestoreInitialized.add(appName)
       }
     }
     const firestore = getFirestore(app)

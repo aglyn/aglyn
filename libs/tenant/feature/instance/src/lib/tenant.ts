@@ -21,6 +21,7 @@ export * from './constants/firebase-config'
 
 export * from './hooks/firebase/auth-persistence'
 export * from './hooks/firebase/firebase-services'
+export * from './hooks/firebase/firestore-cache'
 export * from './hooks/helpers/use-doc'
 export * from './hooks/helpers/use-modify-doc-callback'
 export * from './hooks/helpers/guarded-nodes-save'
