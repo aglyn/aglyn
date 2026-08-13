@@ -40,7 +40,7 @@
  * Storage is STUBBED, deliberately and non-negotiably — same reasoning as
  * `erase-org-credentials.emulator.spec.ts`: there is no Storage emulator in
  * `npm run firebase:emulate` and the admin app holds a real service-account
- * credential, so an unstubbed `eraseOrg` writes its export bundle to the
+ * credential, so an unstubbed `eraseOrg` runs `deleteFiles` against the
  * PRODUCTION bucket. `VERCEL_TOKEN` is cleared for the same class of reason:
  * `releaseConsoleDomain` detaches every name from the console Vercel project
  * first, and this fixture must never reach that API.

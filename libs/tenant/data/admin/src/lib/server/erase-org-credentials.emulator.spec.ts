@@ -72,8 +72,9 @@ if (EMULATED && !getApps().length) {
 /**
  * No Storage emulator exists, and the default app holds a production
  * credential. Every bucket call becomes a no-op recorder so this spec cannot
- * reach GCS; `save` must resolve, or `eraseOrg` aborts on `export-failed`
- * and deletes nothing, which would make the whole spec vacuously green.
+ * reach GCS — `deleteFiles` here would sweep real customer media. `save` is
+ * stubbed too, but only as a backstop: since AGL-1443 the erase path writes
+ * no object at all, and `erase-org-export.emulator.spec.ts` asserts it.
  */
 jest.mock('firebase-admin/storage', () => ({
   getStorage: () => ({

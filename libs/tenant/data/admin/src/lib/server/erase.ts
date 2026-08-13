@@ -112,25 +112,6 @@ export async function eraseSubtree(
   )
 }
 
-type DocRef = FirebaseFirestore.DocumentReference
-
-/** Recursively snapshot a doc + all its subcollections (for the export). */
-async function exportDocTree(ref: DocRef): Promise<Record<string, unknown>> {
-  const snapshot = await ref.get()
-  const result: Record<string, unknown> = {
-    _id: ref.id,
-    data: snapshot.exists ? snapshot.data() : null,
-  }
-  const collections = await ref.listCollections()
-  for (const collectionRef of collections) {
-    const docs = await collectionRef.get()
-    result[collectionRef.id] = await Promise.all(
-      docs.docs.map((docSnapshot) => exportDocTree(docSnapshot.ref)),
-    )
-  }
-  return result
-}
-
 /** Best-effort Stripe customer deletion — PII lives at the processor too. */
 async function deleteStripeCustomer(customerId?: string): Promise<void> {
   const key = process.env.STRIPE_SECRET_KEY
@@ -364,12 +345,14 @@ async function eraseOrgSlugs(
 
 /**
  * The steps of `eraseOrg` after the hold check, named so a failed attempt can
- * say WHERE it stopped (AGL-1455). `export` is the safe one — nothing is gone
- * and nothing is written. Every name after it means the export bundle is
- * already in the bucket.
+ * say WHERE it stopped (AGL-1455).
+ *
+ * `export` used to lead this list, and its removal is the AGL-1443 change: an
+ * erasure no longer writes anything before it starts deleting, so there is no
+ * longer a step whose meaning is "nothing is gone yet". `credentials` is now
+ * the first thing that can fail, and it destroys as it goes.
  */
 type EraseStep =
-  | 'export'
   | 'credentials'
   | 'hosts'
   | 'org-storage'
@@ -382,8 +365,6 @@ export interface EraseOrgResult {
   ok: boolean
   /** Set when the org was NOT erased (flag missing, hold not elapsed, gone). */
   skippedReason?: string
-  /** Storage path of the final export bundle when erased. */
-  exportPath?: string
   hosts?: number
   /** API credentials destroyed (AGL-1444) — outside the org path. */
   apiKeys?: number
@@ -400,7 +381,7 @@ export interface EraseOrgResult {
 }
 
 /** What an in-flight erasure has destroyed so far — counts only. */
-type EraseProgress = Omit<EraseOrgResult, 'ok' | 'skippedReason' | 'exportPath'>
+type EraseProgress = Omit<EraseOrgResult, 'ok' | 'skippedReason'>
 
 /**
  * A stable label for an error, carrying no free text (AGL-1455).
@@ -438,10 +419,12 @@ function errorLabel(error: unknown): string {
  * happened. Staff can find every stuck erasure by filtering the audit log on
  * the action, which is exactly the search that was impossible before.
  *
- * `after.exportWritten` is the field that matters. When it is true a complete
- * dump of a workspace that STILL EXISTS is sitting in the bucket under
- * `after.exportPath` — the worst state this path can leave behind, and
- * previously the least visible.
+ * `after.exportWritten`/`after.exportPath` used to be the fields that
+ * mattered here: they named the complete dump of a still-existing workspace
+ * that a post-export failure left in the bucket. AGL-1443 removed the write,
+ * so that state is no longer reachable and the fields no longer exist. What
+ * replaces them is `after.requestedAt` — WHICH erasure request is stuck,
+ * which the object's name used to be the only record of.
  *
  * Ids, counts, a step name and a timestamp. Never customer data.
  *
@@ -453,6 +436,8 @@ async function recordErasureFailure(entry: {
   orgId: string
   step: EraseStep
   error: unknown
+  /** Millis of the `erasureRequestedAt` this attempt was fulfilling. */
+  requestedAt: number
   before: { hosts: number; members: number }
   after: Record<string, unknown>
 }): Promise<void> {
@@ -468,6 +453,7 @@ async function recordErasureFailure(entry: {
       after: {
         failedStep: entry.step,
         error: errorLabel(entry.error),
+        requestedAt: entry.requestedAt,
         ...entry.after,
       },
       at: FieldValue.serverTimestamp(),
@@ -486,8 +472,9 @@ async function recordErasureFailure(entry: {
  * Order matters and every step is defensive:
  *   1. Re-read the org and re-verify erasureRequestedAt + hold — never
  *      delete on a stale/cancelled request.
- *   2. Write a final JSON export (org + host trees) to Storage FIRST — if
- *      the export can't be written, abort without deleting anything.
+ *   2. Nothing is written. This step used to persist a final JSON export of
+ *      the org and host trees to `erasures/{orgId}/…` and abort if it could
+ *      not — see the note below for why it is gone (AGL-1443).
  *   3. Revoke the org's API credentials (AGL-1444) and its public routing —
  *      SSO domains and custom console domains (AGL-1448). All three are
  *      top-level collections keyed by something other than the org id, so the
@@ -499,11 +486,45 @@ async function recordErasureFailure(entry: {
  *      and every slug the org ever held — tombstones included (AGL-1448).
  *   5. Audit.
  *
- * Every ending is audited, not just the successful one (AGL-1455). An aborted
- * export and a throw from any step after it both write an `org.erase-failed`
- * row before returning or re-throwing, because `erasureRequestedAt` stays set
- * on a failure: without a record the org is retried and fails identically on
- * every subsequent run, forever, and nothing anywhere says so.
+ * Every ending is audited, not just the successful one (AGL-1455). A throw
+ * from any step writes an `org.erase-failed` row before re-throwing, because
+ * `erasureRequestedAt` stays set on a failure: without a record the org is
+ * retried and fails identically on every subsequent run, forever, and nothing
+ * anywhere says so.
+ *
+ * **The erasure writes no copy of the workspace (AGL-1443).** It used to
+ * persist `erasures/{orgId}/{requestedMs}.json` — and "export" understated
+ * it: `exportDocTree` recursed `listCollections()` with no bound and copied
+ * `snapshot.data()` wholesale, so the object was a complete verbatim copy of
+ * the org tree and every host tree, carrying `webhooks.secret` (a plaintext
+ * HMAC key), `orders.paymentLinkUrl` (a live bearer URL that lets its holder
+ * pay), `screens.protection.passwordHash` and `ssoDomains.token`. It landed
+ * on a prefix this function's own storage sweep does not cover, in a bucket
+ * with no lifecycle rule, so the most sensitive object the platform can
+ * produce outlived the request that deleted everything else — indefinitely,
+ * unread, and belonging to a customer who had been told their workspace was
+ * gone. Four facts decided it, and none of them is about tidiness:
+ *
+ *   - **Nothing read it.** One producer, zero consumers in the repo; the
+ *     owner's confirmation email never mentioned it.
+ *   - **A governed full copy already exists.** Firestore backups run weekly
+ *     with 14-week retention (AGL-871), so the dump added no recoverability —
+ *     only a second, ungoverned place the data lived.
+ *   - **The minimum that proves an erasure was already being written.** The
+ *     `adminAudit` row below is ids and counts, in a collection with a
+ *     retention policy. The one thing the object's NAME carried that the row
+ *     did not — which request this run fulfilled — is now `after.requestedAt`.
+ *   - **The DPA commits to "a limited period, after which deleted or
+ *     de-identified"**, which indefinite retention of a full dump sits
+ *     outside of.
+ *
+ * Two consequences are deliberate, not side effects. The export-write abort
+ * is gone with the write: there is nothing left to fail before the first
+ * delete, so an erasure can no longer be blocked by Storage. And the export
+ * was the only unbounded work in this function — it built the whole workspace
+ * in memory inside a 60-second cron, so the larger the workspace the likelier
+ * its erasure silently never happened (AGL-1455 half 1). That defect is
+ * removed by deletion rather than by a streaming exporter.
  */
 export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
   const firestore = firebaseAdmin.app().firestore()
@@ -532,50 +553,18 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
   // The inventory both audit rows report, taken before anything is touched.
   const before = { hosts: hosts.size, members: members.size }
 
-  // Export FIRST — erasure must never be a data's only ending. Abort the
-  // whole operation if we can't persist the bundle.
-  //
-  // The bundle BUILD is inside the guard with the write (AGL-1455). It used to
-  // sit outside, so a read failure while walking the tree — the shape this
-  // path is likeliest to fail in, since the bundle is proportional to the
-  // whole workspace — escaped as a throw rather than the deliberate abort,
-  // and took the rest of the cron batch with it. Both halves now end the same
-  // way: nothing deleted, and the attempt recorded.
-  const exportPath = `erasures/${orgId}/${requestedMs}.json`
-  try {
-    const bundle = {
-      exportedAt: new Date().toISOString(),
-      org: await exportDocTree(orgRef),
-      hosts: await Promise.all(
-        hosts.docs.map((host) => exportDocTree(host.ref)),
-      ),
-    }
-    await storageBucket()
-      .file(exportPath)
-      .save(Buffer.from(JSON.stringify(bundle)), {
-        contentType: 'application/json',
-      })
-  } catch (error) {
-    console.error(`eraseOrg: export write failed for ${orgId}; aborting`, error)
-    await recordErasureFailure({
-      orgId,
-      step: 'export',
-      error,
-      before,
-      // Nothing is gone and nothing is written: the safe abort.
-      after: { exportWritten: false },
-    })
-    return { ok: false, skippedReason: 'export-failed' }
-  }
+  // No export. The write that used to stand here is gone (AGL-1443) — see
+  // the note above this function. Nothing is persisted anywhere before the
+  // deleting starts, and `requestedMs` now travels in the audit row rather
+  // than in an object's name.
 
-  // Everything below runs with a COMPLETE dump of the org already in the
-  // bucket, and none of it was guarded (AGL-1455) — `eraseOrgApiKeys`,
+  // None of what follows was guarded (AGL-1455) — `eraseOrgApiKeys`,
   // `eraseOrgSsoDomains`, `eraseOrgIdempotencyKeys` and `recursiveDelete` all
-  // throw. A throw here leaves the worst state this path can produce: the
-  // workspace still standing, part of it already destroyed, and its full
-  // export persisted. That was recorded nowhere. Each step now names itself,
-  // and the error is re-thrown unchanged — this adds a record, it does not
-  // swallow the failure.
+  // throw. A throw here leaves a workspace half destroyed and still standing,
+  // recorded nowhere. Each step now names itself, and the error is re-thrown
+  // unchanged — this adds a record, it does not swallow the failure. What it
+  // can no longer leave behind is the state that used to be the worst one: a
+  // surviving workspace with its own complete dump already in the bucket.
   const progress: EraseProgress = {}
   let step: EraseStep = 'credentials'
   try {
@@ -632,22 +621,22 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
     step = 'slugs'
     progress.slugs = await eraseOrgSlugs(orgId, slug)
   } catch (error) {
-    console.error(
-      `eraseOrg: ${step} failed for ${orgId} AFTER the export was written`,
-      error,
-    )
+    console.error(`eraseOrg: ${step} failed for ${orgId}`, error)
     await recordErasureFailure({
       orgId,
       step,
       error,
+      requestedAt: requestedMs,
       before,
-      // The org survives and its dump does not: name the object, or nobody
-      // can find the export that outlived the workspace.
-      after: { exportWritten: true, exportPath, ...progress },
+      // How far it got, so the next reader knows what is already destroyed.
+      after: { ...progress },
     })
     throw error
   }
 
+  // The proof of erasure, and now the only record of it: actor, action,
+  // target, the request it fulfilled, the inventory found and what each sweep
+  // destroyed. Ids and counts — never the content (AGL-1443).
   await firestore
     .collection('adminAudit')
     .add({
@@ -655,12 +644,12 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
       action: 'org.erased',
       target: `orgs/${orgId}`,
       before,
-      after: { exportPath, ...progress },
+      after: { requestedAt: requestedMs, ...progress },
       at: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
 
-  return { ok: true, exportPath, ...progress, hosts: hosts.size }
+  return { ok: true, ...progress, hosts: hosts.size }
 }
 
 /** An org that stops a person's account from being erased. */
