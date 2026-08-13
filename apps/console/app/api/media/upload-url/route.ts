@@ -34,7 +34,8 @@ import { randomUUID } from 'crypto'
 
 import {
   normalizeUploadContentType,
-  SIGNED_UPLOAD_MAX_BYTES,
+  requiresFileUploadEntitlement,
+  signedUploadMaxBytes,
   SIGNED_UPLOAD_TYPES_MESSAGE,
   storageContentHash,
 } from '../../../../utils/media-upload-limits'
@@ -102,7 +103,10 @@ async function handler(request: Request): Promise<Response> {
         String(body?.fileName ?? ''),
       )
       const sizeBytes = Number(body?.sizeBytes ?? 0)
-      const maxBytes = SIGNED_UPLOAD_MAX_BYTES[contentType]
+      // One allowlist (AGL-1465): resolves a ceiling for every accepted
+      // type — images included, which is AGL-1454's fix — and `undefined`
+      // for exactly the types this route must refuse.
+      const maxBytes = signedUploadMaxBytes(contentType)
       if (!maxBytes) {
         return Response.json({
           error: SIGNED_UPLOAD_TYPES_MESSAGE,
@@ -119,9 +123,14 @@ async function handler(request: Request): Promise<Response> {
           )}MB max)`,
         }, { status: 413 })
       }
-      // Video, PDF and ZIP all ride the videoMedia entitlement (AGL-162's
-      // "video & file uploads" tier gate).
-      if (!checkEntitlement(org as any, 'videoMedia')) {
+      // Video, PDF, ZIP and documents all ride the videoMedia entitlement
+      // (AGL-162's "video & file uploads" tier gate). Images do NOT — they
+      // are on every plan, and since AGL-1454 gave them a ceiling they can
+      // reach this route, so the gate can no longer be unconditional.
+      if (
+        requiresFileUploadEntitlement(contentType) &&
+        !checkEntitlement(org as any, 'videoMedia')
+      ) {
         return Response.json({ error: 'Video and file uploads require a Pro plan' }, { status: 403 })
       }
       {
@@ -183,7 +192,7 @@ async function handler(request: Request): Promise<Response> {
     const [metadata] = await file.getMetadata()
     const actualBytes = Number(metadata.size ?? 0)
     const contentType = String(metadata.contentType ?? '')
-    const maxBytes = SIGNED_UPLOAD_MAX_BYTES[contentType]
+    const maxBytes = signedUploadMaxBytes(contentType)
     if (!maxBytes || actualBytes > maxBytes) {
       await file.delete().catch(() => undefined)
       return Response.json({ error: 'Uploaded object rejected' }, { status: 415 })

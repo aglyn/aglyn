@@ -102,9 +102,11 @@ import {
   type MediaDayMedia,
 } from '../../utils/analytics-day-cache'
 import {
+  isAllowedUploadType,
   normalizeUploadContentType,
-  SIGNED_UPLOAD_MAX_BYTES,
   SIGNED_UPLOAD_THRESHOLD_BYTES,
+  UPLOAD_ACCEPT_ATTRIBUTE,
+  UPLOAD_TYPES_MESSAGE,
 } from '../../utils/media-upload-limits'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -2013,14 +2015,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // Canonical type (AGL-1317): folds zip aliases and infers pdf/zip
       // from the name when the browser reports an empty type.
       const contentType = normalizeUploadContentType(file.type, file.name)
-      const allowed =
-        contentType.startsWith('image/') ||
-        ['video/mp4', 'video/webm', 'video/quicktime'].includes(contentType) ||
-        contentType === 'application/pdf' ||
-        contentType === 'application/zip'
-      if (!allowed) {
+      // One allowlist (AGL-1465) — the same predicate the server's 415 gate
+      // calls, so the UI cannot accept a drop the API will refuse.
+      if (!isAllowedUploadType(contentType)) {
         enqueueSnackbar(
-          `"${file.name}" skipped — supported uploads: images, mp4/webm video, PDF, ZIP`,
+          `"${file.name}" skipped — ${UPLOAD_TYPES_MESSAGE.toLowerCase()}`,
           { variant: 'warning', persist: false, allowDuplicate: true },
         )
         return 0
@@ -2056,12 +2055,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         const idToken = await (user as any)?.getIdToken?.()
         // Large files go direct-to-storage via signed URLs (AGL-167/1317):
         // Vercel 413s any request body over 4.5MB at the platform layer, so
-        // the base64-JSON route can only carry ~3.3MB of raw file. Video,
-        // PDF and ZIP above the threshold PUT straight to GCS instead.
-        if (
-          SIGNED_UPLOAD_MAX_BYTES[contentType] &&
-          file.size > SIGNED_UPLOAD_THRESHOLD_BYTES
-        ) {
+        // the base64-JSON route can only carry ~3.3MB of raw file. Anything
+        // above the threshold PUTs straight to GCS instead.
+        //
+        // This used to be a CONJUNCTION of a per-type ceiling lookup and the
+        // size test (AGL-1454). A type with no ceiling entry made the first
+        // operand falsy, so the conjunction short-circuited and the file took
+        // the base64 route AT ANY SIZE — which is why every image over ~3 MB
+        // 413'd. Routing is now on size alone: `isAllowedUploadType` above
+        // already established the type, and every allowed type has a ceiling
+        // by construction of `UPLOAD_TYPES`.
+        if (file.size > SIGNED_UPLOAD_THRESHOLD_BYTES) {
           const mint = await fetch('/api/media/upload-url', {
             method: 'POST',
             headers: {
@@ -2411,7 +2415,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           ref={inputRef}
           type="file"
           multiple
-          accept="image/*,video/mp4,video/webm,video/quicktime,application/pdf,application/zip,application/x-zip-compressed,.zip"
+          accept={UPLOAD_ACCEPT_ATTRIBUTE}
           onChange={handleUpload}
           sx={{ display: 'none' }}
         />
@@ -2621,7 +2625,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         <Typography variant="body2" color="text.secondary">
           {loadingMedia
             ? 'Loading media…'
-            : 'No media here — upload images, video, or PDFs to use on your site.'}
+            : 'No media here — upload images, video, PDFs and documents to use on your site.'}
         </Typography>
       ) : (
         <Grid container spacing={2}>

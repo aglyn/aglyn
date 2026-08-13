@@ -72,9 +72,13 @@ feature; large video uploads and higher storage are gated by plan.
 
 ## Upload
 
-- Upload **images**, **video** (MP4, WebM, QuickTime), and **PDFs**. Click **Upload
-  media**, or **drag files straight from your desktop onto the library** — dropped files
-  land in the folder you have open.
+- Upload **images**, **video** (MP4, WebM, QuickTime), **PDFs**, **ZIP archives** and
+  **documents** (Word, Excel, PowerPoint, CSV, RTF, plain text, Markdown and JSON).
+  Click **Upload media**, or **drag files straight from your desktop onto the library**
+  — dropped files land in the folder you have open.
+- Documents and archives are stored and served exactly as you uploaded them — nothing
+  is opened, extracted or converted. Macro-enabled Office files (`.docm`, `.xlsm`,
+  `.pptm`) are not accepted.
 - Rename, **replace the file** behind an asset, and edit images in place. Replace is
   available from the asset's details drawer and straight from the card's overflow menu.
 
@@ -83,10 +87,13 @@ feature; large video uploads and higher storage are gated by plan.
 | Upload | Cap | Plan |
 | --- | --- | --- |
 | Images | 15 MB per file | Every plan |
-| PDFs | 10 MB per file | **Pro and above** |
+| PDFs | 25 MB per file | **Pro and above** |
+| Documents (Word, Excel, CSV, RTF, text, Markdown, JSON) | 25 MB per file | **Pro and above** |
+| Presentations (PowerPoint) | 50 MB per file | **Pro and above** |
+| ZIP archives | 50 MB per file | **Pro and above** |
 | Video | 200 MB per file | **Pro and above** |
 
-Video over 20 MB automatically uses **signed-URL uploads**, so big files go straight to
+Any file over 3 MB automatically uses **signed-URL uploads**, so big files go straight to
 storage without tying up the console. Folders nest up to **5 levels** deep.
 
 Storage is metered per site against your plan (Free 250 MB, Starter 2 GB, Pro 10 GB,

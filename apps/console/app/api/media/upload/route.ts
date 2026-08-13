@@ -40,9 +40,12 @@ import {
 } from '../../../../utils/server/media-scope'
 
 import {
-  DIRECT_UPLOAD_MAX_BYTES,
+  directUploadMaxBytes,
+  isAllowedUploadType,
+  isImageUploadType,
   normalizeUploadContentType,
-  VIDEO_TYPES,
+  requiresFileUploadEntitlement,
+  UPLOAD_TYPES_MESSAGE,
 } from '../../../../utils/media-upload-limits'
 
 // Base64 JSON payloads (AGL-162 caps). NOTE (AGL-1317): on Vercel the
@@ -138,25 +141,23 @@ async function handler(request: Request): Promise<Response> {
       typeof body?.folderId === 'string' && body.folderId
         ? String(body.folderId).slice(0, 64)
         : null
-    // Media-type allowlist (AGL-162): images for everyone; video, PDF and
-    // ZIP by tier (videoMedia flag; dark-launch workspaces uncapped as
-    // usual). Zips (AGL-1317, brand kits) are stored as plain objects —
-    // never extracted or served inline.
-    const isImage = contentType.startsWith('image/')
-    const isVideo = VIDEO_TYPES.has(contentType)
-    const isPdf = contentType === 'application/pdf'
-    const isZip = contentType === 'application/zip'
-    if (!isImage && !isVideo && !isPdf && !isZip) {
-      return Response.json({ error: 'Supported uploads: images, mp4/webm video, PDF, ZIP' }, { status: 415 })
+    // Media-type allowlist (AGL-162): images for everyone; video, PDF, ZIP
+    // and documents by tier (videoMedia flag; dark-launch workspaces
+    // uncapped as usual). This route no longer keeps its own copy of the
+    // list (AGL-1465) — `UPLOAD_TYPES` is the single source the library's
+    // `accept`, the client pre-check and both routes all derive from, so a
+    // drop the UI accepted can no longer 415 here.
+    //
+    // Zips (AGL-1317, brand kits) and documents (AGL-1465) are stored as
+    // plain objects — never extracted, parsed or rendered. Macro-enabled
+    // Office formats (.docm/.xlsm/.pptm) are deliberately NOT on the list.
+    const isImage = isImageUploadType(contentType)
+    if (!isAllowedUploadType(contentType)) {
+      return Response.json({ error: UPLOAD_TYPES_MESSAGE }, { status: 415 })
     }
     const buffer = Buffer.from(data, 'base64')
-    const maxBytes = isVideo
-      ? DIRECT_UPLOAD_MAX_BYTES.video
-      : isPdf
-        ? DIRECT_UPLOAD_MAX_BYTES.pdf
-        : isZip
-          ? DIRECT_UPLOAD_MAX_BYTES.zip
-          : DIRECT_UPLOAD_MAX_BYTES.image
+    // Non-undefined for every allowed type, which the gate above established.
+    const maxBytes = directUploadMaxBytes(contentType) as number
     if (!buffer.length || buffer.length > maxBytes) {
       return Response.json({
         error: `File is empty or too large (${Math.round(maxBytes / 1024 / 1024)}MB max)`,
@@ -172,7 +173,12 @@ async function handler(request: Request): Promise<Response> {
     const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
     // Quota/entitlements ride the owning org's doc (AGL-238).
     const org = scope.billing
-    if ((isVideo || isPdf || isZip) && !checkEntitlement(org, 'videoMedia')) {
+    // Everything that is not an image rides `videoMedia` — AGL-162's
+    // "video & file uploads" gate, which documents join (AGL-1465).
+    if (
+      requiresFileUploadEntitlement(contentType) &&
+      !checkEntitlement(org, 'videoMedia')
+    ) {
       return Response.json({
         error: 'Video and file uploads require a Pro plan',
       }, { status: 403 })
