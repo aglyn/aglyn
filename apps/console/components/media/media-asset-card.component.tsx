@@ -48,7 +48,13 @@ export interface MediaAssetCardProps {
   /** Selection (non-picker multi-select). */
   selectable?: boolean
   selected?: boolean
-  onToggleSelect?: (checked: boolean) => void
+  /**
+   * `range` reports that ⇧ was held (AGL-1462): act on everything between the
+   * last plainly-clicked card and this one. The card only reports the
+   * modifier — what a range MEANS is the grid's question, since only the grid
+   * knows the order the cards are drawn in.
+   */
+  onToggleSelect?: (checked: boolean, options?: { range?: boolean }) => void
   /** Overflow-menu actions (non-picker). */
   onCopyUrl?: () => void
   onReplace?: () => void
@@ -103,11 +109,21 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
     action?.()
   }
 
-  // The primary click: select in picker mode, open details otherwise.
-  const handlePrimary = picker
-    ? () => onSelect?.(media)
-    : onDetails
-      ? () => onDetails()
+  // The primary click: select in picker mode, open details otherwise —
+  // except a ⇧-click on a selectable card, which extends the selection
+  // (AGL-1462). Opening the details drawer on ⇧-click would be the one
+  // gesture nobody means by it, and the checkbox is a 20px target that only
+  // appears on hover, so the card body has to answer ⇧ too.
+  const handlePrimary =
+    selectable || picker || onDetails
+      ? (event: MouseEvent<HTMLElement>) => {
+          if (selectable && event.shiftKey) {
+            event.preventDefault()
+            return onToggleSelect?.(true, { range: true })
+          }
+          if (picker) return onSelect?.(media)
+          onDetails?.()
+        }
       : undefined
 
   const thumbSx = {
@@ -145,7 +161,15 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
           checked={Boolean(selected)}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
-          onChange={(event) => onToggleSelect?.(event.target.checked)}
+          onChange={(event) =>
+            onToggleSelect?.(event.target.checked, {
+              // A checkbox `change` carries the originating mouse event, so
+              // ⇧-clicking the box ranges exactly as ⇧-clicking the tile does.
+              range: Boolean(
+                (event.nativeEvent as { shiftKey?: boolean })?.shiftKey,
+              ),
+            })
+          }
           sx={{
             position: 'absolute',
             top: 2,

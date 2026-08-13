@@ -48,6 +48,12 @@ feature; large video uploads and higher storage are gated by plan.
   The confirmation opens immediately and fills the usage warning in as the scan lands,
   and the message afterwards names the file (or counts and names them, for a selection).
   Deleting is permanent: there is no undo in the console.
+- **Select a range with ⇧-click**: click one card, then hold **⇧** and click another —
+  every card between the two is selected, in the order they are on screen. Works on the
+  card itself and on its checkbox, and un-selects a whole range the same way.
+- **Deleting keeps your place.** However many times you clicked **Load more**, the files
+  you deleted disappear and everything else stays exactly where it was — so a long
+  clear-out is one pass, not one pass per file.
 
 ## Upload
 
