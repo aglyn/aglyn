@@ -38,12 +38,16 @@ export interface MediaFileTypeIcon {
 /**
  * Exact content-type matches (AGL-1463).
  *
- * The upload allowlist today is images, mp4/webm/quicktime video, PDF and
- * ZIP — see `/api/media/upload`, `SIGNED_UPLOAD_MAX_BYTES` and the library's
- * `accept` attribute. The office/text entries below are deliberately wider
- * than that allowlist: those types are not accepted yet, but a DAM asset can
- * also arrive by import or by a widened allowlist later, and an icon that is
- * merely unused costs nothing where a missing one is a blank card.
+ * The office and text entries were mapped here before the DAM accepted any
+ * of them, on the reasoning that an unused icon costs nothing where a
+ * missing one is a blank card. AGL-1465 then widened the allowlist to cover
+ * exactly them, so they are live now — `UPLOAD_TYPES` in
+ * `media-upload-limits.ts` is the one list of accepted types, and this map
+ * stays deliberately wider than it: an asset can also arrive by import, or
+ * predate a narrowing.
+ *
+ * The archive entries beyond `application/zip` (gzip/tar/7z/rar) remain in
+ * that wider category — mapped, not accepted.
  */
 const EXACT_TYPE_ICONS: Record<string, MediaFileTypeIcon> = {
   'application/pdf': { Icon: PictureAsPdfIcon, label: 'PDF' },

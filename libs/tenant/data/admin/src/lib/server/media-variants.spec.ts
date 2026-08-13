@@ -32,6 +32,7 @@
  */
 
 import {
+  classifyLoadFailure,
   generateMediaVariants,
   mediaVariantWidthsFor,
   probeMediaVariantSupport,
@@ -178,5 +179,61 @@ describe('a total failure is reported, not swallowed (AGL-1468)', () => {
 describe('probeMediaVariantSupport (AGL-1468)', () => {
   it('confirms this runtime can actually produce a smaller WebP', async () => {
     await expect(probeMediaVariantSupport()).resolves.toEqual({ ok: true })
+  })
+})
+
+/**
+ * AGL-1471: the code the probe publishes has to name the failure.
+ *
+ * Production answered `sharp-unavailable`, and that turned out to be the
+ * fallback for "the error had no `code`" — which is where BOTH interesting
+ * failures land. `sharp` collects every failed `require` of its prebuilt
+ * binaries and rethrows one composed `Error` with no `code`; `loadSharp`
+ * throws a plain `Error` when the module resolves to a non-function. The
+ * remedies are a build-tracing change and a bundler change respectively, so
+ * one string for both costs a deploy cycle to disambiguate — and this bug has
+ * already spent three weeks being invisible.
+ *
+ * The fixture is `sharp`'s real message, because the classifier reads prose:
+ * there is no field to branch on, only the help text the loader composes.
+ */
+describe('classifyLoadFailure (AGL-1471)', () => {
+  it('prefers a real error code when the platform supplies one', () => {
+    const error = Object.assign(new Error('nope'), { code: 'ERR_DLOPEN_FAILED' })
+    expect(classifyLoadFailure(error)).toBe('ERR_DLOPEN_FAILED')
+  })
+
+  it('names a native load failure, which carries no code at all', () => {
+    // The first two lines sharp composes when no prebuilt binary loads.
+    const error = new Error(
+      'Could not load the "sharp" module using the linux-x64 runtime\n' +
+        'Possible solutions:\n- Ensure optional dependencies can be installed:',
+    )
+    expect(classifyLoadFailure(error)).toBe('sharp-native-missing')
+  })
+
+  it('separates a module SHAPE problem from a missing binary', () => {
+    const error = new Error(
+      'sharp did not resolve to a function (module was object, ' +
+        'default was undefined)',
+    )
+    expect(classifyLoadFailure(error)).toBe('sharp-not-a-function')
+  })
+
+  it('keeps the old fallback for anything it cannot place', () => {
+    expect(classifyLoadFailure(new Error('something else entirely'))).toBe(
+      'sharp-unavailable',
+    )
+    expect(classifyLoadFailure(undefined)).toBe('sharp-unavailable')
+  })
+
+  it('never lets the message itself out — a code is a fixed vocabulary', () => {
+    // The health endpoint is public and a native loader failure names every
+    // path it tried, including the deployment's filesystem layout.
+    const error = new Error(
+      'Could not load the "sharp" module using the linux-x64 runtime\n' +
+        '/var/task/node_modules/sharp/node_modules/@img/sharp-linux-x64',
+    )
+    expect(classifyLoadFailure(error)).not.toContain('/var/task')
   })
 })
