@@ -131,8 +131,21 @@ export const schema: Aglyn.ComponentSchema<PaginationElementProps> = {
       label: 'Variant',
       description: 'Outlined draws a border around each page item.',
       component: Aglyn.FieldComponentType.SELECT,
+      // REAL SENTINELS here, not deletions (AGL-1453) — the opposite call
+      // from Button's and Typography's "Default" options, for a reason that
+      // is visible in the lists themselves: those name MUI's default among
+      // their choices, so `''` was a duplicate. These four offered ONLY the
+      // non-default alternative, so `''` was the sole route back — and it
+      // could not persist (AGL-1191). Picking Outlined, Rounded, Primary or
+      // Small was a one-way door: the "(default)" option reverted on save and
+      // the field snapped back to what it was.
+      //
+      // Each sentinel is MUI Pagination's own literal default for that prop
+      // (`Pagination.js`: `variant = 'text'`, `shape = 'circular'`,
+      // `color = 'standard'`, `size = 'medium'`), so the labels stop lying
+      // and a stored value renders exactly what an unset one did.
       options: [
-        { value: '', label: 'Text (default)' },
+        { value: 'text', label: 'Text (default)' },
         { value: 'outlined', label: 'Outlined' },
       ],
     },
@@ -142,7 +155,7 @@ export const schema: Aglyn.ComponentSchema<PaginationElementProps> = {
       description: 'Rounded squares instead of circles.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
-        { value: '', label: 'Circular (default)' },
+        { value: 'circular', label: 'Circular (default)' },
         { value: 'rounded', label: 'Rounded' },
       ],
     },
@@ -152,7 +165,7 @@ export const schema: Aglyn.ComponentSchema<PaginationElementProps> = {
       description: 'Color of the selected page item.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
-        { value: '', label: 'Standard (default)' },
+        { value: 'standard', label: 'Standard (default)' },
         { value: 'primary', label: 'Primary' },
         { value: 'secondary', label: 'Secondary' },
       ],
@@ -162,7 +175,7 @@ export const schema: Aglyn.ComponentSchema<PaginationElementProps> = {
       // size, and offering it would render nothing different.
       ...FIELD_SIZE,
       options: [
-        { value: '', label: 'Medium (default)' },
+        { value: 'medium', label: 'Medium (default)' },
         { value: 'small', label: 'Small' },
         { value: 'large', label: 'Large' },
       ],

@@ -73,8 +73,9 @@ export const schema: Aglyn.ComponentSchema = {
       description:
         'Defines the directional flow using the `flex-direction` style property. It is applied for all screen sizes.',
       component: Aglyn.FieldComponentType.SELECT,
+      // "Default" deleted (AGL-1453): unpersistable, and a second name for
+      // `column`, MUI Stack's own default, already on the list.
       options: [
-        { value: '', label: 'Default' },
         { value: 'column', label: 'Column' },
         { value: 'column-reverse', label: 'Column Reversed' },
         { value: 'row', label: 'Row' },
@@ -87,8 +88,16 @@ export const schema: Aglyn.ComponentSchema = {
       description:
         'Defines how the browser distributes space between and around content items along the main-axis of the container.',
       component: Aglyn.FieldComponentType.SELECT,
+      // "Default" deleted (AGL-1453). Unpersistable, and a second name for
+      // `flex-start`: CSS's initial `justify-content` is `normal`, which on a
+      // flex container — which a Stack always is — behaves as `flex-start`.
+      //
+      // Deleted rather than sentinelled for a second reason specific to this
+      // prop: `justifyContent` is destructured out ABOVE and pushed into
+      // `sx`, so it never passes through `dropClearedProps`. It is the one
+      // attribute on this component the guard does not cover, so the right
+      // move is to stop minting values it would have to catch.
       options: [
-        { value: '', label: 'Default' },
         { value: 'flex-start', label: 'Flex Start' },
         { value: 'center', label: 'Center' },
         { value: 'flex-end', label: 'Flex End' },

@@ -197,8 +197,19 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
         'that navigates.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Render as',
+      // `'button'` is a REAL SENTINEL, not a deletion (AGL-1453): `''` here
+      // spelled an author's actual choice, and the one they could not make.
+      // The attributes form strips `''` before save (AGL-1191), so a link
+      // switched to Text link had NO route in this dropdown back to Button —
+      // and 213 of the 326 Screen Links in the corpus are in that mode.
+      //
+      // Safe because `renderAs` never reaches MUI: it is destructured out
+      // above and read only as `=== 'link'` / `=== 'linkButton'`, so
+      // `'button'` and an absent value take the identical branch. That is
+      // also what keeps every link authored before AGL-1195 rendering
+      // unchanged.
       options: [
-        { value: '', label: 'Button' },
+        { value: 'button', label: 'Button' },
         { value: 'link', label: 'Text link' },
         { value: 'linkButton', label: 'Link (button styling)' },
       ],
@@ -217,8 +228,9 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
       description: 'The variant to use.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Variant',
+      // "Default" deleted (AGL-1453): unpersistable, and a second name for
+      // `text`, MUI Button's own default, already on the list.
       options: [
-        { value: '', label: 'Default' },
         { value: 'text', label: 'Text' },
         { value: 'outlined', label: 'Outlined' },
         { value: 'contained', label: 'Contained' },

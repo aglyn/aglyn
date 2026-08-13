@@ -89,7 +89,17 @@ async function handler(request: Request): Promise<Response> {
               .catch(() => undefined)
           : undefined
 
-      const result = await eraseOrg(org.id)
+      // Per-org, NOT per-run (AGL-1455). The whole loop sat inside the outer
+      // `try`, so a throw from `eraseOrg` — and every step after its export
+      // write can throw — abandoned every org left in the batch and answered
+      // 500. Since `erasureRequestedAt` survives a failure, the same org led
+      // the next run and starved them again: one broken erasure indefinitely
+      // blocking everyone else's. `eraseOrg` has already written the durable
+      // `org.erase-failed` audit row by the time this catches.
+      const result = await eraseOrg(org.id).catch((error) => {
+        console.error(`run-erasures: erasure failed for ${org.id}`, error)
+        return { ok: false, skippedReason: 'erase-failed' }
+      })
       if (!result.ok) {
         skipped.push({ orgId: org.id, reason: result.skippedReason })
         continue
