@@ -11,8 +11,8 @@ Aglyn uses **two** email systems that do different jobs and don't conflict:
 | System | Job | Sends as | Config |
 | --- | --- | --- | --- |
 | **Google Workspace** | Human **mailboxes** + **inbound** mail (`info@aglyn.com` inbox). Your `MX` records point here. | n/a (receiving) | Workspace admin |
-| **Firebase Auth** | Auth emails only — verification, password reset. | `@aglyn.com` via `_spf.firebasemail.com` | Firebase console |
-| **Resend** | Everything else the **app** sends programmatically. | `noreply@aglyn.com` | `RESEND_API_KEY` + `USAGE_EMAIL_FROM` |
+| **Firebase Auth** | Auth emails only — verification, password reset. **Does not send its own mail**: configured `CUSTOM_SMTP`, relaying through Resend (`smtp.resend.com`). | `noreply@aglyn.com` (via Resend) | Firebase console |
+| **Resend** | Everything else the **app** sends programmatically — and the Firebase Auth relay above. | `noreply@aglyn.com` | `RESEND_API_KEY` + `USAGE_EMAIL_FROM` |
 
 Sending **from** `@aglyn.com` does **not** mean sending **through** Google.
 Resend sends on your behalf and proves it's authorized with DKIM/SPF DNS
@@ -28,14 +28,22 @@ Postmark / Mailgun), chosen because it's purpose-built for app email
 
 ## Current DNS facts (aglyn.com)
 
-- **DNS host:** Google Cloud DNS (`ns-cloud-*.googledomains.com`) — add records
-  in the Google Cloud console → Network Services → Cloud DNS → `aglyn.com` zone.
+- **DNS host:** **Vercel DNS** (`ns1/ns2.vercel-dns.com`) — manage records with
+  `vercel dns` or the Vercel dashboard. (An earlier version of this doc said
+  Google Cloud DNS; that zone is gone — the Cloud DNS API is not even enabled
+  on the project. Verified at the TLD parents 2026-08-13.)
 - **MX:** Google Workspace. ✅ (do not change)
-- **SPF:** `v=spf1 include:_spf.google.com include:_spf.firebasemail.com ~all`
-  — Resend's SPF goes on the `send.` subdomain, so this root record is **not**
-  edited.
-- **DMARC:** `p=none` (monitoring) — permissive, so verification won't be
-  blocked. Consider tightening to `p=quarantine` later, once Resend is verified.
+- **SPF:** `v=spf1 include:_spf.google.com ~all` — one lookup. The old
+  `include:_spf.firebasemail.com` was **removed 2026-08-13** (AGL-1495): Firebase
+  relays through Resend, so the include only authorized SendGrid's shared IP
+  space for nothing. Resend's SPF lives on the `send.` subdomain; this root
+  record stays Google-only.
+- **DMARC:** `p=quarantine; pct=100; sp=quarantine` with aggregate + forensic
+  reports to `webmaster@aglyn.com` (AGL-1493, 2026-08-13). Flip to `p=reject`
+  once the report backlog confirms all three senders (Resend, Workspace,
+  Stripe) pass aligned — all product mail is DKIM `d=aglyn.com` strict.
+- **aglyn.app:** locked down 2026-08-13 (AGL-1494) — `v=spf1 -all`, null DKIM,
+  `p=reject; sp=reject`. Nothing legitimate sends from it; keep it that way.
 
 ## One-time setup
 
