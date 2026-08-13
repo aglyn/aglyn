@@ -87,7 +87,83 @@ export function reportFirestoreDenial(collection?: string): void {
 
 /** Report a listen the SERVER answered. No-op when nothing is registered. */
 export function reportFirestoreServerRead(): void {
+  noteFirestoreServerRead()
   reporters?.onServerRead()
+}
+
+/**
+ * When ANY listener in this tab last got a server-answered snapshot.
+ *
+ * Library-internal evidence, kept regardless of whether app reporters are
+ * registered — `helpers/use-doc` deliberately does not feed `session-health`
+ * (its callers are the besigner document family, where a false verdict hurts
+ * most) but its server answers are still proof the session can read, and
+ * {@link refusedRetryDelayMs} needs that proof from every hook.
+ */
+let lastServerReadAt = 0
+
+/**
+ * Record a server-answered snapshot WITHOUT reporting to `session-health`.
+ * `reportFirestoreServerRead` calls this; `helpers/use-doc` calls only this.
+ */
+export function noteFirestoreServerRead(): void {
+  lastServerReadAt = Date.now()
+}
+
+/** Test seam — the evidence is module scope by design. */
+export function resetFirestoreServerReadEvidence(): void {
+  lastServerReadAt = 0
+}
+
+/**
+ * Cadence for a refusal streak that has outlived the retry budget (AGL-1066),
+ * split by what the refusal is evidence OF (AGL-1440).
+ *
+ * A `permission-denied` has two very different causes and the client cannot
+ * tell them apart from the error alone:
+ *
+ *  - a SESSION fault — stale token, App Check hiccup, an AGL-1143 SSO
+ *    session that refuses everything. Every listener in the tab is refused,
+ *    the heal is an AGL-664 in-place re-auth or a token that attaches late,
+ *    and reopening every 2s is what brings the page back for a recovery
+ *    nobody announced. The ceiling on this cadence is the 38 AGL-1358 write
+ *    guards: it is also how long a save stays refused AFTER the heal.
+ *
+ *  - a RULES denial — the ref itself is one this user may never read (a
+ *    sentinel id, a scoped collaborator's off-limits collection). No amount
+ *    of retrying will ever succeed, and one such listener left open cost
+ *    ~43K refusals a day (AGL-1440: 366K denies in 30 days for two users,
+ *    nearly all of them this loop re-asking a settled question).
+ *
+ * The discriminator is the one this module already trusts for the
+ * session-health verdict: A GENUINELY DEAD SESSION HAS NO SERVER ANSWER TO
+ * OFFER. If any listener has been answered by the server since this
+ * listener's streak began, the session can read and this refusal is about
+ * the ref — so it backs off to a slow cadence. Absent that proof it keeps
+ * the 2s heal cadence, which is the conservative direction: the worst
+ * mistake is a rules-denied listener retrying fast, never a session fault
+ * retrying slow.
+ *
+ * The slow cadence deliberately does not abandon the listen: rules change
+ * (a membership granted mid-session), and the AGL-664 heal broadcast still
+ * reopens instantly regardless of cadence. And it cannot delay a save — a
+ * ref the rules refuse to serve is one they refuse to write, so there is no
+ * AGL-1358 guard waiting on it.
+ */
+export const SESSION_REFUSED_RETRY_DELAY_MS = 2_000
+export const RULES_REFUSED_RETRY_DELAY_MS = 60_000
+
+/**
+ * The delay before a spent refusal streak reopens its listen.
+ *
+ * `streakStartedAt` is when the streak's FIRST refusal landed. Evaluated per
+ * retry, not once: evidence that arrives mid-streak (another listener's
+ * first server answer) moves the next reopen to the slow cadence.
+ */
+export function refusedRetryDelayMs(streakStartedAt: number): number {
+  return lastServerReadAt > streakStartedAt
+    ? RULES_REFUSED_RETRY_DELAY_MS
+    : SESSION_REFUSED_RETRY_DELAY_MS
 }
 
 /**
