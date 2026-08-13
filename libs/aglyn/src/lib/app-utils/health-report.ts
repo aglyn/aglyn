@@ -103,6 +103,88 @@ export function healthHttpStatus(status: 'ok' | 'degraded'): number {
 }
 
 /**
+ * Firestore backup state, reduced to a health verdict (AGL-1490, AGL-1502).
+ *
+ * The 2026-08-02 backup sat at `NOT_AVAILABLE` for eleven days and nothing
+ * noticed — the schedule ran, the API reported the failure, and no one was
+ * listening. This turns "is the newest backup real and recent" into the same
+ * 200/503 contract the other health checks speak, so the existing uptime
+ * probe + alert path is the listener.
+ *
+ * Pure on purpose: the route fetches, this decides, the spec exercises every
+ * branch without a network.
+ */
+export interface BackupSnapshot {
+  /** `READY` | `CREATING` | `NOT_AVAILABLE` (or whatever the API adds next). */
+  state?: string
+  /** ISO timestamp of the data the backup captured. */
+  snapshotTime?: string
+}
+
+export interface BackupsCheck extends HealthCheck {
+  /**
+   * Histogram by state — `{ READY: 1, NOT_AVAILABLE: 1 }`. Counts only: the
+   * endpoint is public, and backup ids or resource paths have no business in
+   * it. Counts are enough to know WHAT is wrong before opening gcloud.
+   */
+  states: Record<string, number>
+  /** Age of the newest READY backup, in days. Null when there is none. */
+  newestReadyAgeDays: number | null
+}
+
+/**
+ * Weekly Sunday schedule + one day of slack. A healthy cadence never exceeds
+ * 7; day 8 means the last run produced nothing usable.
+ */
+export const MAX_BACKUP_AGE_DAYS = 8
+
+export function backupsHealth(
+  backups: BackupSnapshot[],
+  ms: number,
+  now: number = Date.now(),
+): BackupsCheck {
+  const states: Record<string, number> = {}
+  for (const backup of backups) {
+    const state = backup.state ?? 'UNKNOWN'
+    states[state] = (states[state] ?? 0) + 1
+  }
+
+  const newestReadyMs = backups
+    .filter((backup) => backup.state === 'READY' && backup.snapshotTime)
+    .map((backup) => Date.parse(backup.snapshotTime as string))
+    .filter((time) => Number.isFinite(time))
+    .reduce<number | null>((newest, time) => Math.max(newest ?? time, time), null)
+  const newestReadyAgeDays =
+    newestReadyMs === null
+      ? null
+      : Math.round(((now - newestReadyMs) / 86_400_000) * 10) / 10
+
+  // `CREATING` is tolerated: every Sunday there is a window where the newest
+  // backup legitimately is one, and paging on it weekly would teach everyone
+  // to ignore the alert. It earns no freshness credit either — a backup that
+  // never finishes fails the age rule instead.
+  const failed = backups.some(
+    (backup) => backup.state !== 'READY' && backup.state !== 'CREATING',
+  )
+
+  const code = failed
+    ? 'backup-failed'
+    : newestReadyAgeDays === null
+      ? 'no-ready-backup'
+      : newestReadyAgeDays > MAX_BACKUP_AGE_DAYS
+        ? 'backup-stale'
+        : undefined
+
+  return {
+    ok: code === undefined,
+    ms,
+    ...(code === undefined ? {} : { code }),
+    states,
+    newestReadyAgeDays,
+  }
+}
+
+/**
  * Reuse a probe result for `ttlMs`, per instance.
  *
  * The endpoint is public and unauthenticated, so an unthrottled dependency

@@ -17,9 +17,10 @@ measure availability and will commit to a number once there is a quarter of it
 ## Health endpoints
 
 ```
-GET  https://app.aglyn.com/api/health     console
-GET  https://demo.aglyn.com/api/health    tenant runtime
-HEAD <either>                             liveness only, touches nothing
+GET  https://app.aglyn.com/api/health          console
+GET  https://demo.aglyn.com/api/health         tenant runtime
+GET  https://app.aglyn.com/api/health/backups  Firestore backup state (AGL-1490)
+HEAD <any>                                     liveness only, touches nothing
 ```
 
 ```json
@@ -114,15 +115,86 @@ history is not evidence of 100% uptime.** Do not quote it as one. It exists so
 the endpoints are exercised continuously from outside the deploy, and so there
 is something concrete to point a paid external monitor at when one is chosen.
 
+## Production monitoring and alerting (AGL-1502, 2026-08-13)
+
+The external monitor AGL-1148 called for. Lives in **GCP Cloud Monitoring on
+`aglyn-main`** — already paid for (free tier: 1M uptime-check executions/month;
+current usage ≈ 300k), alerting built in, and not hosted on anything it
+monitors. **Every alert emails zach@aglyn.com** (notification channel
+`7043898327231541746`).
+
+Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
+
+### What is watched
+
+| Check | Target | Asserts | Interval |
+| --- | --- | --- | --- |
+| `console-health` | `app.aglyn.com/api/health` | HTTP 2xx **and** `$.status == "ok"` | 5 min |
+| `console-imaging` | `app.aglyn.com/api/health` | `$.imaging.ok == true` | 15 min |
+| `tenant-health` | `aglyn.com/api/health` | HTTP 2xx **and** `$.status == "ok"` | 5 min |
+| `marketing-home` | `aglyn.com/` | 2xx and body contains `Aglyn` | 5 min |
+| `customer-site` | `demo.aglyn.app/` | 2xx and body contains `Aglyn Demo` | 5 min |
+| `backup-state` | `app.aglyn.com/api/health/backups` | HTTP 2xx and `$.status == "ok"` | 15 min |
+| Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
+| Cloud Scheduler | job attempt logged at `severity >= ERROR` | any | log match |
+
+Notes that keep these honest:
+
+- `console-imaging` exists because `imaging.ok` is **deliberately body-only** —
+  variant encoding being down is degraded, not an outage, so it must not 503
+  the main check. A status-code monitor is blind to it; this check reads the
+  body with a JSONPath matcher. That failure mode was real: three weeks of no
+  WebP variants, discovered by archaeology (AGL-1468).
+- `backup-state` closes AGL-1490's alert gap: 503 when any backup is failed,
+  none is READY, or the newest READY is older than 8 days. The probe's verdict
+  logic is `backupsHealth` in `health-report.ts`, spec-covered.
+- `customer-site` asserts on the demo site's own content. If someone renames
+  the demo site's title away from "Aglyn Demo", this check goes red — update
+  the content matcher, don't delete the check.
+- Incident emails carry a runbook snippet pointing back at this file. Alert
+  fires after ~10 minutes of sustained failure (2+ probe regions), so a single
+  blip does not page.
+
+### What is deliberately NOT watched (the honest list)
+
+- **Vercel function errors and logs.** Hobby has no log drains — a 500 spike
+  invisible to the health checks (one broken route, one bad deploy path) is
+  observable only by a user report. **Upgrade path:** Vercel Pro unlocks log
+  drains → pipe to GCP Logging → the same alerting stack picks it up.
+- **APM / client-side error tracking.** No Sentry or similar. A browser-side
+  crash in the builder is invisible end to end. Post-launch decision, tracked
+  in AGL-1148's follow-ups; Sentry's free tier (5k events/mo) likely suffices
+  at beta scale.
+- **Email delivery** (Resend outages), **Stripe webhooks**, and **DNS**: no
+  synthetic coverage. Each has failed loudly rather than silently so far;
+  revisit if that stops being true.
+
+### Cost and plumbing
+
+Everything above sits in the Cloud Monitoring free tier: ~300k uptime
+executions/month against a 1M free allowance, alert policies and the email
+channel are free, and the backup probe is one metadata-only REST call per
+15 minutes. **Expected marginal cost: $0.** (Budget guard: the existing
+`aglyn-main monthly spend` $20 alert.)
+
+The backup probe needed one IAM grant:
+`roles/datastore.backupsViewer` (backups get/list, nothing else) to
+`firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com` (2026-08-13).
+
+Checks and policies were created via the Monitoring REST API; to inspect or
+edit, the console UI is fine, or
+`gcloud monitoring uptime list-configs --project=aglyn-main`.
+
 ## Still missing
 
 Tracked in **AGL-1148**:
 
-- An external uptime monitor with real alerting. The GitHub probe is not one,
-  and the status page is a live check rather than a monitor — neither wakes
-  anybody up.
-- **Stored samples.** Until something records history there is no availability
-  figure to publish, which is why the status page shows none.
+- ~~An external uptime monitor with real alerting.~~ Exists as of 2026-08-13 —
+  see "Production monitoring and alerting" above. The GitHub probe stays as a
+  second, independent vantage point.
+- **Stored samples** now accrue in Cloud Monitoring automatically; the
+  availability figure can be read from the uptime dashboards once a quarter of
+  history exists.
 - An incident-response and comms process, and whoever updates the status page
   during one.
 - The uptime percentage itself, plus SLA credit terms — the commercial half,
