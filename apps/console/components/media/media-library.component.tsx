@@ -95,6 +95,7 @@ import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
+import { mediaSrc, mediaThumbnailSrc } from '../../utils/media-src'
 import {
   readAnalyticsDays,
   recentDayIds,
@@ -3203,7 +3204,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             String(editor.media.contentType ?? '').startsWith('video/') ? (
               <Box
                 component="video"
-                src={editor.media.url}
+                // The CDN URL, not the raw storage one — viable for video
+                // since `serveMediaCdn` honors Range (AGL-1442 S4): this
+                // player has `controls`, and scrubbing it issues ranged
+                // fetches. Falls back to `media.url` when there is no
+                // `cdnPath` (free tier, private assets).
+                src={mediaSrc(editor.media)}
                 controls
                 muted
                 sx={{ width: '100%', borderRadius: 1 }}
@@ -3213,7 +3219,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               ) ? (
               <Box
                 component="img"
-                src={editor.media.url}
+                // A 200px-tall preview in a 340px drawer: the 640px WebP
+                // variant (retina headroom), same S1 move the grid tile got
+                // — this drawer was the raw-URL consumer S1's sweep missed.
+                src={mediaThumbnailSrc(editor.media, 640)}
                 alt={editor.alt}
                 sx={{
                   width: '100%',
