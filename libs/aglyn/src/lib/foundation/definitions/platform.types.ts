@@ -195,6 +195,34 @@ export interface AglynHost extends AglynDocument {
       logo?: string
     }
   }
+  /**
+   * Customer-configured third-party analytics (AGL-138/661). Long written by
+   * the console and read by the tenant through `any` casts; declared as of
+   * AGL-1498 so the write-deny guard sees it through the type rather than
+   * not at all. The id is format-checked (`GA_MEASUREMENT_ID_PATTERN`)
+   * before it reaches the inline script, and its LOADING is consent-gated
+   * by `visitor-consent.ts` — see `consent` below.
+   */
+  analytics?: {
+    gaMeasurementId?: string
+  }
+  /**
+   * Visitor consent tool (AGL-1498). The tool is ACTIVE when this is absent
+   * — but only ever on sites that use a consent-gated feature (today:
+   * `analytics.gaMeasurementId`); with none configured no consent UI exists
+   * and this map decides nothing. `disabled: true` is the host's opt-out
+   * (they run their own consent solution, and gated features load ungated).
+   * `mode` is the host's posture: `'geo'` (geo-conditional: implied consent
+   * with an always-available opt-out in opt-out regions, a prior-consent
+   * banner in EU/EEA/UK and unknown regions) or `'strict'` (the banner for
+   * everyone). Absent `mode` behaves as `'geo'`. Absent-means-active is the
+   * only safe default for the tool itself: a schema slip must fail toward
+   * asking, never toward silently tracking. See `visitor-consent.ts`.
+   */
+  consent?: {
+    disabled?: boolean
+    mode?: 'geo' | 'strict'
+  }
   screens?: Record<ScreenUid, ScreenSlug>
   /** Screen rendered (noindex) for unmatched paths (AGL-87). */
   notFoundScreenId?: ScreenUid
@@ -295,6 +323,16 @@ export const HOST_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
     'tokens. Publisher-authored contact detail that renders into their own ' +
     'pages and emails; undeclared on this interface, so the guard sees it ' +
     'through the resolver sweep rather than the type.',
+  analytics:
+    'The Google Analytics measurement id the host configures for their own ' +
+    'site (AGL-138). Authoring: it only ever tags THEIR pages, the tenant ' +
+    'format-checks it before the inline script, and loading it is ' +
+    'consent-gated (AGL-1498). A rewrite mis-tags the rewriter\'s own site.',
+  consent:
+    'The visitor consent tool switch (AGL-1498). Decides whether the ' +
+    'host\'s OWN site asks its visitors before loading the analytics the ' +
+    'host configured — their compliance posture on their own pages, exactly ' +
+    'like `seo.discourageSearchEngines`. No platform gate reads it.',
   createdAt:
     'Stamped by /api/hosts/create. Nothing gates on it — the org owns ' +
     'billing dates — and console saves touch it freely.',

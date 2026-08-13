@@ -28,6 +28,7 @@ import { useEffect, useRef, useState, type DependencyList } from 'react'
 import {
   DENIAL_STREAK_TO_REPORT,
   denialLabelForQuery,
+  refusedRetryDelayMs,
   reportFirestoreDenial,
   reportFirestoreServerRead,
   subscribeFirestoreSessionHeal,
@@ -36,27 +37,16 @@ import {
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
 
-/**
- * Cadence once a refusal streak has outlived the retry budget (AGL-1066).
- *
- * Until that point the fault is indistinguishable from the AGL-216/217
- * post-sign-in token race, which resolves in well under two seconds, so the
- * fast cadence is what recovers the page. Past it the session is refusing
- * this listen and reopening 2.5 listeners a second buys nothing — but the
- * loop must NOT stop, because the heal (an AGL-664 in-place re-auth) takes as
- * long as a human takes to type a password. A heal broadcast now reopens the
- * listen the instant that lands (see `subscribeFirestoreSessionHeal`), so
- * this cadence is the fallback for a recovery nobody announced, not the only
- * road back.
- *
- * The ceiling on this number is not the churn — it is the 38 AGL-1358 write
- * guards, which refuse a save while `fromCache` is true and can only learn
- * otherwise from a reopened listener that the server answers. Whatever this
- * is, it is also how long a save stays refused AFTER the session heals. Two
- * seconds still cuts the churn fivefold and is inside the latency of the
- * click that follows a re-auth.
+/*
+ * The cadence once a refusal streak has outlived the retry budget lives in
+ * `firestore-denial-reporter.ts` (`refusedRetryDelayMs`), shared by all
+ * three listener hooks: 2s while the fault could be the whole session — that
+ * is what recovers the page after a heal nobody announced, and the ceiling
+ * on it is the 38 AGL-1358 write guards — and 60s once another listener's
+ * server answer proves the session reads and this refusal is about the ref
+ * (AGL-1440). A heal broadcast reopens instantly regardless (see
+ * `subscribeFirestoreSessionHeal`).
  */
-const REFUSED_RETRY_DELAY_MS = 2_000
 
 export type FirestoreCollectionStatus = 'loading' | 'success' | 'error'
 
@@ -165,6 +155,8 @@ export function useFirestoreCollection<T = DocumentData>(
      * reaches its budget and can never report anything.
      */
     let deniedStreak = 0
+    /** Epoch ms of the current streak's first refusal (AGL-1440). */
+    let deniedStreakStartedAt = 0
     let denialReported = false
     /**
      * The retry budget is spent and the last thing the server did was refuse
@@ -308,6 +300,10 @@ export function useFirestoreCollection<T = DocumentData>(
           // produces no error callback at all, so this cannot fire offline.
           if (err?.code === 'permission-denied') {
             deniedStreak += 1
+            // When the streak began — the reference point that lets
+            // `refusedRetryDelayMs` ask whether the session has read from
+            // the server SINCE this listen started being refused (AGL-1440).
+            if (deniedStreak === 1) deniedStreakStartedAt = Date.now()
             if (deniedStreak >= DENIAL_STREAK_TO_REPORT) {
               setServerDenied(true)
               if (!denialReported) {
@@ -321,7 +317,7 @@ export function useFirestoreCollection<T = DocumentData>(
             timer = setTimeout(
               subscribe,
               deniedStreak > MAX_RETRIES
-                ? REFUSED_RETRY_DELAY_MS
+                ? refusedRetryDelayMs(deniedStreakStartedAt)
                 : RETRY_DELAY_MS,
             )
           } else {
@@ -341,9 +337,14 @@ export function useFirestoreCollection<T = DocumentData>(
              *
              * Any OTHER terminal error still stops exactly as before — this
              * is deliberately keyed on the refusal streak, not on `attempt`.
+             * How slow the road is depends on whether the refusal looks like
+             * the session or the ref — see `refusedRetryDelayMs` (AGL-1440).
              */
             if (deniedStreak > MAX_RETRIES) {
-              timer = setTimeout(subscribe, REFUSED_RETRY_DELAY_MS)
+              timer = setTimeout(
+                subscribe,
+                refusedRetryDelayMs(deniedStreakStartedAt),
+              )
             }
           }
         },

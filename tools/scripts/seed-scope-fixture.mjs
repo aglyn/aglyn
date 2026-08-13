@@ -65,7 +65,7 @@ const projectId =
     : 'aglyn-main'
 
 if (!getApps().length) initializeApp({ projectId })
-const db = getFirestore()
+const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 const auth = getAuth()
 
 const ORG_ID = 'scope-agency'

@@ -44,6 +44,7 @@ import { useFirestoreDoc } from './use-firestore-doc'
 import { useDocData } from './helpers/use-doc'
 import {
   reportFirestoreSessionHeal,
+  resetFirestoreServerReadEvidence,
   setFirestoreSessionReporters,
 } from './firestore-denial-reporter'
 
@@ -150,6 +151,11 @@ describe.each(subjects)('%s heals on re-auth (AGL-1066)', (_name, subject) => {
     jest.useFakeTimers()
     // The verdict is what is under test here, not the reporting.
     setFirestoreSessionReporters(null)
+    // Server-read evidence is module state, and fake-timer clocks from
+    // earlier tests can sit AHEAD of this test's — real time is monotonic,
+    // this seam only exists for tests (AGL-1440). The sequences below are
+    // session-wide faults, which must measure with no evidence on record.
+    resetFirestoreServerReadEvidence()
   })
   afterEach(() => jest.useRealTimers())
 

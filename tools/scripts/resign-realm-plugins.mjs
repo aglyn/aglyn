@@ -30,7 +30,7 @@ const privateKey = createPrivateKey({
 })
 
 initializeApp({ credential: applicationDefault() })
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 const snapshot = await firestore
   .collectionGroup('pluginVersions')

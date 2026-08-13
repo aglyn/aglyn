@@ -61,13 +61,31 @@ export function verifyIdToken(idToken: string) {
 }
 
 /**
+ * Optional Firestore database override (AGL-1490). Unset — the default in
+ * every environment today — targets the `(default)` database exactly as
+ * before. Set, it points every Admin-SDK Firestore accessor at the named
+ * database (e.g. one created by `gcloud firestore databases restore` during
+ * disaster recovery, see docs/DISASTER_RECOVERY.md) by configuration instead
+ * of a code change. Read at call time, not module load, so a process
+ * restarted with new env — and a spec toggling `process.env` — sees the
+ * current value. An empty string is normalized to undefined so the SDK's own
+ * `(default)` fallback applies.
+ */
+export function firestoreDatabaseId(): string | undefined {
+  return process.env.FIRESTORE_DATABASE_ID || undefined
+}
+
+/**
  * Compatibility facade replacing firebase-admin v14's removed namespace API
  * (`import * as admin from 'firebase-admin'`) so existing call sites
  * (`fbAdmin.firestore()`, `fbAdmin.firestore.Timestamp`, `fbAdmin.auth()`)
  * keep working unchanged, backed internally by the modular SDK.
  */
 function firestoreNamespace(app?: App) {
-  return getFirestore(app ?? fbAdminApp)
+  // `getFirestore(app, undefined)` resolves to the `(default)` database —
+  // the SDK falls back via `databaseId || DEFAULT_DATABASE_ID` — so behavior
+  // with FIRESTORE_DATABASE_ID unset is identical to `getFirestore(app)`.
+  return getFirestore(app ?? fbAdminApp, firestoreDatabaseId())
 }
 firestoreNamespace.FieldValue = FieldValue
 firestoreNamespace.Timestamp = Timestamp

@@ -20,6 +20,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { ObservableStatus, FirestoreDocOptions } from '../firebase/firebase-services'
 import {
   DENIAL_STREAK_TO_REPORT,
+  noteFirestoreServerRead,
+  refusedRetryDelayMs,
   subscribeFirestoreSessionHeal,
 } from '../firestore-denial-reporter'
 import useModifyDocCallback, {
@@ -28,8 +30,8 @@ import useModifyDocCallback, {
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
-/** See `use-firestore-collection`'s copy of this (AGL-1066). */
-const REFUSED_RETRY_DELAY_MS = 2_000
+// The refused cadence is shared policy — see `refusedRetryDelayMs` in
+// `firestore-denial-reporter.ts` (AGL-1066, AGL-1440).
 
 /**
  * Raw `onSnapshot` listener with its own retry/backoff instead of
@@ -87,6 +89,8 @@ export function useDocData<T>(
      * a false verdict would hurt most.
      */
     let deniedStreak = 0
+    /** Epoch ms of the current streak's first refusal (AGL-1440). */
+    let deniedStreakStartedAt = 0
     /**
      * The retry budget is spent and the server's last word was a refusal —
      * what keeps `status: 'error'` from being undone by the cached emission
@@ -107,6 +111,11 @@ export function useDocData<T>(
             terminal = false
             deniedStreak = 0
             setServerDenied(false)
+            // Evidence only, deliberately not the reporting call: this hook
+            // stays out of `session-health` (see `deniedStreak` above), but
+            // its server answers are still proof the session can read, which
+            // is what `refusedRetryDelayMs` splits the cadence on (AGL-1440).
+            noteFirestoreServerRead()
           } else if (deniedStreak === 0) {
             // Cached, but nothing has been refused since the server last
             // answered — not the AGL-1066 fault, so the budget is refunded
@@ -146,6 +155,7 @@ export function useDocData<T>(
           // which must never read as a dead session.
           if ((err as { code?: string })?.code === 'permission-denied') {
             deniedStreak += 1
+            if (deniedStreak === 1) deniedStreakStartedAt = Date.now()
             if (deniedStreak >= DENIAL_STREAK_TO_REPORT) setServerDenied(true)
           }
           if (attempt < MAX_RETRIES) {
@@ -153,7 +163,7 @@ export function useDocData<T>(
             timer = setTimeout(
               subscribe,
               deniedStreak > MAX_RETRIES
-                ? REFUSED_RETRY_DELAY_MS
+                ? refusedRetryDelayMs(deniedStreakStartedAt)
                 : RETRY_DELAY_MS,
             )
           } else {
@@ -163,8 +173,12 @@ export function useDocData<T>(
             resolveFirstValueRef.current?.()
             // A refusal streak keeps a slow road back for a recovery nobody
             // announced — see the same branch in `use-firestore-collection`.
+            // The cadence splits on session-vs-ref evidence (AGL-1440).
             if (deniedStreak > MAX_RETRIES) {
-              timer = setTimeout(subscribe, REFUSED_RETRY_DELAY_MS)
+              timer = setTimeout(
+                subscribe,
+                refusedRetryDelayMs(deniedStreakStartedAt),
+              )
             }
           }
         },

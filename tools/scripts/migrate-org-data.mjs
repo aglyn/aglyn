@@ -44,7 +44,7 @@ if (!projectId || !clientEmail || !privateKey) {
 if (!getApps().length) {
   initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
 }
-const db = getFirestore()
+const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 const hosts = (await db.collection('hosts').get()).docs
 let plans = 0

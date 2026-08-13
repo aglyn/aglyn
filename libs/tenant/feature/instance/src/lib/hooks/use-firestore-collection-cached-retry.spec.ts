@@ -59,6 +59,7 @@ import { act, renderHook } from '@testing-library/react'
 import { useFirestoreCollection } from './use-firestore-collection'
 import {
   DENIAL_STREAK_TO_REPORT,
+  resetFirestoreServerReadEvidence,
   setFirestoreSessionReporters,
 } from './firestore-denial-reporter'
 
@@ -107,6 +108,9 @@ describe('useFirestoreCollection under persistentLocalCache (AGL-1066)', () => {
   beforeEach(() => {
     mockHandlers = []
     jest.useFakeTimers()
+    // Evidence is module state and fake clocks overlap between tests — the
+    // denial cadences below assume none is on record (AGL-1440).
+    resetFirestoreServerReadEvidence()
   })
   afterEach(() => jest.useRealTimers())
 
@@ -374,6 +378,7 @@ describe('useFirestoreCollection denial reporting (AGL-1066)', () => {
     reported = []
     serverReads = 0
     jest.useFakeTimers()
+    resetFirestoreServerReadEvidence()
     setFirestoreSessionReporters({
       onDenied: (collection) => reported.push(collection),
       onServerRead: () => (serverReads += 1),

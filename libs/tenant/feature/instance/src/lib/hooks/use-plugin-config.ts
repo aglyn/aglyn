@@ -34,15 +34,18 @@ export function usePluginConfig(
   pluginId: string,
 ): { config: Record<string, unknown>; ready: boolean } {
   const firestore = useFirestore()
+  // Held at null while the org is unknown, never addressed as
+  // `orgs/-pending-` (AGL-1440): `pluginSettings` is member-gated, so the
+  // sentinel was a guaranteed-denied read on every mount of every plugin
+  // surface — the exact anti-pattern `use-org-plan.ts` documents removing
+  // (AGL-1064). A null ref issues nothing, `status` stays `'loading'`, and
+  // `ready` below stays false, which is already this hook's contract while
+  // the answer is unknown.
   const { data, status } = useFirestoreDoc<Record<string, unknown>>(
     () =>
-      doc(
-        firestore,
-        'orgs',
-        orgId ?? '-pending-',
-        'pluginSettings',
-        pluginId,
-      ),
+      orgId
+        ? doc(firestore, 'orgs', orgId, 'pluginSettings', pluginId)
+        : null,
     [firestore, orgId, pluginId],
   )
   const config = useMemo(() => {

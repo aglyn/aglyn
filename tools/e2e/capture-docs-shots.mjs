@@ -107,7 +107,7 @@ async function seedGuideFixtures() {
   if (!getApps().length) {
     initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID ?? 'aglyn-main' })
   }
-  const firestore = getFirestore()
+  const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
   const orgId = 'e2e-owner' // Org doc id = owner uid (seed-e2e.mjs).
   const orgRef = firestore.collection('orgs').doc(orgId)
   const hostRef = firestore.collection('hosts').doc(HOST_ID)

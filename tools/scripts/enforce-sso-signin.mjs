@@ -109,7 +109,7 @@ if (!getApps().length) {
   }
   initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
 }
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 const auth = getAuth()
 
 const orgSnapshot = await firestore.collection('orgs').doc(ORG_ID).get()

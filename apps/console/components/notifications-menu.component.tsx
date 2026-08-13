@@ -106,23 +106,31 @@ export function NotificationsMenu() {
     return map
   }, [orgs])
 
+  // Held at null until the uid resolves, never addressed as `users/-none-`
+  // (AGL-1440): notifications are owner-gated, so the sentinel was two
+  // guaranteed-denied listens in the console CHROME — every page, every
+  // load, retried on the refusal cadence until the uid arrived.
   const { data: recent } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'users', uid ?? '-none-', 'notifications'),
-        orderBy('createdAt', 'desc'),
-        limit(10),
-      ),
+      uid
+        ? query(
+            collection(firestore, 'users', uid, 'notifications'),
+            orderBy('createdAt', 'desc'),
+            limit(10),
+          )
+        : null,
     [firestore, uid],
     { idField: '$id' },
   )
   const { data: unreadDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'users', uid ?? '-none-', 'notifications'),
-        where('readAt', '==', null),
-        limit(100),
-      ),
+      uid
+        ? query(
+            collection(firestore, 'users', uid, 'notifications'),
+            where('readAt', '==', null),
+            limit(100),
+          )
+        : null,
     [firestore, uid],
     { idField: '$id' },
   )

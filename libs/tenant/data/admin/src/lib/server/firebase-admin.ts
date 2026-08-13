@@ -17,8 +17,11 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 // Initializes the firebase-admin default app (cert credential, RTDB URL,
-// service account, AppCheck) on module load.
-import '@aglyn/shared-util-fbserver'
+// service account, AppCheck) on module load. `firestoreDatabaseId` is the
+// FIRESTORE_DATABASE_ID override (AGL-1490): unset → `(default)` as before;
+// set → every accessor targets the named database (disaster-recovery cutover,
+// see docs/DISASTER_RECOVERY.md).
+import { firestoreDatabaseId } from '@aglyn/shared-util-fbserver'
 import { decode, encode } from '@msgpack/msgpack'
 import { type App, getApp } from 'firebase-admin/app'
 import { type DecodedIdToken, getAuth } from 'firebase-admin/auth'
@@ -134,7 +137,7 @@ export const layoutVersionConverter =
  */
 function wrapApp(app: App) {
   return {
-    firestore: () => getFirestore(app),
+    firestore: () => getFirestore(app, firestoreDatabaseId()),
     auth: () => getAuth(app),
     storage: () => getStorage(app),
     // Release-flag management (AGL-230): the staff admin flags API reads
@@ -144,7 +147,7 @@ function wrapApp(app: App) {
 }
 
 function firestoreNamespace() {
-  return getFirestore(getApp())
+  return getFirestore(getApp(), firestoreDatabaseId())
 }
 firestoreNamespace.FieldValue = FieldValue
 firestoreNamespace.Timestamp = Timestamp

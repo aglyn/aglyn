@@ -121,7 +121,7 @@ initializeApp({
   credential: applicationDefault(),
   projectId: process.env.GCLOUD_PROJECT ?? 'aglyn-main',
 })
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 /**
  * Props the media picker can write and every render surface now resolves.

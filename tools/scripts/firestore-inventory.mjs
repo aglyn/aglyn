@@ -36,7 +36,7 @@ if (!projectId || !clientEmail || !privateKey) {
 if (!getApps().length) {
   initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
 }
-const db = getFirestore()
+const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 async function walk(parent, depth, prefix) {
   const collections = await parent.listCollections()

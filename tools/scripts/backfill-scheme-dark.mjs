@@ -64,7 +64,7 @@ initializeApp({
   credential: applicationDefault(),
   projectId: process.env.GCLOUD_PROJECT ?? 'aglyn-main',
 })
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 /** Reserved node-sx key holding dark overrides — mirrors `SX_SCHEME_DARK_KEY`. */
 const SCHEME_DARK = '@scheme dark'

@@ -75,18 +75,44 @@ function sendOverlayBeacon(
 function ExperimentsRunner(props: {
   hostId?: string
   experiments: ScreenExperiment[]
+  /** Host consent config (AGL-1498); decides where the visitor id may live. */
+  consentHost?: Aglyn.VisitorConsentHost | null
 }) {
-  const { hostId, experiments } = props
+  const { hostId, experiments, consentHost } = props
 
   useEffect(() => {
     if (!hostId || !experiments.length) return undefined
     const experiment = experiments[0]
+    // Visitor-id persistence honors the consent gate (AGL-1498): without an
+    // analytics yes on a consent-gated site, the id lives in sessionStorage —
+    // variants stay stable within the visit, and the indefinite identifier
+    // is not kept. The id never leaves the browser either way (the beacons
+    // below carry no visitor id), which is why this is a persistence
+    // downgrade rather than a kill switch on experiments.
+    const persistence = Aglyn.resolveVisitorIdPersistence(
+      consentHost,
+      Aglyn.readStoredVisitorConsent(hostId),
+    )
     let visitorId = ''
     try {
-      visitorId = localStorage.getItem('aglyn:visitor') ?? ''
+      const storage =
+        persistence === 'local' ? localStorage : sessionStorage
+      // Read across BOTH stores so the assignment survives a consent move:
+      // a session id promoted to local (consent granted mid-visit) and a
+      // legacy local id migrating down to session both keep their variant.
+      visitorId =
+        storage.getItem(Aglyn.VISITOR_ID_STORAGE_KEY) ??
+        sessionStorage.getItem(Aglyn.VISITOR_ID_STORAGE_KEY) ??
+        localStorage.getItem(Aglyn.VISITOR_ID_STORAGE_KEY) ??
+        ''
       if (!visitorId) {
         visitorId = `v-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
-        localStorage.setItem('aglyn:visitor', visitorId)
+      }
+      storage.setItem(Aglyn.VISITOR_ID_STORAGE_KEY, visitorId)
+      // A pre-consent-tool id may still sit in localStorage from before the
+      // gate existed; while un-consented it must not persist.
+      if (persistence === 'session') {
+        localStorage.removeItem(Aglyn.VISITOR_ID_STORAGE_KEY)
       }
     } catch {
       return undefined // No storage (privacy mode) — serve the default.
@@ -891,7 +917,11 @@ export function MarketingSiteRuntime({ hostId, screens, page }: SiteRuntimeProps
       {popup ? <PopupOverlay popup={popup} hostId={hostId} /> : null}
       {/* Screen/section experiments (AGL-253). */}
       {experiments.length ? (
-        <ExperimentsRunner hostId={hostId} experiments={experiments} />
+        <ExperimentsRunner
+          hostId={hostId}
+          experiments={experiments}
+          consentHost={page['data']?.host as Aglyn.VisitorConsentHost | null}
+        />
       ) : null}
       {/* Site-event automations (AGL-256/257). */}
       {clientAutomations.length ? (

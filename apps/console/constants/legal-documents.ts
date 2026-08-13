@@ -55,7 +55,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v1'
+export const LEGAL_DOCUMENT_VERSION = 'v2'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -72,20 +72,25 @@ export interface LegalDocumentManifestEntry {
  * The documents covered by one acceptance. ToS §19.1 makes the Terms the
  * entire agreement INCLUDING the policies it incorporates by reference, so
  * accepting these two accepts that set.
+ *
+ * v2 (2026-08-13, AGL-1499): the approved pre-launch legal corrections —
+ * beta/$50-cap separation in the Terms (§1.1, §6, §14.3, §15.3), the real
+ * retention posture and CCPA flat denial in the Privacy Policy. Captured from
+ * the live pages after publication, same method as v1.
  */
 export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
   {
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '7ed3b739b896386de7f7c6597acebcd876f9b0fe67c212b0dcb4cf11ab97d7f5',
-    bytes: 32119,
+      '063f48bae466d9e29fac9298ab3e5a473dfc94d07959771b0de043594ca587f9',
+    bytes: 32985,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      'f45c8618855365a8ac70e011dcbc8455e9613f42b0dfefc90a980b8303306df7',
-    bytes: 9543,
+      '42db0bb4cde176b5c5fd2e82a4faa9102b9f5e0a763a824f5b4716b1379daa85',
+    bytes: 10631,
   },
 ]

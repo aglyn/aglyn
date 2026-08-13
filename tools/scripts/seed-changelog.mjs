@@ -61,7 +61,7 @@ if (!getApps().length) {
     initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
   }
 }
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 // ── Resolve the host by id or subdomain ─────────────────────────────────────
 let hostRef = firestore.collection('hosts').doc(hostTarget)

@@ -75,7 +75,7 @@ function chromeExecutable() {
 }
 
 if (!getApps().length) initializeApp({ projectId: 'aglyn-main' })
-const db = getFirestore()
+const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 /**
  * An ID token for the seeded owner, via a custom token — no password, and

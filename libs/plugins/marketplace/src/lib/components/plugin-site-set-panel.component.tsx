@@ -51,15 +51,14 @@ export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
   const orgId = useHostOrgId(hostId)
   const { installPlan, uninstall } = useMarketplaceActions(hostId)
 
+  // Held at null while `useHostOrgId` is in flight, never `orgs/-pending-`
+  // (AGL-1440): installs are member-gated, so the sentinel was a
+  // guaranteed-denied listen on every mount of this panel.
   const { data: orgPin } = useFirestoreDoc<any>(
     () =>
-      doc(
-        firestore,
-        'orgs',
-        orgId ?? '-pending-',
-        'installs',
-        listingId || '-missing-',
-      ),
+      orgId && listingId
+        ? doc(firestore, 'orgs', orgId, 'installs', listingId)
+        : null,
     [firestore, orgId, listingId],
   )
   const [sitePins, setSitePins] = useState<Record<string, any>>({})

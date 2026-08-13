@@ -31,7 +31,7 @@ process.env.FIRESTORE_EMULATOR_HOST ??= 'localhost:8082'
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= 'localhost:9099'
 
 if (!getApps().length) initializeApp({ projectId: 'aglyn-main' })
-const db = getFirestore()
+const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 const tokens = new Map()
 async function idToken(uid) {

@@ -20,6 +20,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { tenantDataTag } from '@aglyn/tenant-data-admin/render-cache'
 import applyDuePublishSchedule from '@aglyn/tenant-runtime/apply-publish-schedule'
 import { revalidatePath, revalidateTag } from 'next/cache'
+import { readDueSchedules } from './publish-schedule-next-due'
 
 /**
  * Apply due publish schedules on a beat, instead of waiting for a visitor
@@ -70,16 +71,40 @@ registerPluginJob({
 
     // Collection-group across every host: schedules are per screen, and the
     // beat has no host context. Needs the composite index on
-    // (publishSchedule.status, publishSchedule.publishAt) — without it this
-    // throws, the runner isolates the failure, and it retries next beat.
-    const due = await firestore
-      .collectionGroup('screens')
-      .where('publishSchedule.status', '==', 'pending')
-      .where('publishSchedule.publishAt', '<=', new Date())
-      .limit(BATCH_LIMIT)
-      .get()
+    // (publishSchedule.status, publishSchedule.publishAt) — the same one the
+    // previous `publishAt <= now` range shape used — without it this throws,
+    // the runner isolates the failure, and it retries next beat.
+    //
+    // Ordered by publishAt with NO time bound, behind the next-due memo
+    // (AGL-1440): one probe returns what is due AND when the next schedule
+    // lands, so an idle platform pays one read per memo window instead of
+    // one per beat. See publish-schedule-next-due.ts for the staleness
+    // argument (a schedule the probe has seen still publishes on its exact
+    // beat; only a brand-new one can wait, bounded by the memo age, with
+    // the lazy ISR executor unchanged as the backstop).
+    const dueDocs = await readDueSchedules({
+      now: Date.now(),
+      read: async () =>
+        (
+          await firestore
+            .collectionGroup('screens')
+            .where('publishSchedule.status', '==', 'pending')
+            .orderBy('publishSchedule.publishAt')
+            .limit(BATCH_LIMIT)
+            .get()
+        ).docs,
+      publishAtMs: (row) => {
+        const at = row.get('publishSchedule.publishAt') as
+          | { toMillis?: () => number }
+          | Date
+          | null
+          | undefined
+        if (at instanceof Date) return at.getTime()
+        return typeof at?.toMillis === 'function' ? at.toMillis() : null
+      },
+    })
 
-    if (due.empty) return
+    if (!dueDocs.length) return
 
     // Host docs hold both the routing map and the subdomain, and several due
     // screens usually share one host — read each at most once.
@@ -92,7 +117,7 @@ registerPluginJob({
       return snapshot
     }
 
-    for (const doc of due.docs) {
+    for (const doc of dueDocs) {
       // `hosts/{hostId}/screens/{screenId}` — the grandparent is the host.
       const hostId = doc.ref.parent.parent?.id
       if (!hostId) continue

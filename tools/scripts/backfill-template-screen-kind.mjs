@@ -117,7 +117,7 @@ if (!getApps().length) {
   }
   initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
 }
-const firestore = getFirestore()
+const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
 console.log(
   `\nBackfill screen kind:'template' (AGL-1400) — project=${projectId} ` +

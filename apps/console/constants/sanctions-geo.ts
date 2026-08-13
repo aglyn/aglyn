@@ -72,19 +72,31 @@ export const EMBARGOED_UA_REGIONS: ReadonlySet<string> = new Set([
   '09', // Luhansk oblast
 ])
 
-/** Vercel's edge geo headers, the only geo signal this deployment has. */
-export const GEO_COUNTRY_HEADER = 'x-vercel-ip-country'
-export const GEO_REGION_HEADER = 'x-vercel-ip-country-region'
+// The geo READER moved to `@aglyn/aglyn` app-utils (AGL-1498): the tenant's
+// consent-mode endpoint needs the identical signal, and two geo layers would
+// eventually disagree about the same request. Re-exported here so this
+// module's public API — what middleware and the specs import — is unchanged.
+// The sanctions POLICY below stays exactly where it was. Deep import, not
+// the barrel: this module is in the EDGE MIDDLEWARE graph, and the barrel
+// would drag the whole lib (React contexts included) into that bundle.
+import {
+  GEO_COUNTRY_HEADER,
+  GEO_REGION_HEADER,
+  type HeaderReader,
+  readRequestGeo,
+  type RequestGeo,
+} from '@aglyn/aglyn/app-utils/request-geo'
+
+export {
+  GEO_COUNTRY_HEADER,
+  GEO_REGION_HEADER,
+  type HeaderReader,
+  readRequestGeo,
+  type RequestGeo,
+}
 
 /** Prefix every log line here shares, so the absence is greppable. */
 export const SANCTIONS_LOG_PREFIX = '[sanctions-geo]'
-
-export interface RequestGeo {
-  /** ISO 3166-1 alpha-2, uppercased. `null` when the edge sent no signal. */
-  country: string | null
-  /** Bare ISO 3166-2 subdivision code, uppercased. `null` when absent. */
-  region: string | null
-}
 
 export type SanctionsOutcome =
   /** An embargoed country code. */
@@ -106,35 +118,6 @@ export type SanctionsOutcome =
 export interface SanctionsVerdict extends RequestGeo {
   blocked: boolean
   outcome: SanctionsOutcome
-}
-
-/** A minimal `Headers`, so route handlers and middleware share one reader. */
-export interface HeaderReader {
-  get(name: string): string | null
-}
-
-/**
- * Normalize a subdivision code to the bare, zero-padded ISO 3166-2 form.
- *
- * Providers disagree on `UA-43` vs `43`, and on `9` vs `09` for Luhansk. All
- * three spellings have to land on the same set member or the sub-country half
- * of this control silently answers "allowed" for a region it was written to
- * catch.
- */
-function normalizeRegion(raw: string): string {
-  const upper = raw.trim().toUpperCase()
-  const bare = upper.includes('-') ? upper.slice(upper.indexOf('-') + 1) : upper
-  return /^\d$/.test(bare) ? `0${bare}` : bare
-}
-
-/** Reads the edge geo signal off a request's headers. */
-export function readRequestGeo(headers: HeaderReader): RequestGeo {
-  const country = (headers.get(GEO_COUNTRY_HEADER) ?? '').trim().toUpperCase()
-  const region = (headers.get(GEO_REGION_HEADER) ?? '').trim()
-  return {
-    country: country || null,
-    region: region ? normalizeRegion(region) : null,
-  }
 }
 
 /**

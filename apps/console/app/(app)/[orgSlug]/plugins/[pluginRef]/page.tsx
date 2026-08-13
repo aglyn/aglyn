@@ -112,15 +112,16 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
   // The org pin, plus every site's pin. Same fan-in as the listing page and
   // for the same reason: the host count is data, so one hook per host would
   // change the hook count between renders.
+  // Held at null until the org resolves — and for a first-party plugin,
+  // which HAS no pin, held at null for good (AGL-1440): installs are
+  // member-gated, so `orgs/-pending-/installs/-missing-` was a
+  // guaranteed-denied listen while the scope loaded, and a pointless read
+  // for the plugins that never have a listing.
   const { data: orgPin } = useFirestoreDoc<any>(
     () =>
-      doc(
-        firestore,
-        'orgs',
-        orgId || '-pending-',
-        'installs',
-        listingId || '-missing-',
-      ),
+      orgId && listingId
+        ? doc(firestore, 'orgs', orgId, 'installs', listingId)
+        : null,
     [firestore, orgId, listingId],
   )
   const [sitePins, setSitePins] = useState<Record<string, any>>({})

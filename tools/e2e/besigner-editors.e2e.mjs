@@ -63,7 +63,7 @@ function chromeExecutable() {
 }
 
 if (!getApps().length) initializeApp({ projectId: 'aglyn-main' })
-const db = getFirestore()
+const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 const hostRef = db.collection('hosts').doc(HOST_ID)
 
 let failures = 0
