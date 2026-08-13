@@ -26,12 +26,67 @@
  * ever orphaned and no delete is blocked.
  */
 
+import type { ScopeToken } from './scope-tokens'
+
 export interface AglynMediaFolder {
   name: string
   /** Parent folder id; null/undefined = root. */
   parentId?: string | null
   /** Sibling sort position. */
   order?: number
+}
+
+export interface NewMediaFolderInput {
+  name: string
+  parentId: string | null
+  /**
+   * `serverTimestamp()` from whichever SDK the caller holds — this module
+   * stays free of both the client and admin Firestore packages.
+   */
+  createdAt: unknown
+  /**
+   * Who may see the folder (AGL-1037). **Required**, with no default: the
+   * whole of AGL-1466 was two call sites that each built the document
+   * inline and each forgot the field, so the type is what stops a third.
+   *
+   * `null` means a SITE library — `hosts/{hostId}/mediaFolders` is private
+   * by construction and stores no scope, the same rule the site-export
+   * import path follows and the reason `scopedToHost` refuses a host ref.
+   */
+  visibleTo: readonly ScopeToken[] | null
+}
+
+/**
+ * The document a media folder is created with (AGL-1466).
+ *
+ * Every `mediaFolders` create goes through here. Before it, the console
+ * wrote `{ name, parentId, createdAt }` from the NEW FOLDER button and from
+ * the legacy-string migration, so a folder in an ORG library landed with no
+ * `visibleTo` — and both enforcement layers fail closed on a missing field
+ * (`array-contains-any` matches nothing, the rules' `hasAny` errors). The
+ * result was a library that looked right on the org page and collapsed into
+ * "No folder" the moment it was opened for a site, because the folders were
+ * gone and only their files remained.
+ */
+export function newMediaFolderDoc(
+  input: NewMediaFolderInput,
+): Record<string, unknown> {
+  const { name, parentId, createdAt, visibleTo } = input
+  // An EMPTY array is the one value that must never be stored. Unlike a
+  // missing field it is a written "visible to nobody" — the backfill leaves
+  // it alone by design and no read path treats it as legacy — so it is
+  // permanent rather than repairable. Getting here means a caller computed
+  // a scope and came back with nothing, which is a bug worth a stack trace
+  // rather than a folder nobody will ever see again.
+  if (visibleTo && !visibleTo.length) {
+    throw new Error('A media folder cannot be created with an empty scope')
+  }
+  return {
+    name,
+    parentId,
+    createdAt,
+    ...(visibleTo ? { visibleTo: [...visibleTo] } : {}),
+  }
 }
 
 /** Nesting cap, enforced in UI and validation (root children = depth 1). */
