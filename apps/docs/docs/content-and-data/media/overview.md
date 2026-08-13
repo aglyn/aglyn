@@ -96,6 +96,16 @@ feature; large video uploads and higher storage are gated by plan.
 Any file over 3 MB automatically uses **signed-URL uploads**, so big files go straight to
 storage without tying up the console. Folders nest up to **5 levels** deep.
 
+:::note SVG uploads are cleaned
+
+An SVG is a document, not just a picture — it can carry scripts, event handlers and
+references to other sites. Uploaded SVGs have all of that stripped, and the delivery URL
+serves them under a policy that blocks scripting outright. Your marks and logos render
+exactly as before; a decorative SVG that relied on embedded script or on pulling an image
+from another domain will render without those parts.
+
+:::
+
 Storage is metered per site against your plan (Free 250 MB, Starter 2 GB, Pro 10 GB,
 Business 50 GB, Scale 75 GB, Advanced 100 GB, Agency 200 GB, Enterprise unlimited) —
 the library's toolbar shows the running total, and the

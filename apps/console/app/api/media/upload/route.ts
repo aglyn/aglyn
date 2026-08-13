@@ -47,6 +47,10 @@ import {
   requiresFileUploadEntitlement,
   UPLOAD_TYPES_MESSAGE,
 } from '../../../../utils/media-upload-limits'
+import {
+  isSvgUploadType,
+  sanitizeSvgBuffer,
+} from '../../../../utils/sanitize-svg'
 
 // Base64 JSON payloads (AGL-162 caps). NOTE (AGL-1317): on Vercel the
 // platform rejects request bodies over 4.5MB with a 413 before this
@@ -155,10 +159,21 @@ async function handler(request: Request): Promise<Response> {
     if (!isAllowedUploadType(contentType)) {
       return Response.json({ error: UPLOAD_TYPES_MESSAGE }, { status: 415 })
     }
-    const buffer = Buffer.from(data, 'base64')
+    const uploaded = Buffer.from(data, 'base64')
+    // SVG sanitization (AGL-1474). An SVG is a document: `image/*` accepts it,
+    // it is stored under the type the client declared, and the CDN serves it
+    // inline from this origin — so an embedded `<script>` ran on
+    // `app.aglyn.com` for anyone with editor rights. The CDN's own CSP is the
+    // containment; stripping the payload here is what keeps the stored
+    // artifact clean. A clean SVG comes back as the identical buffer, so the
+    // hash, the size and the counter are untouched for every honest upload.
+    const svg = isSvgUploadType(contentType) ? sanitizeSvgBuffer(uploaded) : null
+    const buffer = svg ? svg.buffer : uploaded
     // Non-undefined for every allowed type, which the gate above established.
     const maxBytes = directUploadMaxBytes(contentType) as number
-    if (!buffer.length || buffer.length > maxBytes) {
+    // Measured on what was SENT: sanitizing only ever shrinks, and an
+    // oversized upload must be refused for its real weight.
+    if (!uploaded.length || uploaded.length > maxBytes) {
       return Response.json({
         error: `File is empty or too large (${Math.round(maxBytes / 1024 / 1024)}MB max)`,
       }, { status: 413 })
@@ -280,6 +295,11 @@ async function handler(request: Request): Promise<Response> {
       // common case and must not carry a fault marker, or the marker stops
       // meaning anything.
       ...(variantsError ? { variantsError } : {}),
+      // Written down, not merely logged (AGL-1474). An SVG that arrived
+      // carrying script is the one upload anybody will want to find later,
+      // and a serverless log keeps it for about an hour — same reasoning as
+      // `variantsError` above. Absent on every clean asset.
+      ...(svg?.changed ? { svgSanitized: svg.removed } : {}),
       // Org-wide by default — today's behavior (AGL-1043). Stamping it on
       // every new asset is what makes the scoped reads work at all:
       // `array-contains-any` matches nothing on a doc lacking the field.

@@ -39,6 +39,10 @@ import {
   SIGNED_UPLOAD_TYPES_MESSAGE,
   storageContentHash,
 } from '../../../../utils/media-upload-limits'
+import {
+  isSvgUploadType,
+  sanitizeSvgBuffer,
+} from '../../../../utils/sanitize-svg'
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000
 
@@ -190,12 +194,41 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Upload not found — retry' }, { status: 409 })
     }
     const [metadata] = await file.getMetadata()
-    const actualBytes = Number(metadata.size ?? 0)
+    const declaredBytes = Number(metadata.size ?? 0)
     const contentType = String(metadata.contentType ?? '')
     const maxBytes = signedUploadMaxBytes(contentType)
-    if (!maxBytes || actualBytes > maxBytes) {
+    if (!maxBytes || declaredBytes > maxBytes) {
       await file.delete().catch(() => undefined)
       return Response.json({ error: 'Uploaded object rejected' }, { status: 415 })
+    }
+
+    /**
+     * SVG sanitization (AGL-1474), the awkward half.
+     *
+     * On this route the bytes NEVER pass through the server on the way in —
+     * the browser PUTs them straight to GCS with a signed URL — so finalize
+     * is the first moment anything of ours can look at them, and it is
+     * therefore where the strip has to happen. AGL-1454 made this reachable
+     * for images at all (before it, every image took the base64 route), so
+     * an SVG over 3 MB arrives here and nowhere else.
+     *
+     * Only SVG is ever downloaded: the 200 MB videos this route exists for
+     * are never pulled back into the function. The re-save changes the
+     * object's size and md5, so both are re-read rather than reused.
+     */
+    let actualBytes = declaredBytes
+    let contentHash = storageContentHash(metadata.md5Hash)
+    let svgRemoved: string[] = []
+    if (isSvgUploadType(contentType)) {
+      const [raw] = await file.download()
+      const sanitized = sanitizeSvgBuffer(raw)
+      if (sanitized.changed) {
+        await file.save(sanitized.buffer, { contentType })
+        const [rewritten] = await file.getMetadata()
+        actualBytes = Number(rewritten.size ?? sanitized.buffer.length)
+        contentHash = storageContentHash(rewritten.md5Hash)
+        svgRemoved = sanitized.removed
+      }
     }
     {
       // Storage quota applies to every org; a plan-less org resolves as
@@ -236,9 +269,11 @@ async function handler(request: Request): Promise<Response> {
       // revalidation re-streams the whole object instead of taking a 304 —
       // on the one route that carries 200 MB videos. Spread so a missing
       // md5 (composite objects) writes no field at all rather than a null.
-      ...(storageContentHash(metadata.md5Hash)
-        ? { contentHash: storageContentHash(metadata.md5Hash) }
-        : {}),
+      // Re-read after a sanitizing re-save (AGL-1474), or the ETag and the
+      // immutable URL would both pin bytes that are no longer in the bucket.
+      ...(contentHash ? { contentHash } : {}),
+      // AGL-1474 — absent on every clean asset. See `/api/media/upload`.
+      ...(svgRemoved.length ? { svgSanitized: svgRemoved } : {}),
       // Org-wide by default, same as the direct upload route (AGL-1043) —
       // the scoped reads need the field present on every asset.
       ...(scope.collection === 'orgs'

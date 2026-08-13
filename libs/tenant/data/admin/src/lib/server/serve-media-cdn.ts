@@ -55,6 +55,92 @@ export const MEDIA_CDN_STABLE_CACHE_CONTROL =
   'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400'
 
 /**
+ * The CDN's OWN Content-Security-Policy (AGL-1474).
+ *
+ * An uploaded `image/svg+xml` is a document, not a picture. It passes the
+ * `image/*` allowlist, it is stored under whatever type the client declared,
+ * and this handler serves it `inline` from the console's own origin — and
+ * from every tenant site's, since the same handler mounts in both apps. So
+ * `<script>alert(document.domain)</script>` inside an uploaded logo executed
+ * on `app.aglyn.com` the moment the asset URL was opened top-level, for
+ * anyone with editor rights.
+ *
+ * Nothing already in place stopped it. `X-Content-Type-Options: nosniff`
+ * blocks HTML *mislabelled* as an image; it says nothing about a file
+ * honestly labelled `image/svg+xml`, which browsers render as a scripted
+ * document. And there was no CSP on this response **at all**: since AGL-523
+ * the policy is built per-response in each app's middleware, and both
+ * middlewares' matchers exclude `api` (`apps/console/middleware.ts`,
+ * `apps/tenant/middleware.ts`), so a directly-navigated CDN URL never passed
+ * through the code that sets one.
+ *
+ * That is precisely why the header is set HERE, on the response, rather than
+ * added to a matcher: a route-level header cannot be lost to a matcher edit,
+ * a rewrite, or a new mount of `serveMediaCdn` in a third app. It is also
+ * what makes this the containment rather than the remediation — it covers
+ * every asset already in the bucket, including the SVGs uploaded before the
+ * sanitizer existed, without rewriting a byte.
+ *
+ * **It does not touch `<img src>`, which is how logos and marks are used
+ * across this product.** A browser loading an SVG as an image neither runs
+ * its script nor applies the response's CSP — CSP governs documents and
+ * workers. The policy only becomes live in the case that is the vector: the
+ * asset opened as a top-level document (or framed via `<object>`/`<iframe>`).
+ */
+export const MEDIA_CDN_BASE_CSP =
+  "default-src 'none'; script-src 'none'; object-src 'none'; " +
+  "base-uri 'none'; form-action 'none'"
+
+/**
+ * The policy for a type a browser will treat as an ACTIVE DOCUMENT. Adds
+ * `sandbox` — an opaque origin, so even a hypothetical execution has no
+ * `document.domain`, no cookies and no storage to reach for.
+ *
+ * `style-src 'unsafe-inline'` and the two `data:` allowances are not
+ * concessions to script: with `script-src 'none'` and `sandbox` in force,
+ * nothing in CSS or a data URI can execute. They exist so that opening a
+ * logo's URL directly still shows the logo — `default-src 'none'` alone
+ * would blank an SVG's own `<style>` block and its embedded raster fills,
+ * which is a visible regression on legitimate assets and buys no safety.
+ */
+export const MEDIA_CDN_ACTIVE_DOCUMENT_CSP =
+  `${MEDIA_CDN_BASE_CSP}; style-src 'unsafe-inline'; img-src data:; ` +
+  'font-src data:; sandbox'
+
+/**
+ * Types a browser parses as a document rather than rendering as an image.
+ *
+ * Keying off the SERVED content type is sound only because this response also
+ * carries `nosniff`: the browser is bound to the label we send, so an SVG
+ * uploaded under a `image/png` label is decoded as a PNG and is inert. Every
+ * type here except SVG is refused by the upload allowlist today; they are
+ * listed anyway because the allowlist has moved before (AGL-1465) and because
+ * `/api/orgs/media` accepted arbitrary types for its whole life.
+ */
+const MEDIA_CDN_ACTIVE_DOCUMENT_TYPES = new Set([
+  'image/svg+xml',
+  'image/svg',
+  'text/html',
+  'application/xhtml+xml',
+  'application/xml',
+  'text/xml',
+  'text/xsl',
+  'application/xslt+xml',
+  'application/mathml+xml',
+])
+
+/** The `Content-Security-Policy` for a response serving `contentType`. */
+export function mediaCdnContentSecurityPolicy(contentType: string): string {
+  const type = String(contentType ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase()
+  return MEDIA_CDN_ACTIVE_DOCUMENT_TYPES.has(type)
+    ? MEDIA_CDN_ACTIVE_DOCUMENT_CSP
+    : MEDIA_CDN_BASE_CSP
+}
+
+/**
  * The parsed CDN scope segment (AGL-1043). Shapes:
  *
  * - `{hostId}` — that host's own library
@@ -213,6 +299,14 @@ export async function serveMediaCdn(
   req: NextApiRequest,
   res: NextApiResponse,
 ): Promise<void> {
+  // AGL-1474, set FIRST so no exit from this handler can be reached without
+  // it — including the refusals, the 304 and the 500. Upgraded below to the
+  // sandboxing form once the served content type is known. `nosniff` is
+  // repeated here rather than left to the app config's `/(.*)` header: the
+  // policy above keys off the declared type, so this response has to carry
+  // the header that makes the declared type binding, on its own.
+  res.setHeader('Content-Security-Policy', MEDIA_CDN_BASE_CSP)
+  res.setHeader('X-Content-Type-Options', 'nosniff')
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.setHeader('Allow', 'GET, HEAD')
     res.status(405).end()
@@ -357,15 +451,21 @@ export async function serveMediaCdn(
       return
     }
 
+    const servedType = useVariant
+      ? 'image/webp'
+      : String(
+          metadata.contentType ??
+            snapshot.get('contentType') ??
+            'application/octet-stream',
+        )
+    res.setHeader('Content-Type', servedType)
+    // AGL-1474: an SVG (or anything else a browser treats as a document) gets
+    // the sandboxing policy. Everything else keeps the base one set above —
+    // `sandbox` is withheld from raster and PDF responses on purpose, since it
+    // would change how a directly-opened PDF is handled for no security gain.
     res.setHeader(
-      'Content-Type',
-      useVariant
-        ? 'image/webp'
-        : String(
-            metadata.contentType ??
-              snapshot.get('contentType') ??
-              'application/octet-stream',
-          ),
+      'Content-Security-Policy',
+      mediaCdnContentSecurityPolicy(servedType),
     )
     if (metadata.size) res.setHeader('Content-Length', String(metadata.size))
     // Give downloads a real filename+extension (AGL-834): the URL is
