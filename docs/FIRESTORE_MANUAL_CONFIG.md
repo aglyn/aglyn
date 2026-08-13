@@ -39,6 +39,7 @@ cleanup, not a correctness guarantee.
 | collectionGroup | field | why |
 |---|---|---|
 | `rateLimits` | `expiresAt` | ephemeral rate-limit windows (AGL-794/795); expired windows should be reaped, not accumulate |
+| `mediaTombstones` | `expiresAt` | DAM undo records (AGL-1467). Each holds a deleted media document **verbatim** — alt text, description, tags, custom metadata, `visibleTo` scope tokens — plus the storage generations needed to restore it. Bounded to the bucket's **7-day soft-delete window**, because a tombstone that outlives the bytes it addresses can only ever produce a failed restore while still being a copy of customer data (the AGL-1443 shape). The subcollection sits under `hosts/{hostId}` and `orgs/{orgId}`, so an erasure takes it via `recursiveDelete` with no extra sweep. |
 
 Not TTL targets (deliberately): `apiKeys.expiresAt` (validity field — keep expired
 keys as records), `orgSlugs.movedTo` tombstones (intentional persistent
@@ -49,9 +50,18 @@ cookie, not Firestore), `bookings.expiresAtMs` (a number, not a Timestamp).
 gcloud firestore fields ttls update expiresAt \
   --collection-group=rateLimits --enable-ttl \
   --project=aglyn-main --database='(default)'
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=mediaTombstones --enable-ttl \
+  --project=aglyn-main --database='(default)'
 # verify:
 gcloud firestore fields ttls list --project=aglyn-main --database='(default)'
 ```
+
+`mediaTombstones` does **not** depend on the sweep for correctness, and must not:
+TTL is best-effort within ~72h, which is 43% of the window it is bounding.
+`restoreMediaFromTombstone` treats an expired tombstone as absent, refuses with a
+real message, and deletes it on sight. The policy is what stops them
+accumulating; the code is what makes the boundary exact.
 
 ### 2. Scheduled backups (AGL-871)
 
@@ -83,5 +93,5 @@ gcloud firestore databases describe --database='(default)' --project=aglyn-main 
 - Location `nam5` (US multi-region), Native mode, Pessimistic concurrency
 - Point-in-time recovery: **ENABLED** (7-day window)
 - Delete protection: **ENABLED** (AGL-872)
-- TTL policies: **`rateLimits.expiresAt`** (AGL-870)
+- TTL policies: **`rateLimits.expiresAt`** (AGL-870), **`mediaTombstones.expiresAt`** (AGL-1467 — NOT YET APPLIED; the collection ships with this change)
 - Backup schedules: **weekly (Sunday), 14-week retention** (AGL-871)

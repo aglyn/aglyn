@@ -774,8 +774,20 @@ service cloud.firestore {
       // itself too — which would let editors delete the host through
       // this write rule (caught by rules-tests, AGL-235).
       match /{subcollection}/{document=**} {
+        // `mediaTombstones` joins the READ exclusion too (AGL-1467), which
+        // `webhooks`/`orders` are the only other members of. A tombstone holds
+        // a deleted media document VERBATIM — file name, alt text,
+        // description, tags, custom metadata, the `visibleTo` tokens that
+        // decided who could see the asset — and it is written and consumed
+        // entirely by /api/media/upload and /api/media/restore, which use the
+        // Admin SDK and are not subject to these rules. Nothing in the console
+        // lists them, deliberately: a browsable copy of deleted customer
+        // content is the object AGL-1443 is open on, and the undo affordance
+        // does not need one. No client read means no such surface can appear
+        // by accident.
         allow read: if isStaff() ||
-          (isHostAdmin(hostId) && !(subcollection in ['webhooks', 'orders']));
+          (isHostAdmin(hostId) &&
+            !(subcollection in ['webhooks', 'orders', 'mediaTombstones']));
         // Quota-governed collections are created via /api/hosts/resources
         // ONLY (AGL-473) — the route enforces the per-plan quota (and the
         // feature entitlement, where paid) server-side. These flat
@@ -836,13 +848,23 @@ service cloud.firestore {
         // Admin-SDK route, and every client reference in the console and the
         // plugin components is a read, which the catch-all's `allow read`
         // above still grants.
+        //
+        // `mediaTombstones` joins all three as well (AGL-1467), and for the
+        // `counters` reason rather than the privacy one above: a restore
+        // re-increments `counters/media` by the tombstone's OWN `sizeBytes`.
+        // A client that could write a tombstone could therefore hand itself a
+        // negative `sizeBytes` and lower the storage meter — AGL-1367's
+        // read-compare-proceed wall, reached one collection to the left — or
+        // forge a media document with `visibleTo` tokens it was never granted.
+        // A client that could DELETE one destroys the only route back to an
+        // asset it just deleted. Both writers are Admin-SDK routes.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks',
-              'counters', 'analytics', 'members']));
+              'counters', 'analytics', 'members', 'mediaTombstones']));
         // `templates` is excluded from update as well as create: its
         // dedicated block above freezes `source`, and leaving it here would
         // re-grant the unrestricted update this catch-all allows (AGL-666).
@@ -856,7 +878,7 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'installs',
               'templates', 'collections', 'datasets',
-              'counters', 'analytics', 'members']));
+              'counters', 'analytics', 'members', 'mediaTombstones']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -866,7 +888,8 @@ service cloud.firestore {
         allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'collections',
-              'datasets', 'counters', 'analytics', 'members']));
+              'datasets', 'counters', 'analytics', 'members',
+              'mediaTombstones']));
       }
       // Editors keep full client control of a collection doc EXCEPT the two
       // identity keys. `slug` is its public address (uniqueness is claimed in
