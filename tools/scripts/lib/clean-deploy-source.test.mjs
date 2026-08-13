@@ -216,8 +216,18 @@ describe('the guard is wired into the deploy scripts', () => {
         `${script} never calls assertCleanDeploySource — the dirty-tree ` +
           `refusal is not wired and the AGL-1489 near-miss is possible again`,
       )
-      const firstNetworkWrite = source.indexOf('fetch(')
-      assert.notEqual(firstNetworkWrite, -1, `${script} has no fetch call?`)
+      // The network write is either a literal fetch or a shared helper from
+      // lib/firebase-rules-api.mjs (the database deploy PUTs through
+      // databaseRulesRequest since AGL-1509).
+      const firstNetworkWrite = ['fetch(', 'databaseRulesRequest(']
+        .map((marker) => source.indexOf(marker))
+        .filter((at) => at !== -1)
+        .reduce((min, at) => Math.min(min, at), Infinity)
+      assert.notEqual(
+        firstNetworkWrite,
+        Infinity,
+        `${script} has no network call?`,
+      )
       assert.ok(
         guardAt < firstNetworkWrite,
         `${script} calls the guard only after it has already started ` +

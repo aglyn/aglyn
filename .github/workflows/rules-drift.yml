@@ -1,0 +1,104 @@
+name: Rules drift
+
+# Fails when the LIVE Firebase security rules differ from HEAD (AGL-1509).
+#
+# Rules deploy MANUALLY (tools/scripts/deploy-*-rules.mjs), outside the
+# git -> Vercel pipeline, so a merged commit touching cloud/firebase-*.rules
+# is NOT evidence the ruleset shipped. AGL-1489: production Firestore rules
+# sat a day behind HEAD with `mediaTombstones` missing from the deny-lists —
+# strictly MORE permissive than what review approved — and only a manual
+# launch sweep noticed. This workflow is that sweep, standing.
+#
+# Two triggers, two failure modes:
+#  - push touching a rules file (or the checker): goes red immediately after
+#    the merge, and STAYS red until someone runs the deploy script. That red
+#    is the reminder the manual pipeline never had. Re-run the workflow after
+#    deploying to turn it green.
+#  - daily schedule: catches the reverse case — rules hot-fixed in the
+#    Firebase console and never committed — and drift on days nothing merged.
+#    (GitHub schedules are best-effort and pause on 60-day-quiet repos; a
+#    green history is not proof of continuous convergence.)
+#
+# Requires repo secrets (from the service-account JSON the deploy scripts
+# already use via the root .env):
+#   gh secret set FIREBASE_CLIENT_EMAIL --body '<client_email>'
+#   gh secret set FIREBASE_PRIVATE_KEY --body "$(jq -r .private_key service-account.json)"
+# Optional repo vars: FIREBASE_PROJECT_ID (default aglyn-main),
+# FIREBASE_STORAGE_BUCKET (default {project}.appspot.com),
+# FIREBASE_DATABASE_URL (default {project}-default-rtdb.firebaseio.com).
+# NOTE repo variables survive domain/org migrations (AGL-786) — if the
+# project ever moves, update them, don't trust them.
+#
+# When the secrets are ABSENT the guard step below fails the job loudly with
+# setup instructions. Never convert that to a skip: a skipped check that
+# renders green is the exact silent-drift failure mode this workflow exists
+# to prevent, and the checker itself exits 2 (cannot-check) rather than 0 for
+# the same reason.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - cloud/firebase-firestore.rules
+      - cloud/firebase-storage.rules
+      - cloud/firebase-database.rules.json
+      - tools/scripts/check-rules-drift.mjs
+      - tools/scripts/lib/rules-drift.mjs
+      - tools/scripts/lib/firebase-rules-api.mjs
+      - .github/workflows/rules-drift.yml
+  schedule:
+    # Daily, 07:23 UTC — off the top of the hour, where GitHub's scheduler
+    # congestion is worst.
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # Only the newest comparison matters; a delayed run must not pile up.
+  group: rules-drift
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse to no-op without credentials
+        env:
+          CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CLIENT_EMAIL" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY repo secrets are not set." >&2
+            echo "" >&2
+            echo "This job verifies the LIVE security rules match HEAD. Without" >&2
+            echo "credentials it cannot see live, and passing anyway would be the" >&2
+            echo "silent-drift failure mode it exists to prevent (AGL-1489)." >&2
+            echo "Create the secrets once, from the service-account JSON:" >&2
+            echo "  gh secret set FIREBASE_CLIENT_EMAIL --body '<client_email>'" >&2
+            echo "  gh secret set FIREBASE_PRIVATE_KEY --body \"\$(jq -r .private_key service-account.json)\"" >&2
+            exit 2
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # firebase-admin mints the service-account token — the same auth path
+      # the deploy scripts use, shared via tools/scripts/lib/firebase-rules-api.mjs.
+      - run: npm ci
+
+      - name: Diff live rules against HEAD
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
+          FIREBASE_DATABASE_URL: ${{ vars.FIREBASE_DATABASE_URL }}
+        run: npm run check:rules-drift
