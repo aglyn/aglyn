@@ -19,6 +19,7 @@ import {
   type AglynMediaFolder,
   folderDepth,
   isSiblingNameTaken,
+  mediaFolderChoices,
   MEDIA_FOLDER_MAX_DEPTH,
   newMediaFolderDoc,
   normalizeFolderName,
@@ -196,5 +197,83 @@ describe('newMediaFolderDoc', () => {
         visibleTo: [],
       }),
     ).toThrow(/scope/i)
+  })
+})
+
+/**
+ * The MOVE TO FOLDER picker (AGL-1470).
+ *
+ * The failure this exists to stop is silent: with `Blog/Covers` and
+ * `Press/Covers` both present the picker drew two rows reading exactly
+ * `Covers`, and choosing the wrong one rewrites the object to a different
+ * prefix while every id-based reference keeps resolving. No error, no broken
+ * image — the file is just filed where nobody will look for it.
+ */
+describe('mediaFolderChoices', () => {
+  const TREE: Array<AglynMediaFolder & { $id: string }> = [
+    { $id: 'blog', name: 'Blog', parentId: null },
+    { $id: 'press', name: 'Press', parentId: null },
+    { $id: 'blog-covers', name: 'Covers', parentId: 'blog' },
+    { $id: 'press-covers', name: 'Covers', parentId: 'press' },
+  ]
+
+  it('gives two same-named folders under different parents distinct labels', () => {
+    const labels = mediaFolderChoices(TREE).map((choice) => choice.label)
+    expect(labels).toContain('Blog / Covers')
+    expect(labels).toContain('Press / Covers')
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it('orders the list as the sidebar draws it — each child under its parent', () => {
+    expect(mediaFolderChoices(TREE).map((choice) => choice.$id)).toEqual([
+      'blog',
+      'blog-covers',
+      'press',
+      'press-covers',
+    ])
+  })
+
+  it('reports a depth the picker can indent by', () => {
+    const byId = Object.fromEntries(
+      mediaFolderChoices(TREE).map((choice) => [choice.$id, choice]),
+    )
+    expect(byId['blog'].depth).toBe(0)
+    expect(byId['blog-covers'].depth).toBe(1)
+    expect(byId['blog-covers'].path).toEqual(['Blog', 'Covers'])
+  })
+
+  it('sorts siblings by order then name, matching the rail', () => {
+    expect(
+      mediaFolderChoices([
+        { $id: 'b', name: 'Beta', parentId: null },
+        { $id: 'a', name: 'Alpha', parentId: null },
+        { $id: 'z', name: 'Zulu', parentId: null, order: -1 },
+      ]).map((choice) => choice.name),
+    ).toEqual(['Zulu', 'Alpha', 'Beta'])
+  })
+
+  /**
+   * A folder whose parent is missing from the caller's read set is still a
+   * real folder holding real files — dropping it from the picker would make
+   * the destination unreachable, which is a worse failure than an unindented
+   * row. Scoped collaborators see exactly this: `array-contains-any` can
+   * admit a child and refuse its parent (AGL-1466).
+   */
+  it('keeps a folder whose parent is outside the read set', () => {
+    const choices = mediaFolderChoices([
+      { $id: 'orphan', name: 'Covers', parentId: 'not-in-this-read-set' },
+    ])
+    expect(choices).toHaveLength(1)
+    expect(choices[0].label).toBe('Covers')
+    expect(choices[0].depth).toBe(0)
+  })
+
+  /** A cycle must not hang the picker — it is drawn on every render. */
+  it('terminates on a parent cycle', () => {
+    const choices = mediaFolderChoices([
+      { $id: 'a', name: 'A', parentId: 'b' },
+      { $id: 'b', name: 'B', parentId: 'a' },
+    ])
+    expect(choices.map((choice) => choice.$id).sort()).toEqual(['a', 'b'])
   })
 })
