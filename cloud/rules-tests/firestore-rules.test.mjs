@@ -2522,4 +2522,374 @@ describe('pre-release hardening guards', () => {
   })
 })
 
+/**
+ * Clickwrap acceptance records (AGL-1497/1508). `users/{uid}/legalAcceptances/
+ * {version}` is live in production (ruleset 057b9db9) with owner-read and
+ * `write: if false`, and until this block nothing asserted either half. The
+ * collection's entire value is evidentiary: *what did this user accept, and
+ * can we prove the record was not forged, back-dated, amended or deleted from
+ * a client*. So the writes denied here include the OWNER — the person the
+ * evidence is about is exactly who must not hold the pen — and a
+ * staff-claimed token, because the only legitimate writer is the Admin SDK
+ * signup path, which rules never applied to.
+ */
+describe('legal acceptance records are owner-read, never client-written (AGL-1508)', () => {
+  const VERSION = '2026-07-28.1'
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'users', OWNER, 'legalAcceptances', VERSION),
+        { version: VERSION, acceptedAtMs: 1753731600000, source: 'signup' },
+      )
+    })
+  })
+
+  it('the owner and staff read the record; another user and anon cannot', async () => {
+    await mustAllow(
+      'the owner reading their own acceptance',
+      getDoc(doc(authed(OWNER), 'users', OWNER, 'legalAcceptances', VERSION)),
+    )
+    // The support surface lists a user's history; a list is evaluated
+    // against the query, so this proves the rule is provable for LIST too.
+    await mustAllow(
+      'the owner listing their acceptance history',
+      getDocs(collection(authed(OWNER), 'users', OWNER, 'legalAcceptances')),
+    )
+    await mustAllow(
+      'staff reading an acceptance',
+      getDoc(
+        doc(authed(STAFF, { staff: true }), 'users', OWNER, 'legalAcceptances', VERSION),
+      ),
+    )
+    await assertFails(
+      getDoc(doc(authed(EDITOR), 'users', OWNER, 'legalAcceptances', VERSION)),
+    )
+    await assertFails(
+      getDoc(doc(anon(), 'users', OWNER, 'legalAcceptances', VERSION)),
+    )
+  })
+
+  it('no client creates, amends or deletes an acceptance — owner and staff included', async () => {
+    // Forging: one more acceptance the user never made.
+    await mustDeny(
+      'the owner creating an acceptance for themselves',
+      setDoc(doc(authed(OWNER), 'users', OWNER, 'legalAcceptances', '2026-08-13.1'), {
+        version: '2026-08-13.1', acceptedAtMs: Date.now(), source: 'signup',
+      }),
+    )
+    // Back-dating: the dispute the record exists to settle.
+    await mustDeny(
+      'the owner amending acceptedAtMs',
+      updateDoc(doc(authed(OWNER), 'users', OWNER, 'legalAcceptances', VERSION), {
+        acceptedAtMs: 1,
+      }),
+    )
+    // Repudiating: "I never agreed to that version."
+    await mustDeny(
+      'the owner deleting their acceptance',
+      deleteDoc(doc(authed(OWNER), 'users', OWNER, 'legalAcceptances', VERSION)),
+    )
+    // A staff-claimed CLIENT token is still a client. The Admin SDK signup
+    // path is the only writer; a staff laptop with the console open is not it.
+    const superStaffDb = authed(STAFF, { staff: true, staffRole: 'super' })
+    await mustDeny(
+      'super staff creating an acceptance',
+      setDoc(doc(superStaffDb, 'users', OWNER, 'legalAcceptances', 'forged-v'), {
+        version: 'forged-v', acceptedAtMs: Date.now(),
+      }),
+    )
+    await mustDeny(
+      'super staff amending an acceptance',
+      updateDoc(doc(superStaffDb, 'users', OWNER, 'legalAcceptances', VERSION), {
+        acceptedAtMs: 2,
+      }),
+    )
+    await mustDeny(
+      'super staff deleting an acceptance',
+      deleteDoc(doc(superStaffDb, 'users', OWNER, 'legalAcceptances', VERSION)),
+    )
+    // The Admin SDK path still writes — the deny closes the client door only.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'users', OWNER, 'legalAcceptances', '2026-08-13.2'),
+        { version: '2026-08-13.2', acceptedAtMs: Date.now(), source: 'signup' },
+      )
+    })
+  })
+
+  /**
+   * The OR trap, asserted at the exact path. Sibling `match` blocks OR their
+   * allows and the looser wins, and the loosest grant adjacent to this
+   * subtree is the parent: `users/{userId}` is owner-WRITABLE (the account
+   * page). This proves that grant stops at the document — the same owner
+   * token writes the parent and is refused one level down, so a future
+   * `match /users/{userId}/{document=**}` convenience block (or any sibling
+   * re-granting the subtree) turns this red instead of shipping.
+   */
+  it('the parent user-doc write does not reach the acceptance (OR trap)', async () => {
+    await mustAllow(
+      'the owner writing their own user doc — the loosest adjacent grant',
+      setDoc(doc(authed(OWNER), 'users', OWNER), { displayName: 'Z' }, { merge: true }),
+    )
+    await mustDeny(
+      'the same owner token merge-setting the acceptance one level down',
+      setDoc(
+        doc(authed(OWNER), 'users', OWNER, 'legalAcceptances', VERSION),
+        { acceptedAtMs: 3 },
+        { merge: true },
+      ),
+    )
+  })
+})
+
+/**
+ * The AGL-1501 lockdown surface (AGL-1507), live in ruleset 0370ace4.
+ *
+ * `lockdowns/{id}` holds the platform and per-user panic records. Reads are
+ * staff-only — a public read would let anyone enumerate which users are
+ * locked; the visitor-facing notice is served sanitized by an API route.
+ * Writes are closed to EVERYONE including staff clients, because a lockdown
+ * write must also revoke sessions, fan out projections and revalidate cached
+ * pages — /api/admin/lockdown (Admin SDK) is the only writer, and a bare
+ * client write would be a lockdown that looks set and enforces nothing.
+ */
+describe('the lockdowns collection is staff-read, nobody-write (AGL-1507)', () => {
+  const LOCKED_UID = OUTSIDER
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'lockdowns', 'platform'), {
+        scope: 'platform', reasonCode: 'incident', message: 'Back soon',
+        lockedAtMs: Date.now(),
+      })
+      await setDoc(doc(db, 'lockdowns', `user--${LOCKED_UID}`), {
+        scope: 'user', uid: LOCKED_UID, reasonCode: 'abuse',
+        lockedAtMs: Date.now(),
+      })
+    })
+  })
+
+  it('staff read lockdowns; members, the locked user and anon cannot', async () => {
+    await mustAllow(
+      'staff reading the platform lockdown',
+      getDoc(doc(authed(STAFF, { staff: true }), 'lockdowns', 'platform')),
+    )
+    await mustAllow(
+      'staff listing lockdowns',
+      getDocs(collection(authed(STAFF, { staff: true }), 'lockdowns')),
+    )
+    await assertFails(getDoc(doc(authed(OWNER), 'lockdowns', 'platform')))
+    // The locked user learning the shape of their own lock is the
+    // enumeration the staff-only read exists to prevent — the sanitized
+    // notice comes from the API route, not this document.
+    await assertFails(
+      getDoc(doc(authed(LOCKED_UID), 'lockdowns', `user--${LOCKED_UID}`)),
+    )
+    await assertFails(getDoc(doc(anon(), 'lockdowns', 'platform')))
+    await assertFails(getDocs(collection(authed(OWNER), 'lockdowns')))
+  })
+
+  it('no client writes a lockdown — not even the loosest staff token (OR trap)', async () => {
+    // Super staff is the loosest grant in the whole file (it updates org
+    // docs wholesale), so it is the token a future sibling `match` that
+    // accidentally spans /lockdowns would most likely admit. Asserted at the
+    // exact path, per the OR-trap rule: sibling blocks OR and the looser wins.
+    const superStaffDb = authed(STAFF, { staff: true, staffRole: 'super' })
+    await mustDeny(
+      'super staff creating a lockdown',
+      setDoc(doc(superStaffDb, 'lockdowns', 'user--uid-victim'), {
+        scope: 'user', uid: 'uid-victim', reasonCode: 'abuse',
+      }),
+    )
+    await mustDeny(
+      'super staff amending the platform lockdown',
+      updateDoc(doc(superStaffDb, 'lockdowns', 'platform'), { message: 'edited' }),
+    )
+    // Deleting IS the lift — done bare, sessions stay revoked, projections
+    // stay set, caches stay poisoned. Only the route may lift.
+    await mustDeny(
+      'super staff lifting a lockdown by deleting the doc',
+      deleteDoc(doc(superStaffDb, 'lockdowns', 'platform')),
+    )
+    await mustDeny(
+      'plain staff writing a lockdown',
+      setDoc(doc(authed(STAFF, { staff: true }), 'lockdowns', 'platform'), {
+        message: 'edited',
+      }, { merge: true }),
+    )
+    await mustDeny(
+      'an org owner writing a lockdown',
+      setDoc(doc(authed(OWNER), 'lockdowns', 'platform'), { message: 'edited' }),
+    )
+    // The locked user un-locking themselves is the write that matters most.
+    await mustDeny(
+      'the locked user deleting their own lockdown',
+      deleteDoc(doc(authed(LOCKED_UID), 'lockdowns', `user--${LOCKED_UID}`)),
+    )
+    // Positive control: the same super-staff token IS otherwise the loosest
+    // in the file — it writes an org doc wholesale. So the denials above are
+    // this block's `write: false`, not a broken rules file.
+    await mustAllow(
+      'the same super-staff token updating an org doc',
+      updateDoc(doc(superStaffDb, 'orgs', ORG), { suspendedAt: new Date() }),
+    )
+  })
+})
+
+/**
+ * The host half of AGL-1501 (AGL-1507): `suspendedAt`/`suspendedReasonCode`/
+ * `suspendedMessage`/`suspendedUntilMs` on `hosts/{hostId}` are the STAFF
+ * takedown — the site 503s while they are set. They ride the same update key
+ * diff as `subdomain`/`cname`, and the point is the asymmetry: `maintenance`
+ * is the customer's own switch and stays editor-writable, while a security
+ * takedown the site's own editors could clear from the client SDK would not
+ * be a takedown.
+ */
+describe('the staff host takedown keys are not the site\'s to write (AGL-1507)', () => {
+  const TAKEDOWN_KEYS = [
+    'suspendedAt', 'suspendedReasonCode', 'suspendedMessage', 'suspendedUntilMs',
+  ]
+
+  it('editors and site admins cannot set any suspended* key', async () => {
+    for (const uid of [EDITOR, OWNER]) {
+      for (const key of TAKEDOWN_KEYS) {
+        await mustDeny(
+          `hosts/{hostId} { ${key} } as ${uid}`,
+          updateDoc(doc(authed(uid), 'hosts', HOST), {
+            [key]: key === 'suspendedAt' ? new Date() : 'self-served',
+          }),
+        )
+      }
+    }
+  })
+
+  it('a locked-down site cannot be unlocked from the client', async () => {
+    // Staff locked the host; the org itself is NOT suspended, so the
+    // editor's update branch is otherwise wide open — the key diff is the
+    // only thing standing between the site and a self-lift.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'hosts', HOST), {
+        suspendedAt: new Date(), suspendedReasonCode: 'abuse',
+        suspendedMessage: 'Suspended pending review',
+        suspendedUntilMs: Date.now() + 86_400_000,
+      })
+    })
+    for (const uid of [EDITOR, OWNER]) {
+      for (const key of TAKEDOWN_KEYS) {
+        await mustDeny(
+          `clearing hosts/{hostId}.${key} as ${uid}`,
+          updateDoc(doc(authed(uid), 'hosts', HOST), { [key]: deleteField() }),
+        )
+      }
+      // Shortening the sentence is the same lift by another value.
+      await mustDeny(
+        `lowering suspendedUntilMs as ${uid}`,
+        updateDoc(doc(authed(uid), 'hosts', HOST), { suspendedUntilMs: 1 }),
+      )
+    }
+    // Bundling a takedown key with a legitimate one must not launder it
+    // through — `hasAny` bites on the whole diff.
+    await mustDeny(
+      'smuggling suspendedAt inside a rename',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        displayName: 'Innocent', suspendedAt: deleteField(),
+      }),
+    )
+    // The asymmetry the design pins: the customer's own maintenance switch
+    // still works on a host under staff takedown, and so does ordinary
+    // authoring — the deny is four keys, not the document.
+    await mustAllow(
+      'the editor flipping maintenance on a taken-down host',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), { maintenance: true }),
+    )
+    // And staff still write the family — the lift path support actually uses.
+    await mustAllow(
+      'staff clearing the takedown',
+      updateDoc(doc(authed(STAFF, { staff: true }), 'hosts', HOST), {
+        suspendedAt: deleteField(), suspendedReasonCode: deleteField(),
+        suspendedMessage: deleteField(), suspendedUntilMs: deleteField(),
+      }),
+    )
+  })
+})
+
+/**
+ * The org half of AGL-1501 (AGL-1507): `suspendedReasonCode`/
+ * `suspendedMessage`/`suspendedUntilMs` joined `suspendedAt` on BOTH deny
+ * branches of the org update rule. The manager branch is already swept by the
+ * AGL-1355 parsed-list loop above, so what this adds is (a) the floor — the
+ * three names must stay ON the parsed list, so deleting one from the rules
+ * goes red by name here rather than silently shrinking the loop — and (b) the
+ * billing-staff branch, which the parser does not read.
+ */
+describe('the org suspended* additions are on both deny branches (AGL-1507)', () => {
+  const NEW_ORG_KEYS = ['suspendedReasonCode', 'suspendedMessage', 'suspendedUntilMs']
+
+  it('the three new keys are on the parsed manager deny list', () => {
+    for (const key of NEW_ORG_KEYS) {
+      assert.ok(
+        ORG_ADMIN_DENIED.includes(key),
+        `\`${key}\` fell off the canManageOrg() deny list — an org admin ` +
+          `with the client SDK could now ${key === 'suspendedUntilMs'
+            ? 'shorten their own suspension'
+            : 'rewrite their own suspension record'} (AGL-1501).`,
+      )
+    }
+  })
+
+  it('billing staff cannot write the new keys; super staff can', async () => {
+    const billingStaffDb = authed(STAFF, { staff: true, staffRole: 'billing' })
+    for (const key of NEW_ORG_KEYS) {
+      await mustDeny(
+        `orgs/{orgId} { ${key} } as billing staff`,
+        updateDoc(doc(billingStaffDb, 'orgs', ORG), {
+          [key]: key === 'suspendedUntilMs' ? 1 : 'laundered',
+        }),
+      )
+    }
+    // Bundled with the write billing staff legitimately makes.
+    await mustDeny(
+      'smuggling suspendedUntilMs inside a plan change',
+      updateDoc(doc(billingStaffDb, 'orgs', ORG), {
+        plan: 'business', suspendedUntilMs: 1,
+      }),
+    )
+    // Positive controls: the deny is the key diff, not the branch — billing
+    // staff still write plans, and super staff still write the family.
+    await mustAllow(
+      'billing staff still changing the plan',
+      updateDoc(doc(billingStaffDb, 'orgs', ORG), { plan: 'business' }),
+    )
+    await mustAllow(
+      'super staff writing the suspension record',
+      updateDoc(doc(authed(STAFF, { staff: true, staffRole: 'super' }), 'orgs', ORG), {
+        suspendedReasonCode: 'abuse', suspendedMessage: 'Suspended',
+        suspendedUntilMs: Date.now() + 86_400_000,
+      }),
+    )
+  })
+
+  it('a manager cannot write them, alone or bundled with a legit key', async () => {
+    for (const key of NEW_ORG_KEYS) {
+      await mustDeny(
+        `orgs/{orgId} { ${key} } as the org owner`,
+        updateDoc(doc(authed(OWNER), 'orgs', ORG), {
+          [key]: key === 'suspendedUntilMs' ? 1 : 'self-served',
+        }),
+      )
+    }
+    await mustDeny(
+      'smuggling suspendedMessage inside a rename',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), {
+        name: 'Innocent', suspendedMessage: 'all clear',
+      }),
+    )
+    // The branch itself still works.
+    await mustAllow(
+      'the owner still renaming the org',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { name: 'Acme Again' }),
+    )
+  })
+})
+
 assert.ok(true)
