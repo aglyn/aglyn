@@ -89,6 +89,97 @@ export function newMediaFolderDoc(
   }
 }
 
+/** What separates the segments of a folder path in a picker row. */
+export const MEDIA_FOLDER_PATH_SEPARATOR = ' / '
+
+/** One row of a folder picker (AGL-1470). */
+export interface MediaFolderChoice {
+  $id: string
+  /** The folder's own name, for a caller that indents instead. */
+  name: string
+  /** Ancestors then self: `['Blog', 'Covers']`. */
+  path: string[]
+  /** `Blog / Covers` — what a picker row must show. */
+  label: string
+  /** 0 for a root folder; an indent level. */
+  depth: number
+}
+
+/**
+ * The folder list a PICKER may show (AGL-1470).
+ *
+ * A picker that shows bare names is not merely terse. Duplicate names across
+ * parents are normal — `Covers`, `Images`, `Archive`, `2026` — and with
+ * `Blog/Covers` and `Press/Covers` both present, MOVE TO FOLDER… drew two
+ * rows reading exactly `Covers`. Choosing the wrong one is **silent**: a move
+ * is copy-then-delete, so the object is rewritten under a different prefix,
+ * and because every reference to it is by id, nothing breaks. No error, no
+ * missing image — the file is simply filed where nobody will look for it, and
+ * the mistake is undetectable from the site.
+ *
+ * So the label carries the whole path, and the order is the sidebar's:
+ * depth-first, each child directly under its parent, siblings by `order` then
+ * name. The rail computed that hierarchy correctly the whole time; the
+ * pickers beside it threw it away.
+ *
+ * Two robustness rules, both chosen to keep a destination REACHABLE rather
+ * than tidy:
+ *
+ * - **A folder whose parent is missing is kept, at the root.** A scoped
+ *   collaborator's read set can admit a child and refuse its parent
+ *   (AGL-1466), and dropping the child would remove a real destination from
+ *   the menu — a worse failure than an unindented row.
+ * - **A cycle terminates.** This runs on every render of an open picker.
+ */
+export function mediaFolderChoices(
+  folders: ReadonlyArray<AglynMediaFolder & { $id: string }>,
+): MediaFolderChoice[] {
+  const byId = new Map(folders.map((folder) => [folder.$id, folder]))
+  /** True when the parent link leads somewhere real and does not loop back. */
+  const hasUsableParent = (folder: AglynMediaFolder & { $id: string }) => {
+    const seen = new Set<string>([folder.$id])
+    let cursor = folder.parentId ?? null
+    while (cursor) {
+      if (seen.has(cursor)) return false
+      const parent = byId.get(cursor)
+      if (!parent) return false
+      seen.add(cursor)
+      cursor = parent.parentId ?? null
+    }
+    return Boolean(folder.parentId)
+  }
+  const childrenOf = new Map<string | null, Array<AglynMediaFolder & { $id: string }>>()
+  for (const folder of folders) {
+    // Same normalisation the rail applies: anything without a resolvable
+    // parent chain is drawn as a root rather than dropped.
+    const parent = hasUsableParent(folder) ? (folder.parentId as string) : null
+    childrenOf.set(parent, [...(childrenOf.get(parent) ?? []), folder])
+  }
+  for (const siblings of childrenOf.values()) {
+    siblings.sort(
+      (a, b) =>
+        (a.order ?? 0) - (b.order ?? 0) ||
+        String(a.name).localeCompare(String(b.name)),
+    )
+  }
+  const choices: MediaFolderChoice[] = []
+  const walk = (parentId: string | null, path: string[]) => {
+    for (const folder of childrenOf.get(parentId) ?? []) {
+      const nextPath = [...path, folder.name]
+      choices.push({
+        $id: folder.$id,
+        name: folder.name,
+        path: nextPath,
+        label: nextPath.join(MEDIA_FOLDER_PATH_SEPARATOR),
+        depth: nextPath.length - 1,
+      })
+      walk(folder.$id, nextPath)
+    }
+  }
+  walk(null, [])
+  return choices
+}
+
 /** Nesting cap, enforced in UI and validation (root children = depth 1). */
 export const MEDIA_FOLDER_MAX_DEPTH = 5
 

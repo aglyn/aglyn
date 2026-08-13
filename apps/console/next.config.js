@@ -68,17 +68,26 @@ module.exports = withAglyn({
     AGLYN_SILOED_HOST: process.env.AGLYN_SILOED_HOST,
   },
   /**
-   * The three routes that call into `sharp` (AGL-1471).
+   * The routes that call into `sharp` (AGL-1471, extended by AGL-1476).
    *
-   * `/api/health` is listed with the two that do the work, deliberately: it is
+   * `/api/health` is listed with the ones that do the work, deliberately: it is
    * the probe that made this knowable, and a probe that runs in a lambda
    * assembled differently from the one it speaks for is worse than no probe —
    * it would report `ok: true` for a runtime that still cannot encode.
+   *
+   * `/api/media/upload-url` joined them when its finalize started generating
+   * variants for signed-path images (AGL-1476). Leaving it out would reproduce
+   * AGL-1471 exactly, on the one route this fix is about: the code would run,
+   * the addon would ship, `libvips-cpp.so` would not, `dlopen` would fail, and
+   * every large image would land with `variants: []` — the same empty array
+   * the issue set out to fix, now with a `variantsError` attached. This list is
+   * where a route becomes able to encode at all.
    */
   outputFileTracingIncludes: {
     '/api/health': SHARP_NATIVE_LIBRARIES,
     '/api/media/upload': SHARP_NATIVE_LIBRARIES,
     '/api/media/replace': SHARP_NATIVE_LIBRARIES,
+    '/api/media/upload-url': SHARP_NATIVE_LIBRARIES,
   },
   // Same-origin Firebase auth helpers (AGL-462): OAuth redirect/popup
   // return legs break under third-party storage partitioning when the

@@ -33,6 +33,16 @@ feature; large video uploads and higher storage are gated by plan.
 - **Drag and drop to reorganize**: drag a file (or a whole selection) onto a folder to
   move it in, drag a folder onto another to nest it, or drop onto a breadcrumb to move
   items up and out. Nesting depth and name-collision rules are enforced automatically.
+- **Move to folder… shows the full path**, not just the folder name — `Blog / Covers`
+  and `Press / Covers` are two different destinations and the menu says so. The same
+  paths appear in the detail drawer's **Folder** field.
+- **Big moves are safe to interrupt.** Moving a large selection relocates the stored
+  objects one at a time, so the library keeps working through it and tells you how far
+  it has got. If it cannot finish everything, it reports the real split — *Moved 7 of
+  19 — 12 could not be moved* — and **leaves the files that did not move selected**, so
+  clicking Move again picks up exactly where it stopped. Nothing is lost either way: a
+  file is only ever in one folder, its URL keeps working, and a repeat move of a file
+  that already arrived does nothing.
 - Filter by **type, date, and size**, search, and sort the library.
 - **Search covers everything you authored, not just file names** — alt text, description,
   tags, folder name and your own custom metadata values are all searchable. Results update

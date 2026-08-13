@@ -119,7 +119,15 @@ describe('the sharp native libraries are traced into the lambda (AGL-1471)', () 
   const config = readFileSync(join(__dirname, '..', 'next.config.js'), 'utf8')
   const includes = config.slice(config.indexOf('outputFileTracingIncludes:'))
 
-  it.each(['/api/health', '/api/media/upload', '/api/media/replace'])(
+  it.each([
+    '/api/health',
+    '/api/media/upload',
+    '/api/media/replace',
+    // AGL-1476: finalize generates for signed-path images now. Without the
+    // include it would run the new code in a lambda that cannot `dlopen`
+    // libvips and write `variants: []` — the bug, with a reason attached.
+    '/api/media/upload-url',
+  ])(
     'declares the include for %s',
     (route) => {
       // `/api/health` belongs here with the two that do the work: a probe

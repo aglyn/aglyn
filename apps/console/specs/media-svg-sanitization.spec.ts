@@ -119,6 +119,13 @@ const storageFile = () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // Finalize generates variants for signed-path images now (AGL-1476), so it
+  // depends on this module. The REAL one, not a stub: it is what guarantees an
+  // SVG and a video return `{ variants: [] }` without a download, which is the
+  // property the "never downloads a non-SVG" case below is asserting.
+  ...jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/media-variants',
+  ),
   firebaseAdmin: {
     firestore: {
       FieldValue: {

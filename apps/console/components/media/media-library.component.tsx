@@ -122,6 +122,11 @@ import {
 } from './media-delete-copy'
 import { MediaFolderCard } from './media-folder-card.component'
 import { MediaFolderRail } from './media-folder-rail.component'
+import {
+  movedMediaMessage,
+  moveFailureMessage,
+  partialMoveMessage,
+} from './media-move-copy'
 import { parseMediaQuery, searchMedia } from './media-search'
 import { MediaSearchField } from './media-search-field.component'
 import {
@@ -704,6 +709,28 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       Object.fromEntries(folderList.map((folder) => [folder.$id, folder.name])),
     [folderList],
   )
+  /**
+   * The folder list every PICKER draws from (AGL-1470).
+   *
+   * `folderList` is flat and name-only. The rail nests it and reads correctly;
+   * the two menus that pick a destination did not, so `Blog/Covers` and
+   * `Press/Covers` appeared as two identical rows reading `Covers`. Choosing
+   * the wrong one is silent — the object is rewritten under another prefix and
+   * every id-based reference keeps resolving — which makes this the one place
+   * a bare name is actively unsafe rather than merely terse.
+   */
+  const folderChoices = useMemo(
+    () => Aglyn.mediaFolderChoices(folderList as any),
+    [folderList],
+  )
+  /** `Blog / Covers` by id — what the move snackbar names as a destination. */
+  const folderPathById = useMemo(
+    () =>
+      Object.fromEntries(
+        folderChoices.map((choice) => [choice.$id, choice.label]),
+      ),
+    [folderChoices],
+  )
 
   // One-shot legacy migration: create a root folder per distinct legacy
   // string and stamp `folderId` on its assets. Client-side under the
@@ -994,8 +1021,35 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           visibleTo: newFolderScope,
         }),
       )
-      await batch.commit()
-      logActivity('Created media folder', { type: 'media', name })
+      /**
+       * NOT awaited, and that is the fix (AGL-1470).
+       *
+       * `commit()` on the client SDK settles when the SERVER acknowledges,
+       * while latency compensation has already applied the write locally —
+       * so the rail drew the new folder immediately and the dialog sat open
+       * behind it waiting on a round trip. A save that has visibly worked,
+       * with the dialog still up, reads as a failure.
+       *
+       * The write is durable and retried by the SDK either way; awaiting it
+       * bought nothing but the stall. What was genuinely missing is a word
+       * when it lands, and a word when it does not.
+       */
+      void batch
+        .commit()
+        .then(() => {
+          logActivity('Created media folder', { type: 'media', name })
+          enqueueSnackbar(`Folder "${name}" created`, {
+            variant: 'success',
+            persist: false,
+          })
+        })
+        .catch((error) => {
+          console.error('media folder create', error)
+          enqueueSnackbar(`Could not create the folder "${name}"`, {
+            variant: 'error',
+            allowDuplicate: true,
+          })
+        })
       return ref.id
     },
     [
@@ -1109,15 +1163,21 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const [folderPrompt, setFolderPrompt] = useState<{
     title: string
     value: string
-    action: (name: string) => Promise<void>
+    /**
+     * Resolves `false` when the name was REFUSED — a duplicate sibling, a
+     * name past the depth cap. The dialog then stays open holding what was
+     * typed, instead of closing over a rejection and throwing the name away
+     * (AGL-1470).
+     */
+    action: (name: string) => Promise<boolean | void>
   } | null>(null)
   const [folderPromptBusy, setFolderPromptBusy] = useState(false)
   const handleFolderPromptSave = useCallback(async () => {
     if (!folderPrompt) return
     setFolderPromptBusy(true)
     try {
-      await folderPrompt.action(folderPrompt.value)
-      setFolderPrompt(null)
+      const accepted = await folderPrompt.action(folderPrompt.value)
+      if (accepted !== false) setFolderPrompt(null)
     } finally {
       setFolderPromptBusy(false)
     }
@@ -1201,39 +1261,139 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [],
   )
   const [moveAnchor, setMoveAnchor] = useState<HTMLElement | null>(null)
+  /**
+   * How far a bulk move has got, so the toolbar can say so (AGL-1470).
+   *
+   * A move of nineteen assets is nineteen serial round trips to Cloud Storage
+   * and takes tens of seconds. Nothing on screen said that, so the grid and
+   * the rail appeared to "lag a completed move by several seconds" — they were
+   * not lagging, the move had not finished, and there was no way to tell the
+   * two apart. Now the count moves while it runs.
+   */
+  const [moveProgress, setMoveProgress] = useState<{
+    done: number
+    total: number
+  } | null>(null)
+  /**
+   * Move a selection, resumably, and report what actually happened (AGL-1469).
+   *
+   * The server bounds itself by a clock and hands back everything it did not
+   * reach, so this loops until nothing remains. Three rules the old body broke:
+   *
+   * - **A partial result is never reported as a failure.** It says
+   *   `Moved 7 of 19 — 12 could not be moved`, which is the vocabulary
+   *   AGL-1461 established for delete.
+   * - **Only the ids that MOVED leave the selection.** It used to clear the
+   *   lot, so after a partial move the twelve that needed re-trying were
+   *   deselected alongside the seven that did not — and the boundary was
+   *   recoverable only by counting folders afterwards.
+   * - **A transport failure means "not moved yet", not "not moved".** The
+   *   response may be a gateway error over assets that did move, so anything
+   *   this loop did not hear back about is reported as unmoved AND kept
+   *   selected, which is the safe reading in both directions.
+   */
   const moveMedia = useCallback(
     async (mediaIds: string[], folderId: string | null) => {
       if (!mediaIds.length) return
-      // API-routed: moving between folders moves the REAL objects too.
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/media/folders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
-        body: JSON.stringify({
-          ...scopeBody,
-          action: 'move-assets',
-          mediaIds,
-          folderId,
-        }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        return void enqueueSnackbar(payload?.error ?? 'Move failed', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
+      const destination = folderId
+        ? (folderPathById[folderId] ?? folderNameById[folderId] ?? null)
+        : null
+      // Same resolution the delete path uses (AGL-1461), for the same reason:
+      // the grid has already moved by the time the snackbar lands.
+      const nameOf = (mediaId: string) =>
+        String(
+          (items as any[]).find((item) => item.$id === mediaId)?.fileName ??
+            mediaId,
+        )
+      const movedIds: string[] = []
+      const failedIds: string[] = []
+      let pending = [...mediaIds]
+      let transportError: string | null = null
+      setMoveProgress({ done: 0, total: mediaIds.length })
+      try {
+        while (pending.length) {
+          // API-routed: moving between folders moves the REAL objects too.
+          const idToken = await (user as any)?.getIdToken?.()
+          const response = await fetch('/api/media/folders', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({
+              ...scopeBody,
+              action: 'move-assets',
+              mediaIds: pending,
+              folderId,
+            }),
+          })
+          const payload = await response.json().catch(() => ({}))
+          if (!response.ok) {
+            // A 504 has no JSON body at all, which is exactly how the old
+            // code arrived at a bare "Move failed" over seven completed
+            // moves. Whatever is still pending is reported as unmoved.
+            transportError = payload?.error ?? null
+            break
+          }
+          const chunkMoved: string[] = payload?.movedIds ?? []
+          const chunkFailed: string[] = payload?.failedIds ?? []
+          movedIds.push(...chunkMoved)
+          failedIds.push(...chunkFailed)
+          setMoveProgress({
+            done: movedIds.length + failedIds.length,
+            total: mediaIds.length,
+          })
+          const remaining: string[] = payload?.remainingIds ?? []
+          // A round that attempted nothing would loop forever — the server
+          // promises at least one attempt, and this is what happens if that
+          // promise is ever broken.
+          if (!chunkMoved.length && !chunkFailed.length) {
+            break
+          }
+          pending = remaining
+        }
+      } finally {
+        setMoveProgress(null)
       }
-      clearSelection()
-      refresh()
+      const unmoved = mediaIds.filter((id) => !movedIds.includes(id))
+      // Drop only what moved: the rest stays selected, so the retry in front
+      // of the author is the correct retry.
+      forgetSelected(movedIds)
+      if (movedIds.length) refresh()
+      if (!unmoved.length) {
+        return void enqueueSnackbar(
+          movedMediaMessage(movedIds.length, destination),
+          { variant: 'success', persist: false },
+        )
+      }
+      if (!movedIds.length) {
+        return void enqueueSnackbar(
+          transportError ?? moveFailureMessage(unmoved.length, unmoved.map(nameOf)),
+          { variant: 'error', allowDuplicate: true },
+        )
+      }
       enqueueSnackbar(
-        `Moved ${mediaIds.length} file${mediaIds.length === 1 ? '' : 's'}`,
-        { variant: 'success', persist: false },
+        partialMoveMessage({
+          movedCount: movedIds.length,
+          totalCount: mediaIds.length,
+          destination,
+          failedNames: unmoved.map(nameOf),
+        }),
+        // Persisted: it names a boundary the author has to act on, and the
+        // grid behind it has already changed.
+        { variant: 'warning', persist: true },
       )
     },
-    [user, scopeId, enqueueSnackbar, refresh],
+    [
+      user,
+      scopeId,
+      enqueueSnackbar,
+      refresh,
+      forgetSelected,
+      folderPathById,
+      folderNameById,
+      items,
+    ],
   )
 
   const sensors = useSensors(
@@ -2646,9 +2806,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   ? `New folder in "${folderNameById[folderParentContext] ?? ''}"`
                   : 'New folder',
                 value: '',
-                action: async (name) => {
-                  await handleFolderCreate(name, folderParentContext)
-                },
+                action: async (name) =>
+                  Boolean(await handleFolderCreate(name, folderParentContext)),
               })
             }
           >
@@ -2792,6 +2951,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           )}
         </Breadcrumbs>
       ) : null}
+      {moveProgress ? (
+        // A nineteen-asset move is nineteen serial round trips to Cloud
+        // Storage. Saying so is what separates "still working" from the
+        // "the grid lags a completed move" reading (AGL-1470).
+        <Typography variant="body2" color="text.secondary">
+          {`Moving ${moveProgress.done} of ${moveProgress.total} file${moveProgress.total === 1 ? '' : 's'}…`}
+        </Typography>
+      ) : null}
       {!onSelect && selected.size ? (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2">
@@ -2839,21 +3006,26 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             >
               {'No folder'}
             </MenuItem>
-            {folderList.map((folder) => (
+            {folderChoices.map((choice) => (
               <MenuItem
-                key={folder.$id}
+                key={choice.$id}
                 onClick={() => {
                   setMoveAnchor(null)
-                  void moveMedia([...selected], folder.$id)
+                  void moveMedia([...selected], choice.$id)
                 }}
+                // Indented AND pathed. The indent is the sidebar's shape,
+                // which is what makes the list scannable; the path is what
+                // makes a row unambiguous once it scrolls away from its
+                // parent (AGL-1470).
+                sx={{ pl: 2 + choice.depth * 1.5 }}
               >
-                {folder.name}
+                {choice.label}
               </MenuItem>
             ))}
           </Menu>
         </Stack>
       ) : null}
-      {busy || loadingMedia ? <LinearProgress /> : null}
+      {busy || loadingMedia || moveProgress ? <LinearProgress /> : null}
       {loadError && !loadingMedia ? (
         // Never the empty state: "no media" is a claim about the library,
         // and a failed read is a claim about us (AGL-1062).
@@ -2891,9 +3063,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   setFolderPrompt({
                     title: `New folder in "${folder.name}"`,
                     value: '',
-                    action: async (name) => {
-                      await handleFolderCreate(name, folder.$id)
-                    },
+                    action: async (name) =>
+                      Boolean(await handleFolderCreate(name, folder.$id)),
                   })
                 }
                 onRename={() =>
@@ -3099,9 +3270,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             }
           >
             <MenuItem value="">{'No folder'}</MenuItem>
-            {folderList.map((folder) => (
-              <MenuItem key={folder.$id} value={folder.$id}>
-                {folder.name}
+            {/* Same paths as the bulk picker (AGL-1470) — this one also has
+                to render the CURRENT folder in the closed field, where a bare
+                "Covers" says even less. */}
+            {folderChoices.map((choice) => (
+              <MenuItem
+                key={choice.$id}
+                value={choice.$id}
+                sx={{ pl: 2 + choice.depth * 1.5 }}
+              >
+                {choice.label}
               </MenuItem>
             ))}
           </TextField>

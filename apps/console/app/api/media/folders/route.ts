@@ -35,6 +35,7 @@ import {
   mediaCdnPathUpdate,
   scopeCascadeSlice,
 } from '../../../../utils/server/media-scope'
+import { moveAssetsWithinBudget } from '../../../../utils/server/media-move'
 
 /** Bounded per request — console-triggered admin op, not a batch job. */
 const MAX_ASSETS_PER_OP = 500
@@ -238,23 +239,69 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ ok: true, moved: assets.length }, { status: 200 })
     }
 
+    /**
+     * The grid's move, bounded and resumable (AGL-1469).
+     *
+     * This used to be an unbounded serial loop with no try/catch. Moving 19
+     * assets ran past the platform's function limit, so the invocation was
+     * killed mid-loop: seven assets had already been copied to their new
+     * prefix and deleted from the old one, the client got a gateway error
+     * whose body would not parse as JSON, and its fallback string — "Move
+     * failed" — reported a total failure over a partial rewrite of storage.
+     *
+     * `moveAssetsWithinBudget` owns the arithmetic and the reason the bound is
+     * a clock rather than a count. What matters here is the ANSWER SHAPE: a
+     * partial move is a 200 carrying the split, never a status the client can
+     * only read as "nothing happened".
+     *
+     * On a failed asset the `folderId` write may already have landed while the
+     * object stayed at its old prefix. That is deliberately left rather than
+     * rolled back: `relocateAsset` derives both paths from stored state and
+     * skips when they agree, so it is idempotent and a retry converges. The
+     * asset's URL keeps working throughout, because it is the OLD url and the
+     * old object is still there.
+     */
     if (action === 'move-assets') {
-      const mediaIds = Array.isArray(body?.mediaIds)
-        ? (body.mediaIds as unknown[]).map(String).slice(0, 100)
+      const requested = Array.isArray(body?.mediaIds)
+        ? (body.mediaIds as unknown[]).map(String)
         : []
+      const mediaIds = requested.slice(0, MAX_ASSETS_PER_OP)
+      // Everything past the per-request ceiling. Returned rather than
+      // dropped: the old code sliced at 100 and said nothing, so a selection
+      // of 150 reported a clean "Moved 150 files" over 50 that never moved.
+      const overflowIds = requested.slice(MAX_ASSETS_PER_OP)
       const folderId = body?.folderId ? String(body.folderId) : null
       if (!mediaIds.length) {
         return Response.json({ error: 'Missing mediaIds' }, { status: 400 })
       }
-      let moved = 0
-      for (const mediaId of mediaIds) {
-        const snapshot = await mediaRef.doc(mediaId).get()
-        if (!snapshot.exists) continue
-        await snapshot.ref.set({ folderId }, { merge: true })
-        await relocateAsset(await snapshot.ref.get())
-        moved += 1
-      }
-      return Response.json({ ok: true, moved }, { status: 200 })
+      const { movedIds, failedIds, remainingIds: unreached } =
+        await moveAssetsWithinBudget({
+          mediaIds,
+          moveOne: async (mediaId) => {
+            const snapshot = await mediaRef.doc(mediaId).get()
+            // A document that is not there cannot be moved and cannot be
+            // retried into existence — a failure, not a silent `continue`.
+            if (!snapshot.exists) throw new Error('Unknown media')
+            await snapshot.ref.set({ folderId }, { merge: true })
+            await relocateAsset(await snapshot.ref.get())
+          },
+          onFailure: (mediaId, error) =>
+            console.error('media move failed', mediaId, error),
+        })
+      const remainingIds = [...unreached, ...overflowIds]
+      return Response.json(
+        {
+          ok: true,
+          // `moved` stays the count it always was, so a caller written
+          // against the old shape keeps reading the same field.
+          moved: movedIds.length,
+          movedIds,
+          failedIds,
+          remainingIds,
+          done: remainingIds.length === 0,
+        },
+        { status: 200 },
+      )
     }
 
     // Folder scope cascade (AGL-1045). Assets carry their OWN `visibleTo`
@@ -443,4 +490,14 @@ async function handler(request: Request): Promise<Response> {
 }
 
 export const dynamic = 'force-dynamic'
+/**
+ * Every action here relocates real Storage objects — a rename or a folder
+ * delete walks the whole subtree, and a move copies each asset AND each of its
+ * CDN variants. This route had no declared duration and therefore ran at the
+ * account default, which a 19-asset move outran (AGL-1469). Sixty seconds is
+ * what the other long-running routes in this app declare; it is headroom for
+ * `MOVE_BUDGET_MS`, not a substitute for it — an unbounded loop is not made
+ * finishable by a bigger ceiling, only by yielding.
+ */
+export const maxDuration = 60
 export { handler as POST }

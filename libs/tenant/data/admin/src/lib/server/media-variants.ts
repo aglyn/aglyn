@@ -205,6 +205,87 @@ export async function generateMediaVariants(options: {
 }
 
 /**
+ * The largest object this will pull back OUT of storage in order to generate.
+ *
+ * Deliberately equal to `IMAGE_MAX_BYTES`, the console's per-type ceiling for
+ * an image (`apps/console/utils/media-upload-limits.ts`), rather than derived
+ * from it: this library cannot import that file, and the two numbers answer
+ * different questions. That one asks "may this be uploaded at all"; this one
+ * asks "may a serverless function afford to fetch it back and decode it". They
+ * agree today, which is the point — every image the DAM accepts gets variants.
+ * If the upload ceiling is ever raised for a format where 15 MB is small (a
+ * camera RAW, a TIFF), the download stops there instead of silently following
+ * it into a timeout, and says so.
+ */
+export const MEDIA_VARIANT_SOURCE_MAX_BYTES = 15 * 1024 * 1024
+
+/**
+ * Generate variants for an object whose bytes are in STORAGE, not in hand
+ * (AGL-1476).
+ *
+ * `/api/media/upload` has the buffer — the client base64'd it into the request
+ * body. `/api/media/upload-url` never sees it: the browser PUTs straight to GCS
+ * with a signed URL, and finalize is handed a path. Since AGL-1465 gave images
+ * a signed-path ceiling, every image between 3 MB and 15 MB takes that route,
+ * so the assets that most need a 320px WebP became precisely the ones that got
+ * none. Measured on production 2026-08-13: a 6,606,921 B PNG landed with
+ * `variants` **absent**, and `?w=320` served back all 6,606,921 B of
+ * `image/png`; a 2,168,376 B PNG on the base64 route landed with
+ * `variants: [320, 640]` and answered `?w=320` in 31,566 B of `image/webp`.
+ *
+ * So the bytes have to come back. `readSource` is a callback, for the same
+ * reason `saveVariant` is one: this stays free of a storage dependency, and a
+ * spec can hand it a real PNG and count what comes out.
+ *
+ * **The read is the last thing that happens, not the first.** Widths are
+ * decided from the header dimensions the caller already has, so a source
+ * narrower than every target width — and every non-image — costs nothing at
+ * all. That ordering is what keeps this from pulling a 200 MB video back out
+ * of the bucket to discover it has no variants.
+ *
+ * The size refusal is reported as an ERROR rather than as an empty success,
+ * and the distinction is AGL-1468's: `variants: []` with no error means
+ * nothing was ELIGIBLE, and an image the platform accepted and then declined
+ * to optimize is not that. It is eligible work that did not happen, so it
+ * belongs on the document and in `variantFailures` where it can be counted.
+ */
+export async function generateStoredMediaVariants(options: {
+  contentType: string
+  /** The object's REAL size, as storage reports it. */
+  sizeBytes: number
+  sourceWidth?: number | null
+  objectPath: string
+  /** Fetches the whole object. Only ever called when there is work to do. */
+  readSource: () => Promise<Buffer>
+  saveVariant: (path: string, webp: Buffer) => Promise<void>
+  maxSourceBytes?: number
+}): Promise<MediaVariantOutcome> {
+  const widths = mediaVariantWidthsFor(options)
+  if (!widths.length) return { variants: [] }
+
+  const maxSourceBytes = options.maxSourceBytes ?? MEDIA_VARIANT_SOURCE_MAX_BYTES
+  if (options.sizeBytes > maxSourceBytes) {
+    return {
+      variants: [],
+      error: `source too large to fetch for variants (${options.sizeBytes} > ${maxSourceBytes} bytes)`,
+    }
+  }
+
+  let buffer: Buffer
+  try {
+    buffer = await options.readSource()
+  } catch (error) {
+    // A download failure is a genuine fault on an eligible asset, and it is
+    // NOT the same event as `sharp` being unavailable — so it is described
+    // here rather than left to be inferred from a message three frames away.
+    console.error('media variant source download failed', options.objectPath, error)
+    return { variants: [], error: `source download failed — ${describe(error)}` }
+  }
+
+  return generateMediaVariants({ ...options, buffer })
+}
+
+/**
  * Can this deployment produce a variant at all?
  *
  * Synthesises a small image in memory, downscales it, and asserts the result
