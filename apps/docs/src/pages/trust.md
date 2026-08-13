@@ -35,6 +35,7 @@ does not exist.
 | Subprocessor | Purpose |
 | --- | --- |
 | **Google Cloud / Firebase** | Primary datastore (Firestore), authentication, file storage. US region. |
+| **Google reCAPTCHA** | Bot protection on authentication and data access, via Firebase App Check. |
 | **Vercel** | Application hosting and CDN for the console, published sites and docs. |
 | **Stripe** | Payments. Card details go directly to Stripe; Aglyn never receives or stores a card number. |
 | **Resend** | Transactional email delivery. |
