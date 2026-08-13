@@ -33,7 +33,10 @@
  */
 
 const mockEraseOrg = jest.fn()
-const mockSendEmail = jest.fn(async () => undefined)
+// Typed with its parameter: `jest.fn(async () => …)` infers a zero-arity
+// signature, so passing the payload through is a compile error even though it
+// runs fine. `nx test` never surfaced that — only `tsc` does.
+const mockSendEmail = jest.fn(async (_payload: unknown) => undefined)
 
 let mockDue: string[] = []
 
@@ -69,7 +72,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/shared-util-email', () => ({
   isEmailConfigured: () => false,
-  sendEmail: (payload: unknown) => mockSendEmail(payload as never),
+  sendEmail: (payload: unknown) => mockSendEmail(payload),
 }))
 
 jest.mock('../../_lib/render-system-email', () => ({
