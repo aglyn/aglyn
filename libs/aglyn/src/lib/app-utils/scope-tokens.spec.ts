@@ -33,6 +33,7 @@ import {
   parseScopeToken,
   scopeForHosts,
   scopeTokensForHost,
+  storedScope,
   visibleToHost,
   visibleToTokens,
 } from './scope-tokens'
@@ -316,5 +317,57 @@ describe('newResourceScopeFields (AGL-1478)', () => {
     // by design and no read path treats it as legacy, so it is permanent
     // where a missing field is repairable.
     expect(() => newResourceScopeFields([])).toThrow(/empty scope/)
+  })
+})
+
+/**
+ * The read-side counterpart of `newResourceScopeFields`, and the answer to
+ * the same question this module keeps being asked wrongly (AGL-1466/1480).
+ *
+ * Every helper above answers "may this be seen", where a missing field reads
+ * as org-wide because the AGL-1040 docs predate the backfill. An EDITOR asks
+ * a different question — "what is stored" — and four call sites in two files
+ * each wrote their own `Array.isArray(x) ? x : ['org']` for it, which is the
+ * first question's answer given to the second one. That is how a folder no
+ * site could see reported "All sites" for three weeks.
+ */
+describe('storedScope (AGL-1480)', () => {
+  it('answers null when nothing is stored', () => {
+    expect(storedScope(undefined)).toBeNull()
+    expect(storedScope(null)).toBeNull()
+    // Not an array at all — a legacy string, a number, whatever landed there.
+    expect(storedScope('org' as unknown as string[])).toBeNull()
+  })
+
+  it('answers null for a stored empty array too', () => {
+    // The two are different on the doc and identical to an editor: neither
+    // is a scope somebody chose, and both must offer the choice rather than
+    // pre-fill one. `newResourceScopeFields` refuses to WRITE this; the
+    // editor still has to read the ones that exist.
+    expect(storedScope([])).toBeNull()
+  })
+
+  it('answers the tokens verbatim, copied not aliased', () => {
+    const stored = ['host:h1', 'host:h2']
+    const read = storedScope(stored)
+    expect(read).toEqual(['host:h1', 'host:h2'])
+    stored.push('org')
+    expect(read).toEqual(['host:h1', 'host:h2'])
+  })
+
+  it('does not normalize — an editor shows what is there', () => {
+    // `normalizeVisibleTo` collapses and dedupes for STORAGE. Doing it here
+    // would make an untouched drawer differ from the document it was seeded
+    // from, and the save gate compares those two to decide whether to write.
+    expect(storedScope(['org', 'host:h1'])).toEqual(['org', 'host:h1'])
+    expect(normalizeVisibleTo(['org', 'host:h1'])).toEqual([ORG_SCOPE_TOKEN])
+  })
+
+  it('never substitutes the org token, which is the whole point', () => {
+    expect(storedScope(undefined)).not.toEqual([ORG_SCOPE_TOKEN])
+    // The reading the rest of this module takes, for contrast: absent is
+    // visible-to-all when ASKING PERMISSION, and stored-nothing when asking
+    // what a person chose. Both are correct; conflating them is the bug.
+    expect(visibleToHost(undefined, 'h1')).toBe(true)
   })
 })

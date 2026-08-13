@@ -126,6 +126,49 @@ export function visibleToTokens(
 }
 
 /**
+ * The scope a document ACTUALLY carries — `null` when it carries none
+ * (AGL-1466/AGL-1480).
+ *
+ * Every helper above this line answers "may this be seen", and for that
+ * question a missing `visibleTo` reads as org-wide: the AGL-1040 docs
+ * predate the backfill and must stay visible until it reaches them.
+ *
+ * An **editor** asks a different question — "what did somebody choose" —
+ * and the first question's answer is wrong for it. Four call sites across
+ * two files each wrote their own
+ *
+ * ```ts
+ * Array.isArray(doc.visibleTo) ? doc.visibleTo : [ORG_SCOPE_TOKEN]
+ * ```
+ *
+ * and every one of them rendered "All sites" over a document no site could
+ * see, because both enforcement layers fail CLOSED on the missing field.
+ * That inversion is why AGL-1466 went three weeks unnoticed with the folder
+ * tree missing from every host, and AGL-1480 is the third and fourth copies
+ * of it turning up at the surface people use most.
+ *
+ * So: one function, the same lesson `newMediaFolderDoc` drew on the write
+ * side. A caller that wants a display default may still `?? []` or
+ * `?? [ORG_SCOPE_TOKEN]` — but it has to say so, in one visible place,
+ * instead of a ternary that reads like a null check.
+ *
+ * An empty array answers `null` too. On the document the two differ, and
+ * `newResourceScopeFields` refuses to WRITE one; to an editor they are the
+ * same fact — nobody chose this — and both must offer the choice rather
+ * than pre-fill an answer.
+ *
+ * Not normalized, deliberately. `normalizeVisibleTo` collapses for STORAGE;
+ * doing it here would make an untouched editor differ from the document it
+ * was seeded from, and the save gates compare exactly those two to decide
+ * whether to write at all.
+ */
+export function storedScope(
+  visibleTo: readonly string[] | undefined | null
+): string[] | null {
+  return Array.isArray(visibleTo) && visibleTo.length ? [...visibleTo] : null
+}
+
+/**
  * Cleans a scope for storage: drops junk, dedupes, and collapses to
  * `['org']` when org-wide is present, since that already implies every
  * host. Returns null when the result is unusable — empty, or over
