@@ -109,11 +109,15 @@ import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaAssetCard } from './media-asset-card.component'
+import { MediaDeleteConfirmDescription } from './media-delete-confirm.component'
+import {
+  deletedMediaMessage,
+  deleteFailureMessage,
+} from './media-delete-copy'
 import { MediaFolderCard } from './media-folder-card.component'
 import { MediaFolderRail } from './media-folder-rail.component'
 import {
   coverageOf,
-  deleteConfirmationNote,
   type MediaScanCoverage,
   provesUnused,
   usagePanelEmptyMessage,
@@ -1444,8 +1448,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     const confirmed = await confirm({
       title: `Delete ${count} file${count === 1 ? '' : 's'}?`,
       description:
-        'The files are removed from storage. Elements using their URLs ' +
-        'will stop rendering them.',
+        'The files are permanently removed from storage, and elements using ' +
+        'their URLs will stop rendering them. This cannot be undone from the ' +
+        'console.',
       confirmationText: 'Delete',
       confirmationButtonProps: { color: 'error' },
     })
@@ -1453,36 +1458,76 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       .catch(() => false)
     if (!confirmed) return
     setBusy(true)
+    // Named, not counted (AGL-1461). The grid has already moved by the time
+    // the snackbar lands, so a bare count leaves nothing on screen saying
+    // WHICH files went — the gap that let two wrong deletions through the
+    // 2026-08-13 pass unnoticed.
+    const nameOf = (mediaId: string) =>
+      String(
+        (items as any[]).find((item) => item.$id === mediaId)?.fileName ??
+          mediaId,
+      )
+    const deleted: string[] = []
+    const failed: string[] = []
     try {
       const idToken = await (user as any)?.getIdToken?.()
       for (const mediaId of selected) {
-        const response = await fetch('/api/media/upload', {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          body: JSON.stringify({ ...scopeBody, mediaId }),
-        })
-        if (!response.ok) throw new Error(`Delete failed (${response.status})`)
+        // One request per file, so a failure part-way leaves the earlier
+        // ones deleted. Throwing here reported "an error has occurred" and
+        // named neither half — carry on and report both.
+        try {
+          const response = await fetch('/api/media/upload', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({ ...scopeBody, mediaId }),
+          })
+          if (!response.ok) throw new Error(`Delete failed (${response.status})`)
+          deleted.push(nameOf(mediaId))
+        } catch (error) {
+          console.error(error)
+          failed.push(nameOf(mediaId))
+        }
       }
       setSelected(new Set())
       refresh()
-      enqueueSnackbar(`Deleted ${count} file${count === 1 ? '' : 's'}`, {
-        variant: 'success',
-        persist: false,
-      })
-      logActivity('Deleted media (bulk)', { type: 'media', name: `${count}` })
+      if (deleted.length) {
+        enqueueSnackbar(deletedMediaMessage(deleted), {
+          variant: 'success',
+          persist: false,
+        })
+        logActivity('Deleted media (bulk)', {
+          type: 'media',
+          name: `${deleted.length}`,
+        })
+      }
+      if (failed.length) {
+        enqueueSnackbar(deleteFailureMessage(failed), {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
     } catch (error) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
+      enqueueSnackbar(deleteFailureMessage([]), {
         variant: 'error',
         allowDuplicate: true,
       })
     } finally {
       setBusy(false)
     }
-  }, [selected, confirm, user, scopeId, enqueueSnackbar, logActivity, refresh])
+  }, [
+    selected,
+    items,
+    confirm,
+    user,
+    scopeId,
+    enqueueSnackbar,
+    logActivity,
+    refresh,
+  ])
 
   /**
    * "Shared with" for a whole selection or a whole folder (AGL-1045).
@@ -2123,10 +2168,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
 
   const handleDelete = useCallback(
-    (media: Aglyn.AglynHostMedia) => async () => {
-      // Reference-aware warning (AGL-176/AGL-1413): scan before the confirm
-      // so a used asset gets a real warning, not a generic one — and so an
-      // UNUSED-looking one gets an honest account of how hard we looked.
+    (media: Aglyn.AglynHostMedia) => async (): Promise<boolean> => {
+      const fileName = media.fileName ?? media.$id
+      // Reference-aware warning (AGL-176/AGL-1413): the confirmation carries
+      // a real account of where the asset is used, not a generic one — and
+      // where it looks UNUSED, an honest account of how hard we looked.
       //
       // Deletion is irreversible and this dialog is the last thing between
       // the author and it, so silence has to be earned. Before AGL-1413 the
@@ -2135,25 +2181,31 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // setting, or by any version other than the published one. Nothing on
       // screen distinguished "checked, and nothing uses it" from "did not
       // check the half of the corpus that had it".
-      const scan = await scanReferences(media.$id).catch(() => null)
-      const referenceNote = deleteConfirmationNote(
-        scan && {
-          coverage: scan.coverage,
-          names: scan.items.map((reference) => reference.name),
-        },
+      //
+      // NOT awaited (AGL-1461). The scan walks up to a 1,500-document budget
+      // across every site in the org, and awaiting it here is what made ⋮ →
+      // Delete look like a dead button — long enough that the natural
+      // response was to click a destructive control a second time. The scan
+      // starts now and the dialog opens now; `MediaDeleteConfirmDescription`
+      // writes the sentence in when the answer lands.
+      const scan = scanReferences(media.$id).then(
+        (result) => ({
+          coverage: result.coverage,
+          names: result.items.map((reference) => reference.name),
+        }),
+        () => null,
       )
       const confirmed = await confirm({
         title: 'Delete this file?',
-        description:
-          `"${media.fileName ?? media.$id}" will be removed from storage. ` +
-          'Elements using its URL will stop rendering it.' +
-          referenceNote,
+        description: (
+          <MediaDeleteConfirmDescription fileName={fileName} scan={scan} />
+        ),
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
         .then(() => true)
         .catch(() => false)
-      if (!confirmed) return
+      if (!confirmed) return false
       try {
         const idToken = await (user as any)?.getIdToken?.()
         const response = await fetch('/api/media/upload', {
@@ -2165,19 +2217,27 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           body: JSON.stringify({ ...scopeBody, mediaId: media.$id }),
         })
         if (!response.ok) throw new Error(`Delete failed (${response.status})`)
-        enqueueSnackbar('File deleted', { variant: 'success', persist: false })
+        // Names what went (AGL-1461). "File deleted" left nothing on screen
+        // identifying the file, which is why two wrong deletions in the
+        // 2026-08-13 pass were caught by memory rather than by the UI.
+        enqueueSnackbar(deletedMediaMessage([fileName]), {
+          variant: 'success',
+          persist: false,
+        })
         refresh()
         logActivity('Deleted media', {
           type: 'media',
           id: media.$id,
-          name: media.fileName ?? media.$id,
+          name: fileName,
         })
+        return true
       } catch (error) {
         console.error(error)
-        enqueueSnackbar('An error has occurred', {
+        enqueueSnackbar(deleteFailureMessage([fileName]), {
           variant: 'error',
           allowDuplicate: true,
         })
+        return false
       }
     },
     [confirm, user, scopeId, enqueueSnackbar, logActivity, refresh],
@@ -3017,15 +3077,52 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               </Stack>
             )}
           </Box>
-          <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
-            <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleEditorSave}
-            >
-              {'Save'}
-            </Button>
+          {/* Delete lives HERE, directly under "Used on" (AGL-1461).
+              The drawer is where an author establishes that this is the right
+              file — the preview, the folder, the tags, and above all FIND
+              WHERE THIS IS USED, which is the check that should precede a
+              delete. Before this the only delete control was the grid card's
+              overflow menu, so the check and the act happened in different
+              places and the context that made the act safe was gone by the
+              time it happened. That is how, on 2026-08-13, two files that
+              should have been kept were deleted.
+
+              Kept at the opposite end of the row from Save, and error-
+              coloured, because the two controls are one mis-aim apart. */}
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ justifyContent: 'space-between', alignItems: 'center' }}
+          >
+            {editor?.media ? (
+              <Button
+                size="small"
+                color="error"
+                startIcon={<DeleteOutlineIcon fontSize="small" />}
+                onClick={async () => {
+                  // Same handler as the grid card: one confirmation, one
+                  // reference scan, one activity entry. A second delete
+                  // implementation here is how the two surfaces drift.
+                  const deleted = await handleDelete(editor.media)()
+                  // The drawer describes a file that no longer exists.
+                  if (deleted) setEditor(null)
+                }}
+              >
+                {'Delete file'}
+              </Button>
+            ) : (
+              <span />
+            )}
+            <Stack direction="row" spacing={1}>
+              <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleEditorSave}
+              >
+                {'Save'}
+              </Button>
+            </Stack>
           </Stack>
         </Stack>
       </Drawer>

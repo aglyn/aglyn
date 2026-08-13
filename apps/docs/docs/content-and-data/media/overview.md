@@ -43,6 +43,11 @@ feature; large video uploads and higher storage are gated by plan.
 - See **per-asset usage**: delivery counters load automatically, and a **Used on**
   audit runs on demand — click **Find where this is used** to list every screen,
   layout, and content entry that references the asset, each a link that opens it.
+- **Delete from the detail drawer too**, right under the usage audit — so you can run
+  **Find where this is used**, read the answer, and act on it without leaving the file.
+  The confirmation opens immediately and fills the usage warning in as the scan lands,
+  and the message afterwards names the file (or counts and names them, for a selection).
+  Deleting is permanent: there is no undo in the console.
 
 ## Upload
 
