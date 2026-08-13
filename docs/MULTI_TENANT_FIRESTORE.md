@@ -411,9 +411,14 @@ which do not exist today (AGL-1051).
 
 ## 12. Open questions (ALL SETTLED 2026-07-09, closes AGL-232)
 
-- ~~Org-level GDPR erasure~~ — v1 shipped: `erase-tenant.mjs` is org-aware
-  (solely-owned orgs deleted with slug/hostIndex; shared memberships
-  removed; owned-with-members skipped).
+- ~~Org-level GDPR erasure~~ — shipped as `eraseOrg`
+  (`libs/tenant/data/admin/src/lib/server/erase.ts`), reached by the
+  `/api/admin/run-erasures` cron and, when that is stuck, by
+  `erase-tenant.mjs` — which **calls** it rather than reimplementing it
+  (AGL-1481). Nothing is copied anywhere before the delete (AGL-1443); the
+  proof is the `adminAudit` `org.erased` row of ids and counts. The legacy
+  `--tenant` mode is gone with the `tenants/*` collection (AGL-238);
+  personal-account erasure is `eraseUser` (AGL-1140).
 - ~~Ownership transfer~~ — **shipped**: owner-only `transfer-ownership`
   action on `/api/orgs/settings` (`transferOrgOwnership`: one transaction
   across the org doc, both member docs and reverse-index entries; the old
