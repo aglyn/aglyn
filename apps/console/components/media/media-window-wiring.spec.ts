@@ -38,32 +38,36 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const SOURCE = readFileSync(
-  join(__dirname, 'media-library.component.tsx'),
-  'utf8',
-)
-const CARD = readFileSync(
-  join(__dirname, 'media-asset-card.component.tsx'),
-  'utf8',
-)
+import { code } from '../../specs/source-text'
 
 /**
- * The body of a `const <name> = useCallback(` block, to its closing paren,
- * with comments removed.
+ * Comments removed, through the shared bounded stripper (AGL-1479).
  *
  * These handlers are heavily commented and several of the comments discuss
  * `refresh()` by name — including the ones explaining why it is no longer
  * called. Asserting over the code alone is the difference between "this
  * handler re-reads the collection" and "this handler mentions re-reading".
+ *
+ * The copy of the stripper this file carried was applied per-slice and read
+ * `accept="image/*"` as a comment opener; stripping the whole file once and
+ * slicing the RESULT is what lets the bound in `specs/source-text.ts` see it.
  */
+const SOURCE = code(
+  readFileSync(join(__dirname, 'media-library.component.tsx'), 'utf8'),
+  'media-library.component.tsx',
+)
+const CARD = code(
+  readFileSync(join(__dirname, 'media-asset-card.component.tsx'), 'utf8'),
+  'media-asset-card.component.tsx',
+)
+
+/** The body of a `const <name> = useCallback(` block, to its closing paren. */
 function handlerBody(name: string): string {
   const start = SOURCE.indexOf(`const ${name} = useCallback(`)
   expect(start).toBeGreaterThan(-1)
   const end = SOURCE.indexOf('\n  )', start)
   expect(end).toBeGreaterThan(start)
   return SOURCE.slice(start, end)
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '')
 }
 
 describe('a delete edits the window instead of re-reading it (AGL-1462)', () => {

@@ -47,36 +47,42 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { code } from '../../specs/source-text'
+
 const API = join(__dirname, '..', '..', 'app', 'api', 'media')
 
-const DELETE_ROUTE = readFileSync(join(API, 'upload', 'route.ts'), 'utf8')
-const RESTORE_ROUTE = readFileSync(join(API, 'restore', 'route.ts'), 'utf8')
-const LIBRARY = readFileSync(
-  join(__dirname, 'media-library.component.tsx'),
-  'utf8',
-)
-
 /**
- * Source with comments removed.
+ * Comments removed, through the shared bounded stripper (AGL-1479).
  *
  * Required rather than tidy: the DELETE branch's own comment NAMES the call it
  * replaced, which is the right thing for a reader and would make the negative
- * assertion below fail against prose. A structural spec has to look at code.
+ * assertion below pass against prose. A structural spec has to look at code —
+ * and the copy of the stripper this file used to carry deleted 16,383
+ * characters of the library rather than its comments.
  */
-function code(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1')
-}
+const DELETE_ROUTE = code(
+  readFileSync(join(API, 'upload', 'route.ts'), 'utf8'),
+  'app/api/media/upload/route.ts',
+)
+const RESTORE_ROUTE = code(
+  readFileSync(join(API, 'restore', 'route.ts'), 'utf8'),
+  'app/api/media/restore/route.ts',
+)
+const LIBRARY = code(
+  readFileSync(join(__dirname, 'media-library.component.tsx'), 'utf8'),
+  'media-library.component.tsx',
+)
 
 /** Just the DELETE branch of the upload route, so a failure prints one screen. */
 function deleteBranch(): string {
-  const source = code(DELETE_ROUTE)
-  const start = source.indexOf("if (method === 'DELETE')")
+  const start = DELETE_ROUTE.indexOf("if (method === 'DELETE')")
   expect(start).toBeGreaterThan(-1)
-  const end = source.indexOf('const fileName = String(body?.fileName', start)
+  const end = DELETE_ROUTE.indexOf(
+    'const fileName = String(body?.fileName',
+    start,
+  )
   expect(end).toBeGreaterThan(start)
-  return source.slice(start, end)
+  return DELETE_ROUTE.slice(start, end)
 }
 
 /** The body of a `const <name> = useCallback(` declaration. */
@@ -178,7 +184,7 @@ describe('both delete surfaces offer the undo (AGL-1467)', () => {
    * closing the snackbar first would make it "gone" in the UI anyway.
    */
   it('keeps the Undo button up when the restore was refused', () => {
-    const body = code(callbackBody('undoAction'))
+    const body = callbackBody('undoAction')
     expect(body).toMatch(/if \(ok\) closeSnackbar/)
     // The unconditional form, which is what this replaced.
     expect(body).not.toMatch(/\n\s*closeSnackbar\(snackbarId\)\n/)

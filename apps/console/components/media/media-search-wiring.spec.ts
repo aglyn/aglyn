@@ -42,20 +42,30 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const SOURCE = readFileSync(
-  join(__dirname, 'media-library.component.tsx'),
-  'utf8',
+import { code } from '../../specs/source-text'
+
+/**
+ * Comments removed, through the shared bounded stripper (AGL-1479).
+ *
+ * This file's claims are almost all about a word — `search`, `nameLower`,
+ * `debouncedSearch` — appearing or not appearing, and this component's
+ * comments discuss every one of them by name. The copy of the stripper this
+ * file carried read `accept="image/*"` as a comment opener and deleted the
+ * 442 lines that hold `<MediaSearchField complete={…} truncated={…}>`, which
+ * is the subject of the last describe below.
+ */
+const SOURCE = code(
+  readFileSync(join(__dirname, 'media-library.component.tsx'), 'utf8'),
+  'media-library.component.tsx',
 )
 
-/** A `const <name> = useCallback(` block, to its closing paren, decommented. */
+/** A `const <name> = useCallback(` block, to its closing paren. */
 function handlerBody(name: string): string {
   const start = SOURCE.indexOf(`const ${name} = useCallback(`)
   expect(start).toBeGreaterThan(-1)
   const end = SOURCE.indexOf('\n  )', start)
   expect(end).toBeGreaterThan(start)
   return SOURCE.slice(start, end)
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '')
 }
 
 describe('search is client-side, over the loaded window (AGL-1460)', () => {

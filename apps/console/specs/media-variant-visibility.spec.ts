@@ -41,20 +41,26 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
+import { code } from './source-text'
+
 const API = join(__dirname, '..', 'app', 'api', 'media')
 const UPLOAD = join(API, 'upload', 'route.ts')
 const REPLACE = join(API, 'replace', 'route.ts')
 const HEALTH = join(__dirname, '..', 'app', 'api', 'health', 'route.ts')
 
-/** Comments stripped — the rule has to be in the CODE, not the prose. */
-const code = (path: string) =>
-  readFileSync(path, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '')
+/**
+ * Comments stripped — the rule has to be in the CODE, not the prose.
+ *
+ * Through the shared bounded stripper since AGL-1479: the copy that lived here
+ * treated any `/*` as a comment opener, and the four sibling specs that shared
+ * its shape were asserting against a file with a 16,383-character hole in it.
+ */
+const sourceOf = (path: string, label: string) =>
+  code(readFileSync(path, 'utf8'), label)
 
-const upload = code(UPLOAD)
-const replace = code(REPLACE)
-const health = code(HEALTH)
+const upload = sourceOf(UPLOAD, 'app/api/media/upload/route.ts')
+const replace = sourceOf(REPLACE, 'app/api/media/replace/route.ts')
+const health = sourceOf(HEALTH, 'app/api/health/route.ts')
 
 describe.each([
   ['upload', upload],

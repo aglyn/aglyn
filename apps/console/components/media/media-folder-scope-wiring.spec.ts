@@ -44,23 +44,24 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { code } from '../../specs/source-text'
+
 const LIBRARY = readFileSync(
   join(__dirname, 'media-library.component.tsx'),
   'utf8',
 )
 
 /**
- * Source with comments removed. Required, not tidy: the comments below the
- * fixes NAME the shape they replaced, which is the right thing for a reader
- * and would make every negative assertion here pass against prose.
+ * Comments removed. Required, not tidy: the comments below the fixes NAME the
+ * shape they replaced, which is the right thing for a reader and would make
+ * every negative assertion here pass against prose.
+ *
+ * Through the shared, bounded stripper since AGL-1479 — the copy this file
+ * carried read `accept="image/*"` as a comment opener and deleted 16,383
+ * characters out of the middle of the library, which is 442 lines of markup
+ * that every negative assertion below was silently excused from.
  */
-function code(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1')
-}
-
-const CODE = code(LIBRARY)
+const CODE = code(LIBRARY, 'media-library.component.tsx')
 
 /**
  * The body of a `const <name> = useCallback(` declaration — up to whichever
@@ -148,6 +149,32 @@ describe('AGL-1466 · the sharing editor shows what is stored', () => {
    */
   it('does not seed an absent file scope with the org token', () => {
     expect(callbackBody('scopeOfMedia')).not.toMatch(/\[Aglyn\.ORG_SCOPE_TOKEN\]/)
+  })
+
+  /**
+   * The same claim, over the WHOLE component rather than two callbacks named
+   * by hand — and it does not hold (AGL-1480).
+   *
+   * Both assertions above were written against a `CODE` with 16,383 characters
+   * missing from the middle of it (AGL-1479), so "no picker substitutes" was
+   * only ever checked at the two sites someone thought to name. Restoring the
+   * hole turned up a third: the grid card's `onDetails` seeds the detail
+   * drawer with `[Aglyn.ORG_SCOPE_TOKEN]` when the field is absent, so the
+   * most-travelled of the three surfaces still reads "All sites" about a file
+   * that has never been shared with anything.
+   *
+   * `failing` rather than deleted or softened: this is the guarantee the repo
+   * believed it had, stated where it belongs. It turns RED the moment AGL-1480
+   * lands, which is the signal to drop the marker.
+   */
+  it.failing('never seeds an absent scope with the org token, anywhere', () => {
+    const seeds =
+      CODE.match(/visibleTo:[\s\S]{0,140}?\[Aglyn\.ORG_SCOPE_TOKEN\]/g) ?? []
+    // The legitimate ones: a NEW resource's default, the normalizer's floor,
+    // the preview call that needs a usable scope to get a count, and the
+    // radio whose 'org' option IS the org token. What may not appear is a
+    // fallback for a resource that already exists and stored nothing.
+    expect(seeds.filter((seed) => /Array\.isArray/.test(seed))).toHaveLength(0)
   })
 
   /**
