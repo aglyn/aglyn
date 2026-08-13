@@ -62,7 +62,16 @@ feature; large video uploads and higher storage are gated by plan.
   **Find where this is used**, read the answer, and act on it without leaving the file.
   The confirmation opens immediately and fills the usage warning in as the scan lands,
   and the message afterwards names the file (or counts and names them, for a selection).
-  Deleting is permanent: there is no undo in the console.
+- **Undo a delete.** The message that confirms a delete carries an **Undo** button, and
+  pressing it puts the file back exactly as it was — same link, same folder, same tags,
+  alt text and sharing, and any site that was using it starts rendering it again. It
+  works for a whole selection too, so a bulk delete is one button to reverse.
+
+  Undo lives on that message and nowhere else. Once it goes, the file is gone from the
+  library for good, so read the message before dismissing it. Very occasionally Undo
+  will decline — if putting the file back would push you past your plan's storage limit,
+  it says so and leaves the button where it is, so you can free up space and press it
+  again.
 - **Select a range with ⇧-click**: click one card, then hold **⇧** and click another —
   every card between the two is selected, in the order they are on screen. Works on the
   card itself and on its checkbox, and un-selects a whole range the same way.

@@ -116,6 +116,9 @@ import { MediaDeleteConfirmDescription } from './media-delete-confirm.component'
 import {
   deletedMediaMessage,
   deleteFailureMessage,
+  restoredMediaMessage,
+  restoreFailureMessage,
+  UNDO_LABEL,
 } from './media-delete-copy'
 import { MediaFolderCard } from './media-folder-card.component'
 import { MediaFolderRail } from './media-folder-rail.component'
@@ -359,7 +362,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { enqueueSnackbar } = useSnackbar()
+  const { enqueueSnackbar, closeSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   // Sites in this org, for the "Selected sites…" chips and for turning
   // stored `host:` tokens back into names.
@@ -1526,6 +1529,109 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     enqueueSnackbar,
     patchLocal,
   ])
+  /**
+   * Put deleted assets back (AGL-1467).
+   *
+   * The consuming half of the tombstone `/api/media/upload`'s DELETE branch
+   * now writes. One request per file, like the delete it reverses, so a
+   * partial failure reports both halves rather than collapsing into "Undo
+   * failed" — and the server's own sentence is carried through, because the
+   * two refusals it can answer with are things only it knows: the retention
+   * window has closed, or restoring the bytes would breach the storage plan.
+   *
+   * This one DOES `refresh()`, and it is the AGL-1462 rule rather than an
+   * exception to it: a restored document is a document the server re-created,
+   * whose position in the sort order the client cannot reconstruct. The read
+   * is affordable precisely because an undo is rare — the interaction AGL-1462
+   * was about is a delete loop run sixty-five times, and nobody runs an undo
+   * loop.
+   */
+  const restoreMedia = useCallback(
+    async (targets: { id: string; fileName: string }[]): Promise<boolean> => {
+      if (!targets.length) return false
+      setBusy(true)
+      const restored: string[] = []
+      const failures: string[] = []
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        for (const target of targets) {
+          try {
+            const response = await fetch('/api/media/restore', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+              },
+              body: JSON.stringify({ ...scopeBody, mediaId: target.id }),
+            })
+            const payload = await response.json().catch(() => ({}))
+            if (!response.ok) {
+              failures.push(
+                restoreFailureMessage(target.fileName, payload?.error),
+              )
+              continue
+            }
+            restored.push(target.fileName)
+          } catch (error) {
+            console.error(error)
+            failures.push(restoreFailureMessage(target.fileName))
+          }
+        }
+        if (restored.length) {
+          enqueueSnackbar(restoredMediaMessage(restored), {
+            variant: 'success',
+            persist: false,
+          })
+          logActivity('Restored media', {
+            type: 'media',
+            name: `${restored.length}`,
+          })
+          refresh()
+        }
+        for (const failure of failures) {
+          enqueueSnackbar(failure, { variant: 'error', allowDuplicate: true })
+        }
+        return failures.length === 0
+      } finally {
+        setBusy(false)
+      }
+    },
+    [user, scopeId, enqueueSnackbar, logActivity, refresh],
+  )
+
+  /**
+   * The Undo control itself, built once for both delete surfaces.
+   *
+   * Shared for the same reason AGL-1461 routed the card and the drawer through
+   * one `handleDelete`: two copies of a destructive-path affordance are two
+   * things to keep in step, and the one that drifts is the one nobody is
+   * looking at.
+   *
+   * It dismisses the message ON SUCCESS ONLY. A refused undo — the plan's
+   * storage limit is the one a person can act on — leaves the button where it
+   * was, so freeing space and pressing it again is possible. Closing first
+   * would take the only control away at the exact moment it was needed, and
+   * the file really is still restorable: the server keeps the tombstone
+   * through a refusal precisely so the answer is "not yet" rather than "gone".
+   */
+  const undoAction = useCallback(
+    (targets: { id: string; fileName: string }[]) =>
+      (snackbarId: any) => (
+        <Button
+          size="small"
+          color="inherit"
+          onClick={() => {
+            void restoreMedia(targets).then((ok) => {
+              if (ok) closeSnackbar(snackbarId)
+            })
+          }}
+        >
+          {UNDO_LABEL}
+        </Button>
+      ),
+    [closeSnackbar, restoreMedia],
+  )
+
   const handleBulkDelete = useCallback(async () => {
     const count = selected.size
     if (!count) return
@@ -1561,6 +1667,13 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
      * the snackbar that named nothing.
      */
     const deletedIds: string[] = []
+    /**
+     * Id AND name together, which is what an undo needs (AGL-1467): the id
+     * addresses the tombstone and the name is what a refusal has to be able
+     * to say out loud. `deletedIds` alone would give an error message with
+     * nothing in it a person recognises.
+     */
+    const restorable: { id: string; fileName: string }[] = []
     try {
       const idToken = await (user as any)?.getIdToken?.()
       for (const mediaId of selected) {
@@ -1577,8 +1690,15 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             body: JSON.stringify({ ...scopeBody, mediaId }),
           })
           if (!response.ok) throw new Error(`Delete failed (${response.status})`)
-          deleted.push(nameOf(mediaId))
+          const fileName = nameOf(mediaId)
+          deleted.push(fileName)
           deletedIds.push(mediaId)
+          // Only what the server said it wrote a tombstone for. An asset whose
+          // document had already gone leaves nothing to restore, and offering
+          // Undo for it would be the AGL-1461 defect exactly: a control with
+          // nothing behind it.
+          const payload = await response.json().catch(() => ({}))
+          if (payload?.restorable) restorable.push({ id: mediaId, fileName })
         } catch (error) {
           console.error(error)
           failed.push(nameOf(mediaId))
@@ -1590,6 +1710,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         enqueueSnackbar(deletedMediaMessage(deleted), {
           variant: 'success',
           persist: false,
+          // The bulk pass is the one that runs sixty-five times in an
+          // afternoon, which is where the two wrong deletions of 2026-08-13
+          // came from. It is the LAST place undo should be missing.
+          ...(restorable.length ? { action: undoAction(restorable) } : {}),
         })
         logActivity('Deleted media (bulk)', {
           type: 'media',
@@ -1621,6 +1745,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     logActivity,
     clearSelection,
     dropLocal,
+    undoAction,
   ])
 
   /**
@@ -2313,12 +2438,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           body: JSON.stringify({ ...scopeBody, mediaId: media.$id }),
         })
         if (!response.ok) throw new Error(`Delete failed (${response.status})`)
+        const payload = await response.json().catch(() => ({}))
         // Names what went (AGL-1461). "File deleted" left nothing on screen
         // identifying the file, which is why two wrong deletions in the
         // 2026-08-13 pass were caught by memory rather than by the UI.
+        //
+        // And now offers it back (AGL-1467). `restorable` is the server saying
+        // a tombstone exists — the action is only attached when there is
+        // something for it to call, which is the whole difference between this
+        // and the recovery wording AGL-1461 refused to ship.
         enqueueSnackbar(deletedMediaMessage([fileName]), {
           variant: 'success',
           persist: false,
+          ...(payload?.restorable
+            ? {
+                action: undoAction([
+                  { id: String(media.$id), fileName: String(fileName) },
+                ]),
+              }
+            : {}),
         })
         // Edit the window; do not re-read it (AGL-1462). `refresh()` here
         // dropped every page past the first, so deleting the tenth file of a
@@ -2350,6 +2488,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       logActivity,
       dropLocal,
       forgetSelected,
+      undoAction,
     ],
   )
 

@@ -32,18 +32,23 @@
  * changed. They were recovered only because somebody remembered, inside the
  * retention window, roughly what they had clicked.
  *
- * ## Why it does NOT offer them back
+ * ## What it now offers back, and what it still may not claim (AGL-1467)
  *
- * The bucket keeps deleted objects for seven days, so an undo could in
- * principle be backed by something real. It is not backed by anything today:
- * `app/api/media/upload/route.ts` hard-deletes the Firestore document
- * (`mediaRef.delete()`) and decrements the counters, so the bytes surviving
- * in Cloud Storage are unreachable — nothing in the product knows the id, the
- * folder, the tags, the alt text or the scope tokens any more. Copy that says
- * "recoverable for 7 days" would therefore be true of the bucket and false of
- * the console, which is the worst of the three options. `media-delete-copy`
- * says what is true: it is gone from here. The spec holds that line by
- * asserting the offer is UNREACHABLE, not merely absent.
+ * It used to offer nothing, and that was right at the time: the delete
+ * hard-deleted the Firestore document, so the seven days of bytes the bucket
+ * was holding had no address and any word like "undo" would have been true of
+ * the bucket and false of the console. AGL-1467 built the tombstone that gives
+ * them an address, so `UNDO_LABEL` is now backed by a real call to
+ * `/api/media/restore` and the copy is allowed to say so.
+ *
+ * The rule that produced the old silence survives intact, and it is why
+ * nothing here names a DURATION. The tombstone lives seven days; the snackbar
+ * lives seconds. "Recoverable for 7 days" would describe the record rather
+ * than the only control on screen — the same mistake one layer along. The
+ * duration belongs to a durable recently-deleted surface, and that surface was
+ * deliberately not built (see the route's header): it would be a second
+ * browsable copy of customer content, which is precisely the object AGL-1443
+ * is open on.
  */
 
 /**
@@ -102,17 +107,62 @@ export function deleteFailureMessage(names: string[]): string {
 }
 
 /**
+ * The snackbar's undo action (AGL-1467).
+ *
+ * One word, because a snackbar action is read in the half-second before the
+ * grid redraws, and because it is the whole contract: the thing that just
+ * happened can be taken back by pressing this.
+ */
+export const UNDO_LABEL = 'Undo'
+
+/** `Restored "hero.png"` / `Restored 3 files: …`, mirroring the delete. */
+export function restoredMediaMessage(names: string[]): string {
+  if (names.length === 0) return 'Nothing was restored'
+  if (names.length === 1) return `Restored ${quote(names[0])}`
+  const shown = names.slice(0, MAX_NAMED)
+  const hidden = names.length - shown.length
+  const list = hidden
+    ? `${shown.map(quote).join(', ')} and ${hidden} more`
+    : joinNames(shown)
+  return `Restored ${names.length} files: ${list}`
+}
+
+/**
+ * What a refused undo says.
+ *
+ * The server knows things the client does not — the retention window has
+ * closed, or putting the bytes back would breach the plan's storage limit —
+ * and it answers with a sentence rather than a code. That sentence is passed
+ * through verbatim, because "Undo failed" is the AGL-1461 defect wearing a
+ * different verb: an outcome reported without the one fact you would act on.
+ */
+export function restoreFailureMessage(
+  fileName: string,
+  reason?: string,
+): string {
+  return reason?.trim()
+    ? reason.trim()
+    : `Could not restore ${quote(fileName)}`
+}
+
+/**
  * The first sentence of the delete confirmation.
  *
  * Shared by the grid card and the detail drawer (AGL-1461) so the two
- * surfaces cannot drift, and stated as permanent because from the console it
- * is: see the module header on why "recoverable" is not on offer here.
+ * surfaces cannot drift. It used to end "This cannot be undone from the
+ * console", which was true until AGL-1467 and is not now — and a confirmation
+ * that overstates the finality of an act is the mirror of one that
+ * understates it: either way the author decides against a false model.
+ *
+ * "and only there" is the load-bearing half. Undo lives on the message that
+ * follows and nowhere else, so an author who dismisses it has no second route,
+ * and this is the sentence that has to say so before they click.
  */
 export function deleteConfirmationLead(fileName: string): string {
   return (
-    `${quote(fileName)} will be permanently removed from storage, and ` +
-    'elements using its URL will stop rendering it. This cannot be undone ' +
-    'from the console.'
+    `${quote(fileName)} will be removed from storage, and elements using ` +
+    'its URL will stop rendering it. You can undo this from the message ' +
+    'that follows, and only there.'
   )
 }
 

@@ -26,6 +26,7 @@ import {
   readImageDimensions,
 } from '@aglyn/aglyn/server'
 import {
+  deleteMediaWithTombstone,
   emailUnverifiedResponse,
   firebaseAdmin,
   generateMediaVariants,
@@ -100,36 +101,35 @@ async function handler(request: Request): Promise<Response> {
     if (method === 'DELETE') {
       const mediaId = String(body?.mediaId ?? '')
       if (!mediaId) return Response.json({ error: 'Missing mediaId' }, { status: 400 })
-      const mediaRef = scopeRef.collection('media').doc(mediaId)
-      const mediaSnapshot = await mediaRef.get()
+      const mediaSnapshot = await scopeRef
+        .collection('media')
+        .doc(mediaId)
+        .get()
       const objectPath = mediaObjectPath(mediaSnapshot, scope.base)
-      // Object may already be gone; still remove the metadata.
-      await bucket.file(objectPath).delete().catch(() => undefined)
-      // CDN variants (AGL-175) ride along.
-      const variantWidths: number[] = mediaSnapshot.get('variants') ?? []
-      await Promise.all(
-        variantWidths.map((width) =>
-          bucket
-            .file(`${objectPath}__w${width}.webp`)
-            .delete()
-            .catch(() => undefined),
-        ),
+      // Reversible now (AGL-1467). This branch used to `mediaRef.delete()` and
+      // decrement the counters inline, which destroyed the only thing that
+      // could address the bytes GCS keeps for seven days — the id, the file
+      // name, the folder, the tags, the alt text, the scope tokens, `cdnPath`
+      // and `variants` all went with the document, and `File.restore()` needs
+      // a generation number nobody had captured. `deleteMediaWithTombstone`
+      // reads the generations FIRST, then commits the tombstone, the document
+      // delete and both counter decrements together. Object and variant
+      // deletes still happen, and are still best-effort.
+      const result = await deleteMediaWithTombstone({
+        scopeRef,
+        bucket,
+        mediaId,
+        objectPath,
+        uid: decoded.uid,
+      })
+      // `deleted: true` unconditionally, as before: an already-absent document
+      // is a delete that has already happened, and reporting it as a failure
+      // makes a retry look broken. `restorable` is what the snackbar keys its
+      // Undo action on — absent when there is nothing to restore.
+      return Response.json(
+        { deleted: true, restorable: Boolean(result.tombstone) },
+        { status: 200 },
       )
-      if (mediaSnapshot.exists) {
-        const sizeBytes = Number(mediaSnapshot.get('sizeBytes') ?? 0)
-        await mediaRef.delete()
-        await scopeRef
-          .collection('counters')
-          .doc('media')
-          .set(
-            {
-              bytes: firebaseAdmin.firestore.FieldValue.increment(-sizeBytes),
-              count: firebaseAdmin.firestore.FieldValue.increment(-1),
-            },
-            { merge: true },
-          )
-      }
-      return Response.json({ deleted: true }, { status: 200 })
     }
 
     const fileName = String(body?.fileName ?? 'upload').slice(0, 200)

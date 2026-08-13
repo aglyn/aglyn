@@ -2251,6 +2251,78 @@ describe('pre-release hardening guards', () => {
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'hosts', HOST, 'variables', 'var-1')))
   })
 
+  /**
+   * AGL-1467. `mediaTombstones` is the undo record for a deleted asset, and it
+   * is the FIRST collection under a host that no client may read OR write.
+   * Both halves matter and they fail differently:
+   *
+   * - **Read.** A tombstone holds the media document verbatim — alt text,
+   *   description, tags, custom metadata, the `visibleTo` tokens that decided
+   *   who could see the asset. Granting a read here would create, by accident,
+   *   the browsable copy of deleted customer content that AGL-1443 is open on,
+   *   and that the undo affordance was deliberately designed not to need.
+   * - **Write.** A restore re-increments `counters/media` by the tombstone's
+   *   own `sizeBytes` and writes its `media` payload back as a real document.
+   *   So a writable tombstone is AGL-1367's storage meter reached one
+   *   collection to the left (a negative `sizeBytes` lowers the wall and the
+   *   metered invoice with it), plus a way to mint a media document carrying
+   *   scope tokens the author was never granted. A DELETE is the third: it
+   *   destroys the only route back to a file the author just deleted.
+   *
+   * Owner as well as editor, because this is a path question, not a role one.
+   */
+  it('media tombstones are invisible and unwritable to every client (AGL-1467)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'mediaTombstones', 'm1'),
+        { media: { fileName: 'a.png', visibleTo: ['org'] }, sizeBytes: 2048 },
+      )
+    })
+    for (const uid of [EDITOR, OWNER, VIEWER]) {
+      await assertFails(
+        getDoc(doc(authed(uid), 'hosts', HOST, 'mediaTombstones', 'm1')),
+      )
+      await assertFails(
+        setDoc(doc(authed(uid), 'hosts', HOST, 'mediaTombstones', 'forged'), {
+          media: { fileName: 'forged.png', visibleTo: ['org'] },
+          sizeBytes: -100_000_000,
+        }),
+      )
+      await assertFails(
+        updateDoc(doc(authed(uid), 'hosts', HOST, 'mediaTombstones', 'm1'), {
+          sizeBytes: -100_000_000,
+        }),
+      )
+      await assertFails(
+        deleteDoc(doc(authed(uid), 'hosts', HOST, 'mediaTombstones', 'm1')),
+      )
+    }
+  })
+
+  /**
+   * The org library's tombstones, which are the ones that actually exist in
+   * production today — the org DAM is where the 2026-08-13 pass ran. There is
+   * no catch-all under `match /orgs/{orgId}`, so this is default-deny rather
+   * than an exclusion list; asserting it is what stops somebody adding a
+   * convenience block later without noticing what it re-grants.
+   */
+  it('org media tombstones are default-denied to members (AGL-1467)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'orgs', ORG, 'mediaTombstones', 'm1'),
+        { media: { fileName: 'a.png', visibleTo: ['org'] }, sizeBytes: 2048 },
+      )
+    })
+    await assertFails(
+      getDoc(doc(authed(OWNER), 'orgs', ORG, 'mediaTombstones', 'm1')),
+    )
+    await assertFails(
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'mediaTombstones', 'forged'), {
+        sizeBytes: -1,
+      }),
+    )
+  })
+
   it('org publisher profiles are manager-written, payout keys server-only (AGL-652)', async () => {
     // Public read — buyers see who they install from.
     await assertSucceeds(getDoc(doc(anon(), 'publisherProfiles', ORG)))
