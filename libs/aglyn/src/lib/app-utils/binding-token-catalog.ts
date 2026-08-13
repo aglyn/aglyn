@@ -69,6 +69,11 @@ export const ENTRY_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
     description: 'Formatted publish date.',
   },
   {
+    token: '{{entry.author}}',
+    label: 'Author',
+    description: 'The byline set on the entry.',
+  },
+  {
     token: '{{entry.slug}}',
     label: 'Slug',
     description: 'URL-safe entry identifier.',

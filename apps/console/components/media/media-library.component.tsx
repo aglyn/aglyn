@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { useDebounce } from '@aglyn/shared-util-vendor'
 import AddIcon from '@mui/icons-material/Add'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
@@ -109,11 +110,24 @@ import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaAssetCard } from './media-asset-card.component'
+import { MediaDeleteConfirmDescription } from './media-delete-confirm.component'
+import {
+  deletedMediaMessage,
+  deleteFailureMessage,
+} from './media-delete-copy'
 import { MediaFolderCard } from './media-folder-card.component'
 import { MediaFolderRail } from './media-folder-rail.component'
+import { parseMediaQuery, searchMedia } from './media-search'
+import { MediaSearchField } from './media-search-field.component'
+import {
+  EMPTY_MEDIA_SELECTION,
+  forgetMediaSelection,
+  type MediaSelectionState,
+  nextMediaSelection,
+} from './media-selection'
+import { useMediaPages } from './use-media-pages'
 import {
   coverageOf,
-  deleteConfirmationNote,
   type MediaScanCoverage,
   provesUnused,
   usagePanelEmptyMessage,
@@ -144,6 +158,32 @@ export interface MediaLibraryComponentProps {
 
 /** Page size for cursor pagination (AGL-174). */
 const MEDIA_PAGE_SIZE = 60
+
+/**
+ * Search read budget (AGL-1460).
+ *
+ * Search filters the loaded window client-side and always did — Firestore
+ * cannot express a wildcard, a typo or a key an author invented in the detail
+ * drawer, so no amount of query work moves those server-side. What CAN be
+ * fixed is the set: read the rest of the current query once, then answer over
+ * all of it, and say plainly when the cap stopped short of that.
+ *
+ * The three numbers are the whole cost story:
+ *
+ * - `DEBOUNCE_MS` — a keystroke costs zero reads. Filtering is CPU and runs
+ *   undebounced, so the box and the grid never disagree; only the completion
+ *   waits, and `loadAll` is idempotent so out-waiting it changes nothing.
+ * - `MIN_CHARS` — one character is a typo in progress, not a search.
+ * - `MAX_DOCS` — 20 page fetches. On the 174-asset library that made this
+ *   issue it never binds: completing costs 2 fetches / 114 documents, once
+ *   per filter set. For comparison, AGL-1462 removed 9,165 documents in 187
+ *   fetches from a single delete pass; this gives back 1.2% of that, and
+ *   only in exchange for the "Load more" clicks a person was already paying
+ *   to search their own library.
+ */
+const MEDIA_SEARCH_DEBOUNCE_MS = 400
+const MEDIA_SEARCH_MIN_CHARS = 2
+const MEDIA_SEARCH_MAX_DOCS = 1200
 
 /**
  * Docs per request in the folder sharing cascade (AGL-1045). Small enough
@@ -302,7 +342,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // outright needs no filter.
   // Memoised because it is a QUERY DEPENDENCY, not just a value. The
   // `forHostId` branch built a fresh array every render, and the effects
-  // below end in `setFolderCounts`/`setPages` — so a new array meant
+  // below end in `setFolderCounts`/`useMediaPages` — so a new array meant
   // re-render → new array → re-run, a self-sustaining loop firing one
   // `getCountFromServer` per folder (up to 500) for as long as the picker
   // stayed open. `viewerTokens` is already stable state.
@@ -385,19 +425,161 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [user, scopeId, orgId],
   )
 
-  // Paged media loading (AGL-174): cursor pagination over query-side
-  // filters replaces the old limit(500)+client-filter read. The fetch
-  // effect lives below the filter state it depends on.
-  const [pages, setPages] = useState<any[][]>([])
-  const [pageCursor, setPageCursor] =
-    useState<QueryDocumentSnapshot | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [loadingMedia, setLoadingMedia] = useState(true)
-  /** Firestore error code when the last load failed, else null. */
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [refreshKey, setRefreshKey] = useState(0)
-  const refresh = useCallback(() => setRefreshKey((key) => key + 1), [])
-  const mediaDocs = useMemo(() => pages.flat(), [pages])
+  // Organization (AGL-124): search + folder/tag filters over doc metadata.
+  const [search, setSearch] = useState('')
+  // Folder scoping (AGL-172): 'all' = every file, null = root/no folder.
+  const [currentFolder, setCurrentFolder] = useState<string | null | 'all'>(
+    'all',
+  )
+  const [tagFilter, setTagFilter] = useState('')
+  // Sorting + type/date/size filters (AGL-134).
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name' | 'size'>(
+    'newest',
+  )
+  const [typeFilter, setTypeFilter] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
+  const [sizeFilter, setSizeFilter] = useState('')
+
+  // Query construction (AGL-174). Query-side: folder scoping, single-tag
+  // array-contains, type facet, date range, and sort. Two deliberate
+  // downgrades keep the composite-index set small (documented in
+  // cloud/firebase-firestore.indexes.json): the type facet goes
+  // client-side when a tag filter is active or the sort isn't by date,
+  // and the date range goes client-side whenever the type facet is
+  // query-side (Firestore allows one range field). The client-side
+  // filter pass below still applies everything within loaded pages, so
+  // downgrades only affect which docs get fetched, never correctness of
+  // what's shown.
+  // Firestore permits ONE array-contains/array-contains-any per query, and
+  // the scope filter has to be the one that survives — it is the security
+  // constraint, and the tag filter already has a client-side twin below.
+  const tagFilterServerSide = Boolean(tagFilter) && !needsScope
+  const buildConstraints = useCallback(
+    (cursor: QueryDocumentSnapshot | null): QueryConstraint[] => {
+      const constraints: QueryConstraint[] = []
+      const dateSort = sortBy === 'newest' || sortBy === 'oldest'
+      if (typeof currentFolder === 'string' && currentFolder !== 'all') {
+        constraints.push(where('folderId', '==', currentFolder))
+      }
+      if (needsScope) {
+        constraints.push(
+          where('visibleTo', 'array-contains-any', scopeTokens),
+        )
+      }
+      if (tagFilterServerSide) {
+        constraints.push(where('tags', 'array-contains', tagFilter))
+      }
+      const typeQuerySide = Boolean(typeFilter) && !tagFilter && dateSort
+      if (typeQuerySide) {
+        if (typeFilter === 'pdf') {
+          constraints.push(where('contentType', '==', 'application/pdf'))
+        } else {
+          const prefix = typeFilter === 'video' ? 'video/' : 'image/'
+          constraints.push(
+            where('contentType', '>=', prefix),
+            where('contentType', '<', `${prefix}`),
+            orderBy('contentType'),
+          )
+        }
+      }
+      if (dateFilter && dateSort && (!typeQuerySide || typeFilter === 'pdf')) {
+        const days = dateFilter === '7d' ? 7 : 30
+        if (!typeQuerySide) {
+          constraints.push(
+            where(
+              'createdAt',
+              '>=',
+              Timestamp.fromMillis(Date.now() - days * 86400 * 1000),
+            ),
+          )
+        }
+      }
+      if (sortBy === 'name') constraints.push(orderBy('fileName'))
+      else if (sortBy === 'size') constraints.push(orderBy('sizeBytes', 'desc'))
+      else constraints.push(orderBy('createdAt', sortBy === 'oldest' ? 'asc' : 'desc'))
+      if (cursor) constraints.push(startAfter(cursor))
+      constraints.push(limit(MEDIA_PAGE_SIZE))
+      return constraints
+    },
+    [
+      currentFolder,
+      tagFilter,
+      tagFilterServerSide,
+      typeFilter,
+      dateFilter,
+      sortBy,
+      needsScope,
+      scopeTokens,
+    ],
+  )
+  const fetchPage = useCallback(
+    async (cursor: QueryDocumentSnapshot | null) => {
+      const snapshot = await firestoreOneShotRetry(
+        () =>
+          getDocs(
+            query(
+              collection(firestore, scopeCollection, scopeId, 'media'),
+              ...buildConstraints(cursor),
+            ),
+          ),
+        // Named for the session-health verdict (AGL-1063).
+        `${scopeCollection}/media`,
+      )
+      return {
+        docs: snapshot.docs.map((docSnap) => ({
+          $id: docSnap.id,
+          ...docSnap.data(),
+        })),
+        last: snapshot.docs[snapshot.docs.length - 1] ?? null,
+        more: snapshot.docs.length === MEDIA_PAGE_SIZE,
+      }
+    },
+    [firestore, scopeId, buildConstraints],
+  )
+  // Paged media loading (AGL-174): cursor pagination over query-side filters
+  // replaced the old limit(500)+client-filter read. The window state itself
+  // lives in `useMediaPages` (AGL-1462) — see that module's header for why a
+  // mutation must be able to edit the loaded pages rather than re-read them.
+  const mediaPages = useMediaPages<QueryDocumentSnapshot>({
+    fetchPage,
+    // Hold until the caller's read set is known — see `scopeReady`.
+    ready: scopeReady,
+    // Name the path and the scope state. "Missing or insufficient
+    // permissions" with no context cost real time to diagnose — the useful
+    // question is always WHICH collection, under WHICH scope, with WHICH
+    // filter.
+    onError: (error) =>
+      console.error(
+        `media query ${scopeCollection}/${scopeId}/media` +
+          ` needsScope=${needsScope} tokens=${JSON.stringify(scopeTokens)}` +
+          ` sort=${sortBy} folder=${String(currentFolder)}`,
+        error,
+      ),
+  })
+  const {
+    docs: mediaDocs,
+    loading: loadingMedia,
+    /** Firestore error code when the last load failed, else null. */
+    loadError,
+    hasMore,
+    // AGL-1460: whether a client-side pass over `docs` is a pass over the
+    // whole answer, and whether the read cap stopped short of that.
+    complete: windowComplete,
+    truncated: windowTruncated,
+    completing: windowCompleting,
+    loadAll,
+    refreshKey,
+    loadMore: handleLoadMore,
+    // Still the right answer where the SERVER decided something the client
+    // cannot reconstruct: an upload (new ids, unknown sort position), a move
+    // or a folder delete (the rail's counts are server-side aggregates), a
+    // scope change (the document may have left the caller's read set), a
+    // details save (a rename re-sorts, a folder change moves counts). Every
+    // one of those pays a page read, deliberately. A delete does not.
+    refresh,
+    dropLocal,
+    patchLocal,
+  } = mediaPages
   const items: Aglyn.AglynHostMedia[] = useMemo(
     () => (mediaDocs as any[]).filter((item: any) => !item.deletedAt),
     [mediaDocs],
@@ -503,183 +685,40 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
     batch
       .commit()
-      .then(() => setRefreshKey((key) => key + 1))
+      // A genuine re-read: this stamped `folderId` on documents the current
+      // query may not have matched, and it runs at most once per mount.
+      .then(() => refresh())
       .catch((error) => console.error('media migration', error))
-  }, [mediaDocs, folderDocs, firestore, scopeId])
-
-  // Organization (AGL-124): search + folder/tag filters over doc metadata.
-  const [search, setSearch] = useState('')
-  // Folder scoping (AGL-172): 'all' = every file, null = root/no folder.
-  const [currentFolder, setCurrentFolder] = useState<string | null | 'all'>(
-    'all',
-  )
-  const [tagFilter, setTagFilter] = useState('')
-  // Sorting + type/date/size filters (AGL-134).
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name' | 'size'>(
-    'newest',
-  )
-  const [typeFilter, setTypeFilter] = useState('')
-  const [dateFilter, setDateFilter] = useState('')
-  const [sizeFilter, setSizeFilter] = useState('')
-
-  // Query construction (AGL-174). Query-side: folder scoping, single-tag
-  // array-contains, type facet, date range, and sort. Two deliberate
-  // downgrades keep the composite-index set small (documented in
-  // cloud/firebase-firestore.indexes.json): the type facet goes
-  // client-side when a tag filter is active or the sort isn't by date,
-  // and the date range goes client-side whenever the type facet is
-  // query-side (Firestore allows one range field). The client-side
-  // filter pass below still applies everything within loaded pages, so
-  // downgrades only affect which docs get fetched, never correctness of
-  // what's shown.
-  // Firestore permits ONE array-contains/array-contains-any per query, and
-  // the scope filter has to be the one that survives — it is the security
-  // constraint, and the tag filter already has a client-side twin below.
-  const tagFilterServerSide = Boolean(tagFilter) && !needsScope
-  const buildConstraints = useCallback(
-    (cursor: QueryDocumentSnapshot | null): QueryConstraint[] => {
-      const constraints: QueryConstraint[] = []
-      const dateSort = sortBy === 'newest' || sortBy === 'oldest'
-      if (typeof currentFolder === 'string' && currentFolder !== 'all') {
-        constraints.push(where('folderId', '==', currentFolder))
-      }
-      if (needsScope) {
-        constraints.push(
-          where('visibleTo', 'array-contains-any', scopeTokens),
-        )
-      }
-      if (tagFilterServerSide) {
-        constraints.push(where('tags', 'array-contains', tagFilter))
-      }
-      const typeQuerySide = Boolean(typeFilter) && !tagFilter && dateSort
-      if (typeQuerySide) {
-        if (typeFilter === 'pdf') {
-          constraints.push(where('contentType', '==', 'application/pdf'))
-        } else {
-          const prefix = typeFilter === 'video' ? 'video/' : 'image/'
-          constraints.push(
-            where('contentType', '>=', prefix),
-            where('contentType', '<', `${prefix}`),
-            orderBy('contentType'),
-          )
-        }
-      }
-      if (dateFilter && dateSort && (!typeQuerySide || typeFilter === 'pdf')) {
-        const days = dateFilter === '7d' ? 7 : 30
-        if (!typeQuerySide) {
-          constraints.push(
-            where(
-              'createdAt',
-              '>=',
-              Timestamp.fromMillis(Date.now() - days * 86400 * 1000),
-            ),
-          )
-        }
-      }
-      if (sortBy === 'name') constraints.push(orderBy('fileName'))
-      else if (sortBy === 'size') constraints.push(orderBy('sizeBytes', 'desc'))
-      else constraints.push(orderBy('createdAt', sortBy === 'oldest' ? 'asc' : 'desc'))
-      if (cursor) constraints.push(startAfter(cursor))
-      constraints.push(limit(MEDIA_PAGE_SIZE))
-      return constraints
-    },
-    [
-      currentFolder,
-      tagFilter,
-      tagFilterServerSide,
-      typeFilter,
-      dateFilter,
-      sortBy,
-      needsScope,
-      scopeTokens,
-    ],
-  )
-  const fetchPage = useCallback(
-    async (cursor: QueryDocumentSnapshot | null) => {
-      const snapshot = await firestoreOneShotRetry(
-        () =>
-          getDocs(
-            query(
-              collection(firestore, scopeCollection, scopeId, 'media'),
-              ...buildConstraints(cursor),
-            ),
-          ),
-        // Named for the session-health verdict (AGL-1063).
-        `${scopeCollection}/media`,
-      )
-      return {
-        docs: snapshot.docs.map((docSnap) => ({
-          $id: docSnap.id,
-          ...docSnap.data(),
-        })),
-        last: snapshot.docs[snapshot.docs.length - 1] ?? null,
-        more: snapshot.docs.length === MEDIA_PAGE_SIZE,
-      }
-    },
-    [firestore, scopeId, buildConstraints],
-  )
-  useEffect(() => {
-    let active = true
-    // Hold until the caller's read set is known — see `scopeReady`.
-    if (!scopeReady) return undefined
-    setLoadingMedia(true)
-    setLoadError(null)
-    void fetchPage(null)
-      .then((page) => {
-        if (!active) return
-        setPages([page.docs])
-        setPageCursor(page.last)
-        setHasMore(page.more)
-      })
-      // Name the path and the scope state. "Missing or insufficient
-      // permissions" with no context cost real time to diagnose — the
-      // useful question is always WHICH collection, under WHICH scope,
-      // with WHICH filter.
-      .catch((error) => {
-        console.error(
-          `media query ${scopeCollection}/${scopeId}/media` +
-            ` needsScope=${needsScope} tokens=${JSON.stringify(scopeTokens)}` +
-            ` sort=${sortBy} folder=${String(currentFolder)}`,
-          error,
-        )
-        // A FAILED load and an EMPTY library are different facts, and this
-        // component was reporting both as "No media here — upload images…".
-        // Someone whose query was denied was being told, confidently, that
-        // they have no files: an invitation to re-upload assets that are
-        // already there. Whatever the cause (AGL-1062), the page must not
-        // claim knowledge it doesn't have.
-        if (active) setLoadError(error?.code ?? 'unavailable')
-      })
-      .then(() => {
-        if (active) setLoadingMedia(false)
-      })
-    return () => {
-      active = false
-    }
-    // refreshKey re-runs after any mutation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchPage, refreshKey, scopeReady])
-  const handleLoadMore = useCallback(async () => {
-    if (!pageCursor) return
-    setLoadingMedia(true)
-    try {
-      const page = await fetchPage(pageCursor)
-      setPages((prev) => [...prev, page.docs])
-      setPageCursor(page.last)
-      setHasMore(page.more)
-    } catch (error) {
-      console.error('media query', error)
-    } finally {
-      setLoadingMedia(false)
-    }
-  }, [fetchPage, pageCursor])
+  }, [mediaDocs, folderDocs, firestore, scopeId])
   const tags = useMemo(
     () =>
       [...new Set(items.flatMap((item: any) => item.tags ?? []))].sort(),
     [items],
   )
-  const visibleItems = useMemo(() => {
-    const term = search.trim().toLowerCase()
+  /**
+   * Completing the window so search can answer over the whole library
+   * (AGL-1460).
+   *
+   * The debounce is on the READ, never on the filter: debouncing the filter
+   * would recreate the reported symptom, a box whose text does not match the
+   * grid. Gated on `hasMore`, so once the query is fully loaded this stops
+   * asking, and `loadAll` itself is idempotent, so a slow typist who
+   * out-waits 400 ms still pays for the pages exactly once.
+   */
+  const [debouncedSearch] = useDebounce(search.trim(), MEDIA_SEARCH_DEBOUNCE_MS)
+  useEffect(() => {
+    if (debouncedSearch.length < MEDIA_SEARCH_MIN_CHARS) return
+    if (!hasMore) return
+    void loadAll(MEDIA_SEARCH_MAX_DOCS)
+  }, [debouncedSearch, hasMore, loadAll])
+
+  const searchQuery = useMemo(() => parseMediaQuery(search), [search])
+  const searchContext = useMemo(
+    () => ({ folderNameById }),
+    [folderNameById],
+  )
+  const searchResult = useMemo(() => {
     const now = Date.now() / 1000
     const filtered = items.filter((item: any) => {
       if (currentFolder === null && (item.folderId || item.folder)) {
@@ -713,21 +752,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const sizeBytes = item.sizeBytes ?? 0
       if (sizeFilter === '1mb' && sizeBytes < 1024 * 1024) return false
       if (sizeFilter === '5mb' && sizeBytes < 5 * 1024 * 1024) return false
-      if (!term) return true
-      const haystack = [
-        item.fileName,
-        item.folder,
-        item.folderId ? folderNameById[item.folderId] : undefined,
-        item.alt,
-        item.description,
-        ...(item.tags ?? []),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return haystack.includes(term)
+      return true
     })
-    return [...filtered].sort((a: any, b: any) => {
+    const sorted = [...filtered].sort((a: any, b: any) => {
       if (sortBy === 'name') {
         return String(a.fileName ?? '').localeCompare(String(b.fileName ?? ''))
       }
@@ -737,9 +764,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       }
       return (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
     })
+    // Search runs LAST, over the sorted list (AGL-1460). A literal result set
+    // keeps the order the Sort control produced; only the fuzzy fallback
+    // replaces it with relevance, and only when the literal reading found
+    // nothing — which the field's caption discloses rather than quietly
+    // overriding the author's chosen sort on every keystroke.
+    return searchMedia(sorted, searchQuery, searchContext)
   }, [
     items,
-    search,
+    searchQuery,
+    searchContext,
     currentFolder,
     folderNameById,
     tagFilter,
@@ -748,6 +782,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     sizeFilter,
     sortBy,
   ])
+  const visibleItems = searchResult.items
+  /**
+   * The order a ⇧-click measures against (AGL-1462): the cards as drawn,
+   * after filtering and sorting. Deriving it here rather than inside the
+   * click handler is what keeps the range honest when a delete has just
+   * removed an item from the middle of a selected run.
+   */
+  const orderedIds = useMemo(
+    () => visibleItems.map((item: any) => String(item.$id)),
+    [visibleItems],
+  )
 
   // Folders-as-grid-items (AGL-818): render the current level's folders as
   // cards ahead of the files. The "parent context" is the open folder when
@@ -1039,18 +1084,38 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           allowDuplicate: true,
         })
       }
-      refresh()
+      // The client wrote this field and knows its new value (AGL-1462), and
+      // no query filters on it — so there is nothing here a re-read would
+      // learn, and a re-read would cost the loaded window.
+      patchLocal([mediaId], { private: makePrivate })
       enqueueSnackbar(makePrivate ? 'File is now private' : 'File published', {
         variant: 'success',
         persist: false,
       })
     },
-    [user, scopeId, confirm, enqueueSnackbar, refresh],
+    [user, scopeId, confirm, enqueueSnackbar, patchLocal],
   )
 
   // Multi-select + move (AGL-172): checkboxes are the accessible path;
   // dragging a selected card moves the whole selection.
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  //
+  // The state carries a ⇧-click anchor alongside the ids (AGL-1462), because
+  // one checkbox at a time is thirty clicks to select thirty files — which is
+  // what made the delete-then-re-page loop above worth thirty repetitions
+  // instead of two. `media-selection` owns the arithmetic and the reason the
+  // anchor is an id rather than an index.
+  const [selection, setSelection] =
+    useState<MediaSelectionState>(EMPTY_MEDIA_SELECTION)
+  const selected = selection.ids
+  const clearSelection = useCallback(
+    () => setSelection(EMPTY_MEDIA_SELECTION),
+    [],
+  )
+  /** Forget assets that no longer exist, anchor included. */
+  const forgetSelected = useCallback(
+    (ids: string[]) => setSelection((prev) => forgetMediaSelection(prev, ids)),
+    [],
+  )
   const [moveAnchor, setMoveAnchor] = useState<HTMLElement | null>(null)
   const moveMedia = useCallback(
     async (mediaIds: string[], folderId: string | null) => {
@@ -1077,7 +1142,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           allowDuplicate: true,
         })
       }
-      setSelected(new Set())
+      clearSelection()
       refresh()
       enqueueSnackbar(
         `Moved ${mediaIds.length} file${mediaIds.length === 1 ? '' : 's'}`,
@@ -1432,20 +1497,42 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
     await batch.commit()
     setBulkTag(null)
-    refresh()
+    // Same tag arithmetic the batch just wrote, applied to the loaded window
+    // (AGL-1462). Tagging 40 files and losing the window is the same cost as
+    // deleting one and losing it. Where the tag FILTER is query-side the
+    // client-side pass below still drops an asset that no longer carries it,
+    // so the grid stays truthful without a re-read.
+    patchLocal(selected, (item: any) => {
+      const tags: string[] = item.tags ?? []
+      return {
+        tags:
+          bulkTag.mode === 'add'
+            ? Aglyn.normalizeMediaTags([...tags, tag])
+            : tags.filter((existing) => existing !== tag),
+      }
+    })
     enqueueSnackbar(
       `${bulkTag.mode === 'add' ? 'Tagged' : 'Untagged'} ${selected.size} file${selected.size === 1 ? '' : 's'}`,
       { variant: 'success', persist: false },
     )
-  }, [bulkTag, items, selected, firestore, scopeId, enqueueSnackbar, refresh])
+  }, [
+    bulkTag,
+    items,
+    selected,
+    firestore,
+    scopeId,
+    enqueueSnackbar,
+    patchLocal,
+  ])
   const handleBulkDelete = useCallback(async () => {
     const count = selected.size
     if (!count) return
     const confirmed = await confirm({
       title: `Delete ${count} file${count === 1 ? '' : 's'}?`,
       description:
-        'The files are removed from storage. Elements using their URLs ' +
-        'will stop rendering them.',
+        'The files are permanently removed from storage, and elements using ' +
+        'their URLs will stop rendering them. This cannot be undone from the ' +
+        'console.',
       confirmationText: 'Delete',
       confirmationButtonProps: { color: 'error' },
     })
@@ -1453,36 +1540,86 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       .catch(() => false)
     if (!confirmed) return
     setBusy(true)
+    // Named, not counted (AGL-1461). The grid has already moved by the time
+    // the snackbar lands, so a bare count leaves nothing on screen saying
+    // WHICH files went — the gap that let two wrong deletions through the
+    // 2026-08-13 pass unnoticed.
+    const nameOf = (mediaId: string) =>
+      String(
+        (items as any[]).find((item) => item.$id === mediaId)?.fileName ??
+          mediaId,
+      )
+    const deleted: string[] = []
+    const failed: string[] = []
+    /**
+     * The ids the SERVER confirmed, kept apart from the display names
+     * (AGL-1462). One request per file means a failure part-way leaves some
+     * files in place — dropping the whole selection from the window would
+     * hide a file that is still there, which is the same class of mistake as
+     * the snackbar that named nothing.
+     */
+    const deletedIds: string[] = []
     try {
       const idToken = await (user as any)?.getIdToken?.()
       for (const mediaId of selected) {
-        const response = await fetch('/api/media/upload', {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          body: JSON.stringify({ ...scopeBody, mediaId }),
-        })
-        if (!response.ok) throw new Error(`Delete failed (${response.status})`)
+        // One request per file, so a failure part-way leaves the earlier
+        // ones deleted. Throwing here reported "an error has occurred" and
+        // named neither half — carry on and report both.
+        try {
+          const response = await fetch('/api/media/upload', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({ ...scopeBody, mediaId }),
+          })
+          if (!response.ok) throw new Error(`Delete failed (${response.status})`)
+          deleted.push(nameOf(mediaId))
+          deletedIds.push(mediaId)
+        } catch (error) {
+          console.error(error)
+          failed.push(nameOf(mediaId))
+        }
       }
-      setSelected(new Set())
-      refresh()
-      enqueueSnackbar(`Deleted ${count} file${count === 1 ? '' : 's'}`, {
-        variant: 'success',
-        persist: false,
-      })
-      logActivity('Deleted media (bulk)', { type: 'media', name: `${count}` })
+      clearSelection()
+      dropLocal(deletedIds)
+      if (deleted.length) {
+        enqueueSnackbar(deletedMediaMessage(deleted), {
+          variant: 'success',
+          persist: false,
+        })
+        logActivity('Deleted media (bulk)', {
+          type: 'media',
+          name: `${deleted.length}`,
+        })
+      }
+      if (failed.length) {
+        enqueueSnackbar(deleteFailureMessage(failed), {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
     } catch (error) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
+      enqueueSnackbar(deleteFailureMessage([]), {
         variant: 'error',
         allowDuplicate: true,
       })
     } finally {
       setBusy(false)
     }
-  }, [selected, confirm, user, scopeId, enqueueSnackbar, logActivity, refresh])
+  }, [
+    selected,
+    items,
+    confirm,
+    user,
+    scopeId,
+    enqueueSnackbar,
+    logActivity,
+    clearSelection,
+    dropLocal,
+  ])
 
   /**
    * "Shared with" for a whole selection or a whole folder (AGL-1045).
@@ -1659,7 +1796,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         `Sharing updated for ${ids.length} file${ids.length === 1 ? '' : 's'}`,
         { variant: 'success', persist: false },
       )
-      setSelected(new Set())
+      clearSelection()
       return true
     },
     [items, scopeOfMedia, sitesLosingAccess, confirm, firestore, scopeCollection, scopeId, enqueueSnackbar],
@@ -2123,10 +2260,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
 
   const handleDelete = useCallback(
-    (media: Aglyn.AglynHostMedia) => async () => {
-      // Reference-aware warning (AGL-176/AGL-1413): scan before the confirm
-      // so a used asset gets a real warning, not a generic one — and so an
-      // UNUSED-looking one gets an honest account of how hard we looked.
+    (media: Aglyn.AglynHostMedia) => async (): Promise<boolean> => {
+      const fileName = media.fileName ?? media.$id
+      // Reference-aware warning (AGL-176/AGL-1413): the confirmation carries
+      // a real account of where the asset is used, not a generic one — and
+      // where it looks UNUSED, an honest account of how hard we looked.
       //
       // Deletion is irreversible and this dialog is the last thing between
       // the author and it, so silence has to be earned. Before AGL-1413 the
@@ -2135,25 +2273,31 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // setting, or by any version other than the published one. Nothing on
       // screen distinguished "checked, and nothing uses it" from "did not
       // check the half of the corpus that had it".
-      const scan = await scanReferences(media.$id).catch(() => null)
-      const referenceNote = deleteConfirmationNote(
-        scan && {
-          coverage: scan.coverage,
-          names: scan.items.map((reference) => reference.name),
-        },
+      //
+      // NOT awaited (AGL-1461). The scan walks up to a 1,500-document budget
+      // across every site in the org, and awaiting it here is what made ⋮ →
+      // Delete look like a dead button — long enough that the natural
+      // response was to click a destructive control a second time. The scan
+      // starts now and the dialog opens now; `MediaDeleteConfirmDescription`
+      // writes the sentence in when the answer lands.
+      const scan = scanReferences(media.$id).then(
+        (result) => ({
+          coverage: result.coverage,
+          names: result.items.map((reference) => reference.name),
+        }),
+        () => null,
       )
       const confirmed = await confirm({
         title: 'Delete this file?',
-        description:
-          `"${media.fileName ?? media.$id}" will be removed from storage. ` +
-          'Elements using its URL will stop rendering it.' +
-          referenceNote,
+        description: (
+          <MediaDeleteConfirmDescription fileName={fileName} scan={scan} />
+        ),
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
         .then(() => true)
         .catch(() => false)
-      if (!confirmed) return
+      if (!confirmed) return false
       try {
         const idToken = await (user as any)?.getIdToken?.()
         const response = await fetch('/api/media/upload', {
@@ -2165,22 +2309,44 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           body: JSON.stringify({ ...scopeBody, mediaId: media.$id }),
         })
         if (!response.ok) throw new Error(`Delete failed (${response.status})`)
-        enqueueSnackbar('File deleted', { variant: 'success', persist: false })
-        refresh()
+        // Names what went (AGL-1461). "File deleted" left nothing on screen
+        // identifying the file, which is why two wrong deletions in the
+        // 2026-08-13 pass were caught by memory rather than by the UI.
+        enqueueSnackbar(deletedMediaMessage([fileName]), {
+          variant: 'success',
+          persist: false,
+        })
+        // Edit the window; do not re-read it (AGL-1462). `refresh()` here
+        // dropped every page past the first, so deleting the tenth file of a
+        // loaded 174-asset library meant re-reading it to see the other 173 —
+        // 180 documents per file deleted, on a project already at ~40k reads
+        // a day. One document went and the client knows which.
+        dropLocal([media.$id as string])
+        forgetSelected([media.$id as string])
         logActivity('Deleted media', {
           type: 'media',
           id: media.$id,
-          name: media.fileName ?? media.$id,
+          name: fileName,
         })
+        return true
       } catch (error) {
         console.error(error)
-        enqueueSnackbar('An error has occurred', {
+        enqueueSnackbar(deleteFailureMessage([fileName]), {
           variant: 'error',
           allowDuplicate: true,
         })
+        return false
       }
     },
-    [confirm, user, scopeId, enqueueSnackbar, logActivity, refresh],
+    [
+      confirm,
+      user,
+      scopeId,
+      enqueueSnackbar,
+      logActivity,
+      dropLocal,
+      forgetSelected,
+    ],
   )
 
   const currentFolderName =
@@ -2263,15 +2429,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         spacing={1}
         sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
       >
-        <TextField
-          size="small"
-          label="Search"
+        <MediaSearchField
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          sx={{ minWidth: 200 }}
-          helperText={
-            hasMore ? 'Searches loaded files — Load more to widen' : undefined
-          }
+          onChange={setSearch}
+          loaded={items.length}
+          total={totalCount}
+          complete={windowComplete}
+          completing={windowCompleting}
+          truncated={windowTruncated}
+          mode={searchResult.mode}
+          matches={visibleItems.length}
         />
         <TextField
           select
@@ -2404,7 +2571,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           <Button size="small" color="error" onClick={handleBulkDelete}>
             {'Delete…'}
           </Button>
-          <Button size="small" onClick={() => setSelected(new Set())}>
+          <Button size="small" onClick={clearSelection}>
             {'Clear'}
           </Button>
           <Menu
@@ -2510,13 +2677,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   onSelect={onSelect}
                   selectable={!onSelect}
                   selected={selected.has(media.$id as string)}
-                  onToggleSelect={(checked) =>
-                    setSelected((prev) => {
-                      const next = new Set(prev)
-                      if (checked) next.add(media.$id as string)
-                      else next.delete(media.$id as string)
-                      return next
-                    })
+                  // ⇧-click ranges over what is ON SCREEN (AGL-1462) — the
+                  // filtered, sorted order, not the fetch order, because that
+                  // is the run of cards a person is pointing at.
+                  onToggleSelect={(checked, options) =>
+                    setSelection((prev) =>
+                      nextMediaSelection(prev, {
+                        orderedIds,
+                        id: media.$id as string,
+                        checked,
+                        range: options?.range,
+                      }),
+                    )
                   }
                   onCopyUrl={handleCopyUrl(media)}
                   onReplace={
@@ -3017,15 +3189,52 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               </Stack>
             )}
           </Box>
-          <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
-            <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleEditorSave}
-            >
-              {'Save'}
-            </Button>
+          {/* Delete lives HERE, directly under "Used on" (AGL-1461).
+              The drawer is where an author establishes that this is the right
+              file — the preview, the folder, the tags, and above all FIND
+              WHERE THIS IS USED, which is the check that should precede a
+              delete. Before this the only delete control was the grid card's
+              overflow menu, so the check and the act happened in different
+              places and the context that made the act safe was gone by the
+              time it happened. That is how, on 2026-08-13, two files that
+              should have been kept were deleted.
+
+              Kept at the opposite end of the row from Save, and error-
+              coloured, because the two controls are one mis-aim apart. */}
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ justifyContent: 'space-between', alignItems: 'center' }}
+          >
+            {editor?.media ? (
+              <Button
+                size="small"
+                color="error"
+                startIcon={<DeleteOutlineIcon fontSize="small" />}
+                onClick={async () => {
+                  // Same handler as the grid card: one confirmation, one
+                  // reference scan, one activity entry. A second delete
+                  // implementation here is how the two surfaces drift.
+                  const deleted = await handleDelete(editor.media)()
+                  // The drawer describes a file that no longer exists.
+                  if (deleted) setEditor(null)
+                }}
+              >
+                {'Delete file'}
+              </Button>
+            ) : (
+              <span />
+            )}
+            <Stack direction="row" spacing={1}>
+              <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleEditorSave}
+              >
+                {'Save'}
+              </Button>
+            </Stack>
           </Stack>
         </Stack>
       </Drawer>

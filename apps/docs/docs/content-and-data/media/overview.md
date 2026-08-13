@@ -34,6 +34,21 @@ feature; large video uploads and higher storage are gated by plan.
   move it in, drag a folder onto another to nest it, or drop onto a breadcrumb to move
   items up and out. Nesting depth and name-collision rules are enforced automatically.
 - Filter by **type, date, and size**, search, and sort the library.
+- **Search covers everything you authored, not just file names** — alt text, description,
+  tags, folder name and your own custom metadata values are all searchable. Results update
+  as you type, and **✕** (or **Esc**) clears the box.
+  - **Wildcards**: `mock-*-noshadow.png` matches a whole family of files. `*` is any run of
+    characters, `?` is exactly one, and a wildcard pattern matches the *whole* value.
+  - **Search one field**: `tag:hero`, `name:logo`, `alt:product`, `desc:landing`,
+    `folder:brand`, or a custom field by key — `meta.campaign:spring`. Combine them with
+    plain words; everything you type has to match.
+  - **Phrases**: put quotes around anything with a space — `"landing page"`, `tag:"black friday"`.
+  - **Typos still find things.** If nothing matches literally, Aglyn falls back to close
+    matches and tells you it did.
+  - The caption under the box always says **what was actually searched** — the whole library,
+    or how much of it. Typing loads the rest of the library once so the search covers all of
+    it; on very large libraries it searches as much as it can and says where it stopped, so
+    narrowing by folder, type or date gets you the rest.
 - Capture and edit **metadata** in a detail drawer — file name, alt text, description,
   tags, and your own **custom key/value metadata** (mirrored onto the delivered object's
   storage metadata). Bulk-edit tags and folders across a selection.
@@ -43,6 +58,17 @@ feature; large video uploads and higher storage are gated by plan.
 - See **per-asset usage**: delivery counters load automatically, and a **Used on**
   audit runs on demand — click **Find where this is used** to list every screen,
   layout, and content entry that references the asset, each a link that opens it.
+- **Delete from the detail drawer too**, right under the usage audit — so you can run
+  **Find where this is used**, read the answer, and act on it without leaving the file.
+  The confirmation opens immediately and fills the usage warning in as the scan lands,
+  and the message afterwards names the file (or counts and names them, for a selection).
+  Deleting is permanent: there is no undo in the console.
+- **Select a range with ⇧-click**: click one card, then hold **⇧** and click another —
+  every card between the two is selected, in the order they are on screen. Works on the
+  card itself and on its checkbox, and un-selects a whole range the same way.
+- **Deleting keeps your place.** However many times you clicked **Load more**, the files
+  you deleted disappear and everything else stays exactly where it was — so a long
+  clear-out is one pass, not one pass per file.
 
 ## Upload
 

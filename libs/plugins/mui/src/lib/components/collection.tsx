@@ -39,6 +39,9 @@ import type { ReactNode } from 'react'
 import { forwardRef, useContext, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+// One coercion for every authored count in this bundle (AGL-1457) — number
+// fields round-trip as strings, and a second parser here would drift.
+import { toCount } from './image-list'
 
 // Persisted component ids (AGL-551/582); the compose pipeline references
 // them through @aglyn/aglyn constants. Never rename.
@@ -453,6 +456,9 @@ export const collectionEntryBodySchema: Aglyn.ComponentSchema<CollectionEntryBod
 
 /* ── Related posts (AGL-582) ────────────────────────────────────────────── */
 
+/** How the related posts are laid out (AGL-1457). */
+export type CollectionRelatedLayout = 'list' | 'cards'
+
 /** One related post as stamped by the compose pipeline (AGL-582). */
 export interface CollectionRelatedProps extends StackProps {
   /** Section heading; empty string hides it. */
@@ -460,10 +466,42 @@ export interface CollectionRelatedProps extends StackProps {
   /** Compose-time: most related posts listed (default 3). */
   limit?: number | string
   /**
+   * Emit each entry's cover image (AGL-1457). OFF is the default and the
+   * shipped behaviour — the block is live on every blog entry, so turning
+   * covers on by default would restyle published pages nobody asked about.
+   */
+  showCover?: boolean
+  /**
+   * `list` (default) is the plain-link list that has always shipped; `cards`
+   * is the article frame's grid of cover + category chip + title.
+   */
+  layout?: CollectionRelatedLayout
+  /** Columns in the `cards` grid (default 3, the frame's 3-up). */
+  columns?: number | string
+  /**
    * Server-stamped related posts (`expandCollectionRelated`); never set by
    * hand — the tenant computes it from the current entry's category/tags.
    */
   entries?: Aglyn.CollectionRelatedItem[]
+}
+
+/** The frame's 3-up (Figma 170:242) when nothing usable is authored. */
+const RELATED_DEFAULT_COLUMNS = 3
+
+/** Cover height in the card grid, from the frame. */
+const RELATED_COVER_HEIGHT = 180
+
+/**
+ * The card's category chip (AGL-1457). ONE fixed token pair for every
+ * category: colour-coding a chip per category needs conditional styling,
+ * which is not expressible yet (AGL-1307), and inventing a palette here
+ * would have to be unpicked when it is. Same shape as the tag chips Entry
+ * Meta already renders, so the two blocks read as one vocabulary.
+ */
+const relatedChipSx = {
+  alignSelf: 'flex-start',
+  borderColor: 'divider',
+  color: 'text.secondary',
 }
 
 /**
@@ -471,15 +509,28 @@ export interface CollectionRelatedProps extends StackProps {
  * category or a tag (AGL-582). The tenant stamps `entries` at compose time
  * on entry renders; without them the besigner shows an affordance and the
  * published site renders nothing.
+ *
+ * Two layouts (AGL-1457). `list` is the plain-link list that has always
+ * shipped and stays the default — the block is live on every blog entry, so
+ * a new default would restyle published pages nobody asked about. `cards` is
+ * the article frame's grid: cover, category chip, title, at an author-set
+ * column count.
  */
 const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
   (props, ref) => {
     // `limit` is compose-time: the tenant resolves it while stamping
-    // `entries`; strip it so it never hits the DOM.
-    const { heading, limit, entries, ...rest } = props
+    // `entries`; strip it so it never hits the DOM. `showCover`/`layout`/
+    // `columns` are read here, so they must not reach it either.
+    const { heading, limit, entries, showCover, layout, columns, ...rest } =
+      props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+    // The resolver every other surface shares (AGL-1215): a stamped `media:`
+    // reference becomes a CDN URL HERE, not in the document, so one
+    // reference keeps working across sites. Called before the early return —
+    // it is a hook.
+    const { hostId } = Aglyn.useSite()
     if (!entries?.length) {
       if (!suppressNavigation) return <Box ref={ref} {...rest} />
       return (
@@ -504,22 +555,103 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
       )
     }
     const title = heading ?? 'Related articles'
+    const headingNode = title ? (
+      <Typography variant="h5" component="h2">
+        {title}
+      </Typography>
+    ) : null
+    const titleNode = (entry: Aglyn.CollectionRelatedItem) =>
+      suppressNavigation ? (
+        <Typography variant="subtitle1">{entry.title}</Typography>
+      ) : (
+        <AppLink href={entry.url} variant="subtitle1">
+          {entry.title}
+        </AppLink>
+      )
+    /**
+     * The cover, when the author asked for one AND the entry has one. An
+     * entry without a cover gets no box at all rather than a placeholder:
+     * the related list is a real feed, and a row of grey rectangles is worse
+     * than a row of titles.
+     */
+    const coverNode = (entry: Aglyn.CollectionRelatedItem) => {
+      const src = showCover
+        ? Aglyn.resolveMediaSrc(entry.coverImage, { hostId })
+        : undefined
+      if (!src) return null
+      return (
+        <Box
+          component="img"
+          src={src}
+          alt={entry.title ?? ''}
+          loading="lazy"
+          sx={{
+            display: 'block',
+            width: '100%',
+            height: RELATED_COVER_HEIGHT,
+            objectFit: 'cover',
+            borderRadius: 1,
+          }}
+        />
+      )
+    }
+
+    if (layout === 'cards') {
+      // `toCount` rounds and rejects junk; `|| default` also rejects 0, which
+      // it would otherwise accept as a column count and emit `repeat(0, …)`.
+      const columnCount =
+        toCount(columns, RELATED_DEFAULT_COLUMNS) || RELATED_DEFAULT_COLUMNS
+      return (
+        <Box
+          ref={ref}
+          {...rest}
+          // MERGE, never replace (AGL-1450) — the node's slice arrives as the
+          // ARRAY `mergeSxProps` builds in leaf.tsx, so folding it into an
+          // object spreads numeric keys and discards every authored property
+          // while these defaults still apply. Defaults first, node's after.
+          sx={[
+            {
+              display: 'grid',
+              gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+              alignItems: 'start',
+              columnGap: 3,
+              rowGap: 4,
+            },
+            ...nodeSx,
+          ]}
+        >
+          {headingNode ? (
+            <Box sx={{ gridColumn: '1 / -1' }}>{headingNode}</Box>
+          ) : null}
+          {entries.map((entry, index) => (
+            <MuiStack key={index} spacing={1}>
+              {coverNode(entry)}
+              {entry.category ? (
+                <Chip
+                  label={entry.category}
+                  size="small"
+                  variant="outlined"
+                  sx={relatedChipSx}
+                />
+              ) : null}
+              {titleNode(entry)}
+              {entry.date ? (
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  {entry.date}
+                </Typography>
+              ) : null}
+            </MuiStack>
+          ))}
+        </Box>
+      )
+    }
     return (
       <MuiStack ref={ref} spacing={1.5} {...rest}>
-        {title ? (
-          <Typography variant="h5" component="h2">
-            {title}
-          </Typography>
-        ) : null}
+        {headingNode}
         {entries.map((entry, index) => (
           <MuiStack key={index} spacing={0.25}>
-            {suppressNavigation ? (
-              <Typography variant="subtitle1">{entry.title}</Typography>
-            ) : (
-              <AppLink href={entry.url} variant="subtitle1">
-                {entry.title}
-              </AppLink>
-            )}
+            {coverNode(entry)}
+            {titleNode(entry)}
             {entry.date || entry.category ? (
               <Typography
                 variant="caption"
@@ -557,6 +689,39 @@ export const collectionRelatedSchema: Aglyn.ComponentSchema<CollectionRelatedPro
         description: 'Most related posts listed (default 3).',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
         type: 'number',
+      },
+      {
+        name: 'layout',
+        label: 'Layout',
+        description:
+          'List keeps the plain links this block has always rendered. ' +
+          'Cards is the article layout: cover, category, title, in a grid.',
+        component: Aglyn.FieldComponentType.SELECT,
+        // Both values are REAL (AGL-1451/AGL-1453): `''` cannot survive a
+        // save, so an author who switched to Cards would have no route back.
+        // `list` is also the value the render falls back to, so naming it is
+        // the same choice, not a second one.
+        options: [
+          { value: 'list', label: 'List (default)' },
+          { value: 'cards', label: 'Card grid' },
+        ],
+      },
+      {
+        name: 'columns',
+        label: 'Columns',
+        description: 'Cards per row in the card grid. Default 3.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+        type: 'number',
+        // Meaningless on the list, where each post is its own row.
+        condition: { when: 'layout', is: 'cards' },
+      },
+      {
+        name: 'showCover',
+        label: 'Show cover',
+        description:
+          'Show each post’s cover image. Posts without one show their ' +
+          'title alone rather than an empty box.',
+        component: Aglyn.FieldComponentType.SWITCH,
       },
     ],
   }
@@ -686,14 +851,44 @@ export interface CollectionEntryMetaProps extends StackProps {
    * `{{entry.date}}` — only to override.
    */
   date?: string
+  /**
+   * How {@link date} reads when the server fills it in (AGL-1459) — a
+   * COMPOSE-TIME prop, like Related Posts' `limit`: it is answered where the
+   * timestamp still exists (`expandCollectionEntryMeta`) and never reaches the
+   * DOM. Blank, or `default`, is the locale date the block has always emitted.
+   */
+  dateFormat?: Aglyn.CollectionEntryDateFormat
+  /**
+   * Byline (AGL-1459). Server-filled from the entry's own author on entry
+   * templates, exactly like {@link date}; set it — or bind `{{entry.author}}`
+   * — only to override.
+   */
+  author?: string
   /** Category; server-filled, or bind `{{entry.category}}` to override. */
   category?: string
   /** Comma-joined tags; server-filled, or bind `{{entry.tags}}`. */
   tags?: string
+  /**
+   * Round avatar shown before the byline (AGL-1459) — a media-picker target,
+   * so it holds a media reference (AGL-1215) as well as any URL form.
+   *
+   * A block-level pick, deliberately, and NOT a per-author image: entries
+   * carry an author NAME (`authorName`) and no portrait field, so a per-author
+   * avatar would need a schema decision on the entry model plus an editor
+   * field to fill it. Until then this is the site's brand mark, chosen once on
+   * the template — which is what the article frame actually asks for. Left
+   * unset it renders nothing at all, never a broken image.
+   */
+  avatarImage?: string
   showDate?: boolean
+  showAuthor?: boolean
   showCategory?: boolean
   showTags?: boolean
+  showAvatar?: boolean
 }
+
+/** Byline avatar, from the article frame (Figma 170:190). */
+const ENTRY_AVATAR_SIZE = 36
 
 /** Unresolved tokens render empty on the site, literal in the besigner. */
 const metaValue = (
@@ -723,17 +918,29 @@ const CollectionEntryMeta = forwardRef<
 >((props, ref) => {
   const {
     date,
+    // Compose-time (AGL-1459): read by `expandCollectionEntryMeta`, which has
+    // the timestamp. Destructured so it never reaches the DOM.
+    dateFormat: _dateFormat,
+    author,
     category,
     tags,
+    avatarImage,
     showDate,
+    showAuthor,
     showCategory,
     showTags,
+    showAvatar,
     ...rest
   } = props
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+  // The resolver every other surface shares (AGL-1215), so one media
+  // reference keeps working across sites. A hook — before any early return.
+  const { hostId } = Aglyn.useSite()
   const dateValue = showDate !== false ? metaValue(date, suppressNavigation) : ''
+  const authorValue =
+    showAuthor !== false ? metaValue(author, suppressNavigation) : ''
   const categoryValue =
     showCategory !== false ? metaValue(category, suppressNavigation) : ''
   const tagsValue = showTags !== false ? metaValue(tags, suppressNavigation) : ''
@@ -741,8 +948,21 @@ const CollectionEntryMeta = forwardRef<
     .split(',')
     .map((tag) => tag.trim())
     .filter(Boolean)
-  const line = [dateValue, categoryValue].filter(Boolean).join(' · ')
-  if (!line && !tagList.length) {
+  // An unresolved token empties on EVERY surface here, unlike the text
+  // fields: a literal `{{…}}` in a src is a broken image in the canvas, and a
+  // byline that renders a broken avatar on every post is worse than no
+  // avatar at all.
+  const avatarRaw = (avatarImage ?? '').trim()
+  const avatarSrc =
+    showAvatar !== false && avatarRaw && !UNRESOLVED_TOKEN.test(avatarRaw)
+      ? Aglyn.resolveMediaSrc(avatarRaw, { hostId })
+      : ''
+  // Author leads, so the frame's "The Aglyn Team · Jul 2026" reads in that
+  // order. With no author the join is character-for-character what it was.
+  const line = [authorValue, dateValue, categoryValue]
+    .filter(Boolean)
+    .join(' · ')
+  if (!line && !tagList.length && !avatarSrc) {
     if (!suppressNavigation) return <Box ref={ref} {...rest} />
     return (
       <Box
@@ -779,6 +999,25 @@ const CollectionEntryMeta = forwardRef<
       // go first; the node's slice comes after and can override them.
       sx={[{ alignItems: 'center', flexWrap: 'wrap' }, ...nodeSx]}
     >
+      {avatarSrc ? (
+        <Box
+          component="img"
+          src={avatarSrc}
+          // Decorative: the byline names the author in text right beside it,
+          // so a screen reader announcing the mark again is noise.
+          alt=""
+          loading="lazy"
+          sx={{
+            display: 'block',
+            width: ENTRY_AVATAR_SIZE,
+            height: ENTRY_AVATAR_SIZE,
+            borderRadius: '50%',
+            objectFit: 'cover',
+            // No background plate: a brand mark with a transparent ground
+            // would sit on a grey disc nobody asked for.
+          }}
+        />
+      ) : null}
       {line ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           {line}
@@ -810,6 +1049,28 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {
+        name: 'dateFormat',
+        label: 'Date format',
+        description:
+          'How the published date reads. Site default is the format this ' +
+          'block has always used; it has no effect on a Date you typed in ' +
+          'yourself.',
+        component: Aglyn.FieldComponentType.SELECT,
+        // The formats the pure layer knows how to produce, so the list cannot
+        // offer a shape nothing renders. Every value is REAL — including the
+        // do-nothing one (AGL-1451/AGL-1453): `''` cannot survive a save, so
+        // an author who tried a format would have no route back.
+        options: [...Aglyn.COLLECTION_ENTRY_DATE_FORMAT_OPTIONS],
+      },
+      {
+        name: 'author',
+        label: 'Author',
+        description:
+          'Blank shows the entry’s own author. Type here (or bind ' +
+          '{{entry.author}}) only to override it.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
         name: 'category',
         label: 'Category',
         description:
@@ -826,6 +1087,14 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {
+        name: 'avatarImage',
+        label: 'Avatar',
+        description:
+          'Round image before the byline — your brand mark, or any image ' +
+          'from the media library. Blank shows no avatar.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
         name: 'showDate',
         label: 'Show date',
         component: Aglyn.FieldComponentType.SWITCH,
@@ -838,6 +1107,16 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
       {
         name: 'showTags',
         label: 'Show tags',
+        component: Aglyn.FieldComponentType.SWITCH,
+      },
+      {
+        name: 'showAuthor',
+        label: 'Show author',
+        component: Aglyn.FieldComponentType.SWITCH,
+      },
+      {
+        name: 'showAvatar',
+        label: 'Show avatar',
         component: Aglyn.FieldComponentType.SWITCH,
       },
     ],
@@ -1093,7 +1372,11 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: RELATED_ID,
       pluginId: BUNDLE_ID,
-      props: { heading: 'Related articles', limit: 3 },
+      // `layout` is seeded rather than left to the runtime fallback so the
+      // dropdown opens on the value the block is actually rendering, and an
+      // author who tries Cards has a named route back (AGL-1457). `showCover`
+      // is deliberately absent: OFF is the shipped behaviour.
+      props: { heading: 'Related articles', limit: 3, layout: 'list' },
     },
   },
   {
@@ -1135,7 +1418,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     type: Aglyn.NodeType.PRESET,
     displayName: 'Entry Meta',
     pluginId: BUNDLE_ID,
-    description: 'Date · category line with tag chips for the current entry',
+    description: 'Author · date · category line with tag chips for the entry',
     category: Aglyn.ComponentCategory.TEXT,
     icon: { path: mdiTagOutline.path, sx: { color: '#00796b' } },
     data: {
@@ -1144,6 +1427,12 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
       pluginId: BUNDLE_ID,
       props: {
         date: '{{entry.date}}',
+        // Named rather than left to the runtime fallback (AGL-1459): the
+        // dropdown opens on the value the block is actually rendering, and
+        // an author who tries a format has a named route back. `default` is
+        // also the fallback, so naming it is the same choice, not a second.
+        dateFormat: Aglyn.COLLECTION_ENTRY_DATE_FORMAT_DEFAULT,
+        author: '{{entry.author}}',
         category: '{{entry.category}}',
         tags: '{{entry.tags}}',
       },

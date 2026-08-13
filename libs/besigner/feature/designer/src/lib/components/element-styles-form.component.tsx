@@ -474,6 +474,25 @@ const justifySelf: ButtonGroupFormControl = {
   ],
 }
 
+/**
+ * The Flexbox & Grids container toggles, in panel order (AGL-1458).
+ *
+ * A list rather than eight literal call sites because every one of them
+ * needs the same two wirings — the change handler AND the effective value
+ * — and the shipped panel gave them only the first. One render site is one
+ * place for that pair to be right.
+ */
+const FLEXBOX_TOGGLES: ButtonGroupFormControl[] = [
+  alignItems,
+  alignContent,
+  alignSelf,
+  flexWrap,
+  flexDirection,
+  justifyItems,
+  justifyContent,
+  justifySelf,
+]
+
 const TextAlignToggleButtonGroup = (props: { onChange: (e: SyntheticEvent, value: string) => void; value: string; field: { component?: FieldComponentType; name: string; label: string; exclusive?: boolean; options: { value: string; icon: string; label: string }[]; description?: string } }) => {
   const { onChange, value, field } = props
 
@@ -506,7 +525,14 @@ const TextAlignToggleButtonGroup = (props: { onChange: (e: SyntheticEvent, value
   )
 }
 
-export interface ElementStylesFormProps extends FormRendererProps {
+/**
+ * The panel fills a form-renderer-shaped slot in the aside panel, but it
+ * reads neither `schema` nor `componentMapper` — it renders its own groups
+ * and builds their forms itself. They are optional so a caller (and a
+ * spec) can hand it the one prop it actually consumes; the aside panel's
+ * `as any` at the mount site is the same statement, made less precisely.
+ */
+export interface ElementStylesFormProps extends Partial<FormRendererProps> {
   node?: Aglyn.NodeSchema
 }
 
@@ -997,38 +1023,22 @@ const ElementStylesForm = observer(
             href: besignerDocsUrl('responsiveStyling', '#style-groups'),
           }}
         >
-          <ToggleButtonFormControl
-            onChange={handleFlexboxChange(alignItems.name)}
-            schema={alignItems}
-          />
-          <ToggleButtonFormControl
-            onChange={handleFlexboxChange(alignContent.name)}
-            schema={alignContent}
-          />
-          <ToggleButtonFormControl
-            onChange={handleFlexboxChange(alignSelf.name)}
-            schema={alignSelf}
-          />
-          <ToggleButtonFormControl
-            onChange={handleFlexboxChange(flexWrap.name)}
-            schema={flexWrap}
-          />
-          <ToggleButtonFormControl
-            onChange={handleFlexboxChange(flexDirection.name)}
-            schema={flexDirection}
-          />
-          <ToggleButtonFormControl
-            onChange={handleFlexboxChange(justifyItems.name)}
-            schema={justifyItems}
-          />
-          <ToggleButtonFormControl
-            onChange={handleFlexboxChange(justifyContent.name)}
-            schema={justifyContent}
-          />
-          <ToggleButtonFormControl
-            onChange={handleFlexboxChange(justifySelf.name)}
-            schema={justifySelf}
-          />
+          {/* Every container toggle reads its own key back (AGL-1458).
+              These were rendered with an `onChange` and no `value`, so the
+              control seeded its local state from nothing and reported "-
+              not set" for a property the node demonstrably had — while
+              Text Alignment above, which IS handed its effective value,
+              highlighted the same authoring correctly on the same node.
+              Rendered from a list rather than eight hand-wired call sites
+              so a toggle added later cannot arrive read-only again. */}
+          {FLEXBOX_TOGGLES.map((schema) => (
+            <ToggleButtonFormControl
+              key={schema.name}
+              onChange={handleFlexboxChange(schema.name as string)}
+              schema={schema}
+              value={effectiveValues[schema.name as string] ?? ''}
+            />
+          ))}
           {/* Container gaps live with the container toggles (AGL-587);
               they apply immediately like everything else. */}
           <FormRenderer

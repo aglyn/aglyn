@@ -19,8 +19,11 @@ import type { CollectionEntriesSource } from './collection-entries'
 import {
   COLLECTION_ALL_PILL_DEFAULT,
   COLLECTION_ALL_PILL_NONE,
+  COLLECTION_ENTRY_DATE_FORMAT_DEFAULT,
+  COLLECTION_ENTRY_DATE_FORMAT_OPTIONS,
   buildCollectionCategoryLinks,
   collectionCategorySlug,
+  collectionEntryMetaValues,
   collectionEntryTokens,
   collectionListUrl,
   collectionPaginationLinks,
@@ -31,6 +34,7 @@ import {
   expandCollectionEntries,
   expandCollectionEntryMeta,
   expandCollectionRelated,
+  formatCollectionEntryDate,
   parseCollectionRoute,
   resolveCollectionAllLabel,
   resolveCollectionCategoryBySlug,
@@ -1085,6 +1089,51 @@ describe('expandCollectionRelated (AGL-582)', () => {
     expect(untouched).toEqual(snapshot)
   })
 
+  /**
+   * AGL-1457. The block owns its markup, so a cover can only reach it as a
+   * stamped field — there is no template to bind `{{entry.coverImage}}` on.
+   * The raw stored value is stamped, not a URL: a `media:` reference resolves
+   * at RENDER through `resolveMediaSrc`, exactly as the Image element does,
+   * so one reference keeps working across sites and CDN route changes.
+   */
+  it('stamps the raw cover reference on related items (AGL-1457)', () => {
+    const withCover = {
+      slug: 'blog',
+      entries: [
+        { $id: 'current', slug: 'current', tags: ['x'] },
+        {
+          $id: 'match',
+          title: 'Match',
+          slug: 'match',
+          coverImage: 'media:org:jWmGooWE3L/4GF1hRJBUp',
+          tags: ['x'],
+        },
+      ],
+    }
+    const nodes = expandCollectionRelated(
+      relatedNodes(),
+      withCover,
+      withCover.entries[0],
+    )
+    expect(nodes['related'].props.entries).toEqual([
+      {
+        title: 'Match',
+        url: '/blog/match',
+        coverImage: 'media:org:jWmGooWE3L/4GF1hRJBUp',
+      },
+    ])
+  })
+
+  it('omits the cover key entirely for an entry without one (AGL-1457)', () => {
+    const nodes = expandCollectionRelated(
+      relatedNodes(),
+      source,
+      source.entries[0],
+    )
+    const [first] = nodes['related'].props.entries as any[]
+    expect(first).not.toHaveProperty('coverImage')
+  })
+
   it('stamps taxonomy-resolved category names on related items (AGL-582)', () => {
     const taxonomySource = {
       slug: 'blog',
@@ -1213,5 +1262,245 @@ describe('expandCollectionEntryMeta (AGL-1385)', () => {
     expect(nodes['meta'].props).not.toHaveProperty('date')
     expect(nodes['meta'].props).not.toHaveProperty('category')
     expect(nodes['meta'].props).not.toHaveProperty('tags')
+  })
+})
+
+/**
+ * AGL-1459. The block emitted `8/9/2026` and the article frame's byline wants
+ * `Jul 2026`, so the only way to reach the frame was to hardcode a string into
+ * the Date OVERRIDE — which on a *template* stamps one fabricated date onto
+ * all 11 published entries. A raw locale date is also simply the wrong default
+ * for an editorial surface; the format is a presentation choice, and it had no
+ * control at all.
+ *
+ * The formatter lives HERE, next to the timestamp, and not in the block. By
+ * the time a date reaches the component it is already a formatted string, and
+ * re-parsing `8/9/2026` is ambiguous by construction: the very same string
+ * reads as 8 September under a `en-GB` runtime. A byline that silently moves
+ * an article three weeks is worse than one that is the wrong shape.
+ */
+describe('formatCollectionEntryDate (AGL-1459)', () => {
+  /** 2026-07-15T12:00:00Z — mid-month and midday, so no zone moves it. */
+  const seconds = 1_784_116_800
+  const at = { seconds }
+  const date = new Date(seconds * 1000)
+
+  it('leaves the shipped format byte-identical to what the block emits today', () => {
+    // The whole point of the default option: an author who opens the new
+    // dropdown and closes it must not restyle 11 published pages.
+    expect(formatCollectionEntryDate(at)).toBe(date.toLocaleDateString())
+    expect(formatCollectionEntryDate(at, COLLECTION_ENTRY_DATE_FORMAT_DEFAULT))
+      .toBe(date.toLocaleDateString())
+    // And so must an unknown value from a hand-edited document.
+    expect(formatCollectionEntryDate(at, 'nonsense' as never)).toBe(
+      date.toLocaleDateString(),
+    )
+  })
+
+  it('produces the article frame’s "Jul 2026" byline shape', () => {
+    expect(formatCollectionEntryDate(at, 'monthYear', 'en-US')).toBe('Jul 2026')
+    // No day number: that is the whole difference from the shipped format.
+    expect(formatCollectionEntryDate(at, 'monthYear', 'en-US')).not.toContain(
+      '15',
+    )
+  })
+
+  it('offers the other editorial shapes an author would reach for', () => {
+    expect(formatCollectionEntryDate(at, 'mediumDate', 'en-US')).toBe(
+      'Jul 15, 2026',
+    )
+    expect(formatCollectionEntryDate(at, 'longDate', 'en-US')).toBe(
+      'July 15, 2026',
+    )
+  })
+
+  it('writes ISO from the LOCAL calendar day, never a UTC shift', () => {
+    // `toISOString().slice(0, 10)` would date a 8pm-local post tomorrow.
+    const local = formatCollectionEntryDate(at, 'iso')
+    expect(local).toBe(
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-` +
+        `${String(date.getDate()).padStart(2, '0')}`,
+    )
+    expect(local).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('empties an unpublished entry rather than printing the epoch', () => {
+    expect(formatCollectionEntryDate(undefined, 'monthYear')).toBe('')
+    expect(formatCollectionEntryDate(null, 'monthYear')).toBe('')
+    expect(formatCollectionEntryDate({ seconds: 0 }, 'monthYear')).toBe('')
+  })
+
+  it('offers only values that can actually be persisted (AGL-1451/AGL-1453)', () => {
+    const values = COLLECTION_ENTRY_DATE_FORMAT_OPTIONS.map(
+      (option) => option.value,
+    )
+    // "Use the entry's default" is a REAL value, not absence: `''` cannot
+    // survive a save, so an author who tried a format would have no way back.
+    expect(values).toContain(COLLECTION_ENTRY_DATE_FORMAT_DEFAULT)
+    for (const option of COLLECTION_ENTRY_DATE_FORMAT_OPTIONS) {
+      expect(option.value).toBeTruthy()
+      expect(option.label).toBeTruthy()
+    }
+    // Every offered value has to mean something to the formatter.
+    for (const value of values) {
+      expect(formatCollectionEntryDate(at, value)).toBeTruthy()
+    }
+    expect(new Set(values).size).toBe(values.length)
+  })
+})
+
+/**
+ * AGL-1459. Every published post was authored with `The Aglyn Team`, so the
+ * frame's byline was a PRESENTATION gap, not a content gap: the value was in
+ * the collection and the block could not render it. The previous build session
+ * considered binding the author into the `Category` override and rejected it —
+ * the stored node would say "category" and mean "author".
+ */
+describe('the entry author reaches the block (AGL-1459)', () => {
+  const entry = {
+    title: 'Hello',
+    slug: 'hello',
+    authorName: 'The Aglyn Team',
+    publishedAt: { seconds: 1_784_116_800 },
+  }
+
+  it('is one of the values an Entry Meta block shows', () => {
+    expect(collectionEntryMetaValues(entry).author).toBe('The Aglyn Team')
+  })
+
+  it('is bindable by hand as {{entry.author}}, like every other field', () => {
+    expect(collectionEntryTokens(entry, 'blog')['entry.author']).toBe(
+      'The Aglyn Team',
+    )
+    // An entry with no byline empties rather than leaking the token.
+    expect(collectionEntryTokens({}, 'blog')['entry.author']).toBe('')
+  })
+
+  it('reads the same whether it was bound or server-filled', () => {
+    // The reason `collectionEntryMetaValues` exists at all: one entry has to
+    // read one way on both paths.
+    expect(collectionEntryMetaValues(entry).author).toBe(
+      collectionEntryTokens(entry, 'blog')['entry.author'],
+    )
+  })
+
+  it('applies the block’s date format to the values it fills in', () => {
+    expect(collectionEntryMetaValues(entry, undefined, 'monthYear')).toEqual({
+      date: formatCollectionEntryDate(entry.publishedAt, 'monthYear'),
+      author: 'The Aglyn Team',
+      category: '',
+      tags: '',
+    })
+  })
+})
+
+/**
+ * AGL-1459, the stamping half. `dateFormat` is a COMPOSE-TIME prop like
+ * Related Posts' `limit`: it is answered where the timestamp still exists and
+ * never reaches the DOM.
+ */
+describe('expandCollectionEntryMeta honours author and date format (AGL-1459)', () => {
+  const categories = [{ id: 'guides', name: 'Guides' }]
+  const entry = {
+    $id: 'fHkaaFRRWF',
+    title: 'From a form to a dataset in five minutes',
+    slug: 'from-a-form-to-a-dataset-in-five-minutes',
+    authorName: 'The Aglyn Team',
+    categoryId: 'guides',
+    publishedAt: { seconds: 1_784_116_800 },
+  }
+  const metaNodes = (props: Record<string, unknown>) =>
+    ({
+      root: { $id: 'root', componentId: 'stack', nodes: ['meta'] },
+      meta: {
+        $id: 'meta',
+        componentId: 'collectionEntryMeta',
+        parentId: 'root',
+        props,
+      },
+    }) as any
+
+  it('fills the author in, so the byline needs nothing typed', () => {
+    const nodes = expandCollectionEntryMeta(
+      metaNodes({ showAuthor: true }),
+      entry,
+      categories,
+    )
+    expect(nodes['meta'].props.author).toBe('The Aglyn Team')
+  })
+
+  it('never overwrites a hand-typed byline', () => {
+    const nodes = expandCollectionEntryMeta(
+      metaNodes({ author: 'Guest writer' }),
+      entry,
+      categories,
+    )
+    expect(nodes['meta'].props.author).toBe('Guest writer')
+  })
+
+  it('omits the author for an entry that genuinely has none', () => {
+    const nodes = expandCollectionEntryMeta(
+      metaNodes({}),
+      { ...entry, authorName: '' },
+      categories,
+    )
+    expect(nodes['meta'].props).not.toHaveProperty('author')
+  })
+
+  it('stamps the chosen format instead of the raw locale date', () => {
+    const nodes = expandCollectionEntryMeta(
+      metaNodes({ dateFormat: 'monthYear' }),
+      entry,
+      categories,
+    )
+    expect(nodes['meta'].props.date).toBe('Jul 2026')
+  })
+
+  /**
+   * The live template carries the PRESET's `date: '{{entry.date}}'`, so a
+   * format that only filled a blank field would do nothing on the one surface
+   * it was built for — the same shape of trap the issue was filed about. The
+   * token is not a hand-typed override; it names the very value being
+   * reformatted, so a chosen format reformats it. A literal string still wins.
+   */
+  it('reformats the {{entry.date}} binding the preset seeds', () => {
+    const nodes = expandCollectionEntryMeta(
+      metaNodes({ date: '{{entry.date}}', dateFormat: 'monthYear' }),
+      entry,
+      categories,
+    )
+    expect(nodes['meta'].props.date).toBe('Jul 2026')
+  })
+
+  it('leaves a literal Date override exactly as typed', () => {
+    const nodes = expandCollectionEntryMeta(
+      metaNodes({ date: 'Updated weekly', dateFormat: 'monthYear' }),
+      entry,
+      categories,
+    )
+    expect(nodes['meta'].props.date).toBe('Updated weekly')
+  })
+
+  it('changes nothing at all on the default format', () => {
+    for (const props of [
+      {},
+      { dateFormat: COLLECTION_ENTRY_DATE_FORMAT_DEFAULT },
+    ]) {
+      const nodes = expandCollectionEntryMeta(
+        metaNodes(props),
+        entry,
+        categories,
+      )
+      expect(nodes['meta'].props.date).toBe(
+        new Date(1_784_116_800 * 1000).toLocaleDateString(),
+      )
+    }
+    // And a bound token stays literal for later substitution, as before.
+    const bound = expandCollectionEntryMeta(
+      metaNodes({ date: '{{entry.date}}' }),
+      entry,
+      categories,
+    )
+    expect(bound['meta'].props.date).toBe('{{entry.date}}')
   })
 })

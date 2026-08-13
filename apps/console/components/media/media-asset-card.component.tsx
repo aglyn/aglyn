@@ -21,7 +21,6 @@ import { describeScope, isOrgWideScope } from '@aglyn/aglyn'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined'
 import {
   Box,
@@ -37,6 +36,7 @@ import {
   Typography,
 } from '@mui/material'
 import { type MouseEvent, useState } from 'react'
+import { mediaFileTypeIcon } from '../../utils/media-file-icon'
 import { mediaThumbnailSrc } from '../../utils/media-src'
 
 export interface MediaAssetCardProps {
@@ -48,7 +48,13 @@ export interface MediaAssetCardProps {
   /** Selection (non-picker multi-select). */
   selectable?: boolean
   selected?: boolean
-  onToggleSelect?: (checked: boolean) => void
+  /**
+   * `range` reports that ⇧ was held (AGL-1462): act on everything between the
+   * last plainly-clicked card and this one. The card only reports the
+   * modifier — what a range MEANS is the grid's question, since only the grid
+   * knows the order the cards are drawn in.
+   */
+  onToggleSelect?: (checked: boolean, options?: { range?: boolean }) => void
   /** Overflow-menu actions (non-picker). */
   onCopyUrl?: () => void
   onReplace?: () => void
@@ -56,14 +62,6 @@ export interface MediaAssetCardProps {
   onDelete?: () => void
   /** Toggle the AGL-1051 private flag; omitted where the caller can't. */
   onSetPrivate?: (makePrivate: boolean) => void
-}
-
-/** Short type label from a content type, e.g. `image/png` → `PNG`. */
-function typeLabel(contentType: string | undefined): string {
-  const value = String(contentType ?? '')
-  if (value === 'application/pdf') return 'PDF'
-  const subtype = value.split('/')[1] ?? ''
-  return subtype ? subtype.split('+')[0].toUpperCase() : 'FILE'
 }
 
 const THUMB_HEIGHT = 116
@@ -93,7 +91,12 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
   const picker = Boolean(onSelect)
   const contentType = String(media.contentType ?? '')
   const isVideo = contentType.startsWith('video/')
-  const isPdf = contentType === 'application/pdf'
+  // Only an image has a thumbnail to draw. Everything else — PDF, ZIP, and
+  // any type the allowlist grows later — gets a glyph, because the `<img>`
+  // this used to fall through to renders an EMPTY card (AGL-1463).
+  const isImage = contentType.startsWith('image/')
+  const { Icon: FileTypeIcon, label: fileTypeLabel } =
+    mediaFileTypeIcon(contentType)
   const fileName = media.fileName ?? (media as any).$id
 
   const openMenu = (event: MouseEvent<HTMLElement>) => {
@@ -106,11 +109,21 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
     action?.()
   }
 
-  // The primary click: select in picker mode, open details otherwise.
-  const handlePrimary = picker
-    ? () => onSelect?.(media)
-    : onDetails
-      ? () => onDetails()
+  // The primary click: select in picker mode, open details otherwise —
+  // except a ⇧-click on a selectable card, which extends the selection
+  // (AGL-1462). Opening the details drawer on ⇧-click would be the one
+  // gesture nobody means by it, and the checkbox is a 20px target that only
+  // appears on hover, so the card body has to answer ⇧ too.
+  const handlePrimary =
+    selectable || picker || onDetails
+      ? (event: MouseEvent<HTMLElement>) => {
+          if (selectable && event.shiftKey) {
+            event.preventDefault()
+            return onToggleSelect?.(true, { range: true })
+          }
+          if (picker) return onSelect?.(media)
+          onDetails?.()
+        }
       : undefined
 
   const thumbSx = {
@@ -148,7 +161,15 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
           checked={Boolean(selected)}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
-          onChange={(event) => onToggleSelect?.(event.target.checked)}
+          onChange={(event) =>
+            onToggleSelect?.(event.target.checked, {
+              // A checkbox `change` carries the originating mouse event, so
+              // ⇧-clicking the box ranges exactly as ⇧-clicking the tile does.
+              range: Boolean(
+                (event.nativeEvent as { shiftKey?: boolean })?.shiftKey,
+              ),
+            })
+          }
           sx={{
             position: 'absolute',
             top: 2,
@@ -178,20 +199,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
           onClick={handlePrimary}
           sx={thumbSx}
         />
-      ) : isPdf ? (
-        <CardMedia
-          onClick={handlePrimary}
-          sx={{
-            ...thumbSx,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'text.secondary',
-          }}
-        >
-          <PictureAsPdfIcon fontSize="large" />
-        </CardMedia>
-      ) : (
+      ) : isImage ? (
         <CardMedia
           component="img"
           // The 320px WebP variant, not the full-size original. The tile is
@@ -204,6 +212,22 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
           onClick={handlePrimary}
           sx={thumbSx}
         />
+      ) : (
+        // The terminal branch, deliberately: every remaining type lands here
+        // and `mediaFileTypeIcon` always answers, so no content type can
+        // reach the grid without a glyph.
+        <CardMedia
+          onClick={handlePrimary}
+          sx={{
+            ...thumbSx,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'text.secondary',
+          }}
+        >
+          <FileTypeIcon fontSize="large" titleAccess={fileTypeLabel} />
+        </CardMedia>
       )}
 
       <Stack
@@ -223,7 +247,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
             noWrap
             component="div"
           >
-            {`${typeLabel(media.contentType)} · ${formatBytes(media.sizeBytes ?? 0)}`}
+            {`${fileTypeLabel} · ${formatBytes(media.sizeBytes ?? 0)}`}
           </Typography>
           {/* Restriction is visible without opening the drawer (AGL-1045).
               Only shown when it is actually restricted — badging every

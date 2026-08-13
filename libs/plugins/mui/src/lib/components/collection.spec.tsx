@@ -207,6 +207,230 @@ describe('Related posts block (AGL-582)', () => {
   })
 })
 
+/**
+ * AGL-1457. The block shipped exactly two controls — Heading and Limit — so
+ * the article frame's 3-up card grid (180px cover + category chip + title)
+ * could not be authored at all, and the block never emitted a cover. Hand
+ * building the grid was not an option either: related posts are resolved FROM
+ * the collection, so a static 3-up would rot the moment the collection moved.
+ *
+ * The prop vocabulary mirrors the Collection Entries block: a `show*` SWITCH
+ * (Entry Meta's showDate/showCategory/showTags) and a numeric TEXT_FIELD for a
+ * count (Collection Entries' entriesLimit/perPage/page, Grid's columns).
+ *
+ * The plain list stays the DEFAULT. This block is live on every blog entry;
+ * a new default would restyle 11 published pages nobody asked about.
+ */
+describe('Related posts covers and card grid (AGL-1457)', () => {
+  const entries = [
+    {
+      title: 'First',
+      url: '/blog/first',
+      date: '1/1/2026',
+      category: 'Guides',
+      coverImage: 'https://cdn.example.com/first.png',
+    },
+    {
+      title: 'Second',
+      url: '/blog/second',
+      date: '2/1/2026',
+      category: 'Product',
+      coverImage: 'media:org:jWmGooWE3L/4GF1hRJBUp',
+    },
+    { title: 'Third', url: '/blog/third' },
+  ]
+
+  describe('the default render is untouched', () => {
+    it('emits no cover image at all', () => {
+      const { container } = render(<CollectionRelated entries={entries} />)
+      expect(container.querySelectorAll('img')).toHaveLength(0)
+    })
+
+    it('stays a stacked list, not a grid', () => {
+      const { container } = render(<CollectionRelated entries={entries} />)
+      const root = container.firstElementChild as HTMLElement
+      expect(window.getComputedStyle(root).display).not.toBe('grid')
+    })
+
+    it('renders exactly the plain links and date · category captions', () => {
+      const { container } = render(<CollectionRelated entries={entries} />)
+      expect(
+        Array.from(container.querySelectorAll('a')).map((a) =>
+          a.getAttribute('href'),
+        ),
+      ).toEqual(['/blog/first', '/blog/second', '/blog/third'])
+      expect(screen.getByText('1/1/2026 · Guides')).toBeTruthy()
+      // No chip markup on the list layout — the caption carries the category.
+      expect(container.querySelectorAll('.MuiChip-root')).toHaveLength(0)
+    })
+
+    it('is what the shipped preset asks for, explicitly', () => {
+      // Not merely "absent so the runtime default applies": the preset names
+      // the list, so an author who switches to cards has a route back.
+      const preset = collectionPresets.find(
+        (item) =>
+          item.data.componentId === Aglyn.COLLECTION_RELATED_COMPONENT_ID,
+      )
+      expect((preset?.data.props as any)?.layout).toBe('list')
+      expect((preset?.data.props as any)?.showCover).toBeUndefined()
+    })
+  })
+
+  describe('Show cover', () => {
+    it('emits each entry’s cover image', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} showCover />,
+      )
+      const sources = Array.from(container.querySelectorAll('img')).map((img) =>
+        img.getAttribute('src'),
+      )
+      expect(sources).toEqual([
+        'https://cdn.example.com/first.png',
+        // A media reference resolves at render, like every other surface.
+        '/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp',
+      ])
+    })
+
+    it('describes the cover with the entry title', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} showCover />,
+      )
+      expect(container.querySelector('img')?.getAttribute('alt')).toBe('First')
+    })
+
+    it('renders no cover box for an entry that has none', () => {
+      const { container } = render(
+        <CollectionRelated entries={[entries[2]]} showCover />,
+      )
+      expect(container.querySelectorAll('img')).toHaveLength(0)
+      expect(screen.getByText('Third')).toBeTruthy()
+    })
+  })
+
+  describe('Columns', () => {
+    /**
+     * Asserted on the SPECIFIED value, which is all jsdom has — there is no
+     * layout here to resolve `repeat()` into used track sizes. A probe in a
+     * real browser must count tracks instead; the same string reads as
+     * `repeat(3, …)` before layout and `312px 312px 312px` after.
+     */
+    it('renders the authored column count as a grid', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} layout="cards" columns={3} />,
+      )
+      const root = container.firstElementChild as HTMLElement
+      const style = window.getComputedStyle(root)
+      expect(style.display).toBe('grid')
+      expect(style.gridTemplateColumns).toBe('repeat(3, minmax(0, 1fr))')
+      // Heading plus one cell per entry; the heading spans the whole row.
+      expect(root.children).toHaveLength(4)
+      expect(container.querySelectorAll('a')).toHaveLength(3)
+    })
+
+    it('honours a different count', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} layout="cards" columns={2} />,
+      )
+      const root = container.firstElementChild as HTMLElement
+      expect(window.getComputedStyle(root).gridTemplateColumns).toBe(
+        'repeat(2, minmax(0, 1fr))',
+      )
+    })
+
+    it('falls back to the frame’s 3-up when the count is blank or junk', () => {
+      for (const columns of [undefined, '', 'abc', 0, -2]) {
+        const { container, unmount } = render(
+          <CollectionRelated
+            entries={entries}
+            layout="cards"
+            columns={columns as never}
+          />,
+        )
+        const root = container.firstElementChild as HTMLElement
+        expect(window.getComputedStyle(root).gridTemplateColumns).toBe(
+          'repeat(3, minmax(0, 1fr))',
+        )
+        unmount()
+      }
+    })
+
+    it('ignores the count while the layout is the list', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} columns={3} />,
+      )
+      const root = container.firstElementChild as HTMLElement
+      expect(window.getComputedStyle(root).display).not.toBe('grid')
+    })
+
+    it('gives each card the category chip the frame asks for', () => {
+      const { container } = render(
+        <CollectionRelated entries={entries} layout="cards" columns={3} />,
+      )
+      const chips = Array.from(container.querySelectorAll('.MuiChip-root')).map(
+        (chip) => chip.textContent,
+      )
+      // Third has no category, so it gets no chip — never an empty one.
+      expect(chips).toEqual(['Guides', 'Product'])
+    })
+
+    it('keeps the compose-time and layout props off the DOM', () => {
+      const { container } = render(
+        <CollectionRelated
+          entries={entries}
+          limit={3}
+          layout="cards"
+          columns={3}
+          showCover
+        />,
+      )
+      const root = container.firstElementChild as HTMLElement
+      for (const attribute of ['limit', 'layout', 'columns', 'showCover'])
+        expect(root.getAttribute(attribute)).toBeNull()
+    })
+
+    it('never navigates the canvas away from an editing surface', () => {
+      const { container } = render(
+        <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+          <CollectionRelated entries={entries} layout="cards" showCover />
+        </Aglyn.ScreenLinkContext.Provider>,
+      )
+      expect(container.querySelectorAll('a')).toHaveLength(0)
+      expect(screen.getByText('First')).toBeTruthy()
+    })
+  })
+
+  describe('the new controls are authorable', () => {
+    const attribute = (name: string) =>
+      (collectionRelatedSchema.attributes ?? []).find(
+        (item) => item.name === name,
+      )
+
+    it('offers Show cover as a switch', () => {
+      expect(attribute('showCover')?.component).toBe(
+        Aglyn.FieldComponentType.SWITCH,
+      )
+      expect(attribute('showCover')?.label).toBe('Show cover')
+    })
+
+    it('offers Layout with values that can actually be saved (AGL-1453)', () => {
+      const layout = attribute('layout')
+      expect(layout?.component).toBe(Aglyn.FieldComponentType.SELECT)
+      const values = (layout?.options ?? []).map((option: any) => option.value)
+      expect(values).toEqual(['list', 'cards'])
+      // `''` is the shape AGL-1451/AGL-1453 closed repo-wide: it cannot
+      // survive a save, so the pick silently reverts.
+      for (const value of values) expect(value).toBeTruthy()
+    })
+
+    it('offers Columns as a number field, like every other count', () => {
+      expect(attribute('columns')?.component).toBe(
+        Aglyn.FieldComponentType.TEXT_FIELD,
+      )
+      expect((attribute('columns') as any)?.type).toBe('number')
+    })
+  })
+})
+
 describe('Category pills block (AGL-1321)', () => {
   const items = [
     { label: 'All', href: '/blog', active: false },
@@ -387,6 +611,18 @@ describe('Blocks that render their own Stack keep the node style slice (AGL-1450
         sx={nodeSlice(authored) as never}
       />,
     ],
+    // The AGL-1459 byline is a THIRD arrangement of the same Stack — an
+    // avatar sibling ahead of the line — and is held to the same rule.
+    [
+      'Entry Meta (byline)',
+      <CollectionEntryMeta
+        key="byline"
+        avatarImage="https://cdn.example.com/mark.png"
+        author="The Aglyn Team"
+        date="Jul 2026"
+        sx={nodeSlice(authored) as never}
+      />,
+    ],
     [
       'Share Bar',
       <CollectionShare key="share" sx={nodeSlice(authored) as never} />,
@@ -396,6 +632,34 @@ describe('Blocks that render their own Stack keep the node style slice (AGL-1450
       <CollectionCategories
         key="cats"
         items={[{ label: 'All', href: '/blog', active: true }]}
+        sx={nodeSlice(authored) as never}
+      />,
+    ],
+    // The new AGL-1457 markup is held to the same rule: a card grid built by
+    // spreading `rest.sx` into an object would drop the whole slice again.
+    [
+      'Related posts (list)',
+      <CollectionRelated
+        key="related-list"
+        entries={[{ title: 'First', url: '/blog/first' }]}
+        sx={nodeSlice(authored) as never}
+      />,
+    ],
+    [
+      'Related posts (card grid)',
+      <CollectionRelated
+        key="related-cards"
+        layout="cards"
+        columns={3}
+        showCover
+        entries={[
+          {
+            title: 'First',
+            url: '/blog/first',
+            category: 'Guides',
+            coverImage: 'https://cdn.example.com/first.png',
+          },
+        ]}
         sx={nodeSlice(authored) as never}
       />,
     ],
@@ -425,5 +689,245 @@ describe('Blocks that render their own Stack keep the node style slice (AGL-1450
     )
     const root = container.firstElementChild as HTMLElement
     expect(window.getComputedStyle(root).alignItems).toBe('flex-start')
+  })
+})
+
+
+/**
+ * AGL-1459. Entry Meta offered `Date`, `Category`, `Tags` and three `Show *`
+ * switches — no author, no avatar, no date format — so the article frame's
+ * byline (36px round brand mark + `The Aglyn Team` + `· Jul 2026`) could not
+ * be authored at all. Every published post CARRIES an author, so this was a
+ * presentation gap: the value was in the collection and the block could not
+ * render it.
+ *
+ * The date format is the sharp one, and is independent of the other two.
+ * Without it the only way to reach `Jul 2026` was to hardcode a string into
+ * the Date OVERRIDE, which on a *template* stamps one fabricated date onto all
+ * 11 published entries. That is a live trap, not a missing nicety.
+ */
+describe('Entry Meta byline (AGL-1459)', () => {
+  const attribute = (name: string) =>
+    (collectionEntryMetaSchema.attributes ?? []).find(
+      (item) => item.name === name,
+    )
+
+  /**
+   * The block is live on 11 published entries, so the render with none of the
+   * new props set has to be the SAME markup, not merely a similar one.
+   * Recorded off the pre-change implementation, emotion class hashes and all —
+   * those hashes are a function of the sx the block builds, so a default that
+   * quietly gained a property would move them.
+   */
+  describe('the default render is untouched', () => {
+    const BEFORE =
+      '<div class="MuiStack-root css-13mitf6-MuiStack-root">' +
+      '<span class="MuiTypography-root MuiTypography-caption ' +
+      'css-1374baf-MuiTypography-root">1/1/2026 · Guides</span>' +
+      '<div class="MuiChip-root MuiChip-outlined MuiChip-sizeSmall ' +
+      'MuiChip-colorDefault css-9bqyez-MuiChip-root">' +
+      '<span class="MuiChip-label css-19m61dl-MuiChip-label">nextjs</span>' +
+      '</div><div class="MuiChip-root MuiChip-outlined MuiChip-sizeSmall ' +
+      'MuiChip-colorDefault css-9bqyez-MuiChip-root">' +
+      '<span class="MuiChip-label css-19m61dl-MuiChip-label">seo</span>' +
+      '</div></div>'
+
+    it('emits byte-identical markup when no new prop is set', () => {
+      const { container } = render(
+        <CollectionEntryMeta
+          date="1/1/2026"
+          category="Guides"
+          tags="nextjs, seo"
+        />,
+      )
+      expect(container.innerHTML).toBe(BEFORE)
+    })
+
+    it('emits no avatar image and no byline separator of its own', () => {
+      const { container } = render(
+        <CollectionEntryMeta date="1/1/2026" category="Guides" />,
+      )
+      expect(container.querySelectorAll('img')).toHaveLength(0)
+      expect(container.textContent).toBe('1/1/2026 · Guides')
+    })
+
+    it('is what the shipped preset asks for, by name rather than by absence', () => {
+      const preset = collectionPresets.find(
+        (item) =>
+          item.data.componentId === Aglyn.COLLECTION_ENTRY_META_COMPONENT_ID,
+      )
+      const props = preset?.data.props as any
+      // The dropdown opens on the value the block is actually rendering.
+      expect(props?.dateFormat).toBe(Aglyn.COLLECTION_ENTRY_DATE_FORMAT_DEFAULT)
+      // No avatar is seeded: an image nobody chose would be a broken one.
+      expect(props?.avatarImage).toBeUndefined()
+    })
+  })
+
+  describe('Author', () => {
+    it('leads the byline, ahead of the date', () => {
+      render(
+        <CollectionEntryMeta author="The Aglyn Team" date="Jul 2026" />,
+      )
+      expect(screen.getByText('The Aglyn Team · Jul 2026')).toBeTruthy()
+    })
+
+    it('hides behind Show author, like every other part', () => {
+      render(
+        <CollectionEntryMeta
+          author="The Aglyn Team"
+          date="Jul 2026"
+          showAuthor={false}
+        />,
+      )
+      expect(screen.getByText('Jul 2026')).toBeTruthy()
+      expect(screen.queryByText(/Aglyn Team/)).toBeNull()
+    })
+
+    it('collapses an unresolved token on the published site', () => {
+      const { container } = render(
+        <CollectionEntryMeta author="{{entry.author}}" />,
+      )
+      expect(container.textContent).toBe('')
+    })
+
+    it('offers the same override semantics as Date and Category', () => {
+      expect(attribute('author')?.component).toBe(
+        Aglyn.FieldComponentType.TEXT_FIELD,
+      )
+      expect(attribute('author')?.description).toMatch(/blank/i)
+      expect(attribute('author')?.description).toContain('{{entry.author}}')
+      expect(attribute('showAuthor')?.component).toBe(
+        Aglyn.FieldComponentType.SWITCH,
+      )
+    })
+  })
+
+  describe('Avatar', () => {
+    it('renders the chosen brand mark as a 36px round image', () => {
+      const { container } = render(
+        <CollectionEntryMeta
+          avatarImage="https://cdn.example.com/mark.png"
+          author="The Aglyn Team"
+          date="Jul 2026"
+        />,
+      )
+      const image = container.querySelector('img') as HTMLElement
+      expect(image.getAttribute('src')).toBe('https://cdn.example.com/mark.png')
+      const style = window.getComputedStyle(image)
+      expect(style.width).toBe('36px')
+      expect(style.height).toBe('36px')
+      expect(style.borderRadius).toBe('50%')
+    })
+
+    it('resolves a media reference at render, like every other surface', () => {
+      const { container } = render(
+        <CollectionEntryMeta avatarImage="media:org:jWmGooWE3L/4GF1hRJBUp" />,
+      )
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(
+        '/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp',
+      )
+    })
+
+    it('renders NO image rather than a broken one', () => {
+      // An unresolved token and an empty pick are the same answer: nothing.
+      for (const avatarImage of ['{{entry.coverImage}}', '', '   ']) {
+        const { container, unmount } = render(
+          <CollectionEntryMeta avatarImage={avatarImage} date="Jul 2026" />,
+        )
+        expect(container.querySelectorAll('img')).toHaveLength(0)
+        unmount()
+      }
+    })
+
+    it('hides behind Show avatar without losing the picked image', () => {
+      const { container } = render(
+        <CollectionEntryMeta
+          avatarImage="https://cdn.example.com/mark.png"
+          author="The Aglyn Team"
+          showAvatar={false}
+        />,
+      )
+      expect(container.querySelectorAll('img')).toHaveLength(0)
+      expect(screen.getByText('The Aglyn Team')).toBeTruthy()
+    })
+
+    it('is a media-picker target, so the library button appears on it', () => {
+      // The besigner offers Browse on any TEXT_FIELD whose name ends in
+      // image/logo/avatar/… (AGL-341); a differently-spelled prop would be a
+      // URL box with no picker.
+      expect(attribute('avatarImage')?.component).toBe(
+        Aglyn.FieldComponentType.TEXT_FIELD,
+      )
+      expect(
+        /^(src|poster)$|(image|logo|avatar|media|thumbnail|photo|background)(Url)?$/i.test(
+          'avatarImage',
+        ),
+      ).toBe(true)
+    })
+  })
+
+  describe('Date format', () => {
+    it('offers the named shapes the pure layer knows how to produce', () => {
+      const dateFormat = attribute('dateFormat')
+      expect(dateFormat?.component).toBe(Aglyn.FieldComponentType.SELECT)
+      expect((dateFormat?.options ?? []).map((option: any) => option.value))
+        .toEqual(
+          Aglyn.COLLECTION_ENTRY_DATE_FORMAT_OPTIONS.map(
+            (option) => option.value,
+          ),
+        )
+    })
+
+    it('gives every option a value that can actually be saved (AGL-1453)', () => {
+      // "Use the entry's default" is a REAL value. `''` cannot survive a save,
+      // so an author who tried a format would have no route back.
+      for (const option of (attribute('dateFormat')?.options ?? []) as any[]) {
+        expect(option.value).toBeTruthy()
+        expect(option.label).toBeTruthy()
+      }
+    })
+
+    it('is compose-time, so it never reaches the DOM', () => {
+      const { container } = render(
+        <CollectionEntryMeta
+          date="Jul 2026"
+          dateFormat="monthYear"
+          author="The Aglyn Team"
+          showAuthor
+          showAvatar
+          avatarImage=""
+        />,
+      )
+      const root = container.firstElementChild as HTMLElement
+      for (const name of [
+        'dateFormat',
+        'author',
+        'showAuthor',
+        'showAvatar',
+        'avatarImage',
+      ]) {
+        expect(root.getAttribute(name)).toBeNull()
+      }
+    })
+
+    it('renders the frame’s byline end to end', () => {
+      // What frame 170:190 asks for: brand mark, name, `· Jul 2026`.
+      const { container } = render(
+        <CollectionEntryMeta
+          avatarImage="https://cdn.example.com/mark.png"
+          author="The Aglyn Team"
+          date={Aglyn.formatCollectionEntryDate(
+            { seconds: 1_784_116_800 },
+            'monthYear',
+            'en-US',
+          )}
+          showCategory={false}
+          showTags={false}
+        />,
+      )
+      expect(container.querySelector('img')).toBeTruthy()
+      expect(screen.getByText('The Aglyn Team · Jul 2026')).toBeTruthy()
+    })
   })
 })

@@ -154,15 +154,27 @@ mechanism as commerce product/collection templates).
 Besides **Collection Entries** and **Entry Body**, three entry-page blocks are available
 in the block library:
 
-- **Entry Meta** — a `date · category` line plus tag chips. On an entry template it
-  fills itself in from the entry being rendered, so drop it on and it works; each part
-  can be hidden with its **Show** switch. Typing into **Date** / **Category** / **Tags**
-  overrides what it would have shown — including the `{{entry.date}}` /
+- **Entry Meta** — an `author · date · category` line plus tag chips, with an optional
+  round avatar in front of it. On an entry template it fills itself in from the entry
+  being rendered, so drop it on and it works; each part can be hidden with its **Show**
+  switch. Typing into **Author** / **Date** / **Category** / **Tags** overrides what it
+  would have shown — including the `{{entry.author}}` / `{{entry.date}}` /
   `{{entry.category}}` / `{{entry.tags}}` bindings, which still work and are still what
-  the block's preset seeds.
+  the block's preset seeds. **Date format** picks how the published date reads —
+  *Site default* (`8/9/2026`), *Month and year* (`Aug 2026`), *Short date*, *Long date*
+  or *ISO*. It applies to the date the block fills in for itself; a date you typed in by
+  hand is left exactly as typed. **Avatar** takes any image from the media library
+  (usually your brand mark) and renders it 36px and round; blank shows no avatar. The
+  avatar is chosen on the block, not per author — entries carry an author *name*, not a
+  portrait.
 - **Related Posts** — other entries of the same collection that share the current
   entry's **category or a tag**, newest first. Attributes: **Heading** (default
-  "Related articles") and **Limit** (default 3). Renders nothing when the entry has no
+  "Related articles"), **Limit** (default 3), **Layout**, **Columns** and **Show
+  cover**. Layout **List** — the default — is a plain list of links with a
+  `date · category` line under each. Layout **Card grid** lays the posts out in
+  **Columns** cards per row (default 3), each with a category chip above its title.
+  **Show cover** adds each post's cover image; posts without one show their title
+  alone rather than an empty box. Renders nothing when the entry has no
   category/tags or nothing matches.
 - **Share Bar** — X, LinkedIn, Facebook, and copy-link buttons for the current page
   URL. Attribute: **Heading** (default "Share").
