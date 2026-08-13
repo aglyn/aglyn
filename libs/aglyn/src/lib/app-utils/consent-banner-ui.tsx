@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-'use client'
+// Deliberately NO 'use client' directive: inside @aglyn/aglyn the directive
+// splits the bundler into a duplicate module graph, and the second
+// canvas/emitter singleton renders the tenant site blank (AGL-52 — the
+// lint rule that enforces this). It is also unnecessary: every importer
+// (the tenant catch-all, the console preview simulator) is itself a
+// 'use client' module, so this file is already inside the client graph. A
+// future import from a SERVER component fails loudly at build time
+// ("useState only works in a client component"), not silently.
 
 import {
   type CSSProperties,
