@@ -39,9 +39,27 @@
  * The ALLOWED cases assert the long-lived cache header rather than a 200.
  * No storage bucket is configured against the emulator, so an allowed
  * request runs past the scope check and then fails fetching bytes — and
- * `Cache-Control: max-age=3600` is set only AFTER the scope check passes,
- * which makes it the exact signal that separates allowed from denied. The
- * logged storage errors in an allowed case are expected for that reason.
+ * `MEDIA_CDN_STABLE_CACHE_CONTROL` is set only AFTER the scope check
+ * passes, which makes it the exact signal that separates allowed from
+ * denied. The logged storage errors in an allowed case are expected for
+ * that reason, and leaving the bucket unset is deliberate: it is what stops
+ * an emulator run from reaching real Cloud Storage.
+ *
+ * Those cases compare against the exported constant rather than a literal
+ * (AGL-1477). They used to assert `toContain('max-age=3600')`, which went
+ * red when AGL-1442 correctly moved the hour to `s-maxage=3600` — a stale
+ * copy of a value that lives one import away. The constant's own contract
+ * is pinned in `serve-media-cdn.spec.ts`; this file only asks which of the
+ * two headers the handler chose, and exact equality answers that better
+ * than a substring, since the denial header is a PREFIX of the allow one.
+ *
+ * The signing secret is set here rather than inherited from the ambient
+ * environment (AGL-1477). `jest.setup.js` strips anything the root `.env`
+ * leaked into the task — deliberately, see docs/COMMERCE_TOKEN_SIGNING.md —
+ * so `TOKEN_SIGNING_SECRET` is absent by design and a spec that needs one
+ * must bring its own. Fail-closed-on-missing-secret is not weakened by
+ * that: it is asserted in `media-signing.spec.ts`, which deletes the
+ * variable on purpose.
  *
  * Skipped unless FIRESTORE_EMULATOR_HOST is set, so a normal run is
  * unaffected and this can never touch production. Start the emulator
@@ -132,12 +150,27 @@ const getSigned = async (
 describeEmulated('media CDN scope boundary (AGL-1047)', () => {
   let db: Firestore
   let serveMediaCdn: typeof import('./serve-media-cdn').serveMediaCdn
+  /** The allow-path header, read from the module under test — see above. */
+  let stableCacheControl: string
+
+  const originalSecret = process.env['TOKEN_SIGNING_SECRET']
 
   beforeAll(async () => {
+    // A value of this spec's own, so what is asserted below does not depend
+    // on what happens to be in the developer's environment. Any string works
+    // — every case here mints and verifies within this process.
+    process.env['TOKEN_SIGNING_SECRET'] = 'agl-1477-emulator-spec-secret'
     db = getFirestore()
     await seed(db)
-    serveMediaCdn = (await import('./serve-media-cdn')).serveMediaCdn
+    const mod = await import('./serve-media-cdn')
+    serveMediaCdn = mod.serveMediaCdn
+    stableCacheControl = mod.MEDIA_CDN_STABLE_CACHE_CONTROL
   }, 60_000)
+
+  afterAll(() => {
+    if (originalSecret === undefined) delete process.env['TOKEN_SIGNING_SECRET']
+    else process.env['TOKEN_SIGNING_SECRET'] = originalSecret
+  })
 
   it('THE LEAK: a restricted asset 404s on the bare org URL', async () => {
     // The shape AGL-1043 fixed. `org:{orgId}/{mediaId}` names no site, so
@@ -174,19 +207,19 @@ describeEmulated('media CDN scope boundary (AGL-1047)', () => {
       `org:${ORG}:${INTERNAL}`,
       'm-internal',
     ])
-    expect(res.headers['cache-control']).toContain('max-age=3600')
+    expect(res.headers['cache-control']).toBe(stableCacheControl)
   }, 60_000)
 
   it('serves an org-wide asset on the bare org URL', async () => {
     const res = await get(serveMediaCdn, [`org:${ORG}`, 'm-shared'])
-    expect(res.headers['cache-control']).toContain('max-age=3600')
+    expect(res.headers['cache-control']).toBe(stableCacheControl)
   }, 60_000)
 
   it('treats a pre-backfill asset with no scope as org-wide', async () => {
     // Absent `visibleTo` must stay visible (AGL-1040 ordering); a fail-closed
     // read here would blank every image uploaded before the backfill.
     const res = await get(serveMediaCdn, [`org:${ORG}`, 'm-legacy'])
-    expect(res.headers['cache-control']).toContain('max-age=3600')
+    expect(res.headers['cache-control']).toBe(stableCacheControl)
   }, 60_000)
 
   describe('private assets (AGL-1051)', () => {
