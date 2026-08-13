@@ -112,13 +112,12 @@ import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaAssetCard } from './media-asset-card.component'
-import { MediaDeleteConfirmDescription } from './media-delete-confirm.component'
+import { confirmMediaDelete } from './media-delete-confirm.component'
 import {
   deletedMediaMessage,
   deleteFailureMessage,
   restoredMediaMessage,
   restoreFailureMessage,
-  UNDO_LABEL,
 } from './media-delete-copy'
 import { MediaFolderCard } from './media-folder-card.component'
 import { MediaFolderRail } from './media-folder-rail.component'
@@ -135,6 +134,7 @@ import {
   type MediaSelectionState,
   nextMediaSelection,
 } from './media-selection'
+import { mediaUndoAction } from './media-undo-action'
 import { useMediaPages } from './use-media-pages'
 import {
   coverageOf,
@@ -1864,33 +1864,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   /**
    * The Undo control itself, built once for both delete surfaces.
    *
-   * Shared for the same reason AGL-1461 routed the card and the drawer through
-   * one `handleDelete`: two copies of a destructive-path affordance are two
-   * things to keep in step, and the one that drifts is the one nobody is
-   * looking at.
-   *
-   * It dismisses the message ON SUCCESS ONLY. A refused undo — the plan's
-   * storage limit is the one a person can act on — leaves the button where it
-   * was, so freeing space and pressing it again is possible. Closing first
-   * would take the only control away at the exact moment it was needed, and
-   * the file really is still restorable: the server keeps the tombstone
-   * through a refusal precisely so the answer is "not yet" rather than "gone".
+   * The control lives in `media-undo-action.tsx` (AGL-1482) — its label, the
+   * restore it calls and the dismiss-on-success-only rule are pure logic, and
+   * out there they are proved by clicking the button rather than by reading
+   * this callback's source. What stays here is the binding: one action, both
+   * surfaces, for the reason AGL-1461 routed the card and the drawer through
+   * a single `handleDelete`.
    */
   const undoAction = useCallback(
     (targets: { id: string; fileName: string }[]) =>
-      (snackbarId: any) => (
-        <Button
-          size="small"
-          color="inherit"
-          onClick={() => {
-            void restoreMedia(targets).then((ok) => {
-              if (ok) closeSnackbar(snackbarId)
-            })
-          }}
-        >
-          {UNDO_LABEL}
-        </Button>
-      ),
+      mediaUndoAction(targets, { restoreMedia, closeSnackbar }),
     [closeSnackbar, restoreMedia],
   )
 
@@ -2704,25 +2687,21 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // across every site in the org, and awaiting it here is what made ⋮ →
       // Delete look like a dead button — long enough that the natural
       // response was to click a destructive control a second time. The scan
-      // starts now and the dialog opens now; `MediaDeleteConfirmDescription`
-      // writes the sentence in when the answer lands.
-      const scan = scanReferences(media.$id).then(
-        (result) => ({
-          coverage: result.coverage,
-          names: result.items.map((reference) => reference.name),
-        }),
-        () => null,
-      )
-      const confirmed = await confirm({
-        title: 'Delete this file?',
-        description: (
-          <MediaDeleteConfirmDescription fileName={fileName} scan={scan} />
-        ),
-        confirmationText: 'Delete',
-        confirmationButtonProps: { color: 'error' },
+      // starts and the dialog opens in the same tick;
+      // `MediaDeleteConfirmDescription` writes the sentence in when the
+      // answer lands.
+      //
+      // `confirmMediaDelete` owns that ordering, and owns it in a module so
+      // it can be RUN (AGL-1482): the spec beside it hands the flow a scan
+      // that never settles and asserts the dialog opens regardless. Note what
+      // is passed — the scan FUNCTION, not its answer. A caller that awaited
+      // the scan would have nothing to hand this.
+      const confirmed = await confirmMediaDelete({
+        fileName,
+        mediaId: media.$id as string,
+        scanReferences,
+        confirm,
       })
-        .then(() => true)
-        .catch(() => false)
       if (!confirmed) return false
       try {
         const idToken = await (user as any)?.getIdToken?.()
@@ -2779,6 +2758,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     },
     [
       confirm,
+      scanReferences,
       user,
       scopeId,
       enqueueSnackbar,

@@ -46,6 +46,8 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
+  signOut,
+  type UserCredential,
 } from 'firebase/auth'
 import { useCallback, useState } from 'react'
 import {
@@ -61,7 +63,11 @@ import AuthenticatingLayout from '../../../components/layouts/authenticating.lay
 import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-signin'
 import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
 import { authSignInHost } from '../../../utils/auth-delegation'
-import { markInteractiveSignIn } from '../../../utils/interactive-signin'
+import { isNewAccount, sendToConsentGate } from '../../../utils/legal-consent'
+import {
+  markInteractiveSignIn,
+  markInteractiveSignOut,
+} from '../../../utils/interactive-signin'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import {
@@ -88,9 +94,41 @@ function SignIn() {
   // Org workspace subdomains can't run OAuth — hand sign-in to the auth
   // host and skip the local form/redirect-result entirely (AGL-465).
   const delegation = useDelegateWorkspaceSignIn('signin')
+  /**
+   * "Sign in with Google" can create an account (AGL-1497). When it does, the
+   * person in front of us has never been shown the Terms — this page only
+   * carries the passive notice, because everyone reaching it was assumed to
+   * have a contract already.
+   *
+   * So the new account is stood back down and the person is sent to /signup,
+   * where the clickwrap gate is. Signing out rather than deleting: the Firebase
+   * account is empty and harmless, it holds no session cookie and no org, and
+   * their next click — Google on /signup — signs straight back into it and
+   * records the acceptance properly. Deleting the account instead would be a
+   * destructive answer to what is really a routing question.
+   */
+  const rejectUnconsentedNewAccount = useCallback(
+    async (credential: UserCredential): Promise<boolean> => {
+      if (!isNewAccount(credential)) return false
+      markInteractiveSignOut()
+      await signOut(firebaseAuth).catch((error) => {
+        console.error('could not stand down unconsented new account', error)
+      })
+      sendToConsentGate()
+      return true
+    },
+    [firebaseAuth],
+  )
   // Mobile browsers sign in via redirect (AGL-462); this completes the
-  // round-trip when Google sends the user back here.
-  useGoogleRedirectResult('login', setError, delegation === 'off')
+  // round-trip when Google sends the user back here — and on mobile that is
+  // the ONLY place the new-account bounce above can happen, because the page
+  // that started the flow is gone by then.
+  useGoogleRedirectResult(
+    'login',
+    setError,
+    delegation === 'off',
+    rejectUnconsentedNewAccount,
+  )
   // Once auth succeeds there's a short window before the layout redirects to
   // the dashboard/continue URL; show the loading splash instead of flashing
   // the sign-in form back at the user (AGL-476).
@@ -129,7 +167,9 @@ function SignIn() {
             ? signInWithRedirect(firebaseAuth, googleOAuthProvider)
             : signInWithPopup(firebaseAuth, googleOAuthProvider)
         })
-        .then((user) => {
+        .then(async (user) => {
+          // Before the analytics event: this was never a login (AGL-1497).
+          if (await rejectUnconsentedNewAccount(user)) return
           logEvent(analytics, 'login', {
             method: user.providerId,
           })
@@ -146,7 +186,14 @@ function SignIn() {
           dequeueLoading()
         })
     },
-    [error, firebaseAuth, loading, queueLoading],
+    [
+      analytics,
+      error,
+      firebaseAuth,
+      loading,
+      queueLoading,
+      rejectUnconsentedNewAccount,
+    ],
   )
 
   const handleFormSubmit = useCallback(

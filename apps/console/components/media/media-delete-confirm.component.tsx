@@ -16,6 +16,7 @@
  */
 'use client'
 
+import type { ConfirmationContextConfig } from '@aglyn/shared-ui-jsx'
 import { useEffect, useState } from 'react'
 import {
   deleteConfirmationLead,
@@ -90,5 +91,73 @@ export function MediaDeleteConfirmDescription(
   )
 }
 MediaDeleteConfirmDescription.displayName = 'MediaDeleteConfirmDescription'
+
+/** What a usage scan answers with, structurally. */
+export interface MediaDeleteScanResult {
+  coverage: MediaScanCoverage
+  items: readonly { name: string }[]
+}
+
+/** Everything the confirmation needs that the library owns. */
+export interface MediaDeleteConfirmRequest {
+  /** The file the author is about to delete. */
+  fileName: string
+  /** The asset the scan runs against. */
+  mediaId: string
+  /** The scan itself — the FUNCTION, so this is the tick it starts on. */
+  scanReferences: (mediaId: string) => Promise<MediaDeleteScanResult>
+  /** The confirmation provider's `confirm`. */
+  confirm: (options: ConfirmationContextConfig) => Promise<unknown>
+}
+
+/**
+ * Ask before deleting, with the usage scan running behind the dialog
+ * (AGL-1461, extracted AGL-1482).
+ *
+ * A function rather than four lines inside `handleDelete` because the property
+ * that matters here is one of CONTROL FLOW, and control flow can only be
+ * proved by running it. `media-delete-wiring.spec.ts` used to assert
+ * `not.toContain('await scanReferences')` over the library's source — a claim
+ * about when the dialog opens, expressed as a claim about a keyword, and
+ * satisfied by any rewrite that awaits the scan under another name. With the
+ * flow in a module, `media-delete-confirm.spec.tsx` hands it a scan that never
+ * settles and watches the dialog open anyway.
+ *
+ * So: the scan starts, and `confirm` is called in the SAME tick. Nothing may
+ * be awaited above it. The scan walks up to a 1,500-document budget across
+ * every site in the org, and awaiting it here is what made ⋮ → Delete look
+ * like a dead button — long enough that the natural response was to click a
+ * destructive control a second time.
+ *
+ * A scan that rejects becomes `null`, which
+ * {@link MediaDeleteConfirmDescription} renders as the AGL-1413 "could not
+ * check everywhere" sentence rather than as silence.
+ *
+ * @returns whether the author confirmed. A dismissed dialog rejects, and that
+ *   is a `false`, not a failure.
+ */
+export function confirmMediaDelete(
+  request: MediaDeleteConfirmRequest,
+): Promise<boolean> {
+  const { fileName, mediaId, scanReferences, confirm } = request
+  const scan = scanReferences(mediaId).then(
+    (result) => ({
+      coverage: result.coverage,
+      names: result.items.map((reference) => reference.name),
+    }),
+    () => null,
+  )
+  return confirm({
+    title: 'Delete this file?',
+    description: (
+      <MediaDeleteConfirmDescription fileName={fileName} scan={scan} />
+    ),
+    confirmationText: 'Delete',
+    confirmationButtonProps: { color: 'error' },
+  }).then(
+    () => true,
+    () => false,
+  )
+}
 
 export default MediaDeleteConfirmDescription

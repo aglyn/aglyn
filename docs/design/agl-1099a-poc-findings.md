@@ -22,7 +22,7 @@ The design names one claim as the thing that must be proved before 1099b starts:
 | 2 | No request to `/__/auth/iframe`; no `frame-ancestors` entry needed | **HOLDS** — measured, zero requests |
 | 3 | Interactive OAuth becomes structurally impossible | **HOLDS for OAuth only.** "Sign-in never happens on the custom domain, enforced structurally" (AGL-1353) is **too strong** — see §3 |
 | 4 | The refresh token stays out of IndexedDB | **HOLDS** — verified by inspection — but it is **one line away from being undone**, and six such lines exist today (§4) |
-| 5 | *(unstated)* Nothing else durable survives on the origin | **FALSE.** Firestore's persistent cache writes document bodies to the same IndexedDB (§5) |
+| 5 | *(unstated)* Nothing else durable survives on the origin | **FALSE.** Firestore's persistent cache writes document bodies to the same IndexedDB (§5) — **fixed 2026-08-13 by AGL-1456**, which makes the cache `memory` on `ephemeral` origins; still owed a real-browser re-run of the §5 dump to confirm |
 | 6 | `form_post` would destroy the verifier binding | **HOLDS** — measured, not reasoned (§6) |
 
 **The correction that matters most:** the design says the scope reduction is that
@@ -294,6 +294,27 @@ cache, or the custom domain should run Firestore with `memoryLocalCache()`. The
 latter interacts with AGL-1066 (the cached-emission staleness signal) and should
 be decided deliberately, not inherited.
 
+> **Decided 2026-08-13 (AGL-1456): `memoryLocalCache()`, and not clear-on-detach.**
+> Clearing on detach only reaches a browser that comes back to the origin, and a
+> browser that comes back is not the threat — the threat is the profile that
+> already stopped visiting. `localCacheFor()` in
+> `libs/tenant/feature/instance/src/lib/hooks/firebase/firestore-cache.ts` keys
+> the cache off the same `authPersistence` declaration that selects the auth
+> persistence class, so `ephemeral` gets both or neither.
+>
+> On the AGL-1066 interaction, which this note was right to flag: the effect is
+> **in the safe direction** for these hosts. `fromCache` and `serverDenied` are
+> per-listener facts and are untouched. What changes is that a listener whose
+> server listen is being refused no longer has a disk-warm cache to keep serving
+> arbitrarily-old data from on a fresh page load — the fault surfaces instead of
+> being papered over, which is the behaviour AGL-1066 wishes it had everywhere.
+> The retry loop AGL-1440 §1 describes is unchanged; it is keyed on denials, not
+> on the cache.
+>
+> The LRU collector (`memoryLruGarbageCollector()`) rather than the eager
+> default is a read-cost mitigation only — both are memory-only, so the security
+> property is identical.
+
 ---
 
 ## 6. The handoff shape — what was testable, and what it showed
@@ -383,7 +404,8 @@ Stated plainly rather than simulated:
    rather than "we passed the right argument".
 3. **Decide the Firestore cache.** In-memory auth persistence does not make the
    origin clean. Either clear the cache on detach or run `memoryLocalCache()`
-   there.
+   there. — **Done (AGL-1456): `memoryLocalCache()`, keyed off the same
+   `authPersistence` declaration.** See the decision note in §5.
 4. **Keep the concurrency test.** The five cases in §6 are the ones that would
    catch a regression; the concurrent one is the only one that tests the actual
    property, and `failedAttemptDoesNotBurn` is missing from the design's §7 list.

@@ -192,6 +192,27 @@ const ALLOWED = new Map<string, string>([
   ['package-lock.json', '@eslint-community/*, ansi-html-community.'],
   ['apps/docs/package-lock.json', 'Same third-party packages.'],
   ['cloud/functions/package-lock.json', '@eslint-community/* via eslint.'],
+
+  // ---- Frozen legal text (AGL-1497). ----
+  //
+  // Verbatim snapshots of the Terms and Privacy Policy AS PUBLISHED, archived
+  // so a clickwrap acceptance can prove what a user was shown. Both say
+  // "community marketplace" because the published documents do.
+  //
+  // These are the one category of file the sweep must never touch: a hash of
+  // each is recorded on every acceptance and asserted by
+  // `legal-document-version.spec.ts`, so editing a word here does not tidy up
+  // stale naming — it invalidates the evidence and fails that spec. The
+  // wording is fixed by republishing the documents and archiving a NEW
+  // version, never by rewriting an old one.
+  [
+    'apps/console/constants/legal/v1/terms.txt',
+    'Frozen published Terms of Service (v1) — immutable evidence.',
+  ],
+  [
+    'apps/console/constants/legal/v1/privacy.txt',
+    'Frozen published Privacy Policy (v1) — immutable evidence.',
+  ],
 ])
 
 /** Anything whose bytes are not text we can meaningfully read. */

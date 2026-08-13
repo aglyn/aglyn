@@ -25,6 +25,30 @@ import { NextResponse } from 'next/server'
 import { baseCspDirectives } from '../../security-origins'
 
 /**
+ * NO SANCTIONS GEO-BLOCK HERE, ON PURPOSE (AGL-1492).
+ *
+ * The block lives in `apps/console/constants/sanctions-geo.ts` and is wired
+ * into the console only. It was considered here and deliberately not added:
+ *
+ * ToS §3.6 forbids "you" — the party that registers for the Services, per the
+ * §2 definition — from accessing them from an embargoed region. §2 separately
+ * defines an "End User" as a visitor to a customer's Host, expressly "as
+ * distinct from your Account with Aglyn". A visitor in Havana reading a
+ * customer's blog is not Aglyn onboarding a sanctioned customer; the party
+ * being served is the customer, who was screened at signup by the console
+ * block and is screened again by Stripe at payment.
+ *
+ * Wiring it here would instead geo-block **every customer's website, worldwide,
+ * on their own custom domains** — silently deciding, on their behalf and
+ * without their knowledge, who may read their content. That is a product
+ * decision with real customer impact, and it is not one the Terms require. If
+ * it is ever wanted, it belongs to a customer as a per-Host setting they opt
+ * into, not to a compliance commit.
+ *
+ * If you are here to "close the gap": it is not a gap. Read ToS §§2, 3.6.
+ */
+
+/**
  * The way you configure your matcher items depend on your route structure.
  * E.g. if you decide to put all your posts under `/posts/[postSlug]`,
  * you'll need to add an extra matcher item "/posts/:path*".

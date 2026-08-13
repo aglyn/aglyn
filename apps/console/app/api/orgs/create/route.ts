@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
+import { enforceSanctionsGeo } from '../../../../constants/sanctions-geo'
 import {
   createOrganization,
   emailUnverifiedResponse,
@@ -39,6 +40,12 @@ import {
  * Admin-SDK-only (rules deny client writes).
  */
 async function handler(request: Request): Promise<Response> {
+  // Sanctions / OFAC geo-block (AGL-1492). `/api/*` is outside the middleware
+  // matcher, and this route is the provisioning moment — it is where Aglyn
+  // starts providing the Services to a party, which is the act ToS §3.6
+  // prohibits for an embargoed region. Before the body is even parsed.
+  const refused = enforceSanctionsGeo(request.headers, 'json')
+  if (refused) return refused
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST') {

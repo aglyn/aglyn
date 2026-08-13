@@ -455,3 +455,73 @@ describe('CSP violation reporting (AGL-523)', () => {
     })
   })
 })
+
+/**
+ * The sanctions geo-block, driven through the REAL `middleware` export
+ * (AGL-1492).
+ *
+ * `sanctions-geo.spec.ts` proves the policy is right. These prove it is
+ * REACHED — on the actual request path, ahead of every other gate — which is
+ * the half that a passing policy test cannot tell you anything about.
+ */
+describe('sanctions geo-block', () => {
+  function geoRequest(
+    country: string | null,
+    region?: string,
+    host = 'app.aglyn.com',
+    path = '/signup',
+  ) {
+    const headers: Record<string, string> = { host }
+    if (country) headers['x-vercel-ip-country'] = country
+    if (region) headers['x-vercel-ip-country-region'] = region
+    return new NextRequest(`https://${host}${path}`, { headers })
+  }
+
+  it.each(['CU', 'IR', 'KP', 'SY'])(
+    'refuses a %s request with 451 before anything else runs',
+    async (country) => {
+      const response = await middleware(geoRequest(country))
+      expect(response.status).toBe(451)
+      // Ahead of the host gates: an embargoed request must not even reach the
+      // verdict lookup, let alone be served.
+      expect(fetchCalls).toHaveLength(0)
+    },
+  )
+
+  it('refuses Donetsk — a country check alone would have served it', async () => {
+    const response = await middleware(geoRequest('UA', '14'))
+    expect(response.status).toBe(451)
+  })
+
+  it('serves the rest of Ukraine', async () => {
+    const response = await middleware(geoRequest('UA', '30'))
+    expect(response.status).toBe(200)
+  })
+
+  it('serves an allowed region normally, CSP and all', async () => {
+    const response = await middleware(geoRequest('US', 'TX'))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Security-Policy')).toContain('script-src')
+  })
+
+  it('FAILS OPEN when the edge sent no geo header', async () => {
+    // Measured, not hypothetical: a production sign-in device record reads
+    // "Unknown location", so this path carries real users — local dev, self
+    // hosted installs, and anything the edge did not annotate.
+    const response = await middleware(geoRequest(null))
+    expect(response.status).toBe(200)
+  })
+
+  it('blocks the signin page too, not only signup', async () => {
+    const response = await middleware(geoRequest('IR', undefined, 'app.aglyn.com', '/signin'))
+    expect(response.status).toBe(451)
+  })
+
+  it('blocks a workspace subdomain and a custom console domain alike', async () => {
+    expect((await middleware(geoRequest('IR', undefined, 'zgover.aglyn.com'))).status)
+      .toBe(451)
+    expect(
+      (await middleware(geoRequest('IR', undefined, 'console.acme-agency.com'))).status,
+    ).toBe(451)
+  })
+})

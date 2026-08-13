@@ -26,7 +26,9 @@
 // process.env still wins, so `source .env` first is optional.)
 
 import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { cert, initializeApp } from 'firebase-admin/app'
+import { assertCleanDeploySource } from './lib/clean-deploy-source.mjs'
 
 // Load admin creds from the repo's local env files so the script is a single
 // self-contained command (matches the backfill scripts). Already-set env wins.
@@ -66,6 +68,25 @@ function loadLocalEnv() {
 }
 loadLocalEnv()
 
+// Dirty-tree refusal (AGL-1489): this script deploys the WORKTREE copy of
+// the rules file wholesale, so uncommitted edits — including another
+// session's work-in-progress — would go live as a silent side effect.
+// Refuse unless the file matches its committed state; `--allow-dirty` is
+// the typed escape hatch for deliberately deploying uncommitted rules.
+const rulesPath = fileURLToPath(
+  new URL('../../cloud/firebase-firestore.rules', import.meta.url),
+)
+try {
+  const verdict = assertCleanDeploySource(rulesPath, {
+    allowDirty: process.argv.includes('--allow-dirty'),
+    fileLabel: 'cloud/firebase-firestore.rules',
+  })
+  if (verdict.warning) console.warn(verdict.warning)
+} catch (error) {
+  console.error(error.message)
+  process.exit(1)
+}
+
 const projectId = process.env.FIREBASE_PROJECT_ID
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
 const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
@@ -83,10 +104,7 @@ const headers = {
   'Content-Type': 'application/json',
 }
 const project = `projects/${projectId}`
-const content = readFileSync(
-  new URL('../../cloud/firebase-firestore.rules', import.meta.url),
-  'utf8',
-)
+const content = readFileSync(rulesPath, 'utf8')
 
 // 1) Create the ruleset — the API compiles it and rejects on errors.
 const created = await (

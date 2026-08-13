@@ -113,15 +113,14 @@ describe('AGL-1478 · every creator of a scoped collection stamps the scope', ()
       why: 'saving a contact filter as a segment',
     },
     {
-      // The third writer onto `orgs/{orgId}/media`. The other two honour
-      // `defaultResourceScope`; this one hardcoded `['org']`, so the same
-      // upload landed with a different scope depending on which door it
-      // came through.
-      file: 'apps/console/app/api/orgs/media/route.ts',
-      mustContain: ['defaultScopeForNewResource'],
-      why: 'org media upload (the legacy API-only path)',
-    },
-    {
+      // A third writer onto `orgs/{orgId}/media` used to sit here: the legacy
+      // API-only org-media route, which hardcoded `['org']` while these two
+      // honoured `defaultResourceScope`, so the same upload landed with a
+      // different scope depending on which door it came through. AGL-1478
+      // gave it the shared decision; AGL-1485 then deleted the route outright
+      // (no caller since AGL-821, and a divergent document besides), which is
+      // why this list is two rows rather than three. Its absence is asserted
+      // in `apps/console/specs/media-create-shape.spec.ts`.
       file: 'apps/console/app/api/media/upload/route.ts',
       mustContain: ['defaultScopeForNewResource'],
       why: 'console media upload',

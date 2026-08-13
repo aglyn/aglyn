@@ -46,6 +46,7 @@ import {
   describeSignInClient,
   recordDeviceAndMaybeAlert,
 } from '../../_lib/security-alerts'
+import { enforceSanctionsGeo } from '../../../../constants/sanctions-geo'
 
 export const dynamic = 'force-dynamic'
 
@@ -250,6 +251,19 @@ async function handler(request: Request): Promise<Response> {
     const auth = firebaseAdmin.app().auth()
 
     if (request.method !== 'DELETE') {
+      // Sanctions / OFAC geo-block (AGL-1492). Here for the reason stated at
+      // the top of `rejectUnknownWorkspaceHost`: `/api/*` is outside the
+      // middleware matcher, so the page-level block in `middleware.ts` never
+      // sees this route — and this route is the one that MINTS THE SESSION,
+      // i.e. the moment the console actually becomes usable across the
+      // workspace domain. Blocking pages while still minting cookies would be
+      // a control with a hole shaped exactly like the product.
+      //
+      // DELETE is exempt, matching the two guards below it: signing out must
+      // always work, and refusing to let a blocked user end their own session
+      // serves nobody's compliance interest.
+      const refused = enforceSanctionsGeo(request.headers, 'json')
+      if (refused) return refused
       const rejected =
         (await rejectUnknownWorkspaceHost(request)) ??
         (await rejectUnknownConsoleHost(request))

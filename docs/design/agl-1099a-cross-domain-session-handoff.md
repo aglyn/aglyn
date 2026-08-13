@@ -415,6 +415,39 @@ there with `initializeAuth(app, { persistence: inMemoryPersistence })` and **no
 **Cost:** one extra round trip per full page load. The console is an SPA; full
 loads are rare.
 
+**And the same for the Firestore cache — the credential was never the only
+durable thing on that origin (AGL-1456).** `initializeFirestore` enabled
+`persistentLocalCache({ tabManager: persistentMultipleTabManager() })`
+**unconditionally, on every host**, and the PoC measured what that puts on the
+origin: full document bodies under `firestore/<app>/<project>/main →
+remoteDocumentsV14`, plus `firestore_clients_*`, `firestore_online_state_*` and
+`firestore_sequence_number_*` in `localStorage` (§5 of the PoC findings). The
+reasoning above — *the customer can re-point the DNS and read this origin* — is
+exactly as true of every org, host, member and settings document the console
+cached there. Hardening the key while leaving the safe open is not a defensible
+place to stop.
+
+So the same declaration governs both. `FirebaseServicesProvider`'s
+`authPersistence` prop selects the `Auth` persistence class **and** the
+Firestore `localCache`, via `localCacheFor()` in
+`libs/tenant/feature/instance/src/lib/hooks/firebase/firestore-cache.ts`:
+`durable` → `persistentLocalCache`, unchanged on `*.aglyn.com`; `ephemeral` →
+`memoryLocalCache`, so nothing reaches disk. **One prop, not two** — a separate
+`firestoreCache` prop would let 1099c declare a domain `ephemeral` for auth and
+still hand it a persistent cache, which is the exact split that produced this
+gap.
+
+The memory cache takes `memoryLruGarbageCollector()` rather than the eager
+default. Both are memory-only, so the security property is identical, but the
+eager collector drops a document the instant its listener unmounts — the LRU one
+keeps the working set in the JS heap and recovers most of the intra-session
+saving. **The residual read cost is real and is accepted:** a *cold* page load on
+a custom console domain re-reads its working set where a durable origin resumes
+from disk, and tabs no longer share one backend connection through
+`persistentMultipleTabManager`. Against AGL-1440's ~40–60K reads/day that is a
+rounding error at Enterprise volumes, and it is the right trade for an
+Enterprise-only feature — but it is a trade, not a free win.
+
 **Hard revocation: an epoch on the domain record.** `consoleDomains/{host}` gets
 `sessionEpoch` (epoch ms). Both the redemption endpoint and the `GET` exchange
 require `decodedSessionCookie.iat * 1000 >= sessionEpoch`. Bumping the epoch
@@ -461,6 +494,26 @@ lands somewhere that works and is told why, instead of meeting a dead hostname
 that reads as an outage. Challenge the 7-day grace if you think a billing hole
 that stays open for a week is worse than a customer whose console vanishes the
 moment a card declines.
+
+**Why none of these rows needs a "clear the Firestore cache" step (AGL-1456).**
+The obvious other fix for the cache was to have detach instruct the client to
+call `clearIndexedDbPersistence`. It does not work, and the reason is worth
+recording so nobody re-proposes it: a detach is a **server-side** event, and the
+browser that holds the cache may never load that origin again. Clearing on
+detach can only reach a client that comes back — and a client that comes back
+is not the threat. The threat is the browser profile that already stopped
+visiting, sitting on a laptop, holding document bodies for an origin whose DNS
+has since moved.
+
+The cache being memory-only from the start is the only version of this that does
+not depend on the attacker's victim revisiting. It also makes the whole class of
+question moot at **suspension** time, where it would otherwise be sharpest:
+AGL-1436 asks how long a lapsed org keeps serving, and every day of grace is a
+day a console keeps *caching*. With `memoryLocalCache` the grace window is a
+pure billing-and-availability question again — whatever number AGL-1436 lands
+on, it does not also decide how much customer data accumulates on a domain the
+org may be about to stop paying for. That is a decision made smaller, not a
+decision made.
 
 ### D8 — What is reused, and the two things worth extracting
 
@@ -619,6 +672,10 @@ should not be needed at all.
 > `persistentLocalCache` writes document bodies to the same origin's IndexedDB,
 > so D6's "the only credential that survives a tab close is our `HttpOnly`
 > cookie" is true of credentials but not of the origin.
+>
+> (b) and (c) are now **built**: (b) as the `setPersistence` seal (AGL-1379),
+> (c) as the host-conditional `localCache` (AGL-1456) — both folded into D6
+> above. (a) remains open and is still 1099d's blocker.
 
 ### The allowlist that *is* the real ceiling: App Check's reCAPTCHA key
 
@@ -911,11 +968,23 @@ once at connect time and never re-checked.
     (that `useAuth()` actually hands out the sealed instance), each with a
     `durable` positive control so the guard cannot silently become a behaviour
     change on `*.aglyn.com`.
-12. **No refresh token in the origin's IndexedDB after sign-in** on a custom
-    domain. Still owed, and it needs a real browser — jsdom has no IndexedDB, so
-    the unit tests above assert the *guard*, not the *storage*. The PoC's dump
-    harness (`docs/design/agl-1099a-poc-findings.md` §5) is the shape to reuse
-    when 1099c has a domain to run it against.
+12. **The Firestore cache is `memory`, not `persistent`, on the custom domain** —
+    AGL-1456, and asserted on the settings object `initializeFirestore` is
+    actually handed, with the real SDK factories, so `localCache.kind` is
+    Firebase's verdict rather than a shape the test invented.
+    `firestore-cache-provider.spec.tsx` (the provider reaches the helper) and
+    `firestore-cache.spec.ts` (the tab manager and the LRU collector, neither of
+    which `kind` can see), each with a `durable` positive control so this cannot
+    silently become a read-volume change on `*.aglyn.com`.
+13. **Nothing org-identifying in the origin's browser storage after sign-in** on
+    a custom domain — no refresh token *and* no cached document bodies. Still
+    owed, and it needs a real browser: jsdom has no IndexedDB, so items 11 and
+    12 assert the *guard*, not the *storage*. The PoC's dump harness
+    (`docs/design/agl-1099a-poc-findings.md` §5) is the shape to reuse when
+    1099c has a domain to run it against, and it should enumerate object store
+    names and document paths — the same evidence that found the leak. Until it
+    runs, the claim "nothing survives on a customer-controlled origin" is
+    argued, not measured.
 
 **Not structural, and the design must not say it is.** D6's `initializeAuth`
 blocks the **federated** family and nothing else — `signInWithEmailAndPassword`,
@@ -1119,8 +1188,10 @@ its four prerequisites are the same code.
   of AGL-1354, so that route is the only writer and the gate is real.
 
 Still open, and deliberately not built here: everything in D6/D7 that needs the
-handoff, the `setPersistence` guard the PoC's §4 asks for, and the Firestore
-cache decision in its §5.
+handoff. The `setPersistence` guard the PoC's §4 asks for has since been built
+(AGL-1379), and so has the Firestore cache decision in its §5 (AGL-1456) — both
+are wired to the same `authPersistence` declaration, so 1099c switches them
+together by passing `ephemeral`, and cannot get one without the other.
 
 ### 1099d, as scoped — **nothing was built, and that is the finding**
 

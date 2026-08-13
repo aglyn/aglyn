@@ -18,7 +18,11 @@
 
 import type { AuthResultError } from '@aglyn/shared-data-enums'
 import { logEvent } from 'firebase/analytics'
-import { getRedirectResult, GoogleAuthProvider } from 'firebase/auth'
+import {
+  getRedirectResult,
+  GoogleAuthProvider,
+  type UserCredential,
+} from 'firebase/auth'
 import { useEffect, useRef } from 'react'
 import { useAnalytics, useAuth } from '@aglyn/tenant-feature-instance'
 
@@ -29,11 +33,20 @@ import { useAnalytics, useAuth } from '@aglyn/tenant-feature-instance'
  * mount — logging the analytics event the popup path logs inline, and
  * surfacing provider errors through the page's error alert. Resolves to
  * null (no-op) when no redirect is pending, so it is safe on every load.
+ *
+ * `onCredential` is where the pages do what the popup path does inline in its
+ * own `.then` (AGL-1497). This is the ONLY place a mobile OAuth account comes
+ * into existence — the page that started the flow is gone — so both the
+ * sign-up's acceptance record and the sign-in's new-account gate have to hang
+ * off it, or mobile silently keeps the behaviour desktop just had fixed.
  */
 export function useGoogleRedirectResult(
   eventName: 'login' | 'sign_up',
   onError: (error: AuthResultError) => void,
   enabled = true,
+  // Loosely `Promise<unknown>`: the sign-in page's handler reports whether it
+  // bounced the account, which this hook has no use for but must not reject.
+  onCredential?: (credential: UserCredential) => void | Promise<unknown>,
 ): void {
   const auth = useAuth()
   const analytics = useAnalytics()
@@ -47,7 +60,7 @@ export function useGoogleRedirectResult(
     resolved.current = true
     let active = true
     void getRedirectResult(auth)
-      .then((credential) => {
+      .then(async (credential) => {
         if (!credential || !active) return
         // logEvent's overloads type each known event name individually,
         // so the union has to be narrowed before the call.
@@ -56,6 +69,10 @@ export function useGoogleRedirectResult(
         } else {
           logEvent(analytics, 'sign_up', { method: credential.providerId })
         }
+        // Awaited, not fire-and-forget: the callers use this to record an
+        // acceptance and to bounce an unconsented new account, and both lose
+        // races against the redirect that follows a completed sign-in.
+        await onCredential?.(credential)
       })
       .catch((error) => {
         console.error(error)
@@ -68,6 +85,10 @@ export function useGoogleRedirectResult(
     return () => {
       active = false
     }
+    // `onCredential` is deliberately not a dependency: the `resolved` ref
+    // already pins this to one run per mount, and adding a caller's inline
+    // arrow would only re-enter the effect to hit that guard.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analytics, auth, eventName, onError, enabled])
 }
 

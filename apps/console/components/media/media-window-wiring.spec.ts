@@ -56,10 +56,6 @@ const SOURCE = code(
   readFileSync(join(__dirname, 'media-library.component.tsx'), 'utf8'),
   'media-library.component.tsx',
 )
-const CARD = code(
-  readFileSync(join(__dirname, 'media-asset-card.component.tsx'), 'utf8'),
-  'media-asset-card.component.tsx',
-)
 
 /** The body of a `const <name> = useCallback(` block, to its closing paren. */
 function handlerBody(name: string): string {
@@ -118,24 +114,46 @@ describe('what still pays for a refetch, deliberately (AGL-1462)', () => {
   })
 })
 
-describe('⇧-click selects the range between two cards (AGL-1462)', () => {
-  it('the card reports whether ⇧ was held', () => {
-    expect(CARD).toContain('shiftKey')
-    expect(CARD).toContain('onToggleSelect')
+/**
+ * What is left of the ⇧-click claims once the behavioural specs have taken
+ * the halves they can execute (AGL-1482).
+ *
+ * The card's half — that a ⇧-click emits `range: true` and does NOT open the
+ * details drawer over the selection being built — is proved by mounting the
+ * real card in `media-asset-card-selection.spec.tsx`. The algorithm's half —
+ * that the range is inclusive, id-anchored, and survives a delete from its
+ * middle — is proved by executing it in `media-selection.spec.ts`.
+ *
+ * `CARD.toContain('shiftKey')` and `SOURCE.toContain('nextMediaSelection')`
+ * lived here and were measured against both breaks: emitting `range: false`
+ * from a ⇧-click, and computing the range exclusive of its far end. Neither
+ * text assertion moved; six behavioural ones went red. They were checking that
+ * the identifiers exist, which nothing was threatening.
+ *
+ * What no render can reach is the ARGUMENT the grid hands the matcher. The
+ * range is measured against `orderedIds` — the filtered, sorted list actually
+ * on screen — and not against the fetch order or an index into it, which is
+ * the version that breaks after a delete from the middle of a range. That is a
+ * property of the call site inside a component that mounts a Firestore
+ * listener stack and a dnd-kit surface, so it stays here, and it is asserted
+ * as the SHAPE of the call rather than as the presence of a name.
+ */
+describe('⇧-click measures against the order on screen (AGL-1462)', () => {
+  it('feeds the matcher the ids the grid is currently drawing', () => {
+    expect(SOURCE).toMatch(/nextMediaSelection\(prev, \{\s*orderedIds,/)
+  })
+
+  it('and that order is the visible list, not the fetch order', () => {
+    expect(SOURCE).toMatch(
+      /const orderedIds = useMemo\(\s*\(\) => visibleItems\.map\(/,
+    )
   })
 
   /**
-   * The grid resolves the range through the tested module rather than
-   * open-coding a slice — an index-anchored open-coding is the version that
-   * breaks after a delete from the middle of a range.
+   * The other end of the id-anchored design: a delete drops the anchor rather
+   * than leaving it pointing at whichever file slid into that position.
    */
-  it('the grid resolves it through nextMediaSelection', () => {
-    expect(SOURCE).toContain('nextMediaSelection')
-    expect(SOURCE).toContain('forgetMediaSelection')
-  })
-
-  it('measures the range against the order on screen', () => {
-    expect(SOURCE).toContain('orderedIds')
-    expect(SOURCE).toContain('visibleItems.map')
+  it('forgets the anchor when its file is deleted', () => {
+    expect(SOURCE).toContain('forgetMediaSelection(prev, ids)')
   })
 })
