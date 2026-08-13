@@ -115,7 +115,8 @@ export const MEDIA_CDN_ACTIVE_DOCUMENT_CSP =
  * uploaded under a `image/png` label is decoded as a PNG and is inert. Every
  * type here except SVG is refused by the upload allowlist today; they are
  * listed anyway because the allowlist has moved before (AGL-1465) and because
- * `/api/orgs/media` accepted arbitrary types for its whole life.
+ * a legacy fourth upload route accepted arbitrary types for its whole life
+ * before AGL-1485 deleted it.
  */
 const MEDIA_CDN_ACTIVE_DOCUMENT_TYPES = new Set([
   'image/svg+xml',

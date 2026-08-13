@@ -56,7 +56,11 @@ const API_ROUTES: Array<[string, number]> = [
   ['/api/orgs/members?orgId=x', 401],
   ['/api/orgs/invites?orgId=x', 401],
   ['/api/orgs/create', 405],
-  ['/api/orgs/media', 405],
+  // The legacy org-media upload route sat here until AGL-1485 deleted it (no
+  // caller since AGL-821, and it minted a document the other creators do not).
+  // Its absence is asserted at the source in
+  // `apps/console/specs/media-create-shape.spec.ts` — a status smoke on a route
+  // that should not exist would only ever measure the catch-all's 404.
   ['/api/orgs/settings', 405],
   ['/api/admin/org-usage?orgId=x', 401],
   ['/api/admin/audit-archive', 405],

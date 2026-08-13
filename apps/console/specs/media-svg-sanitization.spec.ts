@@ -32,13 +32,17 @@
  *
  * AGL-1474 named two chokepoints and reasoned that they were complete
  * coverage, because Storage rules deny all direct client writes. The rules
- * claim holds. The route inventory did not: `/api/orgs/media` is a third
- * byte-write path onto `orgs/{orgId}/media/{id}` — the exact object path and
- * collection the CDN resolves for the `org:` scope — and it had no type
- * allowlist at all, so it accepted `text/html` outright. It is covered here
- * alongside the other three.
+ * claim holds. The route inventory did not: a legacy fourth org-media upload
+ * route was a third byte-write path onto `orgs/{orgId}/media/{id}` — the exact
+ * object path and collection the CDN resolves for the `org:` scope — and it
+ * had no type allowlist at all, so it accepted `text/html` outright. It was
+ * covered here until AGL-1485 DELETED it: its last caller went in AGL-821, and
+ * it also minted a document missing `storagePath`, `contentHash`, `cdnPath`,
+ * `variants` and `folderId` while never moving `counters/media`. The coverage
+ * claim this file makes is now true of three paths because there are three,
+ * which `media-create-shape.spec.ts` is what keeps honest.
  *
- * `/api/media/upload-url` is the fourth. Its bytes never pass through the
+ * `/api/media/upload-url` is the third. Its bytes never pass through the
  * server on the way in (the browser PUTs them straight to GCS), so the strip
  * happens at finalize; the assertion is that finalize downloads, rewrites and
  * re-reads the object's identity rather than filing the doc against bytes it
@@ -77,9 +81,8 @@ const mediaDoc = (): Record<string, unknown> => ({
   get: async () => ({
     exists: true,
     get: (field: string) => state.existing[field],
-    // `/api/orgs/media` reads the ORG doc for its AGL-1048
-    // `defaultResourceScope` before stamping an upload (AGL-1478), the same
-    // setting the other two upload routes honour.
+    // The upload routes read the ORG doc for its AGL-1048
+    // `defaultResourceScope` before stamping an upload (AGL-1478).
     data: () => state.org,
   }),
   set: (...args: unknown[]) => {
@@ -87,7 +90,6 @@ const mediaDoc = (): Record<string, unknown> => ({
     return Promise.resolve()
   },
   delete: async () => undefined,
-  // `/api/orgs/media` walks `orgs/{id}/media/{id}` off the root firestore.
   collection: () => ({ doc: () => mediaDoc() }),
 })
 
@@ -198,7 +200,6 @@ jest.mock('../utils/server/media-scope', () => ({
 import { POST as uploadPost } from '../app/api/media/upload/route'
 import { POST as replacePost } from '../app/api/media/replace/route'
 import { PATCH as finalize } from '../app/api/media/upload-url/route'
-import { POST as orgMediaPost } from '../app/api/orgs/media/route'
 
 /** The payload AGL-1474 names, inside an otherwise ordinary brand mark. */
 const HOSTILE_SVG =
@@ -362,37 +363,14 @@ describe('/api/media/upload-url finalizes on bytes it has LOOKED at (AGL-1474)',
   })
 })
 
-describe('/api/orgs/media — the third write path AGL-1474 did not count', () => {
-  const orgUpload = (contentType: string, svg = HOSTILE_SVG) =>
-    orgMediaPost(
-      new Request('https://app.aglyn.com/api/orgs/media', {
-        method: 'POST',
-        headers: { authorization: 'Bearer tok' },
-        body: json({
-          orgId: 'org-1',
-          action: 'upload',
-          fileName: 'mark.svg',
-          contentType,
-          dataBase64: Buffer.from(svg, 'utf8').toString('base64'),
-        }),
-      }),
-    )
-
-  it('sanitizes an SVG landed through it', async () => {
-    expect((await orgUpload('image/svg+xml')).status).toBe(200)
-    expect(savedBytes()).not.toContain('alert')
-    expect(savedDoc()['svgSanitized']).toEqual(['script'])
-  })
-
-  it('now REFUSES text/html, which it accepted for its whole life', async () => {
-    // A strictly wider version of the SVG hole: the object lands in
-    // `orgs/{orgId}/media/{id}`, which the CDN serves inline, same origin.
-    const response = await orgUpload('text/html', '<script>alert(1)</script>')
-    expect(response.status).toBe(415)
-    expect(mockFileSave).not.toHaveBeenCalled()
-  })
-
-  it('still takes an ordinary image', async () => {
-    expect((await orgUpload('image/png', 'not-a-png')).status).toBe(200)
-  })
-})
+/**
+ * The write path that used to be asserted fourth here — the legacy org-media
+ * upload route — was deleted in AGL-1485 rather than kept in coverage. It had
+ * had no caller since AGL-821 and minted a divergent document, so the coverage
+ * question it raised is now answered by its absence.
+ *
+ * `apps/console/specs/media-create-shape.spec.ts` holds that ground: it
+ * DISCOVERS the routes that mint a media document rather than listing them, so
+ * the failure mode both issues share — a write path nobody counted — surfaces
+ * as a test failure the moment a fifth one appears.
+ */

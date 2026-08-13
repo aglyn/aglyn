@@ -188,7 +188,7 @@ describe('media CDN Content-Security-Policy (AGL-1474)', () => {
     expect(policy(await serve(['org:acme', 'm1']))).not.toContain('sandbox')
   })
 
-  it('sandboxes text/html too — /api/orgs/media accepted it for its whole life', async () => {
+  it('sandboxes text/html too — a legacy upload route accepted it for years', async () => {
     mockState.doc = { ...mockState.doc, contentType: 'text/html' }
     mockState.metadata = { contentType: 'text/html', size: 6 }
     expect(policy(await serve(['org:acme', 'm1']))).toBe(
