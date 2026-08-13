@@ -17,6 +17,7 @@
 
 import {
   defaultScopeForNewResource,
+  newResourceScopeFields,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
 import {
@@ -137,12 +138,22 @@ async function handler(request: Request): Promise<Response> {
           // mandatory either way: `array-contains-any` matches nothing on a
           // doc missing the field, so an unstamped dataset renders on no
           // site at all (AGL-1044).
-          visibleTo: defaultScopeForNewResource({
-            defaultResourceScope: (org as {
-              defaultResourceScope?: 'org' | 'host'
-            })?.defaultResourceScope,
-            hostId: String(body?.hostId ?? '') || null,
-          }),
+          //
+          // Through `newResourceScopeFields` since AGL-1484: AGL-1478 built
+          // that helper as the type-level gate for exactly the collections
+          // with no document constructor of their own — `datasets` named
+          // first among them — and then only the marketplace fork used it,
+          // while the two ordinary dataset creates went on writing the field
+          // by hand. A required argument that three of four callers bypass
+          // is a convention, not a guarantee.
+          ...newResourceScopeFields(
+            defaultScopeForNewResource({
+              defaultResourceScope: (org as {
+                defaultResourceScope?: 'org' | 'host'
+              })?.defaultResourceScope,
+              hostId: String(body?.hostId ?? '') || null,
+            }),
+          ),
           createdAt: Timestamp.now(),
         })
       return Response.json({ ok: true, id }, { status: 200 })

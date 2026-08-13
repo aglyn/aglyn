@@ -34,6 +34,7 @@ import {
   scopeCovers,
   normalizeVisibleTo,
   ORG_SCOPE_TOKEN,
+  storedScope,
   visibleToHost,
 } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -188,7 +189,18 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   )
   const orgHostList: Array<{ $id: string; name?: string; subdomain?: string }> =
     orgHostDocs ?? []
-  const [visibleTo, setVisibleTo] = useState<string[]>([ORG_SCOPE_TOKEN])
+  const [visibleTo, setVisibleTo] = useState<string[]>([])
+  /**
+   * The dataset stores NO scope (AGL-1484) — as opposed to storing `['org']`.
+   *
+   * The dialog used to render the two identically, which for a dataset is a
+   * worse lie than it was for a media file: `orgs/{orgId}/datasets` is read
+   * with `array-contains-any` in `resolve-dataset.ts` and in the console's
+   * own `organizations.ts`, so an unstamped dataset is matched by no reader
+   * in the product. It renders on no site and is missing from the reference
+   * cards even for an org-wide member — while this control said "All sites".
+   */
+  const [scopeUnset, setScopeUnset] = useState(false)
 
   const [model, setModel] = useState<DatasetModel>({ fields: {}, order: [] })
   const [names, setNames] = useState<{ singular: string; plural: string }>({
@@ -197,11 +209,16 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   })
   useEffect(() => {
     if (!dataset) return
-    setVisibleTo(
-      Array.isArray((dataset as { visibleTo?: string[] }).visibleTo)
-        ? ((dataset as { visibleTo?: string[] }).visibleTo as string[])
-        : [ORG_SCOPE_TOKEN],
-    )
+    // The fourth copy of the AGL-1466 substitution (AGL-1484), and the seed
+    // half of it. Persisting the default on open was the other option and
+    // AGL-1466 ruled it out: opening a dialog would write, the AGL-1042
+    // rules refuse that write from anyone who is not org-wide, and it
+    // repairs only what somebody happens to look at — a repair mechanism
+    // wearing a UI. `previousScope` in `handleSave` reads the SAME helper;
+    // see the note there for why the pair is the safety property.
+    const storedDatasetScope = storedScope((dataset as { visibleTo?: string[] }).visibleTo)
+    setVisibleTo(storedDatasetScope ?? [])
+    setScopeUnset(!storedDatasetScope)
     const effective = effectiveDatasetModel(dataset)
     setModel({
       fields: JSON.parse(JSON.stringify(effective.fields)),
@@ -346,11 +363,25 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
 
   const handleSave = useCallback(async () => {
     if (!dataset || !dataScope) return
-    const previousScope: string[] = Array.isArray(
-      (dataset as { visibleTo?: string[] }).visibleTo,
-    )
-      ? ((dataset as { visibleTo?: string[] }).visibleTo as string[])
-      : [ORG_SCOPE_TOKEN]
+    /**
+     * What the document actually carries, `[]` when it carries nothing
+     * (AGL-1484) — matching the seed above, through the same helper.
+     *
+     * The pairing is the whole safety property, not tidiness. Both sides
+     * used to substitute `[ORG_SCOPE_TOKEN]`, so an unset dataset compared
+     * equal to itself and merely OPENING the dialog wrote nothing; the
+     * damage was confined to the screen. Correcting the seed alone would
+     * make `scopeChanged` true for every unset dataset the moment its
+     * dialog opened, turning a lie on screen into a write nobody asked for
+     * — one the AGL-1041 rules then reject for any member who is not
+     * org-wide, failing the WHOLE schema save with it.
+     *
+     * `[]` is also the honest previous value in the other direction: a
+     * deliberate save of exactly `['org']` on an unset dataset used to
+     * compare equal to the default and be dropped, and that is the one save
+     * an unstamped dataset most needs to land.
+     */
+    const previousScope: string[] = storedScope((dataset as { visibleTo?: string[] }).visibleTo) ?? []
     const scopeChanged =
       JSON.stringify([...previousScope].sort()) !==
       JSON.stringify([...visibleTo].sort())
@@ -517,15 +548,51 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                 </Typography>
               ) : viewerOrgWide ? (
                 <>
+                  {/*
+                    The state this dialog used to hide (AGL-1484), in the
+                    words the folder dialog and the media drawer already
+                    use. It costs a sentence, and it is the difference
+                    between reading "All sites" off a collection no site can
+                    see and being told to choose.
+                  */}
+                  {scopeUnset ? (
+                    <Alert severity="warning">
+                      {'This collection has never been shared. Nothing is ' +
+                        'stored, so it is hidden from every site and any ' +
+                        'page repeating over it renders nothing. Choose who ' +
+                        'it is shared with to fix that.'}
+                    </Alert>
+                  ) : null}
                   <Select
                     size="small"
-                    value={visibleTo.includes(ORG_SCOPE_TOKEN) ? 'org' : 'hosts'}
-                    onChange={(event) =>
+                    value={
+                      visibleTo.includes(ORG_SCOPE_TOKEN)
+                        ? 'org'
+                        : scopeUnset
+                          ? 'unset'
+                          : 'hosts'
+                    }
+                    onChange={(event) => {
+                      // Any choice ends the unset state — from here the
+                      // control shows what was picked, not what was (not)
+                      // stored.
+                      setScopeUnset(false)
                       setVisibleTo(
                         event.target.value === 'org' ? [ORG_SCOPE_TOKEN] : [],
                       )
-                    }
+                    }}
                   >
+                    {/*
+                      A real sentinel, never '' — MUI cannot hold an empty
+                      string as a selected value and a corpus spec forbids
+                      one. Rendered only while unset and disabled, so the
+                      control cannot be set back into "nobody has decided".
+                    */}
+                    {scopeUnset ? (
+                      <MenuItem value="unset" disabled>
+                        {'Not shared with any site'}
+                      </MenuItem>
+                    ) : null}
                     <MenuItem value="org">{'All sites'}</MenuItem>
                     <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
                   </Select>
@@ -538,7 +605,13 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                       'Sites you exclude cannot see or use this dataset — in the console or on their pages.'
                     }
                   </Typography>
-                  {!visibleTo.includes(ORG_SCOPE_TOKEN) ? (
+                  {/*
+                    The host chips are the "Selected sites…" detail. Showing
+                    them under an unset collection would invite a save of
+                    the empty selection already sitting there, which is the
+                    widening-by-accident this class keeps producing.
+                  */}
+                  {!scopeUnset && !visibleTo.includes(ORG_SCOPE_TOKEN) ? (
                     <Stack
                       direction="row"
                       spacing={0.5}
@@ -570,15 +643,25 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                 </>
               ) : (
                 <Typography variant="body2">
-                  {describeScope(
-                    visibleTo,
-                    Object.fromEntries(
-                      orgHostList.map((host) => [
-                        host.$id,
-                        host.name ?? host.subdomain ?? host.$id,
-                      ]),
-                    ),
-                  )}
+                  {/*
+                    A scoped collaborator cannot fix this — the AGL-1041
+                    rules deny them the write — but they are the ones who
+                    notice a repeatable rendering nothing on their site, so
+                    they get the reason rather than `describeScope`'s "No
+                    sites", which reads like a setting somebody chose
+                    (AGL-1484).
+                  */}
+                  {scopeUnset
+                    ? 'Never shared — hidden from every site'
+                    : describeScope(
+                        visibleTo,
+                        Object.fromEntries(
+                          orgHostList.map((host) => [
+                            host.$id,
+                            host.name ?? host.subdomain ?? host.$id,
+                          ]),
+                        ),
+                      )}
                 </Typography>
               )}
             </Stack>

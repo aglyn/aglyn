@@ -25,6 +25,7 @@ import {
   hostScopeToken,
   legacyCollectionKind,
   nameSearchKey,
+  newResourceScopeFields,
   NON_PAGE_SCREEN_MAX_PER_HOST,
   resolveOrgEntitlements,
   rewriteBindingTokensDeep,
@@ -792,7 +793,12 @@ async function handler(request: Request): Promise<Response> {
       id: string,
     ) =>
       firestore.collection('orgs').doc(orgId as string).collection(name).doc(id)
-    const importedScope = { visibleTo: [hostScopeToken(hostId)] }
+    // Through the AGL-1478 gate since AGL-1484. A restore CREATES documents
+    // in three scoped collections — `datasets`, `media`, `mediaFolders` —
+    // and it was the one dataset creator missing from
+    // `scoped-create-coverage.spec.ts` entirely, because it is spelled as a
+    // restore rather than as a create.
+    const importedScope = newResourceScopeFields([hostScopeToken(hostId)])
 
     /**
      * The folder ids a restored `parentId`/`folderId` may legitimately name

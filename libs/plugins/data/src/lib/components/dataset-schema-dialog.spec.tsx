@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+import * as Aglyn from '@aglyn/aglyn'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { doc, updateDoc } from 'firebase/firestore'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
@@ -224,5 +228,185 @@ describe('DatasetSchemaDialog refuses a stale seed (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
 
     await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+  })
+})
+
+/**
+ * AGL-1484: the dialog says what a collection's sharing actually is.
+ *
+ * This is the fourth copy of the substitution AGL-1466 removed from the two
+ * media-folder surfaces and AGL-1480 removed from the two in the DAM detail
+ * drawer — the same `Array.isArray(doc.visibleTo) ? doc.visibleTo : ['org']`
+ * written out longhand, here at the seed AND at `handleSave`'s
+ * `previousScope`.
+ *
+ * It bites harder in this collection than in media. `orgs/{orgId}/datasets`
+ * is read with `array-contains-any` in `resolve-dataset.ts` and in the
+ * console's `organizations.ts`, so an unstamped dataset is matched by no
+ * reader in the product: it renders on no site and is missing from the
+ * reference-health and workflow cards even for an org-wide member — the
+ * exact inverse of the "All sites" this dialog reported about it.
+ *
+ * The treatment is AGL-1466's, deliberately not re-litigated: show the true
+ * state rather than persist a default on render.
+ */
+describe('DatasetSchemaDialog shows the stored scope (AGL-1484)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  const SOURCE = readFileSync(
+    join(__dirname, 'dataset-schema-dialog.component.tsx'),
+    'utf8',
+  )
+
+  /**
+   * The two expressions, lifted from the component's own source.
+   *
+   * Both are single-line `const` declarations with nothing but the
+   * expression after the `=`, and each name occurs once in the file — so a
+   * comment cannot stand in for either. The assertion below is on the
+   * VALUES they produce, which is the only form that catches the trap.
+   */
+  const expressionAfter = (declaration: string): string => {
+    const start = SOURCE.indexOf(declaration)
+    expect(start).toBeGreaterThan(-1)
+    return SOURCE.slice(start + declaration.length, SOURCE.indexOf('\n', start))
+  }
+
+  /**
+   * The trap in fixing this at all, and the reason the two call sites move
+   * in ONE commit.
+   *
+   * Today an untouched dialog writes no scope only because the seed and
+   * `previousScope` substituted the SAME `['org']`, so `scopeChanged` came
+   * out false. Correct one and not the other and a display bug becomes a
+   * WRITE — on every unset collection anyone merely opens, from a control
+   * they never touched, and one the AGL-1041 rules then reject for any
+   * member who is not org-wide, failing the whole schema save with it.
+   *
+   * So: both expressions are evaluated against the same document across the
+   * shapes a dataset actually arrives in, and required to agree. If they
+   * agree, `scopeChanged` is false however either is spelled.
+   */
+  it('opens without making the save gate think the scope changed', () => {
+    const seed = expressionAfter('const storedDatasetScope =')
+    const previous = expressionAfter('const previousScope: string[] =')
+    expect(seed.trim()).toBeTruthy()
+    expect(previous.trim()).toBeTruthy()
+
+    /**
+     * The lifted expression, run against a document.
+     *
+     * The only edit is erasing the `as { visibleTo?: string[] }` assertions
+     * — `new Function` parses JavaScript, and an assertion is precisely the
+     * part of the text that has no runtime meaning, so removing it is what
+     * the compiler does rather than a simplification of what is asserted.
+     * Both sides are checked below to still read the field through the
+     * helper afterwards, so an erasure that ate the expression would not
+     * pass quietly.
+     */
+    const evaluate = (expression: string, document: unknown) => {
+      const runtime = expression
+        .replace(/\s+as\s+\{[^}]*\}/g, '')
+        .replace(/,\s*$/, '')
+      expect(runtime).toMatch(/storedScope\(\(?dataset\)?\.visibleTo\)/)
+      return new Function(
+        'storedScope',
+        'dataset',
+        `return (${runtime})`,
+      )(Aglyn.storedScope, document)
+    }
+
+    for (const document of [
+      {},
+      { visibleTo: undefined },
+      // A stored empty array is a written "visible to nobody". The dialog
+      // must not read that as org-wide either.
+      { visibleTo: [] },
+      { visibleTo: ['org'] },
+      { visibleTo: ['host:a', 'host:b'] },
+    ]) {
+      expect(evaluate(`${seed} ?? []`, document)).toEqual(
+        evaluate(previous, document),
+      )
+    }
+  })
+
+  /** Neither side re-derives the reading; both ask the one helper. */
+  it('reads the stored scope through the one helper, at both sites', () => {
+    expect(SOURCE.match(/storedScope\(\(dataset as/g) ?? []).toHaveLength(2)
+  })
+
+  /** The write is still gated on that comparison, and only on it. */
+  it('still writes the scope only when it changed', () => {
+    expect(SOURCE).toMatch(
+      /\.\.\.\(orgId && viewerOrgWide && scopeChanged\s*\n?\s*\?\s*\{ visibleTo:/,
+    )
+  })
+
+  const unsetDataset = {
+    $id: 'products',
+    displayName: 'Products',
+    model: {
+      fields: { title: { name: 'Title', type: 'text' as const } },
+      order: ['title'],
+    },
+  }
+
+  it('reads unset — not "All sites" — for a collection with no visibleTo', () => {
+    renderDialog(unsetDataset)
+
+    expect(screen.getByText(/never been shared/i)).toBeTruthy()
+    expect(screen.getByText(/hidden from every site/i)).toBeTruthy()
+    // A real sentinel, never '' — MUI cannot hold an empty string as a
+    // selected value and a corpus spec forbids one.
+    expect(screen.getByText('Not shared with any site')).toBeTruthy()
+    expect(screen.queryByText('All sites')).toBeNull()
+  })
+
+  it('still reads "All sites" for a collection that stores the org token', () => {
+    renderDialog({ ...unsetDataset, visibleTo: ['org'] } as never)
+
+    expect(screen.queryByText(/never been shared/i)).toBeNull()
+    expect(screen.queryByText('Not shared with any site')).toBeNull()
+    expect(screen.getByText('All sites')).toBeTruthy()
+  })
+
+  /** Opening the dialog is not a write. */
+  it('writes nothing on open', async () => {
+    renderDialog(unsetDataset)
+
+    await waitFor(() =>
+      expect(screen.getByText(/never been shared/i)).toBeTruthy(),
+    )
+    expect(updateDoc).not.toHaveBeenCalled()
+    expect(doc).not.toHaveBeenCalled()
+  })
+
+  /**
+   * And saving an untouched dialog does not smuggle a scope in with the
+   * schema. `visibleTo` is absent from the payload entirely — which is the
+   * difference between this and the cascading write the pairing prevents.
+   */
+  it('saves the schema without stamping a scope nobody chose', async () => {
+    renderDialog(unsetDataset)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+
+    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+    const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
+    expect(Object.keys(payload)).not.toContain('visibleTo')
+  })
+
+  /** Choosing ends the unset state, and THAT save writes the scope. */
+  it('writes the scope once somebody chooses one', async () => {
+    renderDialog(unsetDataset)
+
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    fireEvent.click(screen.getByRole('option', { name: 'All sites' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+    const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
+    expect(payload.visibleTo).toEqual(['org'])
   })
 })

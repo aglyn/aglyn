@@ -20,6 +20,7 @@ import {
   checkEntitlement,
   createResourceUid,
   defaultScopeForNewResource,
+  newResourceScopeFields,
   visibleToHost,
 } from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
@@ -195,10 +196,16 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
         // default, applied to the site the install came from. Stamping it
         // is not optional — a dataset with no `visibleTo` matches no scoped
         // read and would render on no site at all.
-        visibleTo: defaultScopeForNewResource({
-          defaultResourceScope: org?.defaultResourceScope,
-          hostId,
-        }),
+        //
+        // Through the AGL-1478 gate since AGL-1484, so "every other dataset
+        // creator" is a fact about the type rather than about four object
+        // literals that happen to agree today.
+        ...newResourceScopeFields(
+          defaultScopeForNewResource({
+            defaultResourceScope: org?.defaultResourceScope,
+            hostId,
+          }),
+        ),
         createdAt: now,
       })
 
