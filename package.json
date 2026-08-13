@@ -69,6 +69,7 @@
     "test:plugin-loader": "node tools/plugin-loader/origin/api/load.csp.test.mjs",
     "test:retired-colours": "node --test tools/scripts/lib/retired-colours.test.mjs",
     "test:disk-space": "node --test tools/scripts/lib/disk-space.test.mjs",
+    "test:erase-cli": "node --test tools/scripts/lib/erase-org-cli.test.mjs",
     "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",
     "sync:next-tsconfigs": "node tools/scripts/sync-next-tsconfigs.mjs",

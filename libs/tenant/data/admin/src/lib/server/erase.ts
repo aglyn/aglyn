@@ -146,8 +146,8 @@ async function deleteStripeCustomer(customerId?: string): Promise<void> {
  * Returns the number destroyed, for the audit row — an erasure trail that
  * understates what it removed is the one record that has to be right.
  */
-async function eraseOrgApiKeys(orgId: string): Promise<number> {
-  return deleteDocsByOrgId('apiKeys', orgId)
+async function eraseOrgApiKeys(orgId: string, dryRun = false): Promise<number> {
+  return deleteDocsByOrgId('apiKeys', orgId, dryRun)
 }
 
 /**
@@ -165,10 +165,16 @@ async function eraseOrgApiKeys(orgId: string): Promise<number> {
  *
  * Returns the number destroyed, for the audit row — an erasure trail that
  * understates what it removed is the one record that has to be right.
+ *
+ * `dryRun` runs the query and skips the commit (AGL-1481), so a plan counts
+ * rows through the SAME function that deletes them. A separate counting pass
+ * would be a second enumeration of the sweep list, which is precisely the
+ * divergence AGL-1481 exists to remove.
  */
 async function deleteDocsByOrgId(
   collection: string,
   orgId: string,
+  dryRun = false,
 ): Promise<number> {
   if (!orgId) return 0
   const firestore = firebaseAdmin.app().firestore()
@@ -176,6 +182,7 @@ async function deleteDocsByOrgId(
     .collection(collection)
     .where('orgId', '==', orgId)
     .get()
+  if (dryRun) return rows.size
   for (let index = 0; index < rows.docs.length; index += 400) {
     const batch = firestore.batch()
     for (const doc of rows.docs.slice(index, index + 400)) batch.delete(doc.ref)
@@ -206,8 +213,11 @@ async function deleteDocsByOrgId(
  * Deleting is safe on the read side: `/api/auth/sso-lookup` already treats a
  * missing doc and an inactive one identically (`{ ssoEnabled: false }`).
  */
-async function eraseOrgSsoDomains(orgId: string): Promise<number> {
-  return deleteDocsByOrgId('ssoDomains', orgId)
+async function eraseOrgSsoDomains(
+  orgId: string,
+  dryRun = false,
+): Promise<number> {
+  return deleteDocsByOrgId('ssoDomains', orgId, dryRun)
 }
 
 /**
@@ -232,7 +242,10 @@ async function eraseOrgSsoDomains(orgId: string): Promise<number> {
  * fail because Vercel did. A name that could not be detached keeps its claim
  * and is reported in the audit row as un-released.
  */
-async function releaseOrgConsoleDomains(orgId: string): Promise<number> {
+async function releaseOrgConsoleDomains(
+  orgId: string,
+  dryRun = false,
+): Promise<number> {
   const firestore = firebaseAdmin.app().firestore()
   const claims = await firestore
     .collection(CONSOLE_DOMAINS_COLLECTION)
@@ -241,6 +254,9 @@ async function releaseOrgConsoleDomains(orgId: string): Promise<number> {
   const primaries = new Set(
     claims.docs.map((doc) => (doc.get('primaryHost') as string) || doc.id),
   )
+  // A plan counts the claim sets it WOULD release. `releaseConsoleDomain`
+  // detaches at Vercel, so it must not run for a dry run (AGL-1481).
+  if (dryRun) return primaries.size
   let released = 0
   for (const domain of primaries) {
     const result = await releaseConsoleDomain({ orgId, domain }).catch(
@@ -274,8 +290,11 @@ async function releaseOrgConsoleDomains(orgId: string): Promise<number> {
  * because nothing cleans up the index when a customer id changes — an org that
  * was re-created in Stripe has more than one row pointing at it.
  */
-async function eraseOrgStripeIndex(orgId: string): Promise<number> {
-  return deleteDocsByOrgId('stripeCustomers', orgId)
+async function eraseOrgStripeIndex(
+  orgId: string,
+  dryRun = false,
+): Promise<number> {
+  return deleteDocsByOrgId('stripeCustomers', orgId, dryRun)
 }
 
 /**
@@ -293,8 +312,11 @@ async function eraseOrgStripeIndex(orgId: string): Promise<number> {
  * Taken with the credentials rather than at the end: the record ids they carry
  * point into the org tree that step 4 destroys.
  */
-async function eraseOrgIdempotencyKeys(orgId: string): Promise<number> {
-  return deleteDocsByOrgId('apiIdempotency', orgId)
+async function eraseOrgIdempotencyKeys(
+  orgId: string,
+  dryRun = false,
+): Promise<number> {
+  return deleteDocsByOrgId('apiIdempotency', orgId, dryRun)
 }
 
 /**
@@ -328,6 +350,7 @@ async function eraseOrgIdempotencyKeys(orgId: string): Promise<number> {
 async function eraseOrgSlugs(
   orgId: string,
   currentSlug?: string,
+  dryRun = false,
 ): Promise<number> {
   const firestore = firebaseAdmin.app().firestore()
   const held = await firestore
@@ -336,6 +359,8 @@ async function eraseOrgSlugs(
     .get()
   const slugs = new Set(held.docs.map((doc) => doc.id))
   if (currentSlug) slugs.add(currentSlug)
+  // `detachWorkspaceDomain` calls a live DNS API — never on a plan (AGL-1481).
+  if (dryRun) return slugs.size
   for (const slug of slugs) {
     await firestore.collection('orgSlugs').doc(slug).delete().catch(() => undefined)
     await detachWorkspaceDomain(slug).catch(() => undefined)
@@ -361,11 +386,53 @@ type EraseStep =
   | 'org-tree'
   | 'slugs'
 
+/**
+ * The two things an OPERATOR needs that a served caller does not (AGL-1481).
+ *
+ * `tools/scripts/erase-tenant.mjs` is the manual path staff reach for when the
+ * cron is stuck. It used to be a second implementation of this function, and it
+ * drifted: by the time AGL-1481 was filed it was missing four sweeps added that
+ * week and still wrote a complete dump of the workspace to the operator's
+ * working directory. The fix is that it CALLS this function — which means the
+ * capabilities it had and this function lacked have to live here instead.
+ *
+ * Neither is a hold bypass, deliberately. The script refused to run before the
+ * 7-day hold elapsed and this function refuses too; an `ignoreHold` flag would
+ * have been the easy way to keep the two paths identical and is the one
+ * difference worth preserving as a refusal on both.
+ */
+export interface EraseOrgOptions {
+  /**
+   * Count what an erasure WOULD destroy and destroy nothing. Every sweep runs
+   * its query and skips its write, so the plan is produced by the same list of
+   * sweeps that the erasure is — a separate counting pass would be exactly the
+   * second enumeration this issue removed. Nothing external is touched (no
+   * Storage, no Stripe, no Vercel, no DNS) and no audit row is written.
+   *
+   * Returns `ok: false` with `skippedReason: 'dry-run'`: `ok` means the org was
+   * erased, and a plan did not erase it. A caller that treats a plan as an
+   * erasure is the one mistake this shape has to make impossible.
+   */
+  dryRun?: boolean
+  /**
+   * Who is answerable for this erasure, for the audit row. Defaults to the
+   * cron. A staff member running the script by hand is not the scheduler, and
+   * an erasure trail that says otherwise names the wrong actor for the single
+   * most irreversible action the platform performs.
+   */
+  actorUid?: string
+}
+
 export interface EraseOrgResult {
   ok: boolean
-  /** Set when the org was NOT erased (flag missing, hold not elapsed, gone). */
+  /**
+   * Set when the org was NOT erased (flag missing, hold not elapsed, gone) —
+   * and `'dry-run'` when nothing was erased because nothing was meant to be.
+   */
   skippedReason?: string
   hosts?: number
+  /** Member back-references cleaned up — reported so a plan can show them. */
+  members?: number
   /** API credentials destroyed (AGL-1444) — outside the org path. */
   apiKeys?: number
   /** Public SSO routing docs destroyed (AGL-1448) — outside the org path. */
@@ -380,8 +447,14 @@ export interface EraseOrgResult {
   slugs?: number
 }
 
-/** What an in-flight erasure has destroyed so far — counts only. */
-type EraseProgress = Omit<EraseOrgResult, 'ok' | 'skippedReason'>
+/**
+ * What an in-flight erasure has destroyed so far — counts only.
+ *
+ * `members` is excluded: the inventory already reports it as `before.members`
+ * on both audit rows, and a second copy under `after` would say the same
+ * number twice.
+ */
+type EraseProgress = Omit<EraseOrgResult, 'ok' | 'skippedReason' | 'members'>
 
 /**
  * A stable label for an error, carrying no free text (AGL-1455).
@@ -436,6 +509,8 @@ async function recordErasureFailure(entry: {
   orgId: string
   step: EraseStep
   error: unknown
+  /** Whoever asked for the erasure — the cron, or a named operator. */
+  actorUid: string
   /** Millis of the `erasureRequestedAt` this attempt was fulfilling. */
   requestedAt: number
   before: { hosts: number; members: number }
@@ -446,7 +521,7 @@ async function recordErasureFailure(entry: {
     .firestore()
     .collection('adminAudit')
     .add({
-      actorUid: 'cron:run-erasures',
+      actorUid: entry.actorUid,
       action: 'org.erase-failed',
       target: `orgs/${entry.orgId}`,
       before: entry.before,
@@ -469,6 +544,18 @@ async function recordErasureFailure(entry: {
 /**
  * Permanently erase an organization once its 7-day hold has elapsed
  * (AGL-485/487). Runs from the automated cron and the manual staff path.
+ *
+ * **Both of those are literally this function (AGL-1481).** The manual path,
+ * `tools/scripts/erase-tenant.mjs`, used to be a second implementation, and a
+ * second implementation of a cascade delete is a divergence with a schedule:
+ * within a week of `eraseOrgApiKeys`, the SSO/console-domain release and the
+ * org-keyed index sweeps landing here, the script was missing all four and
+ * reporting success without them — leaving a live API credential, live domain
+ * reservations, `orgSlugs` tombstones and the `stripeCustomers` reverse index
+ * behind an erasure a human had been told was complete. The script now calls
+ * this, and `EraseOrgOptions` is where the two capabilities it had and this
+ * did not (a plan, and a named actor) live instead.
+ *
  * Order matters and every step is defensive:
  *   1. Re-read the org and re-verify erasureRequestedAt + hold — never
  *      delete on a stale/cancelled request.
@@ -526,7 +613,11 @@ async function recordErasureFailure(entry: {
  * its erasure silently never happened (AGL-1455 half 1). That defect is
  * removed by deletion rather than by a streaming exporter.
  */
-export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
+export async function eraseOrg(
+  orgId: string,
+  options: EraseOrgOptions = {},
+): Promise<EraseOrgResult> {
+  const { dryRun = false, actorUid = 'cron:run-erasures' } = options
   const firestore = firebaseAdmin.app().firestore()
   const orgRef = firestore.collection('orgs').doc(orgId)
   const orgSnapshot = await orgRef.get()
@@ -573,59 +664,64 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
     // sign-in routed, or a console domain resolved — mid-erasure would still
     // pass the org gate and reach a half-deleted workspace. Revoking first
     // closes that window as well as the permanent one.
-    progress.apiKeys = await eraseOrgApiKeys(orgId)
-    progress.ssoDomains = await eraseOrgSsoDomains(orgId)
-    progress.consoleDomains = await releaseOrgConsoleDomains(orgId)
-    progress.apiIdempotency = await eraseOrgIdempotencyKeys(orgId)
+    progress.apiKeys = await eraseOrgApiKeys(orgId, dryRun)
+    progress.ssoDomains = await eraseOrgSsoDomains(orgId, dryRun)
+    progress.consoleDomains = await releaseOrgConsoleDomains(orgId, dryRun)
+    progress.apiIdempotency = await eraseOrgIdempotencyKeys(orgId, dryRun)
 
     // Hosts (Storage + routing + Firestore trees).
     step = 'hosts'
     progress.hosts = 0
     for (const host of hosts.docs) {
-      await eraseHost(host.id)
+      if (!dryRun) await eraseHost(host.id)
       progress.hosts += 1
     }
 
     // Org-level Storage (media/dataset assets outside the host prefix).
     step = 'org-storage'
-    try {
-      await storageBucket().deleteFiles({ prefix: `orgs/${orgId}/` })
-    } catch (error) {
-      console.error(`eraseOrg: org storage cleanup failed for ${orgId}`, error)
+    if (!dryRun) {
+      try {
+        await storageBucket().deleteFiles({ prefix: `orgs/${orgId}/` })
+      } catch (error) {
+        console.error(`eraseOrg: org storage cleanup failed for ${orgId}`, error)
+      }
     }
 
     // Stripe: the customer at the processor, AND the local reverse index that
     // correlates that identity back to this workspace (AGL-1448). Deleting
     // only the first left exactly the record AGL-1028 denied to every client.
     step = 'stripe'
-    await deleteStripeCustomer(stripeCustomerId)
-    progress.stripeIndex = await eraseOrgStripeIndex(orgId)
+    if (!dryRun) await deleteStripeCustomer(stripeCustomerId)
+    progress.stripeIndex = await eraseOrgStripeIndex(orgId, dryRun)
 
     // Members' reverse index into this org.
     step = 'members'
-    for (const member of members.docs) {
-      await firestore
-        .collection('users')
-        .doc(member.id)
-        .collection('orgs')
-        .doc(orgId)
-        .delete()
-        .catch(() => undefined)
+    if (!dryRun) {
+      for (const member of members.docs) {
+        await firestore
+          .collection('users')
+          .doc(member.id)
+          .collection('orgs')
+          .doc(orgId)
+          .delete()
+          .catch(() => undefined)
+      }
     }
 
     // The org subtree, then every slug reservation it has ever held — the
     // current one and each rename tombstone (AGL-1448), with the matching
     // `{slug}.aglyn.com` detached (AGL-1136).
     step = 'org-tree'
-    await firestore.recursiveDelete(orgRef)
+    if (!dryRun) await firestore.recursiveDelete(orgRef)
     step = 'slugs'
-    progress.slugs = await eraseOrgSlugs(orgId, slug)
+    progress.slugs = await eraseOrgSlugs(orgId, slug, dryRun)
   } catch (error) {
     console.error(`eraseOrg: ${step} failed for ${orgId}`, error)
     await recordErasureFailure({
       orgId,
       step,
       error,
+      actorUid,
       requestedAt: requestedMs,
       before,
       // How far it got, so the next reader knows what is already destroyed.
@@ -634,13 +730,28 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
     throw error
   }
 
+  // A plan (AGL-1481). Every sweep above ran its query and skipped its write,
+  // so these are the counts the real run would report — reached through the
+  // same code, which is the whole point of the operator script calling this
+  // function instead of listing the sweeps a second time. No audit row: an
+  // erasure that did not happen is not a record of one.
+  if (dryRun) {
+    return {
+      ok: false,
+      skippedReason: 'dry-run',
+      ...progress,
+      hosts: hosts.size,
+      members: members.size,
+    }
+  }
+
   // The proof of erasure, and now the only record of it: actor, action,
   // target, the request it fulfilled, the inventory found and what each sweep
   // destroyed. Ids and counts — never the content (AGL-1443).
   await firestore
     .collection('adminAudit')
     .add({
-      actorUid: 'cron:run-erasures',
+      actorUid,
       action: 'org.erased',
       target: `orgs/${orgId}`,
       before,
@@ -649,7 +760,7 @@ export async function eraseOrg(orgId: string): Promise<EraseOrgResult> {
     })
     .catch(() => undefined)
 
-  return { ok: true, ...progress, hosts: hosts.size }
+  return { ok: true, ...progress, hosts: hosts.size, members: members.size }
 }
 
 /** An org that stops a person's account from being erased. */

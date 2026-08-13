@@ -108,8 +108,9 @@ export const overrideCount = (org: any): number =>
  * by this UI) and logs an `adminAudit` entry with the actor uid. Suspension
  * and erasure sit behind their existing confirmation gates: a reason dialog
  * for suspend, and the two-step request → confirm dialog for erasure, which
- * only flags `erasureRequestedAt` — the hard delete stays a deliberate,
- * separately-run script (tools/scripts/erase-tenant.mjs) after a 7-day hold.
+ * only flags `erasureRequestedAt` — the hard delete happens after a 7-day
+ * hold, from the `/api/admin/run-erasures` cron or by hand with
+ * tools/scripts/erase-tenant.mjs, both of which are `eraseOrg` (AGL-1481).
  */
 export interface StaffOrgActionsProps {
   /** The org doc, with `$id`. Null/undefined disables every action. */
@@ -193,9 +194,10 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
         : 'Cancel the erasure request?',
       description: requesting
         ? 'Marks the organization for GDPR deletion. Nothing is deleted ' +
-          'now: after a 7-day hold, staff run ' +
-          'tools/scripts/erase-tenant.mjs to export a final bundle and ' +
-          'hard-delete all data. Audited.'
+          'now: after a 7-day hold the erasure runs automatically, or ' +
+          'staff run tools/scripts/erase-tenant.mjs to hard-delete all ' +
+          'data. No copy is kept — the hold is the window to export ' +
+          'anything the customer still needs. Audited.'
         : 'The organization is no longer marked for deletion. Audited.',
       confirmationText: requesting ? 'Request erasure' : 'Cancel request',
       confirmationButtonProps: { color: requesting ? 'error' : 'primary' },

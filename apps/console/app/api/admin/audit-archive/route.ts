@@ -133,7 +133,7 @@ async function handler(request: Request): Promise<Response> {
         .join('\n')
       const fallbackText =
         'These organizations are past their GDPR erasure hold. Run ' +
-        'tools/scripts/erase-tenant.mjs to export and hard-delete:\n\n' +
+        'tools/scripts/erase-tenant.mjs to hard-delete. No copy is kept:\n\n' +
         orgsList
       // One send per run, so resolving the staff-designed template here is a
       // single Firestore read (AGL-768); null keeps the built-in copy.

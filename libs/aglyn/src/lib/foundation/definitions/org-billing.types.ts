@@ -555,8 +555,10 @@ export interface AglynOrgBilling extends AglynDocument {
   suspendedAt?: ITimestamp | null
   suspendedReason?: string
   /**
-   * GDPR erasure request (AGL-206): hard deletion happens ONLY via
-   * tools/scripts/erase-tenant.mjs after a 7-day hold from this stamp.
+   * GDPR erasure request (AGL-206): hard deletion happens ONLY via `eraseOrg`
+   * after a 7-day hold from this stamp — reached by the
+   * `/api/admin/run-erasures` cron, or by hand with
+   * tools/scripts/erase-tenant.mjs, which calls the same function (AGL-1481).
    */
   erasureRequestedAt?: ITimestamp | null
   createdAt?: ITimestamp

@@ -215,7 +215,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           block: 'text',
           text:
             'These organizations are past their GDPR erasure hold. Run ' +
-            'tools/scripts/erase-tenant.mjs to export and hard-delete:',
+            'tools/scripts/erase-tenant.mjs to hard-delete. No copy is kept:',
           variant: 'body',
         },
         { block: 'text', text: '{{orgs.list}}', variant: 'body' },
