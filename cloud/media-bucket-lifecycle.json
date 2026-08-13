@@ -1,0 +1,21 @@
+{
+  "$comment": "Lifecycle policy for the MEDIA bucket, gs://aglyn-main.appspot.com (AGL-1443). Apply with: gcloud storage buckets update gs://aglyn-main.appspot.com --lifecycle-file=cloud/media-bucket-lifecycle.json --project=aglyn-main  — read it back with: gcloud storage buckets describe gs://aglyn-main.appspot.com --format='value(lifecycle_config)' --project=aglyn-main. Revert with --clear-lifecycle. This bucket had NO lifecycle configuration at all before this file, and --lifecycle-file REPLACES the whole config rather than merging, so this file must always carry every rule the bucket should have.",
+  "$why": "Two retention artifacts accumulate in a bucket that otherwise holds only live customer media, and nothing reaps either. `adminAudit-archive/{yyyy-MM}/*.jsonl` is where /api/admin/audit-archive moves audit entries once they pass the 90-day Firestore window; rows name the org and some carry `email`. It had no expiry at all, so the 90-day retention the code advertises was really a 90-day MOVE. `erasures/` is a backstop: eraseOrg no longer writes there (AGL-1443 removed the full-workspace export), and this rule exists so a rollback, a revert or a future writer cannot recreate an unbounded prefix silently. Neither period is a guess about cost — both are the DPA §11 commitment, 'a limited period, after which it will be deleted or de-identified', made enforceable.",
+  "$never": "NO rule here may omit matchesPrefix, and no prefix may name orgs/, hosts/ or users/. Those hold live customer media whose only correct deletion is the erasure path, which deletes by prefix under code that knows what it is deleting. Lifecycle matches on age and has no view of Firestore, so an age-based rule over orgs/ would delete the bytes behind media documents that still exist — broken assets across live workspaces, with nothing to say which. apps/console/specs/media-bucket-lifecycle.spec.ts fails the build if either invariant is broken.",
+  "$periods": {
+    "adminAudit-archive/": "365 days in the bucket, after the 90 days each entry already spent in Firestore — so an adminAudit entry is retained about 15 months end to end and is then gone. GCS ages an object from its own creation and the archive object is created at the END of the Firestore window, so 365 is the floor on every entry inside it, not an average.",
+    "erasures/": "30 days. Short on purpose: nothing writes this prefix any more, so an object appearing here is a regression, and the rule's job is that the regression expires rather than accumulating for the years it would take anyone to notice. It cannot delete a record we depend on — the record of an erasure is the adminAudit `org.erased` row, not an object."
+  },
+  "lifecycle": {
+    "rule": [
+      {
+        "action": { "type": "Delete" },
+        "condition": { "age": 365, "matchesPrefix": ["adminAudit-archive/"] }
+      },
+      {
+        "action": { "type": "Delete" },
+        "condition": { "age": 30, "matchesPrefix": ["erasures/"] }
+      }
+    ]
+  }
+}

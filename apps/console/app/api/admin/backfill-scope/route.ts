@@ -20,12 +20,16 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  notifyStaff,
 } from '@aglyn/tenant-data-admin'
+import { isCronAuthorized } from '../../../../utils/cron-auth'
 import {
   addPlan,
+  describeScopeDrift,
   emptyTotals,
   planMemberScopeTokens,
   planScopeStamp,
+  scopeDrift,
   SCOPED_COLLECTIONS,
 } from '../../../../utils/server/backfill-scope'
 
@@ -58,6 +62,29 @@ const LEGACY_SCAN_LIMIT = 5000
  * (AGL-1041). Legacy host-scoped datasets — `hosts/{hostId}/datasets`, the
  * pre-AGL-237 fallback — are counted and left alone; see
  * `ScopeBackfillTotals.legacyHostDatasets`.
+ *
+ * ## The detector (AGL-1478)
+ *
+ * All of the above was true, correct and idempotent for three weeks, and
+ * **nothing ever called it**: no staff page, no cron, no runbook, no
+ * reference in the repo outside its own specs. It was reachable only by a
+ * staff member who knew the path and minted a Bearer token by hand, and
+ * nobody did. So when AGL-1466 left 19 media folders unscoped across two
+ * scopes, the job whose entire purpose is listing exactly those documents
+ * sat there while a person worked it out from a file count that looked
+ * wrong.
+ *
+ * The weekly cron (`.github/workflows/scheduled-crons.yml`) now runs it as
+ * a DRY RUN and this returns **207 plus a staff notification** whenever the
+ * plan is non-zero — 207 being what that workflow turns into a red run.
+ *
+ * The cron cannot repair, whatever it asks for. That is the design, not a
+ * safety belt: a job that silently stamped every unscoped document each
+ * week would hide this class of bug in a new way — the creation paths would
+ * stay broken and the sweep would paper over them forever, which is how a
+ * creation-side hole survives an audit. The repair stays a human act taken
+ * after reading the plan (`docs/SCOPE_DRIFT.md`), and it is still this same
+ * route, driven by a staff Bearer token with `dryRun: false`.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, body, headers: rawHeaders } =
@@ -66,35 +93,57 @@ async function handler(request: Request): Promise<Response> {
   if (method !== 'GET' && method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
+  // Two callers, and only one of them may write. The scheduler holds a
+  // shared secret and no identity, so it gets the detector; the repair
+  // needs a person — a verified staff ID token.
+  const scheduled = isCronAuthorized(headers)
+  if (!scheduled && headers['x-cron-secret'] && !process.env.CRON_SECRET) {
+    // Said out loud rather than 401'd. A scheduler whose secret is missing
+    // ON THE SERVER looks exactly like a scheduler with the wrong secret,
+    // and "the detector has been quietly unauthenticated since the deploy"
+    // is the same shape of silence this whole issue is about.
+    return Response.json(
+      { error: 'Scope drift detection is not configured (CRON_SECRET).' },
+      { status: 501 },
+    )
+  }
   const authorization = headers.authorization ?? ''
-  const idToken = authorization.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length)
-    : undefined
-  if (!idToken) {
+  const idToken =
+    !scheduled && authorization.startsWith('Bearer ')
+      ? authorization.slice('Bearer '.length)
+      : undefined
+  if (!scheduled && !idToken) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
 
   try {
     const app = firebaseAdmin.app()
-    const decoded = await app.auth().verifyIdToken(idToken)
-    if (!decoded.email_verified && !isImpersonationSession(decoded)) {
-      return emailUnverifiedResponse()
-    }
-    if (!decoded['staff']) {
-      return Response.json({ error: 'Staff only' }, { status: 403 })
+    if (!scheduled) {
+      const decoded = await app.auth().verifyIdToken(idToken as string)
+      if (!decoded.email_verified && !isImpersonationSession(decoded)) {
+        return emailUnverifiedResponse()
+      }
+      if (!decoded['staff']) {
+        return Response.json({ error: 'Staff only' }, { status: 403 })
+      }
     }
 
-    // Writing requires an explicit opt-out of the dry run, on a POST.
+    // Writing requires an explicit opt-out of the dry run, on a POST — and
+    // is not available to the scheduler at all.
     const requested = (body as { dryRun?: unknown } | undefined)?.dryRun ??
       query['dryRun']
     const dryRun =
+      scheduled ||
       method === 'GET' ||
       requested === undefined ||
       !(requested === false || requested === '0' || requested === 'false')
 
     const db = app.firestore()
     const byId = firebaseAdmin.firestore.FieldPath.documentId()
-    const afterOrg = String(query['afterOrg'] ?? '')
+    // `cursor` is the shared cron workflow's resume field; `afterOrg` is
+    // this route's original one, kept so a runbook curl still works.
+    const afterOrg = String(query['afterOrg'] ?? '') ||
+      String((body as { cursor?: unknown } | undefined)?.cursor ?? '')
     let orgsQuery = db.collection('orgs').orderBy(byId).limit(ORGS_PER_RUN + 1)
     if (afterOrg) {
       orgsQuery = db
@@ -158,19 +207,54 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    return Response.json({
-      dryRun,
-      totals,
-      planned: pending.length,
-      // Surfaced rather than swallowed: a truncated scan means the legacy
-      // count is a floor, not the answer, and the migrate-or-delete call
-      // in AGL-1040 needs to know which it is reading.
-      legacyScanTruncated: legacy?.truncated ?? null,
-      // Null when this page finished the collection; feed it back as
-      // `?afterOrg=` otherwise. A run that plans nothing and returns a null
-      // cursor is the acceptance criterion.
-      nextAfterOrg: more ? orgDocs[orgDocs.length - 1].id : null,
-    })
+    // On a dry run the plan IS the finding: every planned write names a
+    // document no scoped read can see (AGL-1478).
+    const drift = dryRun ? scopeDrift(totals) : null
+    const said = drift ? describeScopeDrift(drift) : ''
+    if (scheduled && said) {
+      // Notified, not repaired — and named down to the collection, because
+      // which collection it is decides how much it costs: an unscoped
+      // dataset stops a page rendering, an unscoped contact silently
+      // duplicates on the next form submission.
+      await notifyStaff({
+        type: 'system.scopeDrift',
+        title: `${drift?.total} document(s) are missing their sharing scope`,
+        body:
+          `${said}. They are invisible to every site-scoped read until ` +
+          'stamped — this is a report, nothing has been changed.',
+        link: '/admin/overview',
+      }).catch(() => undefined)
+    }
+
+    const nextCursor = more ? orgDocs[orgDocs.length - 1].id : null
+    return Response.json(
+      {
+        dryRun,
+        totals,
+        planned: pending.length,
+        // What the scheduled run is FOR. Present on every dry run, so a
+        // staff curl reads the same number the alert did.
+        ...(drift ? { drift } : {}),
+        // Surfaced rather than swallowed: a truncated scan means the legacy
+        // count is a floor, not the answer, and the migrate-or-delete call
+        // in AGL-1040 needs to know which it is reading.
+        legacyScanTruncated: legacy?.truncated ?? null,
+        // Null when this page finished the collection; feed it back as
+        // `?afterOrg=` otherwise. A run that plans nothing and returns a null
+        // cursor is the acceptance criterion.
+        nextAfterOrg: nextCursor,
+        // The shared cron workflow's resume protocol (AGL-1141): it keeps
+        // POSTing while `done` is false, so a 25-org page cannot leave the
+        // rest of the product unexamined the way one manual curl would.
+        done: !more,
+        nextCursor,
+      },
+      // 207 is that workflow's "finished, and a human must look" — it turns
+      // the run red without the retry a 5xx would earn. A green weekly job
+      // that found 19 unscoped folders and said so only in its body is the
+      // failure mode this issue is about.
+      { status: said ? 207 : 200 },
+    )
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Scope backfill failed' }, { status: 500 })
@@ -202,3 +286,13 @@ async function countLegacyHostDatasets(
 
 export const GET = handler
 export const POST = handler
+export const dynamic = 'force-dynamic'
+
+/**
+ * This sweeps every org and every scoped collection in each. Vercel Hobby
+ * defaults a function to 10s, which is how `report-usage` came to 504 with
+ * FUNCTION_INVOCATION_TIMEOUT having succeeded the day before — and a
+ * detector that times out is a detector that reports nothing while looking
+ * scheduled. Pages of 25 orgs keep this well inside the ceiling.
+ */
+export const maxDuration = 60

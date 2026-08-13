@@ -35,9 +35,10 @@ import {
  * shared `x-cron-secret`, like report-usage / usage-alerts / audit-archive.
  *
  * Finds orgs whose `erasureRequestedAt` is past the 7-day hold and erases
- * each via `eraseOrg` (which re-verifies the hold and writes a final export
- * to Storage before deleting anything). Batched small — irreversible work,
- * so a bounded number per run and eraseOrg is safe to re-run on the rest.
+ * each via `eraseOrg` (which re-verifies the hold and, since AGL-1443, writes
+ * no copy of the workspace anywhere before deleting it — the proof is an
+ * `adminAudit` row of ids and counts). Batched small — irreversible work, so a
+ * bounded number per run and eraseOrg is safe to re-run on the rest.
  */
 const MAX_PER_RUN = 5
 

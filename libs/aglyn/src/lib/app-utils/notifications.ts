@@ -59,6 +59,12 @@ export type AglynNotificationType =
   // mutes to stop routine roster chatter, and "the way you sign in just
   // changed" is not chatter — the next sign-in fails without it.
   | 'system.signInMethodRemoved'
+  // Documents in a scoped collection carrying no `visibleTo` (AGL-1478).
+  // Staff audience: the weekly dry run found resources that are invisible
+  // to every site-scoped read, which always means a creation path forgot
+  // the field. `system.` for the AGL-1088 reason above, and because the
+  // collection it names may be `marketplace`-adjacent or not.
+  | 'system.scopeDrift'
 
 export interface AglynNotification {
   $id?: string
@@ -93,6 +99,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'system.announcement': 'Announcement',
     'system.pluginVerifierRegression': 'Plugin verifier regression',
     'system.signInMethodRemoved': 'Sign-in method removed',
+    'system.scopeDrift': 'Resources missing a sharing scope',
   }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */

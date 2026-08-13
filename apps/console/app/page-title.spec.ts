@@ -45,6 +45,8 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { code as strip } from '../specs/source-text'
+
 const APP_DIR = join(__dirname)
 
 /** Files Next reads metadata from. */
@@ -69,10 +71,18 @@ function walk(dir: string, rel = ''): TitledFile[] {
     }
     if (!METADATA_FILES.has(entry)) continue
     const source = readFileSync(abs, 'utf8')
-    // Strip comments so prose about titles cannot register as a title.
-    const code = source
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/^\s*\/\/.*$/gm, '')
+    /*
+     * Strip comments so prose about titles cannot register as a title —
+     * through the shared bounded stripper (AGL-1479). The copy that used to be
+     * inline here read any `/*` as a comment opener, and a swallowed `title:`
+     * does not fail this spec, it removes a file from the corpus: the
+     * "re-declare the template" invariant then holds over fewer routes and
+     * goes green.
+     *
+     * No fraction floor, uniquely: this walks 141 files and some are a licence
+     * header over a two-line re-export. The span bound still applies.
+     */
+    const code = strip(source, rel ? `${rel}/${entry}` : entry, 0)
     if (!/\btitle\s*:/.test(code)) continue
     found.push({
       rel: rel ? `${rel}/${entry}` : entry,

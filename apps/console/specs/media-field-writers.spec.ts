@@ -40,6 +40,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { code } from './source-text'
+
 const LOGO_CARD = join(__dirname, '..', 'components', 'logo-card.component.tsx')
 const FAVICON_CARD = join(
   __dirname,
@@ -59,17 +61,25 @@ const CONTENT_PAGE = join(
   'page.tsx',
 )
 
-const logoCard = readFileSync(LOGO_CARD, 'utf8')
-const faviconCard = readFileSync(FAVICON_CARD, 'utf8')
-const contentPage = readFileSync(CONTENT_PAGE, 'utf8')
-
-/** Comments stripped — the rule has to be in the CODE, not the prose. */
-const code = (source: string) =>
-  source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-
-const logoCode = code(logoCard)
-const faviconCode = code(faviconCard)
-const contentCode = code(contentPage)
+/**
+ * Comments stripped — the rule has to be in the CODE, not the prose.
+ *
+ * Through the shared bounded stripper since AGL-1479: the copy that lived here
+ * treated any `/*` as a comment opener, which is how four sibling specs came to
+ * assert against a file with 16,383 characters missing from the middle of it.
+ */
+const logoCode = code(
+  readFileSync(LOGO_CARD, 'utf8'),
+  'logo-card.component.tsx',
+)
+const faviconCode = code(
+  readFileSync(FAVICON_CARD, 'utf8'),
+  'favicon-card.component.tsx',
+)
+const contentCode = code(
+  readFileSync(CONTENT_PAGE, 'utf8'),
+  'hosts/[host]/content/page.tsx',
+)
 
 describe('site logo card (AGL-1407)', () => {
   it('writes the picked asset through mediaNodeSrc, not media.url', () => {

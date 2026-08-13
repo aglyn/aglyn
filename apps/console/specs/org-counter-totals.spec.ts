@@ -87,6 +87,9 @@ describe('orgCounterTotals', () => {
         emailSends: 200,
         workflowRuns: 45,
         actionRuns: 10,
+        // Bytes, not a count — see the org-library block below. Zero here
+        // because no `orgRef` was supplied.
+        orgLibraryBytes: 0,
       })
     })
   })
@@ -137,7 +140,12 @@ describe('orgCounterTotals', () => {
       [hostRef('fresh')],
       '2026-07',
     )
-    expect(totals).toEqual({ emailSends: 0, workflowRuns: 0, actionRuns: 0 })
+    expect(totals).toEqual({
+      emailSends: 0,
+      workflowRuns: 0,
+      actionRuns: 0,
+      orgLibraryBytes: 0,
+    })
     expect(Number.isFinite(totals.emailSends)).toBe(true)
   })
 
@@ -215,7 +223,102 @@ describe('orgCounterTotals', () => {
     const firestore = fakeFirestore({})
     const spy = jest.spyOn(firestore, 'getAll')
     const totals = await orgCounterTotals(firestore, [], '2026-07')
-    expect(totals).toEqual({ emailSends: 0, workflowRuns: 0, actionRuns: 0 })
+    expect(totals).toEqual({
+      emailSends: 0,
+      workflowRuns: 0,
+      actionRuns: 0,
+      orgLibraryBytes: 0,
+    })
     expect(spy).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The org LIBRARY's stored bytes (AGL-1473). Same defect as the org-scoped
+   * mail above, one scope over: `resolveMediaScope` sends an org DAM upload to
+   * `orgs/{id}/counters/media` and every consumer that turns bytes into money
+   * summed host counters only, so those bytes were gated at upload and then
+   * dropped before invoicing.
+   *
+   * DIFFERENT UNIT from the three counts beside it, and named so: BYTES,
+   * cumulative, read off the counter's `bytes` field rather than a `YYYY-MM`
+   * one. It rides this helper because it rides the same `getAll` — not because
+   * it is the same kind of number.
+   */
+  describe('org-library storage bytes', () => {
+    it('reads the org library counter’s `bytes`, not a month field', async () => {
+      const totals = await orgCounterTotals(
+        fakeFirestore({
+          siteA: { emailSends: { '2026-07': 12 } },
+          // A month key sitting next to `bytes` is the trap: reading `month`
+          // here would silently report 0 for every org in the world.
+          'org:org-1': { media: { bytes: 25_953_123, '2026-07': 9 } },
+        }),
+        [hostRef('siteA')],
+        '2026-07',
+        orgRef('org-1'),
+      )
+      expect(totals.orgLibraryBytes).toBe(25_953_123)
+    })
+
+    it('does not fold org bytes into any of the three counts', async () => {
+      const totals = await orgCounterTotals(
+        fakeFirestore({
+          siteA: { emailSends: { '2026-07': 12 } },
+          'org:org-1': { media: { bytes: 4_096 } },
+        }),
+        [hostRef('siteA')],
+        '2026-07',
+        orgRef('org-1'),
+      )
+      // Bytes are not sends. The appended-ref indexing in this helper has
+      // already had one modulo bug (see the note in the source); a second
+      // appended ref landing on `emailSends` would bill an org for its photos
+      // as if it had emailed them.
+      expect(totals.emailSends).toBe(12)
+      expect(totals.workflowRuns).toBe(0)
+      expect(totals.actionRuns).toBe(0)
+    })
+
+    it('reads zero for an org that has never used its library', async () => {
+      const totals = await orgCounterTotals(
+        fakeFirestore({ siteA: {}, 'org:org-1': {} }),
+        [hostRef('siteA')],
+        '2026-07',
+        orgRef('org-1'),
+      )
+      expect(totals.orgLibraryBytes).toBe(0)
+      expect(Number.isFinite(totals.orgLibraryBytes)).toBe(true)
+    })
+
+    it('reads zero when no org ref is supplied at all', async () => {
+      const totals = await orgCounterTotals(
+        fakeFirestore({ siteA: { emailSends: { '2026-07': 12 } } }),
+        [hostRef('siteA')],
+        '2026-07',
+      )
+      expect(totals.orgLibraryBytes).toBe(0)
+    })
+
+    it('refuses a corrupt byte count rather than crediting it', async () => {
+      const totals = await orgCounterTotals(
+        fakeFirestore({ siteA: {}, 'org:org-1': { media: { bytes: -1_000 } } }),
+        [hostRef('siteA')],
+        '2026-07',
+        orgRef('org-1'),
+      )
+      expect(totals.orgLibraryBytes).toBe(0)
+    })
+
+    it('reads the same bytes for an org with no hosts at all', async () => {
+      // An org library needs no site. This is the population the host-only sum
+      // could never have seen even in principle.
+      const totals = await orgCounterTotals(
+        fakeFirestore({ 'org:org-1': { media: { bytes: 15_806 } } }),
+        [],
+        '2026-07',
+        orgRef('org-1'),
+      )
+      expect(totals.orgLibraryBytes).toBe(15_806)
+    })
   })
 })

@@ -227,3 +227,43 @@ subscription product, Stripe records them and charges no one.
    fails the build if a *new* route creates or re-prices a subscription
    without resolving the metered price. That spec guards the code; the script
    guards the data.
+
+9. **Org-library storage is measured but not charged** (AGL-1473), until
+   `BILL_ORG_LIBRARY_STORAGE_FROM` names a month.
+
+   The media library has two scopes and the counter follows the scope: a site
+   upload moves `hosts/{id}/counters/media`, an org DAM upload moves
+   `orgs/{id}/counters/media`. **Both are enforced** against the plan's storage
+   cap — the upload route reads the same document it increments. Only the host
+   side was ever summed by `report-usage`, `usage-alerts` and the COGS rollup,
+   so org-library bytes were gated at upload and then dropped before anything
+   priced them. Type-blind: images, PDFs and ZIPs were equally unbilled.
+
+   The measurement is now unconditional. `report-usage` folds the org library
+   into `storageGb` and `costUsd` — those feed `orgMonthlyCogsUsd`, and
+   under-reporting our own cost makes the discount guardrail more generous —
+   and records the split as `orgLibraryStorageGb` plus `orgLibraryBilled` on
+   each `orgs/{id}/usage/{month}` document. `usage-alerts` includes it in the
+   media-storage warning, because a warning is not a charge and the bytes are
+   already enforced.
+
+   | value | behaviour |
+   | -- | -- |
+   | *(unset)* | measured, recorded, **charged to nobody** — DEFAULT |
+   | `YYYY-MM` | that month's invoice and every later one include org-library bytes |
+   | anything else | fails closed: charges nothing |
+
+   ⚠️ **Setting this starts billing for bytes customers have already stored.**
+   It is a month rather than a boolean precisely because the rollup can be
+   re-run for any closed month — a boolean flipped mid-September would
+   re-price a January re-run at January's accumulated bytes. Every month before
+   the configured one bills exactly what it billed the first time; that is a
+   property of the mechanism, not of anyone's care, and
+   `apps/console/utils/usage-metering.spec.ts` pins it.
+
+   **Measured 2026-08-13, against production:** four orgs hold **24.8 MB** of
+   org-scope media between them, 99.9% of it in one *enterprise* org — which
+   does not meter infra overage at all. The two `starter` orgs holding any are
+   five orders of magnitude below their 2 GB included band. So turning this on
+   today changes **no org's bill by a single cent**, which makes now the
+   cheapest moment it will ever be to turn on.

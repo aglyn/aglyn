@@ -1499,6 +1499,13 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     customMeta: Array<{ key: string; value: string }>
     /** Scope tokens being edited (AGL-1045); org library only. */
     visibleTo: string[]
+    /**
+     * True when the file stores NO scope (AGL-1480) — as opposed to storing
+     * `['org']`. The drawer used to render the two identically, and this is
+     * the most-travelled of the three surfaces that did, so it is the one
+     * that taught the most people a file was shared when it was not.
+     */
+    scopeUnset: boolean
   } | null>(null)
   const handleEditorSave = useCallback(async () => {
     if (!editor) return
@@ -1518,9 +1525,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     const metaChanged =
       JSON.stringify(Object.entries(nextMeta).sort()) !==
       JSON.stringify(Object.entries(prevMeta).sort())
-    const previousScope: string[] = Array.isArray(editor.media?.visibleTo)
-      ? editor.media.visibleTo
-      : [Aglyn.ORG_SCOPE_TOKEN]
+    /**
+     * What the document actually carries, `[]` when it carries nothing
+     * (AGL-1480) — matching the seed `onDetails` puts in the drawer, through
+     * the same helper.
+     *
+     * The pairing is the whole safety property here. Both sides used to
+     * substitute `[ORG_SCOPE_TOKEN]`, so an unset file compared equal to
+     * itself and merely LOOKING at it wrote nothing; the damage was confined
+     * to the screen. Fixing the seed alone would have made `scopeChanged`
+     * true for every unset file the moment its drawer opened, turning a lie
+     * on screen into a write nobody asked for — and `set-scope` cascades. So
+     * these two move together or not at all.
+     *
+     * `[]` is also the honest previous value for the OTHER direction: a
+     * deliberate save of exactly `['org']` on an unset file used to compare
+     * equal to the default and be dropped, which is the one save this dialog
+     * most needs to land.
+     */
+    const previousScope: string[] = Aglyn.storedScope(editor.media?.visibleTo) ?? []
     const scopeChanged =
       JSON.stringify([...previousScope].sort()) !==
       JSON.stringify([...editor.visibleTo].sort())
@@ -2036,11 +2059,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * inverse of the truth. Nothing downstream may re-introduce that
    * substitution — it is the reason a folder tree could be missing from
    * every host for three weeks with the sharing dialog saying "All sites".
+   *
+   * Through the shared helper since AGL-1480: this component had written the
+   * substitution out longhand THREE times, and fixing the two somebody
+   * happened to name left the third — the details drawer, one click from
+   * every card — still saying "All sites".
    */
-  const scopeOfMedia = useCallback((media: any): string[] | null => {
-    const stored = Array.isArray(media?.visibleTo) ? media.visibleTo : null
-    return stored?.length ? stored : null
-  }, [])
+  const scopeOfMedia = useCallback(
+    (media: any): string[] | null => Aglyn.storedScope(media?.visibleTo),
+    [],
+  )
 
   const openSelectionScope = useCallback(() => {
     const ids = [...selected]
@@ -3119,7 +3147,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                       ? () => requestCardReplace(media)
                       : undefined
                   }
-                  onDetails={() =>
+                  onDetails={() => {
+                    // The third AGL-1466 surface, and the busiest (AGL-1480).
+                    // This seeded the "Shared with" control with the org token
+                    // whenever the field was absent, so the drawer said "All
+                    // sites" about a file both enforcement layers hide from
+                    // every one of them. `?? []` and the flag below say the
+                    // true thing instead; persisting the default on open was
+                    // the other option and AGL-1466 ruled it out — opening a
+                    // drawer would write, the write cascades, the AGL-1042
+                    // rules refuse it from anyone who is not org-wide, and it
+                    // repairs only what somebody happens to look at.
+                    const storedScope = Aglyn.storedScope(media.visibleTo)
                     setEditor({
                       id: media.$id as string,
                       media,
@@ -3131,11 +3170,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                       customMeta: Object.entries(
                         (media as any).customMetadata ?? {},
                       ).map(([key, value]) => ({ key, value: String(value) })),
-                      visibleTo: Array.isArray((media as any).visibleTo)
-                        ? (media as any).visibleTo
-                        : [Aglyn.ORG_SCOPE_TOKEN],
+                      visibleTo: storedScope ?? [],
+                      scopeUnset: !storedScope,
                     })
-                  }
+                  }}
                   onDelete={handleDelete(media)}
                   // Org library only, and org-wide members only (AGL-1051).
                   // A host's own library is already unreachable from other
@@ -3333,19 +3371,40 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               </Typography>
               {viewerOrgWide ? (
                 <>
+                  {/*
+                    The state this drawer used to hide (AGL-1480), said in
+                    the words the folder dialog already uses. It costs a
+                    sentence and it is the difference between someone
+                    reading "All sites" off a file no site can see and
+                    someone being told to choose.
+                  */}
+                  {editor?.scopeUnset ? (
+                    <Alert severity="warning" sx={{ mb: 1 }}>
+                      {'This file has never been shared. Nothing is stored, ' +
+                        'so it is hidden from every site and any page using ' +
+                        'it there renders nothing. Choose who it is shared ' +
+                        'with to fix that.'}
+                    </Alert>
+                  ) : null}
                   <Select
                     size="small"
                     fullWidth
                     value={
                       (editor?.visibleTo ?? []).includes(Aglyn.ORG_SCOPE_TOKEN)
                         ? 'org'
-                        : 'hosts'
+                        : editor?.scopeUnset
+                          ? 'unset'
+                          : 'hosts'
                     }
                     onChange={(event) =>
                       setEditor((prev) =>
                         prev
                           ? {
                               ...prev,
+                              // Any choice ends the unset state — from here
+                              // the control shows what was picked, not what
+                              // was (not) stored.
+                              scopeUnset: false,
                               visibleTo:
                                 event.target.value === 'org'
                                   ? [Aglyn.ORG_SCOPE_TOKEN]
@@ -3358,10 +3417,22 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                       )
                     }
                   >
+                    {/*
+                      A real sentinel, never '' — MUI cannot hold an empty
+                      string as a selected value. Rendered only while unset
+                      and disabled, so the control cannot be set back into
+                      "nobody has decided".
+                    */}
+                    {editor?.scopeUnset ? (
+                      <MenuItem value="unset" disabled>
+                        {'Not shared with any site'}
+                      </MenuItem>
+                    ) : null}
                     <MenuItem value="org">{'All sites'}</MenuItem>
                     <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
                   </Select>
-                  {!(editor?.visibleTo ?? []).includes(Aglyn.ORG_SCOPE_TOKEN) ? (
+                  {!editor?.scopeUnset &&
+                  !(editor?.visibleTo ?? []).includes(Aglyn.ORG_SCOPE_TOKEN) ? (
                     <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {orgHostList.map((host) => {
                         const token = Aglyn.hostScopeToken(host.$id)
@@ -3393,7 +3464,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 </>
               ) : (
                 <Typography variant="body2">
-                  {Aglyn.describeScope(editor?.visibleTo, hostNameById)}
+                  {/*
+                    A scoped member cannot fix this — the AGL-1042 rules deny
+                    them the write — but they are the ones who notice the file
+                    missing from their site, so they get the reason rather
+                    than `describeScope`'s "No sites", which reads like a
+                    setting somebody chose (AGL-1480).
+                  */}
+                  {editor?.scopeUnset
+                    ? 'Never shared — hidden from every site'
+                    : Aglyn.describeScope(editor?.visibleTo, hostNameById)}
                 </Typography>
               )}
             </Box>

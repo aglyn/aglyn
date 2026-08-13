@@ -22,6 +22,8 @@ import {
   type ContactSource,
   contactMatchesSegment,
   type HostContact,
+  newResourceScopeFields,
+  ORG_SCOPE_TOKEN,
 } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -208,6 +210,22 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
           name,
           tags: filterSegment.tags ?? [],
           sources: filterSegment.sources ?? [],
+          // `contactSegments` is in SCOPED_COLLECTIONS and was the one
+          // member of it with no `array-contains-any` reader and no rules
+          // `hasAny` — the rules gate it on `isOrgWideMember()` and
+          // `campaign-send` checks it with `visibleToHost`, which passes on
+          // a missing field. So nothing broke, which is precisely why this
+          // went unnoticed (AGL-1478): a collection listed as scoped that
+          // nothing enforces is a trap set for whoever wires up the first
+          // scoped read, and they would inherit every segment ever saved
+          // already broken. Stamped at creation instead, like its siblings.
+          //
+          // Org-wide, unconditionally: `useOrgDataScope` resolves to
+          // `['orgs', orgId]` or to null, AGL-1061 having removed the
+          // `hosts/{hostId}` branch after counting zero documents there.
+          // A segment is a saved filter over org contacts, so it is exactly
+          // as visible as they are.
+          ...newResourceScopeFields([ORG_SCOPE_TOKEN]),
           createdAt: new Date(),
         },
       )

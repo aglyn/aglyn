@@ -68,21 +68,27 @@ Deletion is separate from canceling and is the only thing that **removes your
 data**. It's intentional and reversible for a short window:
 
 1. **Request deletion** — an owner starts it from the organization settings; you
-   confirm by typing the organization name. We recommend exporting first.
+   confirm by typing the organization name. **Export anything you want to keep
+   before you start** (Setup → Backup & restore) — the hold is the window for
+   it, and nothing is kept for you afterwards.
 2. **A hold period** follows the request. During the hold nothing is deleted and
    you can **cancel the request** to fully restore.
-3. **After the hold**, a final export bundle is produced and the organization —
-   its sites, files, datasets, and account records — is permanently erased. This
-   step is irreversible.
+3. **After the hold**, the organization — its sites, files, datasets, and
+   account records — is permanently erased. This step is irreversible, and we
+   keep no copy of the erased data. What we retain is an internal record that
+   the erasure happened: which organization, when it was requested, and how
+   many sites, members and credentials were removed.
 
 Deletion covers your organization's sites and their stored files and data. If you
 own an organization that still has **other members**, transfer or remove them
 first — a shared organization isn't deleted out from under its members.
 
 :::info GDPR / right to erasure
-You can request erasure of your personal data at any time. Deletion produces a
-final data export and then permanently removes your records. Contact support if
-you need an erasure completed outside the self-serve flow.
+You can request erasure of your personal data at any time. Deletion permanently
+removes your records and leaves us with no copy of them — only a record that the
+erasure was carried out, which is itself kept for a limited period. Export
+anything you need during the hold. Contact support if you need an erasure
+completed outside the self-serve flow.
 :::
 
 ## Related

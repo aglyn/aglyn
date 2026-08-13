@@ -216,8 +216,8 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
       title: 'Delete this organization?',
       description:
         "After a 7-day hold, this organization's sites, files, and data " +
-        'are permanently erased — a final export is produced first. You can ' +
-        'cancel any time during the hold.',
+        'are permanently erased and we keep no copy. Export anything you ' +
+        'want during the hold — you can also cancel any time before it ends.',
       confirmationText: 'Request deletion',
       confirmationButtonProps: { color: 'error' },
     })
@@ -826,8 +826,8 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                 <Typography variant="body2" color="text.secondary">
                   {'Permanently delete this organization and everything in ' +
                     'it — sites, files, datasets, and members. Nothing is ' +
-                    'removed for 7 days (a final export is produced and you ' +
-                    'can cancel), then erasure is irreversible. Export ' +
+                    'removed for 7 days and you can cancel, then erasure is ' +
+                    'irreversible and we keep no copy of it. Export ' +
                     'anything you want to keep first.'}
                 </Typography>
                 <TextField

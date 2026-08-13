@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { createResourceUid, type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  createResourceUid,
+  newResourceScopeFields,
+  ORG_SCOPE_TOKEN,
+  type PluginApiHandler,
+  type ScopeToken,
+} from '@aglyn/aglyn/server'
 import {
   applyArtifactUpdate,
   planArtifactUpdate,
@@ -91,6 +97,30 @@ interface Target {
   write: (content: any) => Record<string, unknown>
   /** Fields that detach this copy from its listing, for `copy` mode. */
   detach?: Record<string, unknown>
+  /**
+   * The AGL-1037 scope the FORKED copy is created with, or `null` when the
+   * destination collection is not scoped (AGL-1478).
+   *
+   * Required, and required on purpose. `copy` mode writes a brand-new
+   * document into `target.ref.parent` — whatever collection that turns out
+   * to be — from a spread of carried fields, and a spread cannot carry a
+   * field the source never had. For `orgs/{orgId}/datasets` that is the
+   * AGL-1466 bug exactly: an unstamped dataset is not "unrestricted", it is
+   * matched by no `array-contains-any` reader in the product, so it renders
+   * on no site and is missing from the workflows and reference-health cards
+   * even for an org-wide member.
+   *
+   * Making it optional with a sensible default would have been the smaller
+   * diff and is the thing that fails: the two `mediaFolders` creators that
+   * each forgot `visibleTo` were both written by people who had the field
+   * in front of them. A sixth artifact type cannot be added here without
+   * answering this, which is the only guarantee that survives a stranger.
+   *
+   * `null` is a real answer, not an escape hatch: components live in
+   * `hosts/{hostId}/components` and layouts in `hosts/{hostId}/templates`,
+   * both private to their host by construction and neither carrying a scope.
+   */
+  forkScope: readonly ScopeToken[] | null
 }
 
 const trimChanges = (changes: ArtifactChange[]): ArtifactChange[] =>
@@ -201,6 +231,8 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
           marketplace: firebaseAdmin.firestore.FieldValue.delete(),
           detachedFrom: { listingId, version: installedVersion },
         },
+        // `hosts/{hostId}/components` is private to its host; no scope.
+        forkScope: null,
       }
     } else if (artifactType === 'layout') {
       const existing = await hostRef
@@ -228,6 +260,8 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
           source: { type: 'workspace' },
           detachedFrom: { listingId, version: installedVersion },
         },
+        // `hosts/{hostId}/templates` is private to its host; no scope.
+        forkScope: null,
       }
     } else if (artifactType === 'datasetSchema') {
       if (!orgId) {
@@ -275,6 +309,7 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         additiveOnly: summary.additiveOnly,
         recordCount: records?.data().count ?? 0,
       }
+      const installedScope = doc.get('visibleTo')
       target = {
         ref: doc.ref,
         current,
@@ -283,6 +318,16 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
           // The v1 flat list the older editor still reads, kept in step.
           fields: content?.order ?? [],
         }),
+        // A fork INHERITS the copy it forked from, never a fresh default: a
+        // dataset restricted to one client's site must not reappear org-wide
+        // because somebody took a publisher update as a separate copy. An
+        // absent scope reads as org-wide everywhere else (`visibleToHost`),
+        // so it does here. A stored empty array — "visible to nobody" — is
+        // passed through and throws at the write rather than being widened,
+        // which is the right direction to fail in.
+        forkScope: Array.isArray(installedScope)
+          ? (installedScope as ScopeToken[])
+          : [ORG_SCOPE_TOKEN],
       }
     } else if (artifactType === 'theme') {
       // A theme lives on the host document itself, so there is no artifact doc
@@ -302,6 +347,10 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         // No `detach`: a site has exactly one theme, so "install as a separate
         // copy" has nowhere to put the second one. Merge is the only safe way
         // to take a theme update, and the preview says so.
+        //
+        // A theme is a FIELD on the host document, so there is no document to
+        // scope even if it could fork.
+        forkScope: null,
       }
     } else if (artifactType === 'template') {
       // A published template bundle's screens carry no stable identity — only a
@@ -473,6 +522,14 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       // "new copy" is a whole new dataset, which consumes org quota and lands
       // empty — exactly what the install route already does, with the quota
       // check this one does not have.
+      //
+      // This return is also, today, the only thing keeping the fork below
+      // from creating an unstamped `orgs/{orgId}/datasets` document
+      // (AGL-1478): a dataset never reaches it because it has no `detach`.
+      // That is a guard by accident, three statements away from the write
+      // and phrased as a quota argument — give `datasetSchema` a `detach`
+      // for any reason and the scope hole opens with it. `Target.forkScope`
+      // is the guard that stays true whichever way this branch goes.
       return res.status(400).json({
         error:
           artifactType === 'theme'
@@ -510,6 +567,12 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       ...(carried.kind ? { kind: carried.kind } : {}),
       displayName: String(listing.displayName ?? carried.displayName ?? 'Untitled'),
       ...(listing.description ? { description: listing.description } : {}),
+      // Not part of the `carried` spread above, deliberately: a spread
+      // cannot carry a field the source is missing, and "the source had one"
+      // is not the question a scoped collection asks. `Target.forkScope`
+      // makes every artifact type answer it (AGL-1478), and this throws
+      // rather than storing a scope nobody can see through.
+      ...newResourceScopeFields(target.forkScope),
       ...target.write(incoming),
       ...(artifactType === 'component'
         ? {

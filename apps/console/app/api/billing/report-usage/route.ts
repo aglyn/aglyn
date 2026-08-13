@@ -26,6 +26,7 @@ import {
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import {
+  billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
   type HostUsageSnapshot,
 } from '../../../../utils/usage-metering'
@@ -322,7 +323,9 @@ async function hostUsage(
  * Monthly usage rollup + metered billing report (AGL-41, org-keyed since
  * the AGL-238 cutover). Invoke from a scheduler (Vercel cron / GitHub
  * Action) with `x-cron-secret`: sums host counters (storage bytes, month
- * page views, month form submissions), prices whatever exceeds the plan's
+ * page views, month form submissions) plus the ORG LIBRARY's stored bytes
+ * (AGL-1473 — an org DAM upload counts against `orgs/{id}/counters/media` and
+ * belongs to no site), prices whatever exceeds the plan's
  * included bands at cost × 1.30 (AGL-1280), writes audit
  * rollups per tenant (legacy) and per org, and — when Stripe is
  * configured — sends one idempotent Billing Meter event per ORG-month
@@ -437,16 +440,56 @@ async function handler(request: Request): Promise<Response> {
         // `orgRef` since AGL-1438: invites, member-added mail, the welcome
         // email and these very usage summaries belong to the org and to no
         // site, so they are counted at `orgs/{id}/counters` and were invisible
-        // to a sum taken over hosts alone.
+        // to a sum taken over hosts alone. Since AGL-1473 it also carries the
+        // org LIBRARY's stored bytes, which had the identical defect.
         orgCounterTotals(firestore, hostRefs, month, orgRef),
       ])
       // One read of the org doc for every quota decision below — the four
       // meters must agree about which plan they are pricing against.
       const orgData = orgSnapshot.data() as any
+      // The ORG LIBRARY as one more storage snapshot (AGL-1473).
+      //
+      // `resolveMediaScope` sends an org DAM upload to
+      // `orgs/{id}/counters/media` and a site upload to
+      // `hosts/{id}/counters/media`. Both are enforced against
+      // `storagePerHostMb`; only the host side was ever summed here, so
+      // org-library bytes were gated and then dropped before pricing.
+      //
+      // It is a SNAPSHOT rather than an addition to some host's, because the
+      // org library belongs to no site — the same reason `orgCounterTotals`
+      // reads one ref for the whole org rather than one per host. Page views
+      // and form submissions are zero: a library serves no pages.
+      const orgLibrary: HostUsageSnapshot = {
+        storageBytes: counterTotals.orgLibraryBytes,
+        pageViews: 0,
+        formSubmissions: 0,
+      }
       // Only usage BEYOND the plan's included storage/bandwidth/form bands
       // is billed (AGL-1280) — `billedCents` is the excess; `costUsd` stays
       // the gross figure the COGS model and staff views read.
-      const estimate = estimateMonthlyUsageCost(usage, orgData)
+      //
+      // TWO estimates, and the difference between them is exactly the org
+      // library. `estimate` is the TRUTH — every byte the org stores — and is
+      // what `storageGb` and `costUsd` are written from, because those feed
+      // `orgMonthlyCogsUsd`: org-library bytes cost us real money whether or
+      // not we pass the cost on, and under-reporting our own COGS makes the
+      // discount guardrail more generous, which is the direction that loses
+      // money silently.
+      //
+      // `billedEstimate` is what an INVOICE may see, and it excludes the org
+      // library until `BILL_ORG_LIBRARY_STORAGE_FROM` names a month at or
+      // before this one. Charging for bytes stored for months is Zach's call,
+      // not a side effect of fixing the sum. Once the switch is set the two
+      // estimates are the same figure and the branch costs nothing — it is a
+      // pure function over numbers already in hand, no extra read.
+      const estimate = estimateMonthlyUsageCost([...usage, orgLibrary], orgData)
+      const orgLibraryBilled = billsOrgLibraryStorage(
+        month,
+        process.env.BILL_ORG_LIBRARY_STORAGE_FROM,
+      )
+      const billedEstimate = orgLibraryBilled
+        ? estimate
+        : estimateMonthlyUsageCost(usage, orgData)
       const dataStorageMb =
         Math.round((datasetBytes / (1024 * 1024)) * 10) / 10
       // Msgpack bytes of the decoded node maps — see `nodesBytes`. One unit
@@ -496,7 +539,7 @@ async function handler(request: Request): Promise<Response> {
         resolveOrgEntitlements(orgData).emailSendsPerMonth,
       )
       const billedCents =
-        estimate.billedCents +
+        billedEstimate.billedCents +
         Math.round(dataQuota.overageMonthlyUsd * 100) +
         Math.round(apiQuota.overageMonthlyUsd * 100) +
         Math.round(contactQuota.overageMonthlyUsd * 100)
@@ -542,8 +585,23 @@ async function handler(request: Request): Promise<Response> {
           formSubmissions: estimate.formSubmissions,
           costUsd: estimate.costUsd,
           // The excess only, at cost (AGL-1280) — `billedCents` is this
-          // number marked up, plus the three plan-priced overages.
-          billableCostUsd: estimate.billableCostUsd,
+          // number marked up, plus the three plan-priced overages. Read off
+          // `billedEstimate` so it stays the pre-markup twin of what was
+          // actually charged; `storageGb` and `costUsd` above are the truth.
+          billableCostUsd: billedEstimate.billableCostUsd,
+          // The org LIBRARY's share of `storageGb` (AGL-1473), so the split is
+          // legible on the audit doc rather than something you rederive by
+          // subtracting host counters. RECORDED ALWAYS — a month that did not
+          // bill for these bytes still has to say how many there were, which
+          // is what makes the first billed month a comparison rather than a
+          // surprise.
+          orgLibraryStorageGb:
+            Math.max(0, counterTotals.orgLibraryBytes) / (1024 * 1024 * 1024),
+          // Whether THIS month's `billedCents` included them. The audit doc
+          // has to answer "was this month charged for the org library" without
+          // anyone having to know what an environment variable held at the
+          // moment the cron ran.
+          orgLibraryBilled,
           siteSizeMb,
           // A LOWER BOUND when true — the sweep hit `SITE_SIZE_DOC_CEILING`
           // (AGL-1371). Nothing prices from site size today; anything that

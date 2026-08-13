@@ -165,3 +165,67 @@ export function addPlan(
   totals[key].written += plan.writes.length
   totals[key].skipped += plan.skipped
 }
+
+/** What a dry run found: documents an enforced read cannot see. */
+export interface ScopeDrift {
+  /** Unstamped documents per scoped collection; absent means none. */
+  byCollection: Partial<Record<ScopedCollection, number>>
+  /**
+   * Member docs whose `scopeTokens` projection is stale — the other side of
+   * the same match. Counted apart from the resources because it points at a
+   * different repair: the reader is wrong, not the resource.
+   */
+  members: number
+  /** Everything above. Non-zero is the alert condition. */
+  total: number
+}
+
+/**
+ * Reads a DRY RUN's totals as drift (AGL-1478).
+ *
+ * On a dry run `written` is what the backfill *would* have written, which
+ * is exactly the count of documents carrying no `visibleTo` — and both
+ * enforcement layers fail closed on that, so each one is invisible to every
+ * scoped read rather than merely unrestricted.
+ *
+ * This is the number that was always available and never looked at. The
+ * backfill has been correct since AGL-1040 and nothing invoked it, so
+ * AGL-1466's 19 unscoped folders were found by a person noticing a file
+ * count looked wrong. Turning the plan into an alert is the fix; the
+ * repair was never the missing part.
+ */
+export function scopeDrift(totals: ScopeBackfillTotals): ScopeDrift {
+  const byCollection: Partial<Record<ScopedCollection, number>> = {}
+  let total = 0
+  for (const collection of SCOPED_COLLECTIONS) {
+    const count = totals[collection].written
+    if (count > 0) {
+      byCollection[collection] = count
+      total += count
+    }
+  }
+  return {
+    byCollection,
+    members: totals.members.written,
+    // A stale member projection counts toward the alert: the collaborator
+    // reading with the wrong token set is the same failure seen from the
+    // other end, and it is equally invisible from the console.
+    total: total + totals.members.written,
+  }
+}
+
+/**
+ * The alert sentence, worst collection first — empty when there is no
+ * drift, so a caller can use it as the "should I shout" test as well as the
+ * message. The counts ARE the product: "8 of 9 folders unscoped" would have
+ * been AGL-1466 at a glance, three weeks before anyone opened the DAM from
+ * a host and saw 114 files under "No folder".
+ */
+export function describeScopeDrift(drift: ScopeDrift): string {
+  const parts = Object.entries(drift.byCollection)
+    .sort((a, b) => b[1] - a[1])
+    .map(([collection, count]) => `${count} ${collection}`)
+  if (drift.members) parts.push(`${drift.members} member scopeTokens`)
+  if (!parts.length) return ''
+  return `${parts.join(', ')} — see docs/SCOPE_DRIFT.md`
+}

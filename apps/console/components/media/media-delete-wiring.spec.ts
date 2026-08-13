@@ -43,9 +43,19 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const SOURCE = readFileSync(
-  join(__dirname, 'media-library.component.tsx'),
-  'utf8',
+import { code } from '../../specs/source-text'
+
+/**
+ * Comments removed, through the shared bounded stripper (AGL-1479).
+ *
+ * This file used to assert over the raw text, which is the other half of the
+ * same illness its siblings had: the drawer's delete control carries a comment
+ * that NAMES what it replaced, so "the drawer offers a delete control" could be
+ * satisfied by the sentence explaining that it now does.
+ */
+const SOURCE = code(
+  readFileSync(join(__dirname, 'media-library.component.tsx'), 'utf8'),
+  'media-library.component.tsx',
 )
 
 /** The body of `handleDelete`, from its declaration to the closing dep array. */

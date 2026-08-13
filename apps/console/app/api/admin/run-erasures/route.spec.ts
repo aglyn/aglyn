@@ -121,7 +121,7 @@ describe('the erasure runner batch (AGL-1455)', () => {
     mockDue = ['org-a', 'org-b']
     mockEraseOrg.mockImplementation(async (orgId: string) =>
       orgId === 'org-a'
-        ? { ok: false, skippedReason: 'export-failed' }
+        ? { ok: false, skippedReason: 'hold-active' }
         : { ok: true },
     )
 
@@ -130,7 +130,7 @@ describe('the erasure runner batch (AGL-1455)', () => {
     expect(status).toBe(200)
     expect(payload.erased).toEqual(['org-b'])
     expect(payload.skipped).toEqual([
-      { orgId: 'org-a', reason: 'export-failed' },
+      { orgId: 'org-a', reason: 'hold-active' },
     ])
     expect(payload.scanned).toBe(2)
   })

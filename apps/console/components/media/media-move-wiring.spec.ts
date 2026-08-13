@@ -39,6 +39,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { code } from '../../specs/source-text'
+
 const LIBRARY = readFileSync(
   join(__dirname, 'media-library.component.tsx'),
   'utf8',
@@ -49,30 +51,17 @@ const ROUTE = readFileSync(
 )
 
 /**
- * Source with comments removed. Required rather than tidy: the comments
- * below these fixes NAME the shape they replaced, so every negative
- * assertion here would otherwise pass against prose.
+ * Comments removed. Required rather than tidy: the comments below these fixes
+ * NAME the shape they replaced, so every negative assertion here would
+ * otherwise pass against prose.
  *
- * A block comment is only recognised at the start of a line or inside a JSX
- * `{/* … *\/}` wrapper, NOT anywhere a `/*` happens to appear. The library
- * contains `accept="image/*"`, and a naive opener treats that MIME type as
- * the start of a comment and deletes everything up to the next `*\/` — some
- * nine hundred lines, including one of the two pickers this file is about. A
- * negative assertion over a file with a hole in it passes for the wrong
- * reason, which is the failure mode these specs exist to prevent.
+ * This helper used to live in this file, and three sibling specs carried a
+ * copy that read `accept="image/*"` as a comment opener and deleted 16,383
+ * characters of the library — including one of the two pickers this file is
+ * about. It is now shared, and bounded, in `specs/source-text.ts` (AGL-1479).
  */
-function code(source: string): string {
-  return source
-    // A JSX comment, and only a JSX comment: the body may not itself contain
-    // `*/`, or `interface Props {` followed by a JSDoc field comment matches
-    // as far as the next `*/ }` — 120,000 characters of it.
-    .replace(/\{\s*\/\*(?:[^*]|\*(?!\/))*\*\/\s*\}/g, '')
-    .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1')
-}
-
-const CODE = code(LIBRARY)
-const ROUTE_CODE = code(ROUTE)
+const CODE = code(LIBRARY, 'media-library.component.tsx')
+const ROUTE_CODE = code(ROUTE, 'app/api/media/folders/route.ts')
 
 /** The body of a `const <name> = useCallback(` declaration. */
 function callbackBody(name: string): string {

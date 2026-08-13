@@ -26,10 +26,12 @@ import {
 /**
  * Self-serve organization deletion (AGL-485). This route only sets/clears
  * `orgs/{orgId}.erasureRequestedAt` — the same flag staff set in the admin
- * console. Nothing is deleted here: after a 7-day hold the erasure runs via
- * `tools/scripts/erase-tenant.mjs --org <orgId>` (final export, then hard
- * delete of the org, its sites, files, Storage, and Stripe customer). The
- * request is reversible until the hold elapses, so an owner can cancel.
+ * console. Nothing is deleted here: after a 7-day hold the erasure runs from
+ * the `/api/admin/run-erasures` cron via `eraseOrg`, which hard-deletes the
+ * org, its sites, files, Storage, credentials and Stripe customer and keeps
+ * no copy of any of it (AGL-1443) — the record is an `adminAudit` row of ids
+ * and counts. The request is reversible until the hold elapses, so an owner
+ * can cancel.
  *
  * Owner-only — deleting an organization is more consequential than admin
  * management, so only the org's `ownerUid` may request or cancel it.

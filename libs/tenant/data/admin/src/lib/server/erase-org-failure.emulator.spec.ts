@@ -31,30 +31,35 @@
  * and fails identically, forever, while the customer who requested the
  * erasure is told nothing.
  *
- * Two failure shapes, because they are not the same incident:
+ * Two shapes, because they are not the same incident:
  *
- *  1. The export fails. Nothing has been deleted and nothing has been
- *     written — the workspace is exactly as it was.
- *  2. A step AFTER the export write throws (`eraseOrgApiKeys`,
- *     `eraseOrgSsoDomains`, `eraseOrgIdempotencyKeys`, `recursiveDelete` —
- *     none of them guarded). This is the worst state the system can be in:
- *     the workspace survives AND a complete dump of it is already sitting in
- *     the bucket, with some of its credentials already destroyed. Nothing
- *     recorded that at all.
+ *  1. **The bucket refuses every write.** This used to be a failure at all —
+ *     `eraseOrg` wrote a full export first and returned
+ *     `skippedReason: 'export-failed'` if it could not, deleting nothing.
+ *     AGL-1443 removed that write, so a hostile bucket no longer has an
+ *     erasure to stop and this block asserts the ending is gone rather than
+ *     recorded. It is the executable form of AGL-1455 half 1: the unbounded
+ *     in-memory export that made a large workspace's erasure fail silently
+ *     cannot fail, because it does not run.
+ *  2. **A step throws** (`eraseOrgApiKeys`, `eraseOrgSsoDomains`,
+ *     `eraseOrgIdempotencyKeys`, `recursiveDelete` — none of them guarded).
+ *     The workspace survives with some of its credentials already destroyed,
+ *     and nothing recorded that at all. This one is unchanged and still a
+ *     defect; what it no longer leaves behind is a complete dump of the
+ *     surviving workspace, which is why `mockSavedPaths` is now asserted
+ *     EMPTY where it used to be asserted non-empty.
  *
  * The audit row must carry ids, counts, a step name and a timestamp — and no
- * customer data. The surrounding issue (AGL-1443) is that this path already
- * writes too much, so the fix for the trace must not become a second copy of
- * the payload. `PII_PROBE` is seeded into the org tree and asserted absent
+ * customer data. That is the surrounding issue (AGL-1443) reappearing inside
+ * its own fix, so `PII_PROBE` is seeded into the org tree and asserted absent
  * from the row.
  *
  * Storage is STUBBED, deliberately and non-negotiably, as in every other
  * erasure spec: there is no Storage emulator and the admin app is initialized
- * with a real service-account credential, so an unstubbed `eraseOrg` writes
- * its export bundle to — and runs `deleteFiles` against — the PRODUCTION
- * bucket. Here the stub is also the instrument: `mockSaveShouldFail` is how
- * the export failure is forced, and `mockSavedPaths` is how the second test
- * proves a complete dump really was written before the throw.
+ * with a real service-account credential, so an unstubbed `eraseOrg` runs
+ * `deleteFiles` against the PRODUCTION bucket. Here the stub is also the
+ * instrument: `mockSaveShouldFail` makes the bucket hostile, and
+ * `mockSavedPaths` records anything that is written despite it.
  *
  * The seed carries no `slug` and no Stripe customer id, and both integrations
  * are disarmed at module load anyway (localhost carries the LIVE Stripe key).
@@ -73,9 +78,9 @@ import { Timestamp, getFirestore, type Firestore } from 'firebase-admin/firestor
 
 const EMULATED = Boolean(process.env.FIRESTORE_EMULATOR_HOST)
 
-/** The org whose export write is forced to reject. */
+/** The org erased while every bucket write is forced to reject. */
 const ORG_EXPORT = 'e2e-erase-failure-export-org'
-/** The org whose org-tree delete is forced to throw, after the export. */
+/** The org whose org-tree delete is forced to throw. */
 const ORG_POST_EXPORT = 'e2e-erase-failure-post-export-org'
 
 const MEMBER_UID = 'e2e-erase-failure-uid'
@@ -99,8 +104,8 @@ if (EMULATED && !getApps().length) {
 
 /**
  * No Storage emulator, and the default app holds a production credential —
- * so every bucket call is a recorder here. `mockSaveShouldFail` forces the
- * export failure; `mockSavedPaths` records what a successful write persisted.
+ * so every bucket call is a recorder here. `mockSaveShouldFail` makes the
+ * bucket hostile; `mockSavedPaths` records anything written despite it.
  */
 let mockSaveShouldFail = false
 const mockSavedPaths: string[] = []
@@ -209,7 +214,7 @@ describeEmulated('an aborted org erasure is recorded durably (AGL-1455)', () => 
     expect(stripeCalls).toEqual([])
   }, 120_000)
 
-  describe('the export write fails', () => {
+  describe('the bucket refuses every write', () => {
     let result: import('./erase').EraseOrgResult
 
     beforeAll(async () => {
@@ -222,8 +227,14 @@ describeEmulated('an aborted org erasure is recorded durably (AGL-1455)', () => 
       }
     }, 120_000)
 
-    it('aborts without deleting anything — the org is still there', async () => {
-      expect(result).toMatchObject({ ok: false, skippedReason: 'export-failed' })
+    it('erases anyway — no Storage write stands between a request and its erasure', async () => {
+      // This is AGL-1455 half 1, closed by subtraction. The export was the
+      // only unbounded work in `eraseOrg`: built whole in memory inside a
+      // 60-second cron, so the LARGER the workspace the likelier the erasure
+      // failed — and it failed by deleting nothing, silently. There is no
+      // streaming exporter, because there is no exporter.
+      expect(result).toMatchObject({ ok: true })
+      expect(result.skippedReason).toBeUndefined()
       const org = await db.collection('orgs').doc(ORG_EXPORT).get()
       const members = await db
         .collection('orgs')
@@ -240,40 +251,43 @@ describeEmulated('an aborted org erasure is recorded durably (AGL-1455)', () => 
         .where('orgId', '==', ORG_EXPORT)
         .get()
       expect([org.exists, members.size, datasets.size, keys.size]).toEqual([
-        true,
-        1,
-        1,
-        1,
+        false,
+        0,
+        0,
+        0,
       ])
     }, 60_000)
 
-    it('THE DEFECT: the failed attempt leaves an adminAudit row', async () => {
+    it('and it is the success row that gets written, naming the request', async () => {
       const rows = await auditRows(ORG_EXPORT)
       expect(rows).toHaveLength(1)
       expect(rows[0]).toMatchObject({
         actorUid: 'cron:run-erasures',
-        action: 'org.erase-failed',
+        action: 'org.erased',
         target: `orgs/${ORG_EXPORT}`,
-        after: { failedStep: 'export', exportWritten: false },
+        before: { hosts: 0, members: 1 },
+        after: { apiKeys: 1 },
       })
-      // Same shape as the success row it stands in for: a timestamp, and the
-      // inventory of what was found.
       expect(rows[0]['at']).toBeTruthy()
-      expect(rows[0]['before']).toMatchObject({ hosts: 0, members: 1 })
+      // `erasures/{orgId}/{requestedMs}.json` used to be the only record of
+      // which request a run fulfilled. It lives in the row now (AGL-1443).
+      expect(
+        (rows[0]['after'] as Record<string, unknown>)['requestedAt'],
+      ).toEqual(expect.any(Number))
     }, 60_000)
 
-    it('records ids and counts, never the content it failed to erase', async () => {
+    it('records ids and counts, never the content it erased', async () => {
       const rows = await auditRows(ORG_EXPORT)
       expect(JSON.stringify(rows)).not.toContain(PII_PROBE)
     }, 60_000)
   })
 
-  describe('a step AFTER the export write throws', () => {
+  describe('a step throws', () => {
     beforeAll(async () => {
       await seed(ORG_POST_EXPORT)
-      // `recursiveDelete` is one of the unguarded post-export steps named in
-      // AGL-1455, and the last one — so the export is on disk and the
-      // credential sweep has already run when it fails. Patched on the
+      // `recursiveDelete` is one of the unguarded steps named in AGL-1455,
+      // and the last one — so the credential sweep has already run when it
+      // fails, which is what makes this a PARTIAL failure. Patched on the
       // instance `eraseOrg` itself resolves (`getFirestore(getApp())`), and
       // restored immediately so the spec's own cleanup still works.
       const real = db.recursiveDelete.bind(db)
@@ -307,17 +321,15 @@ describeEmulated('an aborted org erasure is recorded durably (AGL-1455)', () => 
       expect([org.exists, members.size, datasets.size]).toEqual([true, 1, 1])
     }, 60_000)
 
-    it('and a complete dump of it is already in the bucket', () => {
-      // The half that makes this the worst state the system can be in: the
-      // workspace still exists and its full export has been persisted.
-      expect(
-        mockSavedPaths.filter((path) =>
-          path.startsWith(`erasures/${ORG_POST_EXPORT}/`),
-        ),
-      ).toHaveLength(1)
+    it('and no dump of it is in the bucket', () => {
+      // This assertion used to run the other way: a surviving workspace WITH
+      // its own complete export persisted was the worst state this path could
+      // produce. AGL-1443 made it unreachable — a failed erasure now leaves
+      // the workspace and nothing else.
+      expect(mockSavedPaths).toEqual([])
     }, 60_000)
 
-    it('THE DEFECT: the partial failure is recorded, dump and all', async () => {
+    it('THE DEFECT: the partial failure is recorded', async () => {
       const rows = await auditRows(ORG_POST_EXPORT)
       expect(rows).toHaveLength(1)
       expect(rows[0]).toMatchObject({
@@ -326,15 +338,15 @@ describeEmulated('an aborted org erasure is recorded durably (AGL-1455)', () => 
         target: `orgs/${ORG_POST_EXPORT}`,
         after: {
           failedStep: 'org-tree',
-          exportWritten: true,
-          // The row has to name the object, or nobody can find the dump that
-          // outlived the workspace.
-          exportPath: expect.stringContaining(`erasures/${ORG_POST_EXPORT}/`),
+          // WHICH request is stuck — the row's job now that no object name
+          // carries it (AGL-1443).
+          requestedAt: expect.any(Number),
           // How far it got: the credential is already destroyed.
           apiKeys: 1,
         },
       })
       expect(rows[0]['at']).toBeTruthy()
+      expect(rows[0]['after']).not.toHaveProperty('exportPath')
     }, 60_000)
 
     it('the credential really was destroyed while the org stands', async () => {

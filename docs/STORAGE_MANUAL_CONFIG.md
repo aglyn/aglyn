@@ -115,7 +115,87 @@ resumable upload, which the 200 MB video cap will eventually want. Note that
 header needs it added here first; the spec asserts that coupling in the other
 direction.
 
+### 2. Bucket lifecycle — retention on the artifact prefixes (AGL-1443)
+
+`cloud/media-bucket-lifecycle.json` carries the policy. **The bucket had no
+lifecycle configuration at all before it.**
+
+```bash
+gcloud storage buckets update gs://aglyn-main.appspot.com \
+  --lifecycle-file=cloud/media-bucket-lifecycle.json --project=aglyn-main
+
+# read it back:
+gcloud storage buckets describe gs://aglyn-main.appspot.com \
+  --format="value(lifecycle_config)" --project=aglyn-main
+```
+
+Revert with `--clear-lifecycle`. **`--lifecycle-file` replaces the whole
+config**; like `--cors-file` it does not merge, so the file must always carry
+every rule the bucket should have.
+
+#### Every prefix in this bucket, and what bounds it
+
+| Prefix | Written by | Bounded by |
+| -- | -- | -- |
+| `orgs/{orgId}/…`, `hosts/{hostId}/…` | the DAM and the media routes (`media-scope.ts`) | **Code, never age.** `eraseOrg`/`eraseHost` sweep them. See the warning below. |
+| `users/{uid}/…` | avatar upload | **Code, never age.** `eraseUser` sweeps it. |
+| `adminAudit-archive/{yyyy-MM}/*.jsonl` | `/api/admin/audit-archive` | **`age: 365`** — this rule. |
+| `erasures/{orgId}/*.json` | **nothing, since AGL-1443** | **`age: 30`** — a backstop, not the policy. |
+| `marketplaceListings/{id}/preview` | `libs/plugins/marketplace/.../preview-image.ts` | **Nothing, deliberately.** See below. |
+
+> **A rule here can delete live customer media, and nothing would say which.**
+> Lifecycle matches on age and has no view of Firestore. A Delete rule with no
+> `matchesPrefix`, or one naming `orgs/`, `hosts/` or `users/`, would age out
+> the bytes behind media documents that still exist, across every live
+> workspace. `apps/console/specs/media-bucket-lifecycle.spec.ts` fails the
+> build on either shape.
+
+#### The two periods, and why they are those numbers
+
+**`adminAudit-archive/` — 365 days.** The archiver advertises
+`RETENTION_DAYS = 90`, but it only ever *moved* entries: out of Firestore, into
+this prefix, where nothing reaped them. Rows name the org and some carry
+`email` (`sso-jit/route.ts` writes one). The prefix does not exist in
+production yet — the oldest audit rows are 2026-08-01, so it first materialises
+around **2026-10-30**, which is the deadline on applying this rule. GCS ages an
+object from its own creation and the archive object is created at the *end* of
+the 90-day Firestore window, so 365 is the floor on every entry inside it, not
+an average: an audit entry is retained about **15 months end to end**.
+
+**`erasures/` — 30 days, as a backstop.** `eraseOrg` no longer writes here at
+all. It used to persist a complete verbatim copy of the org tree and every host
+tree — including `webhooks.secret`, `orders.paymentLinkUrl`,
+`screens.protection.passwordHash` and `ssoDomains.token` — on a prefix its own
+storage sweep does not cover. That object is gone rather than shortened: the
+proof that an erasure happened is the `adminAudit` `org.erased` row, which is
+ids and counts, and a governed full copy already exists in the weekly Firestore
+backups (14-week retention, AGL-871). **Zero of these objects were ever created
+in production**, so there is nothing to clean up; the rule exists so a revert or
+a future writer cannot quietly recreate an unbounded prefix.
+
+Both periods are the DPA §11 commitment — *"a limited period, after which it
+will be deleted or de-identified"* — made enforceable. Note that **soft delete
+is on (7 days)**, so nothing here frees bytes or removes an object for a week
+after its rule fires. That is true of a manual delete too.
+
+#### `marketplaceListings/{id}/preview` gets no rule, on purpose
+
+It is the third prefix outside every erasure sweep, and it is **not a retention
+artifact** — it is the live preview image of a published listing, referenced by
+`previewImageUrl` on the listing document. An age-based rule would 404 the
+browse card of a listing that is still for sale. It survives an org erasure
+because the *listing* does, and whether a listing outlives its publisher is
+AGL-1448's Tier 3 product decision (an erased org's listing is something buyers
+paid for). Whatever that decision is, it has to take this object with it —
+deleting the Storage object here without the Firestore document, or the other
+way round, is the AGL-1443 shape again in the opposite direction.
+
 ### Current bucket settings (verified 2026-08-12)
+
+Lifecycle: **none**, as measured on 2026-08-12.
+`cloud/media-bucket-lifecycle.json` ships with AGL-1443 and is **NOT YET
+APPLIED** — run the command in §2. The deadline is ~2026-10-30, when
+`adminAudit-archive/` first materialises.
 
 `gs://aglyn-main.appspot.com` — location `US`, CORS as in
 `cloud/storage-cors.json` (confirmed byte-identical to the live config, and
@@ -133,8 +213,9 @@ evidence; do not close AGL-1408 the same way.
 ## Not converged by `bootstrap-platform.mjs`
 
 `tools/scripts/bootstrap-platform.mjs` deploys rules, Stripe and Vercel env,
-but has no gcloud section — so a fresh project does **not** get this CORS rule.
-Apply it by hand with the command above after bootstrap.
+but has no gcloud section — so a fresh project gets **neither** the CORS rule
+nor the lifecycle policy. Apply both by hand with the commands above after
+bootstrap.
 
 ## Runbooks
 
