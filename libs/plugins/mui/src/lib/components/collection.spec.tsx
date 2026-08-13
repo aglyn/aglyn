@@ -611,6 +611,18 @@ describe('Blocks that render their own Stack keep the node style slice (AGL-1450
         sx={nodeSlice(authored) as never}
       />,
     ],
+    // The AGL-1459 byline is a THIRD arrangement of the same Stack — an
+    // avatar sibling ahead of the line — and is held to the same rule.
+    [
+      'Entry Meta (byline)',
+      <CollectionEntryMeta
+        key="byline"
+        avatarImage="https://cdn.example.com/mark.png"
+        author="The Aglyn Team"
+        date="Jul 2026"
+        sx={nodeSlice(authored) as never}
+      />,
+    ],
     [
       'Share Bar',
       <CollectionShare key="share" sx={nodeSlice(authored) as never} />,
@@ -677,5 +689,245 @@ describe('Blocks that render their own Stack keep the node style slice (AGL-1450
     )
     const root = container.firstElementChild as HTMLElement
     expect(window.getComputedStyle(root).alignItems).toBe('flex-start')
+  })
+})
+
+
+/**
+ * AGL-1459. Entry Meta offered `Date`, `Category`, `Tags` and three `Show *`
+ * switches — no author, no avatar, no date format — so the article frame's
+ * byline (36px round brand mark + `The Aglyn Team` + `· Jul 2026`) could not
+ * be authored at all. Every published post CARRIES an author, so this was a
+ * presentation gap: the value was in the collection and the block could not
+ * render it.
+ *
+ * The date format is the sharp one, and is independent of the other two.
+ * Without it the only way to reach `Jul 2026` was to hardcode a string into
+ * the Date OVERRIDE, which on a *template* stamps one fabricated date onto all
+ * 11 published entries. That is a live trap, not a missing nicety.
+ */
+describe('Entry Meta byline (AGL-1459)', () => {
+  const attribute = (name: string) =>
+    (collectionEntryMetaSchema.attributes ?? []).find(
+      (item) => item.name === name,
+    )
+
+  /**
+   * The block is live on 11 published entries, so the render with none of the
+   * new props set has to be the SAME markup, not merely a similar one.
+   * Recorded off the pre-change implementation, emotion class hashes and all —
+   * those hashes are a function of the sx the block builds, so a default that
+   * quietly gained a property would move them.
+   */
+  describe('the default render is untouched', () => {
+    const BEFORE =
+      '<div class="MuiStack-root css-13mitf6-MuiStack-root">' +
+      '<span class="MuiTypography-root MuiTypography-caption ' +
+      'css-1374baf-MuiTypography-root">1/1/2026 · Guides</span>' +
+      '<div class="MuiChip-root MuiChip-outlined MuiChip-sizeSmall ' +
+      'MuiChip-colorDefault css-9bqyez-MuiChip-root">' +
+      '<span class="MuiChip-label css-19m61dl-MuiChip-label">nextjs</span>' +
+      '</div><div class="MuiChip-root MuiChip-outlined MuiChip-sizeSmall ' +
+      'MuiChip-colorDefault css-9bqyez-MuiChip-root">' +
+      '<span class="MuiChip-label css-19m61dl-MuiChip-label">seo</span>' +
+      '</div></div>'
+
+    it('emits byte-identical markup when no new prop is set', () => {
+      const { container } = render(
+        <CollectionEntryMeta
+          date="1/1/2026"
+          category="Guides"
+          tags="nextjs, seo"
+        />,
+      )
+      expect(container.innerHTML).toBe(BEFORE)
+    })
+
+    it('emits no avatar image and no byline separator of its own', () => {
+      const { container } = render(
+        <CollectionEntryMeta date="1/1/2026" category="Guides" />,
+      )
+      expect(container.querySelectorAll('img')).toHaveLength(0)
+      expect(container.textContent).toBe('1/1/2026 · Guides')
+    })
+
+    it('is what the shipped preset asks for, by name rather than by absence', () => {
+      const preset = collectionPresets.find(
+        (item) =>
+          item.data.componentId === Aglyn.COLLECTION_ENTRY_META_COMPONENT_ID,
+      )
+      const props = preset?.data.props as any
+      // The dropdown opens on the value the block is actually rendering.
+      expect(props?.dateFormat).toBe(Aglyn.COLLECTION_ENTRY_DATE_FORMAT_DEFAULT)
+      // No avatar is seeded: an image nobody chose would be a broken one.
+      expect(props?.avatarImage).toBeUndefined()
+    })
+  })
+
+  describe('Author', () => {
+    it('leads the byline, ahead of the date', () => {
+      render(
+        <CollectionEntryMeta author="The Aglyn Team" date="Jul 2026" />,
+      )
+      expect(screen.getByText('The Aglyn Team · Jul 2026')).toBeTruthy()
+    })
+
+    it('hides behind Show author, like every other part', () => {
+      render(
+        <CollectionEntryMeta
+          author="The Aglyn Team"
+          date="Jul 2026"
+          showAuthor={false}
+        />,
+      )
+      expect(screen.getByText('Jul 2026')).toBeTruthy()
+      expect(screen.queryByText(/Aglyn Team/)).toBeNull()
+    })
+
+    it('collapses an unresolved token on the published site', () => {
+      const { container } = render(
+        <CollectionEntryMeta author="{{entry.author}}" />,
+      )
+      expect(container.textContent).toBe('')
+    })
+
+    it('offers the same override semantics as Date and Category', () => {
+      expect(attribute('author')?.component).toBe(
+        Aglyn.FieldComponentType.TEXT_FIELD,
+      )
+      expect(attribute('author')?.description).toMatch(/blank/i)
+      expect(attribute('author')?.description).toContain('{{entry.author}}')
+      expect(attribute('showAuthor')?.component).toBe(
+        Aglyn.FieldComponentType.SWITCH,
+      )
+    })
+  })
+
+  describe('Avatar', () => {
+    it('renders the chosen brand mark as a 36px round image', () => {
+      const { container } = render(
+        <CollectionEntryMeta
+          avatarImage="https://cdn.example.com/mark.png"
+          author="The Aglyn Team"
+          date="Jul 2026"
+        />,
+      )
+      const image = container.querySelector('img') as HTMLElement
+      expect(image.getAttribute('src')).toBe('https://cdn.example.com/mark.png')
+      const style = window.getComputedStyle(image)
+      expect(style.width).toBe('36px')
+      expect(style.height).toBe('36px')
+      expect(style.borderRadius).toBe('50%')
+    })
+
+    it('resolves a media reference at render, like every other surface', () => {
+      const { container } = render(
+        <CollectionEntryMeta avatarImage="media:org:jWmGooWE3L/4GF1hRJBUp" />,
+      )
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(
+        '/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp',
+      )
+    })
+
+    it('renders NO image rather than a broken one', () => {
+      // An unresolved token and an empty pick are the same answer: nothing.
+      for (const avatarImage of ['{{entry.coverImage}}', '', '   ']) {
+        const { container, unmount } = render(
+          <CollectionEntryMeta avatarImage={avatarImage} date="Jul 2026" />,
+        )
+        expect(container.querySelectorAll('img')).toHaveLength(0)
+        unmount()
+      }
+    })
+
+    it('hides behind Show avatar without losing the picked image', () => {
+      const { container } = render(
+        <CollectionEntryMeta
+          avatarImage="https://cdn.example.com/mark.png"
+          author="The Aglyn Team"
+          showAvatar={false}
+        />,
+      )
+      expect(container.querySelectorAll('img')).toHaveLength(0)
+      expect(screen.getByText('The Aglyn Team')).toBeTruthy()
+    })
+
+    it('is a media-picker target, so the library button appears on it', () => {
+      // The besigner offers Browse on any TEXT_FIELD whose name ends in
+      // image/logo/avatar/… (AGL-341); a differently-spelled prop would be a
+      // URL box with no picker.
+      expect(attribute('avatarImage')?.component).toBe(
+        Aglyn.FieldComponentType.TEXT_FIELD,
+      )
+      expect(
+        /^(src|poster)$|(image|logo|avatar|media|thumbnail|photo|background)(Url)?$/i.test(
+          'avatarImage',
+        ),
+      ).toBe(true)
+    })
+  })
+
+  describe('Date format', () => {
+    it('offers the named shapes the pure layer knows how to produce', () => {
+      const dateFormat = attribute('dateFormat')
+      expect(dateFormat?.component).toBe(Aglyn.FieldComponentType.SELECT)
+      expect((dateFormat?.options ?? []).map((option: any) => option.value))
+        .toEqual(
+          Aglyn.COLLECTION_ENTRY_DATE_FORMAT_OPTIONS.map(
+            (option) => option.value,
+          ),
+        )
+    })
+
+    it('gives every option a value that can actually be saved (AGL-1453)', () => {
+      // "Use the entry's default" is a REAL value. `''` cannot survive a save,
+      // so an author who tried a format would have no route back.
+      for (const option of (attribute('dateFormat')?.options ?? []) as any[]) {
+        expect(option.value).toBeTruthy()
+        expect(option.label).toBeTruthy()
+      }
+    })
+
+    it('is compose-time, so it never reaches the DOM', () => {
+      const { container } = render(
+        <CollectionEntryMeta
+          date="Jul 2026"
+          dateFormat="monthYear"
+          author="The Aglyn Team"
+          showAuthor
+          showAvatar
+          avatarImage=""
+        />,
+      )
+      const root = container.firstElementChild as HTMLElement
+      for (const name of [
+        'dateFormat',
+        'author',
+        'showAuthor',
+        'showAvatar',
+        'avatarImage',
+      ]) {
+        expect(root.getAttribute(name)).toBeNull()
+      }
+    })
+
+    it('renders the frame’s byline end to end', () => {
+      // What frame 170:190 asks for: brand mark, name, `· Jul 2026`.
+      const { container } = render(
+        <CollectionEntryMeta
+          avatarImage="https://cdn.example.com/mark.png"
+          author="The Aglyn Team"
+          date={Aglyn.formatCollectionEntryDate(
+            { seconds: 1_784_116_800 },
+            'monthYear',
+            'en-US',
+          )}
+          showCategory={false}
+          showTags={false}
+        />,
+      )
+      expect(container.querySelector('img')).toBeTruthy()
+      expect(screen.getByText('The Aglyn Team · Jul 2026')).toBeTruthy()
+    })
   })
 })

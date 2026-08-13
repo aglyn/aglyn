@@ -851,14 +851,44 @@ export interface CollectionEntryMetaProps extends StackProps {
    * `{{entry.date}}` — only to override.
    */
   date?: string
+  /**
+   * How {@link date} reads when the server fills it in (AGL-1459) — a
+   * COMPOSE-TIME prop, like Related Posts' `limit`: it is answered where the
+   * timestamp still exists (`expandCollectionEntryMeta`) and never reaches the
+   * DOM. Blank, or `default`, is the locale date the block has always emitted.
+   */
+  dateFormat?: Aglyn.CollectionEntryDateFormat
+  /**
+   * Byline (AGL-1459). Server-filled from the entry's own author on entry
+   * templates, exactly like {@link date}; set it — or bind `{{entry.author}}`
+   * — only to override.
+   */
+  author?: string
   /** Category; server-filled, or bind `{{entry.category}}` to override. */
   category?: string
   /** Comma-joined tags; server-filled, or bind `{{entry.tags}}`. */
   tags?: string
+  /**
+   * Round avatar shown before the byline (AGL-1459) — a media-picker target,
+   * so it holds a media reference (AGL-1215) as well as any URL form.
+   *
+   * A block-level pick, deliberately, and NOT a per-author image: entries
+   * carry an author NAME (`authorName`) and no portrait field, so a per-author
+   * avatar would need a schema decision on the entry model plus an editor
+   * field to fill it. Until then this is the site's brand mark, chosen once on
+   * the template — which is what the article frame actually asks for. Left
+   * unset it renders nothing at all, never a broken image.
+   */
+  avatarImage?: string
   showDate?: boolean
+  showAuthor?: boolean
   showCategory?: boolean
   showTags?: boolean
+  showAvatar?: boolean
 }
+
+/** Byline avatar, from the article frame (Figma 170:190). */
+const ENTRY_AVATAR_SIZE = 36
 
 /** Unresolved tokens render empty on the site, literal in the besigner. */
 const metaValue = (
@@ -888,17 +918,29 @@ const CollectionEntryMeta = forwardRef<
 >((props, ref) => {
   const {
     date,
+    // Compose-time (AGL-1459): read by `expandCollectionEntryMeta`, which has
+    // the timestamp. Destructured so it never reaches the DOM.
+    dateFormat: _dateFormat,
+    author,
     category,
     tags,
+    avatarImage,
     showDate,
+    showAuthor,
     showCategory,
     showTags,
+    showAvatar,
     ...rest
   } = props
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+  // The resolver every other surface shares (AGL-1215), so one media
+  // reference keeps working across sites. A hook — before any early return.
+  const { hostId } = Aglyn.useSite()
   const dateValue = showDate !== false ? metaValue(date, suppressNavigation) : ''
+  const authorValue =
+    showAuthor !== false ? metaValue(author, suppressNavigation) : ''
   const categoryValue =
     showCategory !== false ? metaValue(category, suppressNavigation) : ''
   const tagsValue = showTags !== false ? metaValue(tags, suppressNavigation) : ''
@@ -906,8 +948,21 @@ const CollectionEntryMeta = forwardRef<
     .split(',')
     .map((tag) => tag.trim())
     .filter(Boolean)
-  const line = [dateValue, categoryValue].filter(Boolean).join(' · ')
-  if (!line && !tagList.length) {
+  // An unresolved token empties on EVERY surface here, unlike the text
+  // fields: a literal `{{…}}` in a src is a broken image in the canvas, and a
+  // byline that renders a broken avatar on every post is worse than no
+  // avatar at all.
+  const avatarRaw = (avatarImage ?? '').trim()
+  const avatarSrc =
+    showAvatar !== false && avatarRaw && !UNRESOLVED_TOKEN.test(avatarRaw)
+      ? Aglyn.resolveMediaSrc(avatarRaw, { hostId })
+      : ''
+  // Author leads, so the frame's "The Aglyn Team · Jul 2026" reads in that
+  // order. With no author the join is character-for-character what it was.
+  const line = [authorValue, dateValue, categoryValue]
+    .filter(Boolean)
+    .join(' · ')
+  if (!line && !tagList.length && !avatarSrc) {
     if (!suppressNavigation) return <Box ref={ref} {...rest} />
     return (
       <Box
@@ -944,6 +999,25 @@ const CollectionEntryMeta = forwardRef<
       // go first; the node's slice comes after and can override them.
       sx={[{ alignItems: 'center', flexWrap: 'wrap' }, ...nodeSx]}
     >
+      {avatarSrc ? (
+        <Box
+          component="img"
+          src={avatarSrc}
+          // Decorative: the byline names the author in text right beside it,
+          // so a screen reader announcing the mark again is noise.
+          alt=""
+          loading="lazy"
+          sx={{
+            display: 'block',
+            width: ENTRY_AVATAR_SIZE,
+            height: ENTRY_AVATAR_SIZE,
+            borderRadius: '50%',
+            objectFit: 'cover',
+            // No background plate: a brand mark with a transparent ground
+            // would sit on a grey disc nobody asked for.
+          }}
+        />
+      ) : null}
       {line ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           {line}
@@ -975,6 +1049,28 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {
+        name: 'dateFormat',
+        label: 'Date format',
+        description:
+          'How the published date reads. Site default is the format this ' +
+          'block has always used; it has no effect on a Date you typed in ' +
+          'yourself.',
+        component: Aglyn.FieldComponentType.SELECT,
+        // The formats the pure layer knows how to produce, so the list cannot
+        // offer a shape nothing renders. Every value is REAL — including the
+        // do-nothing one (AGL-1451/AGL-1453): `''` cannot survive a save, so
+        // an author who tried a format would have no route back.
+        options: [...Aglyn.COLLECTION_ENTRY_DATE_FORMAT_OPTIONS],
+      },
+      {
+        name: 'author',
+        label: 'Author',
+        description:
+          'Blank shows the entry’s own author. Type here (or bind ' +
+          '{{entry.author}}) only to override it.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
         name: 'category',
         label: 'Category',
         description:
@@ -991,6 +1087,14 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {
+        name: 'avatarImage',
+        label: 'Avatar',
+        description:
+          'Round image before the byline — your brand mark, or any image ' +
+          'from the media library. Blank shows no avatar.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
         name: 'showDate',
         label: 'Show date',
         component: Aglyn.FieldComponentType.SWITCH,
@@ -1003,6 +1107,16 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
       {
         name: 'showTags',
         label: 'Show tags',
+        component: Aglyn.FieldComponentType.SWITCH,
+      },
+      {
+        name: 'showAuthor',
+        label: 'Show author',
+        component: Aglyn.FieldComponentType.SWITCH,
+      },
+      {
+        name: 'showAvatar',
+        label: 'Show avatar',
         component: Aglyn.FieldComponentType.SWITCH,
       },
     ],
@@ -1304,7 +1418,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     type: Aglyn.NodeType.PRESET,
     displayName: 'Entry Meta',
     pluginId: BUNDLE_ID,
-    description: 'Date · category line with tag chips for the current entry',
+    description: 'Author · date · category line with tag chips for the entry',
     category: Aglyn.ComponentCategory.TEXT,
     icon: { path: mdiTagOutline.path, sx: { color: '#00796b' } },
     data: {
@@ -1313,6 +1427,12 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
       pluginId: BUNDLE_ID,
       props: {
         date: '{{entry.date}}',
+        // Named rather than left to the runtime fallback (AGL-1459): the
+        // dropdown opens on the value the block is actually rendering, and
+        // an author who tries a format has a named route back. `default` is
+        // also the fallback, so naming it is the same choice, not a second.
+        dateFormat: Aglyn.COLLECTION_ENTRY_DATE_FORMAT_DEFAULT,
+        author: '{{entry.author}}',
         category: '{{entry.category}}',
         tags: '{{entry.tags}}',
       },
