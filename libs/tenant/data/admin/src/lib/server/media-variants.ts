@@ -123,6 +123,40 @@ async function loadSharp(): Promise<SharpFactory> {
   return candidate as SharpFactory
 }
 
+/**
+ * A short, PUBLISHABLE name for why the encoder is unavailable (AGL-1471).
+ *
+ * The first thing the probe said on production was `sharp-unavailable`, and
+ * that answered less than it looked like it did: it is the fallback for "the
+ * error carried no `code`", and BOTH interesting failures land there. `sharp`
+ * catches every `require` of its prebuilt binaries and rethrows one composed
+ * `Error` with no `code` at all; `loadSharp` throws a plain `Error` too when
+ * the module resolves to something that is not callable. One means the native
+ * library did not load, the other means the bundler handed back the wrong
+ * shape, and they have nothing in common except the remedy being different.
+ *
+ * Matching on `sharp`'s own help text is the only signal available — the
+ * distinction is not in a field, only in the prose. It is matched loosely and
+ * it degrades to the old fallback, so a reworded upstream message costs a
+ * detail rather than the answer.
+ *
+ * The MESSAGE still never leaves the process. A native loader failure names
+ * every path it tried, the health endpoint is public, and the point of a code
+ * is that it is a fixed vocabulary the caller can branch on.
+ */
+export function classifyLoadFailure(error: unknown): string {
+  const code = (error as { code?: string })?.code
+  if (code) return String(code)
+  const message = error instanceof Error ? error.message : ''
+  if (/Could not load the "?sharp"? module/i.test(message)) {
+    return 'sharp-native-missing'
+  }
+  if (/did not resolve to a function/i.test(message)) {
+    return 'sharp-not-a-function'
+  }
+  return 'sharp-unavailable'
+}
+
 /** Error text kept short — it is stored on a document, not in a log. */
 function describe(error: unknown): string {
   const text =
@@ -227,7 +261,6 @@ export async function probeMediaVariantSupport(): Promise<{
   } catch (error) {
     // A CODE, never the message: the health endpoint is public and an error
     // from a native module can carry filesystem paths.
-    const code = (error as { code?: string })?.code
-    return { ok: false, code: String(code ?? 'sharp-unavailable') }
+    return { ok: false, code: classifyLoadFailure(error) }
   }
 }
