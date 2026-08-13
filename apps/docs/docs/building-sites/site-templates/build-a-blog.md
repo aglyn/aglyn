@@ -162,7 +162,12 @@ in the block library:
   the block's preset seeds.
 - **Related Posts** — other entries of the same collection that share the current
   entry's **category or a tag**, newest first. Attributes: **Heading** (default
-  "Related articles") and **Limit** (default 3). Renders nothing when the entry has no
+  "Related articles"), **Limit** (default 3), **Layout**, **Columns** and **Show
+  cover**. Layout **List** — the default — is a plain list of links with a
+  `date · category` line under each. Layout **Card grid** lays the posts out in
+  **Columns** cards per row (default 3), each with a category chip above its title.
+  **Show cover** adds each post's cover image; posts without one show their title
+  alone rather than an empty box. Renders nothing when the entry has no
   category/tags or nothing matches.
 - **Share Bar** — X, LinkedIn, Facebook, and copy-link buttons for the current page
   URL. Attribute: **Heading** (default "Share").

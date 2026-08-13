@@ -1085,6 +1085,51 @@ describe('expandCollectionRelated (AGL-582)', () => {
     expect(untouched).toEqual(snapshot)
   })
 
+  /**
+   * AGL-1457. The block owns its markup, so a cover can only reach it as a
+   * stamped field — there is no template to bind `{{entry.coverImage}}` on.
+   * The raw stored value is stamped, not a URL: a `media:` reference resolves
+   * at RENDER through `resolveMediaSrc`, exactly as the Image element does,
+   * so one reference keeps working across sites and CDN route changes.
+   */
+  it('stamps the raw cover reference on related items (AGL-1457)', () => {
+    const withCover = {
+      slug: 'blog',
+      entries: [
+        { $id: 'current', slug: 'current', tags: ['x'] },
+        {
+          $id: 'match',
+          title: 'Match',
+          slug: 'match',
+          coverImage: 'media:org:jWmGooWE3L/4GF1hRJBUp',
+          tags: ['x'],
+        },
+      ],
+    }
+    const nodes = expandCollectionRelated(
+      relatedNodes(),
+      withCover,
+      withCover.entries[0],
+    )
+    expect(nodes['related'].props.entries).toEqual([
+      {
+        title: 'Match',
+        url: '/blog/match',
+        coverImage: 'media:org:jWmGooWE3L/4GF1hRJBUp',
+      },
+    ])
+  })
+
+  it('omits the cover key entirely for an entry without one (AGL-1457)', () => {
+    const nodes = expandCollectionRelated(
+      relatedNodes(),
+      source,
+      source.entries[0],
+    )
+    const [first] = nodes['related'].props.entries as any[]
+    expect(first).not.toHaveProperty('coverImage')
+  })
+
   it('stamps taxonomy-resolved category names on related items (AGL-582)', () => {
     const taxonomySource = {
       slug: 'blog',

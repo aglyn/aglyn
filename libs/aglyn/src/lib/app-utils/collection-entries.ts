@@ -841,6 +841,13 @@ export interface CollectionRelatedItem {
   /** Per-entry byline (AGL-686); falls back to the site as author. */
   authorName?: string
   category?: string
+  /**
+   * The entry's cover, as STORED (AGL-1457) — a `media:` reference, a legacy
+   * URL, or a hotlink. Left unresolved on purpose: the block resolves it at
+   * render through `resolveMediaSrc`, exactly as the Image element does, so
+   * one reference keeps working across sites and CDN route changes.
+   */
+  coverImage?: string
 }
 
 /**
@@ -943,6 +950,11 @@ export function expandCollectionRelated<
             }
           : {}),
         ...(entry.excerpt ? { excerpt: entry.excerpt } : {}),
+        // AGL-1457: the block owns its markup, so there is no template to
+        // bind `{{entry.coverImage}}` on — the cover can only reach it as a
+        // stamped field. Absent covers omit the key rather than stamping an
+        // empty string, so the render asks one question, not two.
+        ...(entry.coverImage ? { coverImage: entry.coverImage } : {}),
         ...(categoryName ? { category: categoryName } : {}),
       }
     })
