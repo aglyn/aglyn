@@ -195,16 +195,21 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   )
   const fields: string[] = useMemo(() => model.order, [model])
 
+  // Guarded on BOTH the scope and a real selection (AGL-1440): with no
+  // datasets, `selected` never resolves, and `datasets/-none-/records` is not
+  // an empty read for everyone — the AGL-1044 scoped-sharing rules deny it
+  // outright for a scoped collaborator, and a permanently denied listen is
+  // reopened forever by the refusal loop.
   const { data: recordDocs } = useFirestoreCollection<any>(
     () =>
-      dataScope
+      dataScope && selected?.$id
         ? query(
             collection(
               firestore,
               dataScope[0],
               dataScope[1],
               'datasets',
-              selected?.$id ?? '-none-',
+              selected.$id,
               'records',
             ),
             limit(500),

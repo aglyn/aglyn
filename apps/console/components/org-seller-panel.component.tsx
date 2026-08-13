@@ -106,25 +106,37 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         : 'loaded'
   const payoutsEnabled =
     payoutsState === 'loaded' && Boolean(profile?.stripeChargesEnabled)
+  // Both held at null while the org is unknown, like the profile above
+  // (AGL-1440): AGL-1380 repaired the profile ref and left these two
+  // `where`-clause siblings on the sentinel. The purchases query is the one
+  // that matters — `marketplacePurchases` is buyer/seller-gated, and a
+  // rules-shaped LIST is evaluated against the QUERY, so the sentinel was
+  // denied wholesale and retried on the refusal cadence. The listings query
+  // is public and merely wasted the round trip.
   const { data: listings } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'marketplaceListings'),
-        // Listings are org-owned (AGL-652): `profileId` is the org id, not a
-        // uid — filtering by uid left this list permanently empty (AGL-781).
-        where('profileId', '==', orgId || '-none-'),
-      ),
+      orgId
+        ? query(
+            collection(firestore, 'marketplaceListings'),
+            // Listings are org-owned (AGL-652): `profileId` is the org id,
+            // not a uid — filtering by uid left this list permanently empty
+            // (AGL-781).
+            where('profileId', '==', orgId),
+          )
+        : null,
     [firestore, orgId],
     { idField: '$id' },
   )
   // Seller ledger (AGL-46): purchase records written by the Stripe webhook.
   const { data: sales } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'marketplacePurchases'),
-        // Sales belong to the ORG that published (AGL-652).
-        where('sellerOrgId', '==', orgId || '-none-'),
-      ),
+      orgId
+        ? query(
+            collection(firestore, 'marketplacePurchases'),
+            // Sales belong to the ORG that published (AGL-652).
+            where('sellerOrgId', '==', orgId),
+          )
+        : null,
     [firestore, orgId],
     { idField: '$id' },
   )

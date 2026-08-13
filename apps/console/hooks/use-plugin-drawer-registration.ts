@@ -43,12 +43,14 @@ export function usePluginDrawerRegistration(hostId: string): void {
   // read the host's own installs, so those plugins had no entry, and the
   // element could not be told they were installed either.
   const orgId = useHostOrgId(hostId)
+  // Held at null while `useHostOrgId` is in flight, never `orgs/-pending-`
+  // (AGL-1440): installs are member-gated, so the sentinel was a
+  // guaranteed-denied listen on every besigner editor session.
   const { data: orgInstallDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'orgs', orgId ?? '-pending-', 'installs'),
-        limit(50),
-      ),
+      orgId
+        ? query(collection(firestore, 'orgs', orgId, 'installs'), limit(50))
+        : null,
     [firestore, orgId],
     { idField: '$id' },
   )

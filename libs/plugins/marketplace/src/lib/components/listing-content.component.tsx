@@ -514,13 +514,19 @@ export function MarketplaceListingContent({
     [firestore, hostId],
     { idField: '$id' },
   )
+  // Held at null until the uid resolves (AGL-1440): `marketplacePurchases`
+  // is buyer/seller-gated and a LIST is evaluated against the QUERY, so the
+  // `-anonymous-` sentinel was denied wholesale on every mount and retried
+  // on the refusal cadence. A signed-out viewer simply has no purchases.
   const { data: purchaseDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'marketplacePurchases'),
-        where('buyerUid', '==', user?.uid ?? '-anonymous-'),
-        limit(200),
-      ),
+      user?.uid
+        ? query(
+            collection(firestore, 'marketplacePurchases'),
+            where('buyerUid', '==', user.uid),
+            limit(200),
+          )
+        : null,
     [firestore, user?.uid],
     { idField: '$id' },
   )
@@ -537,15 +543,14 @@ export function MarketplaceListingContent({
     [firestore, hostId, listingId],
     { idField: '$id' },
   )
+  // Held at null while `useHostOrgId` is in flight, never `orgs/-pending-`
+  // (AGL-1440): installs are member-gated, so the sentinel was a
+  // guaranteed-denied listen on every listing view.
   const { data: orgPin } = useFirestoreDoc<any>(
     () =>
-      doc(
-        firestore,
-        'orgs',
-        orgId ?? '-pending-',
-        'installs',
-        listingId || '-missing-',
-      ),
+      orgId && listingId
+        ? doc(firestore, 'orgs', orgId, 'installs', listingId)
+        : null,
     [firestore, orgId, listingId],
     { idField: '$id' },
   )

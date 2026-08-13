@@ -87,18 +87,18 @@ export function SiteEmailsCard() {
   const [resetting, setResetting] = useState<string | null>(null)
 
   // Which emails have a published design, so the row can offer Edit + Reset
-  // instead of Design. Guarded path keeps the query valid before hostId lands.
+  // instead of Design. Held at null before hostId lands, never addressed as
+  // `hosts/-pending-` (AGL-1440): the HostGuard upstream makes that window
+  // unreachable today, but a guaranteed-denied ref behind somebody else's
+  // guard is one refactor away from a permanent denial loop.
   const { data: templateDocs } = useFirestoreCollection<{
     $id: string
     versionId?: string
   }>(
     () =>
-      collection(
-        firestore,
-        'hosts',
-        hostId || '-pending-',
-        TENANT_EMAIL_COLLECTION,
-      ),
+      hostId
+        ? collection(firestore, 'hosts', hostId, TENANT_EMAIL_COLLECTION)
+        : null,
     [firestore, hostId],
     { idField: '$id' },
   )

@@ -123,21 +123,27 @@ export function OrgPublishPanel({
   const [artifactId, setArtifactId] = useState('')
   const [target, setTarget] = useState<PublishArtifactTarget | null>(null)
 
+  // Held at null while there is no host, never addressed as `hosts/-none-`
+  // (AGL-1440): an org with ZERO sites has no `hosts[0]`, so the sentinel was
+  // not a loading window — it was three permanently rules-denied listens per
+  // panel mount, each reopened forever by the refusal loop. The hook issues
+  // nothing for a null query and the lists render their empty states.
   const { data: componentDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId || '-none-', 'components'),
-        limit(100),
-      ),
+      hostId
+        ? query(
+            collection(firestore, 'hosts', hostId, 'components'),
+            limit(100),
+          )
+        : null,
     [firestore, hostId],
     { idField: '$id' },
   )
   const { data: layoutDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId || '-none-', 'layouts'),
-        limit(100),
-      ),
+      hostId
+        ? query(collection(firestore, 'hosts', hostId, 'layouts'), limit(100))
+        : null,
     [firestore, hostId],
     { idField: '$id' },
   )
@@ -145,19 +151,20 @@ export function OrgPublishPanel({
   // don't depend on the selected site.
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'orgs', orgId || '-none-', 'datasets'),
-        limit(100),
-      ),
+      orgId
+        ? query(collection(firestore, 'orgs', orgId, 'datasets'), limit(100))
+        : null,
     [firestore, orgId],
     { idField: '$id' },
   )
   const { data: emailDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId || '-none-', 'emailTemplates'),
-        limit(100),
-      ),
+      hostId
+        ? query(
+            collection(firestore, 'hosts', hostId, 'emailTemplates'),
+            limit(100),
+          )
+        : null,
     [firestore, hostId],
     { idField: '$id' },
   )

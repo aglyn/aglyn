@@ -85,13 +85,15 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
     { idField: '$id' },
   )
   // Org-tier pins (AGL-237): apply to every host in the org; a host pin
-  // of the same listing shadows the org one.
+  // of the same listing shadows the org one. Held at null while
+  // `useHostOrgId` is in flight, never `orgs/-pending-` (AGL-1440):
+  // installs are member-gated, so the sentinel was a guaranteed-denied
+  // listen on every mount of this card.
   const { data: orgInstallDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'orgs', orgId ?? '-pending-', 'installs'),
-        limit(50),
-      ),
+      orgId
+        ? query(collection(firestore, 'orgs', orgId, 'installs'), limit(50))
+        : null,
     [firestore, orgId],
     { idField: '$id' },
   )

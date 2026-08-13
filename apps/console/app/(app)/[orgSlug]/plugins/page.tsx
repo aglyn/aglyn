@@ -63,12 +63,14 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   const orgId = currentOrg?.$id ?? ''
   const canManage = canManageOrg(currentOrg?.role)
 
+  // Held at null while the org scope loads, never `orgs/-pending-`
+  // (AGL-1440): installs are member-gated, so the sentinel was a
+  // guaranteed-denied listen on every mount of this page.
   const { data: orgInstalls } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'orgs', orgId || '-pending-', 'installs'),
-        limit(100),
-      ),
+      orgId
+        ? query(collection(firestore, 'orgs', orgId, 'installs'), limit(100))
+        : null,
     [firestore, orgId],
     { idField: '$id' },
   )

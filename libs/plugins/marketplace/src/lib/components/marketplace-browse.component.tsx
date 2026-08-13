@@ -216,12 +216,14 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  // Held at null while `useHostOrgId` is in flight, never `orgs/-pending-`
+  // (AGL-1440): the AGL-1047 comment seven lines below records the same
+  // denial-every-mount shape for `useScopeTokens` — this listen had it too.
   const { data: orgPinDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'orgs', orgId ?? '-pending-', 'installs'),
-        limit(100),
-      ),
+      orgId
+        ? query(collection(firestore, 'orgs', orgId, 'installs'), limit(100))
+        : null,
     [firestore, orgId],
     { idField: '$id' },
   )
