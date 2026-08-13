@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   dropMediaFromPages,
   type MediaPage,
@@ -50,9 +50,24 @@ export interface MediaPages {
   /** Firestore error code when the last load failed, else null. */
   loadError: string | null
   hasMore: boolean
+  /**
+   * Every document of the CURRENT query is in the window, so a client-side
+   * pass over `docs` is a pass over the whole answer (AGL-1460).
+   */
+  complete: boolean
+  /** `loadAll` stopped at its cap with pages still unread (AGL-1460). */
+  truncated: boolean
+  /** A `loadAll` pass is in flight. */
+  completing: boolean
   /** Bumped by `refresh`; exposed for effects that must re-run with it. */
   refreshKey: number
   loadMore: () => Promise<void>
+  /**
+   * Page to the end of the current query, or to `maxDocs`, whichever comes
+   * first. Idempotent: once the window is complete it costs nothing, and
+   * overlapping calls collapse into the one pass (AGL-1460).
+   */
+  loadAll: (maxDocs: number) => Promise<void>
   /** Throw the window away and read page one again. Costs the reads. */
   refresh: () => void
   /** Remove documents the client knows are gone. Costs nothing. */
@@ -103,6 +118,21 @@ export interface MediaPages {
  * key is needed. A mutation that leaves the query alone must therefore leave
  * `fetchPage` alone too — which, before this issue, is precisely what
  * `refreshKey` was being used to defeat.
+ *
+ * ## `loadAll` and what search is allowed to claim (AGL-1460)
+ *
+ * DAM search filters the loaded window client-side — it always did, and
+ * Firestore cannot do otherwise for a wildcard, a typo, or a key an author
+ * invented in the detail drawer. So the fix for "search only finds what you
+ * already paged in" is not a better filter; it is to hold the whole answer
+ * before filtering, and to be able to say when you do not.
+ *
+ * `loadAll` is that, bounded. It costs the REST OF THE CURRENT QUERY once —
+ * exactly what a person pays clicking "Load more" to the end, which is what
+ * they had to do before this to search their own library — and then nothing,
+ * ever, until the query changes. `truncated` is the state where the cap
+ * stopped it: the window is bigger but still not everything, and the caller
+ * is obliged to say so rather than imply a full search.
  */
 export function useMediaPages<TCursor>(
   options: UseMediaPagesOptions<TCursor>,
@@ -114,12 +144,35 @@ export function useMediaPages<TCursor>(
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [truncated, setTruncated] = useState(false)
+  const [completing, setCompleting] = useState(false)
+
+  /**
+   * `loadAll` walks pages inside one async call, so it cannot read the
+   * cursor or the has-more flag from state — every iteration would see the
+   * value captured when the call started and re-fetch page two forever.
+   * These mirror the state; the state is what renders.
+   */
+  const cursorRef = useRef<TCursor | null>(null)
+  const hasMoreRef = useRef(false)
+  const loadedRef = useRef(0)
+  const completingRef = useRef(false)
+  /**
+   * Bumped whenever the window is thrown away. A `loadAll` in flight across
+   * a folder change is appending pages of the OLD query, and must stop.
+   */
+  const generationRef = useRef(0)
 
   const refresh = useCallback(() => setRefreshKey((key) => key + 1), [])
 
   useEffect(() => {
     let active = true
     if (!ready) return undefined
+    generationRef.current += 1
+    cursorRef.current = null
+    hasMoreRef.current = false
+    loadedRef.current = 0
+    setTruncated(false)
     setLoading(true)
     setLoadError(null)
     void fetchPage(null)
@@ -128,6 +181,9 @@ export function useMediaPages<TCursor>(
         setPages([page.docs])
         setCursor(page.last)
         setHasMore(page.more)
+        cursorRef.current = page.last
+        hasMoreRef.current = page.more
+        loadedRef.current = page.docs.length
       })
       .catch((error) => {
         if (!active) return
@@ -156,6 +212,9 @@ export function useMediaPages<TCursor>(
       setPages((prev) => [...prev, page.docs])
       setCursor(page.last)
       setHasMore(page.more)
+      cursorRef.current = page.last
+      hasMoreRef.current = page.more
+      loadedRef.current += page.docs.length
     } catch (error) {
       onError?.(error)
     } finally {
@@ -164,6 +223,44 @@ export function useMediaPages<TCursor>(
     // Same reasoning as above for `onError`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchPage, cursor])
+
+  const loadAll = useCallback(
+    async (maxDocs: number) => {
+      // The two free exits, and the reason a keystroke costs nothing: an
+      // already-complete window has no pages left to read, and a pass that
+      // is already running does not need a second one behind it.
+      if (completingRef.current || !hasMoreRef.current) return
+      const generation = generationRef.current
+      completingRef.current = true
+      setCompleting(true)
+      try {
+        while (hasMoreRef.current && cursorRef.current) {
+          if (loadedRef.current >= maxDocs) {
+            setTruncated(true)
+            break
+          }
+          const page = await fetchPage(cursorRef.current)
+          // The query changed under the pass — these documents answer a
+          // question nobody is asking any more.
+          if (generation !== generationRef.current) return
+          setPages((prev) => [...prev, page.docs])
+          setCursor(page.last)
+          setHasMore(page.more)
+          cursorRef.current = page.last
+          hasMoreRef.current = page.more
+          loadedRef.current += page.docs.length
+        }
+      } catch (error) {
+        onError?.(error)
+      } finally {
+        completingRef.current = false
+        setCompleting(false)
+      }
+      // Same reasoning as above for `onError`.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [fetchPage],
+  )
 
   const dropLocal = useCallback((ids: Iterable<string>) => {
     const doomed = [...ids]
@@ -185,8 +282,17 @@ export function useMediaPages<TCursor>(
     loading,
     loadError,
     hasMore,
+    // Nothing left to read for this query. Deliberately derived rather than
+    // stored: `hasMore` already goes false when the last page comes back
+    // short, whether that was `loadMore`, `loadAll`, or a first page that
+    // held the lot. `loading` is part of it so a mount that has not answered
+    // yet does not read as "searched all 0 files".
+    complete: !hasMore && !loading,
+    truncated,
+    completing,
     refreshKey,
     loadMore,
+    loadAll,
     refresh,
     dropLocal,
     patchLocal,

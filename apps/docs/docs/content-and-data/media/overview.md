@@ -34,6 +34,21 @@ feature; large video uploads and higher storage are gated by plan.
   move it in, drag a folder onto another to nest it, or drop onto a breadcrumb to move
   items up and out. Nesting depth and name-collision rules are enforced automatically.
 - Filter by **type, date, and size**, search, and sort the library.
+- **Search covers everything you authored, not just file names** — alt text, description,
+  tags, folder name and your own custom metadata values are all searchable. Results update
+  as you type, and **✕** (or **Esc**) clears the box.
+  - **Wildcards**: `mock-*-noshadow.png` matches a whole family of files. `*` is any run of
+    characters, `?` is exactly one, and a wildcard pattern matches the *whole* value.
+  - **Search one field**: `tag:hero`, `name:logo`, `alt:product`, `desc:landing`,
+    `folder:brand`, or a custom field by key — `meta.campaign:spring`. Combine them with
+    plain words; everything you type has to match.
+  - **Phrases**: put quotes around anything with a space — `"landing page"`, `tag:"black friday"`.
+  - **Typos still find things.** If nothing matches literally, Aglyn falls back to close
+    matches and tells you it did.
+  - The caption under the box always says **what was actually searched** — the whole library,
+    or how much of it. Typing loads the rest of the library once so the search covers all of
+    it; on very large libraries it searches as much as it can and says where it stopped, so
+    narrowing by folder, type or date gets you the rest.
 - Capture and edit **metadata** in a detail drawer — file name, alt text, description,
   tags, and your own **custom key/value metadata** (mirrored onto the delivered object's
   storage metadata). Bulk-edit tags and folders across a selection.

@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { useDebounce } from '@aglyn/shared-util-vendor'
 import AddIcon from '@mui/icons-material/Add'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
@@ -116,6 +117,8 @@ import {
 } from './media-delete-copy'
 import { MediaFolderCard } from './media-folder-card.component'
 import { MediaFolderRail } from './media-folder-rail.component'
+import { parseMediaQuery, searchMedia } from './media-search'
+import { MediaSearchField } from './media-search-field.component'
 import {
   EMPTY_MEDIA_SELECTION,
   forgetMediaSelection,
@@ -155,6 +158,32 @@ export interface MediaLibraryComponentProps {
 
 /** Page size for cursor pagination (AGL-174). */
 const MEDIA_PAGE_SIZE = 60
+
+/**
+ * Search read budget (AGL-1460).
+ *
+ * Search filters the loaded window client-side and always did — Firestore
+ * cannot express a wildcard, a typo or a key an author invented in the detail
+ * drawer, so no amount of query work moves those server-side. What CAN be
+ * fixed is the set: read the rest of the current query once, then answer over
+ * all of it, and say plainly when the cap stopped short of that.
+ *
+ * The three numbers are the whole cost story:
+ *
+ * - `DEBOUNCE_MS` — a keystroke costs zero reads. Filtering is CPU and runs
+ *   undebounced, so the box and the grid never disagree; only the completion
+ *   waits, and `loadAll` is idempotent so out-waiting it changes nothing.
+ * - `MIN_CHARS` — one character is a typo in progress, not a search.
+ * - `MAX_DOCS` — 20 page fetches. On the 174-asset library that made this
+ *   issue it never binds: completing costs 2 fetches / 114 documents, once
+ *   per filter set. For comparison, AGL-1462 removed 9,165 documents in 187
+ *   fetches from a single delete pass; this gives back 1.2% of that, and
+ *   only in exchange for the "Load more" clicks a person was already paying
+ *   to search their own library.
+ */
+const MEDIA_SEARCH_DEBOUNCE_MS = 400
+const MEDIA_SEARCH_MIN_CHARS = 2
+const MEDIA_SEARCH_MAX_DOCS = 1200
 
 /**
  * Docs per request in the folder sharing cascade (AGL-1045). Small enough
@@ -533,6 +562,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     /** Firestore error code when the last load failed, else null. */
     loadError,
     hasMore,
+    // AGL-1460: whether a client-side pass over `docs` is a pass over the
+    // whole answer, and whether the read cap stopped short of that.
+    complete: windowComplete,
+    truncated: windowTruncated,
+    completing: windowCompleting,
+    loadAll,
     refreshKey,
     loadMore: handleLoadMore,
     // Still the right answer where the SERVER decided something the client
@@ -661,8 +696,29 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       [...new Set(items.flatMap((item: any) => item.tags ?? []))].sort(),
     [items],
   )
-  const visibleItems = useMemo(() => {
-    const term = search.trim().toLowerCase()
+  /**
+   * Completing the window so search can answer over the whole library
+   * (AGL-1460).
+   *
+   * The debounce is on the READ, never on the filter: debouncing the filter
+   * would recreate the reported symptom, a box whose text does not match the
+   * grid. Gated on `hasMore`, so once the query is fully loaded this stops
+   * asking, and `loadAll` itself is idempotent, so a slow typist who
+   * out-waits 400 ms still pays for the pages exactly once.
+   */
+  const [debouncedSearch] = useDebounce(search.trim(), MEDIA_SEARCH_DEBOUNCE_MS)
+  useEffect(() => {
+    if (debouncedSearch.length < MEDIA_SEARCH_MIN_CHARS) return
+    if (!hasMore) return
+    void loadAll(MEDIA_SEARCH_MAX_DOCS)
+  }, [debouncedSearch, hasMore, loadAll])
+
+  const searchQuery = useMemo(() => parseMediaQuery(search), [search])
+  const searchContext = useMemo(
+    () => ({ folderNameById }),
+    [folderNameById],
+  )
+  const searchResult = useMemo(() => {
     const now = Date.now() / 1000
     const filtered = items.filter((item: any) => {
       if (currentFolder === null && (item.folderId || item.folder)) {
@@ -696,21 +752,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const sizeBytes = item.sizeBytes ?? 0
       if (sizeFilter === '1mb' && sizeBytes < 1024 * 1024) return false
       if (sizeFilter === '5mb' && sizeBytes < 5 * 1024 * 1024) return false
-      if (!term) return true
-      const haystack = [
-        item.fileName,
-        item.folder,
-        item.folderId ? folderNameById[item.folderId] : undefined,
-        item.alt,
-        item.description,
-        ...(item.tags ?? []),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return haystack.includes(term)
+      return true
     })
-    return [...filtered].sort((a: any, b: any) => {
+    const sorted = [...filtered].sort((a: any, b: any) => {
       if (sortBy === 'name') {
         return String(a.fileName ?? '').localeCompare(String(b.fileName ?? ''))
       }
@@ -720,9 +764,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       }
       return (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
     })
+    // Search runs LAST, over the sorted list (AGL-1460). A literal result set
+    // keeps the order the Sort control produced; only the fuzzy fallback
+    // replaces it with relevance, and only when the literal reading found
+    // nothing — which the field's caption discloses rather than quietly
+    // overriding the author's chosen sort on every keystroke.
+    return searchMedia(sorted, searchQuery, searchContext)
   }, [
     items,
-    search,
+    searchQuery,
+    searchContext,
     currentFolder,
     folderNameById,
     tagFilter,
@@ -731,6 +782,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     sizeFilter,
     sortBy,
   ])
+  const visibleItems = searchResult.items
   /**
    * The order a ⇧-click measures against (AGL-1462): the cards as drawn,
    * after filtering and sorting. Deriving it here rather than inside the
@@ -2377,15 +2429,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         spacing={1}
         sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
       >
-        <TextField
-          size="small"
-          label="Search"
+        <MediaSearchField
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          sx={{ minWidth: 200 }}
-          helperText={
-            hasMore ? 'Searches loaded files — Load more to widen' : undefined
-          }
+          onChange={setSearch}
+          loaded={items.length}
+          total={totalCount}
+          complete={windowComplete}
+          completing={windowCompleting}
+          truncated={windowTruncated}
+          mode={searchResult.mode}
+          matches={visibleItems.length}
         />
         <TextField
           select
