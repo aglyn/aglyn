@@ -24,8 +24,8 @@ import {
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  generateMediaVariants,
   isImpersonationSession,
-  MEDIA_CDN_VARIANT_WIDTHS,
 } from '@aglyn/tenant-data-admin'
 import {
   mediaObjectPath,
@@ -189,30 +189,24 @@ async function handler(request: Request): Promise<Response> {
     // branch below means the field is actively removed if one lingers.
     const cdnAllowed =
       checkEntitlement(org, 'mediaCdn') && mediaSnapshot.get('private') !== true
-    const variants: number[] = []
-    if (cdnAllowed && contentType !== 'image/svg+xml') {
-      try {
-        const sharp = (await import('sharp')).default
-        for (const width of MEDIA_CDN_VARIANT_WIDTHS) {
-          if (dimensions?.width && dimensions.width <= width) continue
-          const webp = await sharp(buffer)
-            .resize({ width, withoutEnlargement: true })
-            .webp({ quality: 80 })
-            .toBuffer()
-          await bucket
-            .file(`${objectPath}__w${width}.webp`)
-            .save(webp, {
+    // Same shape as upload, same reason (AGL-1468): the previous `catch` here
+    // only reached a serverless log, which is why the regeneration half of
+    // this bug was as invisible as the upload half.
+    const { variants, error: variantsError } = cdnAllowed
+      ? await generateMediaVariants({
+          buffer,
+          contentType,
+          sourceWidth: dimensions?.width,
+          objectPath,
+          saveVariant: (path, webp) =>
+            bucket.file(path).save(webp, {
               contentType: 'image/webp',
               metadata: {
                 cacheControl: 'public, max-age=31536000, immutable',
               },
-            })
-          variants.push(width)
-        }
-      } catch (error) {
-        console.error('media variant regeneration failed', mediaId, error)
-      }
-    }
+            }),
+        })
+      : { variants: [] as number[], error: undefined }
 
     await mediaRef.set(
       {
@@ -225,6 +219,12 @@ async function handler(request: Request): Promise<Response> {
           dimensions?.height ?? firebaseAdmin.firestore.FieldValue.delete(),
         contentHash,
         variants,
+        // A merge write, so this has to CLEAR on success rather than simply
+        // not be set: an asset whose first upload failed and whose replace
+        // succeeded would otherwise keep a fault marker for bytes that are
+        // fine, and the population query would over-report forever.
+        variantsError:
+          variantsError ?? firebaseAdmin.firestore.FieldValue.delete(),
         // Stable, mediaId-keyed CDN URL (AGL-829): unchanged by replace, so
         // the entry keeps resolving to the new bytes automatically — unless
         // the plan or the private flag says there should be no path at all,
@@ -250,6 +250,14 @@ async function handler(request: Request): Promise<Response> {
           bytes: firebaseAdmin.firestore.FieldValue.increment(
             buffer.length - previousBytes,
           ),
+          // Same counter the upload route bumps — one number for the scope,
+          // whichever route produced the failure.
+          ...(variantsError
+            ? {
+                variantFailures:
+                  firebaseAdmin.firestore.FieldValue.increment(1),
+              }
+            : {}),
         },
         { merge: true },
       )

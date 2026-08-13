@@ -46,7 +46,10 @@
  * so a degraded dependency returns 503 rather than a 200 whose body says
  * "degraded" — a body nobody parses is not a signal.
  */
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  probeMediaVariantSupport,
+} from '@aglyn/tenant-data-admin'
 import {
   healthBody,
   healthHeaders,
@@ -93,19 +96,50 @@ const firestoreHealth = memoizeWithTtl<HealthCheck>(PROBE_TTL_MS, async () => {
   }
 })
 
+/**
+ * Can this deployment encode an image variant? (AGL-1468)
+ *
+ * Every WebP variant on the platform is produced by these functions, and
+ * production went three weeks generating none of them: 1 of 180 media
+ * documents has a non-empty `variants` array, and the last success was
+ * 2026-07-19. The failure was environmental — the same source produced
+ * variants before that date and stopped — and the only report was a
+ * `console.error` in a log retained for about an hour, so by the time anyone
+ * asked why, the answer was gone.
+ *
+ * An upload is a bad probe for that. It needs a session, an entitled org, a
+ * bucket write and, in practice, a customer noticing their thumbnails are
+ * full-size. This needs a GET, touches no storage and no database, and runs
+ * in the same runtime with the same `import('sharp')`.
+ *
+ * DELIBERATELY NOT IN `checks`. `healthStatus` is "degraded if ANY check
+ * failed" and drives a 503, which is the right rule for Firestore and the
+ * wrong one here: variant generation being unavailable is a degraded
+ * optimization, not an outage. Paging on it would teach everyone to ignore
+ * the endpoint, which is how a health check starts lying.
+ */
+const imagingHealth = memoizeWithTtl<HealthCheck>(PROBE_TTL_MS, async () => {
+  const startedAt = Date.now()
+  const result = await probeMediaVariantSupport()
+  return { ...result, ms: Date.now() - startedAt }
+})
+
 export async function GET(): Promise<Response> {
   const checks = { firestore: await firestoreHealth() }
   const status = healthStatus(checks)
+  const body = healthBody({
+    service: 'console',
+    checks,
+    // Which build answered. Without it a probe cannot tell a recovered
+    // deploy from a rolled-back one, and an incident timeline has no anchor.
+    commit: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
+    environment: process.env['VERCEL_ENV'] ?? 'development',
+    region: process.env['VERCEL_REGION'] ?? null,
+  })
   return Response.json(
-    healthBody({
-      service: 'console',
-      checks,
-      // Which build answered. Without it a probe cannot tell a recovered
-      // deploy from a rolled-back one, and an incident timeline has no anchor.
-      commit: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
-      environment: process.env['VERCEL_ENV'] ?? 'development',
-      region: process.env['VERCEL_REGION'] ?? null,
-    }),
+    // Reported alongside the body rather than merged into `checks`, so it is
+    // readable by anything that wants it and cannot move the status code.
+    { ...body, imaging: await imagingHealth() },
     { status: healthHttpStatus(status), headers: healthHeaders(status) },
   )
 }

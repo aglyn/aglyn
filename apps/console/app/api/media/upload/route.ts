@@ -28,8 +28,8 @@ import {
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  generateMediaVariants,
   isImpersonationSession,
-  MEDIA_CDN_VARIANT_WIDTHS,
 } from '@aglyn/tenant-data-admin'
 import { createHash, randomUUID } from 'crypto'
 import {
@@ -236,31 +236,27 @@ async function handler(request: Request): Promise<Response> {
     // are reachable only through a signed URL minted per view.
     const isPrivateUpload = body?.['private'] === true
     const cdnAllowed = checkEntitlement(org, 'mediaCdn') && !isPrivateUpload
-    const variants: number[] = []
-    if (cdnAllowed && isImage && contentType !== 'image/svg+xml') {
-      try {
-        const sharp = (await import('sharp')).default
-        for (const width of MEDIA_CDN_VARIANT_WIDTHS) {
-          if (dimensions?.width && dimensions.width <= width) continue
-          const webp = await sharp(buffer)
-            .resize({ width, withoutEnlargement: true })
-            .webp({ quality: 80 })
-            .toBuffer()
-          await bucket
-            .file(`${objectPath}__w${width}.webp`)
-            .save(webp, {
+    // Variants are still an optimization — this never fails the upload for
+    // them. What changed (AGL-1468) is that a failure is now WRITTEN DOWN.
+    // The previous shape reported into a serverless log with about an hour of
+    // retention, so a three-week total outage left 174 assets with empty
+    // `variants` and no evidence of why. `variantsError` on the document and
+    // `variantFailures` on the counter make the next one a query.
+    const { variants, error: variantsError } = cdnAllowed
+      ? await generateMediaVariants({
+          buffer,
+          contentType,
+          sourceWidth: dimensions?.width,
+          objectPath,
+          saveVariant: (path, webp) =>
+            bucket.file(path).save(webp, {
               contentType: 'image/webp',
               metadata: {
                 cacheControl: 'public, max-age=31536000, immutable',
               },
-            })
-          variants.push(width)
-        }
-      } catch (error) {
-        // Variants are an optimization — never fail the upload for them.
-        console.error('media variant generation failed', mediaId, error)
-      }
-    }
+            }),
+        })
+      : { variants: [] as number[], error: undefined }
 
     await scopeRef.collection('media').doc(mediaId).set({
       fileName,
@@ -273,6 +269,11 @@ async function handler(request: Request): Promise<Response> {
       uploadedBy: decoded.uid,
       contentHash,
       variants,
+      // Only when something actually went wrong. An asset with nothing to
+      // generate — an SVG, or a source already narrower than 320px — is the
+      // common case and must not carry a fault marker, or the marker stops
+      // meaning anything.
+      ...(variantsError ? { variantsError } : {}),
       // Org-wide by default — today's behavior (AGL-1043). Stamping it on
       // every new asset is what makes the scoped reads work at all:
       // `array-contains-any` matches nothing on a doc lacking the field.
@@ -307,6 +308,16 @@ async function handler(request: Request): Promise<Response> {
         {
           bytes: firebaseAdmin.firestore.FieldValue.increment(buffer.length),
           count: firebaseAdmin.firestore.FieldValue.increment(1),
+          // Rides the write that was already happening, so the visibility
+          // costs zero extra Firestore operations. A monotonic count next to
+          // `count` is the cheapest possible answer to "is this broken for
+          // everyone, or was that one asset unlucky?"
+          ...(variantsError
+            ? {
+                variantFailures:
+                  firebaseAdmin.firestore.FieldValue.increment(1),
+              }
+            : {}),
         },
         { merge: true },
       )
