@@ -40,7 +40,10 @@
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ConfirmationProviderComponent } from '@aglyn/shared-ui-jsx/components/confirmation-provider.component'
 import { act, render, screen, waitFor } from '@testing-library/react'
-import { MediaDeleteConfirmDescription } from './media-delete-confirm.component'
+import {
+  confirmMediaDelete,
+  MediaDeleteConfirmDescription,
+} from './media-delete-confirm.component'
 import type { MediaScanCoverage } from './media-usage-copy'
 
 /**
@@ -130,6 +133,112 @@ describe('delete confirmation latency (AGL-1461)', () => {
     )
     const elapsed = await timeToDialog(open)
     expect({ elapsed: elapsed >= SCAN_MS }).toEqual({ elapsed: true })
+  })
+})
+
+/**
+ * AGL-1482: the same guarantee, with the clock taken out of it.
+ *
+ * The two measurements above compare a fast path to a slow one, which is the
+ * honest way to answer "is it faster". It is not the strongest way to answer
+ * "does it wait", because both shapes finish — a scan that takes 750 ms is
+ * still a scan that resolves, so the assertion is a threshold and a threshold
+ * is a judgement about a machine.
+ *
+ * A scan that NEVER settles removes the judgement. If anything on the path
+ * from the click to the dialog awaits it, there is no dialog, at any timeout.
+ *
+ * This is what replaces `expect(handleDeleteBody()).not.toContain('await
+ * scanReferences')` in `media-delete-wiring.spec.ts`. That assertion was a
+ * claim about ordering expressed as a claim about a keyword: rename the
+ * function, or await it through an alias, and it passes over a dialog that
+ * waits. Running the flow cannot be fooled that way, and `confirmMediaDelete`
+ * exists as a module precisely so it can be run.
+ */
+describe('the flow never waits on the scan (AGL-1461/AGL-1482)', () => {
+  /** A scan that is still walking the corpus, and always will be. */
+  const neverSettles = (): Promise<never> => new Promise<never>(() => undefined)
+
+  it('opens the dialog with the scan still in flight', async () => {
+    let open = () => undefined as void
+    function Harness() {
+      const { confirm } = useConfirmationContext()
+      open = () => {
+        void confirmMediaDelete({
+          fileName: 'hero-banner.png',
+          mediaId: 'm1',
+          scanReferences: neverSettles,
+          confirm,
+        })
+      }
+      return null
+    }
+    render(
+      <ConfirmationProviderComponent>
+        <Harness />
+      </ConfirmationProviderComponent>,
+    )
+    act(() => open())
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
+    // And it names the file, so the dialog that arrived early is usable.
+    expect(screen.getByText(/hero-banner\.png/)).toBeTruthy()
+    expect(screen.getByText(/checking/i)).toBeTruthy()
+  })
+
+  /**
+   * The same fact without a renderer, stated as the ordering it actually is:
+   * `confirm` is called on the tick the scan starts, not on the tick it
+   * answers. Anything awaited above the `confirm` call moves it off this tick
+   * and this fails with zero calls.
+   */
+  it('calls confirm in the same tick it starts the scan', () => {
+    const confirm = jest.fn(() => new Promise<never>(() => undefined))
+    void confirmMediaDelete({
+      fileName: 'hero-banner.png',
+      mediaId: 'm1',
+      scanReferences: neverSettles,
+      confirm,
+    })
+    expect(confirm).toHaveBeenCalledTimes(1)
+  })
+
+  /** The scan still has to START — an unawaited scan is not a skipped one. */
+  it('starts the scan against the file being deleted', () => {
+    const scanReferences = jest.fn(neverSettles)
+    void confirmMediaDelete({
+      fileName: 'hero-banner.png',
+      mediaId: 'm1',
+      scanReferences,
+      confirm: () => new Promise<never>(() => undefined),
+    })
+    expect(scanReferences).toHaveBeenCalledWith('m1')
+  })
+
+  /**
+   * A dismissed dialog rejects, and that is an answer rather than a fault.
+   * Reporting it as anything but `false` would delete a file the author
+   * backed out of.
+   */
+  it('reads a dismissed dialog as a refusal, not a failure', async () => {
+    await expect(
+      confirmMediaDelete({
+        fileName: 'hero-banner.png',
+        mediaId: 'm1',
+        scanReferences: neverSettles,
+        confirm: () => Promise.reject(new Error('dismissed')),
+      }),
+    ).resolves.toBe(false)
+  })
+
+  it('reads a confirmed dialog as a yes', async () => {
+    await expect(
+      confirmMediaDelete({
+        fileName: 'hero-banner.png',
+        mediaId: 'm1',
+        scanReferences: neverSettles,
+        confirm: () => Promise.resolve(undefined),
+      }),
+    ).resolves.toBe(true)
   })
 })
 

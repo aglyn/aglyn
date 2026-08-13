@@ -170,24 +170,19 @@ describe('both delete surfaces offer the undo (AGL-1467)', () => {
    * One control for both, for the reason AGL-1461 gave when it routed the card
    * and the drawer through a single `handleDelete`: two copies of an
    * affordance on a destructive path are two things to keep in step.
+   *
+   * What the button DOES — carries `UNDO_LABEL`, calls the restore with the
+   * snackbar's targets, and dismisses on success only — was asserted here as
+   * three searches through this callback's source until AGL-1482 lifted it to
+   * `media-undo-action.tsx`. It is now three clicks in
+   * `media-undo-action.spec.tsx`, which is the only place the refusal case can
+   * actually be observed. All this has left to say is that the library reaches
+   * for that control rather than open-coding a second one.
    */
-  it('the shared action is the one that calls the restore', () => {
-    const body = callbackBody('undoAction')
-    expect(body).toContain('UNDO_LABEL')
-    expect(body).toContain('restoreMedia(targets)')
-  })
-
-  /**
-   * Dismissed on success ONLY. A refusal a person can act on — the plan's
-   * storage limit — must not take the button with it: the server deliberately
-   * keeps the tombstone through a refusal so the answer is "not yet", and
-   * closing the snackbar first would make it "gone" in the UI anyway.
-   */
-  it('keeps the Undo button up when the restore was refused', () => {
-    const body = callbackBody('undoAction')
-    expect(body).toMatch(/if \(ok\) closeSnackbar/)
-    // The unconditional form, which is what this replaced.
-    expect(body).not.toMatch(/\n\s*closeSnackbar\(snackbarId\)\n/)
+  it('the shared action is the extracted one', () => {
+    expect(callbackBody('undoAction')).toContain(
+      'mediaUndoAction(targets, { restoreMedia, closeSnackbar })',
+    )
   })
 
   /**

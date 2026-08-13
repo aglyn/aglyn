@@ -91,19 +91,37 @@ describe('delete from the detail drawer (AGL-1461)', () => {
   })
 })
 
+/**
+ * AGL-1482: the timing claim moved out of this file, because it could.
+ *
+ * This block used to hold `expect(handleDeleteBody()).not.toContain('await
+ * scanReferences')` — a claim about WHEN the dialog opens, expressed as a
+ * claim about a keyword. It was measured against the break it exists to catch:
+ * with the flow rewritten to `await scanReferences(mediaId)` before calling
+ * `confirm`, that assertion stayed GREEN, because the awaiting had moved one
+ * function along. Four behavioural assertions in
+ * `media-delete-confirm.spec.tsx` went red on the same edit.
+ *
+ * So the ordering now lives in `confirmMediaDelete`, which is a module rather
+ * than four lines inside a 4,000-line component, and is proved by running it
+ * against a scan that never settles. What is left here is the one thing that
+ * spec cannot see: that THIS handler is the caller, and that it hands over the
+ * scan FUNCTION rather than an answer it already waited for.
+ */
 describe('the confirm dialog does not wait on the scan (AGL-1461)', () => {
-  it('never awaits scanReferences inside handleDelete', () => {
-    expect(handleDeleteBody()).not.toContain('await scanReferences')
+  it('confirms through the flow that starts the scan behind the dialog', () => {
+    const body = handleDeleteBody()
+    expect(body).toMatch(/const confirmed = await confirmMediaDelete\(\{/)
   })
 
   /**
-   * The positive half: the scan still has to HAPPEN and still has to reach
-   * the dialog. Dropping the call entirely would satisfy the assertion above
-   * and would quietly undo AGL-1413.
+   * Handed unstarted. `scanReferences,` is the function; `scanReferences(` at
+   * this call site would be a caller that already has the answer, which is
+   * only possible if it awaited one.
    */
-  it('still starts the scan and hands it to the dialog', () => {
+  it('passes the scan itself, not a result it already has', () => {
     const body = handleDeleteBody()
-    expect(body).toContain('scanReferences(media.$id)')
-    expect(body).toContain('MediaDeleteConfirmDescription')
+    expect(body).toContain('scanReferences,')
+    expect(body).not.toMatch(/scanReferences\(/)
   })
 })
