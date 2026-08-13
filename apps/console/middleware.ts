@@ -22,6 +22,7 @@ import {
   isWorkspaceDomainHost,
   WORKSPACE_DOMAIN,
 } from './constants/workspace-domain'
+import { enforceSanctionsGeo } from './constants/sanctions-geo'
 // One source of truth for the frame-ancestors allowlist, shared with
 // `with-aglyn.nextjs.config.js` so the two cannot drift (AGL-523).
 //
@@ -240,6 +241,31 @@ function orgScopedPath(request: NextRequest, slug: string): URL | null {
 }
 
 export async function middleware(request: NextRequest) {
+  // Sanctions / OFAC geo-block (AGL-1492), FIRST — before the nonce, before
+  // any host verdict, before any Firestore-backed lookup.
+  //
+  // The order is the point twice over. An embargoed request must not be able
+  // to spend our Firestore quota on a verdict lookup, and — more importantly —
+  // "we do not serve this region" has to be answered by the layer that decides
+  // WHETHER to serve, not by one of the layers that decides WHAT to serve. Put
+  // below the host gates it would be reachable only on hosts those gates pass.
+  //
+  // This covers every console page including `/signup` and `/signin`, which is
+  // the surface ToS §3.6 is actually about. It does NOT cover `/api/*` — those
+  // sit outside the matcher below, exactly as the workspace-host gate does, so
+  // the two routes that provide the service on their own (`/api/auth/session`
+  // mints the session; `/api/orgs/create` provisions the org) carry the same
+  // check directly. Same reasoning as `rejectUnknownWorkspaceHost`.
+  //
+  // Re-wrapped as a `NextResponse` rather than returned as the plain `Response`
+  // the policy module builds. `sanctions-geo.ts` stays framework-free so the
+  // route handlers can share it, but returning a bare `Response` from here
+  // widens this function's inferred return type to `NextResponse | Response`,
+  // and every existing caller that reads `.cookies` off it stops type-checking.
+  // The conversion is lossless — body, status and headers all carry.
+  const refused = enforceSanctionsGeo(request.headers, 'page')
+  if (refused) return new NextResponse(refused.body, refused)
+
   // CSP script-src: ENFORCING for everyone (AGL-518, AGL-523).
   //
   // The rule everything here follows, found by measurement and documented
