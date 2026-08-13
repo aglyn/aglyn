@@ -29,7 +29,26 @@
 //     node tools/scripts/deploy-storage-rules.mjs
 
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { cert, initializeApp } from 'firebase-admin/app'
+import { assertCleanDeploySource } from './lib/clean-deploy-source.mjs'
+
+// Dirty-tree refusal (AGL-1489): the deploy ships the worktree copy
+// wholesale, so uncommitted edits — possibly another session's — would go
+// live silently. `--allow-dirty` is the typed escape hatch.
+const rulesPath = fileURLToPath(
+  new URL('../../cloud/firebase-storage.rules', import.meta.url),
+)
+try {
+  const verdict = assertCleanDeploySource(rulesPath, {
+    allowDirty: process.argv.includes('--allow-dirty'),
+    fileLabel: 'cloud/firebase-storage.rules',
+  })
+  if (verdict.warning) console.warn(verdict.warning)
+} catch (error) {
+  console.error(error.message)
+  process.exit(1)
+}
 
 const projectId = process.env.FIREBASE_PROJECT_ID
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
@@ -52,10 +71,7 @@ const headers = {
   'Content-Type': 'application/json',
 }
 const project = `projects/${projectId}`
-const content = readFileSync(
-  new URL('../../cloud/firebase-storage.rules', import.meta.url),
-  'utf8',
-)
+const content = readFileSync(rulesPath, 'utf8')
 
 // 1) Create the ruleset — the API compiles it and rejects on errors.
 const created = await (

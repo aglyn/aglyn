@@ -31,7 +31,26 @@
 //     node tools/scripts/deploy-database-rules.mjs
 
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { cert, initializeApp } from 'firebase-admin/app'
+import { assertCleanDeploySource } from './lib/clean-deploy-source.mjs'
+
+// Dirty-tree refusal (AGL-1489): the deploy ships the worktree copy
+// wholesale, so uncommitted edits — possibly another session's — would go
+// live silently. `--allow-dirty` is the typed escape hatch.
+const rulesJsonPath = fileURLToPath(
+  new URL('../../cloud/firebase-database.rules.json', import.meta.url),
+)
+try {
+  const verdict = assertCleanDeploySource(rulesJsonPath, {
+    allowDirty: process.argv.includes('--allow-dirty'),
+    fileLabel: 'cloud/firebase-database.rules.json',
+  })
+  if (verdict.warning) console.warn(verdict.warning)
+} catch (error) {
+  console.error(error.message)
+  process.exit(1)
+}
 
 const projectId = process.env.FIREBASE_PROJECT_ID
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
@@ -46,10 +65,7 @@ const databaseUrl = (
   `https://${projectId}-default-rtdb.firebaseio.com`
 ).replace(/\/+$/, '')
 
-const content = readFileSync(
-  new URL('../../cloud/firebase-database.rules.json', import.meta.url),
-  'utf8',
-)
+const content = readFileSync(rulesJsonPath, 'utf8')
 // RTDB rules are JSON — parse locally so a malformed file fails fast with a
 // clear error instead of a generic 400 from the API.
 try {
