@@ -16,6 +16,7 @@
  */
 
 import {
+  billsOrgLibraryStorage,
   ESTIMATED_PAGE_TRANSFER_BYTES,
   estimateMonthlyUsageCost,
   meteredIncludedAllowance,
@@ -62,6 +63,65 @@ describe('meteredIncludedAllowance', () => {
     expect(included.storageGb).toBe(Number.POSITIVE_INFINITY)
     expect(included.pageViews).toBe(Number.POSITIVE_INFINITY)
     expect(included.formSubmissions).toBe(Number.POSITIVE_INFINITY)
+  })
+})
+
+/**
+ * The switch that decides whether org-library bytes reach an INVOICE
+ * (AGL-1473).
+ *
+ * Org DAM uploads have been gated against quota and dropped before pricing for
+ * months. Metering them is a correctness fix; CHARGING for them is a decision
+ * with an invoice attached, so it is a start MONTH rather than a boolean.
+ *
+ * A boolean would have been the obvious shape and it is the wrong one. The
+ * rollup can be re-run for any closed month — `report-usage` takes `month` in
+ * its body and the daily cron re-sweeps whatever has no `reportedAt` — so a
+ * boolean flipped on the 15th would bill a re-run of January at January's
+ * accumulated bytes. A start month is the only form of this switch that cannot
+ * reach backwards.
+ */
+describe('billsOrgLibraryStorage', () => {
+  it('bills nothing until a start month is configured', () => {
+    // The default has to be OFF. Metering ships; charging waits for a person.
+    expect(billsOrgLibraryStorage('2026-08', undefined)).toBe(false)
+    expect(billsOrgLibraryStorage('2026-08', '')).toBe(false)
+    expect(billsOrgLibraryStorage('2026-08', null)).toBe(false)
+  })
+
+  it('bills the start month itself and every month after it', () => {
+    expect(billsOrgLibraryStorage('2026-09', '2026-09')).toBe(true)
+    expect(billsOrgLibraryStorage('2026-10', '2026-09')).toBe(true)
+    expect(billsOrgLibraryStorage('2027-01', '2026-09')).toBe(true)
+  })
+
+  it('NEVER bills a month that closed before the start month', () => {
+    // The no-backdating guarantee, stated as a test. Re-running an invoiced
+    // month must produce the same bill it produced the first time.
+    expect(billsOrgLibraryStorage('2026-08', '2026-09')).toBe(false)
+    expect(billsOrgLibraryStorage('2026-01', '2026-09')).toBe(false)
+    expect(billsOrgLibraryStorage('2025-12', '2026-09')).toBe(false)
+  })
+
+  it('compares by month, not by string luck across a year boundary', () => {
+    // `'2026-09' <= '2027-01'` is true lexicographically only because the
+    // format is zero-padded and fixed-width. Pinned so a future format change
+    // (a `YYYY-M`, a date) fails here rather than at an invoice.
+    expect(billsOrgLibraryStorage('2027-01', '2026-12')).toBe(true)
+    expect(billsOrgLibraryStorage('2026-12', '2027-01')).toBe(false)
+  })
+
+  it('bills nothing when the configured value is not a month', () => {
+    // A typo'd env var must fail CLOSED. Charging because someone wrote
+    // `true` in a field expecting `2026-09` is the one direction with an
+    // invoice behind it.
+    for (const bad of ['true', 'yes', '2026', '2026-9', 'now', '0']) {
+      expect(billsOrgLibraryStorage('2026-12', bad)).toBe(false)
+    }
+  })
+
+  it('tolerates surrounding whitespace, which env vars collect', () => {
+    expect(billsOrgLibraryStorage('2026-09', ' 2026-09 ')).toBe(true)
   })
 })
 

@@ -85,6 +85,12 @@ async function handler(request: Request): Promise<Response> {
       let actionRuns = 0
       // Media storage (AGL-484): total bytes stored across the org's hosts,
       // to warn when a downgrade leaves an org over its media allowance.
+      //
+      // Plus the ORG LIBRARY, added below (AGL-1473). An org DAM upload counts
+      // against `orgs/{id}/counters/media`, which this sum never read — so an
+      // org sitting over its allowance purely in the shared library got no
+      // warning at all, on the one alert whose entire job is telling somebody
+      // before a downgrade bites.
       let mediaBytes = 0
       // Bandwidth (AGL-1106): this month's page views × the average page
       // transfer — same estimate the billing meter uses; it was displayed
@@ -129,6 +135,20 @@ async function handler(request: Request): Promise<Response> {
           0,
         )
       }
+      // The org library's own counter (AGL-1473). ONE read for the whole org,
+      // not one per host — it belongs to no site, so it cannot fan out.
+      //
+      // This is a WARNING, not a charge, so it is not behind
+      // `BILL_ORG_LIBRARY_STORAGE_FROM`: the bytes are already enforced
+      // against `storagePerHostMb` at upload, and an alert that stays silent
+      // about storage the platform will refuse the next upload for is the
+      // defect, not the caution.
+      const orgMediaCounter = await org.ref
+        .collection('counters')
+        .doc('media')
+        .get()
+      mediaBytes += Math.max(0, Number(orgMediaCounter.get('bytes') ?? 0) || 0)
+
       const hostCount = hosts.size
       const mediaMb = mediaBytes / (1024 * 1024)
       // Org-wide: the loop above summed every host's page views, and
@@ -210,6 +230,7 @@ async function handler(request: Request): Promise<Response> {
         {
           key: 'mediaStorage',
           label: 'media storage',
+          // Every site's library PLUS the org's shared one (AGL-1473).
           used: mediaMb,
           // Org-wide media allowance: per-host cap × the site allowance.
           limit: entitlements.hostLimit * entitlements.storagePerHostMb,

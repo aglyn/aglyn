@@ -134,6 +134,46 @@ export function orgBandwidthGb(
   )
 }
 
+/**
+ * Whether `month`'s invoice includes the ORG LIBRARY's stored bytes
+ * (AGL-1473).
+ *
+ * Org DAM uploads move `orgs/{id}/counters/media`, and every consumer that
+ * turns bytes into money summed host counters only — so those bytes have been
+ * enforced against the storage cap and never priced. Metering them is a
+ * correctness fix and ships unconditionally. CHARGING for bytes that have been
+ * sitting in org libraries for months is a decision with an invoice attached,
+ * so it waits behind this.
+ *
+ * **A start MONTH, not a boolean, and that is the whole design.** `report-usage`
+ * takes `month` in its body and the daily cron re-sweeps any org-month without
+ * `reportedAt`, so a boolean flipped mid-September would bill a re-run of
+ * January at January's accumulated bytes — retroactively, against a month
+ * already invoiced. A start month cannot reach backwards no matter when it is
+ * set, which makes the no-backdating guarantee a property of the mechanism
+ * rather than of anyone's care.
+ *
+ * TO TURN IT ON: set `BILL_ORG_LIBRARY_STORAGE_FROM` to the first month whose
+ * invoice should include org-library bytes, as `YYYY-MM`, in the console
+ * project's environment. Nothing else changes; the measurement, the audit
+ * fields and the COGS figure are already live.
+ *
+ * FAILS CLOSED. Anything that is not a `YYYY-MM` — `true`, `1`, a date, a
+ * typo — bills nothing. The alternative is charging customers because somebody
+ * wrote `yes` in a field that wanted a month.
+ */
+export function billsOrgLibraryStorage(
+  month: string,
+  configuredStart: string | null | undefined,
+): boolean {
+  const start = String(configuredStart ?? '').trim()
+  if (!/^\d{4}-\d{2}$/.test(start)) return false
+  if (!/^\d{4}-\d{2}$/.test(month)) return false
+  // Zero-padded fixed-width `YYYY-MM` orders identically as a string and as a
+  // date; the format check above is what makes that true rather than lucky.
+  return month >= start
+}
+
 /** One month of usage for a single host (from the per-host counters). */
 export interface HostUsageSnapshot {
   storageBytes: number
