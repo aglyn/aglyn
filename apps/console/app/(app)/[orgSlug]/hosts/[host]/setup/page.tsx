@@ -54,6 +54,7 @@ import CustomDomainCard from '../../../../../../components/custom-domain-card.co
 import SiteEmailsCard from '../../../../../../components/site-emails-card.component'
 import FaviconCard from '../../../../../../components/favicon-card.component'
 import SearchIndexingCard from '../../../../../../components/search-indexing-card.component'
+import ConsentBannerCard from '../../../../../../components/consent-banner-card.component'
 import SocialImageCard from '../../../../../../components/social-image-card.component'
 import BusinessDetailsCard from '../../../../../../components/business-details-card.component'
 import LogoCard from '../../../../../../components/logo-card.component'
@@ -149,7 +150,9 @@ const seoSchema: FormSchema = {
       component: FieldComponentType.TEXT_FIELD,
       name: 'analytics.gaMeasurementId',
       label: 'Google Analytics measurement ID',
-      helperText: 'Optional — e.g. G-XXXXXXXXXX; injects gtag on your site',
+      helperText:
+        'Optional — e.g. G-XXXXXXXXXX; injects gtag on your site. Visitors ' +
+        'are asked for consent first (see the Cookie consent card below).',
       help: docsHelp('analytics', {
         anchor: '#google-analytics',
         excerpt:
@@ -839,6 +842,13 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                                 one direction that must never be blocked. */}
                             <div style={{ marginTop: 24 }}>
                               <SearchIndexingCard hostId={hostId} />
+                            </div>
+                            {/* Visitor consent tool (AGL-1498). Beside the
+                                GA field it governs: same tab, its own card
+                                for the same submit-validation reason as the
+                                indexing switch above. */}
+                            <div style={{ marginTop: 24 }}>
+                              <ConsentBannerCard hostId={hostId} />
                             </div>
                           </>
                         ) : null}

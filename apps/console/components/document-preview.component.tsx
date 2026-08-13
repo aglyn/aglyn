@@ -18,6 +18,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { AglynNodeRenderer, useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import {
   getGoogleFontsUrl,
@@ -29,11 +30,21 @@ import {
   Alert,
   CircularProgress,
   CssBaseline,
+  MenuItem,
+  Paper,
   Snackbar,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material'
-import { collection, getDocs, limit, query } from 'firebase/firestore'
+import {
+  collection,
+  doc as firestoreDoc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+} from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -60,6 +71,36 @@ const KIND_LABEL: Record<PreviewKind, string> = {
   component: 'component',
   layout: 'layout',
   template: 'template',
+}
+
+/**
+ * Region simulation for the consent banner (AGL-1498): "view my site
+ * as-if-from the EU / the US / an unknown region / a GPC browser" without
+ * leaving the console. Zach is in the US and would otherwise never see the
+ * EU banner — "it works" needs a better answer than trust.
+ *
+ * It lives HERE, and only here, on purpose: the preview surface is
+ * authenticated console UI, so the override can never reach an anonymous
+ * visitor — a crafted link forcing `region=US` onto an EU visitor would
+ * strip their banner, which is why published pages honor no such parameter
+ * (the one published-page override, `?aglynConsent=ask`, moves TOWARD
+ * strictness only). Same trust boundary as the `aglyn-tenant-host`
+ * preview-override precedent.
+ */
+type ConsentSimulation = 'off' | 'eu' | 'us' | 'unknown' | 'gpc'
+
+const CONSENT_SIMULATIONS: Array<{ value: ConsentSimulation; label: string }> = [
+  { value: 'off', label: 'Off' },
+  { value: 'eu', label: 'EU visitor' },
+  { value: 'us', label: 'US visitor' },
+  { value: 'unknown', label: 'Unknown region' },
+  { value: 'gpc', label: 'GPC browser' },
+]
+
+const SIMULATED_COUNTRY: Record<'eu' | 'us' | 'unknown', string | null> = {
+  eu: 'DE',
+  us: 'US',
+  unknown: null,
 }
 
 export interface DocumentPreviewProps {
@@ -98,11 +139,86 @@ export function DocumentPreview(props: DocumentPreviewProps) {
   const [definitions, setDefinitions] = useState<
     Record<string, Aglyn.ReusableComponentTree> | undefined
   >(undefined)
+  // Consent-banner region simulation (AGL-1498); see ConsentSimulation.
+  const [consentSim, setConsentSim] = useState<ConsentSimulation>('off')
+  const [consentHost, setConsentHost] = useState<Aglyn.VisitorConsentHost | null>(
+    null,
+  )
+  const [simDecision, setSimDecision] =
+    useState<Aglyn.VisitorConsentStatus | null>(null)
 
   const hostId = ids?.hostId
   const kind = ids?.kind
   const docId = ids?.docId
   const versionId = ids?.versionId
+
+  // The host's consent config (GA id + mode), read lazily the first time the
+  // simulator is switched on — the default 'off' costs nothing.
+  useEffect(() => {
+    if (consentSim === 'off' || !hostId || !firestore || consentHost) {
+      return undefined
+    }
+    let cancelled = false
+    firestoreOneShotRetry(
+      () => getDoc(firestoreDoc(firestore, 'hosts', hostId)),
+      'consent-host',
+    )
+      .then((snapshot) => {
+        if (cancelled) return
+        setConsentHost((snapshot.data() as Aglyn.VisitorConsentHost) ?? {})
+      })
+      .catch(() => {
+        if (!cancelled) setConsentHost({})
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [consentSim, hostId, firestore, consentHost])
+
+  // The simulated visitor state, from the SAME resolution rules the tenant
+  // hook applies — posture from `resolveConsentPosture`, implied recorded in
+  // the opt-out posture, GPC as an automatic opt-out — so what the preview
+  // shows is the rule, not a re-enactment of it. `simDecision` holds clicks
+  // made inside the simulation; nothing is ever persisted.
+  const consentPreview = useMemo(() => {
+    if (consentSim === 'off' || !consentHost || !hostId) return null
+    if (!Aglyn.hostConsentRequired(consentHost)) {
+      return { required: false as const }
+    }
+    const now = Date.now()
+    const country = consentSim === 'gpc' ? null : SIMULATED_COUNTRY[consentSim]
+    let stored: Aglyn.StoredVisitorConsent | null = null
+    let posture: Aglyn.VisitorConsentPosture | null = null
+    if (simDecision) {
+      stored = {
+        v: 1,
+        at: now,
+        status: simDecision,
+        analytics: Aglyn.analyticsGrantedByStatus(simDecision),
+        country,
+      }
+    } else if (consentSim === 'gpc') {
+      stored = {
+        v: 1,
+        at: now,
+        status: 'gpc-opt-out',
+        analytics: false,
+        country,
+      }
+    } else {
+      posture = Aglyn.resolveConsentPosture(consentHost, country)
+      if (posture === 'opt-out') {
+        stored = { v: 1, at: now, status: 'implied', analytics: true, country }
+      }
+    }
+    return {
+      required: true as const,
+      stored,
+      posture,
+      country,
+      allowed: Aglyn.isAnalyticsAllowed(consentHost, stored),
+    }
+  }, [consentSim, consentHost, hostId, simDecision])
 
   // Reusable-instance definitions (AGL-1211). The snapshot carries
   // `reusableInstance` nodes verbatim — the besigner composes the layout chain
@@ -375,6 +491,76 @@ export function DocumentPreview(props: DocumentPreviewProps) {
             />
           ))
         : null}
+      {/* Consent region simulator (AGL-1498) — see ConsentSimulation. The
+          picker is console chrome; the banner below it is the REAL shared
+          component the tenant mounts, fed simulated state, so what Zach
+          sees is what an EU/US/unknown/GPC visitor gets. */}
+      <Paper
+        elevation={4}
+        sx={{
+          position: 'fixed',
+          top: 12,
+          right: 12,
+          zIndex: 2147483500,
+          padding: 1.5,
+          width: 250,
+        }}
+      >
+        <Stack spacing={1}>
+          <TextField
+            select
+            size="small"
+            label="Consent preview"
+            value={consentSim}
+            onChange={(event) => {
+              setSimDecision(null)
+              setConsentSim(event.target.value as ConsentSimulation)
+            }}
+          >
+            {CONSENT_SIMULATIONS.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
+          {consentPreview ? (
+            consentPreview.required ? (
+              <Typography
+                variant="caption"
+                color={
+                  consentPreview.allowed ? 'warning.main' : 'text.secondary'
+                }
+              >
+                {(consentPreview.allowed
+                  ? 'Google Analytics: WOULD LOAD'
+                  : 'Google Analytics: blocked') +
+                  (consentPreview.stored
+                    ? ` — recorded "${consentPreview.stored.status}"`
+                    : ' — awaiting the visitor choice') +
+                  '. Simulated: nothing is saved.'}
+              </Typography>
+            ) : (
+              <Typography variant="caption" color="text.secondary">
+                {'No analytics configured (or the consent tool is off) — ' +
+                  'no consent UI renders on this site.'}
+              </Typography>
+            )
+          ) : consentSim !== 'off' ? (
+            <Typography variant="caption" color="text.secondary">
+              {'Loading site consent settings…'}
+            </Typography>
+          ) : null}
+        </Stack>
+      </Paper>
+      {consentPreview?.required && hostId ? (
+        <ConsentBannerUi
+          hostId={hostId}
+          stored={consentPreview.stored}
+          posture={consentPreview.posture}
+          country={consentPreview.country}
+          onDecision={setSimDecision}
+        />
+      ) : null}
     </ThemeProvider>
   )
 }

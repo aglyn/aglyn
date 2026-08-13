@@ -158,6 +158,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Templates, Blocks & Content',
     excerpt: 'Start from templates, drop in pre-built sections and blocks, and publish a blog with collections.',
   },
+  cookieConsent: {
+    path: '/marketing-and-automation/analytics/cookie-consent',
+    title: 'Cookie consent',
+    excerpt: 'Ask visitors before analytics runs — or track immediately where the law allows, with an always-available opt-out. Google Analytics never loads for a visitor whose recorded state does not grant it.',
+  },
   copyAssist: {
     path: '/marketing-and-automation/ai-assist/copy-assist',
     title: 'Copy assist',
@@ -591,6 +596,7 @@ export const DOCS_HELP_ANCHORS = {
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
   contacts: ['#unified-ingestion', '#the-contacts-page', '#segments', '#related'],
   content: ['#site-templates--starter-gallery', '#section--block-library', '#content-collections--blog', '#related'],
+  cookieConsent: ['#how-it-works', '#what-needs-consent', '#privacy-choices--the-persistent-control', '#global-privacy-control', '#previewing-what-visitors-see', '#turn-the-banner-off'],
   copyAssist: ['#use-it', '#tips', '#related'],
   copyPaste: ['#copy', '#paste', '#between-documents', '#copy--paste-vs-duplicate-vs-reusable-components', '#shortcuts', '#related'],
   createARedirect: ['#add-a-rule', '#read-hit-metrics', '#related'],
