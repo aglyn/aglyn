@@ -384,6 +384,32 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
 
   const { org, ready: orgReady } = useCurrentOrg()
+  /**
+   * The scope stored on a folder created here (AGL-1466).
+   *
+   * A folder used to be written as `{ name, parentId, createdAt }` — no
+   * `visibleTo` at all — and both enforcement layers fail closed on the
+   * missing field, so every folder the console created was invisible to the
+   * listener below the moment the library was opened for a site. The files
+   * were fine; they just fell back to "No folder", which reads like data
+   * loss rather than a scoping bug.
+   *
+   * `null` for a SITE library: `hosts/{hostId}/mediaFolders` is private by
+   * construction and stores no scope. For the ORG library this is the same
+   * AGL-1048 default the datasets and uploads created beside it take, so a
+   * folder cannot end up scoped differently from its own contents just
+   * because a different code path made it.
+   */
+  const newFolderScope = useMemo<Aglyn.ScopeToken[] | null>(
+    () =>
+      orgId
+        ? Aglyn.defaultScopeForNewResource({
+            defaultResourceScope: (org as any)?.defaultResourceScope,
+            hostId: forHostId ?? null,
+          })
+        : null,
+    [orgId, org, forHostId],
+  )
   // The org is a path segment in every console route; the "Used on" deep
   // links (AGL-845) build `/[orgSlug]/hosts/[subdomain]/…` from it.
   const orgSlug = useOrgSlug()
@@ -624,8 +650,30 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     return typeof window !== 'undefined' ? window.location.origin : ''
   }, [hostId, hostDoc])
 
-  // Folder hierarchy (AGL-171): first-class docs replace the AGL-124
-  // free-text `folder` string. Legacy strings migrate lazily below.
+  /**
+   * Folder hierarchy (AGL-171): first-class docs replace the AGL-124
+   * free-text `folder` string. Legacy strings migrate lazily below.
+   *
+   * This filter is DELIBERATELY not tolerant of a missing `visibleTo`
+   * (AGL-1466). Every folder it failed to return was a folder nobody had
+   * stamped, and the tempting reading — the editor says "All sites", the
+   * AGL-1037 helpers treat absent as org-wide, so let the query agree — is
+   * the one thing this must not do:
+   *
+   * * There is no narrow version of it. Firestore cannot ask for "field
+   *   absent OR array-contains-any"; tolerating absent means DROPPING the
+   *   `where`, which returns every folder in the org including the ones
+   *   deliberately restricted to another client's site.
+   * * The rules would refuse it anyway for the caller who needs it most. An
+   *   unfiltered list is denied outright for a scoped collaborator — AGL-1047
+   *   removed exactly this escape hatch after proving against the emulator
+   *   that it let one list the whole collection.
+   * * Absent is now a bug, not a legacy state. The backfill has run, the
+   *   affected folders were repaired by hand, and the writes above stamp
+   *   every new one, so failing closed reports the bug instead of hiding it.
+   *
+   * The dialog was the half that was wrong, and the dialog is what changed.
+   */
   const { data: folderDocs } = useFirestoreCollection<any>(
     () =>
       // `null` skips the listener entirely until the read set is known —
@@ -679,7 +727,22 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     for (const name of plan.foldersToCreate) {
       const ref = doc(collection(firestore, scopeCollection, scopeId, 'mediaFolders'))
       idByName[name.toLowerCase()] = ref.id
-      batch.set(ref, { name, parentId: null, createdAt: serverTimestamp() })
+      // Org-wide rather than `newFolderScope` (AGL-1466). This folder is
+      // about to collect assets that already carry their OWN scopes, and a
+      // folder narrower than its contents recreates the exact symptom this
+      // issue is about: a file visible to a site, filed under a folder that
+      // site cannot see, so it shows up in "No folder". `'org'` is the only
+      // token guaranteed to cover every asset the plan assigns to it, and a
+      // folder holds nothing but a name.
+      batch.set(
+        ref,
+        Aglyn.newMediaFolderDoc({
+          name,
+          parentId: null,
+          createdAt: serverTimestamp(),
+          visibleTo: orgId ? [Aglyn.ORG_SCOPE_TOKEN] : null,
+        }),
+      )
     }
     for (const assignment of plan.assignments) {
       const folderId = idByName[assignment.folderName.toLowerCase()]
@@ -922,12 +985,28 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       }
       const ref = doc(collection(firestore, scopeCollection, scopeId, 'mediaFolders'))
       const batch = writeBatch(firestore)
-      batch.set(ref, { name, parentId, createdAt: serverTimestamp() })
+      batch.set(
+        ref,
+        Aglyn.newMediaFolderDoc({
+          name,
+          parentId,
+          createdAt: serverTimestamp(),
+          visibleTo: newFolderScope,
+        }),
+      )
       await batch.commit()
       logActivity('Created media folder', { type: 'media', name })
       return ref.id
     },
-    [firestore, scopeId, folderList, foldersById, enqueueSnackbar, logActivity],
+    [
+      firestore,
+      scopeId,
+      folderList,
+      foldersById,
+      newFolderScope,
+      enqueueSnackbar,
+      logActivity,
+    ],
   )
   const handleFolderRename = useCallback(
     async (folder: Aglyn.AglynHostMediaFolder, rawName: string) => {
@@ -1768,6 +1847,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     visibleTo: string[]
     /** True when the chosen assets do not currently agree on a scope. */
     mixed: boolean
+    /**
+     * True when NOTHING is stored (AGL-1466) — as opposed to `['org']`
+     * being stored. The two are not the same thing and this dialog used to
+     * render them identically, which is what hid the missing writes.
+     */
+    unset: boolean
     /** Files under the folder — null while the count is in flight. */
     fileCount: number | null
     applyToFiles: boolean
@@ -1780,27 +1865,44 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   } | null>(null)
   const canShareScope = Boolean(orgId) && viewerOrgWide && !onSelect
 
-  /** The scope stored on a media doc, defaulted the way the rules do. */
-  const scopeOfMedia = useCallback((media: any): string[] => {
+  /**
+   * The scope actually STORED on a media doc — `null` when the field is
+   * absent (AGL-1466).
+   *
+   * This used to answer `[ORG_SCOPE_TOKEN]` for an absent field, "defaulted
+   * the way the rules do". The rules do the opposite: `hasAny` and
+   * `array-contains-any` both fail closed on a missing field, so an absent
+   * scope means visible to NO site, and the dialog was reporting the exact
+   * inverse of the truth. Nothing downstream may re-introduce that
+   * substitution — it is the reason a folder tree could be missing from
+   * every host for three weeks with the sharing dialog saying "All sites".
+   */
+  const scopeOfMedia = useCallback((media: any): string[] | null => {
     const stored = Array.isArray(media?.visibleTo) ? media.visibleTo : null
-    return stored?.length ? stored : [Aglyn.ORG_SCOPE_TOKEN]
+    return stored?.length ? stored : null
   }, [])
 
   const openSelectionScope = useCallback(() => {
     const ids = [...selected]
     const scopes = ids.map((id) =>
       JSON.stringify(
-        [...scopeOfMedia(items.find((item: any) => item.$id === id))].sort(),
+        [
+          ...(scopeOfMedia(items.find((item: any) => item.$id === id)) ?? []),
+        ].sort(),
       ),
     )
     const agreed = scopes.length && scopes.every((s) => s === scopes[0])
+    // Mixed selections start with nothing chosen. Pre-filling one of the
+    // values would make Apply overwrite the others with a scope nobody
+    // typed — the widening direction of that is a silent leak.
+    const value: string[] = agreed ? JSON.parse(scopes[0]) : []
     setScopeRun(null)
     setScopeDialog({
       target: { kind: 'selection', ids },
-      // Mixed selections start with nothing chosen. Pre-filling one of the
-      // values would make Apply overwrite the others with a scope nobody
-      // typed — the widening direction of that is a silent leak.
-      visibleTo: agreed ? JSON.parse(scopes[0]) : [],
+      visibleTo: value,
+      // They agree, and what they agree on is "nothing stored" — which the
+      // dialog has to say rather than paper over.
+      unset: Boolean(agreed) && !value.length,
       mixed: !agreed,
       fileCount: ids.length,
       applyToFiles: true,
@@ -1809,11 +1911,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   const openFolderScope = useCallback(
     (folder: any) => {
-      const stored = Array.isArray(folder?.visibleTo) ? folder.visibleTo : null
+      const stored = Array.isArray(folder?.visibleTo) && folder.visibleTo.length
+        ? (folder.visibleTo as string[])
+        : null
       setScopeRun(null)
       setScopeDialog({
         target: { kind: 'folder', id: folder.$id, name: folder.name },
-        visibleTo: stored?.length ? stored : [Aglyn.ORG_SCOPE_TOKEN],
+        visibleTo: stored ?? [],
+        unset: !stored,
         mixed: false,
         fileCount: null,
         applyToFiles: true,
@@ -1834,7 +1939,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             ...scopeBody,
             action: 'set-scope',
             folderId: folder.$id,
-            visibleTo: stored?.length ? stored : [Aglyn.ORG_SCOPE_TOKEN],
+            // Only the COUNT is wanted here (`preview`), and the walk does
+            // not depend on the scope — but the route refuses an unusable
+            // one, so an unset folder sends the org token to get its number
+            // rather than a 400. Nothing is written on a preview.
+            visibleTo: stored ?? [Aglyn.ORG_SCOPE_TOKEN],
             preview: true,
           }),
         })
@@ -3508,19 +3617,46 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   'here replaces the sharing on all of them.'}
               </Alert>
             ) : null}
+            {/*
+              The state this dialog used to hide (AGL-1466). An absent
+              `visibleTo` was rendered as "All sites", the exact inverse of
+              what the read side does with it, so a folder that no site
+              could see reported itself as shared with all of them. Saying
+              it out loud is the whole point: it costs a sentence, and it is
+              what turns the next occurrence of this class from three weeks
+              invisible into one glance.
+            */}
+            {scopeDialog?.unset ? (
+              <Alert severity="warning">
+                {scopeDialog.target.kind === 'folder'
+                  ? 'This folder has never been shared. Nothing is stored, ' +
+                    'so it is hidden from every site — and any file inside ' +
+                    'it shows up under "No folder" there. Choose who it is ' +
+                    'shared with to fix that.'
+                  : 'These files have never been shared. Nothing is stored, ' +
+                    'so they are hidden from every site. Choose who they ' +
+                    'are shared with to fix that.'}
+              </Alert>
+            ) : null}
             <Select
               size="small"
               fullWidth
               value={
                 scopeDialog?.visibleTo.includes(Aglyn.ORG_SCOPE_TOKEN)
                   ? 'org'
-                  : 'hosts'
+                  : scopeDialog?.unset
+                    ? 'unset'
+                    : 'hosts'
               }
               onChange={(event) =>
                 setScopeDialog((prev) =>
                   prev
                     ? {
                         ...prev,
+                        // Any choice ends the unset state — from here the
+                        // control shows what the user picked, not what was
+                        // (not) stored.
+                        unset: false,
                         visibleTo:
                           event.target.value === 'org'
                             ? [Aglyn.ORG_SCOPE_TOKEN]
@@ -3530,10 +3666,21 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 )
               }
             >
+              {/*
+                A real sentinel rather than '', which MUI cannot hold as a
+                selected value. Rendered only while unset so it can never be
+                chosen back into.
+              */}
+              {scopeDialog?.unset ? (
+                <MenuItem value="unset" disabled>
+                  {'Not shared with any site'}
+                </MenuItem>
+              ) : null}
               <MenuItem value="org">{'All sites'}</MenuItem>
               <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
             </Select>
-            {!scopeDialog?.visibleTo.includes(Aglyn.ORG_SCOPE_TOKEN) ? (
+            {!scopeDialog?.unset &&
+            !scopeDialog?.visibleTo.includes(Aglyn.ORG_SCOPE_TOKEN) ? (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                 {orgHostList.map((host: any) => {
                   const token = Aglyn.hostScopeToken(host.$id)
