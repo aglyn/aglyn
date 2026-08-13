@@ -84,11 +84,15 @@ describe('the DAM grid uses the thumbnail source (AGL-1440 follow-up)', () => {
     expect(source).toContain('mediaThumbnailSrc(media')
   })
 
-  it('leaves VIDEO on the raw URL', () => {
-    // Deliberate, and the reason this spec exists rather than a blanket
-    // "no media.url anywhere": `serveMediaCdn` ignores `Range` entirely and
-    // streams the whole object, so routing a <video> through it turns every
-    // seek into a full re-download of a file that may be 200 MB.
-    expect(source).toContain('src={media.url}')
+  it('routes VIDEO through the CDN URL — Range support unlocked it', () => {
+    // This pin used to hold the OPPOSITE: video stayed on `media.url`
+    // because `serveMediaCdn` ignored `Range` and a <video> seek would have
+    // re-downloaded a file that may be 200 MB. AGL-1442 S4 gave the route
+    // single byte-range 206s (`serve-media-cdn.range.spec.ts` holds that
+    // contract), so the raw storage URL lost its only advantage — and with
+    // it went the CSP and the caching the raw URL never had. No `?w=`:
+    // variants are WebP stills of images, a video has none.
+    expect(source).not.toContain('src={media.url}')
+    expect(source).toContain('src={mediaSrc(media)}')
   })
 })

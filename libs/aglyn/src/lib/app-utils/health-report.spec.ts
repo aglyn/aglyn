@@ -17,6 +17,8 @@
 
 import {
   HEALTH_NO_STORE,
+  MAX_BACKUP_AGE_DAYS,
+  backupsHealth,
   healthBody,
   healthHeaders,
   healthHttpStatus,
@@ -122,6 +124,96 @@ describe('healthBody', () => {
     // The endpoint is public. Anything resembling an internal detail must not
     // be reachable through it.
     expect(Object.keys(BAD)).toEqual(['ok', 'ms', 'code'])
+  })
+})
+
+describe('backupsHealth', () => {
+  // Fixed clock: 2026-08-13T12:00:00Z.
+  const NOW = Date.parse('2026-08-13T12:00:00Z')
+  const days = (n: number) => new Date(NOW - n * 86_400_000).toISOString()
+
+  it('is ok with a fresh READY backup', () => {
+    const check = backupsHealth([{ state: 'READY', snapshotTime: days(4) }], 7, NOW)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.newestReadyAgeDays).toBe(4)
+    expect(check.states).toEqual({ READY: 1 })
+  })
+
+  it('fails on any NOT_AVAILABLE backup — the AGL-1490 gap', () => {
+    // The 2026-08-02 backup failed silently and sat unnoticed for 11 days.
+    // A fresh READY sibling does NOT excuse it: half the restore points being
+    // gone is exactly the condition that must page someone.
+    const check = backupsHealth(
+      [
+        { state: 'NOT_AVAILABLE', snapshotTime: days(11) },
+        { state: 'READY', snapshotTime: days(4) },
+      ],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('backup-failed')
+    expect(check.states).toEqual({ NOT_AVAILABLE: 1, READY: 1 })
+  })
+
+  it('fails when the newest READY backup exceeds the age budget', () => {
+    const check = backupsHealth(
+      [{ state: 'READY', snapshotTime: days(MAX_BACKUP_AGE_DAYS + 1) }],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('backup-stale')
+    expect(check.newestReadyAgeDays).toBe(MAX_BACKUP_AGE_DAYS + 1)
+  })
+
+  it('fails when no backup is READY at all — including an empty list', () => {
+    // The schedule exists, so "no backups" is a failure, not a fresh start.
+    expect(backupsHealth([], 7, NOW).code).toBe('no-ready-backup')
+    expect(
+      backupsHealth([{ state: 'CREATING', snapshotTime: days(0) }], 7, NOW).code,
+    ).toBe('no-ready-backup')
+  })
+
+  it('tolerates CREATING beside a fresh READY — the Sunday window', () => {
+    // Every week there is a moment where the newest backup is mid-creation.
+    // Paging on that teaches everyone to ignore the alert; the age rule
+    // still catches a backup that never finishes.
+    const check = backupsHealth(
+      [
+        { state: 'READY', snapshotTime: days(6) },
+        { state: 'CREATING', snapshotTime: days(0) },
+      ],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.newestReadyAgeDays).toBe(6)
+  })
+
+  it('gives CREATING no freshness credit', () => {
+    const check = backupsHealth(
+      [
+        { state: 'READY', snapshotTime: days(MAX_BACKUP_AGE_DAYS + 2) },
+        { state: 'CREATING', snapshotTime: days(0) },
+      ],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('backup-stale')
+  })
+
+  it('exposes counts only — no ids, no resource paths', () => {
+    // The endpoint is public; the body must stay describable in one line.
+    const check = backupsHealth([{ state: 'READY', snapshotTime: days(1) }], 7, NOW)
+    expect(Object.keys(check).sort()).toEqual([
+      'ms',
+      'newestReadyAgeDays',
+      'ok',
+      'states',
+    ])
   })
 })
 

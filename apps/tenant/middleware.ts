@@ -105,7 +105,54 @@ type EnvVercelEnv = 'production' | 'development' | 'preview' | undefined
 const TENANT_HOST_PARAM = 'tenantHost'
 const TENANT_HOST_COOKIE = 'aglyn-tenant-host'
 
-export const middleware: NextMiddleware = (req, event) => {
+/**
+ * Lockdown verdict at the REQUEST level (AGL-1501). The edge runtime cannot
+ * query Firestore (see the `cname--` sentinel above), so the verdict comes
+ * from this deployment's own Node route — the same fetch-a-verdict pattern
+ * the console middleware uses for slug/domain verdicts — memoized per
+ * isolate so a hot host costs one fetch per TTL, not one per request.
+ *
+ * Sitting HERE and not only in the (ISR-cached) loader is the point: a
+ * taken-down host must stop serving CACHED pages immediately, and only the
+ * middleware runs before the cache. 30s memo + the lockdown route's own
+ * revalidation fan-out bound the worst-case stale window to seconds, not
+ * the page's `revalidate = 60`.
+ *
+ * FAIL OPEN on any error: an unreachable verdict route is an outage, not a
+ * lockdown — same posture as the console middleware's verdict fetches. The
+ * loader's own lockdown branch is the defence in depth behind this.
+ */
+const LOCKDOWN_VERDICT_TTL_MS = 30_000
+const lockdownVerdicts = new Map<string, { at: number; locked: boolean }>()
+
+async function hostLockdownVerdict(
+  origin: string,
+  tenantHost: string,
+): Promise<boolean> {
+  const cached = lockdownVerdicts.get(tenantHost)
+  if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
+    return cached.locked
+  }
+  let locked = false
+  try {
+    const response = await fetch(
+      `${origin}/api/lockdown-verdict?host=${encodeURIComponent(tenantHost)}`,
+      { headers: { accept: 'application/json' } },
+    )
+    if (response.ok) {
+      const data = (await response.json().catch(() => null)) as {
+        locked?: boolean
+      } | null
+      locked = data?.locked === true
+    }
+  } catch {
+    // Fail open.
+  }
+  lockdownVerdicts.set(tenantHost, { at: Date.now(), locked })
+  return locked
+}
+
+export const middleware: NextMiddleware = async (req, event) => {
   const reqHost = req?.headers?.get('host') || 'app.aglyn.com'
   const AGLYN_TENANT_HOST_CNAME = process.env.AGLYN_TENANT_HOST_CNAME
   const AGLYN_TENANT_DEMO = process.env.AGLYN_TENANT_DEMO
@@ -234,6 +281,27 @@ export const middleware: NextMiddleware = (req, event) => {
       req.cookies.get('__Secure-next-auth.session-token'),
     )
     return NextResponse.redirect(new URL('/', req.url))
+  }
+
+  // Lockdown (AGL-1501): a locked host serves the 503 notice for EVERY
+  // matched path — pages, sitemap, robots, manifest, feeds — before any
+  // cached HTML can answer. Checked ahead of the SEO rewrites on purpose so
+  // a taken-down site stops advertising its content too.
+  if (await hostLockdownVerdict(req.nextUrl.origin, tenantHost)) {
+    const lockedUrl = req.nextUrl.clone()
+    lockedUrl.pathname = '/api/locked'
+    lockedUrl.search = ''
+    lockedUrl.searchParams.set('host', tenantHost)
+    // The host ALSO travels as a request header, exactly like the SEO
+    // rewrites below: a route handler behind a rewrite sees the ORIGINAL
+    // request URL, so a query set on the rewrite target alone never reaches
+    // it (verified against a production-mode server, AGL-1501) — the header
+    // is what survives.
+    const lockedHeaders = new Headers(req.headers)
+    lockedHeaders.set('x-aglyn-tenant-host', tenantHost)
+    return NextResponse.rewrite(lockedUrl, {
+      request: { headers: lockedHeaders },
+    })
   }
 
   // Per-host SEO files resolve through api routes (SEO Toolkit). Clone the

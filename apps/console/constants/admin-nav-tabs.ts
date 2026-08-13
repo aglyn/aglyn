@@ -65,6 +65,11 @@ export function adminNavTabItems() {
       href: buildRoute(Route.ADMIN_EMAILS),
     },
     {
+      id: 'nav-tab-admin-lockdown',
+      label: 'Lockdown',
+      href: buildRoute(Route.ADMIN_LOCKDOWN),
+    },
+    {
       id: 'nav-tab-admin-audit',
       label: 'Audit log',
       href: buildRoute(Route.ADMIN_AUDIT),

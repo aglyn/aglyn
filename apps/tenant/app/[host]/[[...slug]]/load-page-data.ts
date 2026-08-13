@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import {
   filterEnabledPluginsByReleaseFlags,
   firebaseAdmin,
+  getPlatformLockdown,
   getRealmPluginInstalls,
 } from '@aglyn/tenant-data-admin'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
@@ -237,21 +238,45 @@ const loadPageDataCached = cache(
     // promise here cannot become an unhandled rejection.
     const templateScreenIdsPromise = getTemplateScreenIds({ hostId })
 
-    // Org suspension (AGL-202/238): staff-suspended orgs stop serving
-    // every path immediately (short revalidate bounds the lag). Loaded
-    // once here and reused by the branding/overlay branches below.
+    // Lockdown (AGL-1501, superset of the AGL-202 org-suspension branch):
+    // platform, org and host scopes resolved through the one shared
+    // resolver, with the sanitized notice carried in props so the fallback
+    // UI can say WHY. Defence in depth — the middleware's request-level
+    // verdict (which runs before the ISR cache) is the primary gate; this
+    // branch is what keeps a freshly-REGENERATED page honest, and it still
+    // covers any path that reaches the loader without the middleware. The
+    // org doc is loaded once here and reused by the branding/overlay
+    // branches below, as before.
     const orgRes = await getOrgBilling({ hostId })
     timer.mark('getOrgBilling')
-    if ((orgRes.org as any)?.suspendedAt) {
+    const lockdownState = Aglyn.resolveLockdown(
+      {
+        platform: await getPlatformLockdown(),
+        org: Aglyn.normalizeOrgLockdown(orgRes.org as any),
+        host: Aglyn.normalizeHostLockdown(hostRes.host as any),
+      },
+      Date.now(),
+    )
+    if (lockdownState) {
+      const notice = Aglyn.lockdownNotice(lockdownState)
       return {
         props: JSON.parse(
           JSON.stringify({
             data: { host: hostRes.host },
             nodes: null,
             maintenanceFallback: true,
+            lockdown: {
+              reason: lockdownState.reason,
+              title: notice.title,
+              message: notice.body,
+              ...(notice.contact ? { contact: notice.contact } : {}),
+              ...(typeof lockdownState.untilMs === 'number'
+                ? { untilMs: lockdownState.untilMs }
+                : {}),
+            },
           }),
         ),
-        revalidate: 60,
+        revalidate: 30,
       }
     }
 

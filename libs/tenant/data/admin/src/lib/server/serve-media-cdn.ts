@@ -274,6 +274,60 @@ export function mediaContentDisposition(
 }
 
 /**
+ * A parsed `Range` request (AGL-1442 S4). Three answers, and the difference
+ * between the last two is the whole game:
+ *
+ * - `{ start, end }` — a single satisfiable byte range, both ends INCLUSIVE
+ *   (matching `createReadStream`, which is where the numbers go).
+ * - `'unsatisfiable'` — syntactically a range, but nothing in it can be
+ *   served (`start` past EOF, `-0`, an empty object). RFC 9110 §14.1.2 says
+ *   this one earns a 416.
+ * - `null` — everything else: no header, another unit, a multi-range, or
+ *   malformed syntax. RFC 9110 §14.2 lets a server ignore a Range header
+ *   outright, and ignoring means a full 200 — which is both the safe answer
+ *   and the pre-S4 behavior, so every shape this parser does not positively
+ *   recognise degrades to exactly what shipped before it existed.
+ *
+ * Multi-range requests land in `null` DELIBERATELY. Serving them needs a
+ * `multipart/byteranges` body with generated boundaries; no browser sends
+ * them for media (a `<video>` seek is always one range), and a 416 would be
+ * wrong because a multi-range over a real file is satisfiable. A full 200
+ * is the RFC-sanctioned refusal that no client can misread.
+ */
+export type MediaCdnRange = { start: number; end: number } | 'unsatisfiable' | null
+
+export function parseMediaCdnRange(
+  header: unknown,
+  size: number,
+): MediaCdnRange {
+  if (typeof header !== 'string') return null
+  const unit = /^bytes=(.*)$/i.exec(header.trim())
+  if (!unit) return null
+  const specs = unit[1].split(',')
+  if (specs.length !== 1) return null
+  const spec = /^(\d*)-(\d*)$/.exec(specs[0].trim())
+  if (!spec) return null
+  const [, startRaw, endRaw] = spec
+  if (!startRaw && !endRaw) return null
+  if (!startRaw) {
+    // Suffix form `bytes=-N`: the LAST N bytes. `-0` names zero bytes and a
+    // 200 would over-answer it, so it is the one suffix that 416s.
+    const suffix = Number(endRaw)
+    if (!Number.isSafeInteger(suffix)) return null
+    if (suffix === 0 || size === 0) return 'unsatisfiable'
+    return { start: Math.max(0, size - suffix), end: size - 1 }
+  }
+  const start = Number(startRaw)
+  if (!Number.isSafeInteger(start)) return null
+  const end = endRaw ? Number(endRaw) : size - 1
+  if (!Number.isSafeInteger(end)) return null
+  // `bytes=5-2` is a syntax error, not an unsatisfiable range — ignore it.
+  if (endRaw && end < start) return null
+  if (start >= size) return 'unsatisfiable'
+  return { start, end: Math.min(end, size - 1) }
+}
+
+/**
  * CDN media delivery (AGL-175 / AGL-829). Two URL shapes resolve the same
  * asset by `mediaId`, so delivery never depends on the object's storage
  * location (folder moves don't change the URL):
@@ -295,6 +349,13 @@ export function mediaContentDisposition(
  * are part of the CDN cache key, so neither variant can poison the other.
  * The same handler mounts in both the tenant and console apps; raw storage
  * URLs already embedded in screens keep working unchanged.
+ *
+ * Single byte-range requests are honored with a 206 (AGL-1442 S4) — see
+ * {@link parseMediaCdnRange} and the block below `Accept-Ranges` for the
+ * exact semantics. This is the capability whose absence kept video on raw
+ * `firebasestorage.googleapis.com` URLs (S8): a `<video>` seek is a Range
+ * request, and a server that ignores it forces the player to re-download
+ * the whole file.
  */
 export async function serveMediaCdn(
   req: NextApiRequest,
@@ -468,7 +529,65 @@ export async function serveMediaCdn(
       'Content-Security-Policy',
       mediaCdnContentSecurityPolicy(servedType),
     )
-    if (metadata.size) res.setHeader('Content-Length', String(metadata.size))
+    // Range support (AGL-1442 S4) — this is what lets video ride this route
+    // at all: a `<video>` seek is a Range request, and before S4 the raw
+    // storage URL was the only server that would answer one.
+    //
+    // `Accept-Ranges` is advertised unconditionally because it is now TRUE
+    // unconditionally — the handler honors a single byte-range for every
+    // asset class. Limiting it to "types that benefit" would only teach a
+    // PDF viewer or a download manager not to ask for something we would
+    // happily serve, and the header is not part of any cache key.
+    //
+    // Caching shape, established from Vercel's documented criteria rather
+    // than assumed: a request carrying `Range` fails the CDN's
+    // cacheable-response criteria ("Request doesn't contain Range header"),
+    // and 206 is not in its cacheable status list — so every ranged request
+    // reaches this function and its 206 is never stored at the edge. The
+    // edge keeps caching only the full 200s (as today), which means a cached
+    // full body and a function-served partial can never cross. The 206
+    // therefore keeps the URL class's own Cache-Control: at the edge it is
+    // moot, and in the browser a 206 under a STRONG validator is exactly
+    // what lets a player reuse the segments it already fetched.
+    res.setHeader('Accept-Ranges', 'bytes')
+    const size = Number(metadata.size ?? NaN)
+    // Range applies to GET only (RFC 9110 §14.2); a HEAD answers the full
+    // representation's metadata. And with no known size there is no honest
+    // `Content-Range` to write, so the header is ignored and the full body
+    // served — the degradation every unrecognised shape shares.
+    const parsed =
+      req.method === 'GET' && Number.isFinite(size) && size >= 0
+        ? parseMediaCdnRange(req.headers['range'], size)
+        : null
+    // `If-Range`: the client is saying "this range is against version X; if
+    // you hold anything else, send me the whole file". Honoring the range on
+    // a mismatch is how a stale player splices two versions of a video into
+    // one stream — so anything but an exact match with the CURRENT strong
+    // validator (including a date form, and including the no-hash legacy
+    // shape that has no validator at all) collapses to a full 200.
+    const ifRange = req.headers['if-range']
+    const range =
+      parsed !== null && typeof ifRange === 'string' && ifRange !== etag
+        ? null
+        : parsed
+    if (range === 'unsatisfiable') {
+      // The refusal is a function of the REQUEST header, not the URL, and
+      // shared caches key on the URL — no cache may keep it.
+      setCacheControl('private, no-store')
+      res.setHeader('Content-Range', `bytes */${size}`)
+      res.status(416).end()
+      return
+    }
+    const partial = range !== null && typeof range === 'object'
+    const servedBytes = partial
+      ? range.end - range.start + 1
+      : Number(metadata.size ?? 0)
+    if (partial) {
+      res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${size}`)
+      res.setHeader('Content-Length', String(servedBytes))
+    } else if (metadata.size) {
+      res.setHeader('Content-Length', String(metadata.size))
+    }
     // Give downloads a real filename+extension (AGL-834): the URL is
     // mediaId-keyed and extensionless, so without this a "save image" lands
     // as a name-less blob. `?download=1` makes it an actual download rather
@@ -505,9 +624,11 @@ export async function serveMediaCdn(
           media: {
             [mediaId]: {
               serves: firebaseAdmin.firestore.FieldValue.increment(1),
-              bytes: firebaseAdmin.firestore.FieldValue.increment(
-                Number(metadata.size ?? 0),
-              ),
+              // The bytes that actually leave, not the object's size — a
+              // seek in a 200 MB video is a few MB of egress, and counting
+              // the full object per range would overstate delivery by the
+              // number of seeks (AGL-1442 S4).
+              bytes: firebaseAdmin.firestore.FieldValue.increment(servedBytes),
             },
           },
         },
@@ -518,9 +639,13 @@ export async function serveMediaCdn(
       res.status(200).end()
       return
     }
+    if (partial) res.status(206)
+    // `start`/`end` are inclusive in `createReadStream`, matching the parsed
+    // range — GCS is asked for exactly the requested bytes and nothing is
+    // over-read from Storage on a partial serve.
     await new Promise<void>((resolve, reject) => {
       file
-        .createReadStream()
+        .createReadStream(partial ? { start: range.start, end: range.end } : {})
         .on('error', reject)
         .on('end', resolve)
         .pipe(res)

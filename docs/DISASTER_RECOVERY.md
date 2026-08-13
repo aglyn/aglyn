@@ -208,9 +208,15 @@ dated so this never matters.
    of reads ≈ cents) plus ~6.3 MB of GCS storage ≈ **well under $1/month** —
    noise against the $20/month budget. Needs: bucket + service-agent IAM +
    a Cloud Scheduler job if automated.
-2. **No alert on backup state.** A backup can be `NOT_AVAILABLE`
-   indefinitely with zero signal (2026-08-02 proved it). Until alerting
-   exists, the weekly ops habit is the `backups list` command above.
+2. **Alert on backup state — CLOSED 2026-08-13 (AGL-1502).**
+   `GET https://app.aglyn.com/api/health/backups` returns 503 when any
+   backup is in a failed state, no READY backup exists, or the newest READY
+   backup is older than 8 days (weekly cadence + one day of slack). A GCP
+   Monitoring uptime check probes it every 15 minutes and emails
+   zach@aglyn.com on failure — see `docs/UPTIME_AND_SLA.md` §"Production
+   monitoring". The 2026-08-02 `NOT_AVAILABLE` backup keeps this alert red
+   until it is deleted or expires (2026-11-08); that is deliberate — half
+   the restore points being gone is the condition that must page someone.
 3. **Export/import leg unrehearsed** (blocked on gap 1's bucket).
 4. **Client-side database override not built** — browser SDK is pinned to
    `(default)`; acceptable while the copy-back path is the documented end

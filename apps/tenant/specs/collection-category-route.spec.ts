@@ -42,6 +42,9 @@
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: jest.fn() },
+  // Lockdown (AGL-1501): nothing is locked in these scenarios; the verdict
+  // logic is unit-tested in libs/tenant/data/admin lockdown.spec.ts.
+  getPlatformLockdown: jest.fn(async () => null),
   filterEnabledPluginsByReleaseFlags: jest.fn(async () => []),
   getRealmPluginInstalls: jest.fn(async () => []),
 }))

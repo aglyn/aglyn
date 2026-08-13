@@ -112,14 +112,16 @@ service cloud.firestore {
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
-             'suspendedAt', 'suspendedReason', 'erasureRequestedAt'])) ||
+             'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
+             'suspendedMessage', 'suspendedUntilMs', 'erasureRequestedAt'])) ||
         (canManageOrg() && orgNotSuspended() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
              'enabledPlugins', 'seatAddons', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'sso', 'discount',
              'enterprise',
-             'suspendedAt', 'suspendedReason', 'erasureRequestedAt']));
+             'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
+             'suspendedMessage', 'suspendedUntilMs', 'erasureRequestedAt']));
 
       /**
        * The commercial keys, moved off the org doc so a scoped site
@@ -619,12 +621,20 @@ service cloud.firestore {
       // `templates.source` is frozen below.
       // `projectId`/`projectNumber` are the Enterprise siloed-project pointers
       // and have no client writer at all.
+      // `suspendedAt`/`suspendedReasonCode`/`suspendedMessage`/
+      // `suspendedUntilMs` are the STAFF host takedown (AGL-1501) — the site
+      // 503s while they are set. Deliberately not `maintenance`, which is the
+      // customer's own switch: a security takedown the site's editors could
+      // clear from the client SDK would not be a takedown. Written only by
+      // /api/admin/lockdown through the Admin SDK.
       allow update: if isStaff() ||
         (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['memberRoles', 'orgId', 'admins', 'hosts', 'subdomain',
                      'cname', 'cnameAttachmentPending',
                      'cnameDetachmentPending', 'themeInstalledFrom',
+                     'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
+                     'suspendedUntilMs',
                      'projectId', 'projectNumber']) &&
           (hostMemberRole(hostId) == 'admin' ||
             !request.resource.data.diff(resource.data).affectedKeys()
@@ -1237,6 +1247,22 @@ service cloud.firestore {
     match /revocations/{listingId} {
       allow read: if true;
       allow write: if isStaff();
+    }
+
+    // Lockdown records (AGL-1501): `platform` and `user--{uid}` docs — the
+    // two panic-button scopes with no existing carrier (org and host
+    // lockdowns live on their own docs as `suspendedAt` families). Staff-only
+    // READS: enforcement happens server-side through the Admin SDK, and the
+    // visitor-facing notice is served by an API route that returns only the
+    // sanitized reason/message — a public read here would let anyone
+    // enumerate which users are locked. Writes are closed to everyone
+    // INCLUDING staff clients on purpose: /api/admin/lockdown is the only
+    // writer, because a lockdown write must also revoke sessions, fan out
+    // projections and revalidate cached pages — a bare client write would be
+    // a lockdown that looks set and enforces nothing.
+    match /lockdowns/{lockdownId} {
+      allow read: if isStaff();
+      allow write: if false;
     }
 
     // Marketplace purchase records (AGL-46): written only by the Stripe

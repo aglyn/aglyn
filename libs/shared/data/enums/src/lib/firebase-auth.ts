@@ -185,6 +185,11 @@ export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
   [AuthErrorCodes.UNVERIFIED_EMAIL]:
     'Email is not verified. Check your email to verify.',
   [AuthErrorCodes.USER_DELETED]: 'No account matches the credentials provided.',
+  // Lockdown (AGL-1501): a user-scope lock disables the Firebase account, so
+  // this is the notice a locked-out person actually sees at sign-in. The
+  // copy is the action, not the diagnosis — the reason lives with support.
+  [AuthErrorCodes.USER_DISABLED]:
+    'This account is currently disabled. Contact support@aglyn.com to restore access.',
   [AuthErrorCodes.USER_SIGNED_OUT]:
     'You have been signed out. Sign in again to continue.',
   [AuthErrorCodes.WEAK_PASSWORD]:

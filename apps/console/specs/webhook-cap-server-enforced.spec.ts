@@ -97,6 +97,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
+  // Lockdown (AGL-1501): the verdict's own logic is unit-tested in
+  // libs/tenant/data/admin lockdown.spec.ts; this mirror keeps its contract
+  // observable here — staff bypass, suspended org/host => locked (423).
+  getLockdownVerdict: async (options: Record<string, any>) =>
+    options?.staff === true
+      ? null
+      : options?.org?.suspendedAt != null
+        ? { scope: 'org', reason: 'manual' }
+        : options?.host?.suspendedAt != null
+          ? { scope: 'host', reason: 'manual' }
+          : null,
+  lockdownJsonResponse: (state: Record<string, unknown>) =>
+    Response.json({ error: 'locked', ...state }, { status: 423 }),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -256,9 +269,9 @@ describe('webhook cap is enforced server-side (AGL-1360)', () => {
     expect(mockCreate).not.toHaveBeenCalled()
   })
 
-  it('refuses while the owning org is suspended', async () => {
+  it('refuses while the owning org is suspended — 423, the distinct lockdown status (AGL-1501)', async () => {
     state.org = { plan: 'business', suspendedAt: { seconds: 1 } }
-    expect((await createWebhook()).status).toBe(403)
+    expect((await createWebhook()).status).toBe(423)
     expect(mockCreate).not.toHaveBeenCalled()
   })
 })

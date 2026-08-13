@@ -37,7 +37,7 @@ import {
 } from '@mui/material'
 import { type MouseEvent, useState } from 'react'
 import { mediaFileTypeIcon } from '../../utils/media-file-icon'
-import { mediaThumbnailSrc } from '../../utils/media-src'
+import { mediaSrc, mediaThumbnailSrc } from '../../utils/media-src'
 
 export interface MediaAssetCardProps {
   media: Aglyn.AglynHostMedia
@@ -194,7 +194,15 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
       {isVideo ? (
         <CardMedia
           component="video"
-          src={media.url}
+          // The CDN URL, now that `serveMediaCdn` answers Range requests
+          // (AGL-1442 S4) — a `<video>` with `preload="metadata"`-style
+          // behavior issues ranged fetches, and until S4 only the raw
+          // storage URL would honor them, which is why this branch stayed
+          // on `media.url` when the image branch moved. No `?w=`: variants
+          // are WebP stills of IMAGES, a video has none to select.
+          // `mediaSrc` falls back to `media.url` when there is no `cdnPath`
+          // (free tier, private assets), preserving today's behavior there.
+          src={mediaSrc(media)}
           muted
           onClick={handlePrimary}
           sx={thumbSx}
@@ -205,8 +213,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
           // The 320px WebP variant, not the full-size original. The tile is
           // THUMB_HEIGHT tall; `media.url` was the raw Cloud Storage URL, so
           // a grid of 24 assets pulled megabytes of originals from Storage
-          // on every view and never touched the edge cache. Video stays on
-          // `media.url` deliberately — `serveMediaCdn` ignores `Range`.
+          // on every view and never touched the edge cache.
           image={mediaThumbnailSrc(media, 320)}
           alt={media.alt || fileName || ''}
           onClick={handlePrimary}

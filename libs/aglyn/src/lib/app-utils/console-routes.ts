@@ -30,6 +30,8 @@ export enum Route {
   // Staff coupon management (AGL-1105): create discount coupons + promotion
   // codes and read the live net-margin rating before committing to one.
   ADMIN_COUPONS = '/admin/coupons',
+  // The panic button (AGL-1501): platform/org/host/user lockdown controls.
+  ADMIN_LOCKDOWN = '/admin/lockdown',
   ADMIN_AUDIT = '/admin/audit',
   ADMIN_USERS = '/admin/users',
   ADMIN_USER_DETAIL = '/admin/users/[uid]',
@@ -196,6 +198,7 @@ export interface RoutePayload {
   [Route.ADMIN_ORG_HOST_DETAIL]: { orgId: string; hostId: string }
   [Route.ADMIN_OVERVIEW]: undefined
   [Route.ADMIN_COUPONS]: undefined
+  [Route.ADMIN_LOCKDOWN]: undefined
   [Route.ADMIN_AUDIT]: undefined
   [Route.ADMIN_USERS]: undefined
   [Route.ADMIN_USER_DETAIL]: { uid: string }

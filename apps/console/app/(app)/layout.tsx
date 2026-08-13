@@ -19,6 +19,7 @@
 import type { ReactNode } from 'react'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 import MainLayout from '../../components/layouts/main.layout'
+import PlatformLockdownGate from '../../components/platform-lockdown-gate.component'
 import SecondaryNavBarComponent from '../../components/secondary-nav-bar.component'
 
 /**
@@ -39,10 +40,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     // Email/password accounts must verify before any console access
     // (AGL-479); OAuth accounts arrive verified, so this only gates them.
     <AuthenticatedLayout requireEmailVerification>
-      <MainLayout>
-        <SecondaryNavBarComponent />
-        {children}
-      </MainLayout>
+      {/* Platform lockdown notice (AGL-1501): server-side enforcement makes
+          the app unusable for locked users; this swaps the resulting sea of
+          failed requests for the notice. Staff pass through untouched. */}
+      <PlatformLockdownGate>
+        <MainLayout>
+          <SecondaryNavBarComponent />
+          {children}
+        </MainLayout>
+      </PlatformLockdownGate>
     </AuthenticatedLayout>
   )
 }

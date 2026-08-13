@@ -23,7 +23,9 @@ import {
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getLockdownVerdict,
   isImpersonationSession,
+  lockdownJsonResponse,
   resolveConsoleDomain,
   seedUserProfile,
 } from '@aglyn/tenant-data-admin'
@@ -326,6 +328,27 @@ async function handler(request: Request): Promise<Response> {
           return unverified
         }
         tenantId = decoded.firebase?.tenant
+        // Lockdown gate (AGL-1501): this route MINTS THE SESSION — the same
+        // reasoning that put the sanctions gate here. A locked user (or a
+        // platform-wide lockdown) is refused a cookie with the distinct 423
+        // body so the client can show the notice instead of a mystery 401.
+        // `staff` is the un-panic invariant: the claim comes off the VERIFIED
+        // token, and staff are never refused — during a platform lockdown the
+        // people lifting it still need to sign in.
+        const lockdown = await getLockdownVerdict({
+          staff: decoded['staff'] === true,
+          uid: decoded.uid,
+        })
+        if (lockdown) {
+          // Same shape as the unverified-email refusal above (AGL-1142): a
+          // refusal is an eligibility statement, not a sign-out, so a stale
+          // tombstone standing in front of this verified caller is cleared.
+          const locked = lockdownJsonResponse(lockdown)
+          for (const value of clearTombstone ?? []) {
+            locked.headers.append('Set-Cookie', value)
+          }
+          return locked
+        }
         if (!isImpersonationSession(decoded)) {
           signInIdentity = {
             uid: decoded.uid,
@@ -490,6 +513,28 @@ async function handler(request: Request): Promise<Response> {
         : auth
       try {
         const decoded = await sessionAuth.verifySessionCookie(cookie, true)
+        // Lockdown gate (AGL-1501), the exchange half: a locked user's
+        // still-valid cookie must not keep converting into fresh custom
+        // tokens on other subdomains. The cookies are cleared with the
+        // refusal — the notice, not a sea of permission errors, is what the
+        // locked-out client should be left holding. Staff bypass (un-panic
+        // invariant): the claim is read off the VERIFIED session cookie.
+        const lockdown = await getLockdownVerdict({
+          staff: decoded['staff'] === true,
+          uid: decoded.uid,
+        })
+        if (lockdown) {
+          const locked = lockdownJsonResponse(lockdown)
+          locked.headers.append(
+            'Set-Cookie',
+            `${SESSION_COOKIE}=; ${cookieAttributes(request, 0)}`,
+          )
+          locked.headers.append(
+            'Set-Cookie',
+            `${SESSION_TENANT_COOKIE}=; ${cookieAttributes(request, 0)}`,
+          )
+          return locked
+        }
         // Carry the impersonation claim through the cross-subdomain exchange
         // (AGL-480). The session cookie preserves it, but the re-minted custom
         // token would drop it — losing the banner and re-tripping the

@@ -24,7 +24,9 @@ import {
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getLockdownVerdict,
   isImpersonationSession,
+  lockdownJsonResponse,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import {
@@ -172,13 +174,17 @@ async function handler(request: Request): Promise<Response> {
       const orgId = hostSnapshot.get('orgId') as string | undefined
       if (orgId) {
         const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
-        if (orgSnapshot.get('suspendedAt')) {
-          return Response.json({
-            error: 'This workspace is suspended',
-          }, { status: 403 })
-        }
         orgData = (orgSnapshot.data() ?? null) as Record<string, unknown> | null
       }
+      // Lockdown verdict (AGL-1501): subsumes the old bare `suspendedAt`
+      // check — same reads, plus platform/host/user scopes and the distinct
+      // 423 body. This branch is non-staff only, so no bypass flag needed.
+      const lockdown = await getLockdownVerdict({
+        uid: decoded.uid,
+        org: orgData ?? undefined,
+        host: hostSnapshot.data(),
+      })
+      if (lockdown) return lockdownJsonResponse(lockdown)
     }
 
     return await convertScreenKind({
