@@ -30,7 +30,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { buildRoute, Route } from '../constants/route-links'
 
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
@@ -38,6 +38,12 @@ const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 export interface CreateOrgDialogProps {
   open: boolean
   onClose: () => void
+  /**
+   * Seed the name field on first open (AGL-1523): the workspace picker
+   * re-offers the org name a failed signup-time provisioning collected, so
+   * the person doesn't have to type it a second time. Editable as ever.
+   */
+  initialName?: string
 }
 
 /**
@@ -47,7 +53,7 @@ export interface CreateOrgDialogProps {
  * subdomain when workspace subdomains are live.
  */
 export function CreateOrgDialog(props: CreateOrgDialogProps) {
-  const { open, onClose } = props
+  const { open, onClose, initialName } = props
   const { data: user } = useUser()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
@@ -55,6 +61,16 @@ export function CreateOrgDialog(props: CreateOrgDialogProps) {
   const [slug, setSlug] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
   const [busy, setBusy] = useState(false)
+
+  // Seed once, on the first open that has a name to offer — never over what
+  // the person has already typed (AGL-1523).
+  const seededRef = useRef(false)
+  useEffect(() => {
+    if (!open || seededRef.current || !initialName) return
+    seededRef.current = true
+    setName((current) => current || initialName)
+    setSlug((current) => current || generateOrgSlug(initialName))
+  }, [open, initialName])
 
   const reset = () => {
     setName('')

@@ -82,6 +82,7 @@ import {
   postLegalAcceptance,
 } from '../../../utils/legal-consent'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
+import { markSignUpOrgFailure } from '../../../utils/signup-org-failure'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
@@ -182,6 +183,11 @@ async function persistSignUpProfile(
  * not surface as a failed sign-up. It returns `null` and the caller falls
  * back to the workspace picker — which is exactly where signup used to land
  * everyone, so the worst case is the old behaviour.
+ *
+ * Best-effort no longer means SILENT (AGL-1523): a failure leaves a marker
+ * the picker reads, so the person is told what happened to the name they
+ * typed and offered it back — instead of a `console.error` nobody sees and a
+ * picker that pretends the field never existed.
  */
 async function provisionSignUpOrg(
   credential: UserCredential,
@@ -205,11 +211,16 @@ async function provisionSignUpOrg(
     // user a workspace URL they never chose.
     if (!response.ok) {
       console.error('sign-up org create failed', payload?.error)
+      markSignUpOrgFailure({
+        name,
+        error: typeof payload?.error === 'string' ? payload.error : null,
+      })
       return null
     }
     return typeof payload?.slug === 'string' ? payload.slug : null
   } catch (error) {
     console.error('sign-up org create failed', error)
+    markSignUpOrgFailure({ name, error: null })
     return null
   }
 }

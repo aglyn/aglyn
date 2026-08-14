@@ -32,6 +32,7 @@ import {
   lockdownRefusal,
   meterOrgEmail,
   OrgSlugTakenError,
+  signupProvisioningGraceAllows,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -75,7 +76,16 @@ async function handler(request: Request): Promise<Response> {
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
-      return emailUnverifiedResponse()
+      // Signup-time provisioning (AGL-1523): a fresh password account is
+      // ALWAYS unverified when the signup form posts the org name it just
+      // collected, so a flat refusal here made that field dead weight on the
+      // primary self-serve door. A brand-new account owning nothing may
+      // create its ONE signup workspace; everyone else still needs the
+      // verified email (AGL-479 — which keeps gating console ACCESS for this
+      // account regardless: the session mint and app layout still refuse
+      // unverified). Fails closed inside the helper.
+      const graced = await signupProvisioningGraceAllows(decoded.uid)
+      if (!graced) return emailUnverifiedResponse()
     }
     // Lockdown verdict (AGL-1506): the org scope has no carrier before the
     // org exists — platform and user locks still refuse creation; distinct

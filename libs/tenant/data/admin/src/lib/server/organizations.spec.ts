@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { isSlugReservationClaimable } from './organizations'
+import {
+  isSlugReservationClaimable,
+  isWithinSignupProvisioningGrace,
+  SIGNUP_PROVISIONING_GRACE_MS,
+} from './organizations'
 
 // AGL-585: a slug an org renamed AWAY from leaves a `movedTo` tombstone so
 // old URLs redirect — but it must stay claimable by anyone. Only an ACTIVE
@@ -64,6 +68,82 @@ describe('isSlugReservationClaimable (AGL-585)', () => {
     ).toBe(false)
     expect(
       isSlugReservationClaimable({ orgId: 'org-a', movedTo: null }, 'org-b'),
+    ).toBe(false)
+  })
+})
+
+// AGL-1523: the signup flow posts its collected org name seconds after
+// account creation — a moment at which a password account is ALWAYS
+// unverified. The grace admits exactly that shape (brand-new account, no org
+// yet) and nothing else; everything malformed fails CLOSED.
+describe('isWithinSignupProvisioningGrace (AGL-1523)', () => {
+  const NOW = Date.parse('2026-08-14T00:00:00Z')
+  const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString()
+
+  it('admits a brand-new account with no org (the signup moment)', () => {
+    expect(
+      isWithinSignupProvisioningGrace({
+        creationTime: iso(30_000),
+        ownsAnyOrg: false,
+        now: NOW,
+      }),
+    ).toBe(true)
+  })
+
+  it('tolerates slight clock skew (creation "in the future")', () => {
+    expect(
+      isWithinSignupProvisioningGrace({
+        creationTime: iso(-5_000),
+        ownsAnyOrg: false,
+        now: NOW,
+      }),
+    ).toBe(true)
+  })
+
+  it('denies once the account already owns an org — grace is ONE workspace', () => {
+    expect(
+      isWithinSignupProvisioningGrace({
+        creationTime: iso(30_000),
+        ownsAnyOrg: true,
+        now: NOW,
+      }),
+    ).toBe(false)
+  })
+
+  it('denies an old unverified account — the AGL-479 gate stands', () => {
+    expect(
+      isWithinSignupProvisioningGrace({
+        creationTime: iso(SIGNUP_PROVISIONING_GRACE_MS + 1),
+        ownsAnyOrg: false,
+        now: NOW,
+      }),
+    ).toBe(false)
+  })
+
+  it('admits right up to the window edge', () => {
+    expect(
+      isWithinSignupProvisioningGrace({
+        creationTime: iso(SIGNUP_PROVISIONING_GRACE_MS),
+        ownsAnyOrg: false,
+        now: NOW,
+      }),
+    ).toBe(true)
+  })
+
+  it('fails CLOSED on a missing or malformed creation time', () => {
+    expect(
+      isWithinSignupProvisioningGrace({
+        creationTime: undefined,
+        ownsAnyOrg: false,
+        now: NOW,
+      }),
+    ).toBe(false)
+    expect(
+      isWithinSignupProvisioningGrace({
+        creationTime: 'not-a-date',
+        ownsAnyOrg: false,
+        now: NOW,
+      }),
     ).toBe(false)
   })
 })
