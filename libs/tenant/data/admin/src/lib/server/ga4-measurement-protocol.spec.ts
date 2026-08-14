@@ -80,6 +80,34 @@ describe('sendGa4SitePublished when configured', () => {
     expect(body.non_personalized_ads).toBe(true)
   })
 
+  it('carries first_publish so the server hit fills the same dimension as the browser', async () => {
+    // AGL-1588. Registered in GA and sent by nobody until now; a scheduled
+    // first publish is one of the cases it exists to count, since no browser
+    // is present at 3am to fire the client-side event.
+    await sendGa4SitePublished({ hostId: 'host-1', firstPublish: true })
+    await sendGa4SitePublished({ hostId: 'host-1', firstPublish: false })
+
+    const params = fetchMock.mock.calls.map(
+      (call) =>
+        JSON.parse((call as unknown as [string, { body: string }])[1].body)
+          .events[0].params,
+    )
+    expect(params[0]).toEqual({ first_publish: true })
+    // `false` is a VALUE, not an absence: it is what makes the dimension a
+    // breakdown rather than a flag, and the sanitizer must not drop it the
+    // way it drops undefined.
+    expect(params[1]).toEqual({ first_publish: false })
+  })
+
+  it('omits first_publish rather than inventing one when the caller cannot say', async () => {
+    await sendGa4SitePublished({ hostId: 'host-1' })
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body,
+    )
+    expect(body.events[0].params).not.toHaveProperty('first_publish')
+  })
+
   it('sends the host id ONLY as a hash — never as a param or a user id', async () => {
     await sendGa4SitePublished({ hostId: 'host-1' })
 

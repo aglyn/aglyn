@@ -22,6 +22,10 @@ import {
   findScreenIdByRoutePath,
   SCREEN_KIND_EMAIL,
 } from '@aglyn/aglyn/server'
+// Deep import, like the Measurement Protocol sender's: `analytics-events.ts`
+// is deliberately DOM-free so both sides of the publish path can share the
+// one definition of `first_publish` (AGL-1588).
+import { isFirstPublishedRoute } from '@aglyn/aglyn/app-utils/analytics-events'
 import {
   firebaseAdmin,
   getOrgForHost,
@@ -220,6 +224,10 @@ export async function applyDuePublishSchedule(options: {
   const docRef = hostRef.collection(collectionName).doc(docId)
 
   let routePath: string | undefined
+  // Decided from the routing map as read below — BEFORE the batch registers
+  // this entry (AGL-1588). Left undefined outside the screens branch, where
+  // no route is going live and no `site_published` is sent at all.
+  let firstPublish: boolean | undefined
   if (collectionName === 'screens') {
     try {
       const routing = ((await hostRef.get()).get('screens') ?? {}) as Record<
@@ -230,6 +238,9 @@ export async function applyDuePublishSchedule(options: {
       // this only swaps which version it serves, and there is nothing to
       // register and no activation to report.
       if (!routing[docId]) {
+        // The same predicate the console's three publish surfaces use, so a
+        // `first_publish` breakdown means one thing across all four senders.
+        firstPublish = isFirstPublishedRoute(routing)
         const resolved = await resolveScheduledRoutePath({
           hostRef,
           screenId: docId,
@@ -287,7 +298,7 @@ export async function applyDuePublishSchedule(options: {
       // current state: GA4_MEASUREMENT_ID / GA4_API_SECRET are not set on the
       // aglyn-tenant Vercel project (checked 2026-08-14), so this is a clean
       // no-op until they are added. See docs/ANALYTICS.md.
-      await sendGa4SitePublished({ hostId })
+      await sendGa4SitePublished({ hostId, firstPublish })
     } else {
       await docRef.update(applied)
     }

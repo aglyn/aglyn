@@ -301,15 +301,27 @@ export async function sendGa4Purchase(
  * is one synthetic user, forever, however many of its screens go live on a
  * timer.
  *
- * ## No params, deliberately
+ * ## One param, deliberately
  *
- * The browser event sends `{}` and so does this. The host id is a resource
- * identifier bought for nothing, and the metric is answered by the event
- * alone; the id is used only as the hash seed and never transmitted.
+ * `first_publish` and nothing else, matching the browser event (AGL-1588).
+ * The host id is a resource identifier bought for nothing, and the rest of the
+ * metric is answered by the event alone; the id is used only as the hash seed
+ * and never transmitted.
+ *
+ * The caller decides `first_publish` from the routing map it read before
+ * registering the entry, through the same `isFirstPublishedRoute` the console
+ * uses — a dimension is only worth registering if every sender means the same
+ * thing by it, and this sender is the one nobody can watch happen.
  */
 export async function sendGa4SitePublished(input: {
   /** Host uid the route went live on — hashed into a client id, never sent. */
   hostId: string
+  /**
+   * Whether the host had no live route at all before this one. Omit when it
+   * genuinely cannot be determined — the param is optional and an absent
+   * breakdown value beats an invented one.
+   */
+  firstPublish?: boolean
 }): Promise<Ga4SendResult> {
   const credentials = ga4Credentials()
   if (!credentials) {
@@ -321,10 +333,12 @@ export async function sendGa4SitePublished(input: {
   const result = await postGa4Event({
     credentials,
     eventName: 'site_published',
-    // Sanitized like every other payload even though it is empty — the
-    // guarantee should hold because the sanitizer ran, not because the
-    // author of this call happened to pass nothing.
-    params: sanitizeEventParams({}),
+    // Sanitized like every other payload even though it carries one boolean —
+    // the guarantee should hold because the sanitizer ran, not because the
+    // author of this call happened to pass nothing identifying. It also drops
+    // `first_publish` when it is undefined, which is how "not determined"
+    // stays distinct from `false`.
+    params: sanitizeEventParams({ first_publish: input.firstPublish }),
     clientId: synthesizeClientId(input.hostId),
     log: { tag: 'AGL-1589:ga4-site-published' },
   })

@@ -21,6 +21,7 @@ import {
   ANALYTICS_EVENT_NAMES,
   buildBeginCheckoutParams,
   configureAnalyticsTransport,
+  isFirstPublishedRoute,
   resetAnalyticsTransport,
   resetAuthoredEventWarnings,
   resolveAuthoredEventName,
@@ -313,6 +314,47 @@ describe('analytics-events (AGL-1561)', () => {
           reason: 'reserved',
         })
       }
+    })
+  })
+
+  describe('first_publish: what all four publish paths mean by "first" (AGL-1588)', () => {
+    it('is true only when the host had no live route at all', () => {
+      expect(isFirstPublishedRoute({})).toBe(true)
+      expect(isFirstPublishedRoute({ 'screen-1': 'about' })).toBe(false)
+    })
+
+    it('treats a missing map as an unpublished site rather than throwing', () => {
+      // The console reads `hostData?.screens`, which is undefined on a host
+      // that has never published anything — the exact case the dimension is
+      // for, so it must not be the case that fails.
+      expect(isFirstPublishedRoute(undefined)).toBe(true)
+      expect(isFirstPublishedRoute(null)).toBe(true)
+    })
+
+    it('says false for a SECOND page going live, which is a publish and not an activation', () => {
+      // The distinction the dimension exists to draw: the event counts
+      // publishes, `first_publish: true` counts sites that came alive. Read
+      // the other way round, "% who publish a site" would count pages.
+      expect(isFirstPublishedRoute({ 'screen-9': 'contact' })).toBe(false)
+    })
+
+    it('delivers false as a value, not as an absence', () => {
+      const calls = installGtag()
+
+      trackEvent('site_published', { first_publish: false })
+
+      // The sanitizer drops undefined and null; a boolean false has to
+      // survive, or the dimension degrades into a flag that is only ever
+      // true and every republish looks like a missing measurement.
+      expect(calls[0][2]).toEqual({ first_publish: false })
+    })
+
+    it('drops an undetermined first_publish instead of asserting false', () => {
+      const calls = installGtag()
+
+      trackEvent('site_published', { first_publish: undefined })
+
+      expect(calls[0][2]).toEqual({})
     })
   })
 

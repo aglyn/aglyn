@@ -36,10 +36,12 @@ const batchUpdateMock = jest.fn(
   (_ref?: unknown, _data?: Record<string, unknown>) => undefined,
 )
 const commitMock = jest.fn(async () => undefined)
-const ga4Mock = jest.fn(async (_input?: { hostId: string }) => ({
-  sent: true,
-  synthesizedClientId: true,
-}))
+const ga4Mock = jest.fn(
+  async (_input?: { hostId: string; firstPublish?: boolean }) => ({
+    sent: true,
+    synthesizedClientId: true,
+  }),
+)
 let entitled = true
 
 /**
@@ -81,7 +83,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       }),
     },
     getOrgForHost: jest.fn(async () => ({ org: {} })),
-    sendGa4SitePublished: (input: { hostId: string }) => ga4Mock(input),
+    sendGa4SitePublished: (input: {
+      hostId: string
+      firstPublish?: boolean
+    }) => ga4Mock(input),
   }
 })
 
@@ -239,7 +244,21 @@ describe('activation reporting follows the routing map (AGL-1562, AGL-1589)', ()
 
     await run({ versionId: 'v-live', publishSchedule: schedule() })
 
-    expect(ga4Mock).toHaveBeenCalledWith({ hostId: 'h1' })
+    // `first_publish: true` (AGL-1588): the map was empty, so this schedule
+    // did not add a page to a live site — it brought the site alive.
+    expect(ga4Mock).toHaveBeenCalledWith({ hostId: 'h1', firstPublish: true })
+  })
+
+  it('marks a route going live on an ALREADY-LIVE site as not the first', async () => {
+    // A second page going live on a timer is a publish and an activation
+    // event, but not an activation: the site was already reachable. Reporting
+    // it as first would make "% who publish a site" count pages.
+    routingMap = { 'screen-9': 'contact' }
+    screenDocs = { 'screen-1': { slug: 'about' } }
+
+    await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(ga4Mock).toHaveBeenCalledWith({ hostId: 'h1', firstPublish: false })
   })
 
   it('publishes nothing at all for a layout, which has no route to go live', async () => {

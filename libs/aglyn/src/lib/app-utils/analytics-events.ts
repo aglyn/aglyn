@@ -506,6 +506,46 @@ export function buildBeginCheckoutParams(input: {
 }
 
 /**
+ * Decide `site_published`'s `first_publish` from the host's routing map as it
+ * stood BEFORE the route being published was registered (AGL-1588).
+ *
+ * ## What "first" means, and why it is defined once
+ *
+ * Three call sites report `site_published` — `publishScreenRoute`, the
+ * besigner's one-click publish, and the scheduled publish executor, the last
+ * of which is server-side and sends over the Measurement Protocol. A
+ * breakdown is only worth registering if all three mean the same thing by it,
+ * and "first" has several plausible readings. This is the one they share:
+ *
+ * **The host had no live route at all before this one.** Not "first for the
+ * org" — that needs a cross-host query the server path cannot make, and the
+ * scheduled sender's client id is derived from the HOST anyway, so an org is
+ * not a thing it can see. Not "first for this screen" either, which would be
+ * true of every second page a site adds and would make the dimension a
+ * synonym for the event.
+ *
+ * So the metric it separates is the GTM §6 activation one: `first_publish:
+ * true` counts sites that came alive, where the event alone counts publishes.
+ *
+ * ## The one dishonesty, and why it does not matter
+ *
+ * Unpublishing every route and publishing again reports `true` a second time.
+ * Detecting that needs publish history the routing map does not keep. It is
+ * harmless for the metric it exists for, because activation is read as the
+ * share of USERS who ever sent `first_publish: true`, and a user counted twice
+ * is still one user.
+ *
+ * Callers pass what they already hold — the live-subscribed map in the
+ * console, a read snapshot on the server — and never a map read back AFTER
+ * the write, which is never empty.
+ */
+export function isFirstPublishedRoute(
+  routing: Record<string, unknown> | null | undefined,
+): boolean {
+  return Object.keys(routing ?? {}).length === 0
+}
+
+/**
  * The one delivery path, shared by {@link trackEvent} and
  * {@link trackAuthoredEvent}. Takes an ALREADY-sanitized payload — every
  * caller sanitizes first, which is what keeps "a new call site cannot forget"

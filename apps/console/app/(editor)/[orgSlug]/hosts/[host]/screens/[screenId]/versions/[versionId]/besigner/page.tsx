@@ -16,7 +16,10 @@
  */
 'use client'
 
-import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import {
+  isFirstPublishedRoute,
+  trackEvent,
+} from '@aglyn/aglyn/app-utils/analytics-events'
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
@@ -561,6 +564,13 @@ function BesignerPage(props) {
 
   const handlePublish = useCallback(async () => {
     if (slugConflict || unpublishedAncestor) return
+    // Captured BEFORE the writes below (AGL-1588). `routingMap` is a live
+    // subscription with latency compensation, so by the time the write chain
+    // resolves the snapshot has already grown the entry being added — reading
+    // it down there would answer `false` for a genuine first publish. The
+    // stale closure happens to preserve the old value today; that is an
+    // accident of `useCallback` identity, not something to depend on.
+    const firstPublish = isFirstPublishedRoute(routingMap)
     const action =
       normalizedSlug && composedPath
         ? updateScreenDoc({ slug: normalizedSlug } as any)
@@ -576,7 +586,9 @@ function BesignerPage(props) {
               // same handler re-syncs the routing map when someone merely
               // RENAMES the path of an already-published screen, and a rename
               // is not an activation.
-              if (!publishedPath) trackEvent('site_published', {})
+              if (!publishedPath) {
+                trackEvent('site_published', { first_publish: firstPublish })
+              }
               setSlugInput(null)
               enqueueSnackbar(
                 collectionTemplatePublishMessage(
@@ -676,6 +688,10 @@ function BesignerPage(props) {
         )
         return
       }
+      // Read before the two writes below, for the reason given in
+      // `handlePublish`: the live routing map grows this entry as soon as the
+      // sync lands (AGL-1588).
+      const firstPublish = isFirstPublishedRoute(routingMap)
       await updateScreenDoc({ slug: normalizedSlug, versionId } as any)
       await syncScreenRouteEntries(
         firestore,
@@ -689,7 +705,7 @@ function BesignerPage(props) {
       // The unpublish branch above returns before this point, and the two
       // guard clauses bail without writing, so only a route actually going
       // live is counted.
-      trackEvent('site_published', {})
+      trackEvent('site_published', { first_publish: firstPublish })
       enqueueSnackbar(
         collectionTemplatePublishMessage(routesByScreenId.get(screenId), {
           isTemplateScreen: isCollectionTemplate,

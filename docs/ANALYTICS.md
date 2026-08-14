@@ -152,6 +152,54 @@ a tenant site pointed at our own property.
 | `aglyn_experiment` | the same file, from the experiments runner's exposure/conversion beacon |
 | `purchase` | `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch and from the marketplace webhook handler |
 
+### `first_publish`, and what all four senders mean by it (AGL-1588)
+
+The dimension was registered in GA and sent by nobody: all four
+`site_published` call sites passed `{}`, so the breakdown would have been
+empty forever while the doc promised it. It is now WIRED rather than dropped,
+because the choice is not reversible — a publish that already happened cannot
+be re-reported as a first one, and this is the difference between the GTM §6
+activation metric and a publish count.
+
+`isFirstPublishedRoute` (in `analytics-events.ts`, deliberately DOM-free so
+the Measurement Protocol sender shares it) holds the single definition:
+
+> **The host had no live route at all before this one.**
+
+Not "first for the org": that needs a cross-host query the server path cannot
+make, and the scheduled sender's client id is derived from the HOST, so an org
+is not something it can see. Not "first for this screen" either — that is true
+of every second page a site adds, which would make the dimension a synonym for
+the event.
+
+Every sender reads the routing map BEFORE writing to it, since a moment later
+it is never empty:
+
+| Sender | Where the map comes from |
+| --- | --- |
+| `publishScreenRoute` | one `getDoc` on the host, paid for deliberately — see below |
+| the besigner's two handlers | the live-subscribed `routingMap`, captured at the top of the handler before the writes |
+| `apply-publish-schedule.ts` | the `hostRef.get()` it already makes to decide whether to register an entry |
+
+**Why `publishScreenRoute` pays for a read.** The alternative was threading
+the map through six call sites as an optional argument, where a publish
+surface that forgot it would report nothing — indistinguishable in GA from one
+that answered `false`. One extra document read on a rare, deliberate,
+already-multi-write action buys "no new publish button can quietly forget to
+answer", which is the same argument that put the event itself in that
+function.
+
+`false` is a VALUE, not an absence: it is what makes this a breakdown rather
+than a flag. `undefined` is reserved for genuinely-not-determined (the host
+read failed), and the sanitizer drops it, so that hit carries no breakdown
+value instead of an invented one.
+
+**The one dishonesty.** Unpublishing every route and publishing again reports
+`true` a second time; detecting that needs publish history the routing map
+does not keep. Harmless for the metric it serves, since activation is read as
+the share of USERS who ever sent `first_publish: true`, and a user counted
+twice is still one user.
+
 ---
 
 ## Seven decisions worth knowing
@@ -427,7 +475,10 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
 - **custom dimensions registered**, all event-scoped: `method`, `form_name`,
   `form_location`, `billing_interval`, `first_publish`. **A param that is not
   registered is collected but not reportable** — it simply does not appear as a
-  breakdown, which reads exactly like the event not carrying it;
+  breakdown, which reads exactly like the event not carrying it. The converse
+  bit it: `first_publish` was registered and sent by nothing until AGL-1588,
+  which reads the same way from the report end. Registration and a producer
+  are two facts, and the doc has to state both;
 - privacy posture verified: Google Signals **off**, ads personalization **0 of
   307 regions**, user-provided data collection **off**, no Google Ads link,
   data retention **14 months** (event and user), email redaction **on**.
