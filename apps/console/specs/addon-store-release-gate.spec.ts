@@ -102,6 +102,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL predicate, not a re-typed triple (AGL-1715). A hand-written mock
+  // of a single-source list is the drift this guard exists to prevent: the
+  // spec would keep passing while the route's real answer changed.
+  isLiveSubscriptionStatus: jest.requireActual('@aglyn/aglyn/app-utils/org-billing-doc')
+    .isLiveSubscriptionStatus,
   // The REAL plan model: the ceilings and the interval logic downstream of the
   // gate stay honest, so "past the gate" means the route genuinely proceeded.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),

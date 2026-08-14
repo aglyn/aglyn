@@ -16,6 +16,7 @@
  */
 
 import {
+  isLiveSubscriptionStatus,
   pluginRequestFromWeb,
   resolveEffectivePlan,
   resolveOrgEntitlements,
@@ -73,7 +74,14 @@ async function stripeRequest(
   return payload
 }
 
-/** The org's active (or trialing/past_due) subscription, if any. */
+/**
+ * The org's live subscription, if any — the one add-on items are attached to.
+ *
+ * "Live" is `isLiveSubscriptionStatus`, the single list in `org-billing-doc.ts`
+ * (AGL-1715). Add-ons re-price onto whichever subscription this finds, so if
+ * this narrowed relative to checkout's copy the purchase would miss the org's
+ * real subscription rather than fail loudly.
+ */
 async function activeSubscription(
   secretKey: string,
   customerId: string,
@@ -85,7 +93,7 @@ async function activeSubscription(
   )
   return (
     (subscriptions?.data ?? []).find((subscription: any) =>
-      ['active', 'trialing', 'past_due'].includes(subscription.status),
+      isLiveSubscriptionStatus(subscription?.status),
     ) ?? null
   )
 }

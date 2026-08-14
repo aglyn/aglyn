@@ -24,6 +24,7 @@ import {
 import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
+  isLiveSubscriptionStatus,
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
   parseLockdownRefusal,
@@ -178,9 +179,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const fmtLimit = (n: number) =>
     n === UNLIMITED ? 'Unlimited' : n.toLocaleString()
   const subscriptionStatus = org?.subscription?.status
-  const subscriptionActive = ['active', 'trialing', 'past_due'].includes(
-    String(subscriptionStatus ?? ''),
-  )
+  // One list, in `org-billing-doc.ts` (AGL-1715). This decides whether Upgrade
+  // opens a Checkout or a proration preview, and `/api/billing/checkout`
+  // decides whether to allow the session — if the two ever disagree in that
+  // direction the page sends a subscribed org to checkout and the route lets
+  // it through, which is the duplicate subscription AGL-1697 closed.
+  const subscriptionActive = isLiveSubscriptionStatus(subscriptionStatus)
   const cancelAtPeriodEnd =
     (org?.subscription as any)?.cancelAtPeriodEnd === true
 

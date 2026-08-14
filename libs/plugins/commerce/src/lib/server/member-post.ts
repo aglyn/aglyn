@@ -23,6 +23,13 @@ import {
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { type PluginApiHandler, resolveBrandingProfile } from '@aglyn/aglyn/server'
 
+/**
+ * Which member subscribers are live enough to email (AGL-316).
+ *
+ * AGL-1715-EXEMPT: the TENANT's own site members' subscriptions to the
+ * TENANT's products, not the Aglyn org's subscription to us — same reasoning
+ * as `gate.ts`. Not `isLiveSubscriptionStatus`.
+ */
 const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due'])
 
 /**

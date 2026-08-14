@@ -167,8 +167,30 @@ export function orgBillingStatusFrom(
  * `past_due` IS live. A second subscription does not settle the first one's
  * unpaid invoice; it adds a charge beside it. Dunning is paid through the
  * invoices and portal routes.
+ *
+ * THE list, not A list. `live-subscription-status-single-source.spec.ts` fails
+ * the build if this triple is spelled out anywhere else in the repo without an
+ * `AGL-1715-EXEMPT:` line saying why that copy answers a different question.
  */
 const LIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due']
+
+/**
+ * True when a subscription STATUS word means the subscription is live.
+ *
+ * The status-string half of the predicate, for the call sites that hold a
+ * Stripe subscription object rather than an org billing document — the
+ * `subscriptions?customer=…&status=all` list responses in
+ * `/api/billing/subscription`, `/api/billing/addons` and
+ * `/api/admin/org-discount`, and the webhook status word that
+ * `metered-backfill` decides on. Those cannot be typed as an `OrgBillingDoc`
+ * without lying, and wrapping them in one just to unwrap it again is a cast
+ * that hides the shape. Same list, one entry point per shape.
+ */
+export function isLiveSubscriptionStatus(status: unknown): boolean {
+  return (
+    typeof status === 'string' && LIVE_SUBSCRIPTION_STATUSES.includes(status)
+  )
+}
 
 /**
  * True when this org already has a live subscription and must not be sold or
@@ -177,17 +199,16 @@ const LIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due']
  * Lives here rather than at the call site because the failure mode of the
  * copies is asymmetric in the expensive direction: if one call site's list ever
  * narrows relative to another's, a subscribed org gets sold a second
- * subscription and both bill. AGL-1715 tracks repointing the three older inline
- * copies (`billing/page.tsx`, `billing/subscription/route.ts`,
- * `billing/checkout/route.ts`) at this predicate; they are unchanged for now
- * only because each one forces a mock update in console specs that concurrent
- * work is sitting on.
+ * subscription and both bill. AGL-1715 repointed the older inline copies at
+ * this predicate (or at `isLiveSubscriptionStatus` where the value in hand is
+ * a Stripe object): the Billing page, `/api/billing/checkout`,
+ * `/api/billing/subscription`, `/api/billing/addons`,
+ * `/api/admin/org-discount` and `utils/server/metered-backfill`.
  */
 export function isOrgSubscriptionLive(
   billing: Partial<OrgBillingDoc> | null | undefined,
 ): boolean {
-  const status = orgBillingStatusFrom(billing)
-  return !!status && LIVE_SUBSCRIPTION_STATUSES.includes(status)
+  return isLiveSubscriptionStatus(orgBillingStatusFrom(billing))
 }
 
 /**

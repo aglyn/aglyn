@@ -18,6 +18,7 @@
 import {
   buildRoute,
   isCustomPricedPlan,
+  isOrgSubscriptionLive,
   isReleaseFlagOn,
   pluginRequestFromWeb,
   Route,
@@ -52,25 +53,6 @@ const PRICE_ENV: Record<string, string | undefined> = {
   advanced: process.env.STRIPE_PRICE_ADVANCED,
   agency: process.env.STRIPE_PRICE_AGENCY,
 }
-
-/**
- * Subscription statuses that mean "this workspace is already subscribed"
- * (AGL-1697).
- *
- * The same triple the Billing page and `/api/billing/subscription` treat as
- * live. Deliberately a STATUS test rather than a "has a subscription record"
- * test: the record — and the customer id beside it — survives cancellation, so
- * the naive form would lock every churned workspace out of ever paying us
- * again. `incomplete` and `unpaid` are out for the same reason from the other
- * side: there is no live subscription to protect and a new session is the
- * buyer's only way forward.
- *
- * Third copy of this list in the repo, which is one too many — the other two
- * are `billing/page.tsx` and `billing/subscription/route.ts`, and converging
- * all three on one exported predicate is filed rather than done here, because
- * both of those files are under concurrent edit.
- */
-const LIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due']
 
 /** Annual prices (AGL-269); absent envs make the toggle degrade to 501. */
 const YEARLY_PRICE_ENV: Record<string, string | undefined> = {
@@ -191,11 +173,17 @@ async function handler(request: Request): Promise<Response> {
     // asked for something that is not true of this org, and the Billing page
     // can say so. `code` is machine-readable so the client can distinguish
     // this from the payment failures that share the status.
-    const subscriptionStatus = String(
-      (billing.subscription as { status?: unknown } | null | undefined)
-        ?.status ?? '',
-    )
-    if (LIVE_SUBSCRIPTION_STATUSES.includes(subscriptionStatus)) {
+    //
+    // `isOrgSubscriptionLive` is deliberately a STATUS test rather than a "has
+    // a subscription record" test: the record — and the customer id beside it
+    // — survives cancellation, so the naive form would lock every churned
+    // workspace out of ever paying us again. `incomplete`, `incomplete_expired`
+    // and `unpaid` stay open from the other side: there is no live
+    // subscription to protect and a new session is the buyer's only way
+    // forward. It is imported rather than spelled out here because the Billing
+    // page decides the same thing off the same list, and the two narrowing
+    // apart is the double-billing shape (AGL-1715).
+    if (isOrgSubscriptionLive(billing)) {
       return Response.json(
         {
           error:

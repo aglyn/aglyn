@@ -21,7 +21,17 @@ import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { readActiveMemberSession, setMemberCookie } from './membership'
 
-/** Subscription statuses that grant access (trialing pays later). */
+/**
+ * Subscription statuses that grant access (trialing pays later).
+ *
+ * AGL-1715-EXEMPT: these are the TENANT's own site members' subscriptions to
+ * the TENANT's products (`hosts/{hostId}/subscriptions`) — a different Stripe
+ * account, a different buyer and a different decision from
+ * `isLiveSubscriptionStatus`, which is about the Aglyn org's subscription to
+ * US. The words coincide only because both are Stripe subscription statuses.
+ * Converging them would tie a visitor's content access to our own billing
+ * rules.
+ */
 const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due'])
 
 /**
