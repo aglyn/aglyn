@@ -1,6 +1,6 @@
 # Analytics — the GA4 event taxonomy
 
-One taxonomy, two surfaces. This is the map; the code is
+One taxonomy, three surfaces. This is the map; the code is
 `libs/aglyn/src/lib/app-utils/analytics-events.ts`, and the event names and
 their params are a TypeScript type there, so a typo is a compile error rather
 than a silently-missing metric.
@@ -15,7 +15,7 @@ plugin gate), AGL-1559 (the property consolidation).
 
 | Property | Measurement id | Surface |
 | --- | --- | --- |
-| **Aglyn — Platform** (302497406) | `G-YW5PG16YTM` | **the canonical property.** Both `app.aglyn.com` and `aglyn.com`, via one web stream, **ID 3230351080**. Linked to Firebase project `aglyn-main` (app "Aglyn - App Console"). Live since AGL-118. Renamed from "Aglyn — Console" on consolidation. |
+| **Aglyn — Platform** (302497406) | `G-YW5PG16YTM` | **the canonical property.** All three first-party domains — `app.aglyn.com`, `aglyn.com` and `docs.aglyn.com` (AGL-1579) — via one web stream, **ID 3230351080**. Linked to Firebase project `aglyn-main` (app "Aglyn - App Console"). Live since AGL-118. Renamed from "Aglyn — Console" on consolidation. |
 | Aglyn — Marketing (archived 2026-08-14, pre-consolidation) (257010770) | `G-BQ49X14QCD`, stream 2220379072 | retired 2026-08-14. **Do not delete** — it holds the only copy of its own history **and is the Analytics link for the Firebase project `aglyn-app`**. Deleting it would sever that link. Its "Prod" tag and its "traffic in past 48 hours" flag both read as more alive than they are: year to date it has **30 views / 6 users**, ~24 of them `/signin` on Vercel *preview* URLs of the console, plus one view of `/` on `aglyn.com`. `aglyn-app` is the retired marketing site's backend — see AGL-1590. |
 | ~~aglyn-f375b (284263481)~~ | — | **trashed 2026-08-14** (AGL-1581). Stray property, zero data streams, no measurement id, no traffic, no Firebase project of that name, unreferenced in the monorepo. Recoverable from the GA Trash Can until **2026-09-18**; permanently gone after that. |
 
@@ -23,10 +23,11 @@ plugin gate), AGL-1559 (the property consolidation).
 belong to **stream 3230351080 on property 302497406** — secrets are per-stream
 and do not migrate.
 
-**One property, one stream, both domains** (AGL-1559, done 2026-08-14). A single
-measurement id serves both surfaces, because the `_gl` linker is honoured
-per-tag: two ids would give a visitor a fresh `client_id` on the domain hop.
-Separate the surfaces in reports with the built-in **Hostname** dimension.
+**One property, one stream, three domains** (AGL-1559 for two, AGL-1579 for the
+third, both 2026-08-14). A single measurement id serves every surface, because
+the `_gl` linker is honoured per-tag: two ids would give a visitor a fresh
+`client_id` on the domain hop. Separate the surfaces in reports with the
+built-in **Hostname** dimension.
 
 **Google Signals is OFF and ads personalization is 0/307 regions on both.
 Keep it that way** — the live privacy policy's flat "we do not sell or share"
@@ -40,6 +41,23 @@ attributing sessions to `aglyn.com / referral` and overwrites the true source,
 so the consolidation would not actually fix attribution. A journey from
 `aglyn.com` to `app.aglyn.com/signup` is now one session with the original
 channel retained, which is what makes "signups per channel" answerable.
+
+**`docs.aglyn.com` needed no GA admin change, and that was verified rather than
+assumed** (AGL-1579, 2026-08-14). Both halves are substring conditions that a
+subdomain already satisfies: cross-domain linking is `Contains aglyn.com`, and
+the unwanted-referral list is a single `Referral domain contains aglyn.com`.
+Checking mattered more than it sounds — the *second* half is the one that gets
+skipped, and skipping it is silent: a visitor going console → docs → console
+would post a self-referral that overwrites the real acquisition source on
+exactly the journeys the docs instrumentation exists to measure. Adding a
+redundant `docs.aglyn.com` row would have been the other way to get this wrong.
+
+One consequence of the cross-domain list worth knowing before reading reports:
+the domains in it are **excluded from enhanced measurement's outbound-click
+events**, by design. So a docs link to `app.aglyn.com` produces no `click` — it
+produces a continued session, which is the better record and the whole point of
+the consolidation. Only genuinely external destinations (`github.com`) raise
+`click`.
 
 ---
 
@@ -87,7 +105,7 @@ the person to `/signup`), plus `passkey` and `sso` for `login`.
 
 ---
 
-## Six decisions worth knowing
+## Seven decisions worth knowing
 
 ### 1. `purchase` is sent from the server, everything else from the browser
 
@@ -289,6 +307,67 @@ Not done, and why: no cap on the *number* of authored params (GA4 ignores past
 param *keys* (an invalid key costs that one param, again with no safety
 consequence). Both are formatting nits on a path whose real risk was PII.
 
+### 7. The docs site buys its instrumentation from the tag, not from our code (AGL-1579)
+
+`docs.aglyn.com` had no analytics at all, which mattered more than a coverage
+gap: there is no in-product onboarding, tour or checklist anywhere in the
+console (verified in the AGL-1576 audit), so the getting-started guides *are*
+the activation path. Docs drop-off **is** activation drop-off. And
+`/developers/self-hosting` is quoted verbatim in the founding-customer offer,
+with no way to know whether anyone read it.
+
+The whole instrumentation is six lines of config — `gtag` on the classic preset
+in `apps/docs/docusaurus.config.ts` — and the reason it is that small is worth
+recording, because the obvious richer version does not build.
+
+**`apps/docs` cannot import `libs/`.** It is a standalone Docusaurus app with
+its own `node_modules` and its own React 18, deliberately isolated from the
+monorepo's React 19, and it deploys as its own Vercel project (`aglyn-docs`)
+with root directory `apps/docs` and **`sourceFilesOutsideRootDirectory: false`**.
+Vercel therefore uploads `apps/docs` and nothing else. A relative import into
+`../../libs/aglyn/...` compiles locally — Docusaurus's babel rule excludes only
+`node_modules`, not paths outside the site dir — and then fails the production
+build with a module-not-found. Verified against the project settings, not
+guessed.
+
+So `installLinkClickTracking({ surface: 'docs' })` (AGL-1562), which was written
+generic precisely so docs could reuse it, **is not installed here.** The
+alternative — a second copy of the classification rules inside `apps/docs` — is
+the exact duplication that module exists to prevent, and it would drift.
+
+That costs less than it looks, because **GA4's own enhanced measurement is on
+for this stream and already sends the event we wanted**, with the same name and
+the same key param: a docs click to GitHub raises `click` with
+`link_domain: github.com`, `outbound: true`. What the shared listener would add
+on this surface is `surface: 'docs'` and CTA classification — and the CTA half
+is nearly moot here, since the selector keys on MUI classes and docs has no MUI
+and no button-styled links today. To finish the job properly, flip
+`sourceFilesOutsideRootDirectory` on the `aglyn-docs` Vercel project and install
+the listener; do not copy the file.
+
+**`page_view` on route changes is the load-bearing part.** Docusaurus hands over
+to client-side routing after first paint, so a bare gtag snippet would count one
+pageview per session and report the entire getting-started path as a single
+page. The plugin's client module re-sends on `onRouteDidUpdate`, which is what
+makes between-guide drop-off visible at all. Known cosmetic flaw: the
+`page_title` it sends can lag one navigation behind (it defers a tick for
+react-helmet and still occasionally reads the previous title). `page_location`
+is always correct, so report on path, not title.
+
+**Consent: unconditional, matching `app.aglyn.com`.** That is adopting one of
+the two existing postures rather than inventing a third. `aglyn.com` is gated
+only because it is served by the tenant runtime, where the gate is
+host-configured machinery — a Firestore `consent.mode`, `/api/consent/region`,
+and a record keyed per hostId in localStorage. None of it exists on a static
+site, and localStorage is origin-scoped, so a choice made on `aglyn.com` is
+unreachable from `docs.aglyn.com` anyway. The published privacy policy names
+`docs.aglyn.com` in its scope clause (v1 through v4), so docs is squarely a
+first-party surface under it — see the caveat in "Still outstanding" below.
+
+Neither dev nor preview can pollute the property: the plugin returns `null`
+unless `NODE_ENV === 'production'`, and `apps/docs/vercel.json` disables
+non-production git deployments outright, so there are no preview URLs.
+
 ---
 
 ## GA UI configuration
@@ -322,6 +401,12 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    | Link id | `link_id` | Which outbound link, by label |
    | Surface | `surface` | `site` vs `docs` (AGL-1579); Hostname covers the domains, this covers surfaces sharing one |
 
+   **AGL-1579 adds nothing to this list.** Docs pageviews use only built-in
+   dimensions, and the `click` events it produces come from GA4's enhanced
+   measurement, whose `link_domain` / `link_id` are the same two params already
+   queued above. `surface` will not carry the value `docs` until the shared
+   listener can actually be installed there — see decision 7.
+
    `login` needs nothing new — `method` is already registered, and `sso` is a
    new VALUE of it, not a new dimension.
 
@@ -353,6 +438,27 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    (which that listing does not show), the server-side `purchase` is also
    no-opping in production today. Worth checking in the dashboard before
    assuming any server-side event is arriving.
+3. 🚨 **The published privacy policy says we run no third-party analytics.**
+   `apps/console/constants/legal/v4/privacy.txt`, under *"Sale"/"sharing" under
+   U.S. state laws*: "We use no advertising technology and no third-party
+   analytics on our websites or the console" — identical wording in v2, v3 and
+   v4. GA4 is third-party analytics, and it has been live on `app.aglyn.com`
+   and `aglyn.com` since AGL-118, so **the sentence is already inaccurate for
+   two surfaces before AGL-1579 adds a third.** Section 4 of the same document
+   takes the opposite position ("cookies and similar technologies for
+   authentication, security, preferences, and analytics"), so it contradicts
+   itself independently of docs. It reads like it was drafted to mean "no
+   adtech", which is true, but that is not what it says. **This is a legal-copy
+   decision for Zach, not an engineering one** — and it should be settled
+   before the docs tag is deployed, since deploying widens an existing
+   inaccuracy rather than creating one. Filed as AGL-1594. The scope clause
+   itself is fine: it names `docs.aglyn.com` explicitly in every version.
+4. **Enhanced measurement's Site search on docs is unverified.** Docusaurus's
+   local search navigates to `/search?q=…`, and `q` is one of the query keys
+   enhanced measurement watches, so `view_search_results` may already be
+   arriving for free. If it is, note that **`search_term` is untyped visitor
+   input** and does not pass `sanitizeEventParams` — it never touches our code.
+   Confirm what it collects before registering it as a dimension.
 
 ### Environment variables
 

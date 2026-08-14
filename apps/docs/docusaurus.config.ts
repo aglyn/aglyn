@@ -55,6 +55,62 @@ const config: Config = {
             !process.env.VERCEL || process.env.VERCEL_DEEP_CLONE === 'true',
         },
         blog: false,
+        // Google Analytics (AGL-1579). Third first-party surface on the ONE
+        // consolidated property (AGL-1559): `G-YW5PG16YTM`, property 302497406,
+        // web stream 3230351080 — the same measurement id `aglyn.com` and
+        // `app.aglyn.com` already report to. A fourth property was the tempting
+        // shape and the wrong one: the `_gl` linker is honoured per-tag, so a
+        // second id would hand a visitor a fresh `client_id` on the domain hop
+        // and turn "read the docs, then signed up" into two unrelated users.
+        // Separate the three surfaces in reports with the built-in Hostname
+        // dimension.
+        //
+        // Why the id is written here rather than read from an env var: this app
+        // is its own Vercel project (`aglyn-docs`, root directory `apps/docs`)
+        // and it has NO environment variables configured at all — it does not
+        // share the console's `NEXT_PUBLIC_*` surface, and `NEXT_PUBLIC_` is a
+        // Next.js convention that means nothing to Docusaurus anyway. An env
+        // var nobody has set is analytics that silently reports zero, which is
+        // the exact failure this issue exists to end: zero is indistinguishable
+        // from nobody reading the docs. The id is a public identifier, already
+        // served in the HTML of both other domains.
+        //
+        // Dev and preview builds cannot pollute the property. The plugin
+        // returns `null` unless `NODE_ENV === 'production'`, so `docusaurus
+        // start` loads no tag; and this project has non-production git
+        // deployments disabled outright (see vercel.json), so there are no
+        // preview URLs to leak hits either.
+        //
+        // The plugin's client module also re-sends `page_view` on SPA route
+        // changes. That is not a nicety here — Docusaurus hands over to
+        // client-side routing after the first paint, so a bare gtag snippet
+        // would count one pageview per SESSION and report the whole
+        // getting-started path as a single page. Drop-off between guides is the
+        // metric, and it only exists because of that hook.
+        //
+        // CONSENT: unconditional, matching `app.aglyn.com` (AGL-118) rather
+        // than `aglyn.com`. That is adopting one of the two existing postures,
+        // not inventing a third. `aglyn.com` is gated because it is served by
+        // the TENANT runtime, where the gate is host-configured machinery — a
+        // Firestore `consent.mode`, `/api/consent/region`, and a stored record
+        // keyed per hostId in localStorage. None of it exists on a static site,
+        // and localStorage is origin-scoped, so a choice a visitor made on
+        // `aglyn.com` is unreachable from `docs.aglyn.com` regardless. Porting
+        // that stack here would be a THIRD implementation of consent, which is
+        // the outcome AGL-1579 explicitly rules out. Docs is a first-party
+        // Aglyn surface under our own privacy policy, exactly as the console
+        // is.
+        //
+        // `anonymizeIP` emits `'anonymize_ip': true` on the config call. GA4
+        // IGNORES it — IP anonymization is unconditional there and cannot be
+        // switched off. Kept because it is free and honest about intent, but it
+        // is NOT the privacy control: that is property-level (Google Signals
+        // off, ads personalization 0/307 regions, no Ads link, 14-month
+        // retention, email redaction on) and documented in docs/ANALYTICS.md.
+        gtag: {
+          trackingID: 'G-YW5PG16YTM',
+          anonymizeIP: true,
+        },
         theme: {
           customCss: './src/css/custom.css',
         },
