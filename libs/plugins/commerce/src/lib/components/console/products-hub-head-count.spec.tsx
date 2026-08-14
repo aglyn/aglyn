@@ -111,10 +111,41 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 const limitSpy = jest.fn((value: number) => value)
 const countSpy = jest.fn(async (name: string) => {
+  // A server aggregate is a NETWORK round-trip: its answer cannot land in the
+  // same microtask drain as the mount that asked for it. Resolving it there
+  // was the fixture's own fiction, and it is what let a settle helper that
+  // flushed a fixed number of microtasks look correct (AGL-1756). One
+  // macrotask is the cheapest schedule a real `getCountFromServer` can beat,
+  // so the fixture uses it and any tick-counting settle fails deterministically
+  // instead of only under a loaded worker.
+  await new Promise((resolve) => setTimeout(resolve, 0))
   if (aggregate.count == null) {
     throw Object.assign(new Error('denied'), { code: 'permission-denied' })
   }
   return { data: () => ({ count: aggregate.count }), name } as any
+})
+
+/**
+ * The card's real `checkQuota`, observed. Wrapping rather than replacing is
+ * the point: `checkQuota` and `resolveOrgEntitlements` are the contract these
+ * cases exist to exercise, and only the counts are staged.
+ *
+ * It is here because this card renders NO consequence of the count reaching
+ * state — the header counts the loaded rows, so a site of 500 and a site of
+ * 3,000 render the same string, and there is no caption to wait on the way
+ * `locations-head-count.spec.tsx` has one. The number the gate is computed
+ * from is the only thing that distinguishes them, so the spec waits on that.
+ */
+const mockCheckQuota = jest.fn()
+jest.mock('@aglyn/aglyn', () => {
+  const actual = jest.requireActual('@aglyn/aglyn')
+  return {
+    ...actual,
+    checkQuota: (...args: unknown[]) => {
+      mockCheckQuota(...args)
+      return (actual as any).checkQuota(...args)
+    },
+  }
 })
 
 jest.mock('firebase/firestore', () => ({
@@ -168,23 +199,50 @@ beforeEach(() => {
 const mount = () => render(<ProductsHubCard hostId="host-1" />)
 
 /**
- * The aggregate has answered AND its answer has reached state. The call
- * count alone is not enough: it lands on mount while the resolution is
- * still a microtask, so a click issued on that signal would read the very
- * fallback these cases exist to leave behind.
+ * Wait until the card is GATING ON `count` — the aggregate's answer has not
+ * merely resolved, it has reached a render and is the number the next click
+ * will be refused (or allowed) against.
+ *
+ * This replaces a helper that waited for `countSpy` to have been CALLED and
+ * then flushed a fixed two microtasks, assuming the answer had arrived
+ * (AGL-1756). It had not arrived on any schedule longer than those two ticks:
+ * the click then read the `limit(500)` fallback, which sits UNDER the 2,500
+ * band, so nothing was enqueued and the trailing `waitFor` spent RTL's 1,000ms
+ * default — not this file's `jest.setTimeout(30_000)` — before reporting
+ * `Expected: true, Received: false`. It read as a timeout; it was a missed
+ * state update, and only a loaded worker made it visible.
+ *
+ * A tick budget cannot be made large enough, only large enough for today's
+ * promise chain, so the condition replaces it rather than widening it.
  */
-const settled = async () => {
+const gatingOn = async (count: number) => {
+  await waitFor(() =>
+    expect(mockCheckQuota).toHaveBeenCalledWith(
+      expect.anything(),
+      'productsPerHost',
+      count,
+    ),
+  )
+}
+
+/**
+ * The DENIED case has no `gatingOn` signal to wait for: its fallback is also
+ * the value the FIRST render used, so `gatingOn(PRODUCT_ROWS)` would be
+ * satisfied before the read had failed — passing while proving nothing.
+ * Await the very promise the card awaited instead. Settled is settled; no
+ * tick count is involved either way.
+ */
+const readRejected = async () => {
   await waitFor(() => expect(countSpy).toHaveBeenCalled())
   await act(async () => {
-    await Promise.resolve()
-    await Promise.resolve()
+    await countSpy.mock.results[0].value.catch(() => undefined)
   })
 }
 
 describe('the products hub head-count is a server aggregate (AGL-1716)', () => {
   it('refuses Add over the band the loaded window hid', async () => {
     mount()
-    await settled()
+    await gatingOn(SERVER_PRODUCTS)
 
     // 3,000 products against `pro`'s included 2,500. Before the fix the
     // input was 500 — under every band from Pro up — so this opened the
@@ -192,36 +250,36 @@ describe('the products hub head-count is a server aggregate (AGL-1716)', () => {
     // real, refused the save afterwards.
     fireEvent.click(screen.getByText('Add product'))
 
-    await waitFor(() =>
-      expect(
-        enqueueSnackbar.mock.calls.some((call) =>
-          String(call[0]).includes('Your plan includes 2500 products'),
-        ),
-      ).toBe(true),
-    )
+    // Asserted directly, not inside a `waitFor`: the handler enqueues before
+    // it awaits anything, so there is nothing here to wait FOR. A budget
+    // around a synchronous assertion only decides how long a real failure
+    // takes to report.
+    expect(
+      enqueueSnackbar.mock.calls.some((call) =>
+        String(call[0]).includes('Your plan includes 2500 products'),
+      ),
+    ).toBe(true)
   })
 
   it('refuses a duplicate over the same band', async () => {
     mount()
-    await settled()
+    await gatingOn(SERVER_PRODUCTS)
 
     // Duplicate is a create and consumes the same slot, so it reads the
     // same number — before the fix, the same saturated one.
     fireEvent.click(screen.getAllByText('Duplicate')[0])
 
-    await waitFor(() =>
-      expect(
-        enqueueSnackbar.mock.calls.some((call) =>
-          String(call[0]).includes('Your plan includes 2500 products'),
-        ),
-      ).toBe(true),
-    )
+    expect(
+      enqueueSnackbar.mock.calls.some((call) =>
+        String(call[0]).includes('Your plan includes 2500 products'),
+      ),
+    ).toBe(true)
     expect(mockCreateResource).not.toHaveBeenCalled()
   })
 
   it('keeps the list capped — the cap was never the defect', async () => {
     mount()
-    await settled()
+    await gatingOn(SERVER_PRODUCTS)
 
     // Fixing the head-count must not turn this table into a 3,000-row
     // stream. That the two questions now have two answers is the point.
@@ -230,7 +288,7 @@ describe('the products hub head-count is a server aggregate (AGL-1716)', () => {
 
   it('reads the count once per mount, from the products collection', async () => {
     mount()
-    await settled()
+    await gatingOn(SERVER_PRODUCTS)
 
     expect(countSpy).toHaveBeenCalledTimes(1)
     expect(countSpy).toHaveBeenCalledWith('products')
@@ -239,7 +297,9 @@ describe('the products hub head-count is a server aggregate (AGL-1716)', () => {
   it('re-reads the count after the editor closes on a create', async () => {
     aggregate.count = 100
     mount()
-    await settled()
+    // 100, not the 500 the first render gated on — so this cannot be
+    // satisfied before the aggregate has landed.
+    await gatingOn(100)
     countSpy.mockClear()
 
     // Under the band now, so the editor opens; closing it is the only
@@ -254,14 +314,19 @@ describe('the products hub head-count is a server aggregate (AGL-1716)', () => {
   it('falls back to the live rows, never to zero, when the read fails', async () => {
     aggregate.count = null
     mount()
-    await settled()
+    await readRejected()
 
     // 500 known live rows stand in — a lower bound, and this card's prior
     // behaviour. A defaulted 0 would report "no products used" on a site
     // that is over its band, which is the flattering direction again.
+    expect(mockCheckQuota).toHaveBeenCalledWith(
+      expect.anything(),
+      'productsPerHost',
+      PRODUCT_ROWS,
+    )
     fireEvent.click(screen.getByText('Add product'))
 
-    await waitFor(() => expect(screen.queryByText('Cancel')).not.toBeNull())
+    expect(screen.queryByText('Cancel')).not.toBeNull()
     expect(
       enqueueSnackbar.mock.calls.some((call) =>
         String(call[0]).includes('Your plan includes'),
