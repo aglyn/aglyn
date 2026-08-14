@@ -32,6 +32,10 @@ export enum Route {
   ADMIN_COUPONS = '/admin/coupons',
   // The panic button (AGL-1501): platform/org/host/user lockdown controls.
   ADMIN_LOCKDOWN = '/admin/lockdown',
+  // The narrow lever beside it (AGL-1687): disable or release ONE uploaded
+  // file. Its own page rather than a panel on Lockdown because the input is
+  // an asset, not a scope — the two forms share no field but the reason.
+  ADMIN_MEDIA_QUARANTINE = '/admin/media-quarantine',
   ADMIN_AUDIT = '/admin/audit',
   ADMIN_USERS = '/admin/users',
   ADMIN_USER_DETAIL = '/admin/users/[uid]',
@@ -203,6 +207,7 @@ export interface RoutePayload {
   [Route.ADMIN_OVERVIEW]: undefined
   [Route.ADMIN_COUPONS]: undefined
   [Route.ADMIN_LOCKDOWN]: undefined
+  [Route.ADMIN_MEDIA_QUARANTINE]: undefined
   [Route.ADMIN_AUDIT]: undefined
   [Route.ADMIN_USERS]: undefined
   [Route.ADMIN_USER_DETAIL]: { uid: string }

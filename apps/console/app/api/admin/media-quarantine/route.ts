@@ -44,7 +44,46 @@
  * suppressed, not erased, and quietly re-billing a customer while refusing
  * their file would be a worse bug than the one quarantine fixes. The only
  * two collections this route writes are `mediaQuarantines` and
- * `adminAudit`.
+ * `adminAudit`. It READS one media document in `by: "media"` mode, and
+ * only to derive keys from it.
+ *
+ * ## `by: "media"` — the mode the staff form uses (AGL-1687)
+ *
+ * The original two modes take a digest or a scope segment, both transcribed
+ * by hand from a media document or a CDN URL. That is the right shape for a
+ * terminal and the wrong shape for a form, for three reasons a form makes
+ * worse rather than better:
+ *
+ *  1. **Which digest?** A document may carry `contentSha256` AND the legacy
+ *     truncated `contentHash`, and AGL-1631 exists because the runbook named
+ *     the weak one. An operator should not have to remember; the server
+ *     holds the document and can prefer the strong digest itself.
+ *  2. **Which scope segment?** The DAM's read derives its per-asset key from
+ *     `scope.cdnScope` — `org:{orgId}` or `{hostId}`, never the three-part
+ *     form a CDN URL can carry. A hand-typed segment that does not match is
+ *     a quarantine that looks set and refuses nothing. Deriving it here from
+ *     the same two shapes makes the mismatch structurally impossible.
+ *  3. **A release must clear what is actually biting.** An asset can be
+ *     covered by more than one key at once — an entry set on the legacy hash
+ *     before a replace stamped a strong digest, plus a per-asset entry. A
+ *     release that dropped only the preferred key would leave the red
+ *     `Disabled` badge in place and read exactly like a lift that failed,
+ *     which is the AGL-1571 hazard this whole family is built against. So a
+ *     `by: "media"` release removes EVERY key in `mediaQuarantineKeys()`
+ *     that currently holds an entry, and audits each removal.
+ *
+ * It keeps the property `/api/media/quarantine` established: the caller
+ * names an ASSET, never a digest, and the keys are derived server-side.
+ * That route needs it because accepting digests would make it an oracle for
+ * what the platform has taken down anywhere. Here the argument is not
+ * secrecy — a `super` operator can already GET the entire deny list — it is
+ * that a key the server derives from the document is a key that matches the
+ * document, and the three failure modes above are all transcription.
+ *
+ * `GET` gains the same lookup, unwritten: `?orgId=…&mediaId=…` answers with
+ * the asset's keys, which of them are set, and the deny list's size against
+ * its cap. Read-only, so it stays open to every staff role — during an
+ * incident "is this file already disabled?" is a support question.
  */
 
 import {
@@ -59,6 +98,8 @@ import {
   type MediaQuarantineEntry,
   mediaQuarantineAssetKey,
   mediaQuarantineHashKey,
+  mediaQuarantineKey,
+  mediaQuarantineKeys,
   mediaQuarantineNotice,
   normalizeMediaQuarantine,
   pluginRequestFromWeb,
@@ -88,6 +129,126 @@ const SCOPE_SEGMENT = /^[A-Za-z0-9_:-]{1,140}$/
 const MEDIA_ID = /^[A-Za-z0-9_-]{1,64}$/
 /** `contentHash` is a 16-char truncated hex digest (see media-quarantine.ts). */
 const CONTENT_HASH = /^[A-Fa-f0-9]{8,64}$/
+/**
+ * A bare org or host id, which is the HALF of a scope segment the caller
+ * supplies in `by: "media"` mode. No `:` — the joiner is added here, and
+ * accepting one would let a caller hand-build the three-part segment this
+ * mode exists to stop them getting wrong.
+ */
+const SCOPE_ID = /^[A-Za-z0-9_-]{1,64}$/
+
+/**
+ * The asset a `by: "media"` request names, read from its own document.
+ *
+ * `scopeSegment` is DERIVED — `org:{orgId}` or `{hostId}`, the same two
+ * shapes `resolveMediaScope` produces as `cdnScope` — so a per-asset key set
+ * here is byte-identical to the one the DAM looks up. See the module header.
+ */
+interface ResolvedAsset {
+  scopeSegment: string
+  mediaId: string
+  fileName: string | null
+  contentSha256: string | null
+  contentHash: string | null
+  deleted: boolean
+}
+
+async function resolveAsset(
+  firestore: AdminFirestore,
+  input: { orgId?: unknown; hostId?: unknown; mediaId?: unknown },
+): Promise<
+  { asset: ResolvedAsset; error?: undefined } | { asset?: undefined; error: { message: string; status: number } }
+> {
+  const orgId = String(input.orgId ?? '').trim()
+  const hostId = String(input.hostId ?? '').trim()
+  const mediaId = String(input.mediaId ?? '').trim()
+  if (!MEDIA_ID.test(mediaId)) {
+    return { error: { message: 'mediaId is missing or malformed', status: 400 } }
+  }
+  if (Boolean(orgId) === Boolean(hostId)) {
+    return {
+      error: {
+        message: 'Send exactly one of orgId or hostId',
+        status: 400,
+      },
+    }
+  }
+  if (!SCOPE_ID.test(orgId || hostId)) {
+    return { error: { message: 'orgId/hostId is malformed', status: 400 } }
+  }
+  const scopeRef = orgId
+    ? firestore.collection('orgs').doc(orgId)
+    : firestore.collection('hosts').doc(hostId)
+  const snapshot = await scopeRef.collection('media').doc(mediaId).get()
+  if (!snapshot.exists) {
+    // 404 rather than a silent empty answer: an operator acting on a media
+    // id they misread must be told, not handed a form that quietly
+    // quarantines an `asset--…` key matching nothing.
+    return { error: { message: 'No such file in that workspace', status: 404 } }
+  }
+  const value = (field: string): string | null => {
+    const raw = snapshot.get(field)
+    return typeof raw === 'string' && raw.trim() ? raw.trim() : null
+  }
+  return {
+    asset: {
+      scopeSegment: orgId ? `org:${orgId}` : hostId,
+      mediaId,
+      fileName: value('fileName'),
+      contentSha256: value('contentSha256'),
+      contentHash: value('contentHash'),
+      // Soft-deleted assets are still worth quarantining — a DMCA notice
+      // does not stop mattering because the customer moved the file to the
+      // trash, and a restore would bring it straight back. Reported rather
+      // than refused.
+      deleted: Boolean(snapshot.get('deletedAt')),
+    },
+  }
+}
+
+/**
+ * The media-mode half of a response: the asset the server actually read,
+ * and every key that could refuse it with what is set right now. The page
+ * renders this rather than inferring "disabled" from the action it just
+ * took — the same reason the lockdown cards render a re-read verdict.
+ */
+function assetPayload(
+  asset: ResolvedAsset | null,
+  key: string,
+  assetKeys: string[],
+  entries: Record<string, Partial<MediaQuarantineEntry>>,
+) {
+  if (!asset) return {}
+  const resolved = asset
+  return {
+    asset: {
+      scopeSegment: resolved.scopeSegment,
+      mediaId: resolved.mediaId,
+      fileName: resolved.fileName,
+      hasStrongDigest: resolved.contentSha256 != null,
+      hasLegacyDigest: resolved.contentHash != null,
+      deleted: resolved.deleted,
+    },
+    keyKind: describeKeyKind(key, resolved),
+    assetKeys: assetKeys.map((candidate) => ({
+      key: candidate,
+      kind: describeKeyKind(candidate, resolved),
+      set: entries[candidate] != null,
+    })),
+  }
+}
+
+/** Which of the three key kinds `key` is, for the operator's benefit. */
+function describeKeyKind(
+  key: string,
+  asset: ResolvedAsset,
+): 'sha256' | 'legacy' | 'asset' {
+  if (asset.contentSha256 && key === mediaQuarantineHashKey(asset.contentSha256))
+    return 'sha256'
+  if (asset.contentHash && key === mediaQuarantineHashKey(asset.contentHash))
+    return 'legacy'
+  return 'asset'
+}
 
 /** The audit row's view of a quarantine — explicit `null`, never absent. */
 function auditEntryShape(entry: Partial<MediaQuarantineEntry> | null): {
@@ -203,6 +364,58 @@ async function handler(request: Request): Promise<Response> {
       // person answering "is this file already disabled?" is usually
       // support, not the super-role operator who set it.
       const entries = await readEntries(firestore)
+      // The staff form's lookup: name an asset, get back every key that
+      // could refuse it and which of them are set. Unwritten, so it stays
+      // open to every staff role like the rest of GET.
+      const lookupMediaId = String(query?.['mediaId'] ?? '').trim()
+      if (lookupMediaId) {
+        const resolved = await resolveAsset(firestore, {
+          orgId: query?.['orgId'],
+          hostId: query?.['hostId'],
+          mediaId: lookupMediaId,
+        })
+        if (resolved.error) {
+          return Response.json(
+            { error: resolved.error.message },
+            { status: resolved.error.status },
+          )
+        }
+        const asset = resolved.asset
+        const keys = mediaQuarantineKeys(asset)
+        return Response.json(
+          {
+            asset: {
+              scopeSegment: asset.scopeSegment,
+              mediaId: asset.mediaId,
+              fileName: asset.fileName,
+              hasStrongDigest: asset.contentSha256 != null,
+              hasLegacyDigest: asset.contentHash != null,
+              deleted: asset.deleted,
+            },
+            // In preference order, so the first entry is the one a
+            // quarantine would be written under.
+            keys: keys.map((key) => ({
+              key,
+              kind: describeKeyKind(key, asset),
+              state: normalizeMediaQuarantine(entries[key], key),
+              // The internal rationale, which `normalizeMediaQuarantine`
+              // drops on purpose so it can never reach a customer surface.
+              // THIS route is staff-gated end to end and its plain listing
+              // already returns it — an operator deciding whether to lift a
+              // takedown needs the notice number that set it.
+              note:
+                typeof entries[key]?.note === 'string'
+                  ? entries[key].note
+                  : null,
+            })),
+            quarantined: keys.some((key) => entries[key] != null),
+            count: Object.keys(entries).length,
+            maxEntries: MEDIA_QUARANTINE_MAX_ENTRIES,
+            readAtMs: Date.now(),
+          },
+          { status: 200, headers: { 'Cache-Control': 'no-store' } },
+        )
+      }
       const probe = String(query?.['key'] ?? '').trim()
       if (probe) {
         const state = normalizeMediaQuarantine(entries[probe], probe)
@@ -250,11 +463,48 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
-    const resolved = resolveKey(body ?? {})
-    if (resolved.error) {
-      return Response.json({ error: resolved.error }, { status: 400 })
+    /**
+     * `by: "media"` resolves the asset first and derives every key from it;
+     * the two original modes keep taking the key the caller states. See the
+     * module header for why the form uses the first one.
+     */
+    const mediaMode = String(body?.by ?? '') === 'media'
+    let asset: ResolvedAsset | null = null
+    let key: string
+    /** Every key that could refuse this asset. Media mode only. */
+    let assetKeys: string[] = []
+    if (mediaMode) {
+      const found = await resolveAsset(firestore, body ?? {})
+      if (found.error) {
+        return Response.json(
+          { error: found.error.message },
+          { status: found.error.status },
+        )
+      }
+      asset = found.asset
+      assetKeys = mediaQuarantineKeys(asset)
+      // `prefer: "asset"` is the deliberate narrow choice: take down THIS
+      // workspace's copy when the same bytes are legitimate elsewhere. The
+      // default stays the digest, which is the stronger key and the one that
+      // survives a re-upload.
+      const preferAsset = String(body?.prefer ?? 'hash') === 'asset'
+      const derived = preferAsset
+        ? mediaQuarantineAssetKey(asset.scopeSegment, asset.mediaId)
+        : mediaQuarantineKey(asset)
+      if (!derived) {
+        return Response.json(
+          { error: 'Could not derive a quarantine key for that file' },
+          { status: 500 },
+        )
+      }
+      key = derived
+    } else {
+      const resolved = resolveKey(body ?? {})
+      if (resolved.error) {
+        return Response.json({ error: resolved.error }, { status: 400 })
+      }
+      key = resolved.key
     }
-    const key = resolved.key
 
     const reason = body?.reason
     if (action === 'quarantine' && !isMediaQuarantineReason(reason)) {
@@ -317,14 +567,35 @@ async function handler(request: Request): Promise<Response> {
             atMs: Date.now(),
             untilMs,
             actorUid: decoded.uid,
+            // In media mode these come from the document the server read,
+            // not from what the caller typed — the origin fields are the
+            // audit trail's only record of WHICH copy an operator was
+            // looking at, and a mistyped one makes that record a lie.
             originScopeSegment:
-              typeof body?.scopeSegment === 'string'
+              asset?.scopeSegment ??
+              (typeof body?.scopeSegment === 'string'
                 ? String(body.scopeSegment)
-                : null,
+                : null),
             originMediaId:
-              typeof body?.mediaId === 'string' ? String(body.mediaId) : null,
+              asset?.mediaId ??
+              (typeof body?.mediaId === 'string' ? String(body.mediaId) : null),
           }
         : null
+
+    /**
+     * Which keys this request actually touches.
+     *
+     * A quarantine writes exactly one — the preferred key. A media-mode
+     * RELEASE clears every key currently holding an entry, because an asset
+     * can be covered by two at once and a half-lift leaves the `Disabled`
+     * badge up while reporting success. When none are set, the preferred key
+     * is still named so the no-op is audited rather than vanishing.
+     */
+    const actedKeys =
+      mediaMode && action === 'release'
+        ? assetKeys.filter((candidate) => entriesBefore[candidate] != null)
+        : [key]
+    if (!actedKeys.length) actedKeys.push(key)
 
     // A merged nested write, so the document is created on the first
     // quarantine and every other entry is left untouched — two operators
@@ -332,9 +603,9 @@ async function handler(request: Request): Promise<Response> {
     // overwrite each other.
     await indexRef(firestore).set(
       {
-        [MEDIA_QUARANTINE_ENTRIES_FIELD]: {
-          [key]: entry ?? FieldValue.delete(),
-        },
+        [MEDIA_QUARANTINE_ENTRIES_FIELD]: Object.fromEntries(
+          actedKeys.map((acted) => [acted, entry ?? FieldValue.delete()]),
+        ),
       },
       { merge: true },
     )
@@ -342,36 +613,55 @@ async function handler(request: Request): Promise<Response> {
     // converges within the reader's 15s TTL.
     invalidateMediaQuarantineCache()
 
-    await firestore
-      .collection('adminAudit')
-      .add({
+    // One row PER KEY. A release that cleared two entries is two facts, and
+    // collapsing them would leave the second one with no record that it was
+    // ever in force.
+    for (const acted of actedKeys) {
+      const actedBefore = entriesBefore[acted] ?? null
+      await firestore.collection('adminAudit').add({
         actorUid: decoded.uid,
         actorEmail: decoded.email ? String(decoded.email) : null,
         action: `mediaQuarantine.${action}`,
         scope: 'asset',
-        target: `${MEDIA_QUARANTINES_COLLECTION}/${MEDIA_QUARANTINE_INDEX_DOC_ID}#${key}`,
-        before: { quarantined: before != null, ...auditEntryShape(before) },
+        target: `${MEDIA_QUARANTINES_COLLECTION}/${MEDIA_QUARANTINE_INDEX_DOC_ID}#${acted}`,
+        before: {
+          quarantined: actedBefore != null,
+          ...auditEntryShape(actedBefore),
+        },
         after: {
           quarantined: action === 'quarantine',
           ...auditEntryShape(entry),
         },
         at: FieldValue.serverTimestamp(),
       })
+    }
 
     // Read back what was written rather than reporting the intent
     // (AGL-1571). `confirmed: false` means the write returned and the state
     // still disagrees — an alarm, not a quiet success.
-    const verifiedEntry = (await readEntries(firestore))[key] ?? null
-    const verified = normalizeMediaQuarantine(verifiedEntry, key)
+    const entriesAfter = await readEntries(firestore)
+    const verified = normalizeMediaQuarantine(entriesAfter[key] ?? null, key)
+    /**
+     * In media mode a release is only confirmed when NO key can still refuse
+     * the asset. Checking the one preferred key would report success while
+     * the file stayed dark — the precise shape of the failure AGL-1571's
+     * read-back discipline exists to catch.
+     */
+    const confirmed =
+      mediaMode && action === 'release'
+        ? assetKeys.every((candidate) => entriesAfter[candidate] == null)
+        : (verified != null) === (action === 'quarantine')
     return Response.json(
       {
         ok: true,
         action,
         key,
+        keys: actedKeys,
         verified,
         readAtMs: Date.now(),
-        confirmed: (verified != null) === (action === 'quarantine'),
+        confirmed,
         notice: verified ? mediaQuarantineNotice(verified) : null,
+        ...assetPayload(asset, key, assetKeys, entriesAfter),
       },
       { status: 200 },
     )

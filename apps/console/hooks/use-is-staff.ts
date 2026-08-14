@@ -42,20 +42,27 @@ interface TokenUser {
  * scope because StaffGuard, the user menu and the secondary nav all mount at
  * once — one network round trip, not three.
  */
-let reconciliation: { uid: string; claim: Promise<boolean> } | null = null
+let reconciliation: {
+  uid: string
+  claims: Promise<Record<string, unknown>>
+} | null = null
 
-function reconcileStaffClaim(user: TokenUser): Promise<boolean> {
+function reconcileClaims(user: TokenUser): Promise<Record<string, unknown>> {
   const uid = user.uid ?? ''
-  if (reconciliation?.uid === uid) return reconciliation.claim
-  const claim = Promise.resolve(user.getIdTokenResult?.(true))
-    .then((result) => Boolean(result?.claims?.staff))
+  if (reconciliation?.uid === uid) return reconciliation.claims
+  const claims = Promise.resolve(user.getIdTokenResult?.(true))
+    .then((result) => result?.claims ?? {})
     // A token we cannot refresh is not a staff token. Deliberately does not
     // fall back to the cached verdict: failing closed on the UI costs a
     // staff member one reload, while failing open shows admin chrome on a
     // token we could not confirm.
-    .catch(() => false)
-  reconciliation = { uid, claim }
-  return claim
+    .catch(() => ({}) as Record<string, unknown>)
+  reconciliation = { uid, claims }
+  return claims
+}
+
+function reconcileStaffClaim(user: TokenUser): Promise<boolean> {
+  return reconcileClaims(user).then((claims) => Boolean(claims.staff))
 }
 
 /**
@@ -100,6 +107,52 @@ export function useIsStaff(): boolean | null {
   }, [user])
 
   return isStaff
+}
+
+/**
+ * The staff member's ROLE, or `null` while it is still being read and for
+ * anyone who is not staff (AGL-1687).
+ *
+ * A second axis from {@link useIsStaff}, not a replacement: `staff` opens
+ * the admin area, `staffRole` decides who may pull a trigger inside it.
+ * Support can read every panel; `super` is the bar for a lockdown and for a
+ * takedown, and `/api/admin/*` enforces that server-side per request.
+ *
+ * Missing means `support`, matching the routes — they read
+ * `String(decoded['staffRole'] ?? 'support')` and fail closed to the
+ * least-privileged role on a missing claim (AGL-495). A UI that guessed
+ * `super` on an absent claim would offer a button whose request is refused.
+ *
+ * Shares the one forced refresh {@link useIsStaff} already performs, so
+ * mounting both costs the same single round trip.
+ */
+export function useStaffRole(): string | null {
+  const { data: user } = useUser()
+  const [role, setRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    const account = user as TokenUser | undefined
+    if (!account?.getIdTokenResult) return
+    const read = (claims: Record<string, unknown> | undefined) =>
+      claims?.staff ? String(claims.staffRole ?? 'support') : null
+    void Promise.resolve(account.getIdTokenResult())
+      .then((result) => {
+        if (active) setRole(read(result?.claims))
+      })
+      .catch(() => {
+        if (active) setRole(null)
+      })
+      .then(() => reconcileClaims(account))
+      .then((claims) => {
+        if (active) setRole(read(claims))
+      })
+    return () => {
+      active = false
+    }
+  }, [user])
+
+  return role
 }
 
 /** Test seam: drops the shared refresh so each case starts clean. */
