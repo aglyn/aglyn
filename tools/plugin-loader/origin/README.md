@@ -2,8 +2,13 @@
 
 The concrete deployment of the [plugin origin reference](../README.md):
 Vercel project **aglyn-plugins**, git-connected to this directory
-(`rootDirectory: tools/plugin-loader/origin`, production branch `main`),
-serving `https://plugins.aglyn.com`.
+(`rootDirectory: tools/plugin-loader/origin`, production branch `production`
+since 2026-08-04), serving `https://plugins.aglyn.com`.
+
+That alias is verified after every promote by
+`tools/deploy/verify-production-aliases.mjs` (AGL-1610). Note `vercel project
+ls` prints only the canonical `aglyn-plugins-aglyn.vercel.app` URL for this
+project — the custom domain shows up in `vercel inspect`.
 
 What it serves:
 
@@ -29,10 +34,15 @@ Deployments are scoped to this directory. The repo-root `vercel.json` is
 only read by projects rooted at `.` (aglyn-console), so without its own
 git settings this project rebuilt on **every** push to the monorepo — the
 whole `main` history showed up here as no-op deploys. `vercel.json` now
-carries both halves: `git.deploymentEnabled` limits it to `main` (a
-promote push to `production` no longer makes a preview here), and
-`ignoreCommand` (`git diff --quiet HEAD^ HEAD -- .`, run from the root
-directory — exit 0 skips) builds only when this directory changed.
+carries both halves: `git.deploymentEnabled` limits it to `production`
+(`main: false`, so a push to `main` no longer creates a record here), and
+`ignoreCommand` (`bash ../../scripts/vercel-ignore-build.sh plugins` —
+exit 0 skips) builds only when this directory changed.
+
+The `deploymentEnabled` and Production Branch settings must move together:
+see the header of `tools/scripts/vercel-ignore-build.sh`, which explains
+why `main: false` would silently starve this project of production
+deployments if anyone set the branch back to `main`.
 
 Apps point here via `NEXT_PUBLIC_PLUGIN_ORIGIN=https://plugins.aglyn.com`
 (console + tenant). The realm trust keys (`PLUGIN_TRUST_*`) are separate —
