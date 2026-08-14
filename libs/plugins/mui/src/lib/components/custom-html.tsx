@@ -53,17 +53,55 @@ export interface CustomHtmlProps {
 }
 
 /**
+ * Our OWN DOMPurify instance, built lazily on first use.
+ *
+ * Not the shared module singleton, because the `style` hook below is
+ * registered PER INSTANCE and `DOMPurify.addHook` on the default export
+ * would silently change the behaviour of every other DOMPurify caller in
+ * the app. Lazy because the factory needs a real `window` and this module
+ * is imported during SSR; every caller already gates on the client (the
+ * effect below, `typeof window === 'undefined'` in the email blocks).
+ */
+let purifier: DOMPurifyInstance | null = null
+type DOMPurifyInstance = ReturnType<typeof DOMPurify>
+
+function getPurifier(): DOMPurifyInstance {
+  if (purifier) return purifier
+  const instance = DOMPurify(window)
+  // AGL-1725: DOMPurify performs NO CSS filtering on a `style` attribute.
+  // Measured against the installed 3.4.13 with this exact config: a
+  // `style="background:url(http://…)"` survives verbatim, as do
+  // `url(javascript:…)` and `expression(…)`. The comment this replaced
+  // asserted a filtering that does not exist — so an author's inline style
+  // was a second, unsanitised route to the same egress as the `<style>`
+  // block, and in the email blocks (which share this function) a remote
+  // image in a style attribute is an open-tracking pixel aimed at the
+  // recipient. `sanitizeAuthorCss` applies the scheme rule; it does not
+  // touch the host, for the reasons stated on that function.
+  instance.addHook('afterSanitizeAttributes', (node) => {
+    const style = node.getAttribute?.('style')
+    if (!style) return
+    const safe = Aglyn.sanitizeAuthorCss(style)
+    if (safe !== style) node.setAttribute('style', safe)
+  })
+  purifier = instance
+  return instance
+}
+
+/**
  * Sanitization policy (AGL-320): DOMPurify allowlist — no scripts,
- * iframes, objects, or event-handler attributes; style attributes pass
- * through DOMPurify's CSS filtering. Applied at EVERY render (client +
- * besigner canvas), so stored markup can never execute even if a write
- * bypassed the console. Embed mode never touches the DOM — the raw
+ * iframes, objects, or event-handler attributes. Applied at EVERY render
+ * (client + besigner canvas), so stored markup can never execute even if a
+ * write bypassed the console. Embed mode never touches the DOM — the raw
  * snippet only exists inside `sandbox="allow-scripts"` (no
  * allow-same-origin), so it cannot reach cookies, storage, or the
  * parent page.
+ *
+ * `style` attributes are filtered by the hook in {@link getPurifier}
+ * (AGL-1725) rather than by DOMPurify, which does not filter CSS at all.
  */
 export function sanitizeCustomHtml(html: string): string {
-  return DOMPurify.sanitize(html, {
+  return getPurifier().sanitize(html, {
     USE_PROFILES: { html: true },
     FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'base'],
     FORBID_ATTR: ['srcdoc', 'formaction'],
@@ -138,7 +176,15 @@ const CustomHtml = forwardRef<HTMLDivElement, CustomHtmlProps>(
 
     return (
       <Box ref={ref} {...rest}>
-        {css ? <style>{css}</style> : null}
+        {/* AGL-1725: the `css` attribute never reached DOMPurify — that
+            policy covers `html` only — so this <style> block was the one
+            surface on a published site where an author's raw CSS shipped to
+            every visitor unexamined. `sanitizeAuthorCss` refuses schemes
+            that cannot be defended (http:, and anything not https/data/blob)
+            and deliberately leaves the HOST alone; see the module header on
+            why AGL-1701's input restriction does not transfer to a site
+            owner styling their own site. */}
+        {css ? <style>{Aglyn.sanitizeAuthorCss(css)}</style> : null}
         {/* Sanitized above on every render — see sanitizeCustomHtml. */}
         <div dangerouslySetInnerHTML={{ __html: sanitized }} />
       </Box>
@@ -166,7 +212,14 @@ export const schema: Aglyn.ComponentSchema<CustomHtmlProps> = {
     {
       name: 'css',
       label: 'CSS',
-      description: 'Injected as a style tag — keep selectors specific.',
+      // AGL-1725 — the "warn" half of warn-and-disclose. An author can only
+      // weigh this egress if they are told it exists, and the attributes
+      // panel is where they are typing the url().
+      description:
+        'Injected as a style tag — keep selectors specific. A url() ' +
+        'pointing off your site makes every visitor’s browser contact that ' +
+        'host, which sees their IP address and which page they are on. ' +
+        'Insecure http:// URLs are not loaded.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {

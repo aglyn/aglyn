@@ -102,9 +102,20 @@ export const Leaf = observer(
     // up the console's `--mui-palette-*` and the tenant (whose theme has no
     // CSS variables at all) still tracks palette changes. Values carrying
     // no reference come back by identity.
+    // Author CSS (AGL-1725): `node.sx` is the Styles panel's output, and it
+    // is free text — `backgroundImage` is a first-class field and the Custom
+    // CSS tab is free-solo, so any property and any value can be typed. On a
+    // published site that lands in the visitor's document as a real `url()`,
+    // which no input validator and no lint rule can see. Scrubbed HERE, at
+    // the last point before the merge, so it also catches values already
+    // stored; `sx` and `props.sx` are OUR components' own styles and are
+    // deliberately left alone. The scrub is scheme-only and returns its
+    // input by identity when nothing is refused, so the overwhelmingly
+    // common case (no `url()` at all) costs one walk and no new object.
+    const authorSx = Aglyn.sanitizeAuthorSx(node?.sx)
     const mergedSx = resolvePaletteVarsSx(
       resolveSchemeSx(
-        mergeSxProps(sx as any, propsSx as any, node?.sx as any),
+        mergeSxProps(sx as any, propsSx as any, authorSx as any),
         activeScheme,
       ),
       theme?.palette,
