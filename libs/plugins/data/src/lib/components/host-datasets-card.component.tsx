@@ -42,6 +42,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getCountFromServer,
   getDocs,
   limit,
   query,
@@ -222,6 +223,116 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     () => sortDatasetRecords([...(recordDocs ?? [])]),
     [recordDocs],
   )
+  /**
+   * The two HEAD-COUNTS on this card are server aggregates, not the lengths
+   * of the two capped listeners above (AGL-1716, the AGL-1706 shape).
+   *
+   * Both listeners are capped correctly — 100 datasets in a picker, 500 rows
+   * in a table, nobody needs more streamed in. What neither may do is answer
+   * "how many does this org have", and both did:
+   *
+   *  * `records.length` saturated at 500 and was handed to
+   *    `checkQuota(org, 'recordsPerDataset', …)`. The bands are 1,000 /
+   *    10,000 / 100,000 / 500,000 / 1,000,000, so on EVERY paid plan the
+   *    check read 500-against-thousands and could never refuse. Worse, the
+   *    importer computed its room as `limit − records.length`, so an
+   *    understated count *inflated* the slots it offered.
+   *  * `datasets.length` saturated at 100 and fed `checkDatasetQuota`, whose
+   *    bands run to 250 / 500 / 2,000 above that window.
+   *
+   * `api/orgs/datasets` — the route that actually enforces both — counts with
+   * `collection('datasets').count()` and `collection('records').count()` on
+   * these exact paths, so this card was offering headroom the API would then
+   * refuse. It now asks the same question the same way, and the console
+   * billing page and the staff org page already read the dataset count with
+   * this identical unscoped aggregate.
+   *
+   * THE LISTS KEEP THEIR CAPS. The list and the count are different
+   * questions; only the count moved. A one-shot goes stale where a listener
+   * refreshed for free, so both are re-read after any mutation that can move
+   * them — the epochs below.
+   *
+   * No counting RULE moves: `checkQuota` and `checkDatasetQuota` are
+   * untouched entitlement inputs, and nothing here is metered by
+   * `report-usage` (it samples record counts server-side for storage, on its
+   * own read). Only this card's inputs stopped being saturated.
+   */
+  const [datasetCountEpoch, setDatasetCountEpoch] = useState(0)
+  const [recordCountEpoch, setRecordCountEpoch] = useState(0)
+  const [serverDatasetCount, setServerDatasetCount] = useState<number | null>(
+    null,
+  )
+  // TAGGED with the dataset it describes. A bare number would have to be
+  // cleared when the selection changes, and clearing state from inside the
+  // effect that fills it is a render loop waiting for one unstable dep;
+  // tagging answers "whose count is this?" without writing state on render.
+  const [serverRecordCount, setServerRecordCount] = useState<{
+    datasetId: string
+    count: number
+  } | null>(null)
+  useEffect(() => {
+    if (!dataScope) return
+    let active = true
+    // Unscoped, exactly like `api/orgs/datasets` and the billing page: the
+    // quota is about the ORG's datasets, not the subset this collaborator
+    // can see. A scoped collaborator whom AGL-1044 denies the read falls
+    // through to the catch and keeps the visible-rows lower bound.
+    void getCountFromServer(
+      collection(firestore, dataScope[0], dataScope[1], 'datasets'),
+    )
+      .then((snapshot) => {
+        if (active) setServerDatasetCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Falls back to the listener length below — a LOWER bound, and this
+        // card's prior behaviour. Deliberately not 0: `checkDatasetQuota`
+        // answers from whatever it is handed, and 0 used is a confident
+        // wrong number in the flattering direction.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, dataScope, datasetCountEpoch])
+  // The dataset the counts below belong to. Distinct from `selectedId`
+  // above, which is the PICKER value and is null until the user chooses.
+  const countedDatasetId: string | undefined = selected?.$id
+  useEffect(() => {
+    if (!dataScope || !countedDatasetId) return
+    let active = true
+    void getCountFromServer(
+      collection(
+        firestore,
+        dataScope[0],
+        dataScope[1],
+        'datasets',
+        countedDatasetId,
+        'records',
+      ),
+    )
+      .then((snapshot) => {
+        if (active) {
+          setServerRecordCount({
+            datasetId: countedDatasetId,
+            count: snapshot.data().count,
+          })
+        }
+      })
+      .catch(() => {
+        // Same fallback, same reason as above.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, dataScope, countedDatasetId, recordCountEpoch])
+  // Pending, denied, or answered about the PREVIOUS selection, the loaded
+  // rows stand in. They can only UNDERSTATE (same collections, capped),
+  // never overstate, so nothing these figures gate fires on a count larger
+  // than the truth.
+  const datasetCount = serverDatasetCount ?? datasets.length
+  const recordCount =
+    serverRecordCount && serverRecordCount.datasetId === countedDatasetId
+      ? serverRecordCount.count
+      : records.length
   // Query layer (AGL-181): the same evaluator the renderer uses, applied
   // in memory over the loaded window (explicitly bounded, never silently
   // unbounded — the helper text says so).
@@ -255,7 +366,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     }
     // Addon-aware quota (AGL-132): purchased extra datasets raise the
     // limit up to the plan's hard max; beyond that only an upgrade helps.
-    const quota = checkDatasetQuota(org as any, datasets.length)
+    // The ORG's datasets, not the picker's window (AGL-1716).
+    const quota = checkDatasetQuota(org as any, datasetCount)
     if (!quota.allowed) {
       return enqueueSnackbar(
         quota.upgradeRequired
@@ -266,7 +378,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       )
     }
     setCreator({ name: '', fields: '' })
-  }, [org, datasets.length, enqueueSnackbar])
+  }, [org, datasetCount, enqueueSnackbar])
   // Entries are human names — "Roast preference" → stable id
   // `roast_preference` with the pretty name kept for headers (AGL-558).
   const creatorEntries = parseDatasetFieldEntries(creator?.fields ?? '')
@@ -297,6 +409,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     }
     setCreator(null)
     setSelectedId(id)
+    setDatasetCountEpoch((epoch) => epoch + 1)
     enqueueSnackbar(`Dataset "${creator.name.trim()}" created`, {
       variant: 'success',
       persist: false,
@@ -352,6 +465,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     }
     setJoiner(null)
     setSelectedId(id)
+    // A join collection IS a dataset and consumes the same quota.
+    setDatasetCountEpoch((epoch) => epoch + 1)
     enqueueSnackbar('Join collection created', {
       variant: 'success',
       persist: false,
@@ -364,8 +479,10 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       title: 'Delete this collection?',
       description:
         `"${selected.displayName}"` +
-        (records.length
-          ? ` and its ${records.length} document${records.length === 1 ? '' : 's'}`
+        // What is actually being destroyed, not what is loaded (AGL-1716):
+        // a 40,000-row dataset used to warn about "its 500 documents".
+        (recordCount
+          ? ` and its ${recordCount} document${recordCount === 1 ? '' : 's'}`
           : '') +
         ' stop resolving in repeatable components and bindings that ' +
         'reference it.',
@@ -407,6 +524,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       })
     }
     setSelectedId(null)
+    setDatasetCountEpoch((epoch) => epoch + 1)
     enqueueSnackbar('Dataset deleted', { variant: 'success', persist: false })
     logActivity('Deleted dataset', {
       type: 'content',
@@ -415,7 +533,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     })
   }, [
     selected,
-    records.length,
+    recordCount,
     confirm,
     dataScope,
     hostId,
@@ -503,11 +621,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const handleOpenRecord = useCallback(
     (record?: any) => () => {
       if (!record) {
-        const quota = checkQuota(
-          org,
-          'recordsPerDataset',
-          records.length,
-        )
+        // The dataset's documents, not the loaded window (AGL-1716).
+        const quota = checkQuota(org, 'recordsPerDataset', recordCount)
         if (!quota.allowed) {
           return enqueueSnackbar(
             `Record limit reached (${quota.limit}) — see Billing to upgrade`,
@@ -535,7 +650,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         : {}
       setEditor({ id: record?.$id ?? null, values, errors })
     },
-    [org, records.length, model, enqueueSnackbar],
+    [org, recordCount, model, enqueueSnackbar],
   )
   const handleSaveRecord = useCallback(async () => {
     if (!editor || !selected || !dataScope) return
@@ -581,6 +696,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       })
     }
     setEditor(null)
+    // A create moves the count; an update cannot. Same reason as the
+    // importer: the one-shot aggregate does not refresh itself.
+    if (!editor.id) setRecordCountEpoch((epoch) => epoch + 1)
     enqueueSnackbar(editor.id ? 'Record saved' : 'Record added', {
       variant: 'success',
       persist: false,
@@ -673,6 +791,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           record.$id,
         ),
       )
+      setRecordCountEpoch((epoch) => epoch + 1)
       enqueueSnackbar('Record deleted', { variant: 'success', persist: false })
     },
     [selected, datasets, firestore, dataScope, enqueueSnackbar],
@@ -787,14 +906,17 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       }
     }
 
+    // Against the dataset's real size, not the loaded window (AGL-1716) —
+    // `room` subtracts this number from the limit, so an understated count
+    // did not merely fail to refuse, it INFLATED the slots offered.
     const quota = checkQuota(
       org,
       'recordsPerDataset',
-      records.length + creates.length - 1,
+      recordCount + creates.length - 1,
     )
     const room = quota.allowed
       ? creates.length
-      : Math.max(0, Number(quota.limit ?? 0) - records.length)
+      : Math.max(0, Number(quota.limit ?? 0) - recordCount)
     const toWrite = creates.slice(0, room)
     if (!toWrite.length && !updates.length) {
       return void enqueueSnackbar(
@@ -843,6 +965,10 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       })
     }
     setImporter(null)
+    // An import moves the record count and the aggregate is a one-shot —
+    // the listener refreshes the ROWS for free, the count has to be asked
+    // again or the next import prices its room off a pre-import number.
+    setRecordCountEpoch((epoch) => epoch + 1)
     const skippedInvalid = importPreview.prepared.length - validRows.length
     const skippedQuota = creates.length - toWrite.length
     enqueueSnackbar(
@@ -862,6 +988,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     importPreview,
     importer?.keyField,
     org,
+    recordCount,
     records,
     firestore,
     dataScope,
@@ -1391,7 +1518,10 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         orgId={orgId ?? undefined}
         dataset={schemaOpen && selected ? selected : null}
         datasets={datasets}
-        recordCount={records.length}
+        // The dataset's documents, not the loaded window (AGL-1716) — the
+        // dialog warns "N documents exist" before a narrowing type change,
+        // and 500 was the cap talking, not the collection.
+        recordCount={recordCount}
         seedFromCache={datasetsFromCache}
         seedUnreadable={datasetsStatus === 'error'}
         onClose={() => setSchemaOpen(false)}
