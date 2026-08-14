@@ -55,9 +55,10 @@ describe('published legal pages', () => {
   })
 
   it('refuses an unpublished path, another origin, and junk', () => {
-    expect(isPublishedLegalUrl('/legal/marketplace-publisher-agreement')).toBe(
-      false,
-    )
+    // `/legal/marketplace-publisher-agreement` used to sit here. It was
+    // published on 2026-08-14 (AGL-1674) and is now covered by the positive
+    // loop above; `/legal/refunds` keeps this case honest, because a negative
+    // case with nothing in it stops testing anything the day it empties.
     expect(isPublishedLegalUrl('/legal/refunds')).toBe(false)
     // A lookalike host serving anything at all is not our published text.
     expect(isPublishedLegalUrl('https://aglyn.com.evil.example/legal/terms')).toBe(

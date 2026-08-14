@@ -32,13 +32,22 @@
  * go stale by claiming a page exists, which is the mistake the reviewer of the
  * edit that adds a path is looking straight at.
  *
- * VERIFIED 2026-08-14 against the live `/legal` index, which links these eight
- * documents and no others. `/legal/marketplace-publisher-agreement` is
- * deliberately ABSENT — publishing it is a besigner action on the live site and
- * the source text is still an unreviewed draft (`DRAFT — ATTORNEY REVIEW
- * REQUIRED`, `[EFFECTIVE DATE]`). Add it here when, and only when, the page is
- * live: `publisherAgreementIsPublished()` reads this list, so that one edit is
- * what re-opens the acceptance control in the console.
+ * VERIFIED 2026-08-14 against the live `/legal` index, which links these nine
+ * documents and no others. `/legal/marketplace-publisher-agreement` joined the
+ * list that day (AGL-1674), *after* the page was confirmed serving: fetched
+ * once, HTTP 200, and its body read out of the Flight payload rather than the
+ * DOM — `<aglyn-text>` renders into shadow roots and greps empty. The payload
+ * carried exactly one text row, sha256
+ * 66e1f8fb3956cfed1b71712c9aaf38ed736b956de571160b7c3cf83add923d90, identical
+ * to the approved source, with all fourteen sections and no `DRAFT` or
+ * `[EFFECTIVE DATE]` anywhere in the response.
+ *
+ * That ordering is the rule, not a courtesy. `publisherAgreementIsPublished()`
+ * reads this list, so adding a path here is what re-opens the acceptance
+ * control in the console, the accept route and the publish refusal — all three
+ * at once. Added before the page serves, the gate becomes a lie in the other
+ * direction, and the acceptance it collects is the signature-on-a-blank-page
+ * this whole file exists to prevent. Verify first, then add.
  */
 
 /** The origin the canonical legal documents are served from. */
@@ -52,6 +61,7 @@ export const PUBLISHED_LEGAL_PATHS: readonly string[] = [
   '/legal/dmca',
   '/legal/dpa',
   '/legal/eula',
+  '/legal/marketplace-publisher-agreement',
   '/legal/privacy',
   '/legal/subprocessors',
   '/legal/terms',

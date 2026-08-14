@@ -55,12 +55,14 @@ describe('legal links the console presents (AGL-1660)', () => {
     }
   })
 
-  it('knows the publisher agreement is not one of them', () => {
-    // Not a wish: the live /legal index lists exactly these, verified
-    // 2026-08-14. If this fails because the agreement was published, the fix
-    // is to add its path to PUBLISHED_LEGAL_PATHS and delete this test's
-    // second half — the gate then opens on its own.
-    expect(PUBLISHED_LEGAL_PATHS).not.toContain(
+  it('knows the publisher agreement is now one of them', () => {
+    // This assertion used to be `.not.toContain`, as its own comment
+    // instructed, until the page was published and verified serving on
+    // 2026-08-14 (AGL-1674). It is kept rather than deleted because the
+    // interesting failure has simply reversed: an agreement that drops back
+    // out of the published set while the console still offers an Accept button
+    // is the AGL-1660 defect again, and this is where it is caught.
+    expect(PUBLISHED_LEGAL_PATHS).toContain(
       '/legal/marketplace-publisher-agreement',
     )
   })

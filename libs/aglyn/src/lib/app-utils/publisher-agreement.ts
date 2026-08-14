@@ -38,13 +38,20 @@ import { isPublishedLegalUrl } from './published-legal-pages'
 /**
  * The version of the agreement currently in force.
  *
- * Matches the `Agreement version` header of the document itself, which lives
- * in the legal-docs Drive folder rather than the repo (same practice as the
- * Terms of Service). Bump this **only** when the substance changes in a way
- * a publisher should re-read — a typo fix is not a bump. Bumping it stops
- * every publisher at their next publish until they accept again.
+ * Matches the `Agreement version` header of the document itself, which is now
+ * besigner content at {@link PUBLISHER_AGREEMENT_URL} rather than a repo file
+ * (same practice as the Terms of Service). Bump this **only** when the
+ * substance changes in a way a publisher should re-read — a typo fix is not a
+ * bump. Bumping it stops every publisher at their next publish until they
+ * accept again.
+ *
+ * Moved off `2026-07-28.1` on 2026-08-14 (AGL-1674). That string named the
+ * July draft, which was never published and whose §8 said the publisher is the
+ * seller of record. The published text says the opposite — Aglyn processes the
+ * sale and remits transaction tax — so it is a different document in
+ * substance, not a reissue, and re-asking is the point rather than a cost.
  */
-export const PUBLISHER_AGREEMENT_VERSION = '2026-07-28.1'
+export const PUBLISHER_AGREEMENT_VERSION = '2026-08-14.1'
 
 export const PUBLISHER_AGREEMENT_TITLE = 'Marketplace Publisher Agreement'
 
@@ -132,9 +139,9 @@ export const PUBLISHER_AGREEMENT_POINTS: readonly {
   },
   {
     id: 'payouts',
-    label: 'On paid listings you are the seller',
+    label: 'On paid listings we process the sale and take a fee',
     detail:
-      'Payments run through your own Stripe Connect account, we take a platform fee that may change, and refunds, chargebacks, taxes and support on your sales are yours.',
+      'We process the purchase and pay your share into your own Stripe Connect account, less a platform fee that may change. We collect and remit sales tax on Marketplace sales; refunds, chargebacks and support on your Artifacts are yours.',
   },
   {
     id: 'indemnity',
