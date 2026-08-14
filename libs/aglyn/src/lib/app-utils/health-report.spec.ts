@@ -23,7 +23,10 @@ import {
   healthHeaders,
   healthHttpStatus,
   healthStatus,
+  MAX_ORG_CREATIONS_PER_WINDOW,
+  ORG_CREATION_WINDOW_MINUTES,
   memoizeWithTtl,
+  signupsHealth,
 } from './health-report'
 
 const OK = { ok: true, ms: 12 }
@@ -213,6 +216,53 @@ describe('backupsHealth', () => {
       'newestReadyAgeDays',
       'ok',
       'states',
+    ])
+  })
+})
+
+describe('signupsHealth', () => {
+  it('is ok at the baseline — and AT the threshold, not merely below it', () => {
+    // The AGL-1534 per-IP cap is 10/h. A single maxed-out address is the
+    // limiter's job, not this alarm's: exactly 10 must stay green so the
+    // alarm only speaks when the limiter is structurally blind.
+    expect(signupsHealth(0, 7).ok).toBe(true)
+    const atCap = signupsHealth(MAX_ORG_CREATIONS_PER_WINDOW, 7)
+    expect(atCap.ok).toBe(true)
+    expect(atCap.code).toBeUndefined()
+  })
+
+  it('degrades one past the threshold — the multi-address signature', () => {
+    const check = signupsHealth(MAX_ORG_CREATIONS_PER_WINDOW + 1, 7)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('signup-wave')
+    expect(check.recentOrgCreations).toBe(MAX_ORG_CREATIONS_PER_WINDOW + 1)
+  })
+
+  it('degrades when the count itself is unavailable', () => {
+    // An alarm that cannot see the thing it watches must not report calm.
+    const check = signupsHealth(null, 7)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('count-unavailable')
+    expect(check.recentOrgCreations).toBeNull()
+  })
+
+  it('honours a threshold override and self-describes its window', () => {
+    // The route may pass an env-tuned threshold; the body must say what was
+    // asked so the on-call reader never guesses which rule fired.
+    const check = signupsHealth(1, 7, 0)
+    expect(check.ok).toBe(false)
+    expect(check.threshold).toBe(0)
+    expect(check.windowMinutes).toBe(ORG_CREATION_WINDOW_MINUTES)
+  })
+
+  it('exposes a count only — no org names, slugs or owners', () => {
+    const check = signupsHealth(2, 7)
+    expect(Object.keys(check).sort()).toEqual([
+      'ms',
+      'ok',
+      'recentOrgCreations',
+      'threshold',
+      'windowMinutes',
     ])
   })
 })
