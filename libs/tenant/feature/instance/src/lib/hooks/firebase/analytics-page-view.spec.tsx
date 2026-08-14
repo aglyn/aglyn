@@ -41,7 +41,20 @@
 import { render } from '@testing-library/react'
 import { FirebaseServicesProvider } from './firebase-services'
 
-const initializeAnalytics = jest.fn(() => ({}))
+/**
+ * The SDK's real second parameter: `initializeAnalytics(app, options?)`, whose
+ * `options.config` is the only thing forwarded to the `gtag('config', …)` call.
+ * The mock is declared with that exact arity deliberately — the arity IS the
+ * finding this spec pins. `getAnalytics(app)` takes no options at all, which is
+ * why `send_page_view: false` could never be passed and the startup hit always
+ * fired; a nullary mock would have let the spec pass while describing a
+ * function the SDK does not have.
+ */
+type AnalyticsSettings = { config?: Record<string, unknown> }
+
+const initializeAnalytics = jest.fn(
+  (_app: unknown, _options?: AnalyticsSettings) => ({}),
+)
 
 jest.mock('firebase/app-check', () => ({
   __esModule: true,
@@ -52,7 +65,8 @@ jest.mock('firebase/analytics', () => ({
   __esModule: true,
   // Deliberately NO `getAnalytics`: if the provider ever falls back to it,
   // this mock makes that a hard failure instead of a silent regression.
-  initializeAnalytics: (...args: unknown[]) => initializeAnalytics(...args),
+  initializeAnalytics: (...args: Parameters<typeof initializeAnalytics>) =>
+    initializeAnalytics(...args),
 }))
 jest.mock('firebase/remote-config', () => ({
   __esModule: true,
@@ -104,20 +118,14 @@ describe('console analytics boot (AGL-1643)', () => {
     mountProvider()
 
     expect(initializeAnalytics).toHaveBeenCalled()
-    const [, options] = initializeAnalytics.mock.calls[0] as [
-      unknown,
-      { config?: Record<string, unknown> },
-    ]
+    const [, options] = initializeAnalytics.mock.calls[0]
     expect(options?.config?.send_page_view).toBe(false)
   })
 
   it('passes the flag as `config`, the only key gtag reads it from', () => {
     mountProvider()
 
-    const [, options] = initializeAnalytics.mock.calls[0] as [
-      unknown,
-      Record<string, unknown>,
-    ]
+    const [, options] = initializeAnalytics.mock.calls[0]
     // A `send_page_view` at the top level of AnalyticsSettings is inert — the
     // SDK forwards `options.config` and nothing else to the gtag config call.
     expect(options).not.toHaveProperty('send_page_view')
