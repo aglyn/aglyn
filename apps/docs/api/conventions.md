@@ -76,6 +76,7 @@ errors add a `code` with the specific detail.
 | `403` | `insufficient_scope` | The key lacks the required scope (`code` is the scope). |
 | `404` | `not_found` | No such resource — or no such endpoint. |
 | `405` | `method_not_allowed` | Method not supported on that path; the `Allow` header lists what is. |
+| `409` | `conflict` | An earlier request with the same [`Idempotency-Key`](#idempotency) is still running (`code: "idempotency_in_progress"`). |
 | `429` | `rate_limited` | [Rate limit](rate-limits.md) exceeded. |
 | `500` | `internal_error` | Something went wrong on our side. Safe to retry. |
 
@@ -116,11 +117,19 @@ curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
 
 - A fresh create returns **`201`**; a replay of a key we've already seen returns
   **`200`** with the original record. Use the status to tell them apart.
-- Keys are scoped to your organization and **never expire**, so a key really is
-  single-use forever. Use a UUID per logical operation.
-- Replay is looked up **within the dataset you're posting to**. Reusing one key
-  against a *different* dataset creates a second record rather than returning the
-  first — so don't reuse keys across datasets.
+- Keys are scoped to the **dataset you post to**, and **never expire** — a key really
+  is single-use forever. Use a UUID per logical operation, and don't reuse one key
+  across datasets: the second dataset treats it as a separate operation and creates
+  its own record.
+- The replay is the **original response**, replayed verbatim. It keeps working after
+  the record has been edited or deleted — a retry never re-creates a record you have
+  since removed.
+- If a request with the same key is **still in flight**, the second one is refused
+  with a `409 conflict` (`code: "idempotency_in_progress"`) rather than served. That
+  refusal is deliberate: letting it through is exactly the duplicate the key exists
+  to prevent. Retry once the first request has answered.
+- A request that **fails** releases its key, so you can fix the cause and retry with
+  the same one. A `400` never consumes a key at all.
 
 Other methods don't take the header: `PATCH` and `DELETE` are already idempotent by
 nature.
