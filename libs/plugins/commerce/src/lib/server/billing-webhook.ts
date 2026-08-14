@@ -546,17 +546,50 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           .doc(String(hostId))
           .collection('reservations')
           .doc(String(reservationId))
-        const snapshot = await reservationRef.get()
-        if (snapshot.exists && snapshot.get('status') === 'pending') {
-          await reservationRef.set(
-            {
-              status: 'confirmed',
-              paidCents: Number(object?.amount_total ?? 0),
-              checkoutSessionId: String(object.id),
-              paymentIntentId: String(object?.payment_intent ?? '') || null,
-            },
-            { merge: true },
-          )
+        // What the guest actually handed over. This is the DEPOSIT when the
+        // resource has one (`reserve.ts` charges `depositCents || totalCents`),
+        // never the stay's `totalCents` — see the contact call below.
+        const paidCents = Math.max(
+          0,
+          Math.round(Number(object?.amount_total ?? 0)),
+        )
+        // Redelivery guard (AGL-1755), the AGL-1748 shape. The `pending` ->
+        // `confirmed` transition was always the guard, but it was a
+        // read-then-write with every side effect hanging off it, so two
+        // concurrent deliveries could both observe `pending` and both run them:
+        // two manager notifications, two guest emails, two metered sends and —
+        // now that this branch carries money to contacts — two
+        // `FieldValue.increment` calls on the guest's lifetime value.
+        //
+        // Keyed on the STATUS, not on the document existing: `reserve.ts`
+        // writes the reservation before it opens the Stripe session, so
+        // existence is guaranteed by the time any event arrives and says
+        // nothing about whether this delivery is the first. That is the same
+        // reasoning as AGL-1748's draft branch, and the opposite of AGL-1732's
+        // `checkoutSessionId` key, which existed because a SIBLING event wrote
+        // the same path; no sibling writes reservations.
+        let reserved: Record<string, any> | null = null
+        const confirmedNow = await firestore.runTransaction(
+          async (transaction) => {
+            const snapshot = await transaction.get(reservationRef)
+            if (!snapshot.exists) return false
+            if (snapshot.get('status') !== 'pending') return false
+            reserved = (snapshot.data() as any) ?? {}
+            transaction.set(
+              reservationRef,
+              {
+                status: 'confirmed',
+                paidCents,
+                checkoutSessionId: String(object.id),
+                paymentIntentId: String(object?.payment_intent ?? '') || null,
+              },
+              { merge: true },
+            )
+            return true
+          },
+        )
+        if (confirmedNow) {
+          const reservation = (reserved ?? {}) as Record<string, any>
           void notifyHostManagers(String(hostId), {
             type: 'content.booking',
             title: 'New reservation',
@@ -565,26 +598,63 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               : {}),
             link: `/${hostId}/products`,
           })
-          void upsertHostContact({
-            hostId: String(hostId),
-            email: object?.customer_details?.email,
-            name: object?.customer_details?.name ?? undefined,
-            source: 'booking',
-            interaction: {
-              refId: String(reservationId),
-              summary: 'Reserved a stay',
-            },
-          })
+          // Contacts ingestion (AGL-1755): this branch stored `paidCents` from
+          // `amount_total` and then called `upsertHostContact` with no amount,
+          // so a guest who paid for a stay showed a lifetime value of zero. A
+          // guest house's customers are customers; excluding them makes
+          // `ltvCents` mean "product sales only", which is not what it is
+          // called. Provenance survives without a schema change: `source` stays
+          // `'booking'`, so the `sources` map still separates a stay from a
+          // shop sale, and a reader that wants to split service revenue from
+          // product revenue has the interaction timeline to do it with.
+          //
+          // The amount is `amount_total` — the money that moved — and NOT the
+          // reservation's `totalCents`. That distinction is the whole
+          // double-count question, and it resolves in favour of counting:
+          //
+          //  * a deposit is charged once, here;
+          //  * a POS `folio` sale (AGL-317) charges a room extra as its OWN
+          //    paid order and already carries its own `purchaseCents` from
+          //    AGL-1748 — it appends to `reservations/{id}.folio` for display
+          //    and never touches `paidCents`;
+          //  * nothing ever settles a folio by charging again — check-out only
+          //    moves the status, and its dialog says as much ("already recorded
+          //    as paid POS orders");
+          //  * the unpaid stay balance is collected at the register, which is
+          //    likewise a separate POS order with its own amount.
+          //
+          // So the deposit and every folio line are disjoint sums, each counted
+          // exactly once. Taking `totalCents` here is what WOULD double-count:
+          // it would claim money the guest has not paid yet and will pay again
+          // through the register.
+          const guestContactEmail =
+            object?.customer_details?.email ?? reservation['guestEmail'] ?? null
+          if (guestContactEmail) {
+            void upsertHostContact({
+              hostId: String(hostId),
+              email: guestContactEmail,
+              name:
+                object?.customer_details?.name ??
+                reservation['guestName'] ??
+                undefined,
+              source: 'booking',
+              ...(paidCents > 0 ? { purchaseCents: paidCents } : {}),
+              interaction: {
+                refId: String(reservationId),
+                summary: `Reserved a stay ($${(paidCents / 100).toFixed(2)})`,
+              },
+            })
+          }
           const guestEmail = object?.customer_details?.email
           if (guestEmail) {
             const checkIn = new Date(
-              Number(snapshot.get('checkInDayMs')),
+              Number(reservation['checkInDayMs']),
             ).toUTCString()
-            const paid = `$${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`
+            const paid = `$${(paidCents / 100).toFixed(2)}`
             const checkInShort = checkIn.slice(0, 16)
             const fallbackText =
               `Your stay is confirmed!\n\nCheck-in: ${checkInShort}\n` +
-              `Nights: ${snapshot.get('nights')}\n` +
+              `Nights: ${reservation['nights']}\n` +
               `Paid today: ${paid}\n` +
               `Reference: ${reservationId}`
             // Site-owner-designed template when published (AGL-771).
@@ -594,7 +664,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               'reservation-confirmed',
               {
                 'reservation.checkIn': checkInShort,
-                'reservation.nights': String(snapshot.get('nights') ?? ''),
+                'reservation.nights': String(reservation['nights'] ?? ''),
                 'reservation.paid': paid,
                 'reservation.ref': String(reservationId),
               },
