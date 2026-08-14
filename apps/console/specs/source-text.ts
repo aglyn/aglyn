@@ -66,17 +66,29 @@ const LINE_COMMENT = /(^|[^:])\/\/.*$/gm
 /**
  * The longest run a single comment may claim.
  *
- * Chosen against what the guarded sources actually contain: the longest real
- * comment in any of them is the 2,034-character module header of
- * `app/api/media/restore/route.ts`. The `accept="image/*"` hole was 16,383
- * characters (16,932 when AGL-1479 was filed), so this bound sits comfortably
- * above every legitimate comment and an order of magnitude below the defect.
+ * Chosen against what the guarded sources actually contain, and RE-measured
+ * whenever it trips on a legitimate comment — this is a calibration, not a
+ * style rule, and it has been re-cut once already:
+ *
+ * - 3,000 (AGL-1479, 2026-08-13), against a 2,034-character longest real
+ *   comment, the module header of `app/api/media/restore/route.ts`.
+ * - 5,000 (AGL-1739, 2026-08-14), after AGL-1700 landed a 3,481-character
+ *   header on `app/(app)/admin/media-quarantine/page.tsx` — 71% longer than
+ *   the previous record, and a perfectly well-formed docblock. The bound
+ *   caught it and reported a regex mis-read that had not happened, taking
+ *   `page-title.spec.ts` down with it.
+ *
+ * The margin that matters is the one BELOW: the `accept="image/*"` hole this
+ * exists to catch measures 18,010 characters today (16,383 when the bound was
+ * first set, 16,932 when AGL-1479 was filed), so 5,000 still sits more than
+ * three times under the defect. Raise it again if a real comment passes it;
+ * record the new longest here when you do, and keep the gap to the defect.
  *
  * This is the assertion that bites. The fraction below cannot be: the hole took
  * `media-library.component.tsx` from 153,593 characters to 95,980 — 62% still
  * standing, which no sane whole-file ratio would have flagged.
  */
-export const MAX_STRIPPED_SPAN = 3_000
+export const MAX_STRIPPED_SPAN = 5_000
 
 /**
  * How much of a source must survive being stripped.
@@ -91,12 +103,25 @@ export const MIN_KEPT_FRACTION = 0.25
 function withoutBlocks(source: string, pattern: RegExp, label: string): string {
   return source.replace(pattern, (match: string) => {
     if (match.length > MAX_STRIPPED_SPAN) {
+      /*
+       * Say only what is measured, and name BOTH causes. The first version of
+       * this message asserted the mis-read as fact; when a legitimate 3,481-
+       * character docblock tripped it, that sent the reader hunting a regex
+       * bug that was not there (AGL-1739). A guard that names one of two
+       * possible causes misdirects every reader the other one turns up for.
+       */
       throw new Error(
         `${label}: the comment stripper claimed ${match.length} characters as ` +
           `one comment, past the ${MAX_STRIPPED_SPAN}-character bound. That is ` +
-          `not a comment, it is an opener the regex mis-read, and every ` +
-          `negative assertion downstream of it would pass for the wrong ` +
-          `reason (AGL-1479). It starts: ${JSON.stringify(match.slice(0, 160))}`,
+          `either an opener the regex mis-read — a MIME type or a type literal ` +
+          `rather than a comment, in which case every negative assertion ` +
+          `downstream of it would pass for the wrong reason (AGL-1479) — or a ` +
+          `real comment longer than any this bound was calibrated against, in ` +
+          `which case raise MAX_STRIPPED_SPAN in specs/source-text.ts and ` +
+          `record the new longest there. The opening ${Math.min(
+            160,
+            match.length,
+          )} characters tell you which: ${JSON.stringify(match.slice(0, 160))}`,
       )
     }
     return ''
