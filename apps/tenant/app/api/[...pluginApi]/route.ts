@@ -75,6 +75,7 @@ async function dispatch(
         // Non-JSON body — fall through to handler self-gating.
       }
     }
+    let orgId: string | null = null
     if (hostId) {
       // Per-site enablement (AGL-1014): the org set minus the host's
       // deny-list — a plugin disabled for THIS site has no API surface for
@@ -83,6 +84,7 @@ async function dispatch(
         getOrgForHost(hostId),
         getHostDisabledPlugins(hostId),
       ])
+      orgId = resolved?.orgId ?? null
       if (
         resolved &&
         !resolveHostEnabledPlugins(resolved.org, { disabledPlugins }).includes(
@@ -91,18 +93,26 @@ async function dispatch(
       ) {
         return Response.json({ error: 'Not found' }, { status: 404 })
       }
-      // Plugin release gate (AGL-422): a flagged-off plugin's API surface
-      // does not exist either — except for staff bearer tokens (preview).
-      const releaseFiltered = await filterEnabledPluginsByReleaseFlags(
-        [pluginId],
-        {
-          orgId: resolved?.orgId ?? null,
-          authorization: request.headers.get('authorization'),
-        },
-      )
-      if (!releaseFiltered.length) {
-        return Response.json({ error: 'Not found' }, { status: 404 })
-      }
+    }
+    // Plugin release gate (AGL-422), UNCONDITIONAL since AGL-1689: a
+    // flagged-off plugin's API surface does not exist — except for staff
+    // bearer tokens (preview). See the console dispatcher for the full
+    // argument; in one line, nesting this inside `if (hostId)` let any caller
+    // skip the platform-wide kill switch by declining to name a site, and a
+    // release flag — unlike per-site enablement — never needed one.
+    //
+    // This dispatcher is the visitor-facing half, so the hostId-less case is
+    // the more reachable of the two: a public form or cart POST is authored by
+    // whoever is on the page.
+    const releaseFiltered = await filterEnabledPluginsByReleaseFlags(
+      [pluginId],
+      {
+        orgId,
+        authorization: request.headers.get('authorization'),
+      },
+    )
+    if (!releaseFiltered.length) {
+      return Response.json({ error: 'Not found' }, { status: 404 })
     }
   }
 

@@ -20,7 +20,10 @@ import {
   pluginJobKey,
   runPluginJobs,
 } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  filterEnabledPluginsByReleaseFlags,
+  firebaseAdmin,
+} from '@aglyn/tenant-data-admin'
 import { timingSafeEqual } from 'crypto'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 // Imported for its registration side effect (AGL-1159). Core jobs have no
@@ -79,7 +82,38 @@ export async function POST(request: Request): Promise<Response> {
       ((await stateRef.get()).data() ?? {}) as Record<string, number>,
   })
 
+  // Release gate for BACKGROUND work (AGL-1689). Both API dispatchers subtract
+  // a flagged-off plugin's routes; this runner subtracted nothing, so
+  // `release_bookings` off still let `expire-stale-holds` rewrite booking
+  // documents on its six-hour beat. A job is the one surface with no user to
+  // notice it is still running, so it should be the FIRST thing a kill switch
+  // stops, not the last — and the hole widens with every job added rather than
+  // staying the size it was found at.
+  //
+  // Subject-less by nature: the beat has no request, no org and no host —
+  // `expire-stale-holds` is a collection-group query across every site. So
+  // `orgId: null`, which under AGL-1656 means the fully-enabled flags gate and
+  // a partially-rolled-out plugin does not run its jobs at all. Deliberate: a
+  // platform-wide sweep cannot be run for half the orgs, and declining is the
+  // recoverable direction — a skipped beat is tidy-up deferred, where a run
+  // during a partial rollout is a mutation applied to workspaces the rollout
+  // has not reached.
+  //
+  // Unknown plugin ids pass through `filterPluginsByReleaseFlags` untouched, so
+  // the `core` namespace that `publish-schedule-job` registers under — and any
+  // marketplace plugin's job — is unaffected by this gate.
+  const releasedJobPlugins = new Set(
+    await filterEnabledPluginsByReleaseFlags(
+      Array.from(new Set(listPluginJobs().map((job) => job.pluginId))),
+      { orgId: null },
+    ),
+  )
+  const heldByReleaseFlag = listPluginJobs()
+    .filter((job) => !releasedJobPlugins.has(job.pluginId))
+    .map(pluginJobKey)
+
   const results = await runPluginJobs((job) => {
+    if (!releasedJobPlugins.has(job.pluginId)) return false
     const last = Number(lastRuns[pluginJobKey(job)] ?? 0)
     return now - last >= job.intervalMinutes * 60_000
   })
@@ -100,6 +134,16 @@ export async function POST(request: Request): Promise<Response> {
     {
       registered: listPluginJobs().map(pluginJobKey),
       ran: results,
+      // Withheld work, named (AGL-1689). Without this a flag-held job is
+      // indistinguishable from one that simply was not due, which is the
+      // failure mode that hides a kill switch left on: nothing runs, nothing
+      // errors, and the beat keeps answering 200. Same instinct as
+      // `contactsOverageWithheldUsd` on the usage rollup — say what did not
+      // happen, not just what did.
+      //
+      // A held job records no last-run mark, so it becomes due the moment the
+      // flag returns rather than waiting out an interval it spent refused.
+      heldByReleaseFlag,
     },
     { status: 200 },
   )
