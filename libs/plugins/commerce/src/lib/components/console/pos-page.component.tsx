@@ -39,10 +39,13 @@ import {
 } from '@mui/material'
 import { QRCodeSVG } from 'qrcode.react'
 import { collection, limit, query } from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
+
+/** How a sale is being settled. Passed to `settle` explicitly (AGL-1682). */
+type Tender = 'cash' | 'link' | 'folio'
 
 interface RegisterLine {
   productId: string
@@ -126,11 +129,26 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     setRegisterId(first.$id)
     if (first.locationId) setLocationId(first.locationId)
   }, [usableRegisters, registerId])
-  const [paying, setPaying] = useState<'cash' | 'link' | 'folio' | null>(null)
+  // `paying` routes the settlement DIALOGS — nothing else. It is deliberately
+  // not the tender `settle` acts on (AGL-1682): it used to be both, and the
+  // Card button had to `setPaying('link')` and call `settle()` in one handler,
+  // where `settle` still closed over the pre-click `null` and returned at its
+  // own guard. Card has no dialog of its own — the QR dialog is gated on
+  // `cardUrl` — so the card path sets nothing here at all.
+  const [paying, setPaying] = useState<Tender | null>(null)
   const [cashReceived, setCashReceived] = useState('')
   const [folioReservation, setFolioReservation] = useState('')
   const [cardUrl, setCardUrl] = useState('')
   const [busy, setBusy] = useState(false)
+  // Re-entrancy guard for `settle`, deliberately a ref and not `busy`. `busy`
+  // is for RENDERING (it disables the settle buttons); a second tap arriving
+  // before React has re-rendered would read the pre-click `false` out of the
+  // handler's closure exactly the way `paying` was read above. The ref is
+  // written and read synchronously, so it holds whatever the scheduler does —
+  // and it has to hold: /api/commerce/pos-order carries no idempotency key, so
+  // one extra call is one extra `orders` doc and one extra Stripe Checkout
+  // session.
+  const inFlight = useRef(false)
   const [lastReceipt, setLastReceipt] = useState<{
     lines: RegisterLine[]
     totalCents: number
@@ -216,14 +234,21 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     }
   }, [search, products, addProduct])
 
-  const settle = useCallback(async () => {
-    if (busy || lines.length === 0 || !paying) return
+  /**
+   * Take payment. The tender is an ARGUMENT, never read back out of state
+   * (AGL-1682) — every caller already knows which button was pressed, and the
+   * one caller that had to announce it through `setPaying` first could not
+   * then observe its own write.
+   */
+  const settle = useCallback(async (tender: Tender) => {
+    if (inFlight.current || lines.length === 0) return
     if (!registerId) {
       return void enqueueSnackbar(
         'Select a register before taking payment',
         { variant: 'warning', persist: false },
       )
     }
+    inFlight.current = true
     setBusy(true)
     try {
       const idToken = await (user as any)?.getIdToken?.()
@@ -237,12 +262,12 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           hostId,
           lines,
           discountPct,
-          payment: paying,
+          payment: tender,
           registerId,
           customerEmail: customerEmail || undefined,
           locationId: locationId || undefined,
           cashReceivedCents: Math.round(Number(cashReceived) * 100) || 0,
-          reservationId: paying === 'folio' ? folioReservation : undefined,
+          reservationId: tender === 'folio' ? folioReservation : undefined,
         }),
       })
       const payload = await response.json()
@@ -252,7 +277,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           allowDuplicate: true,
         })
       }
-      if (paying === 'link' && payload.url) {
+      if (tender === 'link' && payload.url) {
         setCardUrl(payload.url)
         return
       }
@@ -273,12 +298,11 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         { variant: 'success', persist: false },
       )
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }, [
-    busy,
     lines,
-    paying,
     registerId,
     user,
     hostId,
@@ -290,6 +314,21 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     dueCents,
     enqueueSnackbar,
   ])
+
+  /**
+   * Close the card QR dialog. Clears the cart, because by the time this dialog
+   * exists the order is already on the server awaiting the webhook — leaving
+   * the lines behind meant a backdrop click or Escape dropped the cashier back
+   * on a full register that would mint a SECOND pending order and a SECOND
+   * Checkout session for the same basket on the next tap (AGL-1682). `Done`
+   * always did this; `onClose` did not, and only `onClose` can fire by
+   * accident.
+   */
+  const closeCardDialog = useCallback(() => {
+    setCardUrl('')
+    setLines([])
+    setPaying(null)
+  }, [])
 
   const printReceipt = useCallback(() => {
     if (!lastReceipt) return
@@ -517,11 +556,8 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             </Button>
             <Button
               variant="contained"
-              disabled={lines.length === 0}
-              onClick={() => {
-                setPaying('link')
-                void settle()
-              }}
+              disabled={busy || lines.length === 0}
+              onClick={() => void settle('link')}
               sx={{ flex: 1 }}
             >
               {'Card (QR)'}
@@ -570,7 +606,8 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             variant="contained"
             color="primary"
             disabled={busy || Math.round(Number(cashReceived) * 100) < dueCents}
-            onClick={settle}
+            // `onClick={settle}` would hand MUI's click event to `tender`.
+            onClick={() => void settle('cash')}
           >
             {'Complete sale'}
           </Button>
@@ -602,7 +639,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             variant="contained"
             color="primary"
             disabled={busy || !folioReservation}
-            onClick={settle}
+            onClick={() => void settle('folio')}
           >
             {'Charge folio'}
           </Button>
@@ -610,7 +647,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       </Dialog>
 
       {/* Card QR dialog */}
-      <Dialog open={Boolean(cardUrl)} onClose={() => setCardUrl('')} maxWidth="xs" fullWidth>
+      <Dialog open={Boolean(cardUrl)} onClose={closeCardDialog} maxWidth="xs" fullWidth>
         <DialogTitle>{'Customer pays by card'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
@@ -651,15 +688,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           </Button>
         </DialogContent>
         <DialogActions>
-          <Button
-            onClick={() => {
-              setCardUrl('')
-              setLines([])
-              setPaying(null)
-            }}
-          >
-            {'Done'}
-          </Button>
+          <Button onClick={closeCardDialog}>{'Done'}</Button>
         </DialogActions>
       </Dialog>
     </>

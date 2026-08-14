@@ -39,9 +39,14 @@
  * this test crosses. Nothing here reaches Stripe: the payment URL is a string
  * of the right shape and length, and its length is load-bearing — a 317-char
  * Checkout URL is what sizes the symbol at 61x61 modules.
+ *
+ * The second describe below carries AGL-1682 — how many times the register has
+ * to be tapped, and how many orders come out — and shares this harness rather
+ * than standing up a second one. It was this file that found that defect: the
+ * dialog could not be reached in one click.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 /** The shape and length of a real Stripe Checkout URL, invented payload. */
 const PAYMENT_URL =
@@ -62,6 +67,8 @@ const REGISTER = { $id: 'reg-1', name: 'Front counter' }
 
 /** Every request the component made, so the test can assert on all of them. */
 let requests: string[] = []
+/** The decoded JSON body of each of those, so a test can assert the tender. */
+let payloads: any[] = []
 
 jest.mock('firebase/firestore', () => ({
   // The path is the only thing the collection mock has to carry — the
@@ -101,8 +108,10 @@ import { PosConsolePage } from './pos-page.component'
 
 beforeEach(() => {
   requests = []
-  global.fetch = jest.fn(async (input: any) => {
+  payloads = []
+  global.fetch = jest.fn(async (input: any, init?: any) => {
     requests.push(String(input))
+    payloads.push(init?.body ? JSON.parse(String(init.body)) : null)
     return {
       ok: true,
       json: async () => ({ url: PAYMENT_URL }),
@@ -112,16 +121,11 @@ beforeEach(() => {
 
 /** Rings up one item and settles it by card, which opens the QR dialog. */
 async function openCardDialog() {
-  render(<PosConsolePage hostId="host-1" />)
+  render(<PosConsolePage hostId="host-1" entitled />)
   fireEvent.click(screen.getByText('Flat White'))
-  // TWICE, deliberately. `settle` closes over `paying`, and the handler sets
-  // it in the same tick — so the first click is swallowed by the
-  // `if (… || !paying) return` guard and only the second reaches the API.
-  // That is a real defect in this dialog and it is NOT this issue's to fix;
-  // it is filed separately. Encoding it here keeps the test honest about the
-  // component's actual behaviour instead of the behaviour it should have,
-  // and the test will start failing loudly when it IS fixed.
-  fireEvent.click(screen.getByText('Card (QR)'))
+  // ONE click. Until AGL-1682 this needed two: `settle` closed over `paying`
+  // and the handler set it in the same tick, so the first click died at the
+  // `if (… || !paying) return` guard and only the second reached the API.
   fireEvent.click(screen.getByText('Card (QR)'))
   await waitFor(() => expect(screen.getByText('Customer pays by card')).toBeTruthy())
 }
@@ -170,5 +174,114 @@ describe('POS card QR is rendered locally (AGL-1671)', () => {
     // chooses to follow, not a request the browser makes unasked.
     const links = Array.from(dialog.querySelectorAll('a[href]'))
     expect(links.map((el) => el.getAttribute('href'))).toEqual([PAYMENT_URL])
+  })
+})
+
+/**
+ * One tap, one order (AGL-1682).
+ *
+ * The tender is now an argument to `settle` rather than a `paying` state value
+ * the same handler had just written, and re-entrancy is held by a ref instead
+ * of the `busy` state — which a second tap arriving before React re-rendered
+ * would have read stale in exactly the same way.
+ *
+ * Both halves matter on this path because `/api/commerce/pos-order` carries no
+ * idempotency key: one surplus call is one surplus `orders` doc plus one
+ * surplus Stripe Checkout session, on a live merchant account.
+ */
+describe('POS settlement takes one tap and makes one order (AGL-1682)', () => {
+  /** Renders the register with one item rung up, ready to settle. */
+  function ringUpOneItem() {
+    render(<PosConsolePage hostId="host-1" entitled />)
+    fireEvent.click(screen.getByText('Flat White'))
+  }
+
+  it('creates the order on the FIRST Card (QR) click', async () => {
+    ringUpOneItem()
+    fireEvent.click(screen.getByText('Card (QR)'))
+
+    await waitFor(() =>
+      expect(screen.getByText('Customer pays by card')).toBeTruthy(),
+    )
+    expect(requests).toEqual(['/api/commerce/pos-order'])
+    expect(payloads[0].payment).toBe('link')
+  })
+
+  it('makes ONE order when the cashier double-taps Card (QR)', async () => {
+    ringUpOneItem()
+    // Three separate clicks, each with a render between it and the next.
+    // MEASURED, not assumed: this case still passes with the in-flight ref
+    // deleted, because by click two `busy` has flushed, the button carries
+    // `disabled`, and React declines to fire onClick on a disabled button.
+    // So this pins the user-visible outcome — a cashier who has learned to
+    // double-tap gets one order — and the case below is the one that pins the
+    // ref.
+    const card = screen.getByText('Card (QR)')
+    fireEvent.click(card)
+    fireEvent.click(card)
+    fireEvent.click(card)
+
+    await waitFor(() =>
+      expect(screen.getByText('Customer pays by card')).toBeTruthy(),
+    )
+    expect(requests).toEqual(['/api/commerce/pos-order'])
+  })
+
+  it('makes ONE order when two taps land inside a single React batch', async () => {
+    ringUpOneItem()
+    // Both events dispatched inside ONE `act` scope, so React does not
+    // re-render between them: `setBusy(true)` has not flushed, the button is
+    // not yet `disabled`, and the second handler is the same instance holding
+    // the same pre-click closure. That is the hazard `disabled` cannot cover
+    // and the reason the guard is a ref — it is the only thing that stops the
+    // second call here, and deleting it makes this case, alone, report two
+    // requests.
+    const card = screen.getByText('Card (QR)')
+    await act(async () => {
+      card.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      card.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await waitFor(() =>
+      expect(screen.getByText('Customer pays by card')).toBeTruthy(),
+    )
+    expect(requests).toEqual(['/api/commerce/pos-order'])
+  })
+
+  it('does not leave the same basket chargeable after the QR is dismissed', async () => {
+    ringUpOneItem()
+    fireEvent.click(screen.getByText('Card (QR)'))
+    await waitFor(() =>
+      expect(screen.getByText('Customer pays by card')).toBeTruthy(),
+    )
+
+    // Escape, not the Done button — `onClose` is the path that fires by
+    // accident, and it used to clear only `cardUrl`, handing the cashier back
+    // a still-full register whose next tap billed the basket a second time.
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(() =>
+      expect(screen.getByText('Tap products to add them.')).toBeTruthy(),
+    )
+
+    fireEvent.click(screen.getByText('Card (QR)'))
+    expect(requests).toEqual(['/api/commerce/pos-order'])
+  })
+
+  it('sends the cash tender as cash, not as a click event', async () => {
+    // `settle` used to be passed to `onClick` bare. Now that it takes the
+    // tender as its first argument, that spelling would post MUI's synthetic
+    // mouse event as `payment` and the server would fall back to 'cash' by
+    // luck rather than by intent — for the folio button, to the wrong tender
+    // entirely.
+    ringUpOneItem()
+    fireEvent.click(screen.getByText('Cash'))
+    fireEvent.change(screen.getByLabelText('Cash received ($)'), {
+      target: { value: '5' },
+    })
+    fireEvent.click(screen.getByText('Complete sale'))
+
+    await waitFor(() => expect(requests.length).toBe(1))
+    expect(payloads[0].payment).toBe('cash')
+    expect(payloads[0].cashReceivedCents).toBe(500)
   })
 })
