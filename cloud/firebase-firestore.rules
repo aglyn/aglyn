@@ -1307,6 +1307,33 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Do-not-contact list for marketing calls and texts (AGL-1592), the
+    // mechanism behind Privacy Policy v4 §11. One document per phone number,
+    // id = the E.164 digits without the leading '+'.
+    //
+    // Read is staff-only because the collection IS a list of phone numbers,
+    // annotated with the fact that each one asked us to stop — which is more
+    // sensitive than the numbers alone, not less.
+    //
+    // Write is closed to EVERYONE INCLUDING STAFF CLIENTS, deliberately, and
+    // for the same reason as /lockdowns: recording an opt-out is not one
+    // document write. It has to normalize the number to E.164 (an id computed
+    // client-side would land the record where nothing looks for it), union
+    // the channels rather than overwrite them, and — on an erasure request —
+    // clear the profile copy and stamp the marker that stops SSO re-asserting
+    // it. A bare client write would produce a suppression that looks recorded
+    // and suppresses nothing, which is the exact failure this collection was
+    // created to end.
+    //
+    // Delete stays closed to everything, Admin SDK aside. Opting back in is
+    // `revokedAt` on the existing document: the record is the evidence that
+    // the request was honoured while it was in force, and a deleted record
+    // cannot show that.
+    match /contactSuppressions/{phoneKey} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
     // Designed templates for Aglyn's own outbound email — invites, usage
     // summaries, staff alerts (AGL-747). Platform-level, not per-org: there
     // is no membership to check, only the staff claim.

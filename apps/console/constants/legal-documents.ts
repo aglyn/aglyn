@@ -130,10 +130,26 @@ export interface LegalDocumentManifestEntry {
  * ⚠️ TCPA is NOT solved by any of this. The v4 Privacy Policy discloses
  * marketing calls and texts; a disclosure is not consent, and consumers being
  * a real ICP is where the TCPA bites hardest. No outbound calling or texting
- * programme should start until the consent mechanism is designed, and §11's
- * STOP/opt-out promise has no suppression list behind it yet. Recorded as
+ * programme should start until the consent mechanism is designed. Recorded as
  * counsel questions in `Platform Docs/Legal/Analysis/` — privacy benchmark
  * items 9-10, terms benchmark items 1, 2, 2b, 2c, 4.
+ *
+ * §11's opt-out promise now HAS a mechanism (AGL-1592): the do-not-contact
+ * list at `contactSuppressions/{e164}`, its staff intake at
+ * `/admin/contact-suppressions`, a STOP-keyword seam awaiting an SMS pipeline,
+ * and `forgetUserPhoneNumber`, which stops `/api/auth/sso-jit` re-asserting an
+ * erased number from the customer's IdP. That closes the mechanism gap and NOT
+ * the consent gap above — they are separate, and both are prerequisites.
+ *
+ * ⚠️ §11 IS NOW SLIGHTLY NARROWER THAN THE IMPLEMENTATION, deliberately, and
+ * the fix belongs in v5. §11 says you may "ask us to delete the phone number
+ * we hold for you" without saying that we keep it on a suppression list — and
+ * we must, because a number we cannot recognise is a number we will dial the
+ * next time it reaches us. The carve-out is standard (CCPA §1798.105(d);
+ * the TSR's entity-specific do-not-call duty is unmeetable without a retained
+ * list), but it should be stated rather than inferred. Proposed wording is on
+ * AGL-1592. Do NOT resolve the mismatch by making the code forget the number:
+ * that reads as compliance and produces the call the person asked to prevent.
  *
  * Both documents also move their "Last updated" date to August 14, 2026, which
  * is the mechanism ToS §5.3 and Privacy §12 name for a change taking effect.
