@@ -227,12 +227,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     //     `liftLegacyProduct` only defaults the field on docs it synthesizes
     //     variants for, so a part-migrated doc can reach here without one, and
     //     the two reads must not disagree about what that doc is.
-    //   - ONE-TIME SALES ONLY. A subscription session goes to the webhook's
-    //     `commerce-subscription` branch, which writes a subscription doc and
-    //     never touches `total_details` — so shipping charged there would be
-    //     real money recorded NOWHERE, a strictly worse version of the
-    //     AGL-1698 hazard that orders the whole batch. Recurring shipping is
-    //     also a merchant decision the rate editor does not currently ask.
+    //   - ONE-TIME SALES ONLY. Originally because the webhook's
+    //     `commerce-subscription` branch never touched `total_details`, so
+    //     shipping charged there would have been real money recorded NOWHERE.
+    //     AGL-1732 closed that half — the initial charge now decomposes onto
+    //     the subscription document, `amount_shipping` included — but the
+    //     exclusion stands on the reason that outlived it: RENEWALS are still
+    //     recorded nowhere (`invoice.payment_succeeded` is unhandled), and a
+    //     rate editor written for one-time orders does not ask the merchant
+    //     whether a rate should be re-charged every cycle. Both are product
+    //     decisions, not wiring.
     //
     // Weight is per unit TIMES the quantity bought. `weightGrams` alone would
     // quote the lightest tier on a multi-unit order — the same under-collection

@@ -365,7 +365,10 @@ however many rates the merchant saved — the same merchant and product billing
 two different totals depending on which button the shopper pressed. Buy-now
 resolves through the same AGL-1707 translation, narrowed to physical one-time
 sales: a digital or service product ships nothing, and a subscription session
-is excluded because its webhook branch records no order to store the figure in.
+is excluded because renewals are not recorded at all — AGL-1732 gave the
+initial charge a home on the subscription document, `amount_shipping`
+included, but `invoice.payment_succeeded` is still unhandled, so a rate
+re-charged every cycle would land nowhere after the first.
 So `amount_shipping` is now a real number on both storefront paths for a
 merchant who set shipping up, and structurally 0 only for one who did not.
 Draft orders and POS still resolve no shipping.

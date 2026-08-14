@@ -350,6 +350,15 @@ export interface BuyNowProductSnapshot {
  *
  * The pre-fix record for the same purchase: `1 × 29228`, tax 0, discount 0 —
  * which also sums to 29228.
+ *
+ * ## Also the subscription sale record (AGL-1732)
+ *
+ * `checkout.ts` builds a subscription session with the same function and the
+ * same metadata snapshot — only `mode` differs — so the initial charge of a
+ * storefront subscription decomposes identically. The webhook's
+ * `commerce-subscription` branch stores the result on the subscription
+ * document rather than as an order; the arithmetic is the same either way,
+ * which is why it lives here and is not duplicated there.
  */
 export function computeBuyNowOrder(
   session: BuyNowSessionSource | null | undefined,

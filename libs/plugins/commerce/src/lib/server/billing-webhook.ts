@@ -159,23 +159,108 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
       if (hostId && productId) {
         const firestore = firebaseAdmin.app().firestore()
         const hostRef = firestore.collection('hosts').doc(String(hostId))
-        await hostRef
+        // AGL-1732: this branch used to write the subscription doc and stop —
+        // productId, email, name, customer id, status. NO money, anywhere. Not
+        // as an order (subscriptions are deliberately not orders: the docs, the
+        // console and the tenant account page all keep the two apart), but not
+        // on the subscription doc either, and not in the manager notification
+        // or the contact record. A merchant asking "what is this subscriber
+        // paying me?" had exactly one answer available: log in to Stripe.
+        //
+        // The sale is now decomposed and stored ON THE SUBSCRIPTION, which is
+        // the record this product already treats as the subscription's home.
+        // `computeBuyNowOrder` is the right decomposition rather than a
+        // parallel one: a subscription session is built by the SAME
+        // `checkout.ts` function, carrying the same `unitAmountCents` /
+        // `quantity` / `taxCents` / `discountCents` metadata snapshot, so the
+        // two sessions differ only in `mode`. It reads Stripe's own
+        // `total_details` through `computeCheckoutSessionTotals` — including
+        // the `amount_shipping` AGL-1698 added — so nothing here re-derives a
+        // figure Stripe already holds.
+        //
+        // This records the INITIAL charge only. Renewals arrive as
+        // `invoice.payment_succeeded`, which this webhook does not handle at
+        // all; see the follow-up filed with AGL-1732.
+        const productForSnapshot = await hostRef
+          .collection('products')
+          .doc(String(productId))
+          .get()
+        const liftedForSnapshot = CommerceModel.liftLegacyProduct(
+          (productForSnapshot.data() as any) ?? { name: 'Product' },
+        )
+        const soldVariant = object.metadata?.variantId
+          ? liftedForSnapshot.variants.find(
+              (item) => item.id === String(object.metadata.variantId),
+            )
+          : liftedForSnapshot.variants[0]
+        const variantOptions = Object.values(soldVariant?.options ?? {})
+        const { lineItems: subLineItems, totals: subTotals } =
+          CommerceModel.computeBuyNowOrder(object, {
+            name: String(productForSnapshot.get('name') ?? 'Product'),
+            ...(variantOptions.length
+              ? { variantLabel: variantOptions.join(' / ') }
+              : {}),
+            ...(soldVariant?.sku ? { sku: soldVariant.sku } : {}),
+            ...(liftedForSnapshot.type
+              ? { productType: liftedForSnapshot.type }
+              : {}),
+          })
+        const subscriptionRef = hostRef
           .collection('subscriptions')
           .doc(String(object.subscription))
-          .set(
+        // Redelivery guard (AGL-1732, the AGL-498 shape). Stripe delivers at
+        // least once, and the effects below this write are NOT idempotent —
+        // `upsertHostContact`'s `purchaseCents` is a `FieldValue.increment`, so
+        // a replay would inflate the subscriber's lifetime value and their
+        // order count on every retry.
+        //
+        // Keyed on `checkoutSessionId` rather than on the document existing:
+        // `customer.subscription.created` writes the SAME doc path (status and
+        // period end only) and Stripe does not order the two events, so an
+        // existence check would discard the sale record whenever that event
+        // won the race.
+        const recorded = await firestore.runTransaction(async (transaction) => {
+          const existing = await transaction.get(subscriptionRef)
+          if (existing.get('checkoutSessionId') === String(object.id)) {
+            return false
+          }
+          transaction.set(
+            subscriptionRef,
             {
               productId: String(productId),
+              ...(object.metadata?.variantId
+                ? { variantId: String(object.metadata.variantId) }
+                : {}),
               customerEmail: object?.customer_details?.email ?? null,
               customerName: object?.customer_details?.name ?? null,
               stripeCustomerId: String(object?.customer ?? '') || null,
               status: 'active',
+              // What was bought, and for how much (AGL-1732). The interval
+              // comes from the product doc because the amount alone is
+              // ambiguous — $50 a month and $50 a year are the same number.
+              lineItems: subLineItems,
+              totals: subTotals,
+              ...(liftedForSnapshot.subscription?.interval
+                ? { interval: liftedForSnapshot.subscription.interval }
+                : {}),
+              checkoutSessionId: String(object.id),
               createdAtMs: Date.now(),
             },
             { merge: true },
           )
+          return true
+        })
+        if (!recorded) return
+        const subscriptionCents = Number(subTotals.totalCents ?? 0)
         void notifyHostManagers(String(hostId), {
           type: 'content.order',
-          title: 'New subscriber',
+          // The amount rides the title exactly as the order notification's
+          // does (AGL-1732) — "New subscriber" alone never said what for.
+          title: `New subscriber — $${(subscriptionCents / 100).toFixed(2)}${
+            liftedForSnapshot.subscription?.interval
+              ? `/${liftedForSnapshot.subscription.interval}`
+              : ''
+          }`,
           ...(object?.customer_details?.email
             ? { body: object.customer_details.email }
             : {}),
@@ -186,9 +271,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
           source: 'order',
+          // RFM (AGL-328) counted a subscriber as having spent nothing, so
+          // the customer paying every month looked colder than a one-off
+          // buyer. The initial charge is real money and belongs in LTV.
+          ...(subscriptionCents > 0 ? { purchaseCents: subscriptionCents } : {}),
           interaction: {
             refId: String(object.subscription),
-            summary: 'Started a subscription',
+            summary: `Started a subscription ($${(subscriptionCents / 100).toFixed(2)})`,
           },
         })
       }

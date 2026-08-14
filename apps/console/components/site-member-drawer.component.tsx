@@ -358,9 +358,26 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
                 >
                   <Stack sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" noWrap>
+                      {/*
+                       * The amount (AGL-1732). This row named the product and
+                       * the renewal date and stopped, and no other console
+                       * surface carried the figure either — orders, analytics
+                       * and the CSV all read `orders`, which a subscription
+                       * sale does not create. "What is this subscriber paying
+                       * me?" was answerable only in Stripe. Subscriptions
+                       * written before that fix have no `totals`, so the
+                       * amount is omitted rather than shown as $0.00.
+                       */}
                       {productNames[subscription.productId] ??
                         subscription.productId ??
                         'Subscription'}
+                      {subscription.totals?.totalCents != null
+                        ? ` · ${usd(Number(subscription.totals.totalCents) || 0)}${
+                            subscription.interval
+                              ? `/${subscription.interval}`
+                              : ''
+                          }`
+                        : ''}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {subscription.currentPeriodEndMs

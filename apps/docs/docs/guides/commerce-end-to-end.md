@@ -193,9 +193,16 @@ Active subscriptions are recorded per site and surface in two places:
   [Customer account block](member-accounts.md#2-design-an-account-page)'s
   **Subscriptions** section has a **Manage** button that opens the **Stripe
   Billing Portal** (update card, cancel, see invoices).
-- **You** see each member's subscriptions (with renewal dates) in the member
-  drawer on the site's **Users** page, and managers get a *New subscriber*
-  notification on each signup.
+- **You** see each member's subscriptions in the member drawer on the site's
+  **Users** page — what they subscribed to, the amount and interval, and the
+  renewal date — and managers get a *New subscriber* notification carrying the
+  amount on each signup.
+
+A subscription is **not** an order, by design: it does not appear in
+**Orders**, in the analytics card or in the orders CSV, and it does not
+decrement stock. Those surfaces are for one-time sales. What the subscriber
+pays is recorded on the subscription itself, and every invoice — including
+renewals — lives in Stripe, reachable from the Billing Portal.
 
 An active subscription is also what
 [members-only content](../workspace-and-billing/teams-and-roles/members-only.md)
