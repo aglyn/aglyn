@@ -141,15 +141,42 @@ export interface LegalDocumentManifestEntry {
  * erased number from the customer's IdP. That closes the mechanism gap and NOT
  * the consent gap above — they are separate, and both are prerequisites.
  *
- * ⚠️ §11 IS NOW SLIGHTLY NARROWER THAN THE IMPLEMENTATION, deliberately, and
- * the fix belongs in v5. §11 says you may "ask us to delete the phone number
- * we hold for you" without saying that we keep it on a suppression list — and
- * we must, because a number we cannot recognise is a number we will dial the
- * next time it reaches us. The carve-out is standard (CCPA §1798.105(d);
- * the TSR's entity-specific do-not-call duty is unmeetable without a retained
- * list), but it should be stated rather than inferred. Proposed wording is on
- * AGL-1592. Do NOT resolve the mismatch by making the code forget the number:
- * that reads as compliance and produces the call the person asked to prevent.
+ * §11 MATCHES THE IMPLEMENTATION as of the AGL-1592 correction below — the
+ * earlier "narrower than the implementation, fix it in v5" note is GONE, not
+ * merely superseded: the narrower wording was never deliberate. §11 now states
+ * the suppression carve-out outright ("we will delete it from your account and
+ * keep it only on a limited internal do-not-contact list, used for nothing
+ * else"), because a number we cannot recognise is a number we will dial the
+ * next time it reaches us. The carve-out is standard (CCPA §1798.105(d); the
+ * TSR's entity-specific do-not-call duty is unmeetable without a retained
+ * list). Do NOT "fix" this by making the code forget the number: that reads as
+ * compliance and produces the call the person asked to prevent.
+ *
+ * v4 CORRECTIONS published 2026-08-14 (AGL-1594 + AGL-1592), folded into the
+ * SAME v4 snapshot rather than a v5, because v4 was still unpromoted and a bump
+ * would force every user to re-accept for a copy fix:
+ *
+ *   - AGL-1594, Privacy §3: the "Sale"/"sharing" paragraph claimed "no
+ *     advertising technology and no third-party analytics on our websites or
+ *     the console". GA4 (G-YW5PG16YTM) has run on app.aglyn.com since AGL-118
+ *     and on aglyn.com since AGL-1559, so half that sentence was false — and
+ *     §4 of the same document already disclosed analytics, contradicting it.
+ *     The no-adtech half is true and load-bearing, so it stays; the analytics
+ *     half is replaced by the actual configuration (Signals off, ads
+ *     personalization off in every region, no Ads link, 14-month retention)
+ *     plus the conclusion that analytics configured this way is neither a
+ *     "sale" nor a "share". The Cookie Policy carried the same defect and was
+ *     corrected in the same pass — it is besigner-only, has never been
+ *     clickwrapped, and is NOT snapshotted here, so it has no hash to update.
+ *   - AGL-1592, Privacy §11: the do-not-contact carve-out described above.
+ *
+ * Both edits are AUTHORED-SOURCE changes to the besigner markdown block and
+ * were published FIRST, then re-captured. That ordering is not a preference: a
+ * snapshot is evidence of what a user was actually shown, so hand-writing one
+ * for text that is not live would be a false record of the same shape as the
+ * defect being fixed. The live page was confirmed serving the new text (Flight
+ * row 16:T3430, = 13360 bytes, matching the published source byte-for-byte)
+ * before this hash moved. terms.txt is UNCHANGED by this pass.
  *
  * Both documents also move their "Last updated" date to August 14, 2026, which
  * is the mechanism ToS §5.3 and Privacy §12 name for a change taking effect.
@@ -168,7 +195,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '913eda63de5304f40e1ad44a816f696e8a58c51c40d2419f8afbcc3e9d64acd7',
-    bytes: 12032,
+      '96b24414fb39209be36c804cec72d11341474edfadc279f7b252f1431f1906a9',
+    bytes: 12912,
   },
 ]

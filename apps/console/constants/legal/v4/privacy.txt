@@ -100,7 +100,7 @@ Business transfers
 — in connection with a merger, acquisition, financing, or sale of assets, subject to this Policy.
 With your direction or consent.
 "Sale"/"sharing" under U.S. state laws.
-We do not "sell" personal information and we do not "share" it for cross-context behavioral advertising, as those terms are defined by the CCPA/CPRA and similar U.S. state laws. We use no advertising technology and no third-party analytics on our websites or the console; our service providers process personal information only to provide the Services under contracts that restrict them accordingly. Because there is no sale or sharing, there is nothing to opt out of; this also means opt-out preference signals such as Global Privacy Control have no sale or sharing to act on. If our practices ever change, we will update this Policy and provide the legally required opt-out mechanisms before any such processing begins.
+We do not "sell" personal information and we do not "share" it for cross-context behavioral advertising, as those terms are defined by the CCPA/CPRA and similar U.S. state laws. We use no advertising technology — no ad networks, no advertising or social-media pixels, and nothing that builds cross-context advertising profiles. We do use one third-party analytics provider, Google Analytics, on our marketing site, the console, and our documentation site, and we configure it so that it cannot be used for advertising: Google Signals is off, ads personalization is disabled in every region, no Google Ads account is linked, user-provided data collection is off, email redaction is on, and data is retained for 14 months. Our service providers, including Google Analytics, process personal information only to provide the Services under contracts that restrict them accordingly, and none may use it for their own advertising. Analytics configured this way is neither a "sale" nor a "share" as those laws define them. Because there is no sale or sharing, there is nothing to opt out of; this also means opt-out preference signals such as Global Privacy Control have no sale or sharing to act on. If our practices ever change, we will update this Policy and provide the legally required opt-out mechanisms before any such processing begins.
 4. Cookies & Tracking
 We and our providers use cookies and similar technologies for authentication, security, preferences, and analytics. For details and choices, see the
 Cookie Policy
@@ -137,9 +137,9 @@ The Services link to and integrate with third-party sites and services that we d
 11. Marketing Communications
 You may opt out of marketing emails using the unsubscribe link or by contacting us. You may opt out of marketing telephone calls and text messages at any time — reply
 STOP
-to any marketing text, tell us during a call, or email
+to any marketing text to stop texts, tell us during a call, or email
 privacy@aglyn.com
-— and you may ask us to delete the phone number we hold for you. We may still send you non-promotional, service-related messages, including account, billing, payment, security, and administrative notices, by email and, where we hold a phone number for you, by call or text.
+to stop calls, texts, or both — and you may ask us to delete the phone number we hold for you. If you do, we will delete it from your account and keep it only on a limited internal do-not-contact list, used for nothing else: that record is the only way we can recognize your number and avoid contacting it again. We may still send you non-promotional, service-related messages, including account, billing, payment, security, and administrative notices, by email and, where we hold a phone number for you, by call or text.
 12. Changes to this Policy
 We may update this Policy at any time. Material changes will be indicated by updating the "Last updated" date and, where appropriate, by additional notice. Your continued use of the Services after changes take effect constitutes acceptance.
 13. Contact Us
