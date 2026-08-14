@@ -229,6 +229,14 @@ const ALLOWED = new Map<string, string>([
     'apps/console/constants/legal/v3/privacy.txt',
     'Frozen published Privacy Policy (v3, AGL-1555) — immutable evidence.',
   ],
+  [
+    'apps/console/constants/legal/v4/terms.txt',
+    'Frozen published Terms of Service (v4, AGL-1565) — immutable evidence.',
+  ],
+  [
+    'apps/console/constants/legal/v4/privacy.txt',
+    'Frozen published Privacy Policy (v4, AGL-1564) — immutable evidence.',
+  ],
 ])
 
 /** Anything whose bytes are not text we can meaningfully read. */

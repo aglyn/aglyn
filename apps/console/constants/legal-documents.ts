@@ -55,7 +55,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v3'
+export const LEGAL_DOCUMENT_VERSION = 'v4'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -90,20 +90,37 @@ export interface LegalDocumentManifestEntry {
  * pass but are not snapshotted here — only the two documents the consent
  * control links to are, and the Terms incorporate the rest by reference
  * (§19.1). See `LEGAL_URLS`.
+ *
+ * v4 (2026-08-14, AGL-1564 + AGL-1565): one snapshot cycle for two legal
+ * changes, because every bump re-pins clickwrap and forces re-acceptance.
+ *
+ *   - AGL-1564, Privacy Policy: phone number is now disclosed as collected
+ *     (§1.1, naming both sources — given to us, or asserted by the customer's
+ *     SSO identity provider), the §2 purposes list separates the transactional
+ *     use (billing, dunning, service and security notices) from the
+ *     marketing/sales-outreach use, and §11 gains a call/text opt-out. The
+ *     capability was already live — `users/{uid}.phoneNumber` is written by
+ *     `/api/auth/session` and `/api/auth/sso-jit` — and the policy was silent.
+ *   - AGL-1565, Terms: see the note below, added with that issue's own commit.
+ *
+ * Both documents also move their "Last updated" date to August 14, 2026, which
+ * is the mechanism ToS §5.3 and Privacy §12 name for a change taking effect.
+ * Same capture method as v1–v3, proven against the v3 hashes before this set
+ * was taken.
  */
 export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
   {
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '5438b94d6bae2c9dae80ceba9ec53213990f20fa21b0d5b6f4fbbe3c8d553e73',
-    bytes: 33117,
+      '1ae10b9074cb2e175dd7553180c0bb9a0d77a88c3a263a102a5c6a4c143a1ec2',
+    bytes: 33295,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '0ecdbec1040536870796696cfc862513d1b87cea13ad02cd5818f7714d5fc238',
-    bytes: 10641,
+      '913eda63de5304f40e1ad44a816f696e8a58c51c40d2419f8afbcc3e9d64acd7',
+    bytes: 12032,
   },
 ]
