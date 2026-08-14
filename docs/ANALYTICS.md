@@ -327,17 +327,24 @@ construction; `taxCents` is Stripe's `total_details.amount_tax`, excluded
 because the merchant is seller of record and tax collected is held for the
 state. As in AGL-1639, **no GA4 `tax` param** is sent beside an ex-tax `value`.
 
-**No `shipping` param either**, and the reason changed under AGL-1698 without
-changing the answer. It used to be a live defect: the webhook read two of
-`total_details`' three siblings and skipped `amount_shipping`, so every online
-order stored `shippingCents: 0` while the shipping the shopper paid sat inside
-`amount_total`. That is fixed — `computeCheckoutSessionTotals` now passes it,
-and the stored parts sum to the stored total. What it is **not** yet is a number
-worth reporting, because no Checkout Session we create declares
-`shipping_options`, so Stripe never offers a shipping choice and
-`amount_shipping` is 0 on every live session today. Sending it would still
-assert free shipping on every order. It becomes worth sending when shipping is
-actually charged, not before.
+**No `shipping` param either**, and the reason has now changed twice. It began
+as a live defect: the webhook read two of `total_details`' three siblings and
+skipped `amount_shipping`, so every online order stored `shippingCents: 0` while
+the shipping the shopper paid sat inside `amount_total`. AGL-1698 fixed the
+storage — `computeCheckoutSessionTotals` passes it, and the stored parts sum to
+the stored total. It then stayed unsent because the figure was structurally
+zero: no Checkout Session we created declared `shipping_options`, so Stripe
+never offered a shipping choice.
+
+AGL-1707 closed that: `cart-checkout.ts` declares the merchant's configured
+zones and rates as `shipping_options`, so `amount_shipping` is now a real number
+on any cart session for a merchant who set shipping up. The param is still not
+sent, but the remaining reason is only that plumbing `shippingCents` from the
+stored order out to the wire shape is unbuilt work rather than a truthfulness
+problem — it is tracked separately and is now worth doing. Note the figure is
+still structurally 0 on the buy-now path, which declares neither
+`shipping_address_collection` nor `shipping_options`; only cart checkout
+charges shipping today.
 
 `value` still comes off `totalCents`, and deliberately so. Deriving it from the
 stored parts would have **dropped that shipping revenue entirely** — the same

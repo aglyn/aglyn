@@ -102,11 +102,15 @@ function toAmount(cents: number): number {
  * priced from the host's product docs, so a price edit between session
  * creation and webhook delivery would make our sum disagree with the charge.
  *
- * Still NO GA4 `shipping` param, and still for a factual reason rather than a
- * stylistic one: no Checkout Session we create declares `shipping_options`, so
- * Stripe never offers a shipping choice and `amount_shipping` is 0 on every
- * live session. Sending it would assert free shipping on every order rather
- * than say nothing. It becomes worth sending once shipping is charged.
+ * Still NO GA4 `shipping` param, but the reason has moved on again. It used to
+ * be that no Checkout Session we created declared `shipping_options`, so Stripe
+ * never offered a shipping choice and `amount_shipping` was 0 on every live
+ * session — sending it would have asserted free shipping on every order.
+ * AGL-1707 wired the merchant's configured zones and rates into the cart
+ * session, so `amount_shipping` is now real there. What remains is unbuilt
+ * plumbing rather than a truthfulness objection: `shippingCents` is stored on
+ * the order but is not carried into `StorefrontPurchaseSource` or the wire
+ * shape. It is worth sending now; it is tracked separately.
  *
  * ## Worked example — the spec fixture
  *

@@ -27,6 +27,14 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
  * platform fee sums per line by product type (AGL-278 ladder), and the
  * webhook creates one multi-line order and clears the cart.
  */
+
+/**
+ * Destinations the storefront cart collects an address for, and therefore the
+ * destinations shipping rates are resolved against (AGL-1707). One list, used
+ * twice: narrowing it would stop sales that work today, so it is unchanged.
+ */
+const CART_SHIPPING_COUNTRIES = ['US', 'CA', 'GB', 'AU', 'DE', 'FR'] as const
+
 export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -99,6 +107,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     )
     let itemsCents = 0
     let feeCents = 0
+    // Weight-tier shipping rates price off this (AGL-1707). Without it every
+    // `weight_tiers` rate would resolve at 0g and quote the lightest tier.
+    let totalGrams = 0
     // Cart checkout never builds subscription sessions — every line bills
     // one-time in `payment` mode (recurring products subscribe through the
     // PDP's direct checkout, AGL-303) — so the buyer-chosen billing field
@@ -130,6 +141,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }
       const unitCents = Math.round(Number(variant.priceUsd) * 100)
       itemsCents += unitCents * line.quantity
+      totalGrams += Math.max(0, Number(variant.weightGrams ?? 0)) * line.quantity
       const feePct = Aglyn.resolveTransactionFeePct(
         ownerOrg.org as any,
         product.type,
@@ -280,12 +292,12 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       String(accountId),
     )
     // Address collection feeds order shipping + destination tax later.
-    params.set('shipping_address_collection[allowed_countries][0]', 'US')
-    params.set('shipping_address_collection[allowed_countries][1]', 'CA')
-    params.set('shipping_address_collection[allowed_countries][2]', 'GB')
-    params.set('shipping_address_collection[allowed_countries][3]', 'AU')
-    params.set('shipping_address_collection[allowed_countries][4]', 'DE')
-    params.set('shipping_address_collection[allowed_countries][5]', 'FR')
+    CART_SHIPPING_COUNTRIES.forEach((code, index) => {
+      params.set(
+        `shipping_address_collection[allowed_countries][${index}]`,
+        code,
+      )
+    })
 
     // Stripe Tax when opted in (manual destination tax lands with the
     // AGL-296 checkout, which knows the address before the session).
@@ -297,6 +309,34 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     if (taxSettings.mode === 'stripe') {
       params.set('automatic_tax[enabled]', 'true')
     }
+
+    // Shipping (AGL-1707), from the same settings doc as tax. This is the
+    // ONLY thing that makes Stripe charge shipping: without `shipping_options`
+    // it presents no shipping choice, `total_details.amount_shipping` is 0,
+    // and the zones and rates the merchant configured in the console are
+    // silently worth nothing. The subtotal fed to the rate resolver is the
+    // pre-discount items total — the "Subtotal" the cart itself shows, and
+    // the same figure `resolveDiscount` is given above — so a free-over-$50
+    // threshold means what the shopper saw it mean.
+    //
+    // A merchant who has configured nothing resolves to no options and gets a
+    // session byte-identical to today's: no shipping is charged, exactly as
+    // before. Only a merchant who set rates up starts collecting them.
+    const shippingSettings = storeSettings.get('shipping') as
+      | CommerceModel.ShippingSettings
+      | undefined
+    const shippingOptions = CommerceModel.resolveCheckoutShippingOptions(
+      shippingSettings,
+      CART_SHIPPING_COUNTRIES,
+      { subtotalCents: itemsCents, totalGrams },
+    )
+    shippingOptions.forEach((option, index) => {
+      const field = `shipping_options[${index}][shipping_rate_data]`
+      params.set(`${field}[type]`, 'fixed_amount')
+      params.set(`${field}[display_name]`, option.name.slice(0, 100))
+      params.set(`${field}[fixed_amount][amount]`, String(option.amountCents))
+      params.set(`${field}[fixed_amount][currency]`, 'usd')
+    })
 
     const referer = String(req.headers.referer ?? '')
     const origin = `https://${req.headers.host}`

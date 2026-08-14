@@ -18,9 +18,15 @@
 /**
  * Shipping v1 (AGL-288): zones own countries; rates belong to a zone and
  * price as flat, free-over-threshold, or subtotal/weight tiers. Settings
- * live on `hosts/{hostId}/settings/store` under `shipping`. Pure — the
- * cart estimator (AGL-293), checkout (AGL-296), and POS pickup use
- * `resolveShippingRates`.
+ * live on `hosts/{hostId}/settings/store` under `shipping`. Pure.
+ *
+ * `resolveShippingRates` is the per-destination resolver;
+ * `resolveCheckoutShippingOptions` is the Stripe Checkout adapter that cart
+ * checkout calls (AGL-1707). AGL-288 shipped this model with no production
+ * call site at all — the doc comment here claimed the cart estimator, checkout
+ * and POS pickup used it, and none of them did, so nothing ever read the
+ * settings a merchant saved and no shipping was ever charged. Buy-now, draft
+ * orders and POS still do not resolve shipping; only cart checkout does.
  */
 
 export interface ShippingZone {
@@ -132,4 +138,59 @@ export function resolveShippingRates(
     resolved.push({ rateId: 'pickup', name: 'Local pickup', amountCents: 0 })
   }
   return resolved.sort((a, b) => a.amountCents - b.amountCents)
+}
+
+/** Stripe Checkout accepts at most 5 `shipping_options` on one session. */
+export const MAX_CHECKOUT_SHIPPING_OPTIONS = 5
+
+/**
+ * The rates to declare as `shipping_options` on a Stripe Checkout Session
+ * (AGL-1707). Stripe charges shipping ONLY when the session declares them,
+ * and the session is created before the shopper has entered an address, so
+ * an exact per-destination resolution is not available here: the options are
+ * the union of what every collectable destination resolves to.
+ *
+ * The known imprecision is that a shopper in one zone can be shown — and can
+ * pick — a rate belonging to another. That is deliberate and bounded: the
+ * alternative available today is the status quo, which charges every shopper
+ * in every zone nothing at all. Resolving exactly needs the address before
+ * the session, which is the AGL-296 checkout, filed separately.
+ *
+ * Returns `[]` for a merchant who has configured nothing, and the caller must
+ * then declare no `shipping_options` at all rather than an empty array — a
+ * merchant who never set shipping up keeps a session identical to today's.
+ */
+export function resolveCheckoutShippingOptions(
+  settings: ShippingSettings | undefined,
+  destinationCountries: readonly string[],
+  cart: { subtotalCents: number; totalGrams?: number },
+): ResolvedShippingRate[] {
+  if (!settings) return []
+  const byRateId = new Map<string, ResolvedShippingRate>()
+  for (const country of destinationCountries) {
+    for (const rate of resolveShippingRates(settings, country, cart)) {
+      // Stripe requires a display name, and a rate id is the dedupe key —
+      // the console lets a merchant add a blank row, so neither is assured.
+      if (!rate.rateId || !rate.name) continue
+      const amountCents = Math.max(0, Math.round(Number(rate.amountCents) || 0))
+      const existing = byRateId.get(rate.rateId)
+      // One rate resolving differently for two countries should not be
+      // possible (a zone selects a rate, it does not reprice one), but if it
+      // ever is, keep the dearer. Under-charging is the defect being fixed.
+      if (!existing || amountCents > existing.amountCents) {
+        byRateId.set(rate.rateId, { ...rate, amountCents })
+      }
+    }
+  }
+  return (
+    [...byRateId.values()]
+      // Cheapest first, id as a tie-break so the emitted params are stable.
+      .sort(
+        (a, b) =>
+          a.amountCents - b.amountCents || a.rateId.localeCompare(b.rateId),
+      )
+      // Past Stripe's cap the dearest are dropped, which is the harmless end
+      // to lose: a shopper offered the cheap options would have taken one.
+      .slice(0, MAX_CHECKOUT_SHIPPING_OPTIONS)
+  )
 }
