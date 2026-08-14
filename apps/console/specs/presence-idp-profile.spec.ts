@@ -47,7 +47,7 @@ describe('readIdpProfile (AGL-675)', () => {
         sign_in_attributes: {
           firstName: 'Zach',
           lastName: 'Gover',
-          phoneNumber: '+1 (737) 600-6900',
+          phoneNumber: '+1 (512) 222-8232',
           email: 'zach@aglyn.com',
         },
       },

@@ -286,10 +286,9 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
           },
           async () => {
             // Normalize before storing, not after reading (AGL-1133).
-            // Production held `phoneNumber: "7376006900"` — ten digits, no
-            // country code — which is unusable for SMS or for a Stripe
-            // customer, and every later reader would have had to guess a
-            // country to fix it.
+            // Production held a bare ten-digit `phoneNumber` with no country
+            // code — which is unusable for SMS or for a Stripe customer, and
+            // every later reader would have had to guess a country to fix it.
             //
             // The whole address is REPLACED rather than merged: Firestore
             // merges nested maps key by key, so clearing one line would
