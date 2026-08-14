@@ -28,6 +28,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { clampToViewport, useAnchoredRect } from '../hooks/use-anchored-rect'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
 import { inlineTextEdit } from '../utils/inline-text-edit.store'
 import {
@@ -60,6 +61,9 @@ const RICH_COMMANDS: Array<{ command: string; label: string; title: string }> =
     { command: 'insertUnorderedList', label: '•', title: 'Bulleted list' },
     { command: 'insertOrderedList', label: '1.', title: 'Numbered list' },
   ]
+
+/** Stands in while no edit is open, so the anchor hook can run every render. */
+const EMPTY_RECT = { left: 0, top: 0, width: 0, height: 0 }
 
 function escapeHtml(text: string): string {
   return text
@@ -102,6 +106,10 @@ export const InlineTextEditorComponent = observer(
     const node = inlineTextEdit.node
     const rect = inlineTextEdit.rect
     const propTarget = inlineTextEdit.propTarget
+    // Follows the element as the canvas scrolls or resizes (AGL-1644). Called
+    // unconditionally, above the `!node || !rect` bail-out further down, so the
+    // hook order is stable whether or not an edit is open.
+    const live = useAnchoredRect(inlineTextEdit.anchor, rect ?? EMPTY_RECT)
     const plainRef = useRef<HTMLDivElement>(null)
     const richRef = useRef<HTMLDivElement>(null)
     // Distinguish commit-blur (Enter already committed) from cancel paths.
@@ -475,14 +483,31 @@ export const InlineTextEditorComponent = observer(
 
     if (!node || !rect) return null
 
+    // Read at render, which `useAnchoredRect` makes safe: it re-renders on
+    // every scroll and resize, so these are never a stale snapshot. The toolbar
+    // sits 40px ABOVE the surface, so the top margin has to clear it or the
+    // controls go off-screen while the editable stays on it.
+    const viewportWidth =
+      typeof window === 'undefined' ? Infinity : window.innerWidth
+    const viewportHeight =
+      typeof window === 'undefined' ? Infinity : window.innerHeight
+    const minWidth = Math.max(live.width, 120)
+    const TOOLBAR_CLEARANCE = 48
+    const KEEP_VISIBLE = 80
+
     return (
       <Box
         data-aglyn="overlay:inline-text-editor"
         sx={{
           position: 'fixed',
-          left: rect.left,
-          top: rect.top,
-          minWidth: Math.max(rect.width, 120),
+          left: clampToViewport(live.left, minWidth, viewportWidth),
+          top: clampToViewport(
+            live.top,
+            KEEP_VISIBLE,
+            viewportHeight,
+            TOOLBAR_CLEARANCE,
+          ),
+          minWidth,
           maxWidth: '90vw',
           zIndex: (theme) => theme.zIndex.modal,
         }}

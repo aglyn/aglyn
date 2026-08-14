@@ -227,13 +227,21 @@ export const DraggableDroppable = observer(
         if (editable) {
           e.preventDefault()
           e.stopPropagation()
-          const rect = (e.currentTarget as Element).getBoundingClientRect()
-          inlineTextEdit.open(node, {
-            left: rect.left,
-            top: rect.top,
-            width: rect.width,
-            height: rect.height,
-          })
+          const element = e.currentTarget as Element
+          const rect = element.getBoundingClientRect()
+          inlineTextEdit.open(
+            node,
+            {
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              height: rect.height,
+            },
+            undefined,
+            // The measured element travels with the rect so the overlay can
+            // re-measure on scroll instead of drifting (AGL-1644).
+            element,
+          )
           return
         }
         // In-place markdown editing (AGL-1624): a component whose schema
@@ -250,7 +258,8 @@ export const DraggableDroppable = observer(
         if (!markdownAttribute) return
         e.preventDefault()
         e.stopPropagation()
-        const markdownRect = (e.currentTarget as Element).getBoundingClientRect()
+        const markdownElement = e.currentTarget as Element
+        const markdownRect = markdownElement.getBoundingClientRect()
         const stored = (node.props as Record<string, unknown> | undefined)?.[
           markdownAttribute
         ]
@@ -270,6 +279,7 @@ export const DraggableDroppable = observer(
           },
           markdownAttribute,
           typeof stored === 'string' ? stored : '',
+          markdownElement,
         )
       }
       /** True when the double-click resolved to a prop edit it opened. */
@@ -312,6 +322,10 @@ export const DraggableDroppable = observer(
                 text.boundProp,
               ),
             },
+            // The GRAFTED leaf, not the instance node: it is what was measured,
+            // and it is the one anchor `Besigner.refs` could never supply
+            // because it is not a canvas node (AGL-1644).
+            hit.element,
           )
           return true
         }

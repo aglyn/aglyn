@@ -154,6 +154,122 @@ describe('canvas double-click on a markdown element (AGL-1624)', () => {
   })
 })
 
+/**
+ * A stand-in canvas element whose viewport rect the test can move, the way a
+ * scroll moves a real one.
+ */
+const movableAnchor = (top: number, left = 40) => {
+  const el = document.createElement('div')
+  document.body.appendChild(el)
+  let box = { left, top, width: 600, height: 300 }
+  el.getBoundingClientRect = () =>
+    ({
+      ...box,
+      right: box.left + box.width,
+      bottom: box.top + box.height,
+      x: box.left,
+      y: box.top,
+      toJSON: () => ({}),
+    }) as DOMRect
+  return {
+    el,
+    /** Moves the element and fires the scroll the browser would have fired. */
+    scrollTo: (nextTop: number, nextLeft = box.left) => {
+      box = { ...box, top: nextTop, left: nextLeft }
+      act(() => {
+        fireEvent.scroll(window)
+      })
+    },
+  }
+}
+
+const overlayTop = (testId: string): string =>
+  window.getComputedStyle(screen.getByTestId(testId)).top
+
+/**
+ * AGL-1644. Both in-place editors anchored on a rect captured ONCE at open and
+ * never recomputed, so scrolling the canvas mid-edit left the editor floating
+ * over unrelated chrome. AGL-1624 clamped that dead rect with `Math.max(8, …)`,
+ * which put a first paint somewhere visible and did nothing about the drift —
+ * its own author called it a floor rather than a fix.
+ *
+ * The distinction the tests below turn on: a floor can only ever push the
+ * editor DOWN to the margin. Following the element back UP the page — the
+ * second half of every scroll a person actually performs — is the part a
+ * clamped constant cannot do at all.
+ */
+describe('the markdown editor follows the canvas (AGL-1644)', () => {
+  afterEach(() => {
+    act(() => inlineMarkdownEdit.close())
+    act(() => Besigner.focus.clearSelection())
+    document.body.innerHTML = ''
+  })
+
+  const openAnchored = (top: number) => {
+    const node = markdownNode('Hello world')
+    const anchor = movableAnchor(top)
+    render(<InlineMarkdownEditorComponent />)
+    act(() => {
+      Besigner.focus.setSelectedNode(node)
+      inlineMarkdownEdit.open(
+        node,
+        { left: 40, top, width: 600, height: 300 },
+        'content',
+        node.props.content,
+        anchor.el,
+      )
+    })
+    return anchor
+  }
+
+  it('re-measures the anchor when the canvas scrolls', () => {
+    const anchor = openAnchored(300)
+    expect(overlayTop('inline-markdown-editor')).toBe('300px')
+
+    anchor.scrollTo(180)
+    expect(overlayTop('inline-markdown-editor')).toBe('180px')
+  })
+
+  // The half a floor cannot reach. Scrolled off the top the editor waits at the
+  // margin — and scrolling back returns it to the element, rather than leaving
+  // it parked where the clamp put it.
+  it('waits at the top margin while the element is above the viewport, then comes back', () => {
+    const anchor = openAnchored(300)
+
+    anchor.scrollTo(-900)
+    expect(overlayTop('inline-markdown-editor')).toBe('8px')
+
+    anchor.scrollTo(240)
+    expect(overlayTop('inline-markdown-editor')).toBe('240px')
+  })
+
+  // The opposite edge, which the old `Math.max(8, …)` had no answer for at all:
+  // an element below the fold would have taken the editor off the bottom.
+  it('keeps the editor reachable when the element is below the viewport', () => {
+    const anchor = openAnchored(300)
+    anchor.scrollTo(window.innerHeight + 500)
+    const top = Number.parseFloat(overlayTop('inline-markdown-editor'))
+    expect(top).toBeLessThan(window.innerHeight)
+  })
+
+  // No anchor — an `open` from a caller that has none — must behave exactly as
+  // it did before, on the captured rect.
+  it('falls back to the captured rect when there is no anchor', () => {
+    const node = markdownNode('Hello world')
+    render(<InlineMarkdownEditorComponent />)
+    act(() => {
+      Besigner.focus.setSelectedNode(node)
+      inlineMarkdownEdit.open(
+        node,
+        { left: 40, top: 220, width: 600, height: 300 },
+        'content',
+        node.props.content,
+      )
+    })
+    expect(overlayTop('inline-markdown-editor')).toBe('220px')
+  })
+})
+
 describe('in-place markdown commit semantics (AGL-1624)', () => {
   let updateNodeProps: jest.SpyInstance
 
