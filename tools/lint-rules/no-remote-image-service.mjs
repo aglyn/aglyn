@@ -55,14 +55,25 @@
  *      a config object, a fetch. This is the half that stops `api.qrserver.com`
  *      coming back through a different door.
  *
- *   2. **An image source built by interpolating into a remote query string.**
+ *   2. **A package whose product is a URL to one of those hosts.**
+ *      `REMOTE_IMAGE_SERVICE_PACKAGES` names dependencies that exist only to
+ *      build such a URL, reported at the `import`/`require`. This is the half
+ *      detection 1 structurally cannot do: `gravatarUrlFromEmail(email)`
+ *      assembles `gravatar.com/avatar/<md5(email)>` INSIDE the dependency, so
+ *      no host literal exists in our source and no amount of string scanning
+ *      will ever see it. That shipped for months across every console member
+ *      row (AGL-1683) — an MD5 of each colleague's email, sent to Automattic
+ *      with the viewer's IP. An import is the one place the shape is visible,
+ *      and it is unambiguous: nothing imports `gravatar` for another reason.
+ *
+ *   3. **An image source built by interpolating into a remote query string.**
  *      A `src` / `srcSet` on an image-ish element — `<img>`, anything whose
  *      name ends in `Image`/`Avatar`, or MUI's `component="img"` — whose value
  *      is a template literal that starts at an absolute `http(s)://` host and
  *      whose STATIC text opens a query string. That is the precise shipped
  *      shape, and it catches a host nobody has thought to deny yet.
  *
- * Requiring the `?` is what keeps detection 2 honest. `src={`${cdn}/${id}.png`}`
+ * Requiring the `?` is what keeps detection 3 honest. `src={`${cdn}/${id}.png`}`
  * is a path on a CDN and is nobody's business but ours; the invariant being
  * guarded is about parameters, so the rule asks for one. `FIRST_PARTY_HOSTS`
  * is the other half of that: an `?alt=media&token=…` on our own Firebase
@@ -75,7 +86,7 @@
  * These are false NEGATIVES, chosen so the rule never fires on correct code:
  *
  *   - **A remote URL assembled away from the element.** `const src = base + '?d=' + v`
- *     built in a helper and passed down is invisible to detection 2, which
+ *     built in a helper and passed down is invisible to detection 3, which
  *     reads one template literal at one attribute. Detection 1 still catches
  *     it if the host is a known one.
  *   - **`new URL()` / `URLSearchParams`.** Not modelled. Same fallback.
@@ -83,12 +94,22 @@
  *     in `site-analytics.tsx` is a real, disclosed, consent-gated egress and
  *     is NOT an instance — a tag manager is not an image service, and the
  *     rule must not conflate "third-party request" with "third party drawing
- *     our data". Detection 2 only looks at image-ish elements for exactly
+ *     our data". Detection 3 only looks at image-ish elements for exactly
  *     this reason.
- *   - **Package-mediated egress.** `gravatarUrlFromEmail(email)` builds a
- *     gravatar.com URL inside the `gravatar` dependency, so no host literal
- *     exists in our source and nothing here sees it. That is a separate
- *     finding with a separate fix; a denylist entry would be theatre.
+ *   - **A package NOT on the list.** Detection 2 is a denylist of one shape,
+ *     not an analysis: a new dependency that builds a remote avatar URL is
+ *     invisible until someone adds its name. That is the accepted cost of a
+ *     rule with no false positives — the alternative is flagging every import
+ *     that might touch a URL, which nobody would keep enabled.
+ *
+ * When this rule was written (AGL-1671) the gravatar case was left out on the
+ * grounds that "a denylist entry would be theatre", which was true of a HOST
+ * entry and only of a host entry: the source contained no such string, so it
+ * would have reported nothing. Fixing AGL-1683 changed what a denylist is for
+ * here. The egress is gone and the dependency is uninstalled, so both entries
+ * now guard REINTRODUCTION, which arrives by exactly two doors — `npm i
+ * gravatar` (detection 2) or somebody typing the host by hand (detection 1) —
+ * and both are shut. Neither reports anything in the tree today.
  *
  * ## Provenance
  *
@@ -128,6 +149,10 @@ const REMOTE_IMAGE_SERVICES = [
   'api.dicebear.com',
   'ui-avatars.com',
   'api.multiavatar.com',
+  // Gravatar (AGL-1683) — the identifier is an MD5 of an email address, and
+  // that is a lookup key, not an anonymisation. Covers every subdomain the
+  // package emitted: `www.`, `s.`, `secure.`, `0.`…`3.`.
+  'gravatar.com',
   // Image proxies — everything they fetch, they also see.
   'images.weserv.nl',
   'wsrv.nl',
@@ -138,14 +163,42 @@ const escapeForRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 /**
  * Host match on domain-label boundaries, so `api.qrserver.com` is found in
  * `https://api.qrserver.com/v1/…` but `notqrserver.com.example.org` is not.
+ *
+ * A leading `.` counts as a boundary, so an entry also covers its subdomains:
+ * `gravatar.com` has to catch `secure.gravatar.com`, `s.gravatar.com` and
+ * `0.`…`3.gravatar.com`, which are all the same vendor and were all reachable
+ * from the package's own options (AGL-1683). Listing them one by one would
+ * mean the next `4.` slips through. What the boundary still refuses is a
+ * different registrable domain that merely ENDS in one of these labels —
+ * `notqrserver.com` is preceded by a letter, not a dot, and does not match.
  */
 const SERVICE_PATTERNS = REMOTE_IMAGE_SERVICES.map((host) => ({
   host,
   pattern: new RegExp(
-    `(^|[^A-Za-z0-9.-])${escapeForRegExp(host)}(?![A-Za-z0-9-])`,
+    `(^|[^A-Za-z0-9-])${escapeForRegExp(host)}(?![A-Za-z0-9-])`,
     'i',
   ),
 }))
+
+/**
+ * Dependencies whose entire product is a URL to one of the hosts above.
+ *
+ * The bar for an entry is that the package has NO use except building that
+ * request — `gravatar` exports `url()`/`profile_url()` and nothing else, so
+ * an import of it IS the egress. A package that merely can fetch an image
+ * (axios, next/image) obviously does not belong here.
+ */
+const REMOTE_IMAGE_SERVICE_PACKAGES = ['gravatar', 'gravatar-url']
+
+/** `gravatar` and `gravatar/lib/…` both name the same dependency. */
+function namedServicePackage(request) {
+  if (typeof request !== 'string') return null
+  return (
+    REMOTE_IMAGE_SERVICE_PACKAGES.find(
+      (name) => request === name || request.startsWith(`${name}/`),
+    ) ?? null
+  )
+}
 
 /**
  * Hosts that are ours, or are storage we own and pay for. An image URL here
@@ -257,6 +310,13 @@ export default {
         'POS card QR and it was a LIVE Stripe payment link on every ' +
         'transaction (AGL-1671). Render it in our own runtime instead ' +
         '(`qrcode.react` for QR); registering the vendor is NOT the fix.',
+      servicePackage:
+        '`{{package}}` exists only to build a URL to a third-party image ' +
+        'service, so importing it IS the egress — the host never appears in ' +
+        'our source, which is exactly why this went unnoticed. `gravatar` ' +
+        'put an MD5 of every member email on the console members list, sent ' +
+        'to Automattic with the viewer IP (AGL-1683). An email MD5 is a ' +
+        'lookup key, not an anonymisation. Draw initials locally instead.',
       interpolatedRemoteSource:
         'This image `{{attribute}}` interpolates our data into a query ' +
         'string on `{{host}}`, so whatever `{{attribute}}` encodes is sent to ' +
@@ -273,6 +333,17 @@ export default {
       context.report({ node, messageId: 'knownService', data: { host } })
     }
 
+    /** Detection 2, at whichever syntax pulled the dependency in. */
+    function checkRequest(node, request) {
+      const name = namedServicePackage(request)
+      if (!name) return
+      context.report({
+        node,
+        messageId: 'servicePackage',
+        data: { package: name },
+      })
+    }
+
     return {
       Literal(node) {
         if (typeof node.value === 'string') checkText(node, node.value)
@@ -282,7 +353,33 @@ export default {
         checkText(node, node.value?.cooked ?? node.value?.raw)
       },
 
-      // Detection 2 — the shipped shape, at the element that fetches.
+      // Detection 2 — `import`, `export … from`, `import()`, `require()`.
+      ImportDeclaration(node) {
+        checkRequest(node, node.source?.value)
+      },
+
+      ExportNamedDeclaration(node) {
+        if (node.source) checkRequest(node, node.source.value)
+      },
+
+      ExportAllDeclaration(node) {
+        if (node.source) checkRequest(node, node.source.value)
+      },
+
+      ImportExpression(node) {
+        if (node.source?.type === 'Literal') {
+          checkRequest(node, node.source.value)
+        }
+      },
+
+      CallExpression(node) {
+        if (node.callee?.type !== 'Identifier') return
+        if (node.callee.name !== 'require') return
+        const [first] = node.arguments
+        if (first?.type === 'Literal') checkRequest(node, first.value)
+      },
+
+      // Detection 3 — the shipped shape, at the element that fetches.
       JSXAttribute(node) {
         if (!SOURCE_ATTRIBUTES.has(node.name?.name)) return
         const container = node.value

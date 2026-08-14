@@ -14,29 +14,34 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {
-  gravatarUrlFromEmail,
-  type GravatarUrlOptions,
-} from '@aglyn/shared-util-tools'
-import { useMemo } from 'react'
 import { useUser } from './firebase/firebase-services'
-
-export function useUserGravatar(options?: GravatarUrlOptions) {
-  const { data } = useUser()
-  const email = data?.email
-  return useMemo(() => gravatarUrlFromEmail(email, options), [email, options])
-}
 
 export function useUserPhotoUrl() {
   const { data } = useUser()
   return data?.photoURL
 }
 
-export function useUserPhoto(options?: { gravatar: GravatarUrlOptions }) {
-  const gravatar = useUserGravatar(options?.gravatar)
-  const photoUrl = useUserPhotoUrl()
-
-  return useMemo(() => photoUrl || gravatar, [gravatar, photoUrl])
+/**
+ * The signed-in user's own avatar URL, or nothing (AGL-1683).
+ *
+ * This used to fall back to `gravatarUrlFromEmail(email)`, so every console
+ * page that showed the account chip sent gravatar.com an MD5 of the signed-in
+ * user's email address along with their IP and a `Referer` naming the console.
+ * An email MD5 is not an anonymisation — a gravatar hash is *designed* to be
+ * looked up by anyone who has seen the address — and Automattic is on no
+ * subprocessor register of ours.
+ *
+ * Worse than the leak itself: `gravatar.url(undefined)` still returns a URL
+ * (the MD5 of the string "undefined"), so this hook never returned a falsy
+ * value and the request fired even for a user with no email resolved yet.
+ * Callers that treat "no photo" as "draw the initial" were unreachable.
+ *
+ * Callers now render initials themselves when this is empty — see
+ * `MemberAvatar` in the console, which is the shared answer for a member's
+ * face. No options: there is nothing left to size.
+ */
+export function useUserPhoto() {
+  return useUserPhotoUrl()
 }
 
 export default useUserPhoto

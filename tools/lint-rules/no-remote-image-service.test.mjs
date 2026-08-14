@@ -48,8 +48,13 @@ const ruleTester = new RuleTester({
  * not an exemption worth carving.
  */
 const QR_HOST = ['api', 'qrserver', 'com'].join('.')
+const GRAVATAR_HOST = ['gravatar', 'com'].join('.')
 
 const knownService = (host) => ({ messageId: 'knownService', data: { host } })
+const servicePackage = (name) => ({
+  messageId: 'servicePackage',
+  data: { package: name },
+})
 const interpolated = (host, attribute = 'src') => ({
   messageId: 'interpolatedRemoteSource',
   data: { host, attribute },
@@ -109,6 +114,19 @@ ruleTester.run('no-remote-image-service', rule, {
     // Static image sources on unknown hosts are a disclosure question, not a
     // data-egress one, and this rule is not the place to litigate them.
     `const C = () => <img src="https://images.example.com/logo.png" />`,
+
+    // THE AGL-1683 FIX. Initials drawn from the roster fields we already
+    // hold; no vendor, no hash, no request.
+    `import { splitDisplayName } from '@aglyn/shared-util-tools'
+     const C = ({ displayName, photoURL }: any) => (
+       <Avatar src={photoURL || undefined}>{splitDisplayName(displayName).firstName.slice(0, 1)}</Avatar>
+     )`,
+
+    // Detection 2 is a name denylist, not "any import that might fetch".
+    // Ordinary imports — including ones that DO make requests — are silent.
+    `import axios from 'axios'
+     import QRCode from 'qrcode.react'
+     const gravatarish = require('gravatar-picker-ui-kit')`,
   ],
 
   invalid: [
@@ -158,7 +176,48 @@ ruleTester.run('no-remote-image-service', rule, {
       errors: [knownService('images.weserv.nl')],
     },
 
-    // DETECTION 2 — the case that matters for the vendor nobody has denied
+    // DETECTION 2 — AGL-1683, the shape detection 1 cannot see. This is
+    // `gravatar-url-from-email.ts` as it shipped: the host is assembled
+    // inside the dependency, so the only visible evidence is the import.
+    {
+      code: `export {
+           Options as GravatarUrlOptions,
+           profile_url as gravatarProfileUrlFromEmail,
+           url as gravatarUrlFromEmail,
+         } from 'gravatar'`,
+      errors: [servicePackage('gravatar')],
+    },
+    {
+      code: `import { url } from 'gravatar'
+         const src = url(member.email, { size: '64', default: '404' })`,
+      errors: [servicePackage('gravatar')],
+    },
+    {
+      code: `const { url } = require('gravatar/lib/gravatar')`,
+      errors: [servicePackage('gravatar')],
+    },
+    {
+      code: `const load = () => import('gravatar-url')`,
+      errors: [servicePackage('gravatar-url')],
+    },
+    {
+      code: `export * from 'gravatar'`,
+      errors: [servicePackage('gravatar')],
+    },
+
+    // …and once the package is gone, the other door back in is typing the
+    // host. Every subdomain the package could emit is one entry, so a `4.`
+    // nobody listed is covered too.
+    {
+      code: `const src = 'https://secure.${GRAVATAR_HOST}/avatar/' + md5(email)`,
+      errors: [knownService(GRAVATAR_HOST)],
+    },
+    {
+      code: `const src = \`https://s.${GRAVATAR_HOST}/avatar/\${hash}?d=404\``,
+      errors: [knownService(GRAVATAR_HOST)],
+    },
+
+    // DETECTION 3 — the case that matters for the vendor nobody has denied
     // yet. Same shipped shape, unknown host, still our data in their query
     // string on every render.
     {

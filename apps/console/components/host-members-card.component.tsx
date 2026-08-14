@@ -150,9 +150,10 @@ export function HostMembersCard(props: HostMembersCardProps) {
   // These rows come from `hosts/{hostId}/members`, a different collection
   // whose only writer sets an explicit field list with no `photoURL` on it —
   // so `member.photoURL` was `undefined` for every row and MemberAvatar fell
-  // through to Gravatar. That went unnoticed because the OWNER row reads its
-  // org member doc directly (just above) and therefore did render a stored
-  // photo: the one row that worked was the one being looked at.
+  // through to Gravatar (since removed, AGL-1683 — the fallback is initials
+  // now). That went unnoticed because the OWNER row reads its org member doc
+  // directly (just above) and therefore did render a stored photo: the one
+  // row that worked was the one being looked at.
   //
   // Joining rather than copying the field onto the host doc keeps one source
   // of truth for a member's face, which is what AGL-1126 was for. One `in`
@@ -399,8 +400,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
                     sx={{ alignItems: 'center' }}
                   >
                     {/* No avatar here at all before AGL-1126. An invited row
-                        still gets one — Gravatar works off the email alone,
-                        which is all an invite has. */}
+                        still gets one — the initial comes off the email's
+                        local part, which is all an invite has. */}
                     <MemberAvatar
                       photoURL={
                         member.uid ? photoByUid.get(member.uid) : undefined

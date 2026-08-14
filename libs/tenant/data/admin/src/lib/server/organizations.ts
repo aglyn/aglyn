@@ -730,9 +730,11 @@ export interface UpsertOrgMemberOptions {
    *
    * Every member surface reads the roster; none of them can read Firebase
    * Auth for an SSO member, whose record lives in a per-org tenant pool
-   * (AGL-1122). Without this the console falls back to Gravatar for
+   * (AGL-1122). Without this the console falls back to drawn initials for
    * everyone — fine, but it means a member who HAS a picture still never
-   * shows it. Display data only: never an identity or authorization source.
+   * shows it. This is the ONLY source of a real face now that the Gravatar
+   * fallback is gone (AGL-1683), so keeping it populated matters more than
+   * it did. Display data only: never an identity or authorization source.
    */
   photoURL?: string | null
   /** Job title shown on the roster/member page (AGL-364). */

@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { gravatarUrlFromEmail } from '@aglyn/shared-util-tools'
+import { splitDisplayName } from '@aglyn/shared-util-tools'
 import { Avatar, type AvatarProps } from '@mui/material'
 import { useMemo } from 'react'
 
@@ -25,55 +25,81 @@ export interface MemberAvatarProps extends Omit<AvatarProps, 'src' | 'alt'> {
   photoURL?: string | null
   email?: string | null
   displayName?: string | null
-  /** Rendered pixel size; the Gravatar request asks for 2× it. */
+  /** Rendered pixel size. */
   size?: number
+}
+
+/**
+ * Initials for a member, drawn locally when there is no stored photo.
+ *
+ * `splitDisplayName` is already the console's answer for "one provider string,
+ * two name fields" (AGL-1127), so the two-letter form follows whatever that
+ * decides rather than a second, differently-naive parse. A single-word name
+ * gives one letter; an invited row has only an email, so the local part
+ * before `@` stands in — `ada@example.com` reads as "A", not "@".
+ */
+export function memberInitials(
+  displayName?: string | null,
+  email?: string | null,
+): string {
+  const { firstName, lastName } = splitDisplayName(displayName)
+  const initials = `${firstName.slice(0, 1)}${lastName.slice(0, 1)}`.trim()
+  if (initials) return initials.toUpperCase()
+  const localPart = String(email ?? '')
+    .trim()
+    .split('@')[0]
+  return (localPart.slice(0, 1) || '?').toUpperCase()
 }
 
 /**
  * One member's avatar, resolved the same way everywhere (AGL-1126).
  *
- * Order is deliberate: the member's own `photoURL` (what they chose), then
- * Gravatar for their email, then the initial. Before this, every member
- * surface rendered `<Avatar>{initial}</Avatar>` with no `src` at all, so a
- * member with a picture still showed a grey letter.
+ * The member's own `photoURL` (what they chose), then their initials, drawn
+ * here. Before AGL-1126 every member surface rendered `<Avatar>{initial}</Avatar>`
+ * with no `src` at all, so a member with a picture still showed a grey letter.
  *
- * `d=404` is the load-bearing detail. Gravatar's default is to SYNTHESIZE an
- * identicon for any address, so without it every member gets a generated
- * pattern and the initial fallback becomes unreachable. With `404`, an
- * address with no Gravatar fails the image request and MUI falls back to the
- * child — the initial.
+ * There used to be a Gravatar step between those two, and it is gone
+ * (AGL-1683). It put an MD5 of the member's email in a URL to gravatar.com,
+ * which the browser then fetched with the viewer's IP and a `Referer` naming
+ * the console — so opening the members list told Automattic the email
+ * addresses of the org's whole team. An email MD5 anonymises nothing: a
+ * gravatar hash exists precisely to be looked up from an address, and email
+ * addresses are low-entropy enough to enumerate. Automattic is on no
+ * subprocessor register of ours, there was no DPA, no vendor review, no gate,
+ * and no opt-out — and the members list leaks OTHER people's addresses, who
+ * never had the chance to consent for themselves.
  *
- * Works for SSO members too, who are the reason this is not simply read off
- * Firebase Auth: their auth record lives in a per-org tenant pool the console
- * cannot read from the client at all (AGL-1122). Email is on the roster doc;
- * that is enough.
+ * Initials are the substitute because they need no vendor. The photo path is
+ * untouched: `upsertOrgMember` mirrors the provider `photoURL` onto the roster
+ * (AGL-1126) and that is what actually gives most members a face. Works for
+ * SSO members too, whose auth record lives in a per-org tenant pool the
+ * console cannot read from the client at all (AGL-1122).
  */
 export function MemberAvatar(props: MemberAvatarProps) {
   const { photoURL, email, displayName, size = 32, sx, ...rest } = props
   const src = useMemo(() => {
     const stored = String(photoURL ?? '').trim()
-    if (stored) return stored
-    const address = String(email ?? '').trim()
-    return address
-      ? gravatarUrlFromEmail(address, {
-          size: String(size * 2),
-          default: '404',
-          protocol: 'https',
-        })
-      : undefined
-  }, [photoURL, email, size])
+    return stored || undefined
+  }, [photoURL])
 
   const label = String(displayName || email || '?')
+  const initials = memberInitials(displayName, email)
   return (
     <Avatar
       src={src}
       alt={label}
-      // Google/Gravatar CDNs 403 a request that leaks the console referrer.
+      // Google's CDN 403s a request that leaks the console referrer.
       slotProps={{ img: { referrerPolicy: 'no-referrer' } }}
-      sx={{ width: size, height: size, fontSize: size * 0.45, ...sx }}
+      sx={{
+        width: size,
+        height: size,
+        // Two letters need to fit the same circle one did.
+        fontSize: size * (initials.length > 1 ? 0.36 : 0.45),
+        ...sx,
+      }}
       {...rest}
     >
-      {label.slice(0, 1).toUpperCase()}
+      {initials}
     </Avatar>
   )
 }
