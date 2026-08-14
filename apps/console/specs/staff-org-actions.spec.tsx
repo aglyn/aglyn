@@ -20,11 +20,18 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 /**
  * AGL-939: the shared staff org actions — override, suspend/unsuspend and
  * erasure request — extracted from the Organizations list so the org detail
- * page carries them too. Pinned here per the issue's contract: every action
- * writes the org doc AND an `adminAudit` entry with the actor uid, suspension
- * sits behind its reason dialog, and erasure is two-step (button → explicit
- * confirmation) that only FLAGS the org — a declined confirmation must write
- * nothing at all.
+ * page carries them too. Override and erasure write the org doc AND an
+ * `adminAudit` entry with the actor uid; erasure is two-step (button →
+ * explicit confirmation) that only FLAGS the org — a declined confirmation
+ * must write nothing at all.
+ *
+ * SUSPENSION IS DIFFERENT (AGL-1505): it must flow through the lockdown
+ * core — `POST /api/admin/lockdown { scope: 'org' }` — and must NEVER touch
+ * Firestore from the client. The legacy client write set the flag and
+ * nothing else, so the `orgSuspended` member projection, token revocation
+ * and tenant cache eviction never happened. The suspend tests here assert
+ * both directions: the route IS called with the core's shape, and the
+ * Firestore mocks are NOT — re-adding a direct write turns them red.
  *
  * Authorization is server-side (the scoped Firestore rules and the
  * staff-gated endpoints); the non-staff 403 is asserted against
@@ -101,35 +108,48 @@ describe('StaffOrgActions (AGL-939)', () => {
     })) as unknown as typeof fetch
   })
 
-  it('suspends through the reason dialog: org doc flagged, audit entry with the actor', async () => {
+  it('suspend flows through the lockdown core: POST /api/admin/lockdown, org scope, reason code + notice', async () => {
     const onChanged = jest.fn()
     render(<StaffOrgActions org={org()} onChanged={onChanged} />)
     fireEvent.click(screen.getByText('Suspend'))
     const dialog = screen.getByRole('dialog')
     fireEvent.change(
-      within(dialog).getByLabelText('Reason (shown to the owner)'),
+      within(dialog).getByLabelText('Notice (shown to the owner and visitors)'),
       { target: { value: 'spam network' } },
     )
     fireEvent.click(within(dialog).getByText('Suspend'))
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
-    const [target, write, options] = setDocPayload()
-    expect(target.path).toBe('orgs/org-1')
-    expect(options).toEqual({ merge: true })
-    expect(write['suspendedAt']).toEqual({ seconds: 1_700_000_000 })
-    expect(write['suspendedReason']).toBe('spam network')
-    const [auditTarget, audit] = auditPayload()
-    expect(auditTarget.path).toBe('adminAudit')
-    expect(audit.action).toBe('org.suspend')
-    expect(audit.actorUid).toBe('staff-1')
-    expect(audit.target).toBe('orgs/org-1')
-    expect(audit.after).toEqual({ suspended: true, reason: 'spam network' })
+    const [url, init] = (global.fetch as jest.Mock).mock.calls[0] as [
+      string,
+      { method: string; headers: Record<string, string>; body: string },
+    ]
+    expect(url).toBe('/api/admin/lockdown')
+    expect(init.method).toBe('POST')
+    expect(init.headers['Authorization']).toBe('Bearer tok')
+    expect(JSON.parse(init.body)).toEqual({
+      scope: 'org',
+      targetId: 'org-1',
+      action: 'lock',
+      reason: 'manual',
+      message: 'spam network',
+    })
+    // The AGL-1505 tripwire: the legacy path wrote the org doc and an
+    // adminAudit row from the CLIENT, which set the flag without the
+    // projection fan-out, revocation or cache eviction. Re-adding ANY
+    // direct write turns these red — the route is the only writer (and it
+    // writes the audit row server-side).
+    expect(mockSetDoc).not.toHaveBeenCalled()
+    expect(mockAddDoc).not.toHaveBeenCalled()
   })
 
-  it('unsuspends: the flag keys become delete sentinels, audited as org.unsuspend', async () => {
+  it('unsuspend posts action:unlock to the same route — still no direct write', async () => {
     const onChanged = jest.fn()
     render(
       <StaffOrgActions
-        org={org({ suspendedAt: { seconds: 1 }, suspendedReason: 'spam' })}
+        org={org({
+          suspendedAt: { seconds: 1 },
+          suspendedReasonCode: 'security',
+        })}
         onChanged={onChanged}
       />,
     )
@@ -137,10 +157,62 @@ describe('StaffOrgActions (AGL-939)', () => {
     const dialog = screen.getByRole('dialog')
     fireEvent.click(within(dialog).getByText('Unsuspend'))
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
-    const [, write] = setDocPayload()
-    expect(write['suspendedAt']).toBe('__DELETE__')
-    expect(write['suspendedReason']).toBe('__DELETE__')
-    expect(auditPayload()[1].action).toBe('org.unsuspend')
+    const [url, init] = (global.fetch as jest.Mock).mock.calls[0] as [
+      string,
+      { method: string; body: string },
+    ]
+    expect(url).toBe('/api/admin/lockdown')
+    expect(JSON.parse(init.body)).toEqual({
+      scope: 'org',
+      targetId: 'org-1',
+      action: 'unlock',
+    })
+    expect(mockSetDoc).not.toHaveBeenCalled()
+    expect(mockAddDoc).not.toHaveBeenCalled()
+  })
+
+  it('the suspend dialog prefills the stored lockdown reason code and notice', () => {
+    render(
+      <StaffOrgActions
+        org={org({
+          suspendedReasonCode: 'security',
+          suspendedMessage: 'Account compromised',
+        })}
+        onChanged={jest.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByText('Suspend'))
+    const dialog = screen.getByRole('dialog')
+    const notice = within(dialog).getByLabelText(
+      'Notice (shown to the owner and visitors)',
+    ) as HTMLInputElement
+    expect(notice.value).toBe('Account compromised')
+    // The MUI select renders its current value as text.
+    expect(within(dialog).getByText('security')).toBeTruthy()
+  })
+
+  it('a lockdown route failure surfaces the server error and writes nothing', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: 'Requires the super staff role' }),
+    })
+    const onChanged = jest.fn()
+    render(<StaffOrgActions org={org()} onChanged={onChanged} />)
+    fireEvent.click(screen.getByText('Suspend'))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(within(dialog).getByText('Suspend'))
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        'Requires the super staff role',
+        expect.objectContaining({ variant: 'error' }),
+      ),
+    )
+    expect(onChanged).not.toHaveBeenCalled()
+    expect(mockSetDoc).not.toHaveBeenCalled()
+    expect(mockAddDoc).not.toHaveBeenCalled()
+    // The dialog stays open so the operator can retry or bail.
+    expect(screen.getByRole('dialog')).toBeTruthy()
   })
 
   it('erasure is two-step: the confirmation names the 7-day hold, then flags and audits', async () => {
