@@ -22,6 +22,7 @@
 
 /**
  * AGL-1228: the tenant must not advertise a `script-src` it cannot satisfy.
+ * AGL-1703: it now DOES send a report-only header, and this file had to change.
  *
  * A report-only `script-src 'self' 'nonce-…' 'strict-dynamic'` used to ship on
  * every published page. Measured on two live sites, a page carried **33
@@ -34,9 +35,29 @@
  * "we're measuring before enforcing", and nothing about the running site
  * complains. This suite is the thing that complains.
  *
- * It asserts absence, which is worth being careful about — an absence test
- * passes trivially against a middleware that returns nothing at all. So the
- * base directives that DO enforce are asserted present in the same breath.
+ * ## What changed, and why it is not a loosening
+ *
+ * This file used to assert `Content-Security-Policy-Report-Only` was **null**.
+ * AGL-1703 ships one carrying a report-only `img-src`, so that assertion had to
+ * go — and deleting it would have thrown away the AGL-1228 guarantee along with
+ * it, because "no report-only header" was standing in for "no unsatisfiable
+ * `script-src`". The two are now separated: the header may exist, and every
+ * ingredient of the AGL-1228 defect is pinned by name in it.
+ *
+ * The distinction is mechanical rather than stylistic. AGL-1228's header was
+ * unsatisfiable because it advertised a **per-request nonce** against
+ * **ISR-cached bytes** — two requests to one cached page returned byte-identical
+ * HTML with a different nonce in each response header, so the policy could never
+ * be met. An `img-src` has no per-request component at all: the same string on
+ * every response, agreeing with the cached bytes by construction. So the test to
+ * write is not "is there a header" but "does it contain anything per-request",
+ * which is what `nonce-`, `script-src` and `strict-dynamic` are proxies for.
+ *
+ * It still asserts absence in places, which is worth being careful about — an
+ * absence test passes trivially against a middleware that returns nothing at
+ * all. So the base directives that DO enforce are asserted present in the same
+ * breath, and the report-only header is asserted to actually carry `img-src`
+ * rather than merely to exist.
  */
 
 import { NextRequest } from 'next/server'
@@ -70,11 +91,18 @@ const headersFor = async (path = '/'): Promise<Headers> => {
 }
 
 describe('tenant CSP (AGL-1228)', () => {
-  it('sends NO report-only header at all', async () => {
-    // The whole point. A report-only policy nobody can satisfy costs a header
-    // on every response and returns nothing.
-    const headers = await headersFor()
-    expect(headers?.get('Content-Security-Policy-Report-Only')).toBeNull()
+  it('sends no `script-src`, nonce or `strict-dynamic` in the REPORT-ONLY policy', async () => {
+    // This replaces `expect(...).toBeNull()`. The guarantee is unchanged in
+    // substance and narrower in wording: the header may exist — AGL-1703 needs
+    // one — but not one carrying the ingredient that made AGL-1228's version
+    // unsatisfiable. A per-request nonce cannot match ISR-cached bytes, so any
+    // of these three reappearing here recreates a policy that reports every
+    // script on every page load of every published site.
+    const reportOnly =
+      (await headersFor())?.get('Content-Security-Policy-Report-Only') ?? ''
+    expect(reportOnly).not.toContain('script-src')
+    expect(reportOnly).not.toContain('strict-dynamic')
+    expect(reportOnly).not.toContain('nonce-')
   })
 
   it('sends no `script-src` in the enforcing policy either', async () => {
@@ -109,5 +137,90 @@ describe('tenant CSP (AGL-1228)', () => {
     // that way first and caught by re-adding the code and watching it pass.
     const headers = await headersFor()
     expect(headers?.get('x-middleware-request-x-nonce')).toBeNull()
+  })
+})
+
+describe('tenant report-only img-src (AGL-1703)', () => {
+  it('CONTROL — the report-only header exists and actually carries `img-src`', async () => {
+    // The counterpart to the base-directive control above. Every assertion in
+    // this block is about the CONTENTS of a header, and all of them would pass
+    // against a middleware that stopped sending it — which is the regression
+    // this whole arc exists to prevent, since a policy that reports nothing is
+    // indistinguishable from a site with nothing to report.
+    const reportOnly =
+      (await headersFor())?.get('Content-Security-Policy-Report-Only') ?? ''
+    expect(reportOnly).toContain('img-src')
+    expect(reportOnly).toContain("'self'")
+  })
+
+  it('keeps `img-src` OUT of the enforcing policy', async () => {
+    // The load-bearing one. Enforcing this list would blank author-hotlinked
+    // images across published customer sites — a stranger's shopfront, failing
+    // silently. AGL-1726 states what must be true before that flips; until
+    // then, an `img-src` reaching the enforcing header is the bug.
+    const policy = (await headersFor())?.get('Content-Security-Policy') ?? ''
+    expect(policy).not.toContain('img-src')
+  })
+
+  it('carries BOTH reporting directives and resolves the `report-to` group', async () => {
+    // AGL-518 shipped a report-only policy with no reporting directive for
+    // months: it detected violations, told nobody, and read as an all-clear.
+    // `report-uri` is what Safari and older Chrome send; `report-to` is the
+    // modern one and is silently ignored unless `Reporting-Endpoints` names its
+    // group. Sending one alone loses a browser family.
+    const headers = await headersFor()
+    const reportOnly = headers?.get('Content-Security-Policy-Report-Only') ?? ''
+    expect(reportOnly).toContain('report-uri /api/csp-report')
+    expect(reportOnly).toContain('report-to csp')
+    expect(headers?.get('Reporting-Endpoints')).toBe('csp="/api/csp-report"')
+  })
+
+  it('reports to a RELATIVE path, never an absolute aglyn origin', async () => {
+    // The endpoint must resolve against the customer's own document. An
+    // absolute URL here would make every visitor to every customer's website
+    // issue a cross-origin request to an aglyn host — a CORS preflight per
+    // origin, and our hostname in the network log of a stranger reading
+    // someone's blog.
+    const reportOnly =
+      (await headersFor())?.get('Content-Security-Policy-Report-Only') ?? ''
+    expect(reportOnly).not.toContain('https://console.aglyn')
+    expect(reportOnly).not.toContain('report-uri http')
+  })
+
+  it('allowlists the DAM storage host and nothing else third-party', async () => {
+    // `firebasestorage.googleapis.com` is not optional: orgs without the paid
+    // `mediaCdn` entitlement store the absolute download URL, so dropping it
+    // blanks every FREE-TIER customer's images while paying customers' sites
+    // keep working.
+    //
+    // The absence pins name bare labels rather than full origins, following
+    // pos-card-qr-local.spec: `no-remote-image-service` cannot tell an
+    // assertion of absence from a use. `lh3` is pinned because it is in the
+    // CONSOLE list and copying that list over is the obvious wrong move — the
+    // tenant loads no Firebase client SDK and renders no account avatars.
+    // The analytics hosts are pinned because gtag runs on published sites and
+    // silencing its own image beacon by allowlisting it is the AGL-1671
+    // mistake played backwards.
+    const reportOnly =
+      (await headersFor())?.get('Content-Security-Policy-Report-Only') ?? ''
+    expect(reportOnly).toContain('https://firebasestorage.googleapis.com')
+    expect(reportOnly).not.toContain('lh3')
+    expect(reportOnly).not.toContain('doubleclick')
+    expect(reportOnly).not.toContain('google-analytics')
+    expect(reportOnly).not.toContain('googletagmanager')
+  })
+
+  it('does not drag in the 26 console first-party origins', async () => {
+    // `imgSrcDirective` was the obvious thing to reuse and is the wrong shape:
+    // a customer's website loads no images from `console.aglyn.com`, and every
+    // unneeded entry is one the reports cannot distinguish from a needed one.
+    // `'self'` is what covers the site's own origin — including the
+    // `*.aglyn.app` subdomain, which appears in `PRODUCTION_DOMAINS` nowhere,
+    // and the custom domain, which could not appear there in principle.
+    const reportOnly =
+      (await headersFor())?.get('Content-Security-Policy-Report-Only') ?? ''
+    expect(reportOnly).not.toContain('console.aglyn')
+    expect(reportOnly).not.toContain('admin.aglyn')
+    expect(reportOnly).not.toContain('cname.aglyn')
   })
 })

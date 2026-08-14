@@ -43,6 +43,7 @@ import {
 } from '@aglyn/aglyn-markdown-editor'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
 import { docsHelp } from '../../constants/docs-links'
+import { mediaNodeSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import mediaSrc from '../../utils/media-src'
 import { buildRoute, Route } from '../../constants/route-links'
 
@@ -1009,8 +1010,14 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
         onClose={() => setPickingReadmeImage(false)}
         onPick={(media) => {
           setPickingReadmeImage(false)
-          const url = mediaSrc(media ?? {})
-          if (url) readmeEditorRef.current?.insertImage('', url)
+          // A reference, not the origin-absolute CDN URL (AGL-1705) — the
+          // same switch the listing detail editor's README body makes, and
+          // for the reason established there: this markdown renders only in
+          // the console, through the one `marketplaceListing` slot, so
+          // nothing was relying on the baked-in origin. `?? mediaSrc` keeps
+          // the free-tier fallback, where no `cdnPath` is minted.
+          const src = mediaNodeSrc(media ?? {}) ?? mediaSrc(media ?? {})
+          if (src) readmeEditorRef.current?.insertImage('', src)
         }}
       />
     </Stack>

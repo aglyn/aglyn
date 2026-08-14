@@ -40,6 +40,19 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
       const { listingId, buyerUid, sellerOrgId, feeCents, transferCents } =
         object.metadata ?? {}
       if (listingId && buyerUid && sellerOrgId) {
+        // The remittance-correct split (AGL-1544), read ONCE and used by both
+        // the ledger and the GA hit (AGL-1639) — the two must not be able to
+        // describe the same sale differently.
+        //
+        // `amount_total` is the tax-inclusive GROSS the buyer paid. Out of it:
+        // `taxCents` is what the PLATFORM owes the state (collected under the
+        // marketplace-provider registration, never ours), and `sellerCents` is
+        // the fixed transfer the seller's Connect account received (their
+        // share of the pre-tax price). What is left is what Aglyn keeps.
+        const grossCents = Number(object?.amount_total ?? 0)
+        const taxCents = Number(object?.total_details?.amount_tax ?? 0)
+        const sellerCents = Number(transferCents ?? 0)
+        const netCents = grossCents - taxCents - sellerCents
         await firebaseAdmin
           .app()
           .firestore()
@@ -49,15 +62,12 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
             listingId,
             buyerUid,
             sellerOrgId,
-            // The remittance-correct split (AGL-1544): amount_total includes
-            // the tax automatic_tax added on top; taxCents is what the
-            // PLATFORM owes the state, transferCents is what the seller
-            // received (their share of the pre-tax price). Gross − tax −
-            // transfer = the platform fee, which feeCents also records.
-            amountCents: Number(object?.amount_total ?? 0),
+            // Gross − tax − transfer = the platform fee, which feeCents also
+            // records independently from the rate resolved at checkout.
+            amountCents: grossCents,
             feeCents: Number(feeCents ?? 0),
-            taxCents: Number(object?.total_details?.amount_tax ?? 0),
-            transferCents: Number(transferCents ?? 0),
+            taxCents,
+            transferCents: sellerCents,
             // The refund trail (AGL-1546): `charge.refunded` carries the
             // payment intent, not the session — without this id a refund
             // could never find the purchase it revokes.
@@ -77,9 +87,32 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         // `transaction_id` is the checkout session id — the same key the
         // ledger doc uses — so GA de-duplicates a redelivery exactly as
         // Firestore does.
+        // WHAT COUNTS AS REVENUE ON A MARKETPLACE SALE (AGL-1639)
+        //
+        // Our NET — the platform fee — and not the gross the buyer paid.
+        // Decided once here rather than inferred from whichever Stripe field
+        // was nearest, because the three candidates are genuinely different
+        // numbers:
+        //
+        //   gross incl. tax  reconciles with nothing we own
+        //   GMV ex-tax       what the SELLERS earned, not what we did
+        //   platform net     our books, our MRR, our balance     ← this one
+        //
+        // This is *our* GA property and every other number in it is ours;
+        // subscription `purchase` already reports what Aglyn was paid, and
+        // marketplace revenue has to mean the same thing or the combined
+        // total, ARPA and every revenue-based audience are nonsense. The two
+        // stay separable by `item_category`.
+        //
+        // Tax is excluded rather than folded in, and is deliberately NOT sent
+        // as GA4's `tax` param either: `value` is our fee, so a `tax` beside
+        // it would not be a component of it, and asserting in GA that Aglyn
+        // took this tax is exactly the question the publisher agreement's
+        // seller-of-record clause has open. The ledger doc above keeps the
+        // full split for anyone who needs it.
         void sendGa4Purchase({
           transactionId: String(object.id),
-          value: Number(object?.amount_total ?? 0) / 100,
+          value: netCents / 100,
           currency: String(object?.currency ?? 'usd'),
           items: [
             {
@@ -89,7 +122,8 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
               // dimension when the id already identifies it.
               item_name: String(listingId),
               item_category: 'marketplace',
-              price: Number(object?.amount_total ?? 0) / 100,
+              // GA expects the items to sum to `value`; one item, one price.
+              price: netCents / 100,
               quantity: 1,
             },
           ],

@@ -20,8 +20,9 @@
  * org-scoped from the authenticated key (see api-v1.ts). Datasets/records are
  * the headline CRUD surface; sites, form submissions, and contacts are read.
  */
-import { createHash } from 'node:crypto'
 import {
+  type AttemptClaim,
+  claimAttempt,
   coerceDocumentValues,
   createResourceUid,
   effectiveDatasetModel,
@@ -82,6 +83,77 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
     return body && typeof body === 'object' ? body : {}
   } catch {
     return {}
+  }
+}
+
+// ── Idempotency ─────────────────────────────────────────────────────────────
+
+/**
+ * Take an exclusive claim on one write attempt (AGL-1709), and translate the
+ * transport-agnostic result into a v1 `Response`.
+ *
+ * The claim itself is the shared `claimAttempt` (AGL-1697, `220217133`) — an
+ * unconditional `create()`, where Firestore's rejection on an existing document
+ * IS the dedupe primitive. This resource used to run its own read-then-create,
+ * which is the exact race the mechanism exists to prevent: two concurrent
+ * requests carrying one key both read "no prior key", both fall through, both
+ * create. Worse than no check at all in one respect, because it made the path
+ * look protected. Adopting the shared claim rather than fixing the local copy
+ * is the point — POS, refunds and the REST API now answer this question once.
+ *
+ * `scopeId` carries the ORG as well as the dataset. The helper hashes
+ * `{kind}:{scopeId}:{key}` and its plugin callers pass a globally unique host
+ * id, but a dataset id is only meaningful under its org — and the claim stores
+ * the response body, so a cross-org digest collision would replay one tenant's
+ * record to another. The org belongs in the digest, not just in the swept
+ * field. Scoping by the DATASET is what `apps/docs/api/conventions.md` already
+ * publishes ("replay is looked up within the dataset you're posting to"); the
+ * old org-only digest only reached that outcome by accident, by reading a
+ * `recordId` that did not exist in the other dataset and falling through — and
+ * having fallen through, its key write failed and was swallowed, so the key
+ * never deduped there at all.
+ *
+ * NOTE: the digest changes, so keys stored under the old `orgId:key` shape are
+ * orphaned and a retry straddling this deploy creates a duplicate. Accepted —
+ * the API is pre-beta and the alternative is carrying the race forever.
+ */
+async function claimWrite(
+  ctx: ApiV1Context,
+  datasetId: string,
+  key: string | null,
+): Promise<{ claim: AttemptClaim } | { replay: Response }> {
+  const result = await claimAttempt(ctx.firestore, {
+    kind: 'records',
+    scopeId: `${ctx.orgId}:${datasetId}`,
+    // The field `eraseOrgIdempotencyKeys` sweeps on (AGL-1448).
+    orgId: ctx.orgId,
+    key: key ?? '',
+    busyMessage: 'A request with this Idempotency-Key is still in progress',
+  })
+  if ('claim' in result) return result
+  // The helper is transport-agnostic and answers `{ status, body }`; its
+  // plugin callers hand that straight to a pages-API `res.json()`. v1 publishes
+  // a `{ error: { type, message, code } }` envelope that clients branch on, so
+  // the refusal is rebuilt here rather than leaking the helper's bare
+  // `{ error: '<sentence>' }` onto a documented surface.
+  if (result.replay.status === 409) {
+    return {
+      replay: ApiErrors.conflict({
+        message: 'A request with this Idempotency-Key is still in progress',
+        code: 'idempotency_in_progress',
+        headers: ctx.headers,
+      }),
+    }
+  }
+  // Settled: replay the ORIGINAL response, from the stored body rather than a
+  // fresh read — which is what makes it survive a record since edited or
+  // deleted. The old lookup replayed only while the record still existed and
+  // fell through to a SECOND create otherwise.
+  return {
+    replay: apiJson(result.replay.body, {
+      status: result.replay.status,
+      headers: ctx.headers,
+    }),
   }
 }
 
@@ -218,38 +290,58 @@ async function createRecord(
     })
   }
 
-  // Idempotency: replay a prior create for the same key instead of duplicating.
-  const idempotencyKey = request.headers.get('Idempotency-Key')
-  const idempotencyRef = idempotencyKey
-    ? ctx.firestore
-        .collection('apiIdempotency')
-        .doc(createHash('sha256').update(`${ctx.orgId}:${idempotencyKey}`).digest('hex'))
-    : null
-  if (idempotencyRef) {
-    const prior = await idempotencyRef.get()
-    if (prior.exists) {
-      const priorId = prior.get('recordId') as string
-      const priorSnap = await recordsRef.doc(priorId).get()
-      if (priorSnap.exists) return apiJson(recordView(priorSnap), { status: 200, headers: ctx.headers })
-    }
-  }
+  // Idempotency: replay a prior create for the same key instead of
+  // duplicating. Claimed HERE, below validation, so a deterministic 400 never
+  // takes the key at all — an integrator fixes the payload and retries with
+  // the same key, exactly as the POS cashier does (AGL-1691). Cheaper than
+  // taking-and-releasing, and it cannot leak a claim on a rejection path.
+  const claimed = await claimWrite(
+    ctx,
+    datasetSnap.id,
+    request.headers.get('Idempotency-Key'),
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
 
-  const order = (await recordsRef.count().get()).data().count
-  const recordId = createResourceUid()
-  await recordsRef.doc(recordId).create({
-    values: coerced,
-    order,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-  })
-  if (idempotencyRef) {
-    await idempotencyRef
-      .create({ orgId: ctx.orgId, recordId, createdAt: Timestamp.now() })
-      .catch(() => undefined)
+  try {
+    const order = (await recordsRef.count().get()).data().count
+    const recordId = createResourceUid()
+    await recordsRef.doc(recordId).create({
+      values: coerced,
+      order,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    })
+    const created = await recordsRef.doc(recordId).get()
+    const view = recordView(created)
+    // Recorded as 200, never the 201 this answers: `conventions.md` publishes
+    // the status as how a client tells a fresh create from a replay, and that
+    // is the contract integrations branch on.
+    await claim.record(200, view)
+    return apiJson(view, { status: 201, headers: ctx.headers })
+  } catch (error) {
+    /*
+     * Release on EVERY failure, including one whose outcome we cannot know —
+     * the deliberate opposite of the refund (AGL-1696, `2dd52f01c`), which
+     * strands the key on a throw. Same reasoning, applied where its money term
+     * is absent.
+     *
+     * `datasets/records` is the entire `/v1` write surface — `sites` and
+     * `contacts` are read-only and `dispatchResource` 404s the rest — so
+     * nothing here moves money and "a released key costs a second refund" has
+     * no analogue. The costs invert instead. A duplicate record is visible and
+     * reversible BY THE INTEGRATOR with `DELETE /v1/datasets/{id}/records/{id}`
+     * — same API, same scope, one extra call. A stranded key is irreversible
+     * from outside: keys are documented as never expiring, and an integrator
+     * derives them from their own upstream event ids precisely so retries
+     * dedupe, so a stranded key means that event can never be written at all.
+     *
+     * Residual: a process killed between the claim and the record strands the
+     * key regardless. `createdAtMs` is written so a sweeper can reap those.
+     */
+    await claim.release()
+    throw error
   }
-
-  const created = await recordsRef.doc(recordId).get()
-  return apiJson(recordView(created), { status: 201, headers: ctx.headers })
 }
 
 async function updateRecord(

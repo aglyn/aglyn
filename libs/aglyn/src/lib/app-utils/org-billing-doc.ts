@@ -155,6 +155,63 @@ export function orgBillingStatusFrom(
 }
 
 /**
+ * Subscription statuses that mean "this org is already subscribed" (AGL-1715).
+ *
+ * A STATUS test rather than a "has a subscription record" test, and that is the
+ * part worth preserving: the record — and the `stripeCustomerId` beside it —
+ * both survive cancellation, so the naive form would lock every churned
+ * workspace out of ever paying us again. `incomplete`, `incomplete_expired` and
+ * `unpaid` are out from the other side: there is no live subscription to
+ * protect and a new one is the buyer's only way forward.
+ *
+ * `past_due` IS live. A second subscription does not settle the first one's
+ * unpaid invoice; it adds a charge beside it. Dunning is paid through the
+ * invoices and portal routes.
+ *
+ * THE list, not A list. `live-subscription-status-single-source.spec.ts` fails
+ * the build if this triple is spelled out anywhere else in the repo without an
+ * `AGL-1715-EXEMPT:` line saying why that copy answers a different question.
+ */
+const LIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due']
+
+/**
+ * True when a subscription STATUS word means the subscription is live.
+ *
+ * The status-string half of the predicate, for the call sites that hold a
+ * Stripe subscription object rather than an org billing document — the
+ * `subscriptions?customer=…&status=all` list responses in
+ * `/api/billing/subscription`, `/api/billing/addons` and
+ * `/api/admin/org-discount`, and the webhook status word that
+ * `metered-backfill` decides on. Those cannot be typed as an `OrgBillingDoc`
+ * without lying, and wrapping them in one just to unwrap it again is a cast
+ * that hides the shape. Same list, one entry point per shape.
+ */
+export function isLiveSubscriptionStatus(status: unknown): boolean {
+  return (
+    typeof status === 'string' && LIVE_SUBSCRIPTION_STATUSES.includes(status)
+  )
+}
+
+/**
+ * True when this org already has a live subscription and must not be sold or
+ * provisioned a second one (AGL-1697, AGL-1714).
+ *
+ * Lives here rather than at the call site because the failure mode of the
+ * copies is asymmetric in the expensive direction: if one call site's list ever
+ * narrows relative to another's, a subscribed org gets sold a second
+ * subscription and both bill. AGL-1715 repointed the older inline copies at
+ * this predicate (or at `isLiveSubscriptionStatus` where the value in hand is
+ * a Stripe object): the Billing page, `/api/billing/checkout`,
+ * `/api/billing/subscription`, `/api/billing/addons`,
+ * `/api/admin/org-discount` and `utils/server/metered-backfill`.
+ */
+export function isOrgSubscriptionLive(
+  billing: Partial<OrgBillingDoc> | null | undefined,
+): boolean {
+  return isLiveSubscriptionStatus(orgBillingStatusFrom(billing))
+}
+
+/**
  * True when an org record still carries the moved keys inline — i.e. it has not
  * been through the backfill yet. Used by the read path to decide whether the
  * org doc is a trustworthy fallback, and by the backfill to skip work it has

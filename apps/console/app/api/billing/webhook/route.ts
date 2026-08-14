@@ -34,6 +34,13 @@ import {
   backfillMeteredItem,
   meteredBackfillDecision,
 } from '../../../../utils/server/metered-backfill'
+// The annual-mix metric's only input (AGL-1640) — three-state on purpose, and
+// specced per branch, because a wrong `billing_interval` is indistinguishable
+// from a right one in every report that reads it.
+import {
+  billingIntervalFromInvoice,
+  selectSubscriptionLine,
+} from '../../../../utils/server/billing-interval'
 // Signature verification lives in `utils/server/stripe-signature` so it can be
 // driven directly by spec — it is the security boundary this whole route sits
 // behind, and it must handle the MULTIPLE `v1` signatures a secret roll sends
@@ -385,15 +392,21 @@ async function handler(request: Request): Promise<Response> {
           // analytics hit into a repeated billing side effect.
           if (type === 'invoice.paid') {
             const paidCents = Number(object?.amount_paid ?? amount)
-            const line = object?.lines?.data?.[0]
+            // The line that describes the SUBSCRIPTION, not whatever sorted
+            // first: an invoice carries proration lines, credits and one-off
+            // items, and a mid-cycle switch bills the proration against the
+            // OLD price ahead of the new plan (AGL-1640). Falls back to
+            // index 0 purely so the item keeps a name when no line states a
+            // cadence — the interval itself stays absent in that case.
+            const line = selectSubscriptionLine(object) ?? object?.lines?.data?.[0]
             void sendGa4Purchase({
               transactionId: String(object?.id ?? ''),
               value: paidCents / 100,
               currency: String(object?.currency ?? 'usd'),
-              billingInterval:
-                line?.price?.recurring?.interval === 'year'
-                  ? 'annual'
-                  : 'monthly',
+              // Omitted entirely when the invoice does not say, rather than
+              // defaulted to monthly — an invoice excluded from the annual
+              // mix beats one miscounted in it.
+              billingInterval: billingIntervalFromInvoice(object),
               items: [
                 {
                   item_id: String(line?.price?.id ?? 'subscription'),

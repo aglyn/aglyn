@@ -75,6 +75,11 @@ export function adminNavTabItems() {
       href: buildRoute(Route.ADMIN_LOCKDOWN),
     },
     {
+      id: 'nav-tab-admin-media-quarantine',
+      label: 'Disabled files',
+      href: buildRoute(Route.ADMIN_MEDIA_QUARANTINE),
+    },
+    {
       id: 'nav-tab-admin-audit',
       label: 'Audit log',
       href: buildRoute(Route.ADMIN_AUDIT),

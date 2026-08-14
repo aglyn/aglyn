@@ -1,6 +1,26 @@
 ---
-description: Tenant performance + the 21-issue verification backlog — AGL-1151 (Firestore SDK), AGL-1152 (cold starts), AGL-1150 gaps, and closing In Review
+description: "SUPERSEDED 2026-08-14 — a dated 2026-08-02 session handoff kept for its bundle-measurement method. Use /handoff for the current promotion flow and queue."
 ---
+
+> ⚠️ **SUPERSEDED (2026-08-14) — this is a point-in-time session handoff written
+> 2026-08-02, not a live runbook. For the current promotion flow, working
+> agreements and queue, read `.claude/commands/handoff.md` and `.claude/HANDOFF.md`;
+> where they disagree with anything below, they win.** Corrected in place (AGL-1704):
+>
+> - **Promotion is NOT pre-authorised.** The "standing permission" granted below
+>   applied to the 2026-08-02 session only. **Promotion needs Zach's word before
+>   it starts**, and you never open a production PR unasked.
+> - **Gate in a pinned worktree, never the live checkout.** "Build the console
+>   locally before promoting" is right about CI not being a signal, but with other
+>   agents mid-edit the live working tree produces false reds — and the gate must
+>   run **build + test + lint**, each exit code read bare, never through a pipe.
+> - **The suggested order is spent.** AGL-1152 was measured and closed; treat the
+>   whole list, and the "21 issues sitting In Review", as history and re-derive
+>   from Linear.
+>
+> Still worth reading: **"Read this before touching the bundle"** — the
+> string-literal extraction method is still the right way to attribute a chunk,
+> and **"Things that will bite you"**.
 
 Continue the **tenant performance** work and clear the verification backlog.
 Picks up from `/payments-and-profiles` on 2026-08-02.
@@ -8,8 +28,8 @@ Picks up from `/payments-and-profiles` on 2026-08-02.
 Work issues in Linear: **In Progress** when you start, **In Review** when it
 lands, **Done** once verified in production. One conventional commit per
 AGL-### on `main`, then promote with a PR `main` → `production` and **merge it**
-(never squash). Standing permission for that promotion is granted — build and
-verify first.
+(never squash). ~~Standing permission for that promotion is granted~~ — **corrected
+2026-08-14: promotion needs Zach's word before it starts.**
 
 ## Read this before touching the bundle
 

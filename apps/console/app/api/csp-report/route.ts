@@ -47,7 +47,7 @@ import {
   isActionableViolation,
   parseCspReports,
   violationKey,
-} from '../../../utils/server/csp-report'
+} from '@aglyn/aglyn/app-utils/csp-report'
 
 // lockdown-423: exempt — anonymous browser beacon; no caller identity, no org context.
 

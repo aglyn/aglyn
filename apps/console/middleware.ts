@@ -31,7 +31,7 @@ import { enforceSanctionsGeo } from './constants/sanctions-geo'
 // through a lib would mean the config could not read it, and the two would
 // drift into disagreeing CSPs, which is the exact class of bug AGL-523 was.
 // eslint-disable-next-line @nx/enforce-module-boundaries
-import { baseCspDirectives } from '../../security-origins'
+import { baseCspDirectives, imgSrcDirective } from '../../security-origins'
 
 /**
  * Where violations are posted (AGL-523). Same-origin and outside the matcher
@@ -313,6 +313,28 @@ export async function middleware(request: NextRequest) {
   const scriptSrc = `script-src 'self' https: blob: 'nonce-${nonce}'${
     isProduction ? '' : " 'unsafe-eval'"
   }`
+  // CSP img-src: REPORT-ONLY, on purpose (AGL-1685). The reasoning for the
+  // directive's contents lives with it in `security-origins.js`; what belongs
+  // here is why it goes in a SECOND header rather than into the one above.
+  //
+  // The rule this file opens with says there must be exactly ONE
+  // `Content-Security-Policy`, and that is still true — this is not a second
+  // one. The hazard that rule exists for is the nonce: Next resolves it with
+  // `content-security-policy || …-report-only`
+  // (`next/dist/server/app-render/app-render.js:167`, read in the installed
+  // version, not assumed), so a report-only header can only ever shadow the
+  // nonce when the ENFORCING header is missing or carries no `script-src`.
+  // Ours always carries it, three lines up, so the `||` short-circuits before
+  // the header below is ever consulted. Deleting `script-src` from the
+  // enforcing policy is what would make this dangerous — not adding this.
+  //
+  // Putting `img-src` into the enforcing header instead is the thing not to do
+  // until the reports say it is safe. Eight product surfaces let a user, a
+  // publisher or an enterprise IdP put an arbitrary host into an `<img>` — they
+  // are listed against `imgSrcDirective` — so enforcing today breaks features,
+  // and breaks them the quiet way: an avatar or a customer's own logo that
+  // stops rendering for one org and throws nothing.
+  const imgSrc = imgSrcDirective(isProduction)
   // BOTH directives, because neither is universally supported: `report-uri` is
   // deprecated but is what Safari and older Chrome actually send, while
   // `report-to` is the modern one and needs the `Reporting-Endpoints` header
@@ -343,6 +365,17 @@ export async function middleware(request: NextRequest) {
     res.headers.set(
       'Content-Security-Policy',
       `${scriptSrc}; ${baseDirectives}; ${reportDirectives}`,
+    )
+    // The candidate `img-src`, measured before it is enforced (AGL-1685).
+    // It carries its own `report-uri`/`report-to`: a report-only policy with no
+    // reporting directive is the exact mistake AGL-518 shipped for months —
+    // it detects violations and tells nobody, which reads as an all-clear.
+    // Reports arrive at the same collector with `disposition: "report"` and
+    // `effectiveDirective: "img-src"`, so they are separable from the enforcing
+    // script-src stream in the log without a second endpoint.
+    res.headers.set(
+      'Content-Security-Policy-Report-Only',
+      `${imgSrc}; ${reportDirectives}`,
     )
     return res
   }

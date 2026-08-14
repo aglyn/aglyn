@@ -107,7 +107,34 @@ interface VerdictProbe {
     untilMs?: number
   } | null
   refusal: { status: number; body: unknown } | null
+  /**
+   * The verdict asked BOTH ways (AGL-1628). `locked`/`refusal` above are the
+   * WRITE case, which is what they always meant; a read-only lock is the case
+   * where these two disagree, and that disagreement is the whole answer.
+   * Optional so a page served against an older API does not blank out.
+   */
+  reads?: { locked: boolean; refusal: { status: number; body: unknown } | null }
+  writes?: { locked: boolean; refusal: { status: number; body: unknown } | null }
   features: { feature: string; locked: boolean; body: unknown }[]
+}
+
+/**
+ * The one line an operator needs during an incident: is this caller refused
+ * for everything, for writes only, or for nothing? Null when the probe did
+ * not report intents, so nothing is asserted that was not measured.
+ */
+function verdictIntentSummary(probe: VerdictProbe): string | null {
+  const { reads, writes } = probe
+  if (!reads || !writes) return null
+  if (reads.locked && writes.locked)
+    return 'Reads AND writes refuse — this caller is fully locked out.'
+  if (!reads.locked && writes.locked)
+    return 'Reads pass, writes refuse — this workspace is read-only. Their site keeps serving and they can browse the console; saving is what fails.'
+  if (reads.locked && !writes.locked)
+    // Not reachable through any lock this system can engage; say so rather
+    // than render a confident sentence about an impossible state.
+    return 'Reads refuse but writes pass — that combination should not be possible; capture this response.'
+  return 'Neither reads nor writes are refused for this caller.'
 }
 
 interface ActionLogEntry {
@@ -922,7 +949,14 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                               verdict.staffBypass
                                 ? 'STAFF — BYPASSES EVERY SCOPE'
                                 : verdict.locked
-                                  ? `REFUSED ${verdict.refusal?.status ?? 423}`
+                                  ? // Name WHICH half is refused when only
+                                    // one is: "REFUSED" alone reads as an
+                                    // outage on a site that is still serving.
+                                    `${
+                                      verdict.reads && !verdict.reads.locked
+                                        ? 'WRITES REFUSED'
+                                        : 'REFUSED'
+                                    } ${verdict.refusal?.status ?? 423}`
                                   : 'NOT REFUSED'
                             }
                             color={
@@ -950,7 +984,14 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                               'That account carries the staff claim, so it is never refused by any lockdown — this answer says nothing about whether a lock is engaged.'
                             }
                           </Typography>
-                        ) : null}
+                        ) : (
+                          (() => {
+                            const summary = verdictIntentSummary(verdict)
+                            return summary ? (
+                              <Typography variant="body2">{summary}</Typography>
+                            ) : null
+                          })()
+                        )}
                         <Typography variant="caption" color="text.secondary">
                           {`Scopes evaluated: ${verdict.evaluated.join(', ')}. Anything you left blank was NOT evaluated — a "not refused" here is not a claim about a scope nobody asked about.`}
                         </Typography>
@@ -976,7 +1017,9 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     {verdict.refusal ? (
                       <Stack spacing={0.5}>
                         <Typography variant="body2">
-                          {`The exact response that caller receives (HTTP ${verdict.refusal.status}):`}
+                          {verdict.reads && !verdict.reads.locked
+                            ? `The exact response that caller's WRITE receives (HTTP ${verdict.refusal.status}). Their reads get the real data.`
+                            : `The exact response that caller receives (HTTP ${verdict.refusal.status}):`}
                         </Typography>
                         <Typography
                           component="pre"

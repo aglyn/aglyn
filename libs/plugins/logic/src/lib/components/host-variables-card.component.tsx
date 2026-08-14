@@ -40,8 +40,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { collection, doc, getCountFromServer, limit, query, setDoc, updateDoc } from 'firebase/firestore'
+import { useCallback, useEffect, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -203,6 +203,50 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
     .sort((a: any, b: any) =>
       String(a.name ?? '').localeCompare(String(b.name ?? '')),
     )
+  /**
+   * The variable HEAD-COUNT is a server aggregate, not the length of the
+   * capped listener (AGL-1716, the AGL-1706 shape).
+   *
+   * The listener is `limit(100)` and `variables.length` was handed to
+   * `checkQuota(org, 'variablesPerHost', …)`. The bands are 3 / 25 / 100 /
+   * 1,000 / 5,000, so the window ties Pro's 100 and hides Business's 1,000
+   * and Scale's 5,000 entirely: on those plans the gate compared 100 against
+   * thousands and could never refuse, while `api/hosts/resources` counted
+   * the collection and did. The card offered headroom that did not exist and
+   * then failed the create.
+   *
+   * UNFILTERED, matching the enforcing route: it runs a plain
+   * `collection('variables').count()` for this quota — its `softDeletes`
+   * branch governs only the flat per-host webhook cap — so a soft-deleted
+   * variable has always counted toward `variablesPerHost` server-side while
+   * this card excluded it. The card now asks the route's question in the
+   * route's terms, which is the only thing that makes a console gate a
+   * useful prediction of the route's verdict.
+   *
+   * THE LIST KEEPS ITS CAP. Only a create moves the number (deletes here are
+   * soft, and the route counts them), so that is where it is re-read.
+   */
+  const [variableCountEpoch, setVariableCountEpoch] = useState(0)
+  const [serverVariableCount, setServerVariableCount] = useState<number | null>(
+    null,
+  )
+  useEffect(() => {
+    let active = true
+    void getCountFromServer(collection(firestore, 'hosts', hostId, 'variables'))
+      .then((snapshot) => {
+        if (active) setServerVariableCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Falls back to the loaded rows below — a LOWER bound, and this
+        // card's prior behaviour. Deliberately not 0: `checkQuota` answers
+        // from whatever it is handed, and 0 used is a confident wrong
+        // number in the flattering direction.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId, variableCountEpoch])
+  const variableCount = serverVariableCount ?? variables.length
 
   const [draft, setDraft] = useState<VariableDraft | null>(null)
   const validName = VARIABLE_NAME_PATTERN.test(draft?.name ?? '')
@@ -264,6 +308,10 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
       } else {
         // New variable rides the quota-enforcing resources API (AGL-473).
         await createHostResource({ hostId, resource: 'variable', data: fields })
+        // A create moves the count and the aggregate is a one-shot — the
+        // listener refreshes the ROWS for free, the count has to be asked
+        // again or the cap drifts stale for the rest of the session.
+        setVariableCountEpoch((epoch) => epoch + 1)
       }
       setDraft(null)
       enqueueSnackbar(
@@ -404,11 +452,8 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
           sx={{ alignSelf: 'flex-start' }}
           onClick={() => {
             // Plan cap (AGL-99): dark-launch — plan-less workspaces uncapped.
-            const quota = checkQuota(
-              org,
-              'variablesPerHost',
-              variables.length,
-            )
+            // The site's variables, not this page of them (AGL-1716).
+            const quota = checkQuota(org, 'variablesPerHost', variableCount)
             if (!quota.allowed) {
               return void enqueueSnackbar(
                 `Variable limit reached (${quota.limit}) — upgrade in Billing`,

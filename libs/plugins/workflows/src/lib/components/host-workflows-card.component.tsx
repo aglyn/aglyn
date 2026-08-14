@@ -42,8 +42,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { collection, doc, getCountFromServer, limit, query, setDoc, updateDoc } from 'firebase/firestore'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -122,6 +122,44 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
     .sort((a: any, b: any) =>
       String(a.name ?? '').localeCompare(String(b.name ?? '')),
     )
+  /**
+   * The workflow HEAD-COUNT is a server aggregate, not the length of the
+   * capped listener (AGL-1716, the AGL-1706 shape).
+   *
+   * The listener is `limit(100)` and `workflows.length` fed
+   * `checkQuota(org, 'workflowsPerHost', …)`, whose bands are 0 / 3 / 25 /
+   * 100 / 250 / 500. The window TIES Business's 100 and hides Scale's 250
+   * and Advanced's 500, so on those plans the gate compared 100 against
+   * hundreds and could never refuse — while `api/hosts/resources` counted
+   * the collection and did. The card offered headroom that did not exist and
+   * then failed the create.
+   *
+   * UNFILTERED, matching that route's plain `collection('workflows').count()`
+   * — its `softDeletes` branch governs only the flat per-host webhook cap, so
+   * soft-deleted workflows have always counted server-side while this card
+   * excluded them. Only a create moves the number, so that is where it is
+   * re-read.
+   */
+  const [workflowCountEpoch, setWorkflowCountEpoch] = useState(0)
+  const [serverWorkflowCount, setServerWorkflowCount] = useState<number | null>(
+    null,
+  )
+  useEffect(() => {
+    let active = true
+    void getCountFromServer(collection(firestore, 'hosts', hostId, 'workflows'))
+      .then((snapshot) => {
+        if (active) setServerWorkflowCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Falls back to the loaded rows — a LOWER bound and the prior
+        // behaviour, never 0, which `checkQuota` would answer as "no usage"
+        // on a site that is over its band.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId, workflowCountEpoch])
+  const workflowCount = serverWorkflowCount ?? workflows.length
   // Double-keyed by doc id and name (AGL-261): id references are
   // rename-safe; legacy name references keep resolving.
   const functions = useMemo(() => {
@@ -189,11 +227,8 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         { variant: 'warning', persist: false },
       )
     }
-    const quota = checkQuota(
-      org,
-      'workflowsPerHost',
-      workflows.length,
-    )
+    // The site's workflows, not this page of them (AGL-1716).
+    const quota = checkQuota(org, 'workflowsPerHost', workflowCount)
     if (!quota.allowed) {
       return void enqueueSnackbar(
         `Workflow limit reached (${quota.limit}) — upgrade in Billing`,
@@ -208,7 +243,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
       returnValue: '',
       trigger: null,
     })
-  }, [org, workflows.length, enqueueSnackbar])
+  }, [org, workflowCount, enqueueSnackbar])
 
   const handleTestRun = useCallback(() => {
     if (!draft) return
@@ -264,6 +299,9 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         // New workflow rides the quota-enforcing resources API (AGL-473) —
         // it also re-checks the `workflows` entitlement server-side.
         await createHostResource({ hostId, resource: 'workflow', data: fields })
+        // A create moves the count; the one-shot aggregate below does not
+        // refresh itself the way the listener refreshes the rows.
+        setWorkflowCountEpoch((epoch) => epoch + 1)
       }
       setDraft(null)
       enqueueSnackbar('Workflow saved', { variant: 'success', persist: false })

@@ -1,6 +1,20 @@
 ---
-description: The nav chrome is LIVE — finish the marketing site: publish the footer brand block, build /product overview (11 sections, the applier refuses it by design), and land the stranded dropClearedProps fix
+description: "SUPERSEDED 2026-08-14 — the 'stranded' AGL-1226 fix reached production long ago. A dated 2026-08-08 handoff kept for its measured hazards. Use /handoff."
 ---
+
+> ⚠️ **SUPERSEDED (2026-08-14, AGL-1704).** **Section 3 is spent and its
+> instruction is unsafe to follow.** It says `d4b968094` (AGL-1226) is on
+> `origin/production` but not in the live build and tells you to "deploy it".
+> Verified 2026-08-14: `d4b968094` **is an ancestor of `origin/production`** and
+> **AGL-1226 is Done**. There is nothing stranded, and **you must not deploy
+> anything without Zach's word** — promotion needs his go-ahead before it starts,
+> and you never open a production PR unasked.
+>
+> Also corrected: **AGL-1229 and AGL-1212's siblings have moved** (AGL-1229 is
+> Done; AGL-1212 is In Review) — re-derive the queue from Linear rather than this
+> file.
+>
+> Still worth reading: **"Hazards measured this session"**.
 
 > ⚠️ **CHARTER OVERRIDE (Zach, 2026-08-08) — supersedes anything below that
 > says otherwise.** The marketing site is built by CLICKING in the besigner, in

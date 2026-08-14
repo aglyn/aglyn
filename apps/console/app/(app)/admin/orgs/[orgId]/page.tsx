@@ -58,7 +58,7 @@ import {
   query,
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
@@ -765,6 +765,24 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const [entPlan, setEntPlan] = useState<string>('enterprise')
   const [entMode, setEntMode] = useState<'invoice' | 'checkout'>('invoice')
   const [entBusy, setEntBusy] = useState(false)
+  /**
+   * Idempotency key for ONE provisioning attempt (AGL-1714).
+   *
+   * `entBusy` is React state read out of this handler's closure, so a second
+   * click arriving before the re-render sees the pre-click `false` — and on
+   * `mode: 'invoice'` that second call creates a second net-30 subscription
+   * outright, because there is no Checkout session for anyone to abandon.
+   * Nothing client-side survives a reload or a lost response either.
+   *
+   * Minted lazily and held in a ref, NOT per click: per-click would defeat the
+   * point entirely, since two clicks would mint two keys and the server would
+   * see two deals. It retires when the QUOTE changes — amount, interval, plan
+   * or mode — which is the honest boundary: a retry of the same quote is the
+   * same attempt, and a renegotiated figure is a genuinely new one that must
+   * not be swallowed. The server's live-subscription check is what covers the
+   * staff member who comes back tomorrow.
+   */
+  const entAttemptKey = useRef('')
   const [entResult, setEntResult] = useState<{
     checkoutUrl?: string | null
     hostedInvoiceUrl?: string | null
@@ -805,17 +823,31 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     } as const
   }, [entAmount, entInterval, org, cogsReady, usageLatest])
 
+  useEffect(() => {
+    // A different quote is a different deal, so it gets a different attempt.
+    entAttemptKey.current = ''
+  }, [entAmount, entInterval, entPlan, entMode])
+
   const handleProvisionEnterprise = async () => {
     const amount = Number(entAmount)
     if (!(amount > 0) || entBusy) return
     setEntBusy(true)
     setEntResult(null)
+    // Reuse the key across retries of this quote; mint one if this is the first
+    // attempt (AGL-1714). `randomUUID` needs a secure context, which the console
+    // always is, but fall back rather than throw on a provisioning click.
+    if (!entAttemptKey.current) {
+      entAttemptKey.current =
+        globalThis.crypto?.randomUUID?.() ??
+        `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
     try {
       const idToken = await (user as any)?.getIdToken?.()
       const response = await fetch('/api/admin/enterprise-billing', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Idempotency-Key': entAttemptKey.current,
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({

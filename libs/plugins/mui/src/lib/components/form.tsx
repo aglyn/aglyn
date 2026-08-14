@@ -25,6 +25,7 @@ import FormControl from '@mui/material/FormControl'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import FormGroup from '@mui/material/FormGroup'
 import FormLabel from '@mui/material/FormLabel'
+import Link from '@mui/material/Link'
 import MenuItem from '@mui/material/MenuItem'
 import Radio from '@mui/material/Radio'
 import RadioGroup from '@mui/material/RadioGroup'
@@ -161,12 +162,15 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       ? `[data-aglyn="leaf:${revealNodeId}"]`
       : undefined
   const [status, setStatus] = useState<
-    'idle' | 'sending' | 'sent' | 'error' | 'preview' | 'paused'
+    'idle' | 'sending' | 'sent' | 'error' | 'preview' | 'paused' | 'unavailable'
   >(
     'idle',
   )
   /** The read-only lockdown's own words (AGL-1511); never a hardcoded line. */
   const [pausedMessage, setPausedMessage] = useState('')
+  /** The abuse ceiling's visitor notice (AGL-1666); see `unavailable` below. */
+  const [unavailable, setUnavailable] =
+    useState<Aglyn.FormUnavailableNotice | null>(null)
   const [alerts, setAlerts] = useState<
     Array<{ message: string; severity?: string }>
   >([])
@@ -282,6 +286,20 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
             setStatus('paused')
             return
           }
+          // The site's form-submission abuse ceiling (AGL-1655/1666). This
+          // is a THIRD deliberate refusal, and the only one whose status is
+          // already spoken for: the Free plan's monthly wall answers 429
+          // too. So it is matched on the body's `code` and never on the
+          // status — `parseFormUnavailableRefusal` takes no status for
+          // exactly that reason. A plan-wall 429 keeps falling through to
+          // the generic branch below, which is right: it is the owner's
+          // billing problem, and nothing about waiting fixes it.
+          const notice = Aglyn.parseFormUnavailableRefusal(body)
+          if (notice) {
+            setUnavailable(notice)
+            setStatus('unavailable')
+            return
+          }
         }
         setStatus(response.ok ? 'sent' : 'error')
       } catch {
@@ -348,6 +366,27 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
         // deliberate, temporary pause on a site that is otherwise working,
         // and nothing the visitor typed was lost.
         <Alert severity="info">{pausedMessage}</Alert>
+      ) : null}
+      {status === 'unavailable' && unavailable ? (
+        // `warning`, not `info` and not `error` (AGL-1666). The two `info`
+        // notices above are both cases where nothing was lost — Preview
+        // never intended to send, and a lockdown pause is minutes long with
+        // the visitor's text still in the fields. This one lost a real
+        // message on a live site, so it must not read as reassurance. It is
+        // not `error` either: nothing is broken and "please try again" would
+        // walk the visitor into the same refusal.
+        <Alert severity="warning">
+          {unavailable.message}
+          {unavailable.contact ? (
+            <>
+              {' In the meantime you can reach us at '}
+              <Link href={`mailto:${unavailable.contact}`}>
+                {unavailable.contact}
+              </Link>
+              {'.'}
+            </>
+          ) : null}
+        </Alert>
       ) : null}
       {status === 'preview' ? (
         // Deliberately `info`, not `error`, and it does not say "try again":

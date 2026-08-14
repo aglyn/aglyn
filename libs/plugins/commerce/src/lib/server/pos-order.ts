@@ -22,7 +22,24 @@ import {
   getOrgForHost,
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
-import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  buildRoute,
+  claimAttempt,
+  Route,
+  type AttemptClaim,
+  type PluginApiHandler,
+} from '@aglyn/aglyn/server'
+
+/**
+ * The settlement claim (AGL-1691) now lives in `@aglyn/aglyn/server`
+ * (AGL-1697), because it is the answer for every unkeyed money route and not
+ * just this one. Moved whole and unchanged in behaviour — the digest is still
+ * `sha256('pos:{hostId}:{key}')`, so keys minted against the local version
+ * still resolve. The only difference is the claim document: it carries
+ * `scopeId` where this file wrote `hostId`, and no longer writes a
+ * `serverTimestamp` sentinel alongside `createdAtMs`, since the shared version
+ * takes a plain Firestore-shaped store rather than firebase-admin itself.
+ */
 
 /**
  * POS sale (AGL-312): manager-gated, server-priced. Cash sales create a
@@ -52,10 +69,17 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   const locationId = String(body.locationId ?? '')
   const discountPct = Math.min(100, Math.max(0, Number(body.discountPct ?? 0)))
   const rawLines = Array.isArray(body.lines) ? body.lines : []
+  // One settlement attempt, minted by the register (AGL-1691). Node lowercases
+  // incoming headers, but read both spellings — the plugin API request type
+  // makes no promise about casing.
+  const idempotencyKey = String(
+    req.headers['idempotency-key'] ?? req.headers['Idempotency-Key'] ?? '',
+  ).trim().slice(0, 200)
   if (!hostId || rawLines.length === 0) {
     return res.status(400).json({ error: 'Missing hostId or lines' })
   }
 
+  let claim: AttemptClaim | null = null
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     const firestore = firebaseAdmin.app().firestore()
@@ -160,6 +184,31 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       taxCents,
     })
 
+    // Deterministic tender rejections run BEFORE the claim is taken, so they
+    // never burn the key (AGL-1691): "cash received is short" is a 400 the
+    // cashier fixes by taking more cash and pressing the same button, and a
+    // claimed key would replay the rejection forever. Hoisted above the card
+    // branch so one claim site covers every tender; both are no-ops for `link`.
+    if (payment === 'cash' && cashReceivedCents < totals.totalCents) {
+      return res.status(400).json({ error: 'Cash received is short' })
+    }
+    if (payment === 'folio' && !reservationId) {
+      return res.status(400).json({ error: 'Pick a reservation' })
+    }
+
+    // Point of no return: everything past here writes an order or moves money.
+    const claimed = await claimAttempt(firestore, {
+      kind: 'pos',
+      scopeId: hostId,
+      orgId: String(ownerOrg?.org?.id ?? ''),
+      key: idempotencyKey,
+      busyMessage: 'This sale is already being processed',
+    })
+    if ('replay' in claimed) {
+      return res.status(claimed.replay.status).json(claimed.replay.body)
+    }
+    claim = claimed.claim
+
     if (payment === 'link') {
       // QR payment link on the merchant account, completed by webhook.
       const ownerProfile = await firestore
@@ -228,6 +277,13 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           headers: {
             Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
             'Content-Type': 'application/x-www-form-urlencoded',
+            // The half that costs real money (AGL-1691). Stripe replays the
+            // existing session for a repeated key instead of opening a second
+            // one on the merchant's live account, which covers the window
+            // where our own claim is written but the response never arrives.
+            ...(claim.stripeKey
+              ? { 'Idempotency-Key': claim.stripeKey }
+              : {}),
           },
           body: params.toString(),
         },
@@ -235,20 +291,18 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       const session = (await response.json()) as { url?: string; error?: any }
       if (!response.ok || !session.url) {
         await orderRef.delete().catch(() => undefined)
+        // The sale did not happen — let the same key be tried again rather
+        // than locking this basket out over one flaky moment.
+        await claim.release()
         return res.status(502).json({ error: 'Payment link failed' })
       }
-      return res
-        .status(200)
-        .json({ orderId: orderRef.id, url: session.url, totals })
+      const cardPayload = { orderId: orderRef.id, url: session.url, totals }
+      await claim.record(200, cardPayload)
+      return res.status(200).json(cardPayload)
     }
 
-    // Cash (or folio) sale: paid immediately.
-    if (payment === 'cash' && cashReceivedCents < totals.totalCents) {
-      return res.status(400).json({ error: 'Cash received is short' })
-    }
-    if (payment === 'folio' && !reservationId) {
-      return res.status(400).json({ error: 'Pick a reservation' })
-    }
+    // Cash (or folio) sale: paid immediately. Tender validation for both ran
+    // above, before the claim.
     const orderRef = hostRef.collection('orders').doc()
     const counterRef = hostRef.collection('counters').doc('orders')
     await firestore.runTransaction(async (transaction) => {
@@ -350,14 +404,21 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         },
       })
     }
-    return res.status(200).json({
+    const cashPayload = {
       orderId: orderRef.id,
       totals,
       changeCents:
         payment === 'cash' ? cashReceivedCents - totals.totalCents : 0,
-    })
+    }
+    await claim.record(200, cashPayload)
+    return res.status(200).json(cashPayload)
   } catch (error) {
     console.error(error)
+    // Release on the way out so a transient failure does not strand the key
+    // (AGL-1691). The order write itself may or may not have landed; the
+    // cashier reconciles from the orders list, which is the same position
+    // they were in before this endpoint had a claim at all.
+    await claim?.release()
     return res.status(500).json({ error: 'Sale failed' })
   }
 }

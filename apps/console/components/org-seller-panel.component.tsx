@@ -38,8 +38,8 @@ import {
 import {
   PUBLISHER_AGREEMENT_POINTS,
   PUBLISHER_AGREEMENT_TITLE,
-  PUBLISHER_AGREEMENT_URL,
   PUBLISHER_AGREEMENT_VERSION,
+  publisherAgreementPresentation,
   publisherAgreementState,
 } from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { useRouter } from 'next/navigation'
@@ -308,6 +308,11 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   // situations, and one message for both reads as a bug in whichever case it
   // does not describe.
   const agreementState = publisherAgreementState(profile?.publisherAgreement)
+  // Whether the document can be read at all (AGL-1660). While it has no
+  // published page there is no link to render and no acceptance to collect —
+  // the summary below is a summary OF something, and without the something it
+  // is just seven sentences we wrote.
+  const agreementPresentation = publisherAgreementPresentation(agreementState)
   const acceptedOn = (() => {
     const at = profile?.publisherAgreement?.acceptedAt
     const date = at?.toDate?.()
@@ -611,7 +616,16 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
               {`Accepted — version ${profile?.publisherAgreement?.version}` +
                 (acceptedOn ? ` on ${acceptedOn}` : '')}
             </Alert>
-          ) : (
+          ) : null}
+          {/* An unpublished document replaces the state copy rather than
+              sitting beside it (AGL-1660): "you have not accepted these
+              terms" reads as something the publisher failed to do, and while
+              there is no page to read, the omission is entirely ours. */}
+          {agreementPresentation.unavailableNotice ? (
+            <Alert severity="warning">
+              {agreementPresentation.unavailableNotice}
+            </Alert>
+          ) : agreementState === 'current' ? null : (
             <Alert severity={agreementState === 'outdated' ? 'warning' : 'info'}>
               {agreementState === 'outdated'
                 ? 'These terms have changed since your organization accepted ' +
@@ -636,18 +650,30 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
               </Stack>
             ))}
           </Stack>
-          <Typography variant="body2">
-            <Link
-              href={PUBLISHER_AGREEMENT_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              underline="always"
-            >
-              {`Read the full ${PUBLISHER_AGREEMENT_TITLE}`}
-            </Link>
-            {` (version ${PUBLISHER_AGREEMENT_VERSION})`}
-          </Typography>
-          {agreementState === 'current' ? null : (
+          {/* The href comes from the presentation helper, never from the
+              constant: while the document is unpublished the helper hands back
+              null and there is nothing here to click. That is the point — a
+              link to a 404 above an Accept button is how a publisher ends up
+              having "read" a document that was never served. */}
+          {agreementPresentation.documentUrl ? (
+            <Typography variant="body2">
+              <Link
+                href={agreementPresentation.documentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                underline="always"
+              >
+                {`Read the full ${PUBLISHER_AGREEMENT_TITLE}`}
+              </Link>
+              {` (version ${PUBLISHER_AGREEMENT_VERSION})`}
+            </Typography>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {`Version ${PUBLISHER_AGREEMENT_VERSION} has no published page ` +
+                'yet, so there is no full text to link to.'}
+            </Typography>
+          )}
+          {agreementPresentation.canAccept ? (
             <Button
               variant="contained"
               color="primary"
@@ -661,11 +687,13 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                   ? 'Accept the current version'
                   : 'Accept on behalf of this organization'}
             </Button>
-          )}
-          <Typography variant="caption" color="text.secondary">
-            {'Accepting binds the organization, not you personally — only an ' +
-              'owner or admin can do it, and we record who did and when.'}
-          </Typography>
+          ) : null}
+          {agreementPresentation.canAccept ? (
+            <Typography variant="caption" color="text.secondary">
+              {'Accepting binds the organization, not you personally — only ' +
+                'an owner or admin can do it, and we record who did and when.'}
+            </Typography>
+          ) : null}
         </Stack>
       </CardDisplay>
       </Stack>

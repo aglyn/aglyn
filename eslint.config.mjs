@@ -11,6 +11,7 @@ import noCrossGraphImport from './tools/lint-rules/no-cross-graph-import.mjs'
 import noLinkElementSwitch from './tools/lint-rules/no-link-element-switch.mjs'
 import noListenerRowSpreadIntoWrite from './tools/lint-rules/no-listener-row-spread-into-write.mjs'
 import noPlanGatedEntitlement from './tools/lint-rules/no-plan-gated-entitlement.mjs'
+import noRemoteImageService from './tools/lint-rules/no-remote-image-service.mjs'
 import noSxAfterSpread from './tools/lint-rules/no-sx-after-spread.mjs'
 import noUnguardedLoadingHook from './tools/lint-rules/no-unguarded-loading-hook.mjs'
 
@@ -21,6 +22,7 @@ const aglynPlugin = {
     'no-link-element-switch': noLinkElementSwitch,
     'no-listener-row-spread-into-write': noListenerRowSpreadIntoWrite,
     'no-plan-gated-entitlement': noPlanGatedEntitlement,
+    'no-remote-image-service': noRemoteImageService,
     'no-sx-after-spread': noSxAfterSpread,
     'no-unguarded-loading-hook': noUnguardedLoadingHook,
   },
@@ -128,6 +130,13 @@ export default [
       // and nothing else across 14,742 files, and today's tree is clean. It
       // has no backlog to work off.
       'aglyn/no-listener-row-spread-into-write': 'error',
+      // A third-party service asked to DRAW our data receives it in a GET
+      // query string. The POS card QR did this with a LIVE Stripe payment
+      // link — a URL that pays the order for whoever holds it — on every
+      // transaction, to a vendor with no DPA and no register entry
+      // (AGL-1671). ERROR from the start: today's tree is clean, and the
+      // one instance it exists for is the one this rule was written from.
+      'aglyn/no-remote-image-service': 'error',
       'mobx/exhaustive-make-observable': 'off',
       'mobx/unconditional-make-observable': 'off',
       'mobx/missing-make-observable': 'off',

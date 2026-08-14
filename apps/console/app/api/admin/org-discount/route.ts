@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  isLiveSubscriptionStatus,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   checkDiscountMargin,
   orgCogsInputFrom,
@@ -114,7 +117,11 @@ async function stripe(
   return { ok: response.ok, status: response.status, body }
 }
 
-/** The customer's first live subscription (active/trialing/past_due). */
+/**
+ * The customer's first live subscription — the one a staff discount attaches
+ * to. "Live" is `isLiveSubscriptionStatus`, the single list in
+ * `org-billing-doc.ts` (AGL-1715).
+ */
 async function liveSubscriptionId(
   secretKey: string,
   customerId: string,
@@ -125,7 +132,7 @@ async function liveSubscriptionId(
   )
   if (!res.ok) return null
   const live = (res.body?.data ?? []).find((sub: any) =>
-    ['active', 'trialing', 'past_due'].includes(sub?.status),
+    isLiveSubscriptionStatus(sub?.status),
   )
   return live?.id ?? null
 }

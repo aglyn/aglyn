@@ -366,15 +366,114 @@ describe('CSP violation reporting (AGL-523)', () => {
     expect(enforced).toContain(`report-uri ${REPORT_PATH}`)
   })
 
-  it('emits exactly ONE policy header, never a report-only twin', async () => {
-    // This is the regression guard for the bug that cost AGL-523 months. Next
-    // resolves the nonce as `content-security-policy || …-report-only`, so a
-    // second header does not add a policy — it SHADOWS the nonce, and every
-    // script renders `nonce="$undefined"` while a valid nonce sits unused.
-    // One header carrying script-src is what makes the nonce real.
+  /**
+   * The regression guard for the bug that cost AGL-523 months, restated
+   * against what actually causes it (AGL-1685).
+   *
+   * It used to be `Content-Security-Policy-Report-Only` → `toBeNull()`, and
+   * that assertion was a PROXY. The defect was never "a second header exists";
+   * it was "the header Next reads the nonce out of carries no `script-src`".
+   * AGL-1685 ships a report-only `img-src`, so the proxy and the thing it
+   * stood for came apart, and the proxy is the half that had to go.
+   *
+   * Both halves of the mechanism were re-read in the INSTALLED next@16.2.11,
+   * not assumed:
+   *
+   * 1. `next/dist/server/lib/router-utils/resolve-routes.js:458-461` copies
+   *    EVERY middleware response header onto `req.headers` as well as the
+   *    response — both CSP headers included. This is the undocumented step the
+   *    comment above `nonce` in `middleware.ts` records.
+   * 2. `next/dist/server/app-render/app-render.js:167` then resolves
+   *    `headers['content-security-policy'] || headers['content-security-policy-report-only']`
+   *    and hands the winner to `getScriptNonceFromHeader`, which takes the
+   *    first `script-src` directive, else `default-src`, else no nonce.
+   *
+   * So the real invariant has two clauses, and the tests below are one per
+   * clause: an ENFORCING policy is present on every response that carries a
+   * report-only one, and that enforcing policy carries `script-src`. A second
+   * enforcing policy breaks the first; deleting `script-src` breaks the second.
+   * Either one reproduces `nonce="$undefined"` on every script.
+   */
+  it('emits exactly ONE enforcing policy, and it carries script-src', async () => {
     const response = await middleware(request('app.aglyn.com'))
-    expect(response.headers.get('Content-Security-Policy-Report-Only')).toBeNull()
-    expect(response.headers.get('Content-Security-Policy')).toContain('script-src')
+    const enforced = response.headers.get('Content-Security-Policy')
+    // Clause two. Not merely "contains script-src" — it must be the directive
+    // the nonce is read out of, since that is the whole job of this header.
+    expect(enforced).toMatch(/script-src[^;]*'nonce-[a-f0-9]{32}'/)
+    // Clause one. `,` is CSP's own separator between multiple policies in one
+    // header, and it is also what `Headers.append` joins with — so a second
+    // enforcing policy arriving by EITHER route shows up here, while a plain
+    // `.set()` cannot produce one. Nothing legitimate in this policy contains
+    // a comma: `frame-ancestors` joins its origins with spaces, and the two
+    // reporting directives carry a single path each.
+    expect(enforced).not.toContain(',')
+  })
+
+  it('never sends a report-only policy on a response with no enforcing one', async () => {
+    // The clause the `||` above depends on, and the one that is easiest to
+    // break by accident. The short-circuit only protects a response that HAS
+    // an enforcing header; on a response carrying report-only ALONE, the
+    // report-only header IS the string Next parses for the nonce, and AGL-523
+    // comes straight back. `applyCsp` sets both headers together, which is
+    // what makes this true — so the test is that every response path either
+    // goes through it or carries neither header.
+    //
+    // Exercised across all four shapes the middleware returns: pass, rewrite,
+    // redirect and the sanctions refusal. The redirects and the 451 are the
+    // interesting ones — they set NO CSP at all, which is fine, and would stop
+    // being fine the moment a report-only header were hoisted out of
+    // `applyCsp` to "make sure it always ships".
+    const responses = await Promise.all([
+      middleware(request('app.aglyn.com')), // pass
+      middleware(request('zgover.aglyn.com')), // org rewrite
+      middleware(request('console.acme-agency.com')), // custom-domain rewrite
+      middleware(request('zach-gover.aglyn.com')), // 308 renamed slug
+      middleware(request('console.lapsed.com')), // 307 off a dead domain
+      middleware(request('unknown-workspace-xyz.aglyn.com')), // 307 to apex
+      middleware(
+        new NextRequest('https://app.aglyn.com/signup', {
+          headers: { host: 'app.aglyn.com', 'x-vercel-ip-country': 'KP' },
+        }),
+      ), // 451 sanctions refusal
+    ])
+    for (const response of responses) {
+      const reportOnly = response.headers.get(
+        'Content-Security-Policy-Report-Only',
+      )
+      if (reportOnly === null) continue
+      const enforced = response.headers.get('Content-Security-Policy') ?? ''
+      expect(enforced).toMatch(/script-src[^;]*'nonce-[a-f0-9]{32}'/)
+    }
+    // CONTROL. Every assertion above is inside a conditional, so a middleware
+    // that stopped sending the report-only header entirely would pass it
+    // vacuously — and "the measurement quietly stopped" is exactly the failure
+    // AGL-1685 exists to avoid. At least one of these must carry one.
+    expect(
+      responses.filter((r) =>
+        r.headers.get('Content-Security-Policy-Report-Only'),
+      ),
+    ).not.toHaveLength(0)
+  })
+
+  it('keeps script-src, a nonce and strict-dynamic OUT of the report-only policy', async () => {
+    // Defence in depth behind the two clauses above, and the same narrowing
+    // AGL-1703 made on the tenant side, so one invariant covers both apps.
+    // Even on a hypothetical response where the enforcing header went missing,
+    // a report-only policy carrying no `script-src` and no `nonce-` cannot
+    // hand Next a WRONG nonce — the worst it can do is hand it none.
+    //
+    // The mechanical reason a report-only `img-src` is safe where AGL-1228's
+    // report-only `script-src` was not: a nonce is per-request, so it can
+    // never agree with cached bytes, while an `img-src` is the same string on
+    // every response and agrees with them by construction.
+    const response = await middleware(request('app.aglyn.com'))
+    const reportOnly =
+      response.headers.get('Content-Security-Policy-Report-Only') ?? ''
+    expect(reportOnly).not.toContain('script-src')
+    expect(reportOnly).not.toContain('nonce-')
+    expect(reportOnly).not.toContain('strict-dynamic')
+    // CONTROL — see above: all three pass against a missing header.
+    expect(reportOnly).toContain('img-src')
   })
 
   it('does not honour the retired ?csp= opt-in', async () => {

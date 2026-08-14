@@ -75,7 +75,10 @@ const TOP_PLANS: ReadonlySet<string> = new Set(['agency', 'enterprise'])
  */
 export function UserMenu() {
   const { data: user } = useUser()
-  const userPhotoUrl = useUserPhoto({ gravatar: { size: '64' } })
+  // The stored photo only (AGL-1683). This asked for a Gravatar fallback,
+  // which meant every signed-in page handed gravatar.com an MD5 of the
+  // account's email; the initial below is drawn locally and needs no vendor.
+  const userPhotoUrl = useUserPhoto()
   // Only a URL that names a workspace lets this menu name one (AGL-1130).
   // `useOrgSlug()` falls back to the user's first org so that org-less pages
   // still have somewhere to act; the footer and the Upgrade CTA are CLAIMS

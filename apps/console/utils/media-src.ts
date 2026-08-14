@@ -19,11 +19,21 @@
  * A usable `src` for a picked media asset.
  *
  * Lifted out of the listing detail editor when the publish form gained a
- * media picker of its own (AGL-1080). The CDN path is same-origin and
- * relative, so it needs the origin prefixed before it can be written into
- * markdown that renders elsewhere — a second hand-rolled copy would have
- * gotten that subtly wrong and produced images that work in the console and
- * break on the listing page.
+ * media picker of its own (AGL-1080).
+ *
+ * NO LONGER THE WRITER FOR MARKDOWN BODIES (AGL-1705). This helper used to
+ * justify prefixing the origin by saying the markdown "renders elsewhere".
+ * That claim was checked and is false: the marketplace README's only renderer
+ * is the console's own `marketplaceListing` slot, and `apps/tenant` does not
+ * import the marketplace plugin. The two README writers and the blog body now
+ * store `mediaNodeSrc`'s `media:` reference, which `resolveMediaSrc` turns
+ * back into this same `/api/media/cdn/…` path at render — without freezing
+ * either the origin or the route shape into the document.
+ *
+ * What is left for this helper is the listing's image FIELDS —
+ * `previewImageUrl`, `logoUrl`, `screenshots` — read out of band by
+ * `og:image` and by `resolveSocialImage`, where an absolute URL is the point
+ * (AGL-1701). The origin prefix stays for them.
  */
 export function mediaSrc(media: {
   url?: string

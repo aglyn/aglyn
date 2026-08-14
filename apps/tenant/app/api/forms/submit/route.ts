@@ -40,19 +40,102 @@ const MAX_PAYLOAD_CHARS = 10000
 // wider. The monthly plan quota was never the right thing to be defended BY:
 // burning a site's whole allowance is the damage, not the protection — and
 // since AGL-1280 it is not even a wall on a paid plan, it meters. This
-// counter is global, keyed per (site, IP), and is what actually stops abuse.
+// counter is global, keyed per (site, IP).
+//
+// It is the SHAPE of abuse control, not the whole of it (AGL-1655): 10/60s
+// per address is 14,400/day from one IP and multiplies by the number of
+// addresses, so per-IP alone leaves the site's total unbounded. The per-site
+// monthly ceiling below is what bounds the total.
 const RATE_WINDOW_MS = 60_000
 const RATE_MAX = 10
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
 /**
+ * The ceiling is a per-MONTH count, so the honest retry hint is the month
+ * boundary rather than a made-up interval. UTC, matching `monthKey`.
+ */
+const secondsUntilNextMonth = (now = new Date()): number => {
+  const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+  return Math.max(1, Math.ceil((next - now.getTime()) / 1000))
+}
+
+/**
+ * The one useful thing a refused visitor can be given (AGL-1666): the site's
+ * OWN published support address, so a lost lead has somewhere else to go.
+ *
+ * Read through the host-token registry rather than reaching into the
+ * document, because that registry is what defines this field as the address
+ * a site publishes to visitors — its description is literally "where
+ * visitors should write for help". Anything else on the host document is
+ * account data and must not leave the console.
+ *
+ * Free: the host snapshot is already loaded for the existence check.
+ */
+const publishedContactEmail = (
+  host: Record<string, any> | undefined,
+): string | undefined =>
+  host ? Aglyn.HOST_TOKENS['supportEmail']?.resolve(host) : undefined
+
+/**
+ * Make a tripped ceiling OBSERVABLE (AGL-1655) rather than a silent drop.
+ *
+ * Two audiences, one write. Staff get a durable per-month refusal count at
+ * `hosts/{id}/counters/formSubmissionsRefused` — the same counters-document
+ * shape `contactsDropped` already uses for free-tier contact drops, and
+ * client-unwritable for the same reason (AGL-1367). The site's managers get
+ * one in-app notification, on the FIRST refusal of the month only: a
+ * notification per refused bot request would be the flood again, delivered.
+ *
+ * Best-effort throughout. A bookkeeping failure must not turn a contained
+ * refusal into a 500, because a 500 is a retry invitation.
+ */
+async function recordAbuseCeilingTrip(
+  hostRef: FirebaseFirestore.DocumentReference,
+  hostId: string,
+  monthKey: string,
+  ceiling: number,
+): Promise<void> {
+  try {
+    const refusedRef = hostRef
+      .collection('counters')
+      .doc('formSubmissionsRefused')
+    const refusedSnapshot = await refusedRef.get()
+    const alreadyRefused = Number(refusedSnapshot.get(monthKey) ?? 0)
+    await refusedRef.set(
+      {
+        [monthKey]: FieldValue.increment(1),
+        // Explicit values only — Firestore rejects `undefined`.
+        ceiling,
+        lastRefusedAtMs: Date.now(),
+      },
+      { merge: true },
+    )
+    if (alreadyRefused === 0) {
+      await notifyHostManagers(hostId, {
+        type: 'system.formSubmissionsPaused',
+        title: 'Form submissions paused — unusual volume',
+        body: `This site reached ${ceiling} submissions this month, so further submissions are being refused. They are not being billed. Contact support if this is real traffic.`,
+        link: `/${hostId}/inbox`,
+      })
+    }
+  } catch (error) {
+    console.error('form abuse ceiling bookkeeping failed', error)
+  }
+}
+
+/**
  * Lead-capture submissions endpoint (AGL-76): validates the target host,
  * drops honeypot hits silently, applies the plan's monthly submission quota
  * via a per-month counter — a hard wall on free, a meter on plans that carry
- * the infra pass-through (AGL-1280) — and stores the submission for the
- * console inbox. Writes go through the admin SDK, so client rules never allow
- * arbitrary submission writes.
+ * the infra pass-through (AGL-1280) — refuses above the per-site abuse
+ * ceiling (AGL-1655), and stores the submission for the console inbox. Writes
+ * go through the admin SDK, so client rules never allow arbitrary submission
+ * writes.
+ *
+ * The two 429s are different answers and must stay distinguishable: the plan
+ * wall means the customer's allowance is spent, the ceiling means the site is
+ * being flooded. Only the ceiling refusal carries `code`.
  */
 export async function POST(request: Request): Promise<Response> {
   const payload = (await request.json().catch(() => ({}))) as Record<string, any>
@@ -83,6 +166,10 @@ export async function POST(request: Request): Promise<Response> {
     windowMs: RATE_WINDOW_MS,
   })
   if (!rate.allowed) {
+    // Note this is NOT told to the caller, degraded or not. The body and the
+    // status are identical either way: "the global limiter is currently a
+    // per-instance one" is exactly the sentence an abuser would spend the
+    // window on, and this endpoint is public and unauthenticated.
     return Response.json(
       { error: 'Too many submissions' },
       {
@@ -123,7 +210,10 @@ export async function POST(request: Request): Promise<Response> {
     // without a plan are uncapped, matching every other gate).
     // Plan/quota gates ride the owning org's doc (AGL-238).
     const orgBilling = (await getOrgForHost(hostId))?.org
-    const monthKey = new Date().toISOString().slice(0, 7)
+    // Shared with the console surface that reads these counters back
+    // (AGL-1666) — a differently-derived key there would read 0 refusals on
+    // exactly the sites being refused.
+    const monthKey = Aglyn.submissionMonthKey()
     const counterRef = hostRef.collection('counters').doc('formSubmissions')
     {
       // Plan-less orgs resolve as free (AGL-247) — the cap always runs.
@@ -138,6 +228,43 @@ export async function POST(request: Request): Promise<Response> {
       if (!Aglyn.checkFormSubmissionQuota(orgBilling as any, used).allowed) {
         return json({ error: 'Submission limit reached' }, 429)
       }
+      // Abuse ceiling (AGL-1655). The plan gate above cannot refuse a
+      // metered plan by design, so on every paying customer it was the only
+      // thing between a bot flood and an unbounded invoice — and it always
+      // said yes. The per-IP limiter is 10/60s, which one address turns into
+      // 14,400/day and any number of addresses multiplies.
+      //
+      // This is the ceiling that can say no. It reuses the count already
+      // read above (no extra Firestore read on the happy path) and sits
+      // BEFORE every write, so a refused submission never touches
+      // `counters/formSubmissions` — the document /api/billing/report-usage
+      // invoices from. Refusing and still billing would have been the same
+      // bug with a smaller number.
+      const ceiling = Aglyn.checkFormSubmissionAbuseCeiling(
+        orgBilling as any,
+        used,
+      )
+      if (ceiling.exceeded) {
+        await recordAbuseCeilingTrip(hostRef, hostId, monthKey, ceiling.ceiling)
+        const contact = publishedContactEmail(hostSnapshot.data())
+        return Response.json(
+          {
+            error: 'Submissions are paused for this site',
+            // Machine-readable so a client can tell containment apart from
+            // the plan wall it shares a status with.
+            code: Aglyn.FORM_ABUSE_CEILING_CODE,
+            // The site's own published support address, when it has one
+            // (AGL-1666). NOT the ceiling, the count or the plan: this body
+            // is read by a stranger to the site, and the reason a site
+            // stopped accepting is the owner's to see, not a caller's.
+            ...(contact ? { contact } : {}),
+          },
+          {
+            status: 429,
+            headers: { 'Retry-After': String(secondsUntilNextMonth()) },
+          },
+        )
+      }
     }
 
     const sanitizedFields: Record<string, string> = {}
@@ -150,6 +277,28 @@ export async function POST(request: Request): Promise<Response> {
       fields: sanitizedFields,
       read: false,
       createdAt: FieldValue.serverTimestamp(),
+      // Accepted while the durable limiter was degraded (AGL-1667).
+      //
+      // The limiter fails soft by design (AGL-794, reaffirmed in AGL-1679) and
+      // that is not reversed here: a Firestore blip must not stop a customer's
+      // site collecting leads, and the fallback can only ever allow MORE than
+      // 10/min, never fewer, so nothing legitimate is refused by it. What was
+      // wrong is that the route read `allowed` and `resetMs` and never
+      // `degraded`, so the window left no trace on THIS endpoint at all.
+      //
+      // The AGL-1679 marker records that the store degraded; it cannot say
+      // which submissions came in under the wider cap, and that is the
+      // correlation the incident actually needs — these rows are billed
+      // (`/api/billing/report-usage` prices `counters/formSubmissions`) and a
+      // customer disputing a spike is owed a per-row answer, not "the limiter
+      // was unwell around then".
+      //
+      // Stamped rather than counted because it rides a write that is already
+      // happening: a separate counter would mean an EXTRA Firestore write per
+      // submission, issued precisely while Firestore is the thing that is
+      // failing. Written only when true — an absent field is the healthy case
+      // and costs nothing on the millions of rows that are fine.
+      ...(rate.degraded ? { rateDegraded: true } : {}),
     })
     // Contacts ingestion (AGL-197): forms don't guarantee an email field —
     // best-effort extraction; never blocks the submission.

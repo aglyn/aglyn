@@ -132,6 +132,22 @@ describe('collection entry fallback cover (AGL-1407)', () => {
       expect(build('data:image/png;base64,AAAA').cfb__cover).toBeUndefined()
     })
 
+    it('drops an http: cover — mixed content, no defensible use (AGL-1725)', () => {
+      // The SECOND of the two http:-accepting paths AGL-1701 found;
+      // markdown-lite is AGL-1713 and this rule is separate from it.
+      expect(build('http://images.example.com/photo.jpg').cfb__cover).toBe(
+        undefined,
+      )
+      expect(build('HTTP://images.example.com/photo.jpg').cfb__cover).toBe(
+        undefined,
+      )
+      // The https twin still renders, so this is a scheme rule and not a
+      // host restriction — the site owner's own hotlink keeps working.
+      expect(coverUrl(build('https://images.example.com/photo.jpg'))).toBe(
+        'https://images.example.com/photo.jpg',
+      )
+    })
+
     it('drops an empty or absent cover, as before', () => {
       expect(build(undefined).cfb__cover).toBeUndefined()
       expect(build('').cfb__cover).toBeUndefined()

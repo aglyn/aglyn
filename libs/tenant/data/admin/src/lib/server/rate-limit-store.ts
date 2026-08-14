@@ -50,6 +50,169 @@ import {
 /** Collection holding one document per (key, window). Server-writes only. */
 export const RATE_LIMIT_COLLECTION = 'rateLimits'
 
+/**
+ * Document-id prefix for degradation markers (AGL-1679).
+ *
+ * `degraded: true` used to exist only in a `console.error`, which means a
+ * Firestore blip silently dropped every durable limiter — auth, password
+ * reset, and now the public REST API's per-key quota — back to a per-instance
+ * cap for as long as it lasted, and nobody found out. Fail-soft is only a
+ * defensible choice if someone can tell that it fired.
+ *
+ * This is deliberately not an alerting stack. It is the cheapest thing that
+ * makes a degraded window answerable after the fact: when an episode ends,
+ * the instance writes one summary document into the SAME collection, so it
+ * inherits the deny-all rule and the `expiresAt` TTL policy that already
+ * exist rather than needing a new collection, a rules deploy and a second TTL
+ * policy. Ids are minute-bucketed so concurrent instances converge on a
+ * handful of documents:
+ *
+ * ```
+ * rateLimits/degraded_1755100800000
+ * ```
+ *
+ * Written on RECOVERY, never during the outage — the store is unreachable
+ * exactly when the episode is happening, so a marker written then would be
+ * the one write guaranteed to fail.
+ */
+export const DEGRADATION_DOC_PREFIX = 'degraded_'
+
+/** Marker id granularity, and the log re-notice interval for a long episode. */
+const DEGRADATION_BUCKET_MS = 60_000
+
+/** How long a marker survives the TTL sweep — long enough to look back. */
+const DEGRADATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+
+interface DegradationEpisode {
+  /** Calls that fell back to the in-process limiter. */
+  count: number
+  firstAtMs: number
+  lastAtMs: number
+  /** Last failure's code/message, truncated. */
+  code: string
+  /** Last minute we logged, so a sustained outage cannot flood the log. */
+  lastLoggedBucket: number
+}
+
+/**
+ * The episode currently in progress on THIS instance, or null when healthy.
+ * Module-scoped on purpose: it is a per-instance observation being reported,
+ * and there is nowhere durable to keep it while the durable store is down.
+ */
+let episode: DegradationEpisode | null = null
+
+/** Short, stable error code for the marker and the log line. */
+function failureCode(error: unknown): string {
+  const code = (error as { code?: unknown })?.code
+  if (typeof code === 'string' || typeof code === 'number') return String(code)
+  return String((error as { message?: unknown })?.message ?? 'unknown').slice(
+    0,
+    120,
+  )
+}
+
+/**
+ * Record one fallback. Logs at the start of an episode and at most once a
+ * minute after that — the public REST API now calls this path on every
+ * request, so a per-call `console.error` during a Firestore outage would be a
+ * log flood that buries the signal it is meant to be.
+ */
+function noteDegradation(nowMs: number, error: unknown): void {
+  const bucket = Math.floor(nowMs / DEGRADATION_BUCKET_MS)
+  if (!episode) {
+    episode = {
+      count: 1,
+      firstAtMs: nowMs,
+      lastAtMs: nowMs,
+      code: failureCode(error),
+      lastLoggedBucket: bucket,
+    }
+    console.error(
+      '[rate-limit] degraded: durable store unavailable, falling back to the per-instance cap',
+      { code: episode.code, atMs: nowMs },
+    )
+    return
+  }
+  episode.count += 1
+  episode.lastAtMs = nowMs
+  episode.code = failureCode(error)
+  if (bucket > episode.lastLoggedBucket) {
+    episode.lastLoggedBucket = bucket
+    console.error('[rate-limit] degraded: still falling back', {
+      code: episode.code,
+      count: episode.count,
+      sinceMs: episode.firstAtMs,
+    })
+  }
+}
+
+/**
+ * An episode ended: close it out and leave a durable record of the window.
+ *
+ * Fire-and-forget and best-effort — this is a diagnostic, and failing a
+ * customer's request because the postmortem breadcrumb could not be written
+ * would be a worse bug than the one it documents. The transaction shape
+ * matches the counter above so a marker merges cleanly when several instances
+ * recover into the same minute.
+ */
+function flushDegradation(firestore: any, nowMs: number): void {
+  const ended = episode
+  if (!ended) return
+  // Cleared BEFORE the await so a concurrent recovery cannot flush it twice.
+  episode = null
+  console.error('[rate-limit] recovered from degraded window', {
+    count: ended.count,
+    firstAtMs: ended.firstAtMs,
+    lastAtMs: ended.lastAtMs,
+    code: ended.code,
+  })
+
+  const bucketStart =
+    Math.floor(ended.firstAtMs / DEGRADATION_BUCKET_MS) * DEGRADATION_BUCKET_MS
+  const ref = firestore
+    .collection(RATE_LIMIT_COLLECTION)
+    .doc(`${DEGRADATION_DOC_PREFIX}${bucketStart}`)
+
+  void firestore
+    .runTransaction(async (tx: any) => {
+      const snapshot = await tx.get(ref)
+      const priorCalls = (snapshot.exists ? snapshot.get('calls') : 0) ?? 0
+      const priorEpisodes = (snapshot.exists ? snapshot.get('episodes') : 0) ?? 0
+      const priorFirst = snapshot.exists ? snapshot.get('firstAtMs') : undefined
+      const priorLast = snapshot.exists ? snapshot.get('lastAtMs') : undefined
+      tx.set(
+        ref,
+        {
+          calls: priorCalls + ended.count,
+          episodes: priorEpisodes + 1,
+          firstAtMs: Math.min(priorFirst ?? ended.firstAtMs, ended.firstAtMs),
+          lastAtMs: Math.max(priorLast ?? ended.lastAtMs, ended.lastAtMs),
+          code: ended.code,
+          region: process.env['VERCEL_REGION'] ?? null,
+          // Same TTL field the counters use, so the policy already configured
+          // on this collection sweeps these too — just far later.
+          expiresAt: new Date(nowMs + DEGRADATION_RETENTION_MS),
+        },
+        { merge: true },
+      )
+    })
+    .catch(() => undefined)
+}
+
+/**
+ * The degradation episode in progress on this instance, or `null`. Exposed
+ * for tests and for any future health surface; callers must not treat it as a
+ * global view — it only ever describes the instance that answers.
+ */
+export function currentRateLimitDegradation(): Readonly<DegradationEpisode> | null {
+  return episode
+}
+
+/** Test seam: forget any in-progress episode. */
+export function resetRateLimitDegradationForTests(): void {
+  episode = null
+}
+
 export interface DurableRateLimitOptions {
   limit?: number
   windowMs?: number
@@ -125,6 +288,11 @@ export async function consumeRateLimit(
       return next
     })
 
+    // The store answered, so any episode this instance was in is over. The
+    // marker is written here rather than in the `catch` because the store is
+    // unreachable exactly while the episode is happening (AGL-1679).
+    if (episode) flushDegradation(firestore, now)
+
     return {
       allowed: count <= limit,
       limit,
@@ -133,7 +301,7 @@ export async function consumeRateLimit(
       degraded: false,
     }
   } catch (error) {
-    console.error('[rate-limit] durable store unavailable, degrading', error)
+    noteDegradation(now, error)
     return { ...checkRateLimit(key, { limit, windowMs, now }), degraded: true }
   }
 }

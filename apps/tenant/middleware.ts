@@ -22,7 +22,13 @@ import { NextResponse } from 'next/server'
 // CommonJS outside the nx graph and must `require` the same file — see the
 // console middleware for the full reasoning.
 // eslint-disable-next-line @nx/enforce-module-boundaries
-import { baseCspDirectives } from '../../security-origins'
+import { baseCspDirectives, tenantImgSrcDirective } from '../../security-origins'
+
+/** Where CSP reports go. RELATIVE, so it resolves to the customer's own domain. */
+const CSP_REPORT_PATH = '/api/csp-report'
+
+/** The `Reporting-Endpoints` group name `report-to` resolves against. */
+const CSP_REPORT_GROUP = 'csp'
 
 /**
  * NO SANCTIONS GEO-BLOCK HERE, ON PURPOSE (AGL-1492).
@@ -416,6 +422,44 @@ export const middleware: NextMiddleware = async (req, event) => {
   // 'none'`, `base-uri 'self'`, `frame-ancestors` — plus the plugin sandbox.
   const response = NextResponse.rewrite(new URL(rewrite, req.url))
   response.headers.set('Content-Security-Policy', baseDirectives)
+  // A REPORT-ONLY `img-src`, and its reporting endpoint (AGL-1703). What the
+  // directive contains, and why it is not the console's, lives with
+  // `tenantImgSrcDirective`. What belongs here is why a second header is safe
+  // on the surface AGL-1228 removed one from.
+  //
+  // The AGL-1228 header was unsafe for a reason that does not generalise: it
+  // advertised a per-request `nonce-…`, and tenant pages are ISR-cached, so
+  // the header and the bytes could never agree. This one is the same string on
+  // every response — there is nothing per-request in it to go stale — and it
+  // names no `script-src` and no nonce, so it cannot re-create that mismatch.
+  //
+  // Nor can it shadow a nonce. Next resolves one as `content-security-policy
+  // || …-report-only` (`next/dist/server/app-render/app-render.js:167`, read in
+  // the installed version, not assumed). The enforcing header is set on the
+  // line above, unconditionally, so the `||` short-circuits and this header is
+  // never consulted.
+  //
+  // That short-circuit is why this goes HERE and on no other return path. The
+  // `/api/locked` and SEO rewrites above set no CSP at all, so a report-only
+  // header added to one of those WOULD become the string Next parses for a
+  // nonce — the AGL-523 shadowing shape, rebuilt. Pair it with the enforcing
+  // header or leave it off.
+  //
+  // It carries its own `report-uri`/`report-to`: a report-only policy with no
+  // reporting directive detects violations and tells nobody, which is what
+  // AGL-518 shipped for months and what reads as an all-clear. The endpoint is
+  // RELATIVE on purpose — it resolves against the document, so it lands on the
+  // customer's own domain and reaches `apps/tenant/app/api/csp-report`, which
+  // the matcher at the top of this file keeps out of the host rewrite.
+  response.headers.set(
+    'Reporting-Endpoints',
+    `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"`,
+  )
+  response.headers.set(
+    'Content-Security-Policy-Report-Only',
+    `${tenantImgSrcDirective(process.env.NODE_ENV === 'production')}; ` +
+      `report-uri ${CSP_REPORT_PATH}; report-to ${CSP_REPORT_GROUP}`,
+  )
   const overrideParam = req.nextUrl.searchParams.get(TENANT_HOST_PARAM)
   if (overrideParam) {
     response.cookies.set(TENANT_HOST_COOKIE, overrideParam, { path: '/' })

@@ -39,10 +39,11 @@ export interface MarkdownFieldProps {
   value: string
   onChange: (value: string) => void
   /**
-   * Open the caller's media picker. Omitted when there is nowhere to pick
-   * from — the toolbar's image action is then the editor's own prompt.
+   * Open the caller's media picker, with the alt text the author typed in the
+   * image dialog (AGL-1645). Omitted when there is nowhere to pick from — the
+   * toolbar's image action is then the editor's own prompt.
    */
-  onPickImageFromMedia?: () => void
+  onPickImageFromMedia?: (alt: string) => void
   minHeight?: number
   /** Shown under the editor in visual mode. */
   helperText?: string

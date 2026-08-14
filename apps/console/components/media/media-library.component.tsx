@@ -113,6 +113,7 @@ import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaAssetCard } from './media-asset-card.component'
+import { useMediaQuarantine } from './use-media-quarantine'
 import { confirmMediaDelete } from './media-delete-confirm.component'
 import {
   deletedMediaMessage,
@@ -889,6 +890,21 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     () => visibleItems.map((item: any) => String(item.$id)),
     [visibleItems],
   )
+  /**
+   * Which of the cards on screen have been DISABLED by staff (AGL-1612).
+   *
+   * The deny list is Admin-SDK-only by design, so this is a route probe
+   * rather than a listener — and it costs nothing on a healthy platform,
+   * where the route answers "none" without reading a media document. Keyed
+   * on the drawn order for the same reason ⇧-click is: the question is about
+   * the cards a person is looking at.
+   */
+  const quarantined = useMediaQuarantine({
+    mediaIds: orderedIds,
+    orgId,
+    hostId,
+    user,
+  })
 
   // Folders-as-grid-items (AGL-818): render the current level's folders as
   // cards ahead of the files. The "parent context" is the open folder when
@@ -3106,6 +3122,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 <MediaAssetCard
                   media={media}
                   formatBytes={formatBytes}
+                  // AGL-1612 — absent for every healthy asset, which is
+                  // almost all of them; the card renders no marker at all
+                  // in that case.
+                  quarantine={quarantined[media.$id as string]}
                   onSelect={onSelect}
                   selectable={!onSelect}
                   selected={selected.has(media.$id as string)}

@@ -17,7 +17,11 @@
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { PUBLISHER_AGREEMENT_VERSION } from '@aglyn/aglyn/app-utils/publisher-agreement'
+import {
+  PUBLISHER_AGREEMENT_UNAVAILABLE_NOTICE,
+  PUBLISHER_AGREEMENT_VERSION,
+  publisherAgreementIsPublished,
+} from '@aglyn/aglyn/app-utils/publisher-agreement'
 import {
   isValidPublisherHandle,
   validatePublisherProfileContent,
@@ -41,11 +45,26 @@ import {
  * echoes back some other string is refused rather than recorded — otherwise
  * "accepted v1 forever" becomes a way to never see a changed agreement, and
  * the whole point of versioning it is that a change re-asks.
+ *
+ * And the document must exist (AGL-1660). The console hides the control while
+ * it does not, but the console is UI: this route is the only writer, so this
+ * is the only place the refusal is a fact. Recording an acceptance of text we
+ * never served would put a signature in the record with nothing behind it,
+ * which is strictly worse than having no record — it looks like evidence.
  */
 const acceptPublisherAgreement: PluginApiHandler = async (req, res) => {
   const orgId = String(req.body?.orgId ?? '')
   const version = String(req.body?.version ?? '')
   if (!orgId) return res.status(400).json({ error: 'Missing orgId' })
+  if (!publisherAgreementIsPublished()) {
+    // 409, the same conflict-with-current-state answer a version mismatch
+    // gets: the request is well-formed, the world is not ready for it.
+    return res.status(409).json({
+      error: PUBLISHER_AGREEMENT_UNAVAILABLE_NOTICE,
+      unavailable: true,
+      currentVersion: PUBLISHER_AGREEMENT_VERSION,
+    })
+  }
   if (version !== PUBLISHER_AGREEMENT_VERSION) {
     return res.status(409).json({
       error:

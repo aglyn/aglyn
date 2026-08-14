@@ -25,11 +25,12 @@ import {
   collection,
   deleteDoc,
   doc,
+  getCountFromServer,
   limit,
   query,
   setDoc,
 } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
@@ -60,7 +61,45 @@ export function LocationsCard(props: LocationsCardProps) {
   const locations = [...(locationDocs ?? [])].sort((a: any, b: any) =>
     String(a.name ?? '').localeCompare(String(b.name ?? '')),
   )
-  const quota = Aglyn.checkQuota(org, 'inventoryLocations', locations.length)
+  /**
+   * The location HEAD-COUNT is a server aggregate, not the length of the
+   * capped listener (AGL-1716, the AGL-1706 shape).
+   *
+   * The smallest margin of the eight, and real for exactly one plan: the
+   * listener is `limit(25)` and `inventoryLocations` runs 1 / 1 / 2 / 4 / 6 /
+   * 10 / 50, so only Agency's 50 sits above the window. An agency with more
+   * than 25 stock buckets read its cap as satisfiable, and
+   * `api/hosts/resources` — which counts the collection — refused the add.
+   *
+   * Re-read after an add AND a delete: locations are hard-deleted here, so
+   * unlike the soft-deleting cards a removal really does free a slot on both
+   * sides, and a one-shot that missed it would keep refusing.
+   *
+   * `locations.length === 0` below still decides the FIRST location's
+   * `isDefault` flag off the loaded rows, which is the right question for it
+   * — that one is about what this card can see, not about the site's total.
+   */
+  const [locationCountEpoch, setLocationCountEpoch] = useState(0)
+  const [serverLocationCount, setServerLocationCount] = useState<number | null>(
+    null,
+  )
+  useEffect(() => {
+    let active = true
+    void getCountFromServer(collection(firestore, 'hosts', hostId, 'locations'))
+      .then((snapshot) => {
+        if (active) setServerLocationCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Falls back to the loaded rows — a LOWER bound and the prior
+        // behaviour, never 0, which reads as "no locations used" on a site
+        // that is over its band.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId, locationCountEpoch])
+  const locationCount = serverLocationCount ?? locations.length
+  const quota = Aglyn.checkQuota(org, 'inventoryLocations', locationCount)
   const [name, setName] = useState('')
 
   const handleAdd = useCallback(async () => {
@@ -87,6 +126,7 @@ export function LocationsCard(props: LocationsCardProps) {
         } satisfies CommerceModel.InventoryLocation,
       })
       setName('')
+      setLocationCountEpoch((epoch) => epoch + 1)
     } catch (error: any) {
       enqueueSnackbar(error?.message ?? 'Could not add location', {
         variant: 'warning',
@@ -117,6 +157,9 @@ export function LocationsCard(props: LocationsCardProps) {
         .catch(() => false)
       if (!confirmed) return
       await deleteDoc(doc(firestore, 'hosts', hostId, 'locations', location.$id))
+      // A HARD delete, so the slot really is freed on both sides — the
+      // one-shot aggregate has to be told (AGL-1716).
+      setLocationCountEpoch((epoch) => epoch + 1)
     },
     [confirm, firestore, hostId],
   )
@@ -191,10 +234,12 @@ export function LocationsCard(props: LocationsCardProps) {
           </Button>
         </Stack>
         <Typography variant="caption" color="text.secondary">
+          {/* The site's locations, not this card's rows (AGL-1716) — the
+              readout and the gate must agree, and the gate now counts. */}
           {planReady
-            ? `${locations.length}/${quota.limit === Aglyn.UNLIMITED ? '∞' : quota.limit} locations on your plan`
-            : `${locations.length} location${
-                locations.length === 1 ? '' : 's'
+            ? `${locationCount}/${quota.limit === Aglyn.UNLIMITED ? '∞' : quota.limit} locations on your plan`
+            : `${locationCount} location${
+                locationCount === 1 ? '' : 's'
               } · checking your plan…`}
         </Typography>
       </Stack>

@@ -93,9 +93,6 @@ import { createGoogleOAuthProvider } from '../../../../utils/oauth-providers'
 import { useOrgScope } from '../../../../hooks/use-org-scope'
 import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
 
-/** Hoisted so the photo resolver's memo isn't busted every render. */
-const PROFILE_CARD_GRAVATAR = { gravatar: { size: '144' } }
-
 const basicSchema: FormSchema = {
   id: 'basic',
   title: 'Basic info',
@@ -360,7 +357,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
   // below it rendered a bare initial with no `src`, so one page gave two
   // answers for one user's avatar — a photo up top, a grey "Z" in the card
   // that claims to be showing you your avatar.
-  const resolvedPhotoUrl = useUserPhoto(PROFILE_CARD_GRAVATAR)
+  const resolvedPhotoUrl = useUserPhoto()
   useEffect(() => {
     setPhotoUrl(String((data as any)?.photoUrl ?? user?.photoURL ?? ''))
   }, [(data as any)?.photoUrl, user?.photoURL])
@@ -671,9 +668,11 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
           <Avatar
             // The edited field first, so the card previews what Save would
-            // do; the resolved photo (auth photoURL, then Gravatar) when it
-            // is empty, so clearing the field shows what the console will
-            // actually fall back to rather than a letter it never shows.
+            // do; the auth `photoURL` when it is empty, so clearing the field
+            // shows what the console will actually fall back to. That used to
+            // include a Gravatar step, removed in AGL-1683 — with nothing
+            // stored, the initial below is now what everyone else sees, and
+            // this card shows exactly that.
             src={photoUrl.trim() || resolvedPhotoUrl || undefined}
             slotProps={{ img: { referrerPolicy: 'no-referrer' } }}
             sx={{

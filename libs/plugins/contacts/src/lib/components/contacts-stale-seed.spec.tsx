@@ -90,6 +90,12 @@ jest.mock('firebase/firestore', () => ({
   query: (name: string) => name,
   limit: () => undefined,
   doc: () => ({}),
+  // The page's audience head-count (AGL-1706). Nothing here turns on it —
+  // it is stubbed so the real SDK is not handed this file's string-shaped
+  // collection ref, which throws synchronously out of the effect.
+  getCountFromServer: jest.fn(async () => ({
+    data: () => ({ count: contactDocs.length }),
+  })),
   addDoc: jest.fn().mockResolvedValue(undefined),
   deleteDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),

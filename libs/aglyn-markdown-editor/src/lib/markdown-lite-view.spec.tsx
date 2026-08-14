@@ -46,3 +46,34 @@ describe('MarkdownLiteView (markdown-lite parity)', () => {
     expect(container.textContent).toBe('Steps:do thisthen that')
   })
 })
+
+/**
+ * AGL-1686. The console preview is the surface an author checks a document
+ * against before publishing, so it has to resolve what the tenant resolves —
+ * otherwise a correct document looks broken here and nobody publishes it.
+ *
+ * No `hostId`: the console has no site context, so the scope the picker baked
+ * into the reference is what resolves. The console serves `/api/media/cdn/…`
+ * itself, so the relative URL is fetchable from this origin.
+ */
+describe('MarkdownLiteView images (AGL-1686)', () => {
+  it('resolves a media reference to the CDN url', () => {
+    const { container } = render(
+      <MarkdownLiteView source={'![Chart](media:org:acme/med1)'} />,
+    )
+    const image = container.querySelector('img')
+    expect(image?.getAttribute('src')).toBe('/api/media/cdn/org:acme/med1')
+    expect(image?.getAttribute('alt')).toBe('Chart')
+  })
+
+  it('passes a plain URL through and renders nothing for a bad reference', () => {
+    const { container } = render(
+      <MarkdownLiteView source={'![a](https://x.example/a.png)'} />,
+    )
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(
+      'https://x.example/a.png',
+    )
+    const bad = render(<MarkdownLiteView source={'![a](media:junk)'} />)
+    expect(bad.container.querySelector('img')).toBeNull()
+  })
+})

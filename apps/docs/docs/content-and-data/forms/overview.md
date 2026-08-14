@@ -22,12 +22,15 @@ and your [contacts CRM](../contacts/overview.md).
 2. Configure the fields and the submit behavior.
 3. Publish — the form posts to Aglyn's submit API.
 
-:::note Submission limits
-To keep spam from burning your plan's form allowance, submissions are capped at
-**10 per minute per site, per visitor address**. A visitor over the limit gets a
-short retry delay, not a permanent block. It's per address, so one spammer can't
-lock out everyone else — but bulk-importing through your own public form will trip
-it. Use [datasets](../datasets/import-export.md) for imports instead.
+:::note Per-visitor rate limit
+Submissions are capped at **10 per minute per site, per visitor address**. A
+visitor over the limit gets a short retry delay, not a permanent block. It's per
+address, so one spammer can't lock out everyone else — but bulk-importing through
+your own public form will trip it. Use
+[datasets](../datasets/import-export.md) for imports instead.
+
+That per-address limit is one of several protections in front of your form — see
+[Spam and abuse protection](#spam-and-abuse-protection).
 :::
 
 ### Monthly allowance per plan
@@ -44,13 +47,71 @@ Each tier includes a monthly form-submission allowance, counted per site:
 | Advanced | 100,000 |
 | Agency & Enterprise | Unlimited |
 
-At the cap, further submissions are **declined** — the visitor sees the form's error
-message rather than a fake success — and the count resets with the calendar month
-(UTC). The [billing page's usage meters](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
+On **Free**, that allowance is a hard wall: at the cap, further submissions are
+**declined** — the visitor sees the form's error message rather than a fake success.
+On every paid tier it is a band, not a wall: submissions past the included count keep
+working and bill as
+[metered overage](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters),
+the same way storage and API requests do, because a dropped submission is a lost lead.
+Either way the count resets with the calendar month (UTC), and the
+[billing page's usage meters](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
 warn you at 80% before you get there.
+
+**Unlimited** on Agency and Enterprise means exactly that about the *plan*: nothing
+meters your submission volume and nothing cuts you off for buying too small a tier.
+It is not a promise that the endpoint will take any number of requests from anyone —
+every site, on every plan, sits under the
+[anti-abuse ceiling](#the-per-site-monthly-ceiling) below.
 
 A single submission can carry up to **20 fields** and about **10 KB** of text — plenty
 for any real form, tight enough that a bot can't stuff your inbox.
+
+## Spam and abuse protection
+
+A published form is a public endpoint on the open internet — that is the point of it.
+Three things stand in front of it, and none of them asks your visitors to prove they
+are human:
+
+- **A honeypot field.** Every Aglyn form carries an input that humans never see and
+  never fill. A bot that fills it in gets an ordinary-looking success and nothing is
+  stored — it learns nothing and keeps wasting its time.
+- **A per-address rate limit.** The 10-per-minute limit above, enforced across all of
+  our servers rather than per instance, so it still holds when traffic is spread out.
+- **A per-site monthly ceiling.** Below.
+
+There is deliberately **no CAPTCHA and no attestation check** on the submit endpoint.
+A challenge in front of a lead-capture form is paid for by every real visitor so that
+a bot doesn't get through, and it costs conversions. Whether that trade is the right
+one is an open question we have not settled — see
+[Trust & security](/trust#api-surface) for the same statement from the reviewer's
+side. Until it changes, the ceiling is what bounds the damage.
+
+### The per-site monthly ceiling
+
+Separate from your plan allowance, each site has a monthly ceiling on how many
+submissions the endpoint will accept **at all**. It is abuse containment, not a
+quota: you are not metered against it, it is not something to plan capacity around,
+and no legitimate site reaches it. It sits at **ten times your plan's included
+allowance, or 5,000, whichever is larger** — and at 1,000,000 on the unlimited tiers
+— so it is always far above the volume you actually bought.
+
+If a site does cross it:
+
+- Further submissions are refused for the rest of the calendar month, and **a refused
+  submission is not billed**. It is turned away before the billing counter moves, so a
+  flood cannot add anything to your invoice — not even the part that was refused.
+- Nothing is stored, so there is no spam in your inbox to clean up afterwards.
+- The visitor is told plainly that the form isn't accepting messages and that their
+  message was **not** sent — never a fake success that leaves a real customer waiting
+  for a reply. If your site publishes a **support email**, the notice offers it, so
+  there is still a way to reach you.
+- Your site's **Inbox** shows *"Form submissions are paused"* above the tabs, with how
+  many submissions were refused and the date it lifts, and site managers get a
+  notification.
+- It lifts by itself at the start of the next month (UTC).
+
+Crossing the ceiling almost always means a bot found one of your forms. If it was real
+traffic, **contact support** and we will raise the ceiling for your site.
 
 ## Field types
 

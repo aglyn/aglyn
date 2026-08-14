@@ -72,6 +72,9 @@
 // CLI quirks handled here: `vercel inspect` prints to STDERR (we capture
 // both streams); piped `vercel ls` emits bare deployment URLs with no status
 // column (we confirm Ready via inspect); every inspect is timed out at ~30s.
+// `vercel ls` also PAGES at 20 rows no matter how deep we intend to walk, so
+// the baseline is selected with the server-side `--status READY` filter rather
+// than by scanning the list (AGL-1632 — see MAX_READY_CANDIDATES).
 
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
@@ -84,9 +87,27 @@ const TEAM_SCOPE = 'team_JFfQodGE8VhCAZM6usYTu54M'
 const INSPECT_TIMEOUT_MS = 30_000
 const LS_TIMEOUT_MS = 60_000
 const PROMOTE_TIMEOUT_MS = 240_000
-// Deep enough to reach a Ready deployment past the run of Canceled entries the
-// ignore-step produces on every non-production push.
-const MAX_LS_CANDIDATES = 25
+// How many READY candidates to ask the server for. This is NOT a scan depth.
+//
+// It used to be one (`MAX_LS_CANDIDATES = 25`): the baseline was found by
+// walking the unfiltered `vercel ls` list and inspecting each entry until one
+// came back Ready. That walk could never reach 25, because piped `vercel ls`
+// returns a single page of 20 (measured 2026-08-14 on aglyn-plugins) and
+// nothing passed `--limit` or `--next`. A path-scoped project accumulates
+// roughly one Canceled record per promote — the ignore-build-step CREATES a
+// deployment and then cancels it — so its newest Ready build sinks steadily
+// down that page and would eventually fall off it, at which point the run
+// exited 2 with "wait for the build", advice that is wrong for this cause
+// (AGL-1632).
+//
+// The fix is to stop scanning: `--status READY` filters SERVER-side across the
+// project's entire history, so entry 1 is the newest Ready deployment however
+// many Canceled records precede it, and the page size stops mattering.
+// Measured 2026-08-14 on www-aglyn-io, whose 25 newest production deployments
+// are every one of them Canceled: the filtered query still returns its Ready
+// builds from 28-30 days ago. The few spare candidates below only cover the
+// race where a listed deployment stops being Ready before we inspect it.
+const MAX_READY_CANDIDATES = 5
 // A path-scoped BUILD MISSING normally names one or two commits; cap the list
 // so a misconfigured `buildsOnPaths` cannot bury the verdict under the backlog.
 const MAX_LISTED_COMMITS = 10
@@ -357,11 +378,32 @@ const firstLine = (s) => (s || '(empty output)').split('\n').find((l) => l.trim(
 
 class FatalError extends Error {}
 
-/** Newest-first production deployment URLs from piped `vercel ls <project> --prod`. */
-async function listProdDeployments(project) {
-  const res = await vercel(['ls', project.name, '--prod'], { timeoutMs: LS_TIMEOUT_MS })
+/**
+ * Newest-first READY production deployment URLs for a project (AGL-1632).
+ *
+ * `--status READY` is what makes this correct: the filter is applied by the API
+ * across the project's whole deployment history, so the first row is the newest
+ * Ready deployment no matter how many Canceled records sit in front of it. The
+ * previous version listed everything and scanned, which silently bottomed out at
+ * the 20-row page size.
+ *
+ * An empty result is therefore meaningful and unambiguous: the project has no
+ * Ready production deployment at all, not merely none recent enough to see.
+ */
+async function listReadyProdDeployments(project) {
+  const res = await vercel(
+    ['ls', project.name, '--prod', '--status', 'READY', '--limit', String(MAX_READY_CANDIDATES)],
+    { timeoutMs: LS_TIMEOUT_MS },
+  )
   if (res.binMissing) throw new FatalError('`vercel` CLI not found on PATH — install it (npm i -g vercel)')
-  if (res.timedOut) return { error: `\`vercel ls ${project.name} --prod\` timed out after ${LS_TIMEOUT_MS / 1000}s` }
+  if (res.timedOut) return { error: `\`vercel ls ${project.name} --prod --status READY\` timed out after ${LS_TIMEOUT_MS / 1000}s` }
+  if (!res.ok) {
+    return {
+      error:
+        `\`vercel ls ${project.name} --prod --status READY\` failed: ${firstLine(res.out)} ` +
+        '(--status and --limit need Vercel CLI >= 41; run `vercel --version`)',
+    }
+  }
   // Piped `vercel ls` emits bare deployment URLs (no status column) on stdout.
   let urls = res.stdout
     .split('\n')
@@ -371,18 +413,29 @@ async function listProdDeployments(project) {
     // Defensive fallback: newer CLI formats may decorate lines; scan tokens.
     urls = [...new Set(res.out.match(/https:\/\/[a-z0-9][a-z0-9.-]*\.vercel\.app/gi) ?? [])]
   }
-  if (urls.length === 0) {
-    return { error: `no production deployments found (\`vercel ls ${project.name} --prod\`): ${firstLine(res.out)}` }
-  }
+  // An empty list is a real answer here, not a parse failure — see below.
   return { urls }
 }
 
 /** Newest deployment whose inspect status is Ready. */
 async function findNewestReady(project) {
-  const listed = await listProdDeployments(project)
+  const listed = await listReadyProdDeployments(project)
   if (listed.error) return { error: listed.error }
+  // Distinguish the two causes the old single message conflated (AGL-1632).
+  // This branch can now only mean "no Ready build has EVER existed for this
+  // project" — the query is not windowed, so it cannot mean "the Ready build is
+  // older than we looked". www-aglyn-io is the shape that used to land here.
+  if (listed.urls.length === 0) {
+    return {
+      error:
+        `project "${project.name}" has NO Ready production deployment — ` +
+        `\`vercel ls ${project.name} --prod --status READY\` searches the project's whole ` +
+        'history, so this is not a stale-scan artefact. Check the dashboard: every ' +
+        'production build is Canceled or Errored, or the project is retired.',
+    }
+  }
   const tried = []
-  for (const url of listed.urls.slice(0, MAX_LS_CANDIDATES)) {
+  for (const url of listed.urls) {
     const info = await inspect(url)
     if (info.error) return { error: info.error }
     // Authoritative cross-check: inspect reports the owning project's name
@@ -399,10 +452,14 @@ async function findNewestReady(project) {
     }
     tried.push(`${hostOf(url)}=${info.status ?? 'unknown'}`)
   }
+  // Reachable only as a race: the API listed these as READY and every one of
+  // them had changed state by the time we inspected it. Distinct from the
+  // empty-list case above, and genuinely worth re-running.
   return {
     error:
-      `none of the ${Math.min(listed.urls.length, MAX_LS_CANDIDATES)} newest production ` +
-      `deployments is Ready (${tried.join(', ')}) — wait for the build or check the dashboard`,
+      `\`vercel ls ${project.name} --prod --status READY\` listed ${listed.urls.length} ` +
+      `Ready deployment(s), but none still inspects as Ready (${tried.join(', ')}) — ` +
+      'the state changed underneath the query; re-run',
   }
 }
 

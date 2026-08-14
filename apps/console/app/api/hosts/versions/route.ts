@@ -167,6 +167,11 @@ async function handler(request: Request): Promise<Response> {
     // — same org read, plus the platform/host/user scopes and the distinct
     // 423 body an API consumer can tell apart from a role 403. Staff bypass
     // is the un-panic invariant.
+    //
+    // Audited for read-only (AGL-1625) and left deriving from the method:
+    // this route dispatches on nothing and does one thing — `create()` a
+    // version document. Every path below the verdict either writes or
+    // returns an error, so POST → `write` is the truth and not a guess.
     const lockdown = await getLockdownVerdict({
       request,
       staff: decoded['staff'] === true,

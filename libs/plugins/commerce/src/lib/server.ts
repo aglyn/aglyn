@@ -65,6 +65,7 @@ import { reviewsHandler } from './server/reviews'
 import { connectHandler } from './server/connect'
 import { draftOrderHandler } from './server/draft-order'
 import { memberPostHandler } from './server/member-post'
+import { orderAnalyticsHandler } from './server/order-analytics'
 import { posOrderHandler } from './server/pos-order'
 import { processAbandonedHandler } from './server/process-abandoned'
 import { processRestockHandler } from './server/process-restock'
@@ -88,6 +89,8 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/feed', feedHandler)
   registerPluginApiRoute('commerce/newsletter', newsletterHandler)
   registerPluginApiRoute('commerce/notify-restock', notifyRestockHandler)
+  // GA-safe order projection for the storefront `purchase` (AGL-1641).
+  registerPluginApiRoute('commerce/order-analytics', orderAnalyticsHandler)
   registerPluginApiRoute('commerce/product', productHandler)
   registerPluginApiRoute('commerce/related', relatedHandler)
   registerPluginApiRoute('commerce/reservation-availability', reservationAvailabilityHandler)

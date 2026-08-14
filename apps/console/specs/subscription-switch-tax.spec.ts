@@ -64,6 +64,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL predicate, not a re-typed triple (AGL-1715). A hand-written mock
+  // of a single-source list is the drift this guard exists to prevent: the
+  // spec would keep passing while the route's real answer changed.
+  isLiveSubscriptionStatus: jest.requireActual('@aglyn/aglyn/app-utils/org-billing-doc')
+    .isLiveSubscriptionStatus,
   buildRoute: () => '/acme/manage/billing',
   Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
   isCustomPricedPlan: (plan: string) => plan === 'enterprise',

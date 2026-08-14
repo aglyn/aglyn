@@ -28,6 +28,13 @@
  * Pure, and separate from the route, because the interesting part is not the
  * HTTP: it is deciding which reports are worth keeping.
  *
+ * Lives in a lib rather than `apps/console/utils` since AGL-1703, which gave
+ * the tenant its own collector. The two ROUTES are different — the tenant's is
+ * driven by anonymous visitors to every published customer site, so it carries
+ * limiters the console's does not need — but normalizing two wire formats and
+ * throwing away extension noise is the same job on both, and a second copy of
+ * a parser that reads hostile input is a second thing to get wrong.
+ *
  * ## Why filtering is the whole job
  *
  * A CSP endpoint that logs everything is worse than none. Browser extensions

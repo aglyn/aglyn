@@ -419,6 +419,9 @@ const CollectionEntryBody = forwardRef<
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+  // The site being rendered, for image blocks (AGL-1686) — read once here
+  // because hooks cannot run inside the block map below.
+  const { hostId } = Aglyn.useSite()
   const source = (markdown ?? '').trim()
   const unresolved = !source || UNRESOLVED_TOKEN.test(source)
   const blocks = useMemo(
@@ -468,7 +471,10 @@ const CollectionEntryBody = forwardRef<
             <Box
               key={index}
               component="img"
-              src={block.src}
+              // Resolved like the entry's cover image a few hundred lines
+              // below (AGL-1686): a body image is the same kind of asset and
+              // has no reason to be stored in a more fragile form.
+              src={Aglyn.resolveMediaSrc(block.src, { hostId })}
               alt={block.alt}
               sx={{ maxWidth: '100%', borderRadius: 1, my: 1 }}
             />

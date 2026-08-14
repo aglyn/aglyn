@@ -144,7 +144,9 @@ reaches you in **this browser**:
 
 - **Unread count in tab title** — badges the browser tab, e.g. `(3) Aglyn`,
   so you can see new activity from another tab. On by default.
-- **Sound** — a short chime when a notification arrives. Off by default.
+- **Sound** — a short chime when a notification arrives. On by default on a
+  browser you haven't set it on before; a device where you already turned it off
+  keeps your choice.
 - **Desktop notifications** — a system notification, shown only while the
   Aglyn tab is in the background (in the foreground, the bell and chime
   already tell you). Off by default; switching it on asks your browser for

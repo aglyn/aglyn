@@ -400,8 +400,6 @@ const loadPageDataCached = cache(
                 hostRes.host as never,
               ),
                 {
-                  subjectId:
-                    (orgRes.org as { $id?: string })?.$id ?? hostId,
                   orgId: (orgRes.org as { $id?: string })?.$id ?? null,
                 },
               )
@@ -529,7 +527,6 @@ const loadPageDataCached = cache(
                 hostRes.host as never,
               ),
               {
-                subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId,
                 orgId: (orgRes.org as { $id?: string })?.$id ?? null,
               },
             )
@@ -764,7 +761,6 @@ const loadPageDataCached = cache(
         hostRes.host as never,
       ),
       {
-        subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId,
         orgId: (orgRes.org as { $id?: string })?.$id ?? null,
       },
     )

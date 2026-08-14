@@ -249,6 +249,145 @@ export function signupsHealth(
 }
 
 /**
+ * Rate-limiter degradation, reduced to a health verdict (AGL-1693).
+ *
+ * `consumeRateLimit` fails SOFT: when the Firestore counter is unreachable it
+ * answers from a per-instance `Map` and flags `degraded`. AGL-1679 made that
+ * findable after the fact — on recovery the instance writes one summary
+ * document `rateLimits/degraded_{minuteBucket}` — but nothing reads it, so a
+ * degraded window during the beta still passes unnoticed in real time. This
+ * turns "did any limiter fall back recently" into the same 200/503 contract
+ * the sibling checks speak, so the AGL-1502 uptime check + alert + email path
+ * is the listener.
+ *
+ * **The window is the whole design.** Markers carry a 30-day `expiresAt`, so
+ * "does a marker exist" would leave the endpoint red for a month after a
+ * thirty-second blip — a recovered incident permanently paging is how a check
+ * gets muted, and muted is worse than absent. That is the opposite of the
+ * backups check, which stays red BY DESIGN because a missing restore point is
+ * a condition that persists until someone fixes it (DISASTER_RECOVERY.md gap
+ * 2). A degraded limiter window is an EVENT: it is over, and what is owed is
+ * a notification, not a standing alarm. So the verdict covers a trailing
+ * window and clears itself.
+ *
+ * Filtering on `lastAtMs` rather than the marker's id: the id is bucketed on
+ * `firstAtMs`, so a long episode's document is stamped with the minute the
+ * outage STARTED. An id-range window would miss exactly the longest episodes,
+ * which are the ones worth waking up for.
+ *
+ * Pure on purpose, like `backupsHealth` and `signupsHealth`: the route
+ * queries, this decides, the spec exercises every branch without a network.
+ */
+export interface RateLimitDegradationMarker {
+  /** Calls that fell back to the per-instance cap. */
+  calls?: number
+  /** Instance-episodes merged into this minute bucket. */
+  episodes?: number
+  /** When the episode's last fallback happened. */
+  lastAtMs?: number
+  /** The failure code the episode ended on. */
+  code?: string
+}
+
+export interface RateLimitsCheck extends HealthCheck {
+  /**
+   * Fallback calls inside the trailing window. A COUNT only — the endpoint is
+   * public, and limiter keys are hashed client IPs. Null when the query
+   * itself failed.
+   */
+  degradedCalls: number | null
+  /** Instance-episodes inside the window. 2+ means several instances saw it. */
+  degradedEpisodes: number | null
+  /** Minutes since the most recent fallback, so the body dates itself. */
+  minutesSinceLast: number | null
+  /** The trailing window the counts cover, so the body is self-describing. */
+  windowMinutes: number
+  /** The count above which this reports degraded. */
+  threshold: number
+}
+
+/**
+ * Trailing window the degradation counts cover.
+ *
+ * Bounded from below by the alert path, not by taste. The probe memoises for
+ * 5 minutes, the uptime check runs every 5, and the alert policy wants ~10
+ * minutes of sustained failure before it emails — so a window shorter than
+ * ~20 minutes can go red and green again before anyone is told, which is a
+ * check that reports nothing while looking like it works. 30 leaves ten
+ * minutes of margin and still clears itself inside half an hour.
+ */
+export const RATE_LIMIT_DEGRADED_WINDOW_MINUTES = 30
+
+/**
+ * Any fallback at all is worth an email. Unlike the signup alarm there is no
+ * organic baseline to clear: a healthy deployment produces exactly zero of
+ * these, and one is already the statement "for some requests, the global cap
+ * was not the cap". Firestore retries transactions internally, so a failure
+ * that reaches this code is not a single unlucky contention.
+ */
+export const MAX_DEGRADED_CALLS_PER_WINDOW = 0
+
+export function rateLimitsHealth(
+  markers: RateLimitDegradationMarker[] | null,
+  ms: number,
+  now: number = Date.now(),
+  threshold: number = MAX_DEGRADED_CALLS_PER_WINDOW,
+  windowMinutes: number = RATE_LIMIT_DEGRADED_WINDOW_MINUTES,
+): RateLimitsCheck {
+  // A failed query is degraded, not ok — same rule as `signupsHealth`. An
+  // alarm that cannot see the thing it watches must not report calm, and this
+  // one reads the collection that just failed for the limiter.
+  if (markers === null) {
+    return {
+      ok: false,
+      ms,
+      code: 'markers-unavailable',
+      degradedCalls: null,
+      degradedEpisodes: null,
+      minutesSinceLast: null,
+      windowMinutes,
+      threshold,
+    }
+  }
+
+  const cutoff = now - windowMinutes * 60_000
+  // The window is re-applied here rather than trusted from the query, so the
+  // rule lives in one spec-covered place and a marker whose `lastAtMs` is
+  // missing cannot silently count as recent.
+  const recent = markers.filter(
+    (marker) =>
+      typeof marker.lastAtMs === 'number' && marker.lastAtMs >= cutoff,
+  )
+
+  const degradedCalls = recent.reduce(
+    (total, marker) => total + (Number(marker.calls) || 0),
+    0,
+  )
+  const degradedEpisodes = recent.reduce(
+    (total, marker) => total + (Number(marker.episodes) || 0),
+    0,
+  )
+  const lastAtMs = recent.reduce<number | null>(
+    (latest, marker) => Math.max(latest ?? -Infinity, marker.lastAtMs as number),
+    null,
+  )
+
+  return {
+    ok: degradedCalls <= threshold,
+    ms,
+    ...(degradedCalls <= threshold ? {} : { code: 'rate-limiter-degraded' }),
+    degradedCalls,
+    degradedEpisodes,
+    minutesSinceLast:
+      lastAtMs === null
+        ? null
+        : Math.round(((now - lastAtMs) / 60_000) * 10) / 10,
+    windowMinutes,
+    threshold,
+  }
+}
+
+/**
  * Reuse a probe result for `ttlMs`, per instance.
  *
  * The endpoint is public and unauthenticated, so an unthrottled dependency

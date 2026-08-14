@@ -55,11 +55,12 @@ import {
   collection,
   deleteDoc,
   doc,
+  getCountFromServer,
   limit,
   query,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 const SOURCE_LABELS: Record<ContactSource, string> = {
   form: 'Form',
@@ -94,7 +95,27 @@ const csvEscape = (value: unknown) => {
  * `contactsPerHost` quota check.
  */
 export function ContactsConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, org } = props
+  const { hostId, org, releaseFlag } = props
+  // Whether the audience overage on this page is actually INVOICED
+  // (AGL-1662), and whether that question has been answered yet.
+  //
+  // AGL-1604 stopped the usage cron putting `contactsOverageUsd` into
+  // `billedCents` while `release_contacts` is off for the org; `db5ecdf2b`
+  // taught the console billing page's caption the same thing. This page's own
+  // alert still quoted the dollar figure with no flag check — and this is the
+  // surface a staff member reaches with the flag OFF, because the shell's
+  // `FeatureGate` admits them on `visible` (`released || isStaff`). Support
+  // then reads that number back to a customer whose invoice will not carry it.
+  //
+  // The shell resolves this from `released`, never `visible`: staff opening a
+  // page does not put a line on the customer's bill.
+  //
+  // Both default to the WITHHELD answer when the prop is absent, which only
+  // happens in a direct mount — the shell always supplies it for a surface
+  // with a nav-tab flag. A caller that has not resolved the verdict has not
+  // earned the right to quote a charge.
+  const contactsBilled = releaseFlag?.released ?? false
+  const releaseFlagsReady = releaseFlag?.ready ?? false
   // Org-shared data root (AGL-237). Null until the org lookup settles
   // (AGL-1061), and for a host with no owning org — the pre-migration host
   // path this used to fall back to is gone (AGL-1050), so the CRM lists
@@ -136,9 +157,60 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
       ),
     [contactDocs],
   )
+  /**
+   * The HEAD-COUNT, read as a server-side aggregate (AGL-1706).
+   *
+   * The listener above is `limit(1000)` and always will be — nobody needs
+   * 40,000 rows streamed into a table. What it must not do is answer "how
+   * many contacts does this org have", and it did: `contacts.length`
+   * saturated at 1,000, which is *exactly* the smallest paid included band
+   * (`starter`). So `overageContacts = max(0, used − included)` was 0 on
+   * every stock plan and the alert below could not render at all.
+   *
+   * Worse than the dead alert, the same capped number fed the readout in the
+   * toolbar. An org with 40,000 contacts on Pro read "1,000 contacts ·
+   * 10,000 included" — a page whose job is telling a customer where they sit
+   * in their band, telling them they have room they do not have. The console
+   * billing page read the truth from `getCountFromServer` on this very
+   * collection, so the two surfaces disagreed about the same org's audience.
+   *
+   * THE LIST AND THE COUNT ARE DIFFERENT QUESTIONS and now have different
+   * answers: one aggregate read per mount, the same call
+   * `billing-usage.component.tsx` already makes against the same path.
+   *
+   * The counting RULE is untouched — `checkContactQuota` is an entitlement
+   * input and the usage cron is what bills from it. Only this page's input
+   * stopped being a saturated one.
+   */
+  const [serverContactCount, setServerContactCount] = useState<number | null>(
+    null,
+  )
+  useEffect(() => {
+    if (!dataScope) return
+    let active = true
+    void getCountFromServer(
+      collection(firestore, dataScope[0], dataScope[1], 'contacts'),
+    )
+      .then((snapshot) => {
+        if (active) setServerContactCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Falls back to the listener length below — a LOWER bound, and the
+        // behaviour this page had before. Deliberately not 0: `checkContactQuota`
+        // answers a question from whatever it is handed, and a defaulted 0
+        // would clear the free plan's hard-band alert on an org that is over it.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, dataScope])
+  // Pending or denied, the listener length stands in. It can only UNDERSTATE
+  // (it is the same collection, capped), never overstate, so no alert this
+  // number gates can fire on a count larger than the truth.
+  const contactCount = serverContactCount ?? contacts.length
   // Audience bands (AGL-890): paid plans meter past the included count
   // instead of blocking; only free hard-bands (quota.allowed = false).
-  const quota = checkContactQuota(org, contacts.length)
+  const quota = checkContactQuota(org, contactCount)
   // Signups whose CRM record was dropped at the free band (AGL-891) —
   // written by upsert-contact, host-scoped.
   const { data: droppedCounter } = useFirestoreDoc<any>(
@@ -403,7 +475,10 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
               sx={{ minWidth: 220 }}
             />
             <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-              {`${contacts.length.toLocaleString()} contacts · ${
+              {/* The org's audience, not the page's row count (AGL-1706) —
+                  these two stopped being the same number the moment the
+                  listener grew a `limit(1000)`. */}
+              {`${contactCount.toLocaleString()} contacts · ${
                 Number.isFinite(quota.included)
                   ? `${quota.included.toLocaleString()} included`
                   : '∞'
@@ -502,13 +577,36 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                   : '') +
                 '. Upgrade in Billing to keep collecting.'}
             </Alert>
-          ) : quota.overageContacts > 0 && quota.overageRateUsd != null ? (
+          ) : quota.overageContacts > 0 &&
+            quota.overageRateUsd != null &&
+            // No claim about money until the verdict that decides it has
+            // settled (AGL-1662). `release_contacts` is default-off before
+            // Remote Config activation, so an ungated alert would assert the
+            // withheld wording for one paint on an org that IS billed.
+            releaseFlagsReady ? (
             <Alert severity="info">
-              {`${quota.overageContacts.toLocaleString()} contacts over ` +
-                `your plan's included ${quota.included.toLocaleString()} — ` +
-                `metered at $${quota.overageRateUsd}/1,000 per month ` +
-                `(≈$${quota.overageMonthlyUsd.toFixed(2)} this month). ` +
-                'Upgrade in Billing for a larger included audience.'}
+              {contactsBilled
+                ? `${quota.overageContacts.toLocaleString()} contacts over ` +
+                  `your plan's included ${quota.included.toLocaleString()} — ` +
+                  `metered at $${quota.overageRateUsd}/1,000 per month ` +
+                  `(≈$${quota.overageMonthlyUsd.toFixed(2)} this month). ` +
+                  'Upgrade in Billing for a larger included audience.'
+                : // The wording `db5ecdf2b` put on the billing page, which is
+                  // itself the wording `1a2aed5cb` published to
+                  // `billing-and-plans/overview.md` (AGL-1601/1603). Staff and
+                  // customer must not read different sentences about the same
+                  // org's money.
+                  //
+                  // THE COUNT STAYS, THE TOTAL GOES: the head-count is real —
+                  // ingestion captured those records — and is not a claim
+                  // about money. The upgrade nudge goes with the total, since
+                  // it prompts a purchase premised on a charge that is not
+                  // happening.
+                  `${quota.overageContacts.toLocaleString()} contacts over ` +
+                  `your plan's included ${quota.included.toLocaleString()} — ` +
+                  'not billed while the Contacts page is unavailable. ' +
+                  `The $${quota.overageRateUsd}/1,000 rate applies once ` +
+                  'Contacts opens.'}
             </Alert>
           ) : droppedTotal > 0 ? (
             <Alert severity="info">

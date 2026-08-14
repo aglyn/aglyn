@@ -466,3 +466,66 @@ describe('Table of Contents cleared values (AGL-1451)', () => {
     expect(container.textContent).toContain('Contents')
   })
 })
+
+/**
+ * AGL-1686. The document element is the surface the issue named, and the one
+ * a published legal or policy page renders through.
+ *
+ * Before this, `block.src` went straight to the `<img>` and the parser refused
+ * anything but an absolute `http(s)` URL — so a `media:` reference never even
+ * became a block, and the picture was silently absent rather than broken. The
+ * document now records WHICH ASSET and the renderer builds the URL, which is
+ * what every other image-bearing surface has done since AGL-1215.
+ */
+describe('Markdown images resolve a media reference (AGL-1686)', () => {
+  const imgSrc = (container: HTMLElement) =>
+    container.querySelector('img')?.getAttribute('src')
+
+  it('resolves a reference to the CDN url', () => {
+    const { container } = render(
+      <Markdown content={'![Our logo](media:org:jWmGooWE3L/4GF1hRJBUp)'} />,
+    )
+    expect(imgSrc(container)).toBe('/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp')
+    expect(container.querySelector('img')?.getAttribute('alt')).toBe('Our logo')
+  })
+
+  /**
+   * The capability a stored URL can never have, and the reason resolving early
+   * is a downgrade rather than belt-and-braces: ONE document in a layout or
+   * reusable component shared across sites asks the CDN as the site that is
+   * actually rendering, so a per-site-restricted asset resolves on each.
+   */
+  it('re-points the org scope at the site actually rendering', () => {
+    const { container } = render(
+      <Aglyn.SiteContext.Provider value={{ hostId: 'site-b' } as any}>
+        <Markdown content={'![a](media:org:acme:site-a/med1)'} />
+      </Aglyn.SiteContext.Provider>,
+    )
+    expect(imgSrc(container)).toBe('/api/media/cdn/org:acme:site-b/med1')
+  })
+
+  /**
+   * Back-compat, which is what makes this need no migration: the three older
+   * stored generations all pass through untouched.
+   */
+  it('passes every non-reference value through untouched', () => {
+    for (const src of [
+      'https://firebasestorage.googleapis.com/v0/b/x/o/y.png',
+      '/api/media/cdn/org:acme/med1',
+      'https://images.example.com/hotlink.png',
+    ]) {
+      const { container, unmount } = render(
+        <Markdown content={`![a](${src})`} />,
+      )
+      expect(imgSrc(container)).toBe(src)
+      unmount()
+    }
+  })
+
+  it('emits no img at all for a media reference that does not parse', () => {
+    // There is no correct URL for it, and `src="media:junk"` is a console
+    // error nobody reads.
+    const { container } = render(<Markdown content={'![a](media:junk)'} />)
+    expect(container.querySelector('img')).toBeNull()
+  })
+})

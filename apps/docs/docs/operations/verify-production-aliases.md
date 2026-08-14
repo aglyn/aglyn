@@ -49,11 +49,24 @@ alias is deployment-protected and serves nobody. A stale alias here breaks plugi
 customer, silently — `PluginFrame` renders a placeholder rather than an error.
 
 For each project it finds the newest **Ready** production deployment
-(`vercel ls <project> --prod`, confirmed via `vercel inspect` — scanning past
-the run of Canceled deployments the ignore-step produces on non-production
-pushes), inspects each domain to see which deployment actually serves it, and
-prints a verdict table: `current` or `STALE`. With `--fix` it runs
+(`vercel ls <project> --prod --status READY`, confirmed via `vercel inspect`),
+inspects each domain to see which deployment actually serves it, and prints a
+verdict table: `current` or `STALE`. With `--fix` it runs
 `vercel promote <newest-ready-url>` and re-verifies.
+
+The `--status READY` filter is load-bearing (AGL-1632). The script used to list
+every production deployment and scan for the first Ready one, but `vercel ls`
+returns a single page of **20** rows and never paged past it — so the nominal
+"25 newest" was unreachable. A path-scoped project accumulates roughly one
+Canceled record per promote (the ignore-step *creates* a deployment, then
+cancels it), so its Ready build sinks down that page and would eventually fall
+off it, exiting `2` with the misleading advice to "wait for the build". Asking
+the API to filter instead searches the project's whole history, so the page size
+stops mattering: measured 2026-08-14, `www-aglyn-io` — whose 20 newest are every
+one of them Canceled — still returns its Ready builds from 28 days back.
+
+Consequently **"no Ready production deployment" now means exactly that**, never
+"we did not look far enough", and the two cases print different errors.
 
 Exit codes: `0` all current, `1` at least one stale (after the fix attempt when
 `--fix`), `2` operational error (CLI missing/unauthenticated, unparseable

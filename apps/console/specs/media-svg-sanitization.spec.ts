@@ -152,6 +152,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   generateMediaVariants: jest.fn(async () => ({ variants: [], error: undefined })),
   isImpersonationSession: () => false,
+  // Nothing is taken down in these fixtures (AGL-1613). The routes now
+  // consult the deny list before they write, so the mock has to answer —
+  // `null` is "not quarantined", which is what every case here assumes.
+  quarantinedUploadRefusal: async () => null,
   resolveOrgMembership: async () => ({ member: { role: 'owner' } }),
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),

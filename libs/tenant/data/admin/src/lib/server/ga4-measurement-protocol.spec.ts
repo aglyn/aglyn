@@ -28,7 +28,11 @@
  * measure away from.
  */
 
-import { sendGa4SitePublished, synthesizeClientId } from './ga4-measurement-protocol'
+import {
+  sendGa4Purchase,
+  sendGa4SitePublished,
+  synthesizeClientId,
+} from './ga4-measurement-protocol'
 
 const originalEnv = { ...process.env }
 const fetchMock = jest.fn(async () => ({ ok: true, status: 200 }) as never)
@@ -140,5 +144,75 @@ describe('sendGa4SitePublished when configured', () => {
       synthesizedClientId: true,
       reason: 'network',
     })
+  })
+})
+
+/**
+ * AGL-1640 closes at the wire, not at the caller: the guarantee the annual-mix
+ * metric depends on is that an invoice whose cadence could not be read sends
+ * NO `billing_interval` key — so the hit is excluded from the breakdown rather
+ * than miscounted in it. A caller passing `undefined` must not become a
+ * `'monthly'` here, and must not become a `billing_interval: undefined` that
+ * JSON.stringify would drop by accident rather than by design.
+ */
+describe('purchase carries billing_interval only when it is known (AGL-1640)', () => {
+  const purchase = {
+    transactionId: 'in_test_1',
+    value: 49,
+    currency: 'usd',
+    items: [
+      {
+        item_id: 'price_pro',
+        item_name: 'Pro',
+        item_category: 'subscription',
+        price: 49,
+        quantity: 1,
+      },
+    ],
+    stripeCustomerId: 'cus_1',
+  }
+
+  const sentParams = () =>
+    JSON.parse(
+      (fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body,
+    ).events[0].params
+
+  beforeEach(() => {
+    process.env.GA4_MEASUREMENT_ID = 'G-TEST'
+    process.env.GA4_API_SECRET = 'secret'
+  })
+
+  it('sends annual when the invoice said year', async () => {
+    await sendGa4Purchase({ ...purchase, billingInterval: 'annual' })
+    expect(sentParams().billing_interval).toBe('annual')
+  })
+
+  it('sends monthly when the invoice said month', async () => {
+    await sendGa4Purchase({ ...purchase, billingInterval: 'monthly' })
+    expect(sentParams().billing_interval).toBe('monthly')
+  })
+
+  it('omits the key entirely when the invoice did not say', async () => {
+    await sendGa4Purchase({ ...purchase, billingInterval: undefined })
+    const params = sentParams()
+    expect(params.billing_interval).toBeUndefined()
+    // Absent, not present-and-empty: GA counts a key it receives.
+    expect(Object.hasOwn(params, 'billing_interval')).toBe(false)
+    expect(params.value).toBe(49)
+  })
+
+  it('joins the browser session when a real client id was captured', async () => {
+    // The AGL-1638 half, from the sender's side: a captured client id is used
+    // verbatim and reported as NOT synthesized, which is what distinguishes an
+    // attributable sale from one that merely has the money right.
+    const result = await sendGa4Purchase({
+      ...purchase,
+      clientId: '555444333.1755100000',
+    })
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body,
+    )
+    expect(body.client_id).toBe('555444333.1755100000')
+    expect(result.synthesizedClientId).toBe(false)
   })
 })

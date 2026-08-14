@@ -179,6 +179,12 @@ async function handler(request: Request): Promise<Response> {
       // Lockdown verdict (AGL-1501): subsumes the old bare `suspendedAt`
       // check — same reads, plus platform/host/user scopes and the distinct
       // 423 body. This branch is non-staff only, so no bypass flag needed.
+      //
+      // Audited for read-only (AGL-1625) and left deriving from the method.
+      // The body carries an `action`, but there is exactly one — `convert`,
+      // refused above for any other value — and converting a screen's `kind`
+      // is a write on both legs (promotion and demotion). Nothing here lists
+      // or previews, so the verdict running ahead of the branch costs no read.
       const lockdown = await getLockdownVerdict({
         request,
         uid: decoded.uid,

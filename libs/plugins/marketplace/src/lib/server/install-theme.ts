@@ -21,6 +21,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { listingArtifactType } from '../model/marketplace'
 import { canActAsPublisher } from './publisher-profile'
+import { requirePurchase } from './purchase-entitlement'
 import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
 import { recordVersionMove } from './version-stats'
 
@@ -171,17 +172,18 @@ export const installThemeHandler: PluginApiHandler = async (req, res) => {
       decoded.uid,
       listing.profileId,
     )
-    if (priceUsd > 0 && !ownsListing) {
-      const purchases = await firestore
-        .collection('marketplacePurchases')
-        .where('buyerUid', '==', decoded.uid)
-        .where('listingId', '==', listingId)
-        .limit(1)
-        .get()
-      if (purchases.empty) {
-        return res.status(402).json({ error: 'Purchase required', priceUsd })
-      }
-    }
+    // A FULLY refunded purchase stops entitling (AGL-1546), and until
+    // AGL-1699 only the component route knew that: this one asked whether a
+    // purchase doc EXISTED, so buy/install/refund kept the artifact. The
+    // predicate lives in one place now so the next route cannot miss it.
+    const unpaid = await requirePurchase({
+      firestore,
+      buyerUid: decoded.uid,
+      listingId,
+      priceUsd,
+      ownsListing,
+    })
+    if (unpaid) return res.status(402).json(unpaid)
 
     const versionSnapshot = await listingRef
       .collection('versions')

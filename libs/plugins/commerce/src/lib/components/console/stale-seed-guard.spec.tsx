@@ -134,6 +134,14 @@ jest.mock('firebase/firestore', () => ({
   setDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
   addDoc: jest.fn().mockResolvedValue(undefined),
+  // The products hub reads its cap as a server aggregate (AGL-1716). The
+  // real one throws SYNCHRONOUSLY on the stubbed ref above, which crashes
+  // the render before the AGL-1358 seed guard can be exercised at all.
+  // Answering with the fixture's own length keeps the cap arithmetic true
+  // on both the pending fallback and the resolved read.
+  getCountFromServer: async (name: string) => ({
+    data: () => ({ count: (collections[name] ?? []).length }),
+  }),
 }))
 
 const enqueueSnackbar = jest.fn()

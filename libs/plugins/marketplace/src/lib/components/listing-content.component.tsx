@@ -37,6 +37,7 @@ import {
   buildRoute,
   parseMarkdownLite,
   PLUGIN_HOST_ABI_VERSION,
+  resolveMediaSrc,
   resolveUpdateState,
   Route,
   updateStateLabel,
@@ -247,7 +248,11 @@ export function ListingReadme({ readme }: { readme: string }) {
               <Box
                 key={index}
                 component="img"
-                src={block.src}
+                // Resolved like `ListingImage` next door (AGL-1686). No
+                // `hostId`: a listing belongs to a publishing ORG, not to a
+                // site, so the scope the picker baked in is already the right
+                // one and there is no rendering host to re-point it at.
+                src={resolveMediaSrc(block.src)}
                 alt={block.alt}
                 loading="lazy"
                 sx={{

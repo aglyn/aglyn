@@ -39,11 +39,12 @@ import {
   collection,
   doc,
   documentId,
+  getCountFromServer,
   limit,
   query,
   where,
 } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import { checkOrgSeatQuota } from '../constants/entitlements'
@@ -123,7 +124,52 @@ export function HostMembersCard(props: HostMembersCardProps) {
         ),
     [memberDocs, pageSize],
   )
-  const seatQuota = checkOrgSeatQuota(org, 'members', members.length)
+  /**
+   * SEATS USED is a server aggregate, not the length of the page window
+   * (AGL-1716, the AGL-1706 shape).
+   *
+   * `members` is one PAGE — 25 rows, growing 25 at a time on "Load more" —
+   * and it was being handed to `checkOrgSeatQuota` as the site's seat count
+   * and printed verbatim as "N of M member seats used". `membersPerHost`
+   * runs 50 / 75 / 100 / 250 from Business up, all above the window, so a
+   * site with 60 collaborators on Business read "25 of 50 member seats
+   * used": under its band, with the extra-seat upsell suppressed, while it
+   * was actually over. The API still refused the next add — the card just
+   * offered headroom that did not exist and then failed the action.
+   *
+   * The paging comment above exists *because* an unannounced `limit(100)`
+   * once made a 120-collaborator site look complete (AGL-1124). The list
+   * got the fix; the count that sits beside it did not.
+   *
+   * The window stays exactly as it is. The list and the count are different
+   * questions: one aggregate read per mount, re-read after any mutation
+   * that can move the number.
+   */
+  const [seatCountEpoch, setSeatCountEpoch] = useState(0)
+  const [serverMemberCount, setServerMemberCount] = useState<number | null>(
+    null,
+  )
+  useEffect(() => {
+    let active = true
+    void getCountFromServer(collection(firestore, 'hosts', hostId, 'members'))
+      .then((snapshot) => {
+        if (active) setServerMemberCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Falls back to the page length below — a LOWER bound, and this
+        // card's prior behaviour. Deliberately not 0: `checkOrgSeatQuota`
+        // answers from whatever it is handed (AGL-1422), and 0 seats used
+        // is a confident wrong number in the flattering direction.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId, seatCountEpoch])
+  // Pending or denied, the page window stands in. It can only UNDERSTATE,
+  // never overstate, so nothing this figure gates fires on a count larger
+  // than the truth.
+  const memberSeatsUsed = serverMemberCount ?? members.length
+  const seatQuota = checkOrgSeatQuota(org, 'members', memberSeatsUsed)
 
   // The owner row is the ORG's owner (AGL-1123). It used to render the
   // signed-in `user` whenever they happened to be an admin on this host, so
@@ -150,9 +196,10 @@ export function HostMembersCard(props: HostMembersCardProps) {
   // These rows come from `hosts/{hostId}/members`, a different collection
   // whose only writer sets an explicit field list with no `photoURL` on it —
   // so `member.photoURL` was `undefined` for every row and MemberAvatar fell
-  // through to Gravatar. That went unnoticed because the OWNER row reads its
-  // org member doc directly (just above) and therefore did render a stored
-  // photo: the one row that worked was the one being looked at.
+  // through to Gravatar (since removed, AGL-1683 — the fallback is initials
+  // now). That went unnoticed because the OWNER row reads its org member doc
+  // directly (just above) and therefore did render a stored photo: the one
+  // row that worked was the one being looked at.
   //
   // Joining rather than copying the field onto the host doc keeps one source
   // of truth for a member's face, which is what AGL-1126 was for. One `in`
@@ -209,6 +256,12 @@ export function HostMembersCard(props: HostMembersCardProps) {
           })
           return null
         }
+        // An add or a remove moves the seat count, and the aggregate above
+        // is a one-shot — the listener refreshes the LIST for free, the
+        // count has to be asked again or the caption drifts stale for the
+        // rest of the session. A role change cannot move it; re-reading
+        // anyway is a single aggregate and keeps this off the caller.
+        setSeatCountEpoch((epoch) => epoch + 1)
         return payload
       } catch (error) {
         console.error(error)
@@ -333,7 +386,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
             nowhere near. Only a loaded plan may quote a seat count. */}
         {orgReady && Number.isFinite(seatQuota.limit) ? (
           <Typography variant="caption" color="text.secondary">
-            {`${members.length} of ${seatQuota.limit} member seats used`}
+            {/* The site's collaborators, not this page of them (AGL-1716). */}
+            {`${memberSeatsUsed} of ${seatQuota.limit} member seats used`}
             {seatQuota.upgradeRequired ? (
               ' — upgrade for more'
             ) : seatQuota.addonPriceUsd != null ? (
@@ -399,8 +453,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
                     sx={{ alignItems: 'center' }}
                   >
                     {/* No avatar here at all before AGL-1126. An invited row
-                        still gets one — Gravatar works off the email alone,
-                        which is all an invite has. */}
+                        still gets one — the initial comes off the email's
+                        local part, which is all an invite has. */}
                     <MemberAvatar
                       photoURL={
                         member.uid ? photoByUid.get(member.uid) : undefined

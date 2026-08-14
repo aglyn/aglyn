@@ -1640,30 +1640,36 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
         open={pickerTarget != null}
         onClose={() => setPickerTarget(null)}
         onPick={(media) => {
-          const url = (media as any).url as string | undefined
-          if (url) {
+          // ONE writer for the cover and the body (AGL-1705). The body used
+          // to take the raw storage URL, and the comment here justified it:
+          // the cover's readers resolve a reference and the body's renderers
+          // did not. AGL-1686 taught all five markdown-lite renderers to
+          // resolve, so the premise is gone and the exception with it.
+          //
+          // What the exception cost is exactly what AGL-1215 exists to stop:
+          // `media.url` names the object's CURRENT LOCATION, so an AGL-1215
+          // folder move — which copies the object, rewrites `url` and deletes
+          // the original — 404s every body image permanently, and a replace
+          // regenerates the embedded `&token=` and does it again.
+          //
+          // `mediaNodeSrc` keeps the free-tier behaviour unchanged: the
+          // reference is derived from `cdnPath`, a paid `mediaCdn`
+          // entitlement, and an org without one still degrades to `url`.
+          const src = Aglyn.mediaNodeSrc(media)
+          if (src) {
             const alt = String(
               (media as any).alt ?? (media as any).fileName ?? '',
             )
             if (pickerTarget === 'cover') {
-              // The COVER takes a reference (AGL-1407): every surface that
-              // reads `coverImage` resolves one, so writing the raw URL here
-              // would put back exactly what the back-fill just converted.
-              //
-              // The body does NOT, and must keep the URL: a cover is one
-              // field with known readers, while a body image is markdown
-              // whose renderers resolve nothing, so a `media:` ref inside
-              // `![alt](…)` is a broken image on the page.
-              const src = Aglyn.mediaNodeSrc(media) ?? url
               setEditor((prev) => (prev ? { ...prev, coverImage: src } : prev))
             } else if (bodyTab === 'visual') {
               // Visual tab (AGL-582): insert as an image block at the caret
-              // row; the editor serializes it back to ![alt](url).
-              visualEditorRef.current?.insertImage(alt, url)
+              // row; the editor serializes it back to ![alt](src).
+              visualEditorRef.current?.insertImage(alt, src)
             } else {
               setEditor((prev) =>
                 prev
-                  ? { ...prev, body: `${prev.body}\n\n![${alt}](${url})` }
+                  ? { ...prev, body: `${prev.body}\n\n![${alt}](${src})` }
                   : prev,
               )
             }

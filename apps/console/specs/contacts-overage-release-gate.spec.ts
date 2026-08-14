@@ -53,7 +53,28 @@
 const MONTH = '2026-07'
 const CRON_SECRET = 'test-cron-secret'
 
-import type { ReleaseFlagValue } from '@aglyn/aglyn/server'
+import { RELEASE_FLAGS, type ReleaseFlagValue } from '@aglyn/aglyn/server'
+
+/**
+ * EVERY flag, at its registry default, before `release_contacts` is set
+ * (AGL-1688).
+ *
+ * This fixture used to name `release_contacts` alone, which worked only while
+ * the cron consulted exactly one flag. AGL-1688 added a second gate to the
+ * same loop, and a map missing that key threw inside `isReleaseFlagOn` —
+ * swallowed by the per-org catch and surfacing as a 207 that says nothing
+ * about flags. `getServerReleaseFlagValues` fills the whole map from
+ * `registryDefaults()` even with Remote Config unreachable, so a partial
+ * fixture was never a smaller production; it was a shape production cannot
+ * produce.
+ */
+const flagDefaults = (): Record<string, ReleaseFlagValue> =>
+  Object.fromEntries(
+    RELEASE_FLAGS.map((definition) => [
+      definition.key,
+      { enabled: definition.defaultEnabled },
+    ]),
+  )
 
 /** Contact head-count per org id, as the aggregate `count()` answers it. */
 let mockContactCounts: Record<string, number>
@@ -260,8 +281,9 @@ function seed(options: {
   mockUsageWrites = {}
   mockMeterEvents = []
   mockFlagValues = {
+    ...flagDefaults(),
     release_contacts: options.flag ?? { enabled: false },
-  } as Record<string, ReleaseFlagValue>
+  }
 }
 
 async function rollUp(month = MONTH) {

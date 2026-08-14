@@ -30,6 +30,7 @@ import {
   firebaseAdmin,
   generateStoredMediaVariants,
   isImpersonationSession,
+  quarantinedUploadRefusal,
 } from '@aglyn/tenant-data-admin'
 import {
   folderStoragePath,
@@ -280,6 +281,44 @@ async function handler(request: Request): Promise<Response> {
         actualBytes = Number(rewritten.size ?? sanitized.buffer.length)
         contentHash = storageContentHash(rewritten.md5Hash)
         svgRemoved = sanitized.removed
+      }
+    }
+    /**
+     * Asset quarantine at INGESTION (AGL-1613) — and the chokepoint where
+     * the coverage has to be stated rather than implied.
+     *
+     * **What this catches.** Every object whose `contentHash` GCS gave us,
+     * plus the full `contentSha256` on the SVG branch above, where the
+     * server genuinely held the bytes. That is the whole population of
+     * signed uploads that carry any digest at all.
+     *
+     * **What it does not, and cannot.** The mint (`POST`) leg is not gated:
+     * it hands out a signed URL before any byte exists, so there is nothing
+     * to look up. And `contentHash` here is a truncation of GCS's md5 while
+     * the direct route's is a truncation of sha256, so the same file
+     * re-uploaded through the OTHER route does not present the same key —
+     * quarantine bites within an ingestion path, not across them (AGL-1614
+     * argues why that is unfixable without downloading 200 MB videos back
+     * into the function). A composite object, which GCS gives no md5 for,
+     * carries no digest at all and cannot be matched here; the CDN's
+     * per-asset fallback key is what still covers it at delivery.
+     *
+     * The object is already in the bucket by the time we can ask, so a
+     * refusal DELETES it — exactly as the quota branch below does, and for
+     * the same reason: an object with no media document is billed to nobody
+     * and readable by nobody, and leaving it would grow the bucket forever.
+     * This runs before the counter, before the document and before variant
+     * generation, so a refused finalize moves no billing input and mints no
+     * derived artifacts.
+     */
+    {
+      const refusal = await quarantinedUploadRefusal({
+        contentSha256,
+        contentHash,
+      })
+      if (refusal) {
+        await file.delete().catch(() => undefined)
+        return refusal
       }
     }
     {

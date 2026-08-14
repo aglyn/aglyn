@@ -429,3 +429,56 @@ export function mediaQuarantineNotice(
       }
   }
 }
+
+/**
+ * The status an INGESTION chokepoint refuses a quarantined upload with
+ * (AGL-1613).
+ *
+ * Deliberately NOT the CDN's 410 and NOT the lockdown's 423. The CDN answers
+ * an anonymous fetcher, so its refusal is neutral by design and says nothing
+ * about why. This caller is authenticated and is the OWNER of the bytes, so
+ * the AGL-1506 discipline applies in the other direction: they are told. And
+ * it is not 423, because 423 means "your workspace is locked" — a different
+ * lever with a different remedy, and a client that cannot tell them apart
+ * would send a customer to the wrong support conversation.
+ *
+ * 403 rather than 409: the request is understood, it is refused, and
+ * repeating it verbatim will not help. Nothing about the workspace state
+ * needs to change first.
+ */
+export const MEDIA_QUARANTINE_UPLOAD_STATUS = 403
+
+/**
+ * The JSON an ingestion refusal answers with.
+ *
+ * `error` carries the notice BODY because that is the field every console
+ * upload surface already renders into its snackbar — a refusal whose
+ * explanation lands in a field nothing reads is a silent failure with extra
+ * steps. The structured fields ride alongside for a surface that wants to
+ * render the notice properly (AGL-1612).
+ *
+ * Built from {@link mediaQuarantineNotice}, which takes only `reason` and
+ * `message`. That is the containment for the staff `note`: it is dropped by
+ * `normalizeMediaQuarantine` before a state exists, and this function never
+ * sees a raw entry to reach past it into.
+ */
+export interface MediaQuarantineRefusalBody {
+  error: string
+  quarantined: true
+  title: string
+  reason: MediaQuarantineReason
+  contact: string | null
+}
+
+export function mediaQuarantineRefusalBody(
+  state: Pick<MediaQuarantineState, 'reason' | 'message'>,
+): MediaQuarantineRefusalBody {
+  const notice = mediaQuarantineNotice(state)
+  return {
+    error: notice.body,
+    quarantined: true,
+    title: notice.title,
+    reason: state.reason,
+    contact: notice.contact ?? null,
+  }
+}

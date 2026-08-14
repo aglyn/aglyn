@@ -349,6 +349,11 @@ async function handler(request: Request): Promise<Response> {
     // body. Staff bypass is the un-panic invariant.
     const ownerOrg = await getOrgForHost(hostId)
     const org = (ownerOrg?.org ?? {}) as any
+    //
+    // Audited for read-only (AGL-1625) and left deriving from the method.
+    // `resource` selects a COLLECTION, not an operation: every value in
+    // RESOURCES lands on the same `create()` below, and the counting reads
+    // in between exist only to gate that create. POST → `write` is exact.
     const lockdown = await getLockdownVerdict({
       request,
       staff: decoded['staff'] === true,

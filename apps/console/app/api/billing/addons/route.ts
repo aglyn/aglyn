@@ -16,6 +16,7 @@
  */
 
 import {
+  isLiveSubscriptionStatus,
   pluginRequestFromWeb,
   resolveEffectivePlan,
   resolveOrgEntitlements,
@@ -25,6 +26,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  isServerReleaseFlagOnForOrg,
   memberHasOrgPermission,
   readOrgBilling,
   resolveOrgMembership,
@@ -72,7 +74,14 @@ async function stripeRequest(
   return payload
 }
 
-/** The org's active (or trialing/past_due) subscription, if any. */
+/**
+ * The org's live subscription, if any — the one add-on items are attached to.
+ *
+ * "Live" is `isLiveSubscriptionStatus`, the single list in `org-billing-doc.ts`
+ * (AGL-1715). Add-ons re-price onto whichever subscription this finds, so if
+ * this narrowed relative to checkout's copy the purchase would miss the org's
+ * real subscription rather than fail loudly.
+ */
 async function activeSubscription(
   secretKey: string,
   customerId: string,
@@ -84,7 +93,7 @@ async function activeSubscription(
   )
   return (
     (subscriptions?.data ?? []).find((subscription: any) =>
-      ['active', 'trialing', 'past_due'].includes(subscription.status),
+      isLiveSubscriptionStatus(subscription?.status),
     ) ?? null
   )
 }
@@ -162,6 +171,25 @@ async function handler(request: Request): Promise<Response> {
       !(await memberHasOrgPermission(orgId, actor?.member, 'billing.manage'))
     ) {
       return Response.json({ error: 'billing.manage required' }, { status: 403 })
+    }
+    // Release gate (AGL-1653). The Billing page drops the "Plan add-ons"
+    // card on `useReleaseFlag('release_addon_store').visible`, and until
+    // now that was the ONLY gate — with the flag off the card vanished
+    // while this route kept accepting POSTs and kept reaching Stripe. A
+    // flag whose name says "add-on store" has to close the purchase path,
+    // not just the surface that describes it; that is the whole point of
+    // holding it as a kill switch.
+    //
+    // The staff bypass mirrors `visible` (`released || isStaff`) exactly,
+    // so the one audience that still SEES the card is the one that can
+    // still use it. 404 rather than 403: a released-off feature does not
+    // exist, which is what both plugin API dispatchers and the edit-access
+    // token route already answer.
+    if (
+      !isStaff &&
+      !(await isServerReleaseFlagOnForOrg('release_addon_store', orgId))
+    ) {
+      return Response.json({ error: 'Not available' }, { status: 404 })
     }
     const orgSnapshot = await firebaseAdmin
       .app()

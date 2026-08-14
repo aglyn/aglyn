@@ -256,3 +256,97 @@ describe('InlineTextEditorComponent pills (AGL-586)', () => {
     expect(props['children']).toBe('Hi {{var:v1}}')
   })
 })
+
+/**
+ * AGL-1644. The text editor is the second of the two `position: fixed` in-place
+ * editors, and it never had even the AGL-1624 floor: it positioned on a rect
+ * captured once at open, unclamped, so a scroll left it over unrelated chrome
+ * and an element near the top of the viewport put its toolbar off-screen.
+ */
+describe('the text editor follows the canvas (AGL-1644)', () => {
+  afterEach(() => {
+    act(() => inlineTextEdit.close())
+    document.body.innerHTML = ''
+  })
+
+  const node = () =>
+    ({
+      $id: 'agl1644-inline',
+      type: 'node',
+      componentId: 'text',
+      props: { children: 'Hello' },
+      componentSchema: { flags: {} },
+      nodes: [],
+    }) as any
+
+  /** A canvas element whose viewport rect the test can move, as a scroll does. */
+  const movableAnchor = (top: number, left = 40) => {
+    const el = document.createElement('div')
+    document.body.appendChild(el)
+    let box = { left, top, width: 200, height: 24 }
+    el.getBoundingClientRect = () =>
+      ({
+        ...box,
+        right: box.left + box.width,
+        bottom: box.top + box.height,
+        x: box.left,
+        y: box.top,
+        toJSON: () => ({}),
+      }) as DOMRect
+    return {
+      el,
+      scrollTo: (nextTop: number) => {
+        box = { ...box, top: nextTop }
+        act(() => {
+          fireEvent.scroll(window)
+        })
+      },
+    }
+  }
+
+  const overlay = () =>
+    document.querySelector(
+      '[data-aglyn="overlay:inline-text-editor"]',
+    ) as HTMLElement
+
+  const openAnchored = (top: number) => {
+    const anchor = movableAnchor(top)
+    render(<InlineTextEditorComponent />)
+    act(() =>
+      inlineTextEdit.open(
+        node(),
+        { left: 40, top, width: 200, height: 24 },
+        undefined,
+        anchor.el,
+      ),
+    )
+    return anchor
+  }
+
+  it('re-measures the anchor when the canvas scrolls', () => {
+    const anchor = openAnchored(300)
+    expect(window.getComputedStyle(overlay()).top).toBe('300px')
+
+    anchor.scrollTo(150)
+    expect(window.getComputedStyle(overlay()).top).toBe('150px')
+  })
+
+  // The editor's toolbar sits 40px ABOVE the surface. Anchoring flush at the
+  // element's top put those controls off-screen for any element near the top of
+  // the viewport — visible editable, unreachable Done button.
+  it('keeps the toolbar on screen for an element at the very top', () => {
+    const anchor = openAnchored(300)
+    anchor.scrollTo(2)
+    expect(
+      Number.parseFloat(window.getComputedStyle(overlay()).top),
+    ).toBeGreaterThanOrEqual(40)
+  })
+
+  it('falls back to the captured rect when there is no anchor', () => {
+    render(<InlineTextEditorComponent />)
+    act(() =>
+      inlineTextEdit.open(node(), { left: 40, top: 210, width: 200, height: 24 }),
+    )
+    expect(window.getComputedStyle(overlay()).top).toBe('210px')
+  })
+})

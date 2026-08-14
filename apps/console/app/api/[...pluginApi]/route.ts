@@ -74,6 +74,7 @@ async function dispatch(
         // Non-JSON body — fall through to handler self-gating.
       }
     }
+    let orgId: string | null = null
     if (hostId) {
       // Per-site enablement (AGL-1014): the org set minus the host's
       // deny-list — a plugin disabled for THIS site has no API surface for
@@ -84,6 +85,7 @@ async function dispatch(
         getHostDisabledPlugins(hostId),
         getHostDocAdmin(hostId),
       ])
+      orgId = resolved?.orgId ?? null
       lockdownOrg = resolved?.org as Record<string, unknown> | undefined
       lockdownHost = hostDoc ?? undefined
       if (
@@ -94,19 +96,34 @@ async function dispatch(
       ) {
         return Response.json({ error: 'Not found' }, { status: 404 })
       }
-      // Plugin release gate (AGL-422): a flagged-off plugin's API surface
-      // does not exist either — except for staff bearer tokens (preview).
-      const releaseFiltered = await filterEnabledPluginsByReleaseFlags(
-        [pluginId],
-        {
-          subjectId: resolved?.orgId ?? hostId,
-          orgId: resolved?.orgId ?? null,
-          authorization: request.headers.get('authorization'),
-        },
-      )
-      if (!releaseFiltered.length) {
-        return Response.json({ error: 'Not found' }, { status: 404 })
-      }
+    }
+    // Plugin release gate (AGL-422), UNCONDITIONAL since AGL-1689: a
+    // flagged-off plugin's API surface does not exist — except for staff
+    // bearer tokens (preview).
+    //
+    // It used to live inside `if (hostId)` alongside the per-site enablement
+    // check, which made the platform-wide kill switch opt-in from the
+    // CALLER's side: omit `?hostId=`, or post a non-JSON body so the parse
+    // above falls through, and the flagged-off handler ran. Per-site
+    // enablement genuinely needs a site and stays where it is; a release flag
+    // does not. The two questions were nested together because they were
+    // written together, not because they share a precondition.
+    //
+    // `orgId` is null when no host resolved, and `filterEnabledPluginsByReleaseFlags`
+    // treats a subject-less request as eligible for the fully-enabled flags
+    // only — never a partial rollout (AGL-1656). So a hostId-less request to a
+    // half-rolled-out plugin is refused rather than guessed at, which is the
+    // conservative direction for a kill switch and matches what that helper's
+    // docstring already promised every other caller.
+    const releaseFiltered = await filterEnabledPluginsByReleaseFlags(
+      [pluginId],
+      {
+        orgId,
+        authorization: request.headers.get('authorization'),
+      },
+    )
+    if (!releaseFiltered.length) {
+      return Response.json({ error: 'Not found' }, { status: 404 })
     }
   }
 

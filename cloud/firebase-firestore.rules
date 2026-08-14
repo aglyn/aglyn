@@ -901,13 +901,35 @@ service cloud.firestore {
         // forge a media document with `visibleTo` tokens it was never granted.
         // A client that could DELETE one destroys the only route back to an
         // asset it just deleted. Both writers are Admin-SDK routes.
+        //
+        // `formSubmissions` joins CREATE ONLY (AGL-1668), and the asymmetry is
+        // the decision rather than an oversight. `counters` above is the
+        // number; this is the ROW the number counts. /api/forms/submit is its
+        // only writer and it increments `counters/formSubmissions[YYYY-MM]` in
+        // the same request — the document /api/billing/report-usage invoices
+        // from, and the one AGL-1655's abuse ceiling is evaluated against. A
+        // client `add()` here entered neither: an editor could hold
+        // submissions the Free plan's 20/month wall would have refused, and
+        // paid rows the meter never billed. Not a spam vector (it needs
+        // membership) and NOT a way to lower a bill either — AGL-1367 already
+        // made the counter itself unreachable on all three operations, so the
+        // ceiling's read point was never the exposure. Only the create path
+        // was.
+        //
+        // Update and delete stay OPEN, deliberately. The inbox plugin marks a
+        // submission read with a client `updateDoc` and deletes one with a
+        // client `deleteDoc` — the product's own reader — and neither touches
+        // the counter, which is monotonic per month and does not fall when a
+        // row is removed. Following the `counters` precedent onto all three
+        // lists would have broken the inbox to close nothing.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks',
-              'counters', 'analytics', 'members', 'mediaTombstones']));
+              'counters', 'analytics', 'members', 'mediaTombstones',
+              'formSubmissions']));
         // `templates` is excluded from update as well as create: its
         // dedicated block above freezes `source`, and leaving it here would
         // re-grant the unrestricted update this catch-all allows (AGL-666).
@@ -1232,7 +1254,31 @@ service cloud.firestore {
                      // `deletedAt` alone — so denying these costs nothing.
                      'publisherOrgId', 'sourceComponentId', 'sourceHostId',
                      'versionHistory', 'screenCount', 'previewImageUrl',
-                     'createdAt', 'updatedAt']));
+                     'createdAt', 'updatedAt',
+                     // Listing ARTWORK (AGL-1701). `previewImageUrl` was
+                     // denied on the pass above and its two siblings were
+                     // not, though all three end up in an `<img src>` that
+                     // OTHER orgs' users load — `logoUrl` and every entry of
+                     // `screenshots` are handed straight to `src` by
+                     // listing-content.component.tsx, and `logoUrl` is also
+                     // an `og:image` an UNAUTHENTICATED unfurler fetches.
+                     //
+                     // `validateListingContent` now holds these to
+                     // first-party media, which is the actual fix; this line
+                     // is what makes that fix load-bearing rather than
+                     // advisory. `marketplaceListings` is `allow read: if
+                     // true` and a listingManager is any org owner/admin, so
+                     // while these keys were writable here the API was one
+                     // way to set them, not the way — a publisher could put
+                     // an arbitrary beacon host in either field with a direct
+                     // client write and never touch the route that validates.
+                     //
+                     // Costs nothing for the same reason the block above
+                     // does: the listing editor saves through
+                     // `/api/marketplace/publish-plugin` (`update-listing`),
+                     // and the only client write to a listing in the repo is
+                     // the unpublish toggle, which writes `deletedAt` alone.
+                     'logoUrl', 'screenshots']));
       allow delete: if isStaff() || listingManager();
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/marketplace/install, which

@@ -65,6 +65,14 @@ export type AglynNotificationType =
   // the field. `system.` for the AGL-1088 reason above, and because the
   // collection it names may be `marketplace`-adjacent or not.
   | 'system.scopeDrift'
+  // A site hit the per-month form-submission abuse ceiling and further
+  // submissions are being refused (AGL-1655). `system.`, not `content.`, for
+  // the AGL-1088 reason above and more sharply than any of them: `content` is
+  // literally the category a site owner mutes to stop routine form-submission
+  // chatter, and this is the one form notification that says the form has
+  // STOPPED accepting. Filing it under the muted bucket would guarantee it
+  // reaches nobody on exactly the sites busy enough to trip it.
+  | 'system.formSubmissionsPaused'
 
 export interface AglynNotification {
   $id?: string
@@ -100,6 +108,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'system.pluginVerifierRegression': 'Plugin verifier regression',
     'system.signInMethodRemoved': 'Sign-in method removed',
     'system.scopeDrift': 'Resources missing a sharing scope',
+    'system.formSubmissionsPaused': 'Form submissions paused',
   }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */

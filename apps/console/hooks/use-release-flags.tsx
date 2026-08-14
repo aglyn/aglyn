@@ -101,7 +101,13 @@ export function ReleaseFlagsProvider(props: ReleaseFlagsProviderProps) {
   // (tenant runtime, both API dispatchers, the edit-bar routes) applies the
   // override unconditionally and refuses the work regardless.
   const { org, orgId, ready: orgReady } = useCurrentOrg()
-  const subjectId = orgId ?? user?.uid ?? null
+  // The rollout subject is the ORG, and nothing else (AGL-1656). This used
+  // to fall back to `user.uid`, which bucketed two teammates in one
+  // workspace into different halves of the same percentage — and disagreed
+  // with the server, which fell back to a hostId. Three subjects for one
+  // question. Outside an org scope there is no workspace to roll out to, so
+  // a null subject resolves fully-enabled flags only.
+  const subjectId = orgId ?? null
   const releaseFlagOverrides = org?.releaseFlags
   const overrides = useMemo(
     () => (orgReady ? parseOrgReleaseFlagOverrides(releaseFlagOverrides) : {}),

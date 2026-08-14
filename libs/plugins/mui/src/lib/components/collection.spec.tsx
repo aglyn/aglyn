@@ -324,6 +324,23 @@ describe('Entry body block (AGL-551)', () => {
     expect(image?.getAttribute('alt')).toBe('Diagram')
   })
 
+  /**
+   * AGL-1686. The entry COVER has resolved a reference since AGL-1215 while a
+   * body image did not, so an author picking the same asset for both got one
+   * that survives a folder move and one that did not even render.
+   */
+  it('resolves a media reference in a body image (AGL-1686)', () => {
+    const { container } = render(
+      <Aglyn.SiteContext.Provider value={{ hostId: 'site-b' } as any}>
+        <CollectionEntryBody markdown="![Diagram](media:org:acme:site-a/med1)" />
+      </Aglyn.SiteContext.Provider>,
+    )
+    const image = container.querySelector('img')
+    // Host-qualified at render, exactly as the cover is.
+    expect(image?.getAttribute('src')).toBe('/api/media/cdn/org:acme:site-b/med1')
+    expect(image?.getAttribute('alt')).toBe('Diagram')
+  })
+
   it('routes internal markdown links through AppLink (AGL-582)', () => {
     const { container } = render(
       <CollectionEntryBody markdown="Go [about](/about) or [out](https://example.com)." />,

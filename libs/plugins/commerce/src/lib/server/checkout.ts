@@ -142,7 +142,11 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         .json({ error: 'This site has not enabled payments yet' })
     }
 
-    let amountCents = Math.round(priceUsd * 100) * quantity
+    // The list price per unit, before any coupon (AGL-1711). This is what the
+    // order's line-item snapshot records, and it is carried in the session
+    // metadata so the webhook never has to re-price from the product doc.
+    const listUnitAmountCents = Math.round(priceUsd * 100)
+    let amountCents = listUnitAmountCents * quantity
     // Coupons (AGL-96): host-defined percent-off codes; invalid codes are
     // a visible 400, never a silent full-price charge.
     let appliedCoupon = ''
@@ -206,6 +210,63 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
+    // Shipping (AGL-1720), from the same settings document tax was just read
+    // from. Buy-now declared neither `shipping_address_collection` nor
+    // `shipping_options`, so a merchant who configured zones and rates in the
+    // console collected them on cart orders (AGL-1707) and nothing at all on
+    // buy-now — same merchant, same product, two totals depending on which
+    // button the shopper pressed.
+    //
+    // CONDITIONAL, unlike the cart's, on two things the cart cannot know:
+    //
+    //   - PHYSICAL PRODUCTS ONLY. This is the PDP path for one product, and it
+    //     sells digital downloads and services too. Asking a shopper buying a
+    //     PDF for a shipping address, then charging them to ship it, would be
+    //     a worse bug than the one being fixed. A missing `type` reads as
+    //     physical, exactly as the fee ladder above already reads it —
+    //     `liftLegacyProduct` only defaults the field on docs it synthesizes
+    //     variants for, so a part-migrated doc can reach here without one, and
+    //     the two reads must not disagree about what that doc is.
+    //   - ONE-TIME SALES ONLY. A subscription session goes to the webhook's
+    //     `commerce-subscription` branch, which writes a subscription doc and
+    //     never touches `total_details` — so shipping charged there would be
+    //     real money recorded NOWHERE, a strictly worse version of the
+    //     AGL-1698 hazard that orders the whole batch. Recurring shipping is
+    //     also a merchant decision the rate editor does not currently ask.
+    //
+    // Weight is per unit TIMES the quantity bought. `weightGrams` alone would
+    // quote the lightest tier on a multi-unit order — the same under-collection
+    // this issue is about, and adjacent to the hardcoded `quantity: 1` that
+    // AGL-1711 just removed from this function.
+    //
+    // The subtotal fed to the resolver is the PRE-discount list total, matching
+    // the cart's, so "free over $50" means what the shopper saw it mean.
+    const shippingSettings = storeSettings.get('shipping') as
+      | CommerceModel.ShippingSettings
+      | undefined
+    const shippingOptions =
+      (lifted.type ?? 'physical') === 'physical' && !isSubscription
+        ? CommerceModel.resolveCheckoutShippingOptions(
+            shippingSettings,
+            CommerceModel.CHECKOUT_SHIPPING_COUNTRIES,
+            {
+              subtotalCents: listUnitAmountCents * quantity,
+              totalGrams:
+                Math.max(0, Number(variant.weightGrams ?? 0)) * quantity,
+            },
+          )
+        : []
+
+    // The unit price Stripe actually charges — the coupon is priced INTO it
+    // rather than sent as a Stripe discount, which is why `amount_discount` is
+    // 0 on every buy-now session and the discount has to ride the metadata
+    // (AGL-1711). Hoisted so the Stripe param and the metadata cannot drift.
+    const chargedUnitAmountCents = Math.round(amountCents / quantity)
+    const discountCents = Math.max(
+      0,
+      listUnitAmountCents * quantity - chargedUnitAmountCents * quantity,
+    )
+
     // Subscriptions (AGL-303): recurring prices bill on the platform with
     // a destination transfer + percent fee; the webhook records the sub.
     // `isSubscription` resolved above (AGL-545).
@@ -213,9 +274,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       mode: isSubscription ? 'subscription' : 'payment',
       'line_items[0][quantity]': String(quantity),
       'line_items[0][price_data][currency]': 'usd',
-      'line_items[0][price_data][unit_amount]': String(
-        Math.round(amountCents / quantity),
-      ),
+      'line_items[0][price_data][unit_amount]': String(chargedUnitAmountCents),
       'line_items[0][price_data][product_data][name]': String(
         product.name ?? 'Product',
       ).slice(0, 120),
@@ -265,7 +324,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
               String(accountId),
           }
         : {}),
-      success_url: `${backUrl}${separator}order=success`,
+      // Substituted by Stripe on redirect — see the note in `cart-checkout.ts`
+      // (AGL-1641). The single-product path returns the shopper to the product
+      // page, so the `purchase` is reported by the PDP rather than the cart.
+      success_url: `${backUrl}${separator}order=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${backUrl}${separator}order=canceled`,
       'metadata[type]': isSubscription
         ? 'commerce-subscription'
@@ -275,8 +337,28 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       'metadata[quantity]': String(quantity),
       'metadata[feeCents]': String(feeCents),
+      // The order's decomposition, snapshotted as we compute it (AGL-1711).
+      // Two of these three are invisible to Stripe's own `total_details` BY
+      // OUR OWN CONSTRUCTION — the manual tax goes over as an ordinary
+      // `line_items[1]` product line, and the coupon is priced into
+      // `line_items[0]`'s unit amount — so the webhook cannot recover them
+      // from the session. Frozen here rather than re-derived from the product
+      // doc at webhook time, which a price edit in between would falsify.
+      'metadata[unitAmountCents]': String(listUnitAmountCents),
+      'metadata[taxCents]': String(taxCents),
+      'metadata[discountCents]': String(discountCents),
       ...(appliedCoupon ? { 'metadata[couponCode]': appliedCoupon } : {}),
     })
+    // Both keys or neither (AGL-1720). Stripe will not apply a shipping rate
+    // without an address to ship to, and a merchant who configured nothing
+    // resolves to no options and so gets neither key — a session byte-identical
+    // to the one this handler built before shipping existed on it. Buy-now has
+    // never collected an address, so declaring one unconditionally would put a
+    // shipping form in front of every shopper on a store that charges none.
+    if (shippingOptions.length > 0) {
+      CommerceModel.appendShippingAddressCollectionParams(params)
+      CommerceModel.appendCheckoutShippingParams(params, shippingOptions)
+    }
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {

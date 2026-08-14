@@ -24,6 +24,7 @@ import {
 import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
+  isLiveSubscriptionStatus,
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
   parseLockdownRefusal,
@@ -178,9 +179,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const fmtLimit = (n: number) =>
     n === UNLIMITED ? 'Unlimited' : n.toLocaleString()
   const subscriptionStatus = org?.subscription?.status
-  const subscriptionActive = ['active', 'trialing', 'past_due'].includes(
-    String(subscriptionStatus ?? ''),
-  )
+  // One list, in `org-billing-doc.ts` (AGL-1715). This decides whether Upgrade
+  // opens a Checkout or a proration preview, and `/api/billing/checkout`
+  // decides whether to allow the session — if the two ever disagree in that
+  // direction the page sends a subscribed org to checkout and the route lets
+  // it through, which is the duplicate subscription AGL-1697 closed.
+  const subscriptionActive = isLiveSubscriptionStatus(subscriptionStatus)
   const cancelAtPeriodEnd =
     (org?.subscription as any)?.cancelAtPeriodEnd === true
 
@@ -468,6 +472,19 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         if (payload?.clientSecret) {
           setCheckoutClientSecret(String(payload.clientSecret))
           return
+        }
+        // The server refused because this workspace is already subscribed
+        // (AGL-1697) — the state the `subscriptionActive` branch above exists
+        // to keep us out of, reached anyway by a stale tab or a second window.
+        // Named rather than thrown: the catch-all below says "Could not start
+        // checkout", which reads as a payment failure and is the opposite of
+        // what happened. Nothing was charged; there is simply already a
+        // subscription, and the page reloads onto it.
+        if (response.status === 409 && payload?.code === 'subscription_exists') {
+          return void enqueueSnackbar(
+            payload.error ?? 'This workspace already has a subscription.',
+            { variant: 'warning', persist: false },
+          )
         }
         if (!response.ok || !payload?.url) {
           throw new Error(payload?.error ?? 'Checkout failed')

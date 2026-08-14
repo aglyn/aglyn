@@ -19,10 +19,14 @@ Two separate things share this page, and they behave very differently:
 The limit is per key, so splitting an integration across two keys gives it two
 budgets — and one runaway script can't starve your others.
 
-:::note Best effort, not a hard guarantee
-The limiter is per server instance rather than globally coordinated, so it blunts
-bursts rather than enforcing an exact global cap. Don't design around getting more
-than 120/min, and don't assume you'll always be cut off at exactly 120.
+:::note Counted globally, not per server
+The counter is shared across every server that answers your requests, so 120/min is
+the ceiling for the key no matter which of our instances a request lands on — and it
+doesn't reset when one of them restarts.
+
+If the shared counter is briefly unreachable we fall back to a per-server count rather
+than refusing traffic. That can only ever let *more* than 120/min through, never
+fewer, so a degradation on our side never costs you requests you were entitled to.
 :::
 
 Every response carries the current budget:

@@ -1,6 +1,28 @@
 ---
-description: Self-serve Enterprise SSO (AGL-1210) plus the leftovers from /tenant-performance — CSP enforcing (AGL-523), tenant cold-start 502s (AGL-1152), and the AGL-1187 skip proof
+description: "SUPERSEDED 2026-08-14 — a dated 2026-08-03 session handoff kept for its AGL-1210 SSO design notes. Use /handoff for the current promotion flow and queue."
 ---
+
+> ⚠️ **SUPERSEDED (2026-08-14) — this is a point-in-time session handoff written
+> 2026-08-03, not a live runbook. For the current promotion flow, working
+> agreements and queue, read `.claude/commands/handoff.md` and `.claude/HANDOFF.md`;
+> where they disagree with anything below, they win.** Corrected in place (AGL-1704):
+>
+> - **Promotion is NOT pre-authorised.** The "standing permission" granted below
+>   applied to the 2026-08-03 session only. **Promotion needs Zach's word before
+>   it starts**, and you never open a production PR unasked.
+> - **Never put work on a branch to hold it out of a batch** (see "Another session
+>   is live in this repo"). The current agreement is the opposite: **push to `main`
+>   immediately** and let the batch accumulate there. No branches — only the
+>   production PR is batched.
+> - **A promotion costs 4 deployment records, not 3** — tenant, docs, console and
+>   `aglyn-plugins`, which creates a record on every promote and then cancels it
+>   (AGL-1633). Only `www` has genuinely stopped deploying.
+> - **AGL-523 closed Done 2026-08-04**, the day after this file was written. Treat
+>   the whole "Then, in rough order" list as history and re-derive it from Linear.
+>
+> Still worth reading: the **AGL-1210 design notes** (the DNS TXT domain-verification
+> requirement is a real account-takeover argument, not a nicety) and **"What this
+> session got wrong"**.
 
 Build **self-serve Enterprise SSO** (AGL-1210), then work the leftovers below.
 Picks up from `/tenant-performance` on 2026-08-03.
@@ -8,8 +30,8 @@ Picks up from `/tenant-performance` on 2026-08-03.
 Work issues in Linear: **In Progress** when you start, **In Review** when it
 lands, **Done** once verified in production. One conventional commit per
 AGL-### on `main`, then promote with a PR `main` → `production` and **merge it**
-(never squash). Standing permission for that promotion is granted — build and
-verify first.
+(never squash). ~~Standing permission for that promotion is granted~~ — **corrected
+2026-08-14: promotion needs Zach's word before it starts.**
 
 ## AGL-1210 is the main task
 
@@ -72,17 +94,22 @@ emulator on :8082. On 2026-08-03 it was in besigner/theme/preview.
 - **`git commit --only <your files>`.** Something auto-stages here; a plain
   commit sweeps their work in.
 - **You cannot hold a commit back by not pushing.** Their `git push origin main`
-  pushes the *branch*, carrying your local commits with it. If work must stay
-  out of a batch, put it on a **branch**. An open `main→production` PR also
-  tracks `main`, so its diff is never the diff you approved.
+  pushes the *branch*, carrying your local commits with it. ~~If work must stay
+  out of a batch, put it on a **branch**.~~ **Corrected 2026-08-14: do not create
+  branches.** Push to `main` immediately and let the batch accumulate there —
+  sitting on commits locally is the failure mode this line was trying to solve
+  and it is no longer the answer. An open `main→production` PR tracks `main`, so
+  its diff is never the diff you approved; the current mitigation is to gate as
+  late as possible and re-check `git rev-parse origin/main` against the gated SHA
+  immediately before merging.
 - **Never `git stash`.** Read the failure — it names the file — instead of
   reverting a tree that holds two sessions' work.
 - **Their broken code can block you.** Twice on 2026-08-03: a spec that did not
   typecheck, and a docs page landed without re-running
   `node tools/scripts/generate-docs-help.mjs`. Fixing their file is fine when
   Zach says so; flag it otherwise.
-- Leave them promotion capacity. One promotion costs **3** deployment records
-  against ~100/day.
+- Leave them promotion capacity. One promotion costs ~~**3**~~ **4** deployment
+  records against ~100/day (AGL-1633).
 
 ## What this session got wrong, so you do not repeat it
 

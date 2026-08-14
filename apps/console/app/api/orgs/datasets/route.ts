@@ -33,6 +33,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  isServerReleaseFlagOnForOrg,
   lockdownRefusal,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
@@ -78,6 +79,18 @@ async function handler(request: Request): Promise<Response> {
     const member = membership?.member as any
     if (!member || !WRITER_ROLES.has(String(member.role))) {
       return Response.json({ error: 'Editing org data requires the editor role' }, { status: 403 })
+    }
+
+    // Release gate (AGL-1653). `<FeatureGate flag="release_data_store">` on
+    // the org Data page was the only gate, so org-level dataset
+    // administration kept working with the flag off — the milder sibling of
+    // the add-on store leak above it in the same issue. Same staff bypass as
+    // `FeatureGate`'s `visible`, same 404: released-off means absent.
+    if (
+      decoded['staff'] !== true &&
+      !(await isServerReleaseFlagOnForOrg('release_data_store', orgId))
+    ) {
+      return Response.json({ error: 'Not available' }, { status: 404 })
     }
 
     const firestore = firebaseAdmin.app().firestore()

@@ -111,8 +111,14 @@ export interface MarkdownVisualEditorProps {
    * When set, the Insert image dialog offers a "Choose from media" button
    * that closes the dialog and invokes this callback — the host page opens
    * its media picker and inserts via the imperative handle (AGL-596).
+   *
+   * Receives the alt text typed in the dialog before the handoff (AGL-1645).
+   * Handing the picker an image is the only chance to describe it: an image
+   * row is `contentEditable={false}`, so an alt left empty here can never be
+   * filled in afterwards without deleting and re-inserting the image. Callers
+   * that mint their own alt from the asset are free to ignore it.
    */
-  onPickImageFromMedia?: () => void
+  onPickImageFromMedia?: (alt: string) => void
   /** Fires when the caret's formatting context changes (AGL-984). */
   onContextChange?: (context: MarkdownEditorContext) => void
   minHeight?: number | string
@@ -612,8 +618,13 @@ const BlockRowView = memo(function BlockRowView({
       }}
     >
       {row.kind === 'image' ? (
+        // Resolved for DISPLAY only (AGL-1686); `row.src` keeps the stored
+        // form, so serializing back writes the reference rather than the URL
+        // it happens to resolve to right now. Without this the author would
+        // be editing next to a broken-image icon while the published page
+        // rendered correctly.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={row.src} alt={row.alt} />
+        <img src={Aglyn.resolveMediaSrc(row.src)} alt={row.alt} />
       ) : row.kind === 'code' ? (
         <Box
           sx={{
@@ -942,10 +953,24 @@ const cloneRows = (rows: EditorRow[]): EditorRow[] =>
 
 const HISTORY_LIMIT = 100
 
-/** True when only https?:// or a site-relative (not protocol-relative) path. */
-const isValidLinkUrl = (url: string): boolean =>
-  /^https?:\/\//i.test(url) || /^\/(?!\/)/.test(url)
-const isValidImageUrl = (url: string): boolean => /^https?:\/\//i.test(url)
+/**
+ * What the editor accepts is exactly what the PARSER keeps (AGL-1686).
+ *
+ * These were hand-rolled copies of the parser's rules, and the copy is what
+ * broke: AGL-1645 widened the image rule here to accept the site-relative
+ * `/api/media/cdn/{scope}/{id}` the media library hands back, while
+ * `markdown-lite`'s image rule stayed absolute-`http(s)`-only. The insert
+ * worked, serialized, saved — and the parser then dropped the block on the way
+ * back out, so the image was gone from the document, the preview and the
+ * published page with nothing logged anywhere.
+ *
+ * Delegating means the two can no longer disagree. Both still refuse
+ * protocol-relative `//host`, which would silently leave the site; images
+ * additionally accept a well-formed `media:` reference (AGL-1215), which is
+ * now what the media picker inserts.
+ */
+const isValidLinkUrl = (url: string): boolean => Aglyn.isSupportedLinkHref(url)
+const isValidImageUrl = (url: string): boolean => Aglyn.isSupportedImageSrc(url)
 
 interface UrlDialogState {
   kind: 'link' | 'image'
@@ -2026,7 +2051,7 @@ const MarkdownVisualEditor = forwardRef<
             sx={{ mt: 1 }}
             helperText={
               urlDialog?.kind === 'image'
-                ? 'https:// image URL'
+                ? 'https:// or a site path like /images/hero.png'
                 : 'https:// or a site path like /pricing'
             }
           />
@@ -2061,8 +2086,12 @@ const MarkdownVisualEditor = forwardRef<
               color="primary"
               sx={{ mr: 'auto' }}
               onClick={() => {
+                // Read the alt BEFORE clearing the dialog (AGL-1645) — the
+                // author has already typed it, and the picked image has no
+                // other way to acquire one.
+                const alt = urlDialog.text.trim()
                 setUrlDialog(null)
-                onPickImageFromMedia()
+                onPickImageFromMedia(alt)
               }}
             >
               {'Choose from media'}

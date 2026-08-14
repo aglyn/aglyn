@@ -144,6 +144,12 @@ export interface MarkdownProps extends BoxProps {
 const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
   const { content, sx, children: _children, ...rest } = props
   const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+  /**
+   * The site being rendered, for image blocks (AGL-1686). Read once here
+   * rather than per block: hooks cannot run inside the `blocks.map` below,
+   * and a document may hold any number of images.
+   */
+  const { hostId } = Aglyn.useSite()
   const source = (content ?? '').trim()
   const blocks = useMemo(
     () => (source ? Aglyn.parseMarkdownLite(source) : []),
@@ -215,7 +221,13 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
             <Box
               key={index}
               component="img"
-              src={block.src}
+              // Resolved, exactly as `image.tsx` resolves its `src` prop
+              // (AGL-1686). A document records WHICH ASSET; turning that into
+              // a URL is the renderer's business, so the `/api/media/cdn/…`
+              // route shape never has to be baked into a published document.
+              // Every other value — a legacy storage URL, a legacy CDN path,
+              // an author-typed hotlink — passes through untouched.
+              src={Aglyn.resolveMediaSrc(block.src, { hostId })}
               alt={block.alt}
               loading="lazy"
               sx={{ maxWidth: '100%', borderRadius: 1, my: 2 }}

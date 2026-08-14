@@ -20,6 +20,7 @@ import * as Besigner from '@aglyn/besigner'
 import { Box } from '@mui/material'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 
+import { MediaPickerContext } from '../contexts/media-picker-context'
 import { ATTRIBUTE_COMMIT_DEBOUNCE_MS } from '../hooks/use-debounced-commit'
 import { inlineMarkdownEdit } from '../utils/inline-markdown-edit.store'
 import DraggableDroppable from './dnd/draggable-droppable'
@@ -150,6 +151,122 @@ describe('canvas double-click on a markdown element (AGL-1624)', () => {
     })
 
     expect(inlineMarkdownEdit.node).toBeUndefined()
+  })
+})
+
+/**
+ * A stand-in canvas element whose viewport rect the test can move, the way a
+ * scroll moves a real one.
+ */
+const movableAnchor = (top: number, left = 40) => {
+  const el = document.createElement('div')
+  document.body.appendChild(el)
+  let box = { left, top, width: 600, height: 300 }
+  el.getBoundingClientRect = () =>
+    ({
+      ...box,
+      right: box.left + box.width,
+      bottom: box.top + box.height,
+      x: box.left,
+      y: box.top,
+      toJSON: () => ({}),
+    }) as DOMRect
+  return {
+    el,
+    /** Moves the element and fires the scroll the browser would have fired. */
+    scrollTo: (nextTop: number, nextLeft = box.left) => {
+      box = { ...box, top: nextTop, left: nextLeft }
+      act(() => {
+        fireEvent.scroll(window)
+      })
+    },
+  }
+}
+
+const overlayTop = (testId: string): string =>
+  window.getComputedStyle(screen.getByTestId(testId)).top
+
+/**
+ * AGL-1644. Both in-place editors anchored on a rect captured ONCE at open and
+ * never recomputed, so scrolling the canvas mid-edit left the editor floating
+ * over unrelated chrome. AGL-1624 clamped that dead rect with `Math.max(8, …)`,
+ * which put a first paint somewhere visible and did nothing about the drift —
+ * its own author called it a floor rather than a fix.
+ *
+ * The distinction the tests below turn on: a floor can only ever push the
+ * editor DOWN to the margin. Following the element back UP the page — the
+ * second half of every scroll a person actually performs — is the part a
+ * clamped constant cannot do at all.
+ */
+describe('the markdown editor follows the canvas (AGL-1644)', () => {
+  afterEach(() => {
+    act(() => inlineMarkdownEdit.close())
+    act(() => Besigner.focus.clearSelection())
+    document.body.innerHTML = ''
+  })
+
+  const openAnchored = (top: number) => {
+    const node = markdownNode('Hello world')
+    const anchor = movableAnchor(top)
+    render(<InlineMarkdownEditorComponent />)
+    act(() => {
+      Besigner.focus.setSelectedNode(node)
+      inlineMarkdownEdit.open(
+        node,
+        { left: 40, top, width: 600, height: 300 },
+        'content',
+        node.props.content,
+        anchor.el,
+      )
+    })
+    return anchor
+  }
+
+  it('re-measures the anchor when the canvas scrolls', () => {
+    const anchor = openAnchored(300)
+    expect(overlayTop('inline-markdown-editor')).toBe('300px')
+
+    anchor.scrollTo(180)
+    expect(overlayTop('inline-markdown-editor')).toBe('180px')
+  })
+
+  // The half a floor cannot reach. Scrolled off the top the editor waits at the
+  // margin — and scrolling back returns it to the element, rather than leaving
+  // it parked where the clamp put it.
+  it('waits at the top margin while the element is above the viewport, then comes back', () => {
+    const anchor = openAnchored(300)
+
+    anchor.scrollTo(-900)
+    expect(overlayTop('inline-markdown-editor')).toBe('8px')
+
+    anchor.scrollTo(240)
+    expect(overlayTop('inline-markdown-editor')).toBe('240px')
+  })
+
+  // The opposite edge, which the old `Math.max(8, …)` had no answer for at all:
+  // an element below the fold would have taken the editor off the bottom.
+  it('keeps the editor reachable when the element is below the viewport', () => {
+    const anchor = openAnchored(300)
+    anchor.scrollTo(window.innerHeight + 500)
+    const top = Number.parseFloat(overlayTop('inline-markdown-editor'))
+    expect(top).toBeLessThan(window.innerHeight)
+  })
+
+  // No anchor — an `open` from a caller that has none — must behave exactly as
+  // it did before, on the captured rect.
+  it('falls back to the captured rect when there is no anchor', () => {
+    const node = markdownNode('Hello world')
+    render(<InlineMarkdownEditorComponent />)
+    act(() => {
+      Besigner.focus.setSelectedNode(node)
+      inlineMarkdownEdit.open(
+        node,
+        { left: 40, top: 220, width: 600, height: 300 },
+        'content',
+        node.props.content,
+      )
+    })
+    expect(overlayTop('inline-markdown-editor')).toBe('220px')
   })
 })
 
@@ -341,6 +458,124 @@ describe('in-place markdown commit semantics (AGL-1624)', () => {
     expect(call[1]).toEqual({
       content: 'Hello kept world',
       variant: 'body1',
+    })
+  })
+
+  // AGL-1645. The canvas is the harder of the two surfaces for this: opening
+  // the picker is a modal that takes focus, and focus is what closes and
+  // commits every other in-place editor on this canvas. The whole round trip
+  // is driven, because the button being wired proves nothing on its own.
+  describe('the image button reaches the media library (AGL-1645)', () => {
+    /** `openOn`, under a host picker whose pending callback is captured. */
+    const openWithPicker = (node: any) => {
+      let pending: ((value: string) => void) | null = null
+      const onPickMedia = jest.fn((onPick: (value: string) => void) => {
+        pending = onPick
+      })
+      render(
+        <MediaPickerContext.Provider value={{ onPickMedia }}>
+          <InlineMarkdownEditorComponent />
+        </MediaPickerContext.Provider>,
+      )
+      act(() => {
+        Besigner.focus.setSelectedNode(node)
+        inlineMarkdownEdit.open(
+          node,
+          { left: 40, top: 60, width: 600, height: 300 },
+          'content',
+          node.props.content,
+        )
+      })
+      return { onPickMedia, pick: (value: string) => pending?.(value) }
+    }
+
+    /** Toolbar image button → alt text → "Choose from media". */
+    const openPickerWithAlt = (alt: string) => {
+      act(() => {
+        fireEvent.click(screen.getByLabelText('Image'))
+      })
+      act(() => {
+        fireEvent.change(screen.getByLabelText('Alt text'), {
+          target: { value: alt },
+        })
+      })
+      act(() => {
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Choose from media' }),
+        )
+      })
+    }
+
+    it('inserts the picked asset and commits it as markdown-lite', () => {
+      const { onPickMedia, pick } = openWithPicker(markdownNode('Before.'))
+      openPickerWithAlt('A signed contract')
+      expect(onPickMedia).toHaveBeenCalledTimes(1)
+
+      act(() => {
+        pick('media:org:acme/med123')
+      })
+      // Shown resolved, stored as the reference (AGL-1686).
+      const img = document.querySelector(
+        '[data-row-kind="image"] img',
+      ) as HTMLImageElement | null
+      expect(img?.getAttribute('src')).toBe('/api/media/cdn/org:acme/med123')
+      expect(img?.getAttribute('alt')).toBe('A signed contract')
+
+      act(() => {
+        jest.advanceTimersByTime(ATTRIBUTE_COMMIT_DEBOUNCE_MS)
+      })
+      expect(lastCommittedContent()).toBe(
+        'Before.\n\n![A signed contract](media:org:acme/med123)',
+      )
+    })
+
+    // The focus hazard, stated as an assertion. The editor must still be open
+    // and still editing the same node after a modal has taken focus and given
+    // it back — a surface that closed on the dialog would drop the author back
+    // onto the canvas with the image inserted into nothing.
+    it('stays open across the modal that steals focus', () => {
+      const node = markdownNode('Before.')
+      const { pick } = openWithPicker(node)
+      openPickerWithAlt('Kept open')
+      act(() => {
+        pick('media:org:acme/med123')
+      })
+      // Let the dialog finish its exit transition and hand focus back. Until
+      // it does, MUI holds `aria-hidden` on everything behind the modal — the
+      // editor is there, but a role query cannot see it, which is precisely
+      // the state an author would be stuck in if the dialog never closed.
+      act(() => {
+        jest.advanceTimersByTime(500)
+      })
+      expect(inlineMarkdownEdit.node?.$id).toBe(node.$id)
+      expect(screen.getByTestId('inline-markdown-editor')).toBeTruthy()
+
+      // And typing after the insert still commits, on the same debounce.
+      const rows = rowEls()
+      const last = rows[rows.length - 1] as HTMLElement
+      last.textContent = 'After the image.'
+      act(() => {
+        fireEvent.input(last)
+      })
+      act(() => {
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+      })
+      expect(String(lastCommittedContent())).toContain(
+        '![Kept open](media:org:acme/med123)\n\nAfter the image.',
+      )
+    })
+
+    // Without a host picker the editor keeps its own URL prompt rather than
+    // showing a button that does nothing.
+    it('offers no media button when the host supplies no picker', () => {
+      openOn(markdownNode(''))
+      act(() => {
+        fireEvent.click(screen.getByLabelText('Image'))
+      })
+      expect(screen.getByLabelText('Alt text')).toBeTruthy()
+      expect(
+        screen.queryByRole('button', { name: 'Choose from media' }),
+      ).toBeNull()
     })
   })
 })

@@ -33,7 +33,7 @@ import {
   Typography,
 } from '@mui/material'
 import { doc, updateDoc } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 
 export interface OrderDetailDialogProps {
@@ -126,6 +126,25 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     })
   }, [order, confirm, write])
 
+  /**
+   * Idempotency key for ONE refund attempt (AGL-1696), the same shape the POS
+   * register uses for a sale (AGL-1691).
+   *
+   * Minted lazily so a retry of this attempt — a lost response, a second
+   * click, the admin reopening the dialog after a timeout — reuses it and the
+   * server replays instead of sending the money again. Retired on a definitive
+   * answer, which makes the NEXT refund a new attempt: two partial refunds of
+   * the same amount on the same order are two real refunds, and keying on the
+   * order (or the amount) would silently swallow the second.
+   *
+   * NOT retired on a network failure or a 5xx — that is precisely the window
+   * the key exists to cover.
+   */
+  const attemptKey = useRef('')
+  useEffect(() => {
+    attemptKey.current = ''
+  }, [orderId])
+
   const handleRefund = useCallback(async () => {
     if (!order || !orderId) return
     const confirmed = await confirm({
@@ -141,17 +160,29 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
       .catch(() => false)
     if (!confirmed) return
     setBusy(true)
+    // `randomUUID` needs a secure context, which the console always is, but
+    // fall back rather than throw on a refund.
+    if (!attemptKey.current) {
+      attemptKey.current =
+        globalThis.crypto?.randomUUID?.() ??
+        `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
     try {
       const idToken = await (user as any)?.getIdToken?.()
       const response = await fetch('/api/commerce/refund', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Idempotency-Key': attemptKey.current,
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({ hostId, orderId }),
       })
       const payload = await response.json()
+      // A definitive answer ends this attempt either way: the next refund is a
+      // new one and must get a new key. A 5xx or a thrown fetch keeps the key,
+      // so pressing Refund again dedupes rather than sends a second transfer.
+      if (response.status < 500) attemptKey.current = ''
       if (!response.ok) {
         enqueueSnackbar(payload?.error ?? 'Refund failed', {
           variant: 'error',

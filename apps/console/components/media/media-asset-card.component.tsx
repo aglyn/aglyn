@@ -18,6 +18,7 @@
 
 import type * as Aglyn from '@aglyn/aglyn'
 import { describeScope, isOrgWideScope } from '@aglyn/aglyn'
+import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
@@ -62,6 +63,22 @@ export interface MediaAssetCardProps {
   onDelete?: () => void
   /** Toggle the AGL-1051 private flag; omitted where the caller can't. */
   onSetPrivate?: (makePrivate: boolean) => void
+  /**
+   * The owner-facing notice when this file has been DISABLED by staff
+   * (AGL-1612), or absent when it has not.
+   *
+   * Absent is the normal case and stays free of any marker — a badge on
+   * every healthy asset would be the noise that makes this one invisible.
+   * The shape is exactly what `/api/media/quarantine` returns, which is
+   * built from `mediaQuarantineNotice()`; the staff `note` is not part of
+   * it and must never be.
+   */
+  quarantine?: {
+    reason: string
+    title: string
+    body: string
+    contact: string | null
+  } | null
 }
 
 const THUMB_HEIGHT = 116
@@ -86,6 +103,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
     onDetails,
     onDelete,
     onSetPrivate,
+    quarantine,
   } = props
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const picker = Boolean(onSelect)
@@ -281,6 +299,31 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
                 color="warning"
                 icon={<VisibilityOffOutlinedIcon />}
                 label="Private"
+                sx={{ mt: 0.5, maxWidth: '100%' }}
+              />
+            </Tooltip>
+          ) : null}
+          {/* Disabled by staff (AGL-1612). Until now the only symptom was an
+              image that had quietly stopped rendering, with nothing in the
+              DAM to explain it — for the workspace that owns the file and
+              for the staff operator looking at the same grid.
+              `error`, not `warning`: this file is not serving to anyone, and
+              it must not read like the "Private" advisory beside it. The
+              body carries the reason and the support address; the internal
+              staff note is not in this payload and cannot leak through. */}
+          {quarantine ? (
+            <Tooltip
+              title={
+                quarantine.contact
+                  ? `${quarantine.body} (${quarantine.contact})`
+                  : quarantine.body
+              }
+            >
+              <Chip
+                size="small"
+                color="error"
+                icon={<BlockOutlinedIcon />}
+                label="Disabled"
                 sx={{ mt: 0.5, maxWidth: '100%' }}
               />
             </Tooltip>

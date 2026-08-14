@@ -16,6 +16,8 @@
  */
 
 import {
+  MAX_CHECKOUT_SHIPPING_OPTIONS,
+  resolveCheckoutShippingOptions,
   resolveShippingRates,
   type ShippingSettings,
 } from './commerce-shipping'
@@ -102,5 +104,141 @@ describe('resolveShippingRates', () => {
       .toEqual([])
     expect(resolveShippingRates(undefined, 'US', { subtotalCents: 1 }))
       .toEqual([])
+  })
+})
+
+/**
+ * The Stripe Checkout adapter (AGL-1707). The session is created before the
+ * shopper has an address, so these are the union over every destination the
+ * cart collects — see the doc comment on the function for why that trade is
+ * the one taken.
+ */
+describe('resolveCheckoutShippingOptions', () => {
+  const countries = ['US', 'CA', 'GB', 'AU', 'DE', 'FR']
+
+  it('offers nothing for a merchant who configured nothing', () => {
+    // The load-bearing case: this is what keeps a session for an
+    // unconfigured merchant identical to the pre-AGL-1707 one.
+    expect(
+      resolveCheckoutShippingOptions(undefined, countries, {
+        subtotalCents: 2000,
+      }),
+    ).toEqual([])
+    expect(
+      resolveCheckoutShippingOptions({}, countries, { subtotalCents: 2000 }),
+    ).toEqual([])
+    expect(
+      resolveCheckoutShippingOptions({ zones: [], rates: [] }, countries, {
+        subtotalCents: 2000,
+      }),
+    ).toEqual([])
+  })
+
+  it('unions every zone the collectable destinations reach', () => {
+    const options = resolveCheckoutShippingOptions(settings, countries, {
+      subtotalCents: 2000,
+      totalGrams: 400,
+    })
+    // `intl` belongs to the '*' zone, which only CA/GB/AU/DE/FR reach, and
+    // the three `us` rates only US reaches. All four have to be present or a
+    // shopper in one of those groups is charged nothing.
+    // Cheapest first; `free50` and `std` tie at 799 and break by rate id.
+    expect(options.map((option) => option.rateId)).toEqual([
+      'wt',
+      'free50',
+      'std',
+      'intl',
+    ])
+    expect(options.map((option) => option.amountCents)).toEqual([
+      599, 799, 799, 2999,
+    ])
+  })
+
+  it('prices free_over and weight tiers off the cart it is given', () => {
+    const free = resolveCheckoutShippingOptions(settings, ['US'], {
+      subtotalCents: 6000,
+      totalGrams: 400,
+    })
+    expect(free.find((option) => option.rateId === 'free50')?.amountCents).toBe(
+      0,
+    )
+    // The heavier tier, which only applies because totalGrams is real. A cart
+    // weight of 0 would quote 599 here.
+    const heavy = resolveCheckoutShippingOptions(settings, ['US'], {
+      subtotalCents: 2000,
+      totalGrams: 1500,
+    })
+    expect(heavy.find((option) => option.rateId === 'wt')?.amountCents).toBe(
+      1299,
+    )
+  })
+
+  it('dedupes one rate reached from several destinations', () => {
+    const worldOnly: ShippingSettings = {
+      zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
+      rates: [
+        {
+          id: 'flat',
+          zoneId: 'world',
+          name: 'Standard',
+          kind: 'flat',
+          amountCents: 500,
+        },
+      ],
+    }
+    const options = resolveCheckoutShippingOptions(worldOnly, countries, {
+      subtotalCents: 2000,
+    })
+    expect(options).toEqual([
+      { rateId: 'flat', name: 'Standard', amountCents: 500 },
+    ])
+  })
+
+  it('offers local pickup exactly once', () => {
+    const options = resolveCheckoutShippingOptions(
+      { ...settings, localPickup: true },
+      countries,
+      { subtotalCents: 2000, totalGrams: 400 },
+    )
+    expect(
+      options.filter((option) => option.rateId === 'pickup'),
+    ).toHaveLength(1)
+    expect(options[0]).toMatchObject({ rateId: 'pickup', amountCents: 0 })
+  })
+
+  it('skips rows the console allows but Stripe would reject', () => {
+    const ragged: ShippingSettings = {
+      zones: [{ id: 'us', name: 'US', countries: ['US'] }],
+      rates: [
+        { id: '', zoneId: 'us', name: 'No id', kind: 'flat', amountCents: 100 },
+        { id: 'noname', zoneId: 'us', name: '', kind: 'flat', amountCents: 200 },
+        { id: 'ok', zoneId: 'us', name: 'Fine', kind: 'flat', amountCents: 300 },
+      ],
+    }
+    expect(
+      resolveCheckoutShippingOptions(ragged, ['US'], { subtotalCents: 1 }).map(
+        (option) => option.rateId,
+      ),
+    ).toEqual(['ok'])
+  })
+
+  it('caps at Stripe’s limit, keeping the cheapest', () => {
+    const many: ShippingSettings = {
+      zones: [{ id: 'us', name: 'US', countries: ['US'] }],
+      rates: Array.from({ length: 8 }, (_unused, index) => ({
+        id: `r${index}`,
+        zoneId: 'us',
+        name: `Rate ${index}`,
+        kind: 'flat' as const,
+        amountCents: (index + 1) * 100,
+      })),
+    }
+    const options = resolveCheckoutShippingOptions(many, ['US'], {
+      subtotalCents: 1,
+    })
+    expect(options).toHaveLength(MAX_CHECKOUT_SHIPPING_OPTIONS)
+    expect(options.map((option) => option.amountCents)).toEqual([
+      100, 200, 300, 400, 500,
+    ])
   })
 })

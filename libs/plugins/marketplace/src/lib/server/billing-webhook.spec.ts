@@ -169,8 +169,6 @@ describe('GA4 purchase reporting (AGL-1561)', () => {
     // The session id, so GA de-duplicates a Stripe redelivery exactly as the
     // ledger's doc id does.
     expect(sent.transactionId).toBe('cs_test_1')
-    // Whole currency units, gross — the same 10825 cents the ledger records.
-    expect(sent.value).toBe(108.25)
     expect(sent.items[0].item_category).toBe('marketplace')
   })
 
@@ -189,6 +187,84 @@ describe('GA4 purchase reporting (AGL-1561)', () => {
     await marketplaceBillingWebhookHandler(completedSession() as any)
 
     expect(JSON.stringify(adminMock.__ga4)).not.toContain('@')
+  })
+})
+
+/**
+ * AGL-1639. GA revenue that disagrees with Stripe is worse than no GA
+ * revenue, because it gets quoted.
+ *
+ * The fixture is one whole worked example: a $100 listing sold by a 20%-rate
+ * seller into a jurisdiction charging $8.25 of tax.
+ *
+ *   gross (amount_total) 10825¢ = 10000¢ listing + 825¢ tax
+ *   − tax                  825¢  collected by the platform, owed to the state
+ *   − transfer            8000¢  paid to the seller's Connect account
+ *   ────────────────────────────
+ *   = platform net        2000¢  which is exactly metadata.feeCents
+ *
+ * Sending 108.25 booked tax and the seller's payout as Aglyn revenue.
+ */
+describe('marketplace revenue reconciles with Stripe (AGL-1639)', () => {
+  it('reports the platform NET, not the tax-inclusive gross', async () => {
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    const sent = adminMock.__ga4[0]
+    expect(sent.value).toBe(20)
+    // The gross the buyer paid, and the ex-tax GMV, are both wrong answers.
+    expect(sent.value).not.toBe(108.25)
+    expect(sent.value).not.toBe(100)
+    // One item, one price: GA expects the items to sum to `value`.
+    expect(sent.items[0].price).toBe(20)
+    expect(sent.items[0].quantity).toBe(1)
+  })
+
+  it('the number GA gets equals the number the ledger records as the fee', async () => {
+    // The two are computed independently — GA from Stripe's authoritative
+    // gross and tax minus the seller transfer, the ledger's feeCents from
+    // the rate resolved at checkout. If they ever diverge, one of them is
+    // lying about the same sale.
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    const ledger = adminMock.__writes[0].data
+    const sent = adminMock.__ga4[0]
+    expect(sent.value * 100).toBe(ledger.feeCents)
+    expect(sent.value * 100).toBe(
+      Number(ledger.amountCents) -
+        Number(ledger.taxCents) -
+        Number(ledger.transferCents),
+    )
+  })
+
+  it('holds at a different rate, price and tax jurisdiction', async () => {
+    // A $250 listing at the 30% free-plan rate, no sales tax owed.
+    await marketplaceBillingWebhookHandler(
+      completedSession({
+        amount_total: 25000,
+        total_details: { amount_tax: 0 },
+        metadata: {
+          type: 'marketplace-purchase',
+          listingId: 'listing-1',
+          buyerUid: 'buyer-1',
+          sellerOrgId: 'seller-org',
+          feeCents: '7500',
+          transferCents: '17500',
+        },
+      }) as any,
+    )
+    expect(adminMock.__ga4[0].value).toBe(75)
+  })
+
+  it('accounts for every cent the buyer paid, exactly once', async () => {
+    // Aglyn collects sales tax as marketplace provider and remits it; it is
+    // not ours and it is not `value`. The full decomposition of the gross has
+    // to close — GA revenue plus the tax plus the seller's transfer IS what
+    // the buyer was charged, with nothing double-counted and nothing lost.
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    const ledger = adminMock.__writes[0].data
+    expect(
+      adminMock.__ga4[0].value * 100 +
+        Number(ledger.taxCents) +
+        Number(ledger.transferCents),
+    ).toBe(Number(ledger.amountCents))
   })
 })
 

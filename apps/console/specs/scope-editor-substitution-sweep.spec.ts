@@ -96,7 +96,7 @@ describe('AGL-1484 · nothing substitutes the org token for an absent scope', ()
    *
    * The narrowing is not only speed. `code()`'s bounds are calibrated against
    * whole guarded sources, and running it over 15,000 files would eventually
-   * trip its `MAX_STRIPPED_SPAN` bound on a legitimate 3,000-character
+   * trip its `MAX_STRIPPED_SPAN` bound on a legitimate 5,000-character
    * module header and fail this spec for a reason that has nothing to do
    * with scopes. The sixteen files that name `ORG_SCOPE_TOKEN` at all are the
    * only ones the pattern can match, and the longest single comment among

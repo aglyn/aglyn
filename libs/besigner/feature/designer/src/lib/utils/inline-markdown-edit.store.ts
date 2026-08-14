@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { makeAutoObservable } from 'mobx'
+import { makeAutoObservable, observable } from 'mobx'
 
 export interface InlineMarkdownEditRect {
   left: number
@@ -57,6 +57,14 @@ export function findMarkdownAttributeName(
  * closed canvas shadow root — the same frame of reference `inlineTextEdit`
  * uses, and the only one the two sides share.
  *
+ * `anchor` is the element the rect was measured from, kept so the editor can
+ * re-measure instead of drifting when the canvas scrolls (AGL-1644). `rect` is
+ * still carried and still used: it is the value the first paint positions on,
+ * before any layout effect has run, and the fallback when there is no anchor.
+ *
+ * It is an `observable.ref` — a DOM node is a foreign object graph and mobx has
+ * no business walking into it.
+ *
  * `initialValue` is captured at open and never re-read. The editor re-parses
  * its row model whenever the incoming value differs from the string it last
  * emitted, which resets the undo history and drops the caret; feeding the
@@ -66,11 +74,12 @@ export function findMarkdownAttributeName(
 class InlineMarkdownEditStore {
   node?: Aglyn.NodeSchema<any> = undefined
   rect?: InlineMarkdownEditRect = undefined
+  anchor?: Element = undefined
   attributeName?: string = undefined
   initialValue = ''
 
   constructor() {
-    makeAutoObservable(this)
+    makeAutoObservable(this, { anchor: observable.ref })
   }
 
   open(
@@ -78,9 +87,11 @@ class InlineMarkdownEditStore {
     rect: InlineMarkdownEditRect,
     attributeName: string,
     initialValue: string,
+    anchor?: Element,
   ) {
     this.node = node
     this.rect = rect
+    this.anchor = anchor
     this.attributeName = attributeName
     this.initialValue = initialValue
   }
@@ -88,6 +99,7 @@ class InlineMarkdownEditStore {
   close() {
     this.node = undefined
     this.rect = undefined
+    this.anchor = undefined
     this.attributeName = undefined
     this.initialValue = ''
   }

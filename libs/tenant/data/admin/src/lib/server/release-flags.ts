@@ -158,22 +158,28 @@ export function __resetReleaseFlagCaches(): void {
 
 /**
  * The server half of the plugin release gate (AGL-422): subtracts
- * flagged-off first-party plugins from an effective set, with the same
- * subject bucketing the console client uses (`subjectId` = orgId, so a
- * whole workspace gets a rollout verdict together). The staff bypass is
+ * flagged-off first-party plugins from an effective set. The staff bypass is
  * only paid for when something was actually subtracted AND the request
  * carries a bearer token — the common all-flags-on path never verifies.
  *
- * AGL-1635: `orgId` carries the per-org overrides. It is passed separately
- * from `subjectId` because the two are not the same thing — callers fall
- * back to a hostId as the rollout subject when the org lookup misses, and a
- * hostId must never be read as an org id here.
+ * `orgId` is the ONLY subject: it selects the per-org overrides (AGL-1635)
+ * and it is the rollout bucket. AGL-1635 took a separate `subjectId` here
+ * because callers fell back to a hostId when the org lookup missed, and a
+ * hostId must never be read as an org id. AGL-1656 removed that fallback
+ * instead of accommodating it — a hostId and an orgId hash to different
+ * buckets, so a mid-rollout flag could land the published site and the
+ * console on opposite sides of the same percentage for the same workspace.
+ * With one subject the two cannot disagree by construction, and there is no
+ * longer a parameter through which a non-org subject could be reintroduced.
  */
 export async function filterEnabledPluginsByReleaseFlags(
   pluginIds: readonly string[],
   options: {
-    subjectId?: string | null
-    /** The org whose overrides apply, when the caller resolved one. */
+    /**
+     * The org this request belongs to: rollout bucket AND override key.
+     * Null when no org could be resolved — a subject-less request gets the
+     * fully-enabled flags only, never a partial rollout.
+     */
     orgId?: string | null
     /** Raw Authorization header, when the caller has one (API dispatch). */
     authorization?: string | null
@@ -188,7 +194,7 @@ export async function filterEnabledPluginsByReleaseFlags(
       ? isReleaseFlagOnForOrg(
           flagKey,
           values[flagKey],
-          options.subjectId ?? null,
+          options.orgId ?? null,
           overrides,
         )
       : true

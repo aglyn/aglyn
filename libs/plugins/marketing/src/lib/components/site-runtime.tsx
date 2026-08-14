@@ -661,6 +661,14 @@ function PopupOverlay(props: {
   // Email capture (AGL-200): submits into the forms pipeline (inbox +
   // contacts); success suppresses the popup for ~10 years.
   const [email, setEmail] = useState('')
+  // The honeypot's value, held in state so whatever a bot typed into the
+  // hidden input below is what gets POSTed (AGL-1665). This used to be a
+  // hardcoded `website: ''` in the request body: the route drops a
+  // submission only when the field is NON-empty, so a constant empty string
+  // never failed the check — it removed it. There was no field on the page
+  // to fill and no value a script could set, which made the popup the one
+  // form surface on the site with no honeypot at all.
+  const [website, setWebsite] = useState('')
   const [submitted, setSubmitted] = useState(false)
 
   useEffect(() => {
@@ -728,7 +736,11 @@ function PopupOverlay(props: {
           formName: 'Popup',
           fields: { email: value },
           path: window.location.pathname,
-          website: '',
+          // Submitted AS-IS (AGL-1665) — the point of a honeypot is that the
+          // client never judges it. `libs/plugins/mui/.../form.tsx` reads its
+          // own hidden `website` input off the FormData and forwards it the
+          // same way; `/api/forms/submit` is the single place that decides.
+          website,
         }),
       })
     } catch {
@@ -857,6 +869,28 @@ function PopupOverlay(props: {
                       borderRadius: 8,
                       border: '1px solid #d1d5db',
                       fontSize: 14,
+                    }}
+                  />
+                  {/* Honeypot: humans never see or fill this (AGL-1665).
+                      Off-screen rather than `display:none`/`hidden`, and
+                      named `website`, so the naive form-filling bots the
+                      route's check is aimed at treat it as an ordinary
+                      field — the same bait, presented the same way, as the
+                      site form's. Out of flow, so the flex row above is
+                      unchanged. */}
+                  <input
+                    type="text"
+                    name="website"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden="true"
+                    value={website}
+                    onChange={(event) => setWebsite(event.target.value)}
+                    style={{
+                      position: 'absolute',
+                      left: '-5000px',
+                      height: 0,
+                      width: 0,
                     }}
                   />
                   <button

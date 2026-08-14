@@ -64,8 +64,15 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 /** The quota-enforcing create path, so a NEW workflow is distinguishable. */
 const mockCreateResource = jest.fn().mockResolvedValue({ id: 'wf-new' })
 
+/**
+ * Stable, like the real hook. `firestore` is a dependency of the head-count
+ * effect this card grew in AGL-1716; a `() => ({})` stub hands back a new
+ * instance every render and re-fires that effect on each one.
+ */
+const FIRESTORE = {}
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestore: () => ({}),
+  useFirestore: () => FIRESTORE,
   useFirestoreCollection: (build: () => unknown) => ({
     data: collections[build() as string] ?? [],
     status: listener.status,
@@ -88,6 +95,14 @@ jest.mock('firebase/firestore', () => ({
   doc: () => ({}),
   setDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
+  // The card reads its cap as a server aggregate (AGL-1716). The real one
+  // throws SYNCHRONOUSLY on the stubbed ref above, which crashes the render
+  // before the AGL-1358 guard can be exercised at all. Answering with the
+  // fixture's own length keeps the cap arithmetic true on both the pending
+  // fallback and the resolved read.
+  getCountFromServer: async (name: string) => ({
+    data: () => ({ count: (collections[name] ?? []).length }),
+  }),
 }))
 
 const enqueueSnackbar = jest.fn()

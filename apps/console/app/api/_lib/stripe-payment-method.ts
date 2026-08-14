@@ -29,6 +29,15 @@ export interface StaffPaymentMethod {
 /**
  * Subscription statuses Stripe will actually bill against. A cancelled
  * subscription's method is stale and must never outrank a live one.
+ *
+ * AGL-1715-EXEMPT: a deliberate SUPERSET of `isLiveSubscriptionStatus` — it
+ * adds `unpaid`. Different question. That predicate answers "may this org open
+ * a subscription", where an unpaid one must not block a new sale; this answers
+ * "which subscription is Stripe billing against, so whose payment method is
+ * the live one", and an unpaid subscription still has the card that failed on
+ * it. Sharing the list would show a stale method on exactly the orgs in
+ * dunning — the ones looking at this card. `stripe-payment-method.spec.ts`
+ * pins `unpaid` deliberately; do not converge them.
  */
 const LIVE_SUBSCRIPTION_STATUSES = [
   'active',

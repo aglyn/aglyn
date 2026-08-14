@@ -151,8 +151,15 @@ export const LISTING_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> =
     readme:
       'Markdown documentation for the listing page (no raw HTML). ' +
       'Publisher-authored and sanitized at render.',
-    logoUrl: 'Publisher-authored listing artwork. Sanitized at render.',
-    screenshots: 'Publisher-authored listing artwork. Sanitized at render.',
+    // `logoUrl` and `screenshots` were here, justified as "sanitized at
+    // render" (AGL-1701). They were not: listing-content.component.tsx hands
+    // both straight to an `<img src>`, and `logoUrl` additionally becomes an
+    // `og:image` served to unauthenticated unfurlers. Publisher-authored
+    // ARTWORK is not like publisher-authored COPY — copy is read by the
+    // viewer, artwork is FETCHED by the viewer's browser from whatever host
+    // the string names, disclosing their IP and a `Referer` naming the
+    // console and their org to a recipient on no subprocessor register.
+    // Denied in the rules and held to first-party media on the API path.
     homepageUrl:
       'Publisher-authored outbound link, sanitized at render. It points ' +
       'away from the platform and decides nothing here.',

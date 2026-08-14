@@ -18,7 +18,12 @@ by the nx boundary rule (`scope:app` may not depend on `aglyn:addons`,
    `node tools/scripts/generate-plugin-manifests.mjs` emits the four
    `plugins.{client,server}.generated.ts` files under
    `apps/{console,tenant}` — the ONLY sanctioned plugin references
-   (file-scoped eslint-disable).
+   (file-scoped eslint-disable). **Re-run it after every edit to
+   `plugins.config.json` and commit the result.** `--check` (AGL-1728,
+   `npm run generate:plugin-manifests:check`) fails if you didn't; it runs
+   in CI and as a `npm run typecheck` preflight, because a stale manifest
+   type-checks perfectly — a plugin missing from it is not a type error,
+   it is a plugin the runtime loader silently never activates.
 2. **Core registries** (`libs/aglyn/src/lib/plugin-manager/`) — console
    extensions (nav, pages, widgets, providers), site runtimes, site-page
    hooks (redirect resolvers, page resolvers, enrichers), billing-webhook

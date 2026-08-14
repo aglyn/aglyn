@@ -24,6 +24,10 @@ import {
   checkDiscountMargin,
   checkEntitlement,
   checkFormSubmissionQuota,
+  checkFormSubmissionAbuseCeiling,
+  FORM_ABUSE_CEILING_FLOOR,
+  FORM_ABUSE_CEILING_MULTIPLE,
+  FORM_ABUSE_CEILING_UNLIMITED,
   planMetersInfraOverage,
   isBillingSubscription,
   isCustomPricedPlan,
@@ -727,6 +731,86 @@ describe('plan entitlements', () => {
     expect(
       checkFormSubmissionQuota({ plan: 'enterprise' } as any, 1e9).allowed,
     ).toBe(true)
+  })
+
+  it('checkFormSubmissionAbuseCeiling bounds what the plan gate cannot (AGL-1655)', () => {
+    // The premise. On every metered plan the plan gate answers yes forever —
+    // by design since AGL-1280 — which is why the ceiling has to be a
+    // SEPARATE question rather than a stricter answer to this one.
+    expect(checkFormSubmissionQuota({ plan: 'starter' } as any, 5_000).allowed).toBe(
+      true,
+    )
+    expect(checkFormSubmissionQuota({ plan: 'enterprise' } as any, 1e9).allowed).toBe(
+      true,
+    )
+
+    // Starter includes 200; 10× is 2,000, under the floor, so the floor wins
+    // and a small customer keeps generous headroom instead of a second,
+    // tighter plan limit.
+    const starter = checkFormSubmissionAbuseCeiling({ plan: 'starter' } as any, 0)
+    expect(starter.ceiling).toBe(FORM_ABUSE_CEILING_FLOOR)
+    expect(starter.exceeded).toBe(false)
+    expect(
+      checkFormSubmissionAbuseCeiling({ plan: 'starter' } as any, 4_999).exceeded,
+    ).toBe(false)
+    // At the ceiling, not one past it — the count is submissions ALREADY
+    // taken this month, so the 5,001st is the first one refused.
+    expect(
+      checkFormSubmissionAbuseCeiling({ plan: 'starter' } as any, 5_000).exceeded,
+    ).toBe(true)
+
+    // Above the floor the multiple takes over, so a bigger plan is never
+    // clipped inside the band it paid for.
+    const pro = checkFormSubmissionAbuseCeiling({ plan: 'pro' } as any, 0)
+    expect(pro.ceiling).toBe(1_000 * FORM_ABUSE_CEILING_MULTIPLE)
+    expect(pro.ceiling).toBeGreaterThan(
+      PLAN_ENTITLEMENTS.pro.formSubmissionsPerMonth,
+    )
+
+    // UNLIMITED bands have nothing to multiply and must still be finite —
+    // an unlimited PLAN is not an unlimited tolerance for a bot flood.
+    const enterprise = checkFormSubmissionAbuseCeiling(
+      { plan: 'enterprise' } as any,
+      0,
+    )
+    expect(enterprise.ceiling).toBe(FORM_ABUSE_CEILING_UNLIMITED)
+    expect(Number.isFinite(enterprise.ceiling)).toBe(true)
+    expect(
+      checkFormSubmissionAbuseCeiling({ plan: 'enterprise' } as any, 1e9).exceeded,
+    ).toBe(true)
+
+    // The ladder never inverts: no plan's ceiling is below the one below it,
+    // and no plan's ceiling is below its OWN included band — either would
+    // turn containment into a capacity cut.
+    const ladder: OrgPlan[] = [
+      'free',
+      'starter',
+      'pro',
+      'business',
+      'scale',
+      'advanced',
+      'agency',
+      'enterprise',
+    ]
+    let previous = 0
+    for (const plan of ladder) {
+      const { ceiling } = checkFormSubmissionAbuseCeiling({ plan } as any, 0)
+      expect(ceiling).toBeGreaterThanOrEqual(previous)
+      expect(ceiling).toBeGreaterThanOrEqual(
+        Math.min(
+          PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
+          FORM_ABUSE_CEILING_UNLIMITED,
+        ),
+      )
+      previous = ceiling
+    }
+
+    // A negative count cannot manufacture headroom, and a plan-less org
+    // resolves as free rather than as uncapped.
+    expect(checkFormSubmissionAbuseCeiling(null, -1e9).used).toBe(0)
+    expect(checkFormSubmissionAbuseCeiling(null, 0).ceiling).toBe(
+      FORM_ABUSE_CEILING_FLOOR,
+    )
   })
 
   it('gates commerce features per the AGL-278 matrix', () => {

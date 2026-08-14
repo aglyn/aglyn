@@ -81,6 +81,16 @@ export const ApiErrors = {
     errorResponse(404, 'not_found', 'Not found', init),
   badRequest: (init?: ApiResponseInit) =>
     errorResponse(400, 'bad_request', 'Bad request', init),
+  /**
+   * The request conflicts with work already in flight (AGL-1709). Used by the
+   * idempotency claim for the one case it must fail CLOSED: an identical
+   * attempt that has taken the claim but not yet settled. Letting the second
+   * caller through is the duplicate the key exists to prevent, so it is
+   * refused rather than served — and a client that reads `type` gets a
+   * retriable answer rather than a mystery.
+   */
+  conflict: (init?: ApiResponseInit) =>
+    errorResponse(409, 'conflict', 'Conflicts with the current state', init),
   methodNotAllowed: (init?: ApiResponseInit) =>
     errorResponse(405, 'method_not_allowed', 'Method not allowed', init),
   rateLimited: (retryAfterSec: number, headers?: Record<string, string>) =>

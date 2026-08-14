@@ -127,10 +127,18 @@ emulator-host env vars** so it can never touch production):
 ## Tenant render + API checks
 
 The same emulator + seed also drive a tenant smoke pass (no separate runner
-yet — curl assertions). The e2e firebase config pins `emulators.logging.port`
+yet — curl assertions). Both firebase configs pin `emulators.logging.port`
 to 4520 and `hub.port` to 4420 precisely so **port 4500 stays free**: the
 tenant middleware's `localhost:4500` case then resolves the seeded host
 `demo` natively, with no temporary middleware edits.
+
+`cloud/firebase.json` — the config behind `npm run firebase:emulate`, which
+is what `require-emulator.mjs` tells you to start — did not pin them until
+AGL-1626, so firebase-tools' defaults (hub 4400, **logging 4500**) took the
+one port the tenant needs. Nothing errored: `serve:tenant:emulated` and
+`smoke:tenant:prod` came up on a port the middleware does not recognize, and
+every page 307'd to `https://app.aglyn.com` via the `default` branch. If you
+ever see that redirect locally, check what owns 4500 before anything else.
 
 ```bash
 # emulators + seed as above, then:

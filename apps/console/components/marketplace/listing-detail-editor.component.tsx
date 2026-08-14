@@ -20,7 +20,7 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 // The stored preview may be a `media:` reference (AGL-1424), which is not a
 // URL. Resolved where it is DISPLAYED, never in `values`.
-import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { mediaNodeSrc, resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import {
   Box,
   Button,
@@ -130,8 +130,30 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
     if (!url) return
     if (target === 'preview') setValues((c) => ({ ...c, previewImageUrl: url }))
     else if (target === 'logo') setValues((c) => ({ ...c, logoUrl: url }))
-    else if (target === 'body') editorRef.current?.insertImage('', url)
-    else if (target === 'screenshot')
+    else if (target === 'body') {
+      // The README BODY takes a reference; the three image FIELDS above keep
+      // `mediaSrc` (AGL-1705). Not an inconsistency — a field is one string
+      // with known readers and its own AGL-1701 validator, while the body is
+      // markdown that AGL-1686 taught every renderer to resolve.
+      //
+      // The absolute form was justified by `mediaSrc`'s own docstring — it
+      // prefixes the origin because the markdown "renders elsewhere". That
+      // was checked rather than assumed, and it is not true. The renderer
+      // `MarketplaceListingContent` is registered through
+      // `registerConsoleExtension`; its `marketplaceListing` slot has exactly
+      // one render site, the console's `/[orgSlug]/marketplace/[listingId]`
+      // route; and `apps/tenant` never imports the marketplace plugin at all.
+      // The body reaches no other origin by another door either — the social
+      // card builds `og:image` from `previewImageUrl`/`logoUrl`, never from
+      // the README.
+      //
+      // So a site-relative resolve lands on the console origin, which serves
+      // `/api/media/cdn/[...path]` — the very route the absolute URL pointed
+      // at. Same bytes over the same route, minus a baked-in origin and a
+      // baked-in route shape that cannot be changed without a migration.
+      const src = mediaNodeSrc(media) ?? url
+      editorRef.current?.insertImage('', src)
+    } else if (target === 'screenshot')
       setScreenshots((current) =>
         current.length >= MAX_SCREENSHOTS || current.includes(url)
           ? current

@@ -27,6 +27,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
  * platform fee sums per line by product type (AGL-278 ladder), and the
  * webhook creates one multi-line order and clears the cart.
  */
+
 export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -99,6 +100,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     )
     let itemsCents = 0
     let feeCents = 0
+    // Weight-tier shipping rates price off this (AGL-1707). Without it every
+    // `weight_tiers` rate would resolve at 0g and quote the lightest tier.
+    let totalGrams = 0
     // Cart checkout never builds subscription sessions — every line bills
     // one-time in `payment` mode (recurring products subscribe through the
     // PDP's direct checkout, AGL-303) — so the buyer-chosen billing field
@@ -130,6 +134,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }
       const unitCents = Math.round(Number(variant.priceUsd) * 100)
       itemsCents += unitCents * line.quantity
+      totalGrams += Math.max(0, Number(variant.weightGrams ?? 0)) * line.quantity
       const feePct = Aglyn.resolveTransactionFeePct(
         ownerOrg.org as any,
         product.type,
@@ -279,13 +284,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       'payment_intent_data[transfer_data][destination]',
       String(accountId),
     )
-    // Address collection feeds order shipping + destination tax later.
-    params.set('shipping_address_collection[allowed_countries][0]', 'US')
-    params.set('shipping_address_collection[allowed_countries][1]', 'CA')
-    params.set('shipping_address_collection[allowed_countries][2]', 'GB')
-    params.set('shipping_address_collection[allowed_countries][3]', 'AU')
-    params.set('shipping_address_collection[allowed_countries][4]', 'DE')
-    params.set('shipping_address_collection[allowed_countries][5]', 'FR')
+    // Address collection feeds order shipping + destination tax later. The
+    // country list and the emission are shared with buy-now (AGL-1720).
+    CommerceModel.appendShippingAddressCollectionParams(params)
 
     // Stripe Tax when opted in (manual destination tax lands with the
     // AGL-296 checkout, which knows the address before the session).
@@ -298,11 +299,42 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       params.set('automatic_tax[enabled]', 'true')
     }
 
+    // Shipping (AGL-1707), from the same settings doc as tax. This is the
+    // ONLY thing that makes Stripe charge shipping: without `shipping_options`
+    // it presents no shipping choice, `total_details.amount_shipping` is 0,
+    // and the zones and rates the merchant configured in the console are
+    // silently worth nothing. The subtotal fed to the rate resolver is the
+    // pre-discount items total — the "Subtotal" the cart itself shows, and
+    // the same figure `resolveDiscount` is given above — so a free-over-$50
+    // threshold means what the shopper saw it mean.
+    //
+    // A merchant who has configured nothing resolves to no options and gets a
+    // session byte-identical to today's: no shipping is charged, exactly as
+    // before. Only a merchant who set rates up starts collecting them.
+    const shippingSettings = storeSettings.get('shipping') as
+      | CommerceModel.ShippingSettings
+      | undefined
+    const shippingOptions = CommerceModel.resolveCheckoutShippingOptions(
+      shippingSettings,
+      CommerceModel.CHECKOUT_SHIPPING_COUNTRIES,
+      { subtotalCents: itemsCents, totalGrams },
+    )
+    CommerceModel.appendCheckoutShippingParams(params, shippingOptions)
+
     const referer = String(req.headers.referer ?? '')
     const origin = `https://${req.headers.host}`
     const backUrl = referer.startsWith('http') ? referer : origin
     const separator = backUrl.includes('?') ? '&' : '?'
-    params.set('success_url', `${backUrl}${separator}order=success`)
+    // `{CHECKOUT_SESSION_ID}` is substituted by Stripe on redirect (AGL-1641).
+    // Without it the return URL said only that SOMETHING succeeded, so the
+    // storefront could not name the order it had just completed — which is why
+    // `purchase` could not be reported at all. It is also the order doc id and
+    // becomes the GA `transaction_id`, so GA4's own de-duplication makes a
+    // refresh of this page harmless.
+    params.set(
+      'success_url',
+      `${backUrl}${separator}order=success&session_id={CHECKOUT_SESSION_ID}`,
+    )
     params.set('cancel_url', `${backUrl}${separator}order=canceled`)
     if (email) params.set('customer_email', email)
     params.set('metadata[type]', 'commerce-cart')

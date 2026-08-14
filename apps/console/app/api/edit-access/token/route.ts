@@ -116,6 +116,24 @@ async function handler(request: Request): Promise<Response> {
     // org read. Staff bypass is the un-panic invariant.
     const locked = await lockdownRefusal({
       request,
+      // AUDITED AND LEFT AT `write` (AGL-1625). Minting is not a data write
+      // — the token is a stateless HMAC and nothing is persisted — so the
+      // question is only whether refusing it over-refuses a read.
+      //
+      // It does not, for two reasons the sibling `presence/token` does not
+      // share. First, what this token buys is the EDIT bar: it deep-links
+      // into the besigner, whose saves are client-direct Firestore writes
+      // that the AGL-210 suspension rules deny for exactly the orgs a
+      // read-only lock covers. Handing one out during a write freeze admits
+      // someone to an editor that cannot save — worse than a refusal that
+      // says so. Second, the token OUTLIVES this check by its whole TTL,
+      // so a mint during the window is a write capability that survives
+      // into it; a presence token confers no such thing (it only shows who
+      // else is looking, and presence lives in RTDB).
+      //
+      // Stated rather than derived from POST so the reasoning is on the
+      // record: this one was decided, not defaulted.
+      intent: 'write',
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org:

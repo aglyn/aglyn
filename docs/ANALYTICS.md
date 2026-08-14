@@ -106,7 +106,7 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | **`site_published`** | Custom | Console + **Server** (tenant) | `first_publish?` | **Activation — "% who publish a site"** |
 | `stripe_connected` | Custom | Console | — | **Activation — "% who connect Stripe"** |
 | `begin_checkout` | Reserved | Console + Tenant | `currency`, `value`, `items`, `billing_interval?` | Revenue — checkout funnel |
-| `purchase` | Reserved | **Server** | `transaction_id`, `currency`, `value`, `items`, `billing_interval` | Revenue — paid conversions, ARPA, annual mix |
+| `purchase` | Reserved | **Server** (ours) + Tenant storefront (the merchant's) | `transaction_id`, `currency`, `value`, `items`, `billing_interval?` | Revenue — paid conversions, ARPA, annual mix; and the merchant's own ecommerce revenue |
 | `view_item` | Reserved | Tenant (storefront) | `items` | Merchant's own product funnel |
 | `add_to_cart` | Reserved | Tenant (storefront) | `items` | Merchant's own product funnel |
 | `aglyn_overlay` | Custom | Tenant (marketing) | `overlay_action`, `overlay_id?` | Engagement — announcement bars and popups |
@@ -178,7 +178,7 @@ a tenant site pointed at our own property.
 | `add_to_cart` | the same file, on a successful add |
 | `aglyn_overlay` | `libs/plugins/marketing/src/lib/components/site-runtime.tsx` (`sendOverlayBeacon`) |
 | `aglyn_experiment` | the same file, from the experiments runner's exposure/conversion beacon |
-| `purchase` | `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch and from the marketplace webhook handler |
+| `purchase` | **Ours:** `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch and from the marketplace webhook handler. **The merchant's:** `libs/plugins/commerce/src/lib/utils/use-storefront-purchase-event.ts`, mounted by `cart.tsx` and `product-detail.tsx` — the two pages Stripe returns a shopper to (AGL-1641) |
 
 ### `first_publish`, and what all four senders mean by it (AGL-1588)
 
@@ -285,11 +285,100 @@ cheap one: the subscription path already captures the id via `readGaClientId`
 and carries it on Stripe metadata, and the marketplace checkout simply never
 learned to.
 
-Also absent entirely: **tenant storefront orders send no `purchase` at all.**
-The commerce plugin fires `begin_checkout` client-side and nothing server-side,
-so a merchant's GA property shows carts entering checkout and never completing.
-That is the merchant's funnel, not ours, which is why it is filed rather than
-fixed here — but it makes their ecommerce reports structurally incomplete.
+#### The storefront `purchase` is client-side, and that is the same decision, not a contradiction (AGL-1641)
+
+Tenant storefront orders used to send no `purchase` at all, so a merchant's GA
+property showed carts entering checkout and never completing — a 0% conversion
+rate and zero revenue, rendered authoritatively. They now send one, from the
+browser, which is the **opposite** of decision 1 above and for the same reason
+decision 1 gives.
+
+Decision 1 weighs a lost hit against the cost of losing it. For OUR revenue a
+lost hit is a hole in our books, so it is worth a server sender and the
+Measurement Protocol credentials it needs. For a MERCHANT's product analytics
+the same loss is what every storefront on the internet already accepts, and the
+server route would cost a per-host Measurement Protocol API secret — a new host
+setting, a new secret to encrypt, a new support burden — because a merchant's
+hits go to **their** property (`host.analytics.gaMeasurementId`), not ours.
+
+The two objections decision 1 raises against a client `purchase` are answered
+rather than ignored:
+
+* *"the return URL carries no amount and no session id"* — it does now.
+  `success_url` gained `session_id={CHECKOUT_SESSION_ID}`, and
+  `/api/commerce/order-analytics` returns a PII-free projection of the order
+  the webhook wrote. The Stripe session id is the bearer credential: it is
+  unguessable, it is handed only to the buyer, and the lookup is scoped to the
+  host that owns the order.
+* *"it would re-fire on a refresh"* — `transaction_id` is that same session id,
+  and GA4 de-duplicates purchases on it. A `sessionStorage` guard is the cheap
+  second layer, not the guarantee.
+
+**Whose revenue the number is.** The merchant's. This is the inverse of the
+marketplace call (AGL-1639): there the property is ours and `value` is platform
+net, because our fee is what Aglyn was paid. On a tenant storefront the merchant
+is the seller, so Aglyn's `feeCents` is **not** subtracted — it is their cost of
+sale, not a reduction in what they sold, and subtracting it would show every
+merchant a revenue figure a few percent of their real one.
+
+**The number itself** is `totalCents - taxCents`. `totalCents` is Stripe's
+`amount_total` written verbatim by the webhook, so it reconciles with Stripe by
+construction; `taxCents` is the tax the webhook stored, excluded because the
+merchant is seller of record and tax collected is held for the state. As in
+AGL-1639, **no GA4 `tax` param** is sent beside an ex-tax `value`.
+
+`taxCents` was described here as simply `total_details.amount_tax`, and on the
+cart path it is. On the **buy-now** path it was not, and the difference was a
+live AGL-1639-shaped overstatement (AGL-1711). `checkout.ts` sends manual
+destination tax to Stripe as an ordinary `line_items[1]` product line, so
+`amount_tax` is 0 while the tax sits inside `amount_total`; the webhook then
+stored `taxCents: 0`, and this `value` — `totalCents - 0` — reported
+**tax-inclusive gross** into the merchant's own GA4 property on every taxed
+buy-now sale. The same commit fixed the two other components the event reads:
+`items[].quantity` was hardcoded to 1 regardless of how many units were bought,
+and `items[].price` was the whole session total rather than the unit price, so
+a 3 × $100 purchase reported as one $300 unit. `computeBuyNowOrder` now
+composes `taxCents` from `amount_tax` plus the line-item tax carried in the
+session metadata, and the quantity and unit price from the metadata too — so
+`value`, `price` and `quantity` are all right without this event changing at
+all. It reads stored fields; the fix belonged under it.
+
+**No `shipping` param either**, and the reason has now changed twice. It began
+as a live defect: the webhook read two of `total_details`' three siblings and
+skipped `amount_shipping`, so every online order stored `shippingCents: 0` while
+the shipping the shopper paid sat inside `amount_total`. AGL-1698 fixed the
+storage — `computeCheckoutSessionTotals` passes it, and the stored parts sum to
+the stored total. It then stayed unsent because the figure was structurally
+zero: no Checkout Session we created declared `shipping_options`, so Stripe
+never offered a shipping choice.
+
+AGL-1707 closed that: `cart-checkout.ts` declares the merchant's configured
+zones and rates as `shipping_options`, so `amount_shipping` is now a real number
+on any cart session for a merchant who set shipping up. The param is still not
+sent, but the remaining reason is only that plumbing `shippingCents` from the
+stored order out to the wire shape is unbuilt work rather than a truthfulness
+problem — it is tracked separately and is now worth doing.
+
+AGL-1720 then closed the same gap on buy-now, which had declared neither
+`shipping_address_collection` nor `shipping_options` and so charged nothing
+however many rates the merchant saved — the same merchant and product billing
+two different totals depending on which button the shopper pressed. Buy-now
+resolves through the same AGL-1707 translation, narrowed to physical one-time
+sales: a digital or service product ships nothing, and a subscription session
+is excluded because its webhook branch records no order to store the figure in.
+So `amount_shipping` is now a real number on both storefront paths for a
+merchant who set shipping up, and structurally 0 only for one who did not.
+Draft orders and POS still resolve no shipping.
+
+`value` still comes off `totalCents`, and deliberately so. Deriving it from the
+stored parts would have **dropped that shipping revenue entirely** — the same
+failure shape as the AGL-1639 overstatement with the opposite sign. AGL-1698
+makes the parts complete, so the two now agree; the reason to keep `totalCents`
+is no longer that the parts are short but that `totalCents` is Stripe's own
+number verbatim and reconciles by construction, while `itemsCents` is priced
+from the host's product docs and a price edit mid-session would diverge.
+`purchase-analytics.spec.ts` still pins the decomposition, and
+`commerce-orders.spec.ts` now pins the reconciliation.
 
 ### 2. Consent-blocked means the event is gone, not queued
 
@@ -613,6 +702,56 @@ umbrella ships every entry point — "in package.json" is not integration), and
 there is **no Web Vitals / RUM of any kind** in any app. Those are real gaps
 rather than impossible ones — filed rather than assumed worthwhile, since each
 has to answer what it tells us that we cannot already see.
+
+### 10. The console sends exactly one `page_view` per page, with a real URL (AGL-1643)
+
+Pageviews are the denominator of nearly every rate in the funnel, so both
+defects here distorted rates rather than adding a missing number — the kind of
+error that survives review because the report still renders.
+
+**`page_location` was a bare pathname.** `usePathname()` returns `/org/hosts`,
+and GA4 specifies `page_location` as the full URL and **derives the Hostname
+dimension from it**. Hostname is how this one property separates `aglyn.com`
+from `app.aglyn.com`, so the malformed value degraded exactly the dimension the
+consolidation depends on — and the landing-page and page-referrer dimensions
+with it. The console now sends `window.location.href`, reduced by
+`sanitizeEventParams` to origin + pathname, which also closes the gap that this
+was the one console event bypassing the sanitizer. That matters here more than
+anywhere: a console URL is the value most likely to carry an address, since
+prefilled invite and signup links put one in the query.
+
+**The first pageview of every load was counted twice, and this was verified
+rather than inferred.** Booting Firebase Analytics issues
+`gtag('config', <id>, configProperties)`, and the vendored SDK's own comment on
+that call reads: *"This will trigger a page_view event unless 'send_page_view'
+is set to false in configProperties"*. `getAnalytics(app)` cannot pass
+`configProperties` at all — it forwards `options?.config ?? {}` — so the key was
+never present, on top of the layout's own effect firing for the same page.
+
+The suppression goes on the **SDK's** hit, and the direction is the whole
+decision. The SDK fires once per document load; the layout's effect fires on
+mount **and** on every `usePathname` change, so it is a superset. Suppressing
+the layout's instead would have dropped every client-side navigation and halved
+console pageviews, with reports that looked entirely healthy. `firebase-services.tsx`
+therefore calls `initializeAnalytics(app, { config: { send_page_view: false } })`,
+which is the only form that can pass the flag, and
+`analytics-page-view.spec.tsx` pins it.
+
+Attribution does not move: the surviving hit is sent from the same document at
+mount, so `document.referrer` — which gtag resolves into `page_referrer` itself,
+and which carries marketing traffic source into the session — is still the
+external referrer at that moment.
+
+**Still true, and deliberate:** `usePathname()` does not change on a
+query-string-only navigation, so paginated and filtered views do not re-report.
+An event per filter change would burn the per-session budget for a breakdown
+nobody reads.
+
+**Still open:** two raw `logEvent(analytics, 'screen_view', …)` calls live
+outside the taxonomy, in `hosts/[host]/setup/page.tsx` and `manage/user/page.tsx`.
+They are legal — Firebase treats `screen_view` and the `firebase_` prefix
+specially — but they are the one class of console event neither the compiler nor
+the sanitizer sees.
 
 ---
 

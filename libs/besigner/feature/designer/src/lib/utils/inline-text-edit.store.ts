@@ -16,7 +16,7 @@
  */
 
 import type * as Aglyn from '@aglyn/aglyn'
-import { makeAutoObservable } from 'mobx'
+import { makeAutoObservable, observable } from 'mobx'
 
 export interface InlineTextEditRect {
   left: number
@@ -48,29 +48,42 @@ export interface InlinePropEditTarget {
  * where its element sits in viewport coordinates (the editor renders as a
  * fixed overlay OUTSIDE the closed canvas shadow root, so screen coordinates
  * are the only shared frame of reference).
+ *
+ * `anchor` is the element the rect was measured from, kept so the editor can
+ * re-measure rather than drift when the canvas scrolls (AGL-1644). It is the
+ * anchor RATHER than the node's `Besigner.refs` entry because a prop-override
+ * edit measures a grafted preview leaf, which is not a canvas node and has no
+ * ref — the case a ref lookup would have missed silently.
+ *
+ * An `observable.ref`: a DOM node is a foreign object graph, and mobx has no
+ * business walking into it.
  */
 class InlineTextEditStore {
   node?: Aglyn.NodeSchema<any> = undefined
   rect?: InlineTextEditRect = undefined
+  anchor?: Element = undefined
   propTarget?: InlinePropEditTarget = undefined
 
   constructor() {
-    makeAutoObservable(this)
+    makeAutoObservable(this, { anchor: observable.ref })
   }
 
   open(
     node: Aglyn.NodeSchema<any>,
     rect: InlineTextEditRect,
     propTarget?: InlinePropEditTarget,
+    anchor?: Element,
   ) {
     this.node = node
     this.rect = rect
     this.propTarget = propTarget
+    this.anchor = anchor
   }
 
   close() {
     this.node = undefined
     this.rect = undefined
+    this.anchor = undefined
     this.propTarget = undefined
   }
 }

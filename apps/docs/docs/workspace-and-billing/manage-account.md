@@ -64,8 +64,9 @@ your activity. Pick an image from the organization's
 [media library](../content-and-data/media/overview.md) or paste an `https` image URL.
 
 Leave it empty and Aglyn falls back to the photo your sign-in provider gave us, and
-then to [Gravatar](https://gravatar.com) for your email address. The preview beside
-the field shows exactly what everyone else sees.
+then to your initials, drawn by Aglyn. Nothing about you is sent to an outside
+avatar service to work out what to show. The preview beside the field shows exactly
+what everyone else sees.
 
 ## Basic info
 

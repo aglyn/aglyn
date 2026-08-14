@@ -82,6 +82,7 @@ import {
 } from '../../../utils/legal-consent'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import { markSignUpOrgFailure } from '../../../utils/signup-org-failure'
+import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
@@ -397,6 +398,27 @@ function SignUp() {
             credential.user,
             LEGAL_DOCUMENT_VERSION,
             values ? 'signup-password' : 'signup-google',
+          )
+          // Remember the plan the visitor picked, on the ACCOUNT (AGL-1535).
+          //
+          // Everything below carries the intent on the URL, and that works
+          // until the email-verification wall: the password door's account is
+          // always unverified at this moment, so the app layout bounces the
+          // billing destination to /verify-email, and the verified return
+          // lands on `/` with nothing on it. Worse, the click that verifies
+          // routinely happens in a different browser — on a phone, in whatever
+          // the mail client opens — where no browser-local marker exists at
+          // all. `users/{uid}` is the surface signup already writes and the
+          // only one that survives both.
+          //
+          // Awaited for the same reason the acceptance above is: both branches
+          // below can end in `window.location.assign`, which tears this page
+          // down mid-write. Best-effort inside — a failed remember must not
+          // read as a failed sign-up.
+          await rememberOnboardingPlanIntent(
+            firestore,
+            credential.user.uid,
+            planIntent,
           )
           // A Google sign-up has no form, so it never had a workspace name
           // and used to land on the picker with the plan intent discarded

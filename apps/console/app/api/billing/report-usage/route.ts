@@ -499,9 +499,58 @@ async function handler(request: Request): Promise<Response> {
         month,
         process.env.BILL_ORG_LIBRARY_STORAGE_FROM,
       )
-      const billedEstimate = orgLibraryBilled
+      // Form-submission overage is WITHHELD while `release_inbox` is off
+      // (AGL-1688). The same split AGL-1604 found on Contacts, on the flag
+      // next door: the flag gates the console Inbox page and its nav tab,
+      // while `/api/forms/submit` keeps writing `hosts/{id}/formSubmissions`
+      // and `GET /v1/sites/{id}/form-submissions` keeps serving them. So
+      // submissions accrue past the plan's band and bill at cost x 1.3, for a
+      // lead list the customer has no console way to read, mark read, or
+      // export. Nobody may be charged for what they cannot reach.
+      //
+      // AGL-1688 recorded "no billing path" for Inbox, which is why it is
+      // stated here: `hostUsage` reads `counters/formSubmissions` into
+      // `HostUsageSnapshot.formSubmissions`, and `estimateMonthlyUsageCost`
+      // prices the excess over `hostLimit x formSubmissionsPerMonth` at
+      // `METERED_UNIT_RATES_USD.perFormSubmission`. It bills. That is what
+      // makes the Contacts remedy the analogous one rather than a stretch.
+      //
+      // Same construction as `contactsOverageBilled` below and for the same
+      // reasons: bucketed by `orgId` so an org inside a partial rollout CAN
+      // reach the page and so is billed; per-org overrides read off `orgData`,
+      // already in hand, so a staff grant reaches the invoice too (AGL-1635)
+      // at no extra read; and conditional on the flag rather than zeroed, so
+      // the day Inbox ships the same expression bills again on its own.
+      const formSubmissionsBilled = isReleaseFlagOnForOrg(
+        'release_inbox',
+        releaseFlagValues['release_inbox'],
+        orgId,
+        parseOrgReleaseFlagOverrides(orgData?.['releaseFlags']),
+      )
+      // WHAT REACHES THE INVOICE, not what is counted. The snapshots feeding
+      // `estimate` are untouched, so `costUsd`, the recorded `formSubmissions`
+      // total and every COGS reader stay truthful — under-reporting our own
+      // cost is the direction that silently loosens the discount guardrail.
+      const billedHosts = formSubmissionsBilled
+        ? usage
+        : usage.map((host) => ({ ...host, formSubmissions: 0 }))
+      const billedEstimateBeforeInbox = orgLibraryBilled
         ? estimate
         : estimateMonthlyUsageCost(usage, orgData)
+      const billedEstimate = formSubmissionsBilled
+        ? billedEstimateBeforeInbox
+        : estimateMonthlyUsageCost(
+            orgLibraryBilled ? [...billedHosts, orgLibrary] : billedHosts,
+            orgData,
+          )
+      // What was forgone, so a withheld month is distinguishable from a month
+      // with no form overage at all — the first question anyone re-reading a
+      // beta invoice will ask. Pre-markup, matching `billableCostUsd` beside
+      // which it is recorded.
+      const formSubmissionsWithheldUsd = formSubmissionsBilled
+        ? 0
+        : billedEstimateBeforeInbox.billableCostUsd -
+          billedEstimate.billableCostUsd
       const dataStorageMb =
         Math.round((datasetBytes / (1024 * 1024)) * 10) / 10
       // Msgpack bytes of the decoded node maps — see `nodesBytes`. One unit
@@ -630,7 +679,18 @@ async function handler(request: Request): Promise<Response> {
           hostCount: hostRefs.length,
           storageGb: estimate.storageGb,
           pageViews: estimate.pageViews,
+          // COUNTED ALWAYS (AGL-1688), like `contactsCount` below: the
+          // submissions are real, the count is what the abuse ceiling and the
+          // plan quota are evaluated against, and it stays truthful whatever
+          // the flag says. Only the figure that reaches `billedCents` moves.
           formSubmissions: estimate.formSubmissions,
+          // Whether THIS month charged for form-submission overage, and what
+          // was forgone if it did not. Same pair, same reason, as
+          // `contactsOverageBilled` / `contactsOverageWithheldUsd`: without
+          // the second field a withheld month is indistinguishable from a
+          // month that simply stayed inside the band.
+          formSubmissionsBilled,
+          formSubmissionsOverageWithheldUsd: formSubmissionsWithheldUsd,
           costUsd: estimate.costUsd,
           // The excess only, at cost (AGL-1280) — `billedCents` is this
           // number marked up, plus the three plan-priced overages. Read off

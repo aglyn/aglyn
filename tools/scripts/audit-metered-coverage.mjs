@@ -93,7 +93,17 @@ async function* paginate(path) {
 const isMeteredPrice = (price) =>
   Boolean(price?.recurring?.meter) || price?.recurring?.usage_type === 'metered'
 
-/** Statuses that bill, and therefore should meter. */
+/**
+ * Statuses that bill, and therefore should meter.
+ *
+ * AGL-1715-EXEMPT: the same question as `isLiveSubscriptionStatus` — this is
+ * the only copy that is a copy rather than a different decision — but this is
+ * a standalone `node` ops script, run with bare node and never built, so it
+ * cannot import a TypeScript lib. Kept in sync by hand, and cheap to get
+ * wrong: it reads Stripe, decides nothing and writes nothing, so drift here
+ * misreports an audit rather than billing anyone twice. If this file ever
+ * grows a build step, delete this list and import the predicate.
+ */
 const BILLABLE = new Set(['active', 'trialing', 'past_due'])
 
 const results = {

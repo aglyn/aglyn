@@ -29,7 +29,12 @@ import {
   useRef,
   useState,
 } from 'react'
+import {
+  clampToViewport,
+  useAnchoredRect,
+} from '../hooks/use-anchored-rect'
 import { useDebouncedCommit } from '../hooks/use-debounced-commit'
+import { useMarkdownMediaPicker } from '../hooks/use-markdown-media-picker'
 import {
   inlineMarkdownEdit,
   type InlineMarkdownEditRect,
@@ -38,6 +43,8 @@ import {
 interface SurfaceProps {
   node: Aglyn.NodeSchema<any>
   rect: InlineMarkdownEditRect
+  /** The element `rect` was measured from, re-measured as the canvas moves. */
+  anchor?: Element
   attributeName: string
   initialValue: string
   /** Whether the canvas selection still names the node being edited. */
@@ -77,10 +84,17 @@ interface SurfaceProps {
 const InlineMarkdownEditorSurface = observer(function InlineMarkdownEditorSurface(
   props: SurfaceProps,
 ) {
-  const { node, rect, attributeName, initialValue, selected } = props
+  const { node, rect, anchor, attributeName, initialValue, selected } = props
+  // Follows the element as the canvas scrolls or resizes (AGL-1644).
+  const live = useAnchoredRect(anchor, rect)
   const [value, setValue] = useState(initialValue)
   const latestRef = useRef(initialValue)
   const committedRef = useRef(initialValue)
+  // The toolbar's image action opens the host's media library rather than a
+  // "paste a URL" prompt (AGL-1645). The picker is a modal that takes focus,
+  // which is exactly what a blur-committed editor cannot survive — and the
+  // reason this one commits on a debounce instead is written out above.
+  const { editorRef, onPickImageFromMedia } = useMarkdownMediaPicker()
 
   const commit = useCallback(() => {
     const current = inlineMarkdownEdit.node ?? node
@@ -134,6 +148,20 @@ const InlineMarkdownEditorSurface = observer(function InlineMarkdownEditorSurfac
     event.stopPropagation()
   }, [])
 
+  // Read at render, which `useAnchoredRect` makes safe: it re-renders on every
+  // scroll and resize, so these are never a stale snapshot.
+  const viewportWidth =
+    typeof window === 'undefined' ? Infinity : window.innerWidth
+  const viewportHeight =
+    typeof window === 'undefined' ? Infinity : window.innerHeight
+  const width = Math.max(live.width, 360)
+  // A long document is usually TALLER than the viewport, so the element's top
+  // edge is frequently scrolled off the top of the screen while it is being
+  // edited. The editor waits at the nearest edge until the element comes back
+  // rather than following it out of sight; KEEP_VISIBLE is how much of it has
+  // to remain reachable at the bottom.
+  const KEEP_VISIBLE = 160
+
   return (
     <Box
       data-aglyn="overlay:inline-markdown-editor"
@@ -143,13 +171,9 @@ const InlineMarkdownEditorSurface = observer(function InlineMarkdownEditorSurfac
       onDoubleClick={stop}
       sx={{
         position: 'fixed',
-        // A long document is usually TALLER than the viewport, so the element's
-        // top edge is frequently scrolled off the top of the screen by the time
-        // someone double-clicks the middle of it. Anchoring naively there would
-        // open the editor off-screen.
-        left: Math.max(8, rect.left),
-        top: Math.max(8, rect.top),
-        width: Math.max(rect.width, 360),
+        left: clampToViewport(live.left, width, viewportWidth),
+        top: clampToViewport(live.top, KEEP_VISIBLE, viewportHeight),
+        width,
         maxWidth: '90vw',
         zIndex: (theme) => theme.zIndex.modal,
       }}
@@ -178,6 +202,11 @@ const InlineMarkdownEditorSurface = observer(function InlineMarkdownEditorSurfac
           )}
           value={value}
           onChange={handleChange}
+          editorRef={editorRef}
+          onPickImageFromMedia={onPickImageFromMedia}
+          // The OPEN rect, deliberately, not the live one: position follows the
+          // element, but the editor's own height must not change under the
+          // author mid-sentence just because the canvas relaid out.
           minHeight={Math.min(Math.max(rect.height, 200), 520)}
         />
       </Paper>
@@ -210,6 +239,7 @@ export const InlineMarkdownEditorComponent = observer(
         key={`${node.$id}:${attributeName}`}
         node={node}
         rect={rect}
+        anchor={inlineMarkdownEdit.anchor}
         attributeName={attributeName}
         initialValue={inlineMarkdownEdit.initialValue}
         selected={Besigner.focus.isNodeSelected(node)}

@@ -18,6 +18,7 @@
 import {
   buildRoute,
   isCustomPricedPlan,
+  isLiveSubscriptionStatus,
   pluginRequestFromWeb,
   Route,
   type OrgPlan,
@@ -86,7 +87,15 @@ async function stripeRequest(
   return payload
 }
 
-/** The org's active (or trialing/past_due) subscription, if any. */
+/**
+ * The org's live subscription, if any — the one a switch/cancel/resume is
+ * legal against.
+ *
+ * "Live" is `isLiveSubscriptionStatus`, the single list in `org-billing-doc.ts`
+ * (AGL-1715), not a local triple: this route and `/api/billing/checkout` are
+ * the two halves of one decision, and them narrowing apart is how an org ends
+ * up with two subscriptions (AGL-1697).
+ */
 async function activeSubscription(
   secretKey: string,
   customerId: string,
@@ -98,7 +107,7 @@ async function activeSubscription(
   )
   return (
     (subscriptions?.data ?? []).find((subscription: any) =>
-      ['active', 'trialing', 'past_due'].includes(subscription.status),
+      isLiveSubscriptionStatus(subscription?.status),
     ) ?? null
   )
 }

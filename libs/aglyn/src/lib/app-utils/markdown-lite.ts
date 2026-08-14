@@ -23,6 +23,8 @@
  * so there is nothing to sanitize).
  */
 
+import { isMediaRef, parseMediaRef } from './media-ref'
+
 export type MarkdownInline =
   | { type: 'text'; text: string }
   | { type: 'bold'; text: string }
@@ -73,9 +75,35 @@ export type MarkdownBlock =
 const INLINE_PATTERN =
   /(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(\[([^\]]+)\]\(([^)\s]+)\))/g
 
-/** Only http(s) links/images survive; anything else renders as text. */
+/**
+ * Only absolute http(s) survives; anything else renders as text. The `http:`
+ * half reaches LINKS only — {@link safeImageUrl} refuses it before it gets
+ * here (AGL-1713).
+ */
 function safeUrl(url: string): string | null {
   return /^https?:\/\//i.test(url) ? url : null
+}
+
+/**
+ * Whether a link target is one the parser will keep — the PUBLIC half of
+ * {@link safeLinkUrl}, so an editor can refuse what the parser would drop
+ * instead of discovering the disagreement on the published page (AGL-1686).
+ */
+export function isSupportedLinkHref(url: string): boolean {
+  return safeLinkUrl(url) !== null
+}
+
+/**
+ * Whether an image source is one the parser will keep. The predicate an
+ * authoring surface must validate against, for the reason
+ * {@link isSupportedLinkHref} exists and one the editor learned the hard way:
+ * AGL-1645 widened the visual editor's image check to accept site-relative
+ * paths without widening this file, so every image picked from the media
+ * library serialized into the document and then vanished on the next parse.
+ * One predicate, two callers, no drift.
+ */
+export function isSupportedImageSrc(url: string): boolean {
+  return safeImageUrl(url) !== null
 }
 
 /**
@@ -87,6 +115,49 @@ function safeUrl(url: string): string | null {
 function safeLinkUrl(url: string): string | null {
   if (/^\/(?!\/)/.test(url)) return url
   return safeUrl(url)
+}
+
+/**
+ * Image sources take everything a link takes, PLUS a media reference
+ * (AGL-1686).
+ *
+ * Images were the one slot still on absolute-`http(s)`-only, and that was
+ * silently eating two forms the product now produces:
+ *
+ * 1. `media:{scope}/{mediaId}` — what "Browse media" stores everywhere else
+ *    (AGL-1215). The reference names the asset and lets the renderer decide
+ *    how to fetch it, which is the only form that survives a folder move, a
+ *    replace, a route change, and a component shared across sites.
+ * 2. A site-relative `/api/media/cdn/…` or `/images/hero.png`. The visual
+ *    editor's own `isValidImageUrl` accepts these (AGL-1645) and
+ *    `safeLinkUrl` always has — so the parser was the one place that
+ *    disagreed, and it disagreed by DROPPING the whole block. An image with
+ *    an unparseable src emits no block at all, so the failure was not a
+ *    broken-image icon or a console error; the picture simply was not there.
+ *
+ * A malformed reference is still refused. `parseMediaRef` is the same grammar
+ * `formatMediaRef` mints against, so `media:` junk an author typed never
+ * becomes a block whose src no renderer can resolve — the parse boundary
+ * keeps the promise `resolveMediaSrc` makes on the other side.
+ *
+ * Protocol-relative stays refused here exactly as it is for links.
+ *
+ * It takes one thing LESS than a link, though: `http:` (AGL-1713). An image is
+ * fetched the moment the page renders; a link is followed by the reader's
+ * choice, past an interstitial the browser puts up. So an `http:` image on our
+ * TLS pages is mixed content that every current browser blocks outright — the
+ * permissive form never rendered a picture, it only moved the failure from
+ * authoring time to the viewer, and stored a src that is a CSP violation
+ * waiting for AGL-1702 to enforce. Refusing it here reports at authoring time
+ * through `isSupportedImageSrc`, which the editor and the besigner picker both
+ * validate against. This is the same asymmetry AGL-1701 struck between
+ * `SAFE_SRC` and `SAFE_HREF` on the published marketplace node, and the same
+ * reason it left `homepageUrl`/`repositoryUrl` as any-https.
+ */
+function safeImageUrl(url: string): string | null {
+  if (isMediaRef(url)) return parseMediaRef(url) ? url : null
+  if (/^http:\/\//i.test(url)) return null
+  return safeLinkUrl(url)
 }
 
 /** True for hrefs the parser emitted as site-relative (start with `/`). */
@@ -252,7 +323,7 @@ function parseChunk(chunk: string): MarkdownBlock[] {
   if (!trimmed) return []
   const image = /^!\[([^\]]*)\]\(([^)\s]+)\)$/.exec(trimmed)
   if (image) {
-    const src = safeUrl(image[2])
+    const src = safeImageUrl(image[2])
     return src ? [{ type: 'image', src, alt: image[1] }] : []
   }
   const heading = HEADING_PATTERN.exec(trimmed)

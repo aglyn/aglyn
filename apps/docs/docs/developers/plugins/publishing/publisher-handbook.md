@@ -33,6 +33,12 @@ from **Marketplace → Profile**. Only an owner or admin can accept it,
 because only they can bind the organization, and we record who accepted
 it and when.
 
+You can read the agreement in full at
+[aglyn.com/legal/marketplace-publisher-agreement](https://aglyn.com/legal/marketplace-publisher-agreement),
+alongside the rest of the [legal centre](https://aglyn.com/legal). The
+version in force is stated at the top of that page, and it is the same
+string the panel records against your acceptance.
+
 It is a different thing from the
 [pre-publish checklist](#before-you-publish), and they are not
 interchangeable:
@@ -48,8 +54,10 @@ surprise people later — the license you grant us to host, verify and
 distribute; what you warrant about each version; that you cannot recall
 code already installed; that we can disable a version everywhere without
 notice if it looks dangerous; that review is a safety screen and not an
-endorsement; and that on paid listings you are the seller. Read the full
-agreement before accepting.
+endorsement; and that on paid listings we process the sale, pay your
+share into your own Stripe Connect account less a platform fee, and
+collect and remit sales tax — while refunds, chargebacks and support on
+your artifacts stay with you. Read the full agreement before accepting.
 
 **If we change the agreement, publishing stops** until someone who can
 bind your organization reads and accepts the new version. An older

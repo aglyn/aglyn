@@ -25,6 +25,7 @@
 // and API routes, and `@aglyn/aglyn` carries `createContext` (illegal in a
 // Server Component) while `@aglyn/aglyn/server` carries `node:fs` (illegal in
 // the browser). Neither is safe from here; the deep path has no dependencies.
+import { isFirstPartyMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 import type { ListingVerificationRequest } from '@aglyn/aglyn/app-utils/marketplace-verification'
 // Visibility lives in core (AGL-876), for the same reason the artifact-type
@@ -687,9 +688,51 @@ export const LISTING_MAX_SCREENSHOTS = 6
 const HTTPS_URL = /^https:\/\/[^\s]+$/
 
 /**
+ * The message every listing IMAGE field returns when it is refused. Names the
+ * remedy, because "must be an https URL" was true of the value the publisher
+ * just typed and told them nothing.
+ */
+export const LISTING_IMAGE_ERROR =
+  'must be an image from your media library — paste a link and the people ' +
+  'browsing your listing would be loading it from a server you control'
+
+/** Length cap shared by every listing URL field. */
+const LISTING_URL_MAX_CHARS = 500
+
+/**
+ * Whether a listing image field is one we will store (AGL-1701).
+ *
+ * Listing artwork is the one publisher-supplied value that OTHER orgs' users
+ * load. It is also, established while fixing this, gated by nothing: review
+ * is a statement about a version's bytes (AGL-966), the staff review route
+ * never projects `logoUrl`/`screenshots` so a reviewer cannot see them even
+ * if the checklist asked, and `update-listing` writes them at any time
+ * without touching `reviewStatus` — so a listing can pass review with benign
+ * artwork and swap it afterwards while still reading `verified`.
+ *
+ * Constraining the INPUT rather than sanitizing the output is the whole
+ * point: the render sites are three components and an `og:image`, and the
+ * next one added would not know to sanitize.
+ */
+function isListingImageValue(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= LISTING_URL_MAX_CHARS &&
+    isFirstPartyMediaSrc(value)
+  )
+}
+
+/**
  * Validates publisher-editable listing content (AGL-430). Returns the
  * normalized subset to persist, or an error. Shared by publish and the
  * update-listing action so both paths accept exactly the same shapes.
+ *
+ * IMAGE fields and LINK fields are validated differently (AGL-1701).
+ * `homepageUrl` and `repositoryUrl` stay any-https: they are anchors a reader
+ * chooses to follow, and a publisher's homepage living on the publisher's
+ * domain is the entire point of the field. `logoUrl` and `screenshots` are
+ * `<img src>`, which fetches with no such choice, so those are held to
+ * first-party media.
  */
 export function validateListingContent(input: Record<string, unknown>): {
   ok: boolean
@@ -697,27 +740,37 @@ export function validateListingContent(input: Record<string, unknown>): {
   content?: Partial<MarketplaceListing>
 } {
   const content: Partial<MarketplaceListing> = {}
-  for (const key of ['logoUrl', 'homepageUrl', 'repositoryUrl'] as const) {
+  for (const key of ['homepageUrl', 'repositoryUrl'] as const) {
     const value = input[key]
     if (value === undefined || value === '') continue
-    if (typeof value !== 'string' || !HTTPS_URL.test(value) || value.length > 500) {
+    if (
+      typeof value !== 'string' ||
+      !HTTPS_URL.test(value) ||
+      value.length > LISTING_URL_MAX_CHARS
+    ) {
       return { ok: false, error: `${key} must be an https URL` }
     }
     content[key] = value
+  }
+  const logoUrl = input['logoUrl']
+  if (logoUrl !== undefined && logoUrl !== '') {
+    if (!isListingImageValue(logoUrl)) {
+      return { ok: false, error: `logoUrl ${LISTING_IMAGE_ERROR}` }
+    }
+    content.logoUrl = logoUrl
   }
   const screenshots = input['screenshots']
   if (screenshots !== undefined) {
     if (
       !Array.isArray(screenshots) ||
       screenshots.length > LISTING_MAX_SCREENSHOTS ||
-      screenshots.some(
-        (url) =>
-          typeof url !== 'string' || !HTTPS_URL.test(url) || url.length > 500,
-      )
+      screenshots.some((url) => !isListingImageValue(url))
     ) {
       return {
         ok: false,
-        error: `screenshots must be up to ${LISTING_MAX_SCREENSHOTS} https URLs`,
+        error:
+          `screenshots must be up to ${LISTING_MAX_SCREENSHOTS} images, and ` +
+          `each ${LISTING_IMAGE_ERROR}`,
       }
     }
     content.screenshots = screenshots as string[]
@@ -948,8 +1001,18 @@ const KEPT_NODE_KEYS = [
 
 /** Only navigable protocols — mirrors ScreenLink/Image/Button hardening. */
 const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
-/** `src` additionally allows inline images, which are inert. */
-const SAFE_SRC = /^(https?:\/\/|data:image\/|\/|#)/i
+/**
+ * `src` additionally allows inline images, which are inert.
+ *
+ * `https:` only, unlike {@link SAFE_HREF} (AGL-1701). An `http:` href is a
+ * link a reader chooses to follow and their browser will warn about; an
+ * `http:` image is fetched automatically, and on the authenticated console —
+ * or on any tenant page we serve over TLS — it is mixed content, which every
+ * current browser blocks outright. So the permissive form bought a published
+ * node nothing: the image did not render either way, it just failed at the
+ * viewer instead of at publish time.
+ */
+const SAFE_SRC = /^(https:\/\/|data:image\/|\/|#)/i
 
 /**
  * Strips props a published node must never carry into someone else's site

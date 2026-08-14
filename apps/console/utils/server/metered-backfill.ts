@@ -66,7 +66,7 @@ import {
   planFromPriceId,
   PAID_PLANS,
 } from './billing-addons'
-import type { OrgPlan } from '@aglyn/aglyn/server'
+import { isLiveSubscriptionStatus, type OrgPlan } from '@aglyn/aglyn/server'
 
 /**
  * `boundary`  — attach only just after a period starts (DEFAULT). Never
@@ -94,9 +94,6 @@ export type MeteredBackfillMode = 'boundary' | 'immediate' | 'off'
  * billed for anyway. Widening it does not create a new class of charge.
  */
 export const BOUNDARY_GRACE_SECONDS = 72 * 60 * 60
-
-/** Subscription statuses that bill, and therefore should meter. */
-const BILLABLE_STATUSES = ['active', 'trialing', 'past_due']
 
 export function meteredBackfillMode(): MeteredBackfillMode {
   const raw = String(process.env.STRIPE_METERED_BACKFILL ?? '').toLowerCase()
@@ -164,7 +161,13 @@ export function meteredBackfillDecision(
   const mode = input.mode ?? meteredBackfillMode()
   if (mode === 'off') return no('disabled')
   if (input.canceled) return no('not-billable')
-  if (!BILLABLE_STATUSES.includes(String(input.status ?? ''))) {
+  // Statuses that bill, and therefore should meter — the same list as "this
+  // org has a live subscription", off the single source in `org-billing-doc.ts`
+  // (AGL-1715). It is genuinely the same question asked of the same status
+  // word: `past_due` is still owed and still meters, `incomplete`/`unpaid`
+  // bill nothing. If the two ever need to differ, that is a decision to write
+  // down here, not a triple to re-type.
+  if (!isLiveSubscriptionStatus(input.status)) {
     return no('not-billable')
   }
 
