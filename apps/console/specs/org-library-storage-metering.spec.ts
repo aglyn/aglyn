@@ -196,6 +196,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   emailSendsOverage: jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/email-metering',
   ).emailSendsOverage,
+  // Inert here: this suite prices STORAGE. The contacts release gate
+  // (AGL-1604) has its own suite, and these orgs hold no contacts.
+  getServerReleaseFlagValues: async () => ({}),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -205,6 +208,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/measure-node-map'),
+  isReleaseFlagOn: () => false,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
