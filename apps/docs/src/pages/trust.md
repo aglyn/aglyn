@@ -99,12 +99,14 @@ ask and we will send them. This table is the engineering view and may lag them.
   until we do, this is what the endpoint actually has.
 - **Rate limiting** is durable and shared across serverless instances —
   Firestore-backed, rather than per-instance memory that resets on every cold
-  start — on the endpoints where a single success is expensive: sign-in and
-  passkey flows, password reset, email verification, workspace creation, form
-  submission, and page-protection unlock. Lower-consequence endpoints, and the
-  per-key quota on the public REST API, still use an in-process counter that is
-  per instance. If the durable store is unreachable the limiter degrades to
-  that in-process counter rather than failing open.
+  start — on the endpoints where a single success is expensive or the limit is
+  a published number: sign-in and passkey flows, password reset, email
+  verification, workspace creation, form submission, page-protection unlock,
+  and the per-key quota on the public REST API. What remains on an in-process
+  counter is the high-volume telemetry that carries no access: the analytics
+  beacon and client error reports. If the durable store is unreachable the
+  limiter degrades to that in-process counter rather than failing open, and
+  records the degraded window so it can be reviewed afterwards.
 
 ## Customer data and deletion
 

@@ -17,7 +17,10 @@
 
 import {
   consumeRateLimit,
+  currentRateLimitDegradation,
+  DEGRADATION_DOC_PREFIX,
   RATE_LIMIT_COLLECTION,
+  resetRateLimitDegradationForTests,
 } from './rate-limit-store'
 
 /**
@@ -33,6 +36,9 @@ function fakeFirestore() {
     docs,
     failFrom: () => {
       failNext = true
+    },
+    recover: () => {
+      failNext = false
     },
     collection: (name: string) => ({
       doc: (id: string) => ({ path: `${name}/${id}` }),
@@ -138,5 +144,94 @@ describe('consumeRateLimit (AGL-794)', () => {
     expect(result.degraded).toBe(true)
     expect(result.allowed).toBe(true)
     expect(result.limit).toBe(3)
+  })
+})
+
+/**
+ * `degraded: true` used to exist only in a `console.error` (AGL-1679). A
+ * Firestore blip therefore dropped every durable limiter — auth, password
+ * reset, and the public REST API's per-key quota — to a per-instance cap for
+ * as long as it lasted, and the only record was a log line in a retention
+ * window measured in hours. Fail-soft is defensible only if the fallback is
+ * findable afterwards.
+ */
+describe('AGL-1679 · a degraded window leaves a durable record', () => {
+  const opts = (firestore: unknown, now: number) => ({
+    firestore,
+    limit: 3,
+    windowMs: 1000,
+    now,
+  })
+
+  /** The marker is written fire-and-forget; let its microtasks land. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  const markers = (firestore: ReturnType<typeof fakeFirestore>) =>
+    [...firestore.docs.entries()].filter(([path]) =>
+      path.startsWith(`${RATE_LIMIT_COLLECTION}/${DEGRADATION_DOC_PREFIX}`),
+    )
+
+  beforeEach(() => {
+    resetRateLimitDegradationForTests()
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+    resetRateLimitDegradationForTests()
+  })
+
+  it('writes a summary of the episode once the store comes back', async () => {
+    const firestore = fakeFirestore()
+    firestore.failFrom()
+    await consumeRateLimit('ip-1', opts(firestore, 10_000))
+    await consumeRateLimit('ip-2', opts(firestore, 10_400))
+    await consumeRateLimit('ip-1', opts(firestore, 10_800))
+
+    // Nothing durable exists yet — the store was the thing that was down, so
+    // a marker written DURING the window is the one write guaranteed to fail.
+    expect(markers(firestore)).toHaveLength(0)
+    expect(currentRateLimitDegradation()?.count).toBe(3)
+
+    firestore.recover()
+    await consumeRateLimit('ip-1', opts(firestore, 11_000))
+    await settle()
+
+    const found = markers(firestore)
+    expect(found).toHaveLength(1)
+    const [, marker] = found[0]
+    expect(marker['calls']).toBe(3)
+    expect(marker['episodes']).toBe(1)
+    expect(marker['firstAtMs']).toBe(10_000)
+    expect(marker['lastAtMs']).toBe(10_800)
+    // Swept by the TTL policy already configured on this collection, so the
+    // record needs no new collection, rule or policy of its own.
+    expect(marker['expiresAt']).toBeInstanceOf(Date)
+    // Episode closed: a later healthy call must not write a second marker.
+    expect(currentRateLimitDegradation()).toBeNull()
+  })
+
+  it('writes nothing at all when the store never failed', async () => {
+    const firestore = fakeFirestore()
+    await consumeRateLimit('ip-1', opts(firestore, 10_000))
+    await consumeRateLimit('ip-1', opts(firestore, 10_100))
+    await settle()
+    expect(markers(firestore)).toHaveLength(0)
+    expect(currentRateLimitDegradation()).toBeNull()
+  })
+
+  it('logs once per episode, not once per refused call', async () => {
+    // The REST API calls this on every request (AGL-1679), so a per-call
+    // `console.error` during an outage is a log flood that buries the signal.
+    const firestore = fakeFirestore()
+    firestore.failFrom()
+    for (let i = 0; i < 25; i += 1) {
+      await consumeRateLimit('ip-1', opts(firestore, 10_000 + i))
+    }
+    expect(console.error).toHaveBeenCalledTimes(1)
+
+    // …and once more if it is still going a minute later.
+    await consumeRateLimit('ip-1', opts(firestore, 10_000 + 60_001))
+    expect(console.error).toHaveBeenCalledTimes(2)
   })
 })

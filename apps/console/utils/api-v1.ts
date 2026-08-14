@@ -27,7 +27,7 @@ import { checkEntitlement } from '@aglyn/aglyn/server'
 import {
   ApiErrors,
   type ApiScope,
-  checkRateLimit,
+  consumeRateLimit,
   firebaseAdmin,
   getOrgDoc,
   lockdownRefusal,
@@ -61,9 +61,11 @@ export function apiUsageMonth(now = new Date()): string {
 /**
  * Fire-and-forget monthly API-request counter (AGL-635). One increment per
  * authenticated request on `orgs/{orgId}/apiUsage/{YYYY-MM}.count` — the
- * durable meter the monthly rollup reads and bills overage from (the rate
- * limiter is in-memory only). Never blocks or fails the request; single-doc
- * contention is fine at the rate-limit volume, sharding is a later option.
+ * durable meter the monthly rollup reads and bills overage from — a separate
+ * concern from the per-minute rate limiter above, which counts requests to
+ * refuse them rather than to bill them. Never blocks or fails the request;
+ * single-doc contention is fine at the rate-limit volume, sharding is a later
+ * option.
  */
 function recordApiRequest(
   firestore: FirebaseFirestore.Firestore,
@@ -104,7 +106,30 @@ export async function authenticateApiV1(
   // client that reads it off every response shouldn't lose it on exactly the
   // errors it retries (AGL-900). Consume the budget before the entitlement
   // check so an unentitled key can't poll `plan_required` for free.
-  const rate = checkRateLimit(verified.keyId)
+  //
+  // DURABLE, not the in-process `checkRateLimit` this used to call (AGL-1679).
+  // The per-instance counter resets on every cold start and each concurrent
+  // instance keeps its own, so the enforced ceiling was `120 × warm instances`
+  // — a number that moves with our traffic, not the customer's. That is a
+  // billed product surface: `apps/docs/api/rate-limits.md` publishes 120/min
+  // per key as the number an integration plans against, and the same key could
+  // be throttled at 120 or at 600 depending on how the fleet happened to be
+  // scaled. RATE_LIMITING.md's cost objection (a transaction per call) is the
+  // right one for an analytics beacon and the wrong one here: every request on
+  // this path already does a key lookup, an org read and a usage write, so one
+  // more transaction is proportionate to what the request costs anyway.
+  //
+  // Defaults are DEFAULT_RATE_LIMIT / DEFAULT_RATE_WINDOW_MS — the documented
+  // 120 per fixed minute. Namespaced key so a key id can never collide with
+  // another durable limiter's bucket.
+  //
+  // Fails SOFT, deliberately: on a Firestore error this falls back to the same
+  // per-instance counter it used to be. A hard failure here would convert one
+  // Firestore blip into a simultaneous outage of every customer integration,
+  // and the degradation is customer-favourable — the fallback budget starts
+  // empty, so a degraded window can only ever allow MORE than 120/min, never
+  // fewer. `degraded` is recorded durably by the store itself.
+  const rate = await consumeRateLimit(`apiv1:${verified.keyId}`)
   const headers = rateLimitHeaders(rate)
   if (!rate.allowed) {
     return ApiErrors.rateLimited(

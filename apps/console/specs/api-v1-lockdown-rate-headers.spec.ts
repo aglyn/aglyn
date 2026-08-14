@@ -42,14 +42,47 @@ const mockVerifyApiKey = jest.fn()
 const mockGetOrgDoc = jest.fn()
 const mockLockdownRefusal = jest.fn()
 
+/**
+ * Backing store for the DURABLE limiter (AGL-1679). The route no longer uses
+ * an in-process `Map`, so a stub that cannot run a transaction would send
+ * every call down the fail-soft branch and quietly test the fallback instead
+ * of the limiter — with identical numbers, which is exactly how that would go
+ * unnoticed. This map is the durable store.
+ */
+const mockRateLimitDocs = new Map<string, Record<string, unknown>>()
+
 // `lockdownJsonResponse` is pure, but its module reaches for the admin SDK at
-// import time. Stub that one edge so the REAL body builder is what answers.
+// import time. Stub that one edge so the REAL body builder is what answers —
+// with enough Firestore for the durable limiter's transaction to succeed.
 jest.mock(
   '../../../libs/tenant/data/admin/src/lib/server/firebase-admin',
-  () => ({
-    __esModule: true,
-    default: {},
-  }),
+  () => {
+    const firestore = {
+      collection: (name: string) => ({
+        doc: (id: string) => ({
+          path: `${name}/${id}`,
+          collection: () => ({ doc: () => ({ set: async () => undefined }) }),
+        }),
+      }),
+      runTransaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+        const tx = {
+          get: async (ref: { path: string }) => ({
+            exists: mockRateLimitDocs.has(ref.path),
+            get: (field: string) => mockRateLimitDocs.get(ref.path)?.[field],
+          }),
+          set: (ref: { path: string }, value: Record<string, unknown>) => {
+            mockRateLimitDocs.set(ref.path, {
+              ...(mockRateLimitDocs.get(ref.path) ?? {}),
+              ...value,
+            })
+          },
+        }
+        return fn(tx)
+      },
+    }
+    const firebaseAdmin = { app: () => ({ firestore: () => firestore }) }
+    return { __esModule: true, default: firebaseAdmin, firebaseAdmin }
+  },
 )
 
 const ORG = { plan: 'business' }
@@ -72,9 +105,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   const { lockdownJsonResponse } = jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/lockdown',
   )
+  // …and the real DURABLE limiter, running against the Firestore fake above.
+  const { consumeRateLimit } = jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/rate-limit-store',
+  )
   return {
     __esModule: true,
     ...apiHttp,
+    consumeRateLimit,
     lockdownJsonResponse,
     firebaseAdmin: {
       app: () => ({
