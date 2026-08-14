@@ -82,6 +82,15 @@ jest.mock('firebase/firestore', () => ({
   doc: () => ({}),
   deleteDoc: jest.fn(),
   setDoc: jest.fn(),
+  // The products hub reads its cap as a server aggregate (AGL-1716). The
+  // real one throws SYNCHRONOUSLY on the stubbed ref above ("Cannot use
+  // 'in' operator to search for '_delegate'"), which crashes the render
+  // before any of these plan assertions can run. Answering with the
+  // fixture's own length keeps the cap arithmetic true here, where the
+  // plan gate — not the count — is what is under test.
+  getCountFromServer: async (name: string) => ({
+    data: () => ({ count: (collections[name] ?? []).length }),
+  }),
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({

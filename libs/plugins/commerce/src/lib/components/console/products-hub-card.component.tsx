@@ -43,11 +43,12 @@ import {
   addDoc,
   collection,
   doc,
+  getCountFromServer,
   limit,
   query,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   useFirestoreCollection,
@@ -167,11 +168,63 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [productDocs, search, statusFilter])
 
-  // Cap against ALL live products, not the filtered view (AGL-471).
-  const productCount = useMemo(
+  /**
+   * The catalog HEAD-COUNT is a server aggregate, not the length of the
+   * capped listener (AGL-1716, the AGL-1706 shape).
+   *
+   * The listener is `limit(500)` — correctly; a 25,000-product catalog does
+   * not belong in a table. What it must not do is answer "how many products
+   * does this site have", and it did: the length saturated at 500 and was
+   * handed to `checkQuota(org, 'productsPerHost', …)` and to the batch check
+   * the CSV importer runs. The bands are 2,500 / 10,000 / 25,000 above the
+   * window, so on Pro and up the check compared 500 against thousands and
+   * could never refuse — the card offered headroom and `api/hosts/resources`
+   * then refused the create, which is the AGL-1716 shape exactly.
+   *
+   * The aggregate is deliberately UNFILTERED, which also closes a second,
+   * quieter disagreement: `api/hosts/resources` enforces this quota with a
+   * plain `collection('products').count()`, and `softDeletes` there governs
+   * only the flat per-host cap on webhooks — so the server has always
+   * counted soft-deleted products toward `productsPerHost` while this card
+   * excluded them. The card now asks the enforcing route's question, in the
+   * enforcing route's terms.
+   *
+   * THE LIST KEEPS ITS CAP, and the filtered `products` view above still
+   * drives the table, the export and the slug set. A one-shot goes stale
+   * where a listener refreshed for free, so the count is re-read after any
+   * mutation that moves it.
+   *
+   * No counting RULE moves: `checkQuota` is untouched and `report-usage`
+   * meters contacts, storage and API requests — never the catalog.
+   */
+  const [productCountEpoch, setProductCountEpoch] = useState(0)
+  const [serverProductCount, setServerProductCount] = useState<number | null>(
+    null,
+  )
+  useEffect(() => {
+    let active = true
+    void getCountFromServer(collection(firestore, 'hosts', hostId, 'products'))
+      .then((snapshot) => {
+        if (active) setServerProductCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Falls back to the live-row count below — a LOWER bound, and this
+        // card's prior behaviour. Deliberately not 0: `checkQuota` answers
+        // from whatever it is handed, and 0 used is a confident wrong
+        // number in the flattering direction.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId, productCountEpoch])
+  // Cap against ALL live products, not the filtered view (AGL-471). This is
+  // the fallback now: pending or denied, it can only UNDERSTATE, never
+  // overstate, so nothing it gates fires on a count larger than the truth.
+  const loadedProductCount = useMemo(
     () => (productDocs ?? []).filter((product: any) => !product.deletedAt).length,
     [productDocs],
   )
+  const productCount = serverProductCount ?? loadedProductCount
   // Gate only once the org doc has loaded: an unresolved org reads as the
   // free tier's 0-product cap, which swallowed every Add/Duplicate click.
   // The resources API (AGL-473) stays the authoritative cap on create.
@@ -216,6 +269,10 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             updatedAtMs: Date.now(),
           },
         })
+        // A create moves the count and the aggregate is a one-shot — the
+        // listener refreshes the ROWS for free, the count has to be asked
+        // again or the cap drifts stale for the rest of the session.
+        setProductCountEpoch((epoch) => epoch + 1)
         enqueueSnackbar('Product duplicated as draft', {
           variant: 'success',
           persist: false,
@@ -322,6 +379,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       })
     }
     setImporting(null)
+    setProductCountEpoch((epoch) => epoch + 1)
     enqueueSnackbar(`Imported ${parsed.products.length} products`, {
       variant: 'success',
       persist: false,
@@ -863,6 +921,10 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         onClose={() => {
           setEditing(null)
           setCreating(false)
+          // The dialog reports no verdict, so a create and a cancel look
+          // the same from here. Re-reading on both is one aggregate and
+          // keeps the cap off the dialog's shoulders (AGL-1716).
+          setProductCountEpoch((epoch) => epoch + 1)
         }}
       />
     </CardDisplay>
