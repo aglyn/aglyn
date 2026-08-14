@@ -23,8 +23,17 @@ source file, and every heading you add means hand-editing the contents list too.
 
 ## The Markdown element
 
-Drop **Markdown** from the **Text** group of the **ELEMENTS** drawer, then paste your document
-into the **Content** attribute.
+Drop **Markdown** from the **Text** group of the **ELEMENTS** drawer, then write or paste your
+document into the **Content** attribute.
+
+**Content** is a visual editor, not a text box. Headings, bold, italic, links, lists, quotes,
+images, code blocks and tables all have toolbar buttons, and the shorthands below still work
+as you type — start a line with `## ` and it becomes a heading. Pasting from a word processor
+or a Google Doc keeps its formatting rather than arriving as one flat paragraph.
+
+The toolbar's **Markdown** switch shows the raw source instead, for when you want to paste a
+whole file in one go or check exactly what's stored. Both views edit the same text — the
+element stores markdown either way.
 
 Text is set for reading rather than for a layout: 17px on a generous line height, in the
 theme's primary text colour, with headings that step up in size on wider screens. You don't

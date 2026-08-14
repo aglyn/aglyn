@@ -12,6 +12,11 @@ for the how-to.
 
 ## August 2026 — editing together (newest)
 
+- **[A visual editor for long documents](building-sites/besigner/long-form-markdown.md#the-markdown-element)** —
+  the Markdown element's **Content** attribute is a WYSIWYG editor, not a text box:
+  headings, bold, links, lists, quotes, images, code and tables from a toolbar, pasting
+  from a Google Doc keeps its formatting, and a **Markdown** switch shows the raw source
+  when you want it. Editing a whole policy page no longer means preparing one long paste.
 - **[Live co-editing](building-sites/besigner/live-co-editing.md)** — open the same
   screen, layout, component, template, or designed email as a teammate and edit it
   **together**: presence avatars in the toolbar, each collaborator's cursor and

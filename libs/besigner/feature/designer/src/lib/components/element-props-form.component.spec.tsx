@@ -16,6 +16,7 @@
  */
 
 import { PLUGIN_SETTINGS_FIELD_COMPONENT } from './plugin-settings-field.component'
+import { MARKDOWN_ATTRIBUTE_FIELD_COMPONENT } from './markdown-attribute-field.component'
 import { TOKEN_TEXT_FIELD_COMPONENT } from './token-text-field.component'
 import { SCREEN_LINK_FIELD_COMPONENT } from './screen-link-field.component'
 import { act, renderHook } from '@testing-library/react'
@@ -136,6 +137,7 @@ describe('elementPropsComponentMapper coverage (AGL-584)', () => {
     Aglyn.FieldComponentType.ICON_PICKER,
     Aglyn.FieldComponentType.COLOR_PICKER,
     Aglyn.FieldComponentType.CSS_DIMENSION,
+    Aglyn.FieldComponentType.MARKDOWN,
   ])('registers an editor for %s', (type) => {
     expect(elementPropsComponentMapper[type]).toBeDefined()
   })
@@ -146,7 +148,11 @@ describe('elementPropsComponentMapper coverage (AGL-584)', () => {
   // reach the mapper — a rewrite pointing at an unregistered key throws and
   // blanks the panel exactly the same way AGL-584 did, while every test above
   // stays green.
-  it.each([TOKEN_TEXT_FIELD_COMPONENT, PLUGIN_SETTINGS_FIELD_COMPONENT])(
+  it.each([
+    TOKEN_TEXT_FIELD_COMPONENT,
+    PLUGIN_SETTINGS_FIELD_COMPONENT,
+    MARKDOWN_ATTRIBUTE_FIELD_COMPONENT,
+  ])(
     'registers the internal editor %s that an attribute rewrites to',
     (key) => {
       expect(elementPropsComponentMapper[key]).toBeDefined()

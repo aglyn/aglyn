@@ -605,7 +605,11 @@ export const markdownSchema: Aglyn.ComponentSchema<MarkdownProps> = {
         'code, pipe tables and > quotes. Paste the whole source file — a ' +
         'Table of contents element on the same screen lists the ## and ### ' +
         'headings automatically.',
-      component: Aglyn.FieldComponentType.TEXTAREA,
+      // The WYSIWYG rather than a raw textarea (AGL-1616): this attribute is
+      // a whole document — the published Privacy Policy body is one of them —
+      // and editing it as raw markdown-lite meant a 13 KB paste (AGL-1594).
+      // The stored value is unchanged, so every renderer is untouched.
+      component: Aglyn.FieldComponentType.MARKDOWN,
     },
   ],
 }
